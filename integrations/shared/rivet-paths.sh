@@ -126,10 +126,14 @@ rivetos_exported_rivetos_names() {
 
 # Empty string or a leftover Cursor / marketplace `${NAME}` placeholder.
 # Same rule as ingest-session.mjs. Never prints the value.
+# Claude Code userConfig substitution uses `${user_config.KEY}` — that
+# must also count as unset so it cannot shadow ~/.rivetos/.env.
 rivetos_is_effective_unset() {
   local v="${1-}"
   [ -z "$v" ] && return 0
-  [[ "$v" =~ ^\$\{[A-Z0-9_]+\}$ ]]
+  [[ "$v" =~ ^\$\{[A-Z0-9_]+\}$ ]] && return 0
+  [[ "$v" =~ ^\$\{user_config\.[A-Z0-9_]+\}$ ]] && return 0
+  return 1
 }
 
 rivetos_is_postgres_url() {
@@ -597,6 +601,40 @@ rivetos_unset_empty_rivetos_vars() {
   done
 }
 
+# Collect only declared plugin-form keys; an empty list means file-over-inherited.
+# CLAUDE_PLUGIN_OPTION_* wins over .mcp.json's RIVETOS_PLUGIN_OPT_* channel: it
+# is the client's documented export for userConfig and the one that carries
+# `sensitive` values, which are not substituted into .mcp.json.
+rivetos_collect_plugin_options() {
+  local xtrace_on=0 _k _prefix _opt
+  case "$-" in *x*) xtrace_on=1 ;; esac
+  set +x
+  RIVETOS_PLUGIN_KEYS=''
+  for _k in RIVETOS_MODE RIVETOS_DATAHUB_URL RIVETOS_EMBED_URL RIVETOS_EMBED_MODEL \
+            RIVETOS_CLOUD_URL RIVETOS_CLOUD_TOKEN \
+            RIVETOS_MCP_ENABLE_MEMORY_WRITE; do
+    for _prefix in RIVETOS_PLUGIN_OPT_ CLAUDE_PLUGIN_OPTION_; do
+      _opt="${_prefix}${_k}"
+      if ! rivetos_is_effective_unset "${!_opt-}"; then
+        export "${_k}=${!_opt}"
+        RIVETOS_PLUGIN_KEYS="${RIVETOS_PLUGIN_KEYS} ${_k}"
+      fi
+      unset "$_opt"
+    done
+  done
+  if [ "$xtrace_on" -eq 1 ]; then set -x; fi
+}
+
+# Match the sidecar boot guard: missing embed model is fatal only with memory.
+# Arguments permit persist to validate the resulting file before writing it.
+rivetos_embed_model_missing() {
+  local pg="${1-${RIVETOS_PG_URL:-}}" hub="${2-${RIVETOS_DATAHUB_URL:-}}"
+  local embed="${3-${RIVETOS_EMBED_URL:-}}" model="${4-${RIVETOS_EMBED_MODEL:-}}"
+  ! rivetos_is_effective_unset "$embed" &&
+    rivetos_is_effective_unset "$model" &&
+    { ! rivetos_is_effective_unset "$pg" || rivetos_is_postgres_url "$hub"; }
+}
+
 # Public name for the stranger DataHub field. v1 maps a postgres URL onto
 # RIVETOS_PG_URL (the sidecar still speaks Postgres). HTTPS den / MCP-bridge
 # endpoints stay on RIVETOS_DATAHUB_URL only — do not invent a conversion.
@@ -623,21 +661,28 @@ rivetos_apply_cloud_defaults() {
 # server still starts, but with echo + web tools only (memory disabled).
 #
 # Default: env file wins (same as main / historical harness launchers).
-# RIVETOS_PLUGIN_ENV=1: process / plugin values win after stripping
-# placeholders, and a plugin postgres DataHub overwrites a file-only PG URL.
+# RIVETOS_PLUGIN_ENV=1: only RIVETOS_PLUGIN_KEYS values win over the file.
+# An unset key list retains historical grok-bot process/plugin precedence.
+# A plugin postgres DataHub overwrites a PG URL not supplied by the plugin.
 rivetos_load_env() {
   local xtrace_on=0
   case "$-" in *x*) xtrace_on=1 ;; esac
   set +x
   local env_file="${RIVETOS_ENV_FILE:-$HOME/.rivetos/.env}"
-  local restore="" n plugin_datahub plugin_pg plugin_mode=0
+  local restore="" n names plugin_datahub="" plugin_pg="" plugin_mode=0
 
   if [ "${RIVETOS_PLUGIN_ENV:-}" = "1" ]; then
     plugin_mode=1
+    # Unset (not empty) preserves grok-bot's existing precedence unchanged.
+    names="${RIVETOS_PLUGIN_KEYS-$(rivetos_exported_rivetos_names)}"
     rivetos_unset_empty_rivetos_vars
-    plugin_datahub="${RIVETOS_DATAHUB_URL:-}"
-    plugin_pg="${RIVETOS_PG_URL:-}"
-    for n in $(rivetos_exported_rivetos_names); do
+    for n in $names; do
+      [[ "$n" =~ ^RIVETOS_[A-Za-z0-9_]+$ ]] || continue
+      rivetos_is_effective_unset "${!n-}" && continue
+      case "$n" in
+        RIVETOS_DATAHUB_URL) plugin_datahub="${!n}" ;;
+        RIVETOS_PG_URL) plugin_pg="${!n}" ;;
+      esac
       restore="${restore}$(printf 'export %s=%q\n' "$n" "${!n}")"$'\n'
     done
   fi
@@ -691,4 +736,68 @@ rivetos_mcp_cli() {
     return 1
   fi
   printf '%s\n' "$cli"
+}
+
+# Pinned npm version for the no-checkout MCP stdio entry:
+#   npx -y @rivetos/mcp-sidecar@<pin> --stdio
+# Requires a release ≥ 0.5.0 — the 0.4.0-beta line has no stdio mode
+# (marketplace program spec §9 / §11). This constant is the single pin;
+# kits must not hardcode a second copy. 0.5.0 is merged on main (#794)
+# but not yet published to npm — the no-checkout path works once that
+# release is on the registry.
+RIVETOS_MCP_SIDECAR_VERSION="0.5.0"
+
+rivetos_npx_mcp_spec() {
+  printf '%s\n' "@rivetos/mcp-sidecar@${RIVETOS_MCP_SIDECAR_VERSION}"
+}
+
+# Capture handler for Claude Code hooks (bin rivetos-claude-capture).
+# Same pin as the sidecar — first 0.5.0 line of the stdio-era release.
+rivetos_npx_capture_spec() {
+  printf '%s\n' "@rivetos/provider-claude-cli@${RIVETOS_MCP_SIDECAR_VERSION}"
+}
+
+rivetos_tree_at() {
+  local root="$1"
+  [ -f "$root/nx.json" ] && [ -d "$root/services/mcp-sidecar" ]
+}
+
+# Prints "checkout <abs-path-to-cli.js>" or "npx". Never prints secrets.
+# Built checkout ($RIVETOS_ROOT / walk-up / /opt/rivetos) wins unchanged.
+# An explicit RivetOS tree that is not built keeps the existing error
+# (do not silently fall through to npx). No tree at all → npx.
+rivetos_resolve_mcp_launch() {
+  local root cli
+  root="$(rivetos_find_root)"
+  cli="$root/services/mcp-sidecar/dist/cli.js"
+  if [ -f "$cli" ]; then
+    printf 'checkout %s\n' "$cli"
+    return 0
+  fi
+  if rivetos_tree_at "$root"; then
+    rivetos_mcp_cli "$root"
+    return 1
+  fi
+  printf 'npx\n'
+  return 0
+}
+
+# Prints "checkout <abs-path-to-hooks.js>" or "npx". Return 1 when a
+# RivetOS tree is present but the capture handler is not built.
+rivetos_resolve_capture() {
+  local root="${1:-}"
+  local hook
+  if [ -z "$root" ]; then
+    root="$(rivetos_find_root)"
+  fi
+  hook="$root/plugins/providers/claude-cli/dist/hooks.js"
+  if [ -f "$hook" ]; then
+    printf 'checkout %s\n' "$hook"
+    return 0
+  fi
+  if rivetos_tree_at "$root"; then
+    return 1
+  fi
+  printf 'npx\n'
+  return 0
 }
