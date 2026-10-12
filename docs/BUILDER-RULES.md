@@ -18,7 +18,8 @@ brief names. The TypeScript source at /opt/rivetos is REFERENCE for boundary beh
    preservation, no number-spelling rules, no `JsValue`/`JsString`/`JsNumber` — except the one capture event-id hash.
 5. One runtime per process. Never build a tokio runtime in a library; never hold a `parking_lot` lock across `.await`;
    blocking work goes to `spawn_blocking`; long tasks take and honour a `CancellationToken`.
-6. No comments of any kind. No `#[allow]`. No `unwrap`/`expect`/`panic!` in production code. No `unsafe`.
+6. No comments of any kind. No `#[allow]`; a lint that is wrong for one spot takes `#[expect(lint, reason = "…")]`. No
+   `unwrap`/`expect`/`panic!` in production code. No `unsafe`.
 7. Tests prove the contract. Replay your recordings through `testkit` as ordinary `cargo test`s; port the TypeScript tests
    that test boundary behaviour; unit-test only logic the replays do not reach. Test files live in `tests/` by responsibility;
    small `#[cfg(test)]` modules only for private helpers; fixtures under `tests/fixtures/`, goldens copied under `tests/golden/`

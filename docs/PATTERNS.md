@@ -9,8 +9,10 @@ Anti-pattern: comments explaining code. Pattern: names and types carry the meani
 or a test. Check: gate `COMMENT`.
 
 ## ALLOW
-Anti-pattern: `#[allow(...)]` / `#[expect(...)]` to silence a lint. Pattern: fix the code; if a lint is wrong for the whole
-workspace, change `Cargo.toml` `[workspace.lints]` in a reviewed change. Check: gate `ALLOW`.
+Anti-pattern: `#[allow(...)]`, or `#[expect(...)]` without a reason, to silence a lint. Pattern: fix the code. Where a lint
+is genuinely wrong for one spot, `#[expect(lint, reason = "…")]` — the compiler re-checks it every build, so it cannot go
+stale. A lint wrong for the whole workspace is a reviewed change to `[workspace.lints]`. Check: gate `ALLOW`, Clippy
+`allow_attributes` and `allow_attributes_without_reason`.
 
 ## UNWRAP
 Anti-pattern: `.unwrap()` / `.expect()` in production code. Pattern: return the crate's `thiserror` error with `?`; a value

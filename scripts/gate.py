@@ -32,7 +32,7 @@ FILE_CEILING = 600
 
 PROD = [
     (re.compile(r'^\s*//|/\*'), 'COMMENT', 'comment'),
-    (re.compile(r'#!?\[(allow|expect)\('), 'ALLOW', 'allow/expect attribute'),
+    (re.compile(r'#!?\[allow\(|#!?\[expect\((?![^\]]*\breason\s*=)'), 'ALLOW', 'allow attribute, or expect without a reason'),
     (re.compile(r'\.(unwrap|expect)\('), 'UNWRAP', 'unwrap/expect in production code'),
     (re.compile(r'\bunsafe\b'), 'UNSAFE', 'unsafe'),
     (re.compile(r'\bJs(Value|String|Object|Number|Array)\b|\bserde_json::Number\b|use serde_json::\{?[^;]*\bNumber\b|\w*truthy\w*|\btypeof\w*|\[object Object\]|\b\w*(NumberOr|OrNumber)\w*|JSON\.stringify'), 'JSMODEL', 'JavaScript value model or semantics (truthiness, typeof, [object Object])'),
