@@ -15,63 +15,56 @@ concurrency:
 
 jobs:
   gate:
-    name: Gate (design rules, privacy, secrets, authorship)
+    name: Gate (cargo xtask check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly-2026-10-11
+        with:
+          components: rustc-dev, llvm-tools-preview
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          components: rustfmt, clippy, llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Tools
+        run: |
+          cargo install cargo-dylint dylint-link --locked
+          cargo install cargo-deny --locked
+      - name: cargo xtask check
+        run: cargo xtask check --locked
+
+  commits:
+    name: Commits (house identity, no attribution, Conventional Commits)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - run: python3 scripts/gate_test.py
-      - run: python3 scripts/gate.py .
-      - name: Commit authorship
-        if: github.event_name == 'pull_request'
-        run: python3 scripts/gate.py --commits "origin/${{ github.base_ref }}..HEAD"
+      - name: House identity and attribution
+        run: cargo xtask commits "origin/${{ github.base_ref }}..HEAD"
+      - name: Conventional Commits
+        uses: crate-ci/committed@v1
+        with:
+          args: --no-wip
+          commits: "origin/${{ github.base_ref }}..HEAD"
 
   rust:
-    name: fmt, clippy, tests, build
+    name: Tests (coverage) and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Toolchain
-        run: rustup toolchain install "$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal --component rustfmt,clippy,llvm-tools-preview
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
-      - name: Crates present
-        id: crates
-        run: echo "any=$(ls crates 2>/dev/null | grep -c . )" >> "$GITHUB_OUTPUT"
-      - name: Format
-        if: steps.crates.outputs.any != '0'
-        run: cargo fmt --all --check
-      - name: Clippy
-        if: steps.crates.outputs.any != '0'
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - uses: taiki-e/install-action@v2
-        if: steps.crates.outputs.any != '0'
         with:
           tool: cargo-nextest,cargo-llvm-cov,cargo-machete
-      - name: Tests
-        if: steps.crates.outputs.any != '0'
-        run: cargo nextest run --workspace --all-features
-      - name: Coverage floor
-        if: steps.crates.outputs.any != '0'
-        run: cargo llvm-cov nextest --workspace --all-features --fail-under-lines "$(cat coverage-floor.txt)" --summary-only
+      - name: Tests under the coverage floor
+        run: cargo llvm-cov nextest --workspace --all-features --locked --fail-under-lines "$(cat coverage-floor.txt)" --summary-only
+      - name: Doc tests
+        run: cargo test --doc --workspace --all-features --locked
       - name: Unused dependencies
-        if: steps.crates.outputs.any != '0'
         run: cargo machete
       - name: Build
-        if: steps.crates.outputs.any != '0'
-        run: cargo build --workspace --release
-
-  deny:
-    name: cargo-deny (advisories, licences, bans, sources)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Toolchain
-        run: rustup toolchain install "$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
-      - name: Crates present
-        id: crates
-        run: echo "any=$(ls crates 2>/dev/null | grep -c . )" >> "$GITHUB_OUTPUT"
-      - uses: taiki-e/install-action@cargo-deny
-        if: steps.crates.outputs.any != '0'
-      - name: Check
-        if: steps.crates.outputs.any != '0'
-        run: cargo deny --all-features check
+        run: cargo build --workspace --locked

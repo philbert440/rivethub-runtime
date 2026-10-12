@@ -5,7 +5,6 @@ use parking_lot::Mutex;
 use regex::Regex;
 
 #[rustfmt::skip]
-#[expect(clippy::disallowed_types, reason = "structural JSON comparison holds arbitrary recorded JSON")]
 pub type Json = serde_json::Value;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -116,7 +116,7 @@ pub struct MemoryTagsToolArgs {
     pub value: Option<String>,
     pub tag: Option<String>,
     pub display: Option<String>,
-    pub state: Option<String>,
+    pub state: Option<TagState>,
     pub ids: Option<Vec<String>>,
     pub session_keys: Option<Vec<String>>,
     pub entries: Option<Vec<TagEntryPair>>,

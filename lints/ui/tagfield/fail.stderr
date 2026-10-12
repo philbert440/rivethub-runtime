@@ -1,0 +1,10 @@
+warning: constant type tag as a field (use #[serde(tag = "type")]) → docs/PATTERNS.md#tagfield
+  --> $DIR/fail.rs:8:5
+   |
+LL |     pub r#type: SnapshotTag,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(tagfield)]` on by default
+
+warning: 1 warning emitted
+

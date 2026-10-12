@@ -1,0 +1,10 @@
+warning: serde rename equal to the field name → docs/PATTERNS.md#redundantrename
+  --> $DIR/redundantrenamefail.rs:6:5
+   |
+LL |     max_tokens: u32,
+   |     ^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(redundant_rename)]` on by default
+
+warning: 1 warning emitted
+

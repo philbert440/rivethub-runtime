@@ -1,0 +1,10 @@
+warning: Option<Option<T>> outside a *Patch/*Update type (use Option<T> with skip_serializing_if) → docs/PATTERNS.md#nullable
+  --> $DIR/fail.rs:4:5
+   |
+LL |     pub title: Option<Option<String>>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(nullable)]` on by default
+
+warning: 1 warning emitted
+

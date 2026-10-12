@@ -1,0 +1,14 @@
+warning: macro_rules! in production code (write the types and impls out) → docs/PATTERNS.md#typemacro
+  --> $DIR/fail.rs:4:1
+   |
+LL | / macro_rules! closed {
+LL | |     ($n:ident) => {
+LL | |         pub enum $n {}
+LL | |     };
+LL | | }
+   | |_^
+   |
+   = note: `#[warn(typemacro)]` on by default
+
+warning: 1 warning emitted
+

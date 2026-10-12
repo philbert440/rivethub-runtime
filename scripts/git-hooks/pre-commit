@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-cd "$(git rev-parse --show-toplevel)"
-python3 scripts/gate.py --staged
-if git diff --cached --name-only --diff-filter=ACMR | grep -q '\.rs$'; then
-  cargo fmt --all --check
-fi

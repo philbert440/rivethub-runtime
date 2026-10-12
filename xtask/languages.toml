@@ -1,0 +1,25 @@
+extensions = ["md", "rs", "toml"]
+paths = [
+  ".gitattributes",
+  ".cargo/config.toml",
+  ".github/CODEOWNERS",
+  ".gitignore",
+  "Cargo.lock",
+  "LICENSE",
+  "coverage-floor.txt",
+  "lints/Cargo.lock",
+]
+globs = [
+  ".github/*.md",
+  ".github/workflows/*.yml",
+  "crates/*/tests/golden/**/*.json",
+  "crates/*/tests/golden/**/*.jsonl",
+  "crates/*/tests/golden/**/*.md",
+  "crates/*/tests/golden/**/*.txt",
+  "crates/*/tests/fixtures/**/*.json",
+  "crates/*/tests/fixtures/**/*.jsonl",
+  "crates/*/tests/fixtures/**/*.txt",
+  "lints/examples/*.stderr",
+  "lints/ui/*/*.stderr",
+  "xtask/data/*.json",
+]

@@ -1,0 +1,24 @@
+warning: same enum defined 2 times (Role, CaptureRole) — one definition, imported where needed → docs/PATTERNS.md#duptype
+  --> $DIR/fail.rs:3:1
+   |
+LL | / pub enum Role {
+LL | |     System,
+LL | |     User,
+LL | |     Tool,
+LL | | }
+   | |_^
+   |
+   = note: `#[warn(duptype)]` on by default
+
+warning: same enum defined 2 times (Role, CaptureRole) — one definition, imported where needed → docs/PATTERNS.md#duptype
+  --> $DIR/fail.rs:9:1
+   |
+LL | / pub enum CaptureRole {
+LL | |     System,
+LL | |     User,
+LL | |     Tool,
+LL | | }
+   | |_^
+
+warning: 2 warnings emitted
+

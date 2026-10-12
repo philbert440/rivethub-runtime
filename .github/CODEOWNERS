@@ -2,7 +2,9 @@
 /crates/kernel/         @philbert440
 /crates/wire/           @philbert440
 /docs/CONTRACT.md       @philbert440
-/scripts/gate.py        @philbert440
+/xtask/languages.toml   @philbert440
+/xtask/lints-policy.toml @philbert440
 /Cargo.toml             @philbert440
 /deny.toml              @philbert440
 /clippy.toml            @philbert440
+/lints/                 @philbert440

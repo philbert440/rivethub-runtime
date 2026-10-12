@@ -1,0 +1,10 @@
+warning: hand-written impl Serialize/Deserialize (derive it; validated newtypes take #[serde(try_from/into)]) → docs/PATTERNS.md#customserde
+  --> $DIR/fail.rs:9:1
+   |
+LL | impl serde::Serialize for V {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(customserde)]` on by default
+
+warning: 1 warning emitted
+

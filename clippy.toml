@@ -9,11 +9,16 @@ disallowed-types = [
   { path = "std::sync::Mutex", reason = "use parking_lot::Mutex for short critical sections or tokio::sync::Mutex across awaits" },
   { path = "std::sync::RwLock", reason = "use parking_lot::RwLock or tokio::sync::RwLock" },
   { path = "serde_json::Value", reason = "boundary payloads are typed; use a serde struct or enum" },
+  { path = "serde_json::Map", reason = "typed maps: BTreeMap/HashMap with a typed key (JSONMAP)" },
+  { path = "serde_json::Number", reason = "any-number is not a type; i64 epoch ms, f64 measured, u16/u32/u64 counts (JSMODEL)" },
 ]
 disallowed-methods = [
-  { path = "std::process::exit", reason = "return an error to main; only the binary decides the exit code" },
-  { path = "tokio::runtime::Builder::new_multi_thread", reason = "only the rivethub binary builds a runtime" },
-  { path = "tokio::runtime::Builder::new_current_thread", reason = "only the rivethub binary builds a runtime" },
-  { path = "std::env::var", reason = "the environment is read once by the config crate" },
-  { path = "std::env::var_os", reason = "the environment is read once by the config crate" },
+  { path = "std::process::exit", reason = "return an error to main; only the binary decides the exit code (EXIT)" },
+  { path = "tokio::runtime::Builder::new_multi_thread", reason = "only the rivethub binary builds a runtime (RUNTIME)" },
+  { path = "tokio::runtime::Builder::new_current_thread", reason = "only the rivethub binary builds a runtime (RUNTIME)" },
+  { path = "std::env::var", reason = "the environment is read once by the config crate (ENV)" },
+  { path = "std::env::var_os", reason = "the environment is read once by the config crate (ENV)" },
+]
+disallowed-macros = [
+  { path = "tokio::main", reason = "libraries expose async fns; only the rivethub binary builds a runtime (RUNTIME)" },
 ]

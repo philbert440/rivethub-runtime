@@ -1,0 +1,14 @@
+warning: value tree with a Null variant (deserialize into typed structs and enums) → docs/PATTERNS.md#dynvalue
+  --> $DIR/fail.rs:3:1
+   |
+LL | / pub enum Node {
+LL | |     Null,
+LL | |     Bool(bool),
+LL | |     Seq(Vec<Node>),
+LL | | }
+   | |_^
+   |
+   = note: `#[warn(dynvalue)]` on by default
+
+warning: 1 warning emitted
+

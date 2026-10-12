@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "xtask"]
+exclude = ["lints"]
 
 [workspace.package]
 edition = "2024"
@@ -8,6 +9,10 @@ license = "Apache-2.0"
 publish = false
 version = "0.1.0"
 repository = "https://github.com/philbert440/rivethub-runtime"
+rust-version = "1.99"
+
+[workspace.metadata.dylint]
+libraries = [{ path = "lints" }]
 
 [workspace.dependencies]
 agent-client-protocol = "0.3"
@@ -15,6 +20,7 @@ async-trait = "0.1"
 axum = { version = "0.8", features = ["ws", "macros"] }
 base64 = "0.22"
 bytes = "1"
+cargo_metadata = "0.23"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 clap = { version = "4", features = ["derive"] }
 config = { path = "crates/config", version = "0.1.0" }
@@ -27,6 +33,7 @@ nix = { version = "0.30", features = ["process", "signal", "fs", "user"] }
 parking_lot = "0.12"
 pgvector = { version = "0.4", features = ["sqlx"] }
 portable-pty = "0.9"
+ra-ap-rustc_lexer = "0.177"
 rcgen = "0.13"
 regex = "1"
 regress = "0.12"
@@ -53,6 +60,7 @@ thiserror = "2"
 tokio = { version = "1" }
 tokio-tungstenite = "0.26"
 tokio-util = { version = "0.7", features = ["rt"] }
+toml = "1"
 tower = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
@@ -70,6 +78,8 @@ rust_2018_idioms = { level = "warn", priority = -1 }
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
@@ -79,6 +89,8 @@ dbg_macro = "deny"
 print_stdout = "deny"
 print_stderr = "deny"
 exit = "deny"
+option_option = "deny"
+derivable_impls = "deny"
 mem_forget = "deny"
 indexing_slicing = "warn"
 wildcard_enum_match_arm = "warn"

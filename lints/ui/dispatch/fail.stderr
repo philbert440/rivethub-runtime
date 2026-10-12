@@ -1,0 +1,12 @@
+warning: match on `.as_str()` (deserialize the tag into a serde enum and match on the variant) → docs/PATTERNS.md#dispatch
+  --> $DIR/fail.rs:4:5
+   |
+LL | /     match s.as_str() {
+LL | |         _ => 1,
+LL | |     }
+   | |_____^
+   |
+   = note: `#[warn(dispatch)]` on by default
+
+warning: 1 warning emitted
+

@@ -1,0 +1,22 @@
+[package]
+name = "rr_lints"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dylint_linting = { version = "6.1.1", features = ["constituent"] }
+regex = "1"
+
+[dev-dependencies]
+dylint_testing = "6.1.1"
+serde = { version = "1", features = ["derive"] }
+
+[features]
+constituent = ["dylint_linting/constituent"]
+
+[package.metadata.rust-analyzer]
+rustc_private = true

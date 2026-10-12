@@ -7,22 +7,30 @@ for the TypeScript RivetOS runtime at sixteen observable boundaries and a fresh 
 - `docs/ARCHITECTURE.md` — crates, ports, process shape, build order.
 - `docs/BUILDER-RULES.md` — the one page every change is held to.
 - `crates/` — the workspace (`wire`, `config`, `kernel`, `testkit`, adapters, services, `cli`, `rivethub`).
+- `lints/` — the Dylint library (`cargo dylint`) carrying the design rules that need names, types or whole-program
+  knowledge; outside the workspace, pinned to the nightly its `dylint_linting` version requires.
+- `xtask/` — the repository tooling (`cargo xtask`): `check` (the repository gate), `install-hooks`, the languages
+  allow-list, the lint policy.
 
 ## Working here
 
 ```sh
-scripts/install-hooks.sh          # pre-commit: gate + fmt; commit-msg: house identity, no attribution trailers
-python3 scripts/gate.py .         # what CI runs first: crate map, dependency direction, forbidden patterns, privacy, secrets
-cargo clippy --workspace --all-targets -- -D warnings
-cargo nextest run --workspace
+cargo xtask install-hooks        # installs the xtask binary into target/git-hooks (pre-commit, commit-msg)
+cargo xtask check                # what CI runs first: fmt, clippy, dylint, cargo-deny, languages, privacy, secrets
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace
 ```
 
-The repository is Rust plus shell for CI and git hooks. Clients of the runtime, including the per-harness capture hooks, live
-in their own repositories and reach the runtime over its boundaries.
+The repository is Rust only. The git hooks are the `xtask` binary itself: `cargo xtask install-hooks` copies it to
+`target/git-hooks/pre-commit` and `target/git-hooks/commit-msg` and points `core.hooksPath` there; the binary dispatches on
+the name it is invoked as (pre-commit: staged privacy + fmt; commit-msg: house identity, no attribution trailers). Clients
+of the runtime, including the per-harness capture hooks, live in their own repositories and reach the runtime over its
+boundaries.
 
-Every crate depends only downward (foundation ← kernel ← adapters/services ← composition); the gate fails a build the moment a
-`Cargo.toml` breaks that. Production code has no comments, no `allow`, no `unwrap`/`expect`, no `unsafe`; `clippy.toml`
-disallows std locks, untyped JSON, runtime construction and environment reads outside their one home. `deny.toml` keeps TLS
-on rustls and bans `anyhow`, OpenSSL and a second async runtime.
+Every crate depends only downward (foundation ← kernel ← adapters/services ← composition); `deny.toml` fails the build the
+moment a `Cargo.toml` breaks that (each internal crate is a ban whose wrappers are exactly the crates allowed to use it).
+Production code has no comments, no `allow`, no `unwrap`/`expect`, no `unsafe`; `clippy.toml` disallows std locks, untyped
+JSON, runtime construction and environment reads outside their one home, and `lints/` carries the rest of
+`docs/PATTERNS.md` as Dylint lints. `deny.toml` keeps TLS on rustls and bans `anyhow`, OpenSSL and a second async runtime.
 
 Licensed under Apache-2.0.
