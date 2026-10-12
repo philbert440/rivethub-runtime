@@ -5,6 +5,13 @@ use std::path::{Path, PathBuf};
 use config::{Finding, PLUGINS_IGNORED, ProviderType, WORKFLOWS_IGNORED};
 use libtest_mimic::{Arguments, Failed, Trial};
 
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private shared test module: unreachable_pub requires pub(crate) here, the nursery lint disagrees"
+)]
+#[path = "../common/mod.rs"]
+mod common;
+
 const GOLDEN_FILES: [&str; 8] = [
     "validate_config",
     "validate_config_runtime",
@@ -65,14 +72,6 @@ struct Replay {
     deviation: Option<Deviation>,
 }
 
-fn fixture_path(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("golden")
-        .join("fixtures")
-        .join(format!("{name}.jsonl"))
-}
-
 fn golden_path(subpath: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -81,12 +80,12 @@ fn golden_path(subpath: &str) -> PathBuf {
 }
 
 fn read_cases(name: &str) -> Result<Vec<Case>, String> {
-    let path = fixture_path(name);
-    let text = fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
-    text.lines()
-        .filter(|line| !line.is_empty())
-        .map(|line| {
-            serde_json::from_str(line).map_err(|error| format!("{}: {error}", path.display()))
+    let lines = common::read_cases(name).map_err(|error| error.to_string())?;
+    lines
+        .iter()
+        .enumerate()
+        .map(|(index, line)| {
+            common::parse_case(name, index, line).map_err(|error| error.to_string())
         })
         .collect()
 }
@@ -222,68 +221,129 @@ fn multiset(findings: &[Finding]) -> BTreeSet<(String, String, String)> {
         .collect()
 }
 
-fn replay(case: &Replay) -> Result<(), Failed> {
+fn sorted_findings(findings: &[Finding]) -> Vec<Finding> {
+    let mut sorted = findings.to_vec();
+    sorted.sort_by_key(|finding| {
+        (
+            finding.severity.to_string(),
+            finding.path.clone(),
+            finding.message.clone(),
+        )
+    });
+    sorted
+}
+
+fn outcome_failure(case: &Replay, reason: &str, expected: &str, actual: &str) -> String {
+    common::case_failure(&case.id, reason, &case.input, expected, actual)
+}
+
+fn replay_type_confused(case: &Replay, actual: &config::ValidationResult) -> Result<(), String> {
+    if actual.errors.len() != 1 {
+        return Err(outcome_failure(
+            case,
+            "a type-confused document must produce exactly one wrong-type error",
+            "exactly one error finding at the serde path",
+            &format!(
+                "{} error findings: {:?}",
+                actual.errors.len(),
+                multiset(&actual.errors)
+            ),
+        ));
+    }
+    match case.deviation.as_ref().map(|deviation| deviation.class) {
+        Some(DeviationClass::Rejected) if case.recorded_accepted => Ok(()),
+        Some(DeviationClass::Rejected) => Err(outcome_failure(
+            case,
+            "the deviations table pins accepted-but-rejected, but the recording rejects this input",
+            "the recording accepts this input",
+            &format!("the recording rejects it: {:?}", multiset(&actual.errors)),
+        )),
+        Some(class) => Err(outcome_failure(
+            case,
+            "the document is type-confused but the deviations table pins another class",
+            "class accepted-but-rejected (or no deviations row)",
+            &format!("class {class}"),
+        )),
+        None if case.recorded_accepted => Err(outcome_failure(
+            case,
+            "accepted by the recording but rejected here, and absent from the deviations table",
+            "accepted (the recording records no errors)",
+            &format!("rejected: {:?}", multiset(&actual.errors)),
+        )),
+        None => Ok(()),
+    }
+}
+
+fn replay_well_typed(
+    case: &Replay,
+    expected: &[Finding],
+    actual: &[Finding],
+) -> Result<(), String> {
+    if multiset(expected) == multiset(actual) {
+        return Ok(());
+    }
+    Err(common::case_failure(
+        &case.id,
+        "findings diverge (compared as a multiset of severity, path, message)",
+        &case.input,
+        &common::json_text(&sorted_findings(expected)),
+        &common::json_text(&sorted_findings(actual)),
+    ))
+}
+
+fn replay_case(case: &Replay) -> Result<(), String> {
     let actual = config::validate_document(&case.input);
+    if config::type_document(&case.input).is_err() {
+        return replay_type_confused(case, &actual);
+    }
     let actual_findings: Vec<Finding> = actual
         .errors
         .iter()
         .chain(&actual.warnings)
         .cloned()
         .collect();
-    if config::type_document(&case.input).is_err() {
-        if actual.errors.len() != 1 {
-            return Err(format!(
-                "{}: expected exactly one wrong-type error, got {}: {:?}",
-                case.id,
-                actual.errors.len(),
-                multiset(&actual.errors)
-            )
-            .into());
-        }
-        return match case.deviation.as_ref().map(|deviation| deviation.class) {
-            Some(DeviationClass::Rejected) if case.recorded_accepted => Ok(()),
-            Some(DeviationClass::Rejected) => Err(format!(
-                "{}: the deviations table pins accepted-but-rejected, but the recording rejects this input",
-                case.id
-            )
-            .into()),
-            Some(class) => Err(format!(
-                "{}: the document is type-confused but the deviations table pins class {class:?}",
-                case.id
-            )
-            .into()),
-            None if case.recorded_accepted => Err(format!(
-                "{}: accepted by the recording but rejected here, and absent from the deviations table: {:?}",
-                case.id,
-                multiset(&actual.errors)
-            )
-            .into()),
-            None => Ok(()),
-        };
-    }
     let expected = match &case.deviation {
         Some(Deviation {
             class: DeviationClass::Rejected,
             ..
         }) => {
-            return Err(format!(
-                "{}: the deviations table pins accepted-but-rejected, but the document is well-typed",
-                case.id
-            )
-            .into());
+            return Err(outcome_failure(
+                case,
+                "the deviations table pins accepted-but-rejected, but the document is well-typed",
+                "a type-confused document",
+                "a well-typed document",
+            ));
         }
         Some(deviation) => &deviation.findings,
         None => &case.contract,
     };
-    let (expected_set, actual_set) = (multiset(expected), multiset(&actual_findings));
-    if expected_set == actual_set {
+    replay_well_typed(case, expected, &actual_findings)
+}
+
+fn replay_file(name: &str, deviations: &BTreeMap<String, Deviation>) -> Result<(), Failed> {
+    let cases = read_cases(name).map_err(Failed::from)?;
+    let mut failures = Vec::new();
+    for (index, case) in cases.iter().enumerate() {
+        let id = common::case_id(name, index);
+        let replay = Replay {
+            id: id.clone(),
+            input: case.input.clone(),
+            recorded_accepted: case.out.errors.is_empty(),
+            contract: contract_findings(&case.input, &case.out),
+            deviation: deviations.get(&id).cloned(),
+        };
+        if let Err(failure) = replay_case(&replay) {
+            failures.push(failure);
+        }
+    }
+    if failures.is_empty() {
         return Ok(());
     }
-    let expected_only: Vec<_> = expected_set.difference(&actual_set).collect();
-    let actual_only: Vec<_> = actual_set.difference(&expected_set).collect();
     Err(format!(
-        "{}: findings diverge\n  expected-only: {expected_only:?}\n  actual-only:   {actual_only:?}",
-        case.id
+        "{}/{} cases in {name}.jsonl diverge:\n\n{}",
+        failures.len(),
+        cases.len(),
+        failures.join("\n\n")
     )
     .into())
 }
@@ -334,22 +394,10 @@ fn collect_trials() -> Result<Vec<Trial>, String> {
         .collect();
     let mut trials = Vec::new();
     for name in GOLDEN_FILES {
-        for (index, case) in read_cases(name)?.into_iter().enumerate() {
-            let id = format!("{name}.jsonl:{}", index + 1);
-            let recorded_accepted = case.out.errors.is_empty();
-            let contract = contract_findings(&case.input, &case.out);
-            let deviation = deviations.get(&id).cloned();
-            let input = case.input;
-            trials.push(Trial::test(id.clone(), move || {
-                replay(&Replay {
-                    id,
-                    input,
-                    recorded_accepted,
-                    contract,
-                    deviation,
-                })
-            }));
-        }
+        let file_deviations = deviations.clone();
+        trials.push(Trial::test(format!("{name}.jsonl"), move || {
+            replay_file(name, &file_deviations)
+        }));
     }
     trials.push(Trial::test(
         "deviations_are_documented".to_owned(),

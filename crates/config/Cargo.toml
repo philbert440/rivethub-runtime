@@ -19,6 +19,7 @@ wire.workspace = true
 [dev-dependencies]
 libtest-mimic.workspace = true
 serde_json.workspace = true
+similar-asserts.workspace = true
 
 [[test]]
 name = "validate"

@@ -1,8 +1,9 @@
 # Golden deviations — crates/config
 
 The replay in `tests/validate/` drives every recorded case in
-`tests/golden/fixtures/validate_config*.jsonl` through `config::validate_document`
-as one test per recorded case. Proof frame:
+`tests/golden/fixtures/validate_config*.jsonl` through `config::validate_document`,
+one test per recording file (a failing file lists every failing case with its
+diff). Proof frame:
 
 - A case is WELL-TYPED when `serde_path_to_error::deserialize` of the document
   into the typed `Config` succeeds. Well-typed cases must match the recorded

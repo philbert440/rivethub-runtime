@@ -1,7 +1,13 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::Deserialize;
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private shared test module: unreachable_pub requires pub(crate) here, the nursery lint disagrees"
+)]
+mod common;
 
 #[derive(Deserialize)]
 struct FormatCase {
@@ -10,7 +16,7 @@ struct FormatCase {
     out: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, serde::Serialize)]
 struct FormatInput {
     #[serde(default)]
     errors: Vec<config::Finding>,
@@ -18,59 +24,36 @@ struct FormatInput {
     warnings: Vec<config::Finding>,
 }
 
-fn fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("golden")
-        .join("fixtures")
-        .join(format!("{name}.jsonl"))
-}
-
-fn read_lines(name: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let text = std::fs::read_to_string(fixture(name))?;
-    Ok(text
-        .lines()
-        .filter(|line| !line.is_empty())
-        .map(str::to_owned)
-        .collect())
-}
-
-fn parse_case<T: serde::de::DeserializeOwned>(
-    name: &str,
-    index: usize,
-    line: &str,
-) -> Result<T, Box<dyn std::error::Error>> {
-    let label = format!("{name} case {}", index + 1);
-    serde_json::from_str(line).map_err(|error| format!("parse {label}: {error}").into())
-}
-
 #[test]
 fn format_validation_result_replay() -> Result<(), Box<dyn std::error::Error>> {
+    let lines = common::read_cases("format_validation_result")?;
     let mut failures = Vec::new();
-    for (index, line) in read_lines("format_validation_result")?.iter().enumerate() {
-        let case: FormatCase = parse_case("format_validation_result", index, line)?;
+    for (index, line) in lines.iter().enumerate() {
+        let case: FormatCase = common::parse_case("format_validation_result", index, line)?;
         let mut result = config::ValidationResult::default();
-        for finding in case.input.errors {
-            result.push(finding);
+        for finding in &case.input.errors {
+            result.push(finding.clone());
         }
-        for finding in case.input.warnings {
-            result.push(finding);
+        for finding in &case.input.warnings {
+            result.push(finding.clone());
         }
         let actual = result.to_string();
-        if actual != case.out && failures.len() < 5 {
-            failures.push(format!(
-                "case {}\n  expected: {:?}\n  actual:   {:?}",
-                index + 1,
-                case.out,
-                actual
+        if actual != case.out {
+            failures.push(common::case_failure(
+                &common::case_id("format_validation_result", index),
+                "formatted result diverges",
+                &case.input,
+                &case.out,
+                &actual,
             ));
         }
     }
     assert!(
         failures.is_empty(),
-        "{} format cases diverge:\n{}",
+        "{}/{} format_validation_result.jsonl cases diverge:\n\n{}",
         failures.len(),
-        failures.join("\n")
+        lines.len(),
+        failures.join("\n\n")
     );
     Ok(())
 }
@@ -82,7 +65,7 @@ struct PathsCase {
     out: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, serde::Serialize)]
 struct PathsInput {
     env: BTreeMap<String, String>,
     #[serde(default)]
@@ -93,26 +76,30 @@ fn replay_paths(
     name: &str,
     apply: fn(&config::Environment, Option<Vec<String>>) -> PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let lines = common::read_cases(name)?;
     let mut failures = Vec::new();
-    for (index, line) in read_lines(name)?.iter().enumerate() {
-        let case: PathsCase = parse_case(name, index, line)?;
+    for (index, line) in lines.iter().enumerate() {
+        let case: PathsCase = common::parse_case(name, index, line)?;
         let env = config::Environment::from_vars(case.input.env.clone());
-        let actual = apply(&env, case.input.segments.clone());
-        if actual != Path::new(case.out.as_str()) && failures.len() < 5 {
-            failures.push(format!(
-                "{name} case {}\n  env: {:?}\n  expected: {}\n  actual:   {}",
-                index + 1,
-                case.input.env,
-                case.out,
-                actual.display()
+        let actual = apply(&env, case.input.segments.clone())
+            .display()
+            .to_string();
+        if actual != case.out {
+            failures.push(common::case_failure(
+                &common::case_id(name, index),
+                "resolved path diverges",
+                &case.input,
+                &case.out,
+                &actual,
             ));
         }
     }
     assert!(
         failures.is_empty(),
-        "{} {name} cases diverge:\n{}",
+        "{}/{} {name}.jsonl cases diverge:\n\n{}",
         failures.len(),
-        failures.join("\n")
+        lines.len(),
+        failures.join("\n\n")
     );
     Ok(())
 }

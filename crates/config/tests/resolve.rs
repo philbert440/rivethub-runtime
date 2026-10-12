@@ -1,7 +1,12 @@
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use serde::Deserialize;
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private shared test module: unreachable_pub requires pub(crate) here, the nursery lint disagrees"
+)]
+mod common;
 
 #[derive(Deserialize)]
 struct ResolveCase {
@@ -10,44 +15,37 @@ struct ResolveCase {
     out: serde_yaml_ng::Value,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, serde::Serialize)]
 struct ResolveInput {
     env: BTreeMap<String, String>,
     value: serde_yaml_ng::Value,
 }
 
-fn golden_path(name: &str) -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("golden")
-        .join("fixtures")
-        .join(format!("{name}.jsonl"))
-}
-
 #[test]
-fn resolve_env_vars_replay() {
-    let text = std::fs::read_to_string(golden_path("resolve_env_vars")).unwrap();
+fn resolve_env_vars_replay() -> Result<(), Box<dyn std::error::Error>> {
+    let lines = common::read_cases("resolve_env_vars")?;
     let mut failures = Vec::new();
-    for (index, line) in text.lines().filter(|line| !line.is_empty()).enumerate() {
-        let case: ResolveCase = serde_json::from_str(line)
-            .unwrap_or_else(|error| panic!("parse resolve case {}: {error}", index + 1));
+    for (index, line) in lines.iter().enumerate() {
+        let case: ResolveCase = common::parse_case("resolve_env_vars", index, line)?;
         let env = config::Environment::from_vars(case.input.env.clone());
         let mut actual = case.input.value.clone();
         config::resolve_env_vars_with(&env, &mut actual);
-        if actual != case.out && failures.len() < 5 {
-            failures.push(format!(
-                "case {}\n  input: {:?}\n  expected: {:?}\n  actual:   {:?}",
-                index + 1,
-                case.input.value,
-                case.out,
-                actual
+        if actual != case.out {
+            failures.push(common::case_failure(
+                &common::case_id("resolve_env_vars", index),
+                "resolved value diverges",
+                &case.input,
+                &common::json_text(&case.out),
+                &common::json_text(&actual),
             ));
         }
     }
     assert!(
         failures.is_empty(),
-        "{} resolve cases diverge:\n{}",
+        "{}/{} resolve_env_vars.jsonl cases diverge:\n\n{}",
         failures.len(),
-        failures.join("\n")
+        lines.len(),
+        failures.join("\n\n")
     );
+    Ok(())
 }
