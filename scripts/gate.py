@@ -298,10 +298,19 @@ def check_rust_file(rel, text, crate):
             if (in_test or is_test) and code not in ALWAYS:
                 continue
             if rx.search(line):
-                block(f'{code} {rel}:{i}: {label}: {line.strip()[:90]}')
+                block(f'{code} {rel}:{i}: {label} → docs/PATTERNS.md#{code.lower()}: {line.strip()[:80]}')
+
+
+def pattern_registry(root):
+    p = os.path.join(root, 'docs', 'PATTERNS.md')
+    heads = set(re.findall(r'^## ([A-Z]+)$', open(p).read(), re.M)) if os.path.exists(p) else set()
+    for _, code, _ in PROD:
+        if code not in heads:
+            block(f'PATTERNS rule {code} has no entry in docs/PATTERNS.md')
 
 
 def full(root):
+    pattern_registry(root)
     crates = manifests(root)
     dependency_direction(crates)
     for dp, dn, fn in os.walk(os.path.join(root, 'crates')):

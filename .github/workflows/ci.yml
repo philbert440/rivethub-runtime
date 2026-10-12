@@ -20,6 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      - run: python3 scripts/gate_test.py
       - run: python3 scripts/gate.py .
       - name: Commit authorship
         if: github.event_name == 'pull_request'
