@@ -19,8 +19,6 @@ deny = [
   { crate = "openssl", reason = "TLS is rustls everywhere" },
   { crate = "openssl-sys", reason = "TLS is rustls everywhere" },
   { crate = "native-tls", reason = "TLS is rustls everywhere" },
-  { crate = "lazy_static", reason = "use std::sync::LazyLock" },
-  { crate = "once_cell", reason = "use std::sync::OnceLock / LazyLock" },
   { crate = "anyhow", reason = "errors are typed with thiserror; the binary maps them to exit codes" },
   { crate = "async-std", reason = "one async runtime: tokio" },
   { crate = "tmux_interface", reason = "herdr is the only multiplexer" },

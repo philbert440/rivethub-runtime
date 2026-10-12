@@ -509,7 +509,7 @@ impl Tool for EchoTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::InvalidArguments("text is required".to_string()))?;
         Ok(rmcp::model::CallToolResult::success(vec![
-            rmcp::model::Content::text(text),
+            rmcp::model::ContentBlock::text(text),
         ]))
     }
 }

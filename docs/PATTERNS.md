@@ -147,8 +147,10 @@ Anti-pattern: `std::process::exit` outside `main`. Pattern: return an error; the
 Check: clippy `exit`, `disallowed-methods`.
 
 ## DEPS
-Anti-pattern: a crate outside the policy (OpenSSL, `anyhow`, `once_cell`, `lazy_static`, a second async runtime, tmux).
-Pattern: rustls; `thiserror`; `std::sync::LazyLock`/`OnceLock`; tokio; herdr. Check: `deny.toml` bans.
+Anti-pattern: a crate outside the policy (OpenSSL, `anyhow`, a second async runtime, tmux), or `once_cell`/`lazy_static`
+as direct dependencies. Pattern: rustls; `thiserror`; `std::sync::LazyLock`/`OnceLock`; tokio; herdr. Check: `deny.toml`
+bans for the first group; `once_cell`/`lazy_static` must not be direct dependencies and is checked in review (other crates
+pull them transitively, so they are not banned in `deny.toml`).
 
 ## LINTPOLICY
 Anti-pattern: a lane editing `[workspace.lints]` (adding `allow` entries) to get its own code through. Pattern: fix the
