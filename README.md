@@ -7,8 +7,6 @@ for the TypeScript RivetOS runtime at sixteen observable boundaries and a fresh 
 - `docs/ARCHITECTURE.md` — crates, ports, process shape, build order.
 - `docs/BUILDER-RULES.md` — the one page every change is held to.
 - `crates/` — the workspace (`wire`, `config`, `kernel`, `testkit`, adapters, services, `cli`, `rivethub`).
-- `integrations/` — per-harness hook kits that capture sessions into memory (boundary B3).
-- `distro/` — installer, systemd units, pins.
 
 ## Working here
 
@@ -19,9 +17,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo nextest run --workspace
 ```
 
+The repository is Rust plus shell for CI and git hooks. Clients of the runtime, including the per-harness capture hooks, live
+in their own repositories and reach the runtime over its boundaries.
+
 Every crate depends only downward (foundation ← kernel ← adapters/services ← composition); the gate fails a build the moment a
 `Cargo.toml` breaks that. Production code has no comments, no `allow`, no `unwrap`/`expect`, no `unsafe`; `clippy.toml`
 disallows std locks, untyped JSON, runtime construction and environment reads outside their one home. `deny.toml` keeps TLS
-on rustls and errors on `thiserror`.
+on rustls and bans `anyhow`, OpenSSL and a second async runtime.
 
 Licensed under Apache-2.0.

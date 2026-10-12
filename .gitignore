@@ -3,3 +3,4 @@ target/
 lcov.info
 .env
 .env.*
+__pycache__/

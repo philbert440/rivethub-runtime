@@ -1,7 +1,0 @@
-{
-  "mcpServers": {
-    "rivetos": {
-      "command": "${CURSOR_PLUGIN_ROOT}/bin/rivet-memory-mcp.sh"
-    }
-  }
-}

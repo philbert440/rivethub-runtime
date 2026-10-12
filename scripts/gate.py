@@ -434,8 +434,19 @@ def stringly(root, files):
                 block(f'STRINGLY {rel}:{i}: field `{m.group(1)}` is a String but enum `{names[m.group(1)]}` exists → docs/PATTERNS.md#stringly')
 
 
+STACK_RE = re.compile(r'\.(ts|tsx|js|jsx|mjs|cjs|py|pyc|pyi)$|(^|/)(package(-lock)?\.json|node_modules|pnpm-lock\.yaml|yarn\.lock|pyproject\.toml|requirements\.txt)$')
+STACK_ALLOW = re.compile(r'^scripts/[a-z_]+\.py$')
+
+
+def one_stack(paths):
+    for rel in paths:
+        if rel and STACK_RE.search(rel) and not STACK_ALLOW.match(rel):
+            block(f'STACK {rel}: non-Rust source or package manifest in the runtime repo → docs/PATTERNS.md#stack')
+
+
 def full(root):
     pattern_registry(root)
+    one_stack(git(root, 'ls-files').split('\n'))
     lint_policy(root)
     crates = manifests(root)
     dependency_direction(crates)
@@ -466,6 +477,7 @@ def full(root):
 def staged(root):
     priv, sec = load_hashes(root, 'privacy-denylist.json'), load_hashes(root, 'secret-denylist.json')
     files = [f for f in git(root, 'diff', '--cached', '--name-only', '--diff-filter=ACMR').split('\n') if f]
+    one_stack(files)
     for rel in files:
         if skip_scan(rel):
             continue

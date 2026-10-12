@@ -128,6 +128,13 @@ compare JSON with null-valued object members removed on both sides. `Option<Opti
 the contract gives `null` its own meaning ("clear this field"), and such a type is named `…Patch` or `…Update`.
 Check: gate `NULLABLE`.
 
+## STACK
+Anti-pattern: a second language in the runtime repo — TypeScript or JavaScript hook kits, Python plugins, Node installers,
+`package.json` — or tooling written in another language because it was quicker. Pattern: the repo is Rust (crates and a
+`cargo xtask` for repo tooling) plus shell for CI and git hooks. Clients of the runtime, including the per-harness capture
+hooks, live in their own repos and talk to the runtime over its boundaries. Check: gate `STACK` (any tracked `.ts`/`.js`/
+`.mjs`/`.cjs`/`.py` file or package manifest; `scripts/*.py` is allowed only until the gate moves to `cargo xtask`).
+
 ## ENV
 Anti-pattern: reading the environment anywhere but configuration. Pattern: the binary builds `config::Environment` from
 `std::env::vars_os()` once and passes `Config` down. Check: clippy `disallowed-methods` (`std::env::var`, `var_os`).

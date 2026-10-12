@@ -2,10 +2,10 @@
 
 ## State (2026-10-12)
 
-Repository created from the design in `docs/`. Workspace is empty (`crates/` has no members yet); Wave 0 (`wire`, `config`,
-`kernel`, `testkit`) is the first code. `integrations/` and `distro/` carry their history from the RivetOS monorepo and still
-use the `rivetos` names; they are updated to `rh` / `RIVETHUB_*` in Wave 5 with the compatibility aliases from CONTRACT
-decision 16.
+Repository created from the design in `docs/`. On `main`: the gate and guardrails, and `config` (Wave 0). `wire`/`kernel` are
+approved on `rr/v2-foundation` (Phil reviewed the types); `testkit` is in progress. The repository is Rust only (plus shell
+for CI and hooks): the per-harness hook kits and the Node installer stayed in the RivetOS monorepo (gate rule STACK), and
+`scripts/gate.py` moves to `cargo xtask`.
 
 ## How work happens
 

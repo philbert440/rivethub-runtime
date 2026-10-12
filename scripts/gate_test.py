@@ -83,7 +83,19 @@ with tempfile.TemporaryDirectory() as d:
     out = subprocess.run([sys.executable, os.path.join(d, 'scripts', 'gate.py'), d], capture_output=True, text=True).stdout
     if 'UNTYPED' in out:
         failures.append('UNTYPED: fired on serde_yaml::Value in config resolve.rs')
+with tempfile.TemporaryDirectory() as d:
+    shutil.copytree(os.path.join(ROOT, 'docs'), os.path.join(d, 'docs'))
+    shutil.copytree(os.path.join(ROOT, 'scripts'), os.path.join(d, 'scripts'))
+    os.makedirs(os.path.join(d, 'tools'))
+    open(os.path.join(d, 'tools', 'hook.ts'), 'w').write('export const a = 1\n')
+    subprocess.run(['git', 'init', '-q', d], check=True)
+    subprocess.run(['git', '-C', d, 'add', '-A'], check=True)
+    out = subprocess.run([sys.executable, os.path.join(d, 'scripts', 'gate.py'), d], capture_output=True, text=True).stdout
+    if 'STACK tools/hook.ts' not in out:
+        failures.append('STACK: did not fire on a tracked .ts file')
+    if 'STACK scripts/gate.py' in out:
+        failures.append('STACK: fired on the gate script itself')
 for f in failures:
     print(f)
-print(f'GATE-TEST {"FAIL" if failures else "OK"}: {len(CASES) + len(WIRE) + len(EXTRA) + 1} cases, {len(failures)} failure(s)')
+print(f'GATE-TEST {"FAIL" if failures else "OK"}: {len(CASES) + len(WIRE) + len(EXTRA) + 3} cases, {len(failures)} failure(s)')
 sys.exit(1 if failures else 0)
