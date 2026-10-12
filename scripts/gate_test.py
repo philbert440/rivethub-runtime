@@ -62,6 +62,8 @@ for code, (bad, good) in CASES.items():
         failures.append(f'{code}: fired on the proper pattern')
 EXTRA = [
     ('JSMODEL', 'pub fn is_truthy(v: &str) -> bool { !v.is_empty() }\n', 'pub fn is_enabled(v: bool) -> bool { v }\n'),
+    ('NAMING', 'pub fn room_state() {}\n', 'pub fn golden_path() {}\npub struct NetworkGoldenPath;\n'),
+    ('JSMODEL', 'pub fn build() -> bool { "JSON.stringify(x)".is_empty() }\n', 'pub fn build() -> bool { true }\n'),
     ('COUNTTYPE', 'pub struct A {\n    pub timeout_ms: Option<f64>,\n}\n', 'pub struct A {\n    pub timeout_ms: Option<u64>,\n}\n'),
     ('COUNTTYPE', 'pub struct A {\n    pub top_k: Option<f64>,\n}\n', 'pub struct A {\n    pub top_k: Option<i32>,\n    pub top_p: Option<f64>,\n}\n'),
     ('JSMODEL', 'pub enum NumberOrText {\n    N(f64),\n}\n', 'pub struct A {\n    pub timeout_ms: u64,\n}\n'),

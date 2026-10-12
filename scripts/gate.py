@@ -35,7 +35,7 @@ PROD = [
     (re.compile(r'#!?\[(allow|expect)\('), 'ALLOW', 'allow/expect attribute'),
     (re.compile(r'\.(unwrap|expect)\('), 'UNWRAP', 'unwrap/expect in production code'),
     (re.compile(r'\bunsafe\b'), 'UNSAFE', 'unsafe'),
-    (re.compile(r'\bJs(Value|String|Object|Number|Array)\b|\bserde_json::Number\b|use serde_json::\{?[^;]*\bNumber\b|\w*truthy\w*|\btypeof\w*|\[object Object\]|\b\w*(NumberOr|OrNumber)\w*'), 'JSMODEL', 'JavaScript value model or semantics (truthiness, typeof, [object Object])'),
+    (re.compile(r'\bJs(Value|String|Object|Number|Array)\b|\bserde_json::Number\b|use serde_json::\{?[^;]*\bNumber\b|\w*truthy\w*|\btypeof\w*|\[object Object\]|\b\w*(NumberOr|OrNumber)\w*|JSON\.stringify'), 'JSMODEL', 'JavaScript value model or semantics (truthiness, typeof, [object Object])'),
     (re.compile(r'^impl(<[^>]*>)?\s+(PartialEq|Eq|Clone|Copy|Debug|Default|Hash|PartialOrd|Ord)\s+for\b'), 'MANUALDERIVE', 'hand-written impl of a derivable trait (use #[derive])'),
     (re.compile(r'^impl(<\'de>)?\s+(serde::)?(Serialize|Deserialize<\'de>)\s+for\b|(^|[^_])\bwith\s*=\s*"(?!(::)?serde_with::)|serialize_with\s*=|deserialize_with\s*='), 'CUSTOMSERDE', 'hand-written serde (use derives, #[serde(try_from/into)], strum, serde_with)'),
     (re.compile(r'^\s*pub\s+(port|\w*_port)\s*:\s*(Option<)?(i64|i32|u64|u32|usize)\b|^\s*pub\s+(count|limit|offset|total|inserted|skipped|index|attempts?|moved|dropped|len|\w+_count|\w*_tokens)\s*:\s*(Option<)?(i64|i32)\b'), 'COUNTTYPE', 'signed or oversized integer for a port or count (u16 ports; u32/u64/usize counts)'),
@@ -43,7 +43,7 @@ PROD = [
     (re.compile(r'\bserde_yaml::(Value|Mapping|Number|Sequence)\b|use serde_yaml::\{?[^;]*\b(Value|Mapping|Number|Sequence)\b'), 'UNTYPED', 'raw serde_yaml value outside config load/resolve (deserialize into typed fields; wrong types are serde_path_to_error errors)'),
     (re.compile(r'\bIgnoredAny\b'), 'UNKNOWNKEYS', 'IgnoredAny key capture (report unknown keys with serde_ignored)'),
     (re.compile(r'match\s+\w+(\.\w+\(\))*\.as_str\(\)\s*\{'), 'DISPATCH', 'string dispatch on a wire tag (use an enum)'),
-    (re.compile(r'\b\w*([Dd]en_|_den\b|Den[A-Z]|[Rr]oom_|_room\b|Room[A-Z])\w*'), 'NAMING', 'den/room identifier'),
+    (re.compile(r'\b(?:\w+_)?(?:den|rooms?)(?:_\w+)?\b|\b\w*?(?<![a-z])(?:Den|Rooms?)(?:[A-Z]\w*)?\b'), 'NAMING', 'den/room identifier'),
     (re.compile(r'tokio::runtime::Builder|#\[tokio::main\]'), 'RUNTIME', 'runtime construction outside the binary'),
     (re.compile(r'\bstd::sync::(Mutex|RwLock)\b'), 'STDLOCK', 'std lock (use parking_lot or tokio::sync)'),
     (re.compile(r'\b(println|eprintln|print|eprint)!\('), 'PRINT', 'print macro (use tracing; only the binary writes to stdout)'),
@@ -328,7 +328,7 @@ def check_rust_file(rel, text, crate):
                 block(f'COUNTTYPE {rel}:{i}: signed pid (use u32) → docs/PATTERNS.md#counttype')
     if re.search(r'(^|/)(den|room|rooms)(\.rs|/)', rel.replace(os.sep, '/')):
         block(f'NAMING {rel}: den/room file or module name → docs/PATTERNS.md#naming')
-    is_test = '/tests/' in '/' + rel or crate == 'testkit' or rel.endswith('/build.rs')
+    is_test = '/tests/' in '/' + rel or rel.endswith('/build.rs')
     if not is_test:
         n = sum(1 for l in lines if l.strip())
         if n > FILE_CEILING:
@@ -345,6 +345,8 @@ def check_rust_file(rel, text, crate):
             if code == 'NAMING' and re.search(r'"[^"]*(den|room)[^"]*"', line):
                 continue
             if code == 'UNTYPED' and rel.replace(os.sep, '/').endswith('crates/wire/src/json.rs'):
+                continue
+            if code == 'UNTYPED' and crate == 'testkit':
                 continue
             if code == 'UNTYPED' and 'serde_yaml' in line and re.search(r'crates/config/src/(load|resolve|free_form)\.rs$', rel.replace(os.sep, '/')):
                 continue
