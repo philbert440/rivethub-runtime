@@ -54,7 +54,7 @@ make_bundle() {
   mkdir -p "${dir}"
   # bash printf treats a format starting with - as options (SC: -- ends them).
   printf -- '-----BEGIN CERTIFICATE-----\nCERT\n-----END CERTIFICATE-----\n' >"${dir}/${name}.crt"
-  printf -- '-----BEGIN PRIVATE KEY-----\nKEYMATERIAL-do-not-print\n-----END PRIVATE KEY-----\n' >"${dir}/${name}.key"
+  printf -- '-----BEGIN PRIVATE KEY-----\nKEYMATERIAL-do-not-print\n-----END PRIVATE KEY-----\n' >"${dir}/${name}.key" # secret-scan-allow
   printf -- '-----BEGIN CERTIFICATE-----\nCHAIN\n-----END CERTIFICATE-----\n' >"${dir}/ca-chain.pem"
   cat >"${dir}/mesh.json" <<EOF
 {

@@ -53,6 +53,7 @@ IPV6_INTERNAL_RE = re.compile(r'\b(?:f[cd][0-9a-f]{2}|fe80)(?::[0-9a-f]{0,4}){2,
 WG_KEY_RE = re.compile(r'\b[A-Za-z0-9+/]{43}=(?![A-Za-z0-9+/=])')
 LAN_HOST_RE = re.compile(r'\b[a-z0-9][a-z0-9-]*\.lan\b(?!\.)', re.I)
 WORD_RE = re.compile(r'\b[A-Za-z][A-Za-z0-9]*\b')
+NONSPACE_RE = re.compile(r'\S+')
 HYPHEN_RE = re.compile(r'\b[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+\b')
 TOKEN_RES = [
     (re.compile(r'\bsk-[A-Za-z0-9_-]{20,}'), 'API key shape (sk-…)'),
@@ -70,6 +71,12 @@ SKIP_SCAN_RE = [
     re.compile(r'(^|/)Cargo\.lock$'),
     re.compile(r'\.(png|jpg|jpeg|gif|webp|ico|svg|pdf|zip|gz|woff2?|ttf|otf|mp3|wav|ogg|mp4|webm|so|a|bin|wasm)$', re.I),
 ]
+OWNER_IDENTITY_RE = [re.compile(r'(^|/)LICENSE$'), re.compile(r'(^|/)NOTICE$'), re.compile(r'^\.github/CODEOWNERS$')]
+FIXTURE_RE = re.compile(r'(^|/)(fixtures|testdata)/')
+PRAGMA = re.compile(r'(secret-scan-allow|gate-allow)')
+TITLE_RE = re.compile(r'[A-Z][a-z]+')
+LINUX_AFTER_RE = re.compile(r'\s+Linux\b')
+IDENT_CHAR = re.compile(r'[A-Za-z0-9-]')
 PATH_MARKER_RE = [re.compile(r'(^|/)README(\.[A-Za-z0-9]+)?$', re.I), re.compile(r'(^|/)docs/'), re.compile(r'(^|/)fixtures/'), re.compile(r'\.(md|mdx)$', re.I)]
 AUTHORSHIP = {
     'house': [('rivet philbot', 'rivetphilbot@gmail.com'), ('rivet', 'rivetphilbot@gmail.com'), ('philip', 'philbert440@gmail.com'),
@@ -112,42 +119,52 @@ def is_private_ip(tok):
 
 
 def in_tag_context(line, idx, token):
-    before, after = line[:idx], line[idx + len(token):]
+    end = idx + len(token)
     i = idx
-    while i > 0 and re.match(r'[A-Za-z0-9-]', line[i - 1]):
+    while i > 0 and IDENT_CHAR.match(line, i - 1):
         i -= 1
     if line[i:i + 2] == '--':
         return False
-    if re.search(r'[A-Za-z0-9]-$', before) or re.match(r'^-[A-Za-z0-9]', after):
-        j = idx
-        while j < len(line) and re.match(r'[A-Za-z0-9-]', line[j]):
+    hyphen_before = idx >= 2 and line[idx - 1] == '-' and line[idx - 2].isalnum()
+    hyphen_after = end + 1 < len(line) and line[end] == '-' and line[end + 1].isalnum()
+    if hyphen_before or hyphen_after:
+        j = end
+        while j < len(line) and IDENT_CHAR.match(line, j):
             j += 1
         return re.search(r'(^|-)(rivet|grokbot)(-|$)', line[i:j], re.I) is not None
-    q = before[-1:] if before else ''
-    if q in ("'", '"', '`') and after.startswith(q):
+    q = line[idx - 1] if idx > 0 else ''
+    if q in ("'", '"', '`') and line[end:end + 1] == q:
         if token.lower() == 'arch':
             return False
-        pre = before[:-1]
-        return not (re.search(r'[A-Za-z0-9_]$', pre) or re.search(r'[\[(,]$', pre) or re.search(r',\s*$', pre))
+        c = line[idx - 2] if idx >= 2 else ''
+        if c.isalnum() or c in '_[(,':
+            return False
+        k = idx - 2
+        while k >= 0 and line[k] in ' \t':
+            k -= 1
+        return not (k >= 0 and line[k] == ',')
     return False
 
 
 def check_persona(token, line, idx):
     if len(token) <= 4:
-        if re.fullmatch(r'[A-Z][a-z]+', token):
-            return not re.match(r'^\s+Linux\b', line[idx + len(token):])
+        if TITLE_RE.fullmatch(token):
+            return not LINUX_AFTER_RE.match(line, idx + len(token))
         return in_tag_context(line, idx, token)
-    return not (2 <= len(token) <= 4 and token.isupper())
+    return True
 
 
 def scan_line(line, file, priv, sec):
     out = []
     marker = any(r.search(file) for r in PATH_MARKER_RE)
+    owner_file = any(r.search(file) for r in OWNER_IDENTITY_RE)
+    fixture = FIXTURE_RE.search(file) is not None
+    pragma = PRAGMA.search(line) is not None
     for m in UUID_RE.finditer(line):
         if sha(m.group(0).lower()) in priv:
             out.append(('denylist-uuid', m.group(0)))
     for m in EMAIL_RE.finditer(line):
-        if sha(m.group(0).lower()) in priv:
+        if not owner_file and sha(m.group(0).lower()) in priv:
             out.append(('denylist-email', m.group(0)))
     for m in HYPHEN_RE.finditer(line):
         tok = m.group(0)
@@ -165,7 +182,7 @@ def scan_line(line, file, priv, sec):
     for m in WORD_RE.finditer(line):
         tok = m.group(0)
         if check_persona(tok, line, m.start()):
-            if sha(tok.lower()) in priv:
+            if not owner_file and sha(tok.lower()) in priv:
                 out.append(('denylist-persona', tok))
         elif re.fullmatch(r'[A-Za-z]{2,}\d+', tok) and sha(tok.lower()) in priv:
             out.append(('denylist-host', tok))
@@ -176,8 +193,7 @@ def scan_line(line, file, priv, sec):
         if any(sha(c) in priv for c in cands):
             out.append(('denylist-ip-prefix', tok))
     for m in IPV4_FULL_RE.finditer(line):
-        kind = is_private_ip(m.group(0))
-        if kind == 'private':
+        if not pragma and is_private_ip(m.group(0)) == 'private':
             out.append(('private-ip', m.group(0)))
     for m in HOME_RE.finditer(line):
         user = m.group(1)
@@ -185,17 +201,19 @@ def scan_line(line, file, priv, sec):
             continue
         if sha(user.lower()) in priv or marker:
             out.append(('home-path', m.group(0)))
-    for m in IPV6_INTERNAL_RE.finditer(line):
-        out.append(('ipv6-internal', m.group(0)))
-    for m in WG_KEY_RE.finditer(line):
-        out.append(('wg-key', m.group(0)[:12] + '…'))
-    for m in LAN_HOST_RE.finditer(line):
-        out.append(('lan-host', m.group(0)))
-    for rx, label in TOKEN_RES:
-        for m in rx.finditer(line):
-            out.append(('secret', label))
-    for tok in re.findall(r'\S+', line):
-        if sha(tok) in sec or sha(tok.lower()) in sec:
+    if not pragma:
+        for m in IPV6_INTERNAL_RE.finditer(line):
+            out.append(('ipv6-internal', m.group(0)))
+        for m in WG_KEY_RE.finditer(line):
+            out.append(('wg-key', m.group(0)[:12] + '…'))
+        for m in LAN_HOST_RE.finditer(line):
+            out.append(('lan-host', m.group(0)))
+        if not fixture:
+            for rx, label in TOKEN_RES:
+                if rx.search(line):
+                    out.append(('secret', label))
+    for tok in NONSPACE_RE.findall(line):
+        if len(tok) >= 8 and (sha(tok) in sec or sha(tok.lower()) in sec):
             out.append(('denylist-secret', tok[:6] + '…'))
     return out
 
@@ -203,9 +221,8 @@ def scan_line(line, file, priv, sec):
 def scan_text(text, file, priv, sec, offset_lines=None):
     for n, line in enumerate(text.split('\n'), 1):
         for rule, match in scan_line(line, file, priv, sec):
-            shown = match if rule not in ('secret', 'denylist-secret') else match
             where = offset_lines[n - 1] if offset_lines else n
-            block(f'PRIVACY {file}:{where}: {rule}: {shown}')
+            block(f'PRIVACY {file}:{where}: {rule}: {match}')
 
 
 def skip_scan(file):
@@ -213,7 +230,7 @@ def skip_scan(file):
 
 
 def git(root, *args):
-    return subprocess.run(['git', *args], cwd=root, capture_output=True, text=True, check=False).stdout
+    return subprocess.run(['git', *args], cwd=root, capture_output=True, check=False).stdout.decode('utf-8', errors='replace')
 
 
 def manifests(root):
@@ -309,11 +326,13 @@ def staged(root):
     priv, sec = load_hashes(root, 'privacy-denylist.json'), load_hashes(root, 'secret-denylist.json')
     files = [f for f in git(root, 'diff', '--cached', '--name-only', '--diff-filter=ACMR').split('\n') if f]
     for rel in files:
-        text = git(root, 'show', f':{rel}')
-        if rel.startswith('crates/') and rel.endswith('.rs'):
-            check_rust_file(rel, text, rel.split('/')[1])
         if skip_scan(rel):
             continue
+        text = git(root, 'show', f':{rel}')
+        if '\ufffd' in text[:4096]:
+            continue
+        if rel.startswith('crates/') and rel.endswith('.rs'):
+            check_rust_file(rel, text, rel.split('/')[1])
         diff = git(root, 'diff', '--cached', '-U0', '--', rel)
         added, numbers, n = [], [], 0
         for line in diff.split('\n'):

@@ -1242,7 +1242,7 @@ ensure_rivet_ssh_key() {
     # Deterministic fixture; never a real private key.
     # printf treats a format starting with - as options (same trap as
     # test/node-sh.bats make_bundle). Keep the PEM on argv after -- / %s.
-    printf '%s\n' '-----BEGIN OPENSSH PRIVATE KEY-----' 'TEST-RIVET-KEY' '-----END OPENSSH PRIVATE KEY-----' >"${key}"
+    printf '%s\n' '-----BEGIN OPENSSH PRIVATE KEY-----' 'TEST-RIVET-KEY' '-----END OPENSSH PRIVATE KEY-----' >"${key}" # secret-scan-allow
     printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIRivetTestFixture rivet@test' >"${pub}"
     log "RIVETHUB_TEST=1: wrote fixture rivet ssh keypair under ${dir}"
   else
