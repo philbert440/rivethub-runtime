@@ -325,7 +325,7 @@ def check_rust_file(rel, text, crate):
                 if f and f.group(4) == pending_rename[0]:
                     block(f'REDUNDANTRENAME {rel}:{pending_rename[1]}: serde rename equal to the field name → docs/PATTERNS.md#redundantrename')
                 pending_rename = None
-            if crate == 'config' and re.match(r'\s*pub\s+(\w+_ms|\w*timeout\w*|\w+_tokens|\w+_dims|\w*minutes|\w*hours|start|end|port|\w+_count|\w+_window)\s*:\s*(Option<)?f(32|64)\b', line):
+            if crate == 'config' and re.match(r'\s*pub\s+(\w+_ms|\w*timeout\w*|\w+_tokens|\w+_dims|\w*minutes|\w*hours|start|end|port|\w+_count|\w+_window|top_k|seed|num_ctx|\w*max_\w+|\w*min_tokens)\s*:\s*(Option<)?f(32|64)\b', line):
                 block(f'COUNTTYPE {rel}:{i}: float for a duration, count or size setting (use u64/u32/u16/u8) → docs/PATTERNS.md#counttype')
             if re.match(r'\s*pub\s+pid\s*:\s*(Option<)?i(32|64)\b', line):
                 block(f'COUNTTYPE {rel}:{i}: signed pid (use u32) → docs/PATTERNS.md#counttype')

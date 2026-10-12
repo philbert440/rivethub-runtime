@@ -165,7 +165,8 @@ Anti-pattern: JavaScript-number habits in integer fields — `port: i64`, `limit
 `u16` for ports, `u32`/`u64`/`usize` for counts and limits; `i64` only for signed quantities and epoch milliseconds; `u32`
 for a pid. Settings that are durations, sizes or counts (`timeout_ms`, `embed_expected_dims`, quiet-hour `start`) are
 unsigned integers, never `f64`; a fractional value in a config file is a type error. Measured values a server reports
-(`prompt_ms: 12.4`) stay `f64`. Check: gate `COUNTTYPE`.
+(`prompt_ms: 12.4`) stay `f64`, as do sampling weights (`temperature`, `top_p`); `top_k` is an integer (`i32`, -1 disables).
+Check: gate `COUNTTYPE`.
 
 ## DUPTYPE
 Anti-pattern: the same enum defined in several modules (`Role`, `CaptureRole`, `stream::Role`). Pattern: one definition,

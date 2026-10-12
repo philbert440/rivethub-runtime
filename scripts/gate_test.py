@@ -63,6 +63,7 @@ for code, (bad, good) in CASES.items():
 EXTRA = [
     ('JSMODEL', 'pub fn is_truthy(v: &str) -> bool { !v.is_empty() }\n', 'pub fn is_enabled(v: bool) -> bool { v }\n'),
     ('COUNTTYPE', 'pub struct A {\n    pub timeout_ms: Option<f64>,\n}\n', 'pub struct A {\n    pub timeout_ms: Option<u64>,\n}\n'),
+    ('COUNTTYPE', 'pub struct A {\n    pub top_k: Option<f64>,\n}\n', 'pub struct A {\n    pub top_k: Option<i32>,\n    pub top_p: Option<f64>,\n}\n'),
     ('JSMODEL', 'pub enum NumberOrText {\n    N(f64),\n}\n', 'pub struct A {\n    pub timeout_ms: u64,\n}\n'),
     ('UNTYPED', 'pub struct A {\n    pub temperature: serde_yaml::Value,\n}\n', 'pub struct A {\n    pub temperature: Option<f64>,\n}\n'),
 ]
