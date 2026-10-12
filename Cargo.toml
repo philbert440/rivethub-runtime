@@ -1,0 +1,84 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+version = "0.1.0"
+repository = "https://github.com/philbert440/rivethub-runtime"
+
+[workspace.dependencies]
+agent-client-protocol = "0.3"
+async-trait = "0.1"
+axum = { version = "0.8", features = ["ws", "macros"] }
+bytes = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+clap = { version = "4", features = ["derive"] }
+futures = "0.3"
+nix = { version = "0.30", features = ["process", "signal", "fs", "user"] }
+parking_lot = "0.12"
+pgvector = { version = "0.4", features = ["sqlx"] }
+portable-pty = "0.9"
+rcgen = "0.13"
+regress = "0.12"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "stream"] }
+rmcp = { version = "0.5", features = ["server", "client", "transport-io", "transport-streamable-http-server"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2"
+rustls-webpki = "0.103"
+schemars = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+sha2 = "0.10"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json", "migrate"] }
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "fs", "io-util", "net", "signal"] }
+tokio-tungstenite = "0.26"
+tokio-util = { version = "0.7", features = ["rt"] }
+tower = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+url = "2"
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+unreachable_pub = "warn"
+missing_debug_implementations = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+exit = "deny"
+mem_forget = "deny"
+indexing_slicing = "warn"
+wildcard_enum_match_arm = "warn"
+large_futures = "warn"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+doc_markdown = "allow"
+option_if_let_else = "allow"
+missing_const_for_fn = "allow"
+future_not_send = "allow"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"

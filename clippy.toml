@@ -1,0 +1,19 @@
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-dbg-in-tests = true
+allow-print-in-tests = true
+too-many-lines-threshold = 80
+too-many-arguments-threshold = 6
+disallowed-types = [
+  { path = "std::sync::Mutex", reason = "use parking_lot::Mutex for short critical sections or tokio::sync::Mutex across awaits" },
+  { path = "std::sync::RwLock", reason = "use parking_lot::RwLock or tokio::sync::RwLock" },
+  { path = "serde_json::Value", reason = "boundary payloads are typed; use a serde struct or enum" },
+]
+disallowed-methods = [
+  { path = "std::process::exit", reason = "return an error to main; only the binary decides the exit code" },
+  { path = "tokio::runtime::Builder::new_multi_thread", reason = "only the rivethub binary builds a runtime" },
+  { path = "tokio::runtime::Builder::new_current_thread", reason = "only the rivethub binary builds a runtime" },
+  { path = "std::env::var", reason = "the environment is read once by the config crate" },
+  { path = "std::env::var_os", reason = "the environment is read once by the config crate" },
+]

@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    name: Gate (design rules, privacy, secrets, authorship)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: python3 scripts/gate.py .
+      - name: Commit authorship
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/gate.py --commits "origin/${{ github.base_ref }}..HEAD"
+
+  rust:
+    name: fmt, clippy, tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup toolchain install "$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal --component rustfmt,clippy,llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Crates present
+        id: crates
+        run: echo "any=$(ls crates 2>/dev/null | grep -c . )" >> "$GITHUB_OUTPUT"
+      - name: Format
+        if: steps.crates.outputs.any != '0'
+        run: cargo fmt --all --check
+      - name: Clippy
+        if: steps.crates.outputs.any != '0'
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Tools
+        if: steps.crates.outputs.any != '0'
+        run: cargo install cargo-nextest cargo-llvm-cov cargo-machete --locked
+      - name: Tests
+        if: steps.crates.outputs.any != '0'
+        run: cargo nextest run --workspace --all-features
+      - name: Coverage floor
+        if: steps.crates.outputs.any != '0'
+        run: cargo llvm-cov nextest --workspace --all-features --fail-under-lines "$(cat coverage-floor.txt)" --summary-only
+      - name: Unused dependencies
+        if: steps.crates.outputs.any != '0'
+        run: cargo machete
+      - name: Build
+        if: steps.crates.outputs.any != '0'
+        run: cargo build --workspace --release
+
+  deny:
+    name: cargo-deny (advisories, licences, bans, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --all-features

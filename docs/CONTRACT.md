@@ -1,0 +1,96 @@
+# RivetHub Rust runtime — the boundary contract
+
+Decided 2026-10-12 by Phil. This document is the whole definition of "drop-in replacement": the Rust runtime (RivetHub) must match the
+TypeScript runtime (RivetOS) (`origin/main`, commit c72e851f and later) at every boundary listed here, and nowhere else. Internals are
+designed fresh in idiomatic Rust (see ARCHITECTURE, the design artifact). Nothing in this document describes how the
+TypeScript is built; it describes only what other software, people and files observe.
+
+Reference material that survives from the first attempt (read-only; `/rivet-shared/plans/rust-rewrite/`):
+- `inventory/*.md` — what the TypeScript does at each boundary, with file:line evidence (3,535 lines, 8 documents).
+- `golden/` — recordings of the TypeScript's real inputs and outputs, produced by the recorders in `tools/`.
+- `PLAN.md` TypeScript-bugs table — behaviour the owner decided to fix rather than reproduce.
+
+## 1. Boundaries
+
+| # | Boundary | Who observes it | Spec (inventory) | Pinned by (recording) | Acceptance test |
+|---|---|---|---|---|---|
+| B1 | Gateway HTTP + WS API (`/api/*`, `/files/*`, `/term`, `/event(s)`, `/sessions`, `/state`, `/layout`, `/healthz`, `/mesh.json`, static SPA, `/ws`, `/v1` OpenAI-compatible) | RivetHub web/Android/Electron, hooks, mesh peers, scripts | gateway-api.md §2–§17 (route table §4, aliases §5) | `golden/gateway/` (28 files, recorded traffic incl. startup refusals) + `golden/term/` (17) | replay every recorded exchange: same status, headers (names case-insensitive), body; WS frames in order |
+| B2 | Session event stream v1 (`AgentEvent`, `v: 1`) and the room/session snapshot | RivetHub clients `/ws` clients, `POST /event(s)` producers | gateway-api.md §6, core-domain.md §1.10 | gateway + term recordings (events and snapshots) | accept/reject decisions and emitted snapshots identical on recorded inputs |
+| B3 | Capture ingest: hook payloads from every harness → `POST /api/capture` batch body | 10 harness integration kits (claude, codex, grok, kimi, qwen, opencode, hermes, pi, cursor, cowork) | data-layer.md §3.1–§3.6; harness-control-plane.md §3 | `golden/capture/` (22: pg arms), `golden/capture-zod/` (batch validation) | same rows written for the same hook input; same validation errors |
+| B4 | Postgres schema and data (`rh_*` tables, migrations 0001–0019, views, triggers, graphile_worker jobs) | the live datahub, the TypeScript workers during cutover, operators | data-layer.md §1–§2 | `golden/capture/pg/` (30 scenarios), `golden/memory/` | Rust migrates a 0001-era DB to the same schema; writes rows the TypeScript reads and vice versa; enqueues the same jobs with the same keys |
+| B5 | SQLite memory file (`memory.sqlite`, schema v7 and its upgrade ladder through cutover; schema v8 adds a sqlite-vec index afterwards) | standalone nodes, TypeScript nodes during cutover | data-layer.md §3; sqlite plugin | `golden/memory-sqlite/` (20 files incl. fixture DBs, upgrades, search results) | same `sqlite_master`, same rows, same search ranks; files open both ways |
+| B6 | Memory read API: search / browse / stats / get_full / tags (HTTP and MCP) | RivetHub clients, MCP clients (Claude Code etc.), agents | data-layer.md §3.7–§3.11; gateway-api.md §11 | `golden/memory-sqlite/` search cases; gateway recordings | same results and ranking on the same data |
+| B7 | MCP sidecar: RivetHub's own tools only (`echo`, `memory_*`, `wiki_*`, `delegate_task`, `list_agents`, `skill_list`, `skill_manage`), their schemas, transports (stdio, HTTP, den) | Claude Code, codex, every MCP client | mcp-tools-providers.md §2–§3 | tool catalog in the inventory; (recording to add: `tools/list` + sample calls) | identical `tools/list` output for the kept tools; identical results for recorded calls |
+| B8 | Provider wire traffic: the OpenAI-compatible chat (streamed) and embeddings API as spoken to vLLM, SGLang, llama-server, Ollama and hosted OpenAI-compatible endpoints | the model servers | mcp-tools-providers.md §5.4–§5.5 | the vllm, llama-server and ollama scenarios in `golden/providers/` (request+response) | byte-equal request bodies (headers filtered), same parsed responses and stream chunks |
+| B9 | CLI: command tree, flags, output text, exit codes, prompts | operators, systemd units, scripts, `rh update --mesh` | cli.md §0–§19 | `tests` listed in cli.md §21; (recording to add: CLI golden transcripts) | same stdout/stderr/exit for the same argv on the same state |
+| B10 | `config.yaml` keys, defaults, validation messages; environment variables | operators, deploy tooling | config-and-boot.md §1–§2 | `golden/diff/config/` (realistic cases) | same accept/reject and same messages for the same file |
+| B11 | On-disk state: `~/.rivethub/` layout, pid and lock files, `mesh.json`, agent presets, device/pairing files, uploads, layouts, wiki pages (markdown + frontmatter), skills `_meta.json`, `codex-threads.json` | other nodes, backups, humans, TypeScript during cutover | config-and-boot.md §3.9; core-domain.md §1.11; gateway-api.md §8 | fixtures under `golden/` and the inventories' documented formats | files written by Rust are read by TypeScript and vice versa |
+| B12 | Harness protocol: ACP (`session/*`) natively or through the codex-acp and claude-code-acp adapter binaries; herdr control; terminal WS framing | the harness binaries, herdr, RivetHub clients terminal | harness-control-plane.md §1–§2; standardize/SESSION-MODEL.md | `golden/term/` (PTY, WS, roster) ; ACP conformance via the `agent-client-protocol` crate's schema | real binaries: new/resume/prompt/cancel work on every installed harness; term replays pass |
+| B13 | Workers: graphile job names, payloads, keys, priorities, cron entries; worker role split | the shared Postgres queue, other nodes' workers | data-layer.md §2.3–§2.6 | `golden/capture/pg/` job rows | same jobs enqueued; same job handled with the same result rows |
+| B14 | Mesh: `mesh.json` registry format and re-registration rules, heartbeat, the agent channel (TLS HTTP on `agent_channel_port`), CA layout under `/rivet-shared/rivet-ca` | peer nodes (TypeScript and Rust during cutover), `rivet-ca.sh`, operators | core-domain.md §1.11; config-and-boot.md §1.8; gateway-api.md §7; cli.md §9 | `golden/` mesh.json fixtures | mixed-version mesh: both runtimes register, heartbeat and reach each other's agent channel |
+| B15 | Hook events (names and context fields) seen by skills and the safety fence / audit log | skills, the audit log, operators | core-domain.md §1.6 | existing TypeScript test fixtures | the same hook sequence and fields for the same turn (the workflow journal belongs to the `rivethub-workflows` package, not the runtime) |
+| B16 | Logs operators read, health endpoint, `doctor` output | operators, monitoring | config-and-boot.md §3.10–§3.11; cli.md §2.5 | documented lines | same lines for the documented events |
+
+## 2. What is explicitly NOT part of the contract
+
+- Internal module structure, class names, file layout of the TypeScript.
+- JavaScript runtime behaviour on inputs RivetHub never produces: `Date.parse` legacy forms, NaN/-0, prototype keys,
+  implicit coercions, UTF-16 slicing except where a client receives the bytes.
+- Key order of JSON objects, number spelling (`1` vs `1.0`), and whitespace — EXCEPT where a stored hash or dedupe key depends
+  on them (today: capture event ids, which hash the `JSON.stringify` of tool arguments; keep that one function).
+- Hardening, redaction, validation, timeouts and locking the TypeScript does not have. Weaknesses the TypeScript shares are
+  logged in the bugs table and fixed after cutover in both.
+- Reviewer opinions about internals. A finding against the Rust is valid only if it names a boundary row above and shows the
+  observable difference, or shows a defect the Rust itself introduces (crash, hang, data loss, wrong result), or a departure
+  from the Rust standards.
+
+## 3. Owner decisions already made (apply, do not re-litigate)
+
+ACP-shaped session model with chat over ACP (see decision 7 for the final per-harness shape; the earlier app-server /
+stream-json / headless drivers are superseded) and terminal as a PTY view of the same
+session (SESSION-MODEL.md); one multi-thread runtime; no comments anywhere; no den/room naming; standard crates; literal
+file-edit replace; delete custom auto-actions; drop the AI-SDK user-agent; one store-timestamp parser; PGlite migration as a
+one-shot `pg_dump` at cutover; `en-US` default locale; regex/YAML/JSON engine diagnostic text may differ after the TypeScript
+prefix; lone surrogates become U+FFFD except on wire-exact paths.
+
+Decided 2026-10-12 (the design's six questions): (1) switching chat↔terminal is a turn-end handoff with one owner per
+session and queued messages, never injection; (2) herdr is the only terminal multiplexer (tmux support is dropped — B12
+narrows to herdr control + PTY); (3) CLI-backed model providers stay, as a thin ModelProvider over a headless harness
+session; (4) one process per service (`rh gateway`, `rh agent`, `rh worker --role`, `rh mcp`), with
+`rh start/stop/status` keeping their CLI contract by supervising those processes; inter-process communication uses the
+existing boundaries (B1 HTTP API, B4/B13 Postgres queue) — no new wire; (5) one reviewer, Claude Opus, for Rust idiom and
+quality; boundary acceptance is mechanical; (6) the first attempt's branches and PRs are deleted.
+
+Decided 2026-10-12 (crate review): (7) one harness adapter — every chat-capable harness speaks ACP, natively or through
+`codex-acp` / `claude-code-acp`; pi and cursor are terminal-only until they have ACP; no codex app-server, claude stream-json
+or headless drivers are built. (8) A crate exists only where a feature is replaced or deployed on its own: hooks live in
+agent-loop, skills in mcp, agent presets in gateway, the wiki builder in workers, the certificate authority in cli, the
+harness store readers in capture (behind the `TranscriptReader` port, wired to the gateway's transcript route by the binary).
+(9) Standalone runs on SQLite: no embedded Postgres and no local-db crate; existing PGlite installs migrate once at cutover
+through the SQLite store's Postgres-shaped import; `rh local` drops `--pg-port` and `--db` (B9 narrows accordingly);
+sqlite-vec arrives as schema v8 after cutover while v7 brute-force search holds parity through the transition.
+(10) No built-in tool set: the `shell`, `file_*`, `search_*`, `ask_user`, `todo`, `internet_search` and `web_fetch` tools are
+deleted (memory shows no RivetHub use of the first five; every harness ships its own shell, file, search and web tools, so the web
+tools do not belong in the sidecar either). B7 narrows to the sidecar's RivetHub-owned tools; the `RIVETHUB_MCP_ENABLE_{SHELL,
+FILE,SEARCH}` gates and the `plugins/tools/*` plugin entries are accepted and ignored by `config` with a deprecation warning.
+(11) One model client: `providers` is a single OpenAI-compatible implementation (chat with streamed text/reasoning/tool-call
+deltas, usage, cancellation, extra-body passthrough; embeddings) plus the cli-backed provider over a headless ACP session.
+The native Anthropic Messages, Gemini and xAI Responses clients are not built (no node configures them; those models are
+reached through their harnesses); `providers.<id>.type` values for them are a config error naming the harness to use instead.
+The agent loop stays, minimal, for Discord, the task engine's API agents and `/v1`.
+(12) Chat-channel bots (Discord, Telegram, voice) live in `rivethub-channels`; `channels.discord/telegram/voice` config is
+accepted and ignored with a warning. (13) Workflows kept but outside the runtime: the separate `rivethub-workflows` workspace package
+(own binary, depends on `wire` + HTTP client only) drives sessions and tasks over the public API; not linked into `rivethub`.
+(14) Clients stay in the monorepo under `apps/`; the gateway serves the RivetHub web build from `static_dir`.
+(15) Capture redaction is a configuration option, off by default: `memory.capture.redaction.{enabled,builtins,patterns}` and
+`RIVETHUB_CAPTURE_REDACTION` are honoured by the hook-side writer; the YAML keys are actually passed to the hook process (the
+TypeScript validated them but did not). Nothing is redacted unless enabled.
+Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
+
+## 4. Gaps to close before building the affected slice
+
+- MCP `tools/list` and sample-call recording (B7); CLI golden transcripts (B9); ACP conformance runs against installed
+  binaries (B12). Each is a recorder under `tools/` plus files under `golden/`, recorded from the TypeScript runtime.
+
+Naming (Phil 2026-10-12): the single-node install with an embedded database is "standalone" (not "laptop mode") in every
+Rust identifier, log line and document. The CLI command `rh local` keeps its name because it is part of the B9 contract.
