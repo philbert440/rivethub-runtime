@@ -42,9 +42,10 @@ jobs:
       - name: Clippy
         if: steps.crates.outputs.any != '0'
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: Tools
+      - uses: taiki-e/install-action@v2
         if: steps.crates.outputs.any != '0'
-        run: cargo install cargo-nextest cargo-llvm-cov cargo-machete --locked
+        with:
+          tool: cargo-nextest,cargo-llvm-cov,cargo-machete
       - name: Tests
         if: steps.crates.outputs.any != '0'
         run: cargo nextest run --workspace --all-features
@@ -63,7 +64,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          command: check
-          arguments: --all-features
+      - name: Toolchain
+        run: rustup toolchain install "$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+      - name: Crates present
+        id: crates
+        run: echo "any=$(ls crates 2>/dev/null | grep -c . )" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@cargo-deny
+        if: steps.crates.outputs.any != '0'
+      - name: Check
+        if: steps.crates.outputs.any != '0'
+        run: cargo deny --all-features check

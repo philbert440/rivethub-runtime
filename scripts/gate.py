@@ -7,6 +7,7 @@ usage:
   gate.py --staged             pre-commit: forbidden patterns on staged .rs files; privacy + secret scan on staged added lines
   gate.py --commit-msg <file>  commit-msg hook: house identity, no AI attribution trailers
   gate.py --commits <range>    CI: the same check over every commit in a git range
+  gate.py --text               privacy + secret scan of stdin (added lines of a diff, a PR body)
 
 Design source: docs/ARCHITECTURE.md (layers), docs/BUILDER-RULES.md (rules), docs/CONTRACT.md (what must match).
 Exit 1 on any blocking finding."""
@@ -386,6 +387,11 @@ def main():
         label = 'commit-msg'
     elif args[:1] == ['--staged']:
         label = f'staged ({staged(os.getcwd())} files)'
+    elif args[:1] == ['--text']:
+        root = os.getcwd()
+        priv, sec = load_hashes(root, 'privacy-denylist.json'), load_hashes(root, 'secret-denylist.json')
+        scan_text(sys.stdin.read(), '<input>', priv, sec)
+        label = 'text'
     elif args[:1] == ['--commits']:
         commits(os.getcwd(), args[1])
         label = f'commits {args[1]}'
