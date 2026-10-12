@@ -35,7 +35,10 @@ PROD = [
     (re.compile(r'#!?\[(allow|expect)\('), 'ALLOW', 'allow/expect attribute'),
     (re.compile(r'\.(unwrap|expect)\('), 'UNWRAP', 'unwrap/expect in production code'),
     (re.compile(r'\bunsafe\b'), 'UNSAFE', 'unsafe'),
-    (re.compile(r'\bJs(Value|String|Object|Number|Array)\b'), 'JSMODEL', 'JavaScript value model type'),
+    (re.compile(r'\bJs(Value|String|Object|Number|Array)\b|\bserde_json::Number\b|use serde_json::\{?[^;]*\bNumber\b'), 'JSMODEL', 'JavaScript value model type'),
+    (re.compile(r'^impl(<[^>]*>)?\s+(PartialEq|Eq|Clone|Copy|Debug|Default|Hash|PartialOrd|Ord)\s+for\b'), 'MANUALDERIVE', 'hand-written impl of a derivable trait (use #[derive])'),
+    (re.compile(r'^impl(<\'de>)?\s+(serde::)?(Serialize|Deserialize<\'de>)\s+for\b|(^|[^_])\bwith\s*=\s*"(?!(::)?serde_with::)|serialize_with\s*=|deserialize_with\s*='), 'CUSTOMSERDE', 'hand-written serde (use derives, #[serde(try_from/into)], strum, serde_with)'),
+    (re.compile(r'^\s*pub\s+(port|\w*_port)\s*:\s*(Option<)?(i64|i32|u64|u32|usize)\b|^\s*pub\s+(count|limit|offset|total|inserted|skipped|index|attempts?|moved|dropped|len|\w+_count|\w*_tokens)\s*:\s*(Option<)?(i64|i32)\b'), 'COUNTTYPE', 'signed or oversized integer for a port or count (u16 ports; u32/u64/usize counts)'),
     (re.compile(r'\bserde_json::(Value|Map)\b|\bMap<String,\s*(serde_json::)?Value>|use serde_json::\{?[^;]*\b(Value|Map)\b'), 'UNTYPED', 'raw serde_json Value/Map outside wire::json (use a typed struct, wire::JsonObject, or wire::Extra)'),
     (re.compile(r'match\s+\w+(\.\w+\(\))*\.as_str\(\)\s*\{'), 'DISPATCH', 'string dispatch on a wire tag (use an enum)'),
     (re.compile(r'\b\w*([Dd]en_|_den\b|Den[A-Z]|[Rr]oom_|_room\b|Room[A-Z])\w*'), 'NAMING', 'den/room identifier'),
@@ -76,7 +79,7 @@ SKIP_SCAN_RE = [
     re.compile(r'\.(png|jpg|jpeg|gif|webp|ico|svg|pdf|zip|gz|woff2?|ttf|otf|mp3|wav|ogg|mp4|webm|so|a|bin|wasm)$', re.I),
 ]
 OWNER_IDENTITY_RE = [re.compile(r'(^|/)LICENSE$'), re.compile(r'(^|/)NOTICE$'), re.compile(r'^\.github/CODEOWNERS$')]
-FIXTURE_RE = re.compile(r'(^|/)(fixtures|testdata)/')
+FIXTURE_RE = re.compile(r'(^|/)(fixtures|testdata|golden)/')
 PRAGMA = re.compile(r'(secret-scan-allow|gate-allow)')
 TITLE_RE = re.compile(r'[A-Z][a-z]+')
 LINUX_AFTER_RE = re.compile(r'\s+Linux\b')
@@ -282,6 +285,19 @@ def dependency_direction(crates):
 
 def check_rust_file(rel, text, crate):
     lines = text.split('\n')
+    if len(re.findall(r'Self::\w+\s*=>\s*"', text)) >= 3:
+        block(f'DUPNAMES {rel}: match table mapping variants to strings (derive strum Display/EnumString with serde\'s rename rule) → docs/PATTERNS.md#dupnames')
+    if crate == 'wire' and '/tests/' not in '/' + rel.replace(os.sep, '/'):
+        in_payload = False
+        for i, line in enumerate(lines, 1):
+            if re.match(r'\s*#\[derive\([^)]*(Serialize|Deserialize)', line):
+                in_payload = True
+            elif in_payload and re.match(r'\s*pub (struct|enum) ', line):
+                in_payload = line.rstrip().endswith('{') and ' struct ' in line
+            elif in_payload and re.match(r'^}', line):
+                in_payload = False
+            elif in_payload and re.match(r'^    [a-z_][a-z0-9_]*\s*:', line):
+                block(f'WIREPUB {rel}:{i}: private field on a wire payload (wire payloads have pub fields, no accessors) → docs/PATTERNS.md#wirepub')
     if re.search(r'(^|/)(den|room|rooms)(\.rs|/)', rel.replace(os.sep, '/')):
         block(f'NAMING {rel}: den/room file or module name → docs/PATTERNS.md#naming')
     is_test = '/tests/' in '/' + rel or crate == 'testkit' or rel.endswith('/build.rs')
@@ -335,8 +351,38 @@ def single_variant_tags(files):
                 block(f'TAGFIELD {rel}:{i}: constant type tag `{m.group(2)}` as a field (use #[serde(tag = "type")]) → docs/PATTERNS.md#tagfield')
 
 
+def duplicate_enums(files):
+    seen = {}
+    for rel, text in files:
+        for m in re.finditer(r'pub enum (\w+)\s*\{([^}]*)\}', text):
+            variants = tuple(sorted(re.findall(r'^\s*([A-Z]\w*)', m.group(2), re.M)))
+            if len(variants) >= 3:
+                seen.setdefault(variants, []).append(f'{rel}:{m.group(1)}')
+    for variants, where in seen.items():
+        groups = {}
+        for w in where:
+            groups.setdefault(re.findall(r'[A-Z][a-z0-9]*', w.rsplit(':', 1)[1])[-1], []).append(w)
+        for same in groups.values():
+            if len(same) > 1:
+                block(f'DUPTYPE same enum defined {len(same)} times: {", ".join(same)} → docs/PATTERNS.md#duptype')
+
+
+def lint_policy(root):
+    head = git(root, 'show', 'main:Cargo.toml') or git(root, 'show', 'origin/main:Cargo.toml')
+    if not head:
+        return
+    try:
+        base = tomllib.loads(head).get('workspace', {}).get('lints')
+        mine = tomllib.load(open(os.path.join(root, 'Cargo.toml'), 'rb')).get('workspace', {}).get('lints')
+    except tomllib.TOMLDecodeError:
+        return
+    if base != mine:
+        block('LINTPOLICY [workspace.lints] differs from main (lint policy changes only in a reviewed main commit) → docs/PATTERNS.md#lintpolicy')
+
+
 def stringly(root, files):
     single_variant_tags(files)
+    duplicate_enums(files)
     enums = set()
     for _, text in files:
         enums.update(re.findall(r'^\s*pub enum (\w+)', text, re.M))
@@ -357,6 +403,7 @@ def stringly(root, files):
 
 def full(root):
     pattern_registry(root)
+    lint_policy(root)
     crates = manifests(root)
     dependency_direction(crates)
     sources = []

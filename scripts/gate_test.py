@@ -11,7 +11,7 @@ CASES = {
     'ALLOW': ('#[allow(dead_code)]\npub fn a() {}\n', 'pub fn a() {}\n'),
     'UNWRAP': ('pub fn a(x: Option<u8>) -> u8 { x.unwrap() }\n', 'pub fn a(x: Option<u8>) -> u8 { x.unwrap_or(0) }\n'),
     'UNSAFE': ('pub fn a() { unsafe {} }\n', 'pub fn a() {}\n'),
-    'JSMODEL': ('pub struct A(JsNumber);\n', 'pub struct A(f64);\n'),
+    'JSMODEL': ('pub struct A(serde_json::Number);\n', 'pub struct A(f64);\n'),
     'UNTYPED': ('pub struct A {\n    v: serde_json::Map<String, serde_json::Value>,\n}\n', 'pub struct A {\n    pub v: wire::JsonObject,\n}\n'),
     'TAGFIELD': ('pub enum SnapshotTag {\n    Snapshot,\n}\npub struct S {\n    pub r#type: SnapshotTag,\n}\n', '#[serde(tag = "type", rename = "snapshot")]\npub struct S {\n    pub v: i64,\n}\n'),
     'STRINGLY': ('pub enum HarnessId {\n    Grok,\n}\npub struct S {\n    pub harness: Option<String>,\n}\n', 'pub enum HarnessId {\n    Grok,\n}\npub struct S {\n    pub harness: Option<HarnessId>,\n}\n'),
@@ -21,24 +21,35 @@ CASES = {
     'STDLOCK': ('pub static A: std::sync::Mutex<u8> = std::sync::Mutex::new(0);\n', 'pub static A: parking_lot::Mutex<u8> = parking_lot::Mutex::new(0);\n'),
     'DYNVALUE': ('pub enum Node {\n    Null,\n    Bool(bool),\n    Seq(Vec<Node>),\n}\n', 'pub enum Kind {\n    Postgres,\n    Sqlite,\n}\n'),
     'STRSET': ('pub(crate) const KNOWN: [&str; 2] = ["vllm", "ollama"];\n', 'pub enum ProviderType {\n    Vllm,\n    Ollama,\n}\n'),
+    'MANUALDERIVE': ('pub struct A(u8);\nimpl PartialEq for A {\n    fn eq(&self, o: &Self) -> bool { self.0 == o.0 }\n}\n', '#[derive(PartialEq)]\npub struct A(u8);\n'),
+    'CUSTOMSERDE': ('pub struct V;\nimpl Serialize for V {\n}\n', '#[derive(Serialize)]\n#[serde(into = "u8")]\npub struct V;\n'),
+    'COUNTTYPE': ('pub struct A {\n    pub port: i64,\n    pub limit: i64,\n}\n', 'pub struct A {\n    pub port: u16,\n    pub limit: u32,\n}\n'),
+    'DUPNAMES': ('pub fn n(h: H) -> &\'static str { match h { Self::A => "a", Self::B => "b", Self::C => "c" } }\n', '#[derive(strum::Display)]\npub enum H {\n    A,\n}\n'),
+    'DUPTYPE': ('pub enum Role {\n    System,\n    User,\n    Tool,\n}\npub enum CaptureRole {\n    System,\n    User,\n    Tool,\n}\n', 'pub enum Role {\n    System,\n    User,\n    Tool,\n}\n'),
     'PRINT': ('pub fn a() { println!("x"); }\n', 'pub fn a() { tracing::info!("x"); }\n'),
 }
 MANIFEST = '[package]\nname = "mcp"\nedition.workspace = true\nlicense.workspace = true\nversion.workspace = true\npublish.workspace = true\n\n[lints]\nworkspace = true\n'
 
 
-def gate(src):
+def gate(src, crate='mcp'):
     with tempfile.TemporaryDirectory() as d:
         shutil.copytree(os.path.join(ROOT, 'docs'), os.path.join(d, 'docs'))
         shutil.copytree(os.path.join(ROOT, 'scripts'), os.path.join(d, 'scripts'))
-        os.makedirs(os.path.join(d, 'crates', 'mcp', 'src'))
-        open(os.path.join(d, 'crates', 'mcp', 'Cargo.toml'), 'w').write(MANIFEST)
-        open(os.path.join(d, 'crates', 'mcp', 'src', 'lib.rs'), 'w').write(src)
+        os.makedirs(os.path.join(d, 'crates', crate, 'src'))
+        open(os.path.join(d, 'crates', crate, 'Cargo.toml'), 'w').write(MANIFEST.replace('"mcp"', f'"{crate}"'))
+        open(os.path.join(d, 'crates', crate, 'src', 'lib.rs'), 'w').write(src)
         subprocess.run(['git', 'init', '-q', d], check=True)
         out = subprocess.run([sys.executable, os.path.join(d, 'scripts', 'gate.py'), d], capture_output=True, text=True).stdout
         return {line.split()[0] for line in out.splitlines() if line and not line.startswith('GATE')}
 
 
 failures = []
+WIRE = {'WIREPUB': ('#[derive(Serialize)]\npub struct A {\n    hidden: u8,\n}\n', '#[derive(Serialize)]\npub struct A {\n    pub shown: u8,\n}\n')}
+for code, (bad, good) in WIRE.items():
+    if code not in gate(bad, 'wire'):
+        failures.append(f'{code}: did not fire on the anti-pattern')
+    if code in gate(good, 'wire'):
+        failures.append(f'{code}: fired on the proper pattern')
 for code, (bad, good) in CASES.items():
     if code not in gate(bad):
         failures.append(f'{code}: did not fire on the anti-pattern')
@@ -46,5 +57,5 @@ for code, (bad, good) in CASES.items():
         failures.append(f'{code}: fired on the proper pattern')
 for f in failures:
     print(f)
-print(f'GATE-TEST {"FAIL" if failures else "OK"}: {len(CASES)} rules, {len(failures)} failure(s)')
+print(f'GATE-TEST {"FAIL" if failures else "OK"}: {len(CASES) + len(WIRE)} rules, {len(failures)} failure(s)')
 sys.exit(1 if failures else 0)

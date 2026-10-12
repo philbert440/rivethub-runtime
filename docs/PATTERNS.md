@@ -20,9 +20,10 @@ that cannot be absent is made non-optional by its type. Check: gate `UNWRAP`, cl
 Anti-pattern: `unsafe`. Pattern: a safe crate API. Check: gate `UNSAFE`, `unsafe_code = "forbid"`.
 
 ## JSMODEL
-Anti-pattern: emulating JavaScript values or built-ins (`JsNumber`, `JsString`, UTF-16 slicing, `Date.parse` heuristics,
-key-order preservation). Pattern: plain Rust types; the contract defines what is observable, and JavaScript runtime quirks are
-not part of it. Check: gate `JSMODEL`.
+Anti-pattern: emulating JavaScript values or built-ins (`JsNumber`, `JsString`, `serde_json::Number` for "any number",
+UTF-16 slicing, `Date.parse` heuristics, key-order preservation, accepting `"132"` or `10.7` where an integer is meant). Pattern: plain Rust types (`i64` epoch ms, `f64`, `u16`); the contract defines what is observable, and JavaScript runtime
+quirks on inputs RivetHub clients never send are not part of it (CONTRACT §2) — such recorded exchanges are listed as
+deviations, not reproduced. Check: gate `JSMODEL`.
 
 ## UNTYPED
 Anti-pattern: `serde_json::Value` / `Map<String, Value>` in structs, helpers or signatures — including private fields with
@@ -93,3 +94,37 @@ Check: clippy `exit`, `disallowed-methods`.
 ## DEPS
 Anti-pattern: a crate outside the policy (OpenSSL, `anyhow`, `once_cell`, `lazy_static`, a second async runtime, tmux).
 Pattern: rustls; `thiserror`; `std::sync::LazyLock`/`OnceLock`; tokio; herdr. Check: `deny.toml` bans.
+
+## LINTPOLICY
+Anti-pattern: a lane editing `[workspace.lints]` (adding `allow` entries) to get its own code through. Pattern: fix the
+code; a lint policy change is its own reviewed commit on `main`. Check: gate `LINTPOLICY` (lints must equal `main`'s).
+
+## MANUALDERIVE
+Anti-pattern: a hand-written `impl PartialEq/Clone/Debug/Default/Hash/Ord for` that does what `#[derive]` does. Pattern:
+`#[derive(...)]`. Check: gate `MANUALDERIVE`.
+
+## CUSTOMSERDE
+Anti-pattern: hand-written `impl Serialize`/`impl Deserialize`, or `#[serde(with = "crate::…")]` helper modules. Pattern:
+derives; `#[serde(try_from = "String", into = "String")]` with `TryFrom`/`From` for validated newtypes (`SessionId`,
+`ProtocolVersion` via `try_from = "u8"`); `strum` for string forms of enums; `serde_with` (e.g.
+`with = "::serde_with::rust::double_option"` where the contract distinguishes absent from `null`). Check: gate `CUSTOMSERDE`.
+
+## DUPNAMES
+Anti-pattern: a `match` table mapping each variant to its string (`Self::ClaudeCode => "claude-code"`) beside serde's own
+renames, plus `FromStr` that round-trips through a deserializer. Pattern: one naming rule on the enum —
+`#[derive(Serialize, Deserialize, strum::Display, strum::EnumString)]` with `#[serde(rename_all = "kebab-case")]` and
+`#[strum(serialize_all = "kebab-case")]`. Check: gate `DUPNAMES` (three or more `Self::X => "…"` arms in a file).
+
+## COUNTTYPE
+Anti-pattern: JavaScript-number habits in integer fields — `port: i64`, `limit: i64`, token counts as `i64`. Pattern:
+`u16` for ports, `u32`/`u64`/`usize` for counts and limits; `i64` only for signed quantities and epoch milliseconds.
+Check: gate `COUNTTYPE`.
+
+## DUPTYPE
+Anti-pattern: the same enum defined in several modules (`Role`, `CaptureRole`, `stream::Role`). Pattern: one definition,
+imported where needed; a wire payload that genuinely differs gets a type that differs. Check: gate `DUPTYPE` (same variant set and the same final name
+word, e.g. `Role`/`CaptureRole`).
+
+## WIREPUB
+Anti-pattern: private fields with accessor methods on `wire` payload structs. Pattern: wire payloads are plain data with
+`pub` fields; invariants live in validated newtypes (`SessionId`). Check: gate `WIREPUB`.
