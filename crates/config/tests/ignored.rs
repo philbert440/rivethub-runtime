@@ -1,6 +1,6 @@
 use config::{type_document, validate_document};
 
-fn findings(document: &serde_yaml::Value) -> Vec<String> {
+fn findings(document: &serde_yaml_ng::Value) -> Vec<String> {
     let typed = type_document(document);
     if let Ok(typed) = &typed {
         assert!(!typed.ignored.is_empty() || document.get("providers").is_none());
@@ -16,8 +16,8 @@ fn findings(document: &serde_yaml::Value) -> Vec<String> {
     lines
 }
 
-fn parsed(yaml: &str) -> Result<serde_yaml::Value, serde_yaml::Error> {
-    serde_yaml::from_str(yaml)
+fn parsed(yaml: &str) -> Result<serde_yaml_ng::Value, serde_yaml_ng::Error> {
+    serde_yaml_ng::from_str(yaml)
 }
 
 #[test]

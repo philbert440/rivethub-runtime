@@ -1,29 +1,22 @@
 use crate::environment::Environment;
 
-pub fn resolve_env_vars_with(env: &Environment, value: &serde_yaml::Value) -> serde_yaml::Value {
+pub fn resolve_env_vars_with(env: &Environment, value: &mut serde_yaml_ng::Value) {
     match value {
-        serde_yaml::Value::String(text) => serde_yaml::Value::String(substitute(env, text)),
-        serde_yaml::Value::Sequence(items) => serde_yaml::Value::Sequence(
-            items
-                .iter()
-                .map(|item| resolve_env_vars_with(env, item))
-                .collect(),
-        ),
-        serde_yaml::Value::Mapping(entries) => serde_yaml::Value::Mapping(
-            entries
-                .iter()
-                .map(|(key, item)| (key.clone(), resolve_env_vars_with(env, item)))
-                .collect(),
-        ),
-        serde_yaml::Value::Tagged(tagged) => {
-            serde_yaml::Value::Tagged(Box::new(serde_yaml::value::TaggedValue {
-                tag: tagged.tag.clone(),
-                value: resolve_env_vars_with(env, &tagged.value),
-            }))
+        serde_yaml_ng::Value::String(text) => *text = substitute(env, text),
+        serde_yaml_ng::Value::Sequence(items) => {
+            for item in items {
+                resolve_env_vars_with(env, item);
+            }
         }
-        serde_yaml::Value::Null | serde_yaml::Value::Bool(_) | serde_yaml::Value::Number(_) => {
-            value.clone()
+        serde_yaml_ng::Value::Mapping(entries) => {
+            for (_key, item) in entries.iter_mut() {
+                resolve_env_vars_with(env, item);
+            }
         }
+        serde_yaml_ng::Value::Tagged(tagged) => resolve_env_vars_with(env, &mut tagged.value),
+        serde_yaml_ng::Value::Null
+        | serde_yaml_ng::Value::Bool(_)
+        | serde_yaml_ng::Value::Number(_) => {}
     }
 }
 
@@ -48,7 +41,7 @@ fn substitute(env: &Environment, text: &str) -> String {
         }
         if !name.is_empty() && matches!(chars.peek().copied(), Some((_, '}'))) {
             chars.next();
-            out.push_str(env.get(&name).unwrap_or(""));
+            out.push_str(env.text(&name).unwrap_or(""));
         } else {
             out.push_str("${");
             out.push_str(&name);

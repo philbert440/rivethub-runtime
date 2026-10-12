@@ -1,5 +1,8 @@
+use std::path::PathBuf;
+
 use serde::Deserialize;
 
+use crate::enums::Effort;
 use crate::free_form::FreeForm;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
@@ -154,22 +157,22 @@ pub struct CliProvider {
     pub declared: Option<String>,
     pub binary: Option<String>,
     pub tools: Option<String>,
-    pub effort: Option<String>,
+    pub effort: Option<Effort>,
     pub permission_mode: Option<String>,
     pub exclude_dynamic_sections: Option<bool>,
     pub append_system_prompt: Option<bool>,
-    pub cwd: Option<String>,
+    pub cwd: Option<PathBuf>,
     pub timeout_ms: Option<u64>,
     pub permission_prompts: Option<String>,
     pub permission_timeout_ms: Option<u64>,
     pub allowed_api_key_sources: Option<Vec<String>>,
-    pub home: Option<String>,
+    pub home: Option<PathBuf>,
     pub session: Option<String>,
     pub profile: Option<String>,
     pub sandbox: Option<String>,
     pub approve_for_me: Option<bool>,
     pub skip_git_repo_check: Option<bool>,
-    pub reasoning_effort: Option<String>,
+    pub reasoning_effort: Option<Effort>,
     pub max_turns: Option<u32>,
     pub no_plan: Option<bool>,
     pub system_prompt: Option<String>,

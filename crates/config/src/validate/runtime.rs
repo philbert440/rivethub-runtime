@@ -1,10 +1,10 @@
 use crate::model::{HeartbeatEntry, RuntimeSection};
 use crate::report::ValidationResult;
 
-use super::required_string;
+use super::{required_path, required_string};
 
 pub(super) fn validate(out: &mut ValidationResult, section: &RuntimeSection) {
-    required_string(
+    required_path(
         out,
         "runtime.workspace",
         section.workspace.as_deref(),

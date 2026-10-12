@@ -8,8 +8,94 @@ mod providers;
 mod runtime;
 mod tasks;
 
+use std::path::Path;
+
 use crate::model::{AgentEntry, Config};
 use crate::report::ValidationResult;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IgnoredPath(Vec<Segment>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Segment {
+    Key(String),
+    Index(usize),
+}
+
+impl IgnoredPath {
+    pub(super) fn collect(prefix: &str, path: &serde_ignored::Path<'_>) -> Self {
+        let mut collected = Vec::new();
+        collect_segments(&mut collected, path);
+        collected.reverse();
+        let mut segments: Vec<Segment> = prefix
+            .split('.')
+            .filter(|part| !part.is_empty())
+            .map(|part| match part.parse::<usize>() {
+                Ok(index) => Segment::Index(index),
+                Err(_) => Segment::Key(part.to_owned()),
+            })
+            .collect();
+        segments.extend(collected);
+        Self(segments)
+    }
+
+    fn render(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        for segment in &self.0 {
+            let part = match segment {
+                Segment::Key(key) => key.clone(),
+                Segment::Index(index) => index.to_string(),
+            };
+            if part.bytes().all(|byte| byte.is_ascii_digit())
+                && let Some(last) = parts.last_mut()
+            {
+                last.push('[');
+                last.push_str(&part);
+                last.push(']');
+            } else {
+                parts.push(part);
+            }
+        }
+        parts.join(".")
+    }
+}
+
+impl std::fmt::Display for IgnoredPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.render())
+    }
+}
+
+fn collect_segments(segments: &mut Vec<Segment>, path: &serde_ignored::Path<'_>) {
+    match path {
+        serde_ignored::Path::Root => {}
+        serde_ignored::Path::Seq { parent, index } => {
+            segments.push(Segment::Index(*index));
+            collect_segments(segments, parent);
+        }
+        serde_ignored::Path::Map { parent, key } => {
+            let key = normalized_key(key);
+            if !key.is_empty() {
+                segments.push(Segment::Key(key));
+            }
+            collect_segments(segments, parent);
+        }
+        serde_ignored::Path::Some { parent }
+        | serde_ignored::Path::NewtypeStruct { parent }
+        | serde_ignored::Path::NewtypeVariant { parent } => collect_segments(segments, parent),
+    }
+}
+
+fn normalized_key(key: &str) -> String {
+    match key.rsplit_once('?') {
+        Some((name, index))
+            if !index.is_empty() && index.bytes().all(|byte| byte.is_ascii_digit()) =>
+        {
+            format!("{name}[{index}]")
+        }
+        _ => key.replace('?', ""),
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
 enum RemovedKey {
@@ -40,21 +126,31 @@ enum RemovedKey {
 }
 
 impl RemovedKey {
-    fn from_path(path: &str) -> Option<Self> {
-        match path {
-            "runtime.fallbacks" => Some(Self::RuntimeFallbacks),
-            "runtime.coding_pipeline" => Some(Self::RuntimeCodingPipeline),
-            "memory.postgres.review_endpoint" => Some(Self::PostgresReviewEndpoint),
-            "memory.postgres.review_model" => Some(Self::PostgresReviewModel),
-            "memory.postgres.review_api_key" => Some(Self::PostgresReviewApiKey),
-            other if agent_fallbacks(other) => Some(Self::AgentFallbacks),
+    fn from_path(segments: &[Segment]) -> Option<Self> {
+        let [Segment::Key(head), rest @ ..] = segments else {
+            return None;
+        };
+        let head: &str = head.as_str();
+        match (head, rest) {
+            ("runtime", [Segment::Key(key)]) if key == "fallbacks" => Some(Self::RuntimeFallbacks),
+            ("runtime", [Segment::Key(key)]) if key == "coding_pipeline" => {
+                Some(Self::RuntimeCodingPipeline)
+            }
+            ("memory", [Segment::Key(parent), Segment::Key(key)]) if parent == "postgres" => {
+                let key: &str = key.as_str();
+                match key {
+                    "review_endpoint" => Some(Self::PostgresReviewEndpoint),
+                    "review_model" => Some(Self::PostgresReviewModel),
+                    "review_api_key" => Some(Self::PostgresReviewApiKey),
+                    _ => None,
+                }
+            }
+            ("agents", [Segment::Key(_), Segment::Key(key)]) if key == "fallbacks" => {
+                Some(Self::AgentFallbacks)
+            }
             _ => None,
         }
     }
-}
-
-fn agent_fallbacks(path: &str) -> bool {
-    path.split('.').count() == 3 && path.starts_with("agents.") && path.ends_with(".fallbacks")
 }
 
 pub const PLUGINS_IGNORED: &str = "\"plugins\" is ignored — the Rust runtime loads no plugins.";
@@ -66,7 +162,7 @@ pub struct Presence {
     pub workflows: bool,
 }
 
-pub fn validate(config: &Config, ignored: &[String], presence: &Presence) -> ValidationResult {
+pub fn validate(config: &Config, ignored: &[IgnoredPath], presence: &Presence) -> ValidationResult {
     let mut out = ValidationResult::default();
     ignored_findings(config, ignored, &mut out);
     if presence.plugins {
@@ -120,113 +216,140 @@ fn sections(config: &Config, out: &mut ValidationResult) {
     }
 }
 
-fn ignored_findings(config: &Config, ignored: &[String], out: &mut ValidationResult) {
-    for raw in ignored {
-        let path = normalized_path(raw);
-        if let Some(message) = RemovedKey::from_path(&path).map(|removed| removed.to_string()) {
-            out.error(&path, message);
-        } else if let Some(message) = ignored_message(config, &path) {
-            out.warning(&path, message);
+fn ignored_findings(config: &Config, ignored: &[IgnoredPath], out: &mut ValidationResult) {
+    for path in ignored {
+        if let Some(message) = RemovedKey::from_path(&path.0).map(|removed| removed.to_string()) {
+            out.error(path.to_string(), message);
+        } else if let Some(message) = ignored_message(config, &path.0) {
+            out.warning(path.to_string(), message);
         }
     }
 }
 
-fn normalized_path(raw: &str) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    for segment in raw.split('.') {
-        let segment = normalized_segment(segment);
-        if segment.is_empty() {
-            continue;
-        }
-        if let Some(previous) = parts.last_mut()
-            && segment.bytes().all(|byte| byte.is_ascii_digit())
-        {
-            previous.push('[');
-            previous.push_str(&segment);
-            previous.push(']');
-            continue;
-        }
-        parts.push(segment);
+fn ignored_message(config: &Config, segments: &[Segment]) -> Option<String> {
+    if let [Segment::Key(key)] = segments {
+        return top_level_message(key);
     }
-    parts.join(".")
-}
-
-fn normalized_segment(segment: &str) -> String {
-    match segment.rsplit_once('?') {
-        Some((name, index))
-            if !index.is_empty() && index.bytes().all(|byte| byte.is_ascii_digit()) =>
-        {
-            format!("{name}[{index}]")
-        }
-        _ => segment.replace('?', ""),
-    }
-}
-
-fn ignored_message(config: &Config, path: &str) -> Option<String> {
-    if !path.contains('.') {
-        return top_level_message(path);
-    }
-    let (head, rest) = path.split_once('.')?;
-    let segments: Vec<&str> = rest.split('.').collect();
+    let [Segment::Key(head), rest @ ..] = segments else {
+        return None;
+    };
+    let head: &str = head.as_str();
     match head {
-        "runtime" => match segments.as_slice() {
-            [key] => Some(format!("Unknown runtime key \"{key}\"")),
-            [parent, key] if parent.starts_with("heartbeats[") => {
-                Some(format!("Unknown heartbeat key \"{key}\""))
+        "runtime" => runtime_message(rest),
+        "agents" => agents_message(rest),
+        "providers" => providers_message(config, rest),
+        "channels" => channels_message(rest),
+        "memory" => memory_message(rest),
+        "deployment" => deployment_message(rest),
+        "den" => gateway_message(rest),
+        "tasks" => tasks_message(rest),
+        _ => None,
+    }
+}
+
+fn runtime_message(rest: &[Segment]) -> Option<String> {
+    match rest {
+        [Segment::Key(key)] => Some(format!("Unknown runtime key \"{key}\"")),
+        [Segment::Key(parent), Segment::Key(key)] if parent.starts_with("heartbeats[") => {
+            Some(format!("Unknown heartbeat key \"{key}\""))
+        }
+        [Segment::Key(parent), Segment::Index(_), Segment::Key(key)] if parent == "heartbeats" => {
+            Some(format!("Unknown heartbeat key \"{key}\""))
+        }
+        _ => None,
+    }
+}
+
+fn agents_message(rest: &[Segment]) -> Option<String> {
+    match rest {
+        [Segment::Key(_id), Segment::Key(key)] => Some(format!("Unknown agent key \"{key}\"")),
+        [Segment::Key(_id), Segment::Key(parent), Segment::Key(key)] if parent == "tools" => Some(
+            format!("Unknown tools filter key \"{key}\" — expected \"exclude\" or \"include\""),
+        ),
+        _ => None,
+    }
+}
+
+fn providers_message(config: &Config, rest: &[Segment]) -> Option<String> {
+    match rest {
+        [Segment::Key(id), Segment::Key(key)] => {
+            let kind = config.provider_kind(id)?;
+            Some(format!(
+                "Unknown key \"{key}\" for provider type \"{kind}\""
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn channels_message(rest: &[Segment]) -> Option<String> {
+    match rest {
+        [Segment::Key(id), Segment::Key(key)] if id == "agent" => {
+            Some(format!("Unknown key \"{key}\" for channel type \"agent\""))
+        }
+        _ => None,
+    }
+}
+
+fn memory_message(rest: &[Segment]) -> Option<String> {
+    match rest {
+        [Segment::Key(key)] => Some(format!(
+            "Unknown memory key \"{key}\" — supported: \"postgres\" / \"sqlite\" (backend), \"capture\" (write-path options)"
+        )),
+        [Segment::Key(parent), Segment::Key(key)] => {
+            let parent: &str = parent.as_str();
+            match parent {
+                "postgres" => Some(format!("Unknown memory.postgres key \"{key}\"")),
+                "sqlite" => Some(format!("Unknown memory.sqlite key \"{key}\"")),
+                "capture" => Some(format!("Unknown memory.capture key \"{key}\"")),
+                _ => None,
             }
-            _ => None,
-        },
-        "agents" => match segments.as_slice() {
-            [_id, key] => Some(format!("Unknown agent key \"{key}\"")),
-            [_id, "tools", key] => Some(format!(
-                "Unknown tools filter key \"{key}\" — expected \"exclude\" or \"include\""
-            )),
-            _ => None,
-        },
-        "providers" => match segments.as_slice() {
-            [id, key] => {
-                let kind = config.provider_kind(id)?;
-                Some(format!(
-                    "Unknown key \"{key}\" for provider type \"{kind}\""
-                ))
+        }
+        [Segment::Key(parent), Segment::Key(grand), Segment::Key(key)]
+            if parent == "postgres" && grand == "embedded" =>
+        {
+            Some(format!("Unknown memory.postgres.embedded key \"{key}\""))
+        }
+        [Segment::Key(parent), Segment::Key(grand), Segment::Key(key)]
+            if parent == "capture" && grand == "redaction" =>
+        {
+            Some(format!("Unknown memory.capture.redaction key \"{key}\""))
+        }
+        _ => None,
+    }
+}
+
+fn deployment_message(rest: &[Segment]) -> Option<String> {
+    match rest {
+        [Segment::Key(key)] => Some(format!("Unknown deployment key \"{key}\"")),
+        _ => None,
+    }
+}
+
+fn gateway_message(rest: &[Segment]) -> Option<String> {
+    match rest {
+        [Segment::Key(key)] => Some(format!("Unknown den key \"{key}\"")),
+        [Segment::Key(parent), Segment::Key(key)] => {
+            let parent: &str = parent.as_str();
+            match parent {
+                "terminal" => Some(format!("Unknown den.terminal key \"{key}\"")),
+                "devices" => Some(format!("Unknown den.devices key \"{key}\"")),
+                _ => None,
             }
-            _ => None,
-        },
-        "channels" => match segments.as_slice() {
-            ["agent", key] => Some(format!("Unknown key \"{key}\" for channel type \"agent\"")),
-            _ => None,
-        },
-        "memory" => match segments.as_slice() {
-            [key] => Some(format!(
-                "Unknown memory key \"{key}\" — supported: \"postgres\" / \"sqlite\" (backend), \"capture\" (write-path options)"
-            )),
-            ["postgres", key] => Some(format!("Unknown memory.postgres key \"{key}\"")),
-            ["postgres", "embedded", key] => {
-                Some(format!("Unknown memory.postgres.embedded key \"{key}\""))
-            }
-            ["sqlite", key] => Some(format!("Unknown memory.sqlite key \"{key}\"")),
-            ["capture", key] => Some(format!("Unknown memory.capture key \"{key}\"")),
-            ["capture", "redaction", key] => {
-                Some(format!("Unknown memory.capture.redaction key \"{key}\""))
-            }
-            _ => None,
-        },
-        "deployment" => match segments.as_slice() {
-            [key] => Some(format!("Unknown deployment key \"{key}\"")),
-            _ => None,
-        },
-        "den" => match segments.as_slice() {
-            [key] => Some(format!("Unknown den key \"{key}\"")),
-            ["terminal", key] => Some(format!("Unknown den.terminal key \"{key}\"")),
-            ["devices", key] => Some(format!("Unknown den.devices key \"{key}\"")),
-            _ => None,
-        },
-        "tasks" => match segments.as_slice() {
-            [key] => Some(format!("Unknown tasks key \"{key}\"")),
-            ["eval", key] => Some(format!("Unknown tasks.eval key \"{key}\"")),
-            ["harnesses", _id, key] => Some(format!("Unknown key \"{key}\"")),
-            _ => None,
-        },
+        }
+        _ => None,
+    }
+}
+
+fn tasks_message(rest: &[Segment]) -> Option<String> {
+    match rest {
+        [Segment::Key(key)] => Some(format!("Unknown tasks key \"{key}\"")),
+        [Segment::Key(parent), Segment::Key(key)] if parent == "eval" => {
+            Some(format!("Unknown tasks.eval key \"{key}\""))
+        }
+        [Segment::Key(parent), Segment::Key(_id), Segment::Key(key)] if parent == "harnesses" => {
+            Some(format!("Unknown key \"{key}\""))
+        }
         _ => None,
     }
 }
@@ -330,6 +453,17 @@ pub(super) fn required_string(
     }
 }
 
+pub(super) fn required_path(
+    out: &mut ValidationResult,
+    path: &str,
+    value: Option<&Path>,
+    message: &str,
+) {
+    if value.is_none_or(|value| value.as_os_str().is_empty()) {
+        out.error(path, message);
+    }
+}
+
 pub(super) fn positive<T: Copy + Default + PartialEq>(
     out: &mut ValidationResult,
     path: &str,
@@ -367,7 +501,7 @@ pub(super) fn hardcoded_key_warning(out: &mut ValidationResult, path: &str, name
     );
 }
 
-fn looks_like_api_key(key: &str) -> bool {
+pub(super) fn looks_like_api_key(key: &str) -> bool {
     key.strip_prefix("sk-").is_some_and(|rest| {
         rest.len() >= 20
             && rest

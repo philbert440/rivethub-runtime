@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use config::{Config, ConfigError, Environment, MemoryBackend};
 
 fn env_from(pairs: &[(&str, &str)]) -> Environment {
@@ -26,7 +28,7 @@ fn load(text: &str) -> Result<Config, ConfigError> {
 
 fn validation_error(text: &str) -> Result<String, String> {
     match Config::from_str(&Environment::default(), text) {
-        Err(ConfigError::Validation { formatted }) => Ok(formatted),
+        Err(ConfigError::Validation { result }) => Ok(result.to_string()),
         Err(other) => Err(format!("{other}")),
         Ok(_) => Err("config loaded".to_owned()),
     }
@@ -46,7 +48,7 @@ const HEX_KEY: &str = "0123456789abcdef00112233445566778899aabbccddeeff001122334
 #[test]
 fn decision_16_new_env_names_win_and_legacy_names_warn() {
     let env = env_from(&[("RIVETOS_SHARED_DIR", "/srv/legacy")]);
-    assert_eq!(config::shared_dir(&env), "/srv/legacy");
+    assert_eq!(config::shared_dir(&env), PathBuf::from("/srv/legacy"));
     assert!(
         env.legacy_notice("RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR")
             .is_some()
@@ -56,7 +58,7 @@ fn decision_16_new_env_names_win_and_legacy_names_warn() {
         ("RIVETHUB_SHARED_DIR", "/srv/new"),
         ("RIVETOS_SHARED_DIR", "/srv/legacy"),
     ]);
-    assert_eq!(config::shared_dir(&env), "/srv/new");
+    assert_eq!(config::shared_dir(&env), PathBuf::from("/srv/new"));
     assert!(
         env.legacy_notice("RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR")
             .is_none()
@@ -74,16 +76,14 @@ fn decision_16_probe_prefers_rivethub_home() -> Result<(), Box<dyn std::error::E
     std::fs::write(legacy.join("config.yaml"), "runtime: {}\n")?;
 
     let env = env_from(&[("HOME", root.to_str().ok_or("temp path")?)]);
-    let (path, legacy_flag) =
-        config::resolve_config_path(&env).ok_or("no config candidate found")?;
-    assert!(path.ends_with(".rivethub/config.yaml"));
-    assert!(!legacy_flag);
+    let location = config::resolve_config_path(&env).ok_or("no config candidate found")?;
+    assert!(location.path().ends_with(".rivethub/config.yaml"));
+    assert!(!location.is_legacy());
 
     std::fs::remove_file(hub.join("config.yaml"))?;
-    let (path, legacy_flag) =
-        config::resolve_config_path(&env).ok_or("no legacy config candidate found")?;
-    assert!(path.ends_with(".rivetos/config.yaml"));
-    assert!(legacy_flag);
+    let location = config::resolve_config_path(&env).ok_or("no legacy config candidate found")?;
+    assert!(location.path().ends_with(".rivetos/config.yaml"));
+    assert!(location.is_legacy());
 
     std::fs::remove_file(legacy.join("config.yaml"))?;
     std::fs::remove_dir_all(&root)?;

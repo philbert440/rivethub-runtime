@@ -1,7 +1,7 @@
-use std::str::FromStr;
+use std::collections::BTreeMap;
 
 use crate::enums::{HarnessId, ModelsMode, listed};
-use crate::model::{EvalSection, HarnessEntry, TasksSection};
+use crate::model::{EvalSection, HarnessEntry, HarnessSlot, TasksSection};
 use crate::report::ValidationResult;
 
 pub(super) fn validate(out: &mut ValidationResult, section: &TasksSection) {
@@ -32,12 +32,9 @@ fn eval_section(out: &mut ValidationResult, eval: &EvalSection) {
     }
 }
 
-fn harness_map(
-    out: &mut ValidationResult,
-    harnesses: &std::collections::BTreeMap<String, HarnessEntry>,
-) {
+fn harness_map(out: &mut ValidationResult, harnesses: &BTreeMap<HarnessSlot, HarnessEntry>) {
     for (id, harness) in harnesses {
-        if HarnessId::from_str(id).is_err() {
+        if let HarnessSlot::Unknown(id) = id {
             out.warning(
                 format!("tasks.harnesses.{id}"),
                 format!(
@@ -50,15 +47,16 @@ fn harness_map(
     }
 }
 
-fn harness_entry(out: &mut ValidationResult, id: &str, harness: &HarnessEntry) {
-    let prefix = format!("tasks.harnesses.{id}");
+fn harness_entry(out: &mut ValidationResult, id: &HarnessSlot, harness: &HarnessEntry) {
+    let shown = id.as_text();
+    let prefix = format!("tasks.harnesses.{shown}");
     sheet_list(out, &prefix, "models", harness.models.as_ref());
     sheet_list(out, &prefix, "efforts", harness.efforts.as_ref());
     allowed_tools(out, &prefix, harness);
     models_mode_warnings(out, &prefix, harness);
-    if id != "claude-code" {
+    if !matches!(id, HarnessSlot::Known(HarnessId::ClaudeCode)) {
         let message = format!(
-            "\"isolation\" / \"allowed_tools\" are read by the claude-code executor only; ignored for \"{id}\""
+            "\"isolation\" / \"allowed_tools\" are read by the claude-code executor only; ignored for \"{shown}\""
         );
         if harness.isolation.is_some() {
             out.warning(format!("{prefix}.isolation"), message.clone());
@@ -69,12 +67,7 @@ fn harness_entry(out: &mut ValidationResult, id: &str, harness: &HarnessEntry) {
     }
 }
 
-fn sheet_list(
-    out: &mut ValidationResult,
-    prefix: &str,
-    label: &str,
-    entries: Option<&Vec<String>>,
-) {
+fn sheet_list<T>(out: &mut ValidationResult, prefix: &str, label: &str, entries: Option<&Vec<T>>) {
     let Some(entries) = entries else {
         return;
     };

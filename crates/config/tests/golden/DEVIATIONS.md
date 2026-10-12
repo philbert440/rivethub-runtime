@@ -1,13 +1,14 @@
-# Golden deviations — crates/config (round 4)
+# Golden deviations — crates/config
 
-The replay in `tests/validate.rs` drives every recorded case in
-`tests/golden/fixtures/validate_config*.jsonl` through `config::validate_document`.
-Proof frame (rounds 3–4):
+The replay in `tests/validate/` drives every recorded case in
+`tests/golden/fixtures/validate_config*.jsonl` through `config::validate_document`
+as one test per recorded case. Proof frame:
 
 - A case is WELL-TYPED when `serde_path_to_error::deserialize` of the document
   into the typed `Config` succeeds. Well-typed cases must match the recorded
   findings exactly, compared as a sorted multiset of (severity, path, message).
-  Decision replacements below are applied to the recorded side first.
+  The CONTRACT §3 decisions (11, 12/20, 13, 15) are applied to the recorded
+  side first — they are boundary behaviour, not deviations.
 - A TYPE-CONFUSED case (typed deserialization fails) produces exactly one error
   finding at serde's path, message `"<path>" has the wrong type: <serde
   message>`. The replay asserts only that the recorded outcome also had at
@@ -15,10 +16,13 @@ Proof frame (rounds 3–4):
 - `format_validation_result`, `resolve_env_vars`, `shared_dir`, `shared_path`,
   `install_root` and `install_path` replays are exact and carry no deviations.
 
-Case ids are `file:line`. 5,825 of 6,008 validate cases match the recording
-exactly (after the decision replacements); the remaining cases fall into the
-four counted deviation classes below, asserted against these counts by the
-replay test.
+The deviations below are the cases where the recording's expected findings are
+not reproduced verbatim. They are pinned as data in
+`tests/golden/deviations.jsonl` (one row per case: id, class, and the expected
+findings that replace the recorded ones); `deviations_are_documented` asserts
+the per-file counts against this document. 5,825 of 6,008 validate cases match
+the recording exactly (after the decision replacements); the remaining cases
+fall into the four classes below.
 
 ## Accepted-but-rejected (115 cases)
 
@@ -61,24 +65,23 @@ differs. Five examples per file:
 serde's derived structs accept the sequence form, so a section written as a
 YAML list (`agents.local: []`, `providers.reasoning_effort: []`) deserializes
 into the all-default entry instead of failing with the recorded
-`… must be an object` error. The replay skips a case when the only extra
-recorded finding is an object-shape error at a path that contains every other
-divergence. Five examples per file:
+`… must be an object` error. The table pins the actual expected findings for
+each such case. Examples:
 
 - `validate_config_agents_providers.jsonl` — 3 sequence-shaped sections or entries; ids: validate_config_agents_providers.jsonl:47, validate_config_agents_providers.jsonl:81, validate_config_agents_providers.jsonl:657
 
 ## Explicit nulls read as missing (7 cases)
 
 Absent and explicit `null` are the same "missing" on every typed field
-(round-4 NULLABLE: no `Option<Option<T>>`). serde_yaml goes one step further
+(NULLABLE: no `Option<Option<T>>`). serde_yaml goes one step further
 for the plain container shapes: an explicit null deserializes as the empty
 sequence (`runtime.heartbeats`, `memory.capture.redaction.patterns`,
 `den.allowed_origins`) or the all-default section (`den.devices`,
 `memory.capture`), so the document stays well-typed and the recorded
 must-be-array / must-be-an-object / must-be-a-list error is not reproduced.
-The replay counts a case here only when the sole divergence is recorded error
-findings whose input path holds an explicit `null` and the Rust side is
-silent. Five examples per file:
+The table pins the actual expected findings for each such case: recorded error
+findings whose input path holds an explicit `null`, while the Rust side is
+silent. Examples:
 
 - `validate_config_den.jsonl` — 3 explicit nulls read as missing; ids: validate_config_den.jsonl:131, validate_config_den.jsonl:466, validate_config_den.jsonl:740
 - `validate_config_memory.jsonl` — 3 explicit nulls read as missing; ids: validate_config_memory.jsonl:234, validate_config_memory.jsonl:337, validate_config_memory.jsonl:468
@@ -93,16 +96,16 @@ silent. Five examples per file:
 - Old: the warning above under `memory.capture.redaction.enabled` whenever
   `enabled: true`. New: the warning is absent; the setting is passed through
   and reachable as `Config::capture_redaction()`.
-- The replay drops every recorded instance of the warning before comparing.
+- The replay drops every recorded instance of the warning before comparing
+  (a uniform contract adjustment, applied to every case).
 
 ## Decision 13 — workflows left the runtime
 
 - Decision: the separate `rivethub-workflows` package drives workflows over the
   public API, so a top-level `workflows:` section is accepted and ignored with
-  one warning for ANY value present (round 3 removes the truthiness gate); the
-  recorded per-key validation (`"workflows" must be an object`,
-  `"workflows.enabled" must be a boolean`, `Unknown workflows key "…"`, and so
-  on) is not reproduced.
+  one warning for ANY value present; the recorded per-key validation
+  (`"workflows" must be an object`, `"workflows.enabled" must be a boolean`,
+  `Unknown workflows key "…"`, and so on) is not reproduced.
 - The replay replaces every recorded finding under `workflows` with the single
   warning `"workflows" is ignored — workflows moved out of the runtime into the
   rivethub-workflows package.` whenever the key is present.
@@ -175,7 +178,7 @@ after the TypeScript prefix.
 ## Root-shape and wrong-type messages
 
 `Config must be a YAML object (got …)` and the per-field `… must be a string`
-/ `… must be an array` shape messages are replaced, per the round-3 frame, by
+/ `… must be an array` shape messages are replaced, per the proof frame, by
 the single typed error `"<path>" has the wrong type: <serde message>` for
 type-confused documents. Required-section and required-field missing messages
 (`Missing required section "runtime"`, `Missing required field

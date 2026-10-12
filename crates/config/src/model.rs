@@ -1,12 +1,30 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use serde::Deserialize;
 
 use crate::enums::{
-    DeploymentTarget, Effort, EmbedWireShape, Isolation, MemoryBackend, ModelsMode, ThinkingLevel,
-    VerifierExecutor,
+    DeploymentTarget, Effort, EmbedWireShape, HarnessId, Isolation, MemoryBackend, ModelsMode,
+    ThinkingLevel, VerifierExecutor,
 };
 use crate::provider::{ProviderSlot, ProviderType};
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
+#[serde(untagged)]
+pub enum HarnessSlot {
+    Known(HarnessId),
+    Unknown(String),
+}
+
+impl HarnessSlot {
+    pub fn as_text(&self) -> Cow<'_, str> {
+        match self {
+            Self::Known(id) => Cow::Owned(id.to_string()),
+            Self::Unknown(id) => Cow::Borrowed(id),
+        }
+    }
+}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
@@ -35,12 +53,12 @@ pub struct RedactionSettings {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct RuntimeSection {
-    pub workspace: Option<String>,
+    pub workspace: Option<PathBuf>,
     pub default_agent: Option<String>,
     pub turn_timeout: Option<u64>,
     pub context: Option<ContextSection>,
-    pub skill_dirs: Option<Vec<String>>,
-    pub plugin_dirs: Option<Vec<String>>,
+    pub skill_dirs: Option<Vec<PathBuf>>,
+    pub plugin_dirs: Option<Vec<PathBuf>>,
     pub heartbeats: Vec<HeartbeatEntry>,
     pub safety: Option<SafetySection>,
     pub auto_actions: Option<AutoActionsSection>,
@@ -69,9 +87,9 @@ pub struct SafetySection {
 #[serde(default)]
 pub struct WorkspaceFenceSection {
     #[serde(alias = "allowedDirs")]
-    pub allowed_dirs: Option<Vec<String>>,
+    pub allowed_dirs: Option<Vec<PathBuf>>,
     #[serde(alias = "alwaysAllow")]
-    pub always_allow: Option<Vec<String>>,
+    pub always_allow: Option<Vec<PathBuf>>,
     pub tools: Option<Vec<String>>,
 }
 
@@ -183,7 +201,7 @@ pub struct PostgresSection {
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(default)]
 pub struct EmbeddedSection {
-    pub data_dir: Option<String>,
+    pub data_dir: Option<PathBuf>,
     #[serde(default = "default_embedded_port")]
     pub port: u16,
     #[serde(default = "default_auto_migrate")]
@@ -207,15 +225,15 @@ fn default_max_connections() -> u32 {
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(default)]
 pub struct SqliteSection {
-    pub path: Option<String>,
+    pub path: Option<PathBuf>,
     pub embed_endpoint: Option<String>,
     pub embed_model: Option<String>,
     pub embed_api_key: Option<String>,
     pub embed_token_command: Option<Vec<String>>,
-    pub embed_wire_shape: Option<String>,
+    pub embed_wire_shape: Option<EmbedWireShape>,
     pub tagging: Option<bool>,
     pub workers: Option<bool>,
-    pub wiki_dir: Option<String>,
+    pub wiki_dir: Option<PathBuf>,
     pub project_rule: Option<String>,
     pub tagger_allow_protected_removals: Option<bool>,
     pub tagger_api_key: Option<String>,
@@ -260,9 +278,9 @@ pub enum MeshTls {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct MeshTlsPaths {
-    pub ca_path: Option<String>,
-    pub cert_path: Option<String>,
-    pub key_path: Option<String>,
+    pub ca_path: Option<PathBuf>,
+    pub cert_path: Option<PathBuf>,
+    pub key_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -276,15 +294,15 @@ pub struct GatewaySection {
     pub tls_cert: Option<String>,
     pub tls_key: Option<String>,
     pub terminal: Option<TerminalSection>,
-    pub static_dir: Option<String>,
+    pub static_dir: Option<PathBuf>,
     pub root_redirect: Option<String>,
-    pub files_root: Option<String>,
+    pub files_root: Option<PathBuf>,
     pub files_open: bool,
     pub devices: DevicesSection,
     pub advertise_mdns: Option<bool>,
     pub allowed_origins: Vec<String>,
     pub allowed_hosts: Vec<String>,
-    pub allowed_harnesses: Option<Vec<String>>,
+    pub allowed_harnesses: Option<Vec<HarnessSlot>>,
 }
 
 fn default_gateway_port() -> u16 {
@@ -315,7 +333,7 @@ pub struct DevicesSection {
     pub relay_forward_dest: Option<String>,
     pub shared_host: Option<String>,
     pub shared_export: Option<String>,
-    pub roster_path: Option<String>,
+    pub roster_path: Option<PathBuf>,
     pub gateway_url: Option<String>,
     pub pg_admin_url: Option<String>,
     pub pg_device_group: Option<String>,
@@ -327,8 +345,8 @@ pub struct TasksSection {
     pub enabled: Option<bool>,
     pub pricing: Option<BTreeMap<String, PricingEntry>>,
     pub eval: Option<EvalSection>,
-    pub harnesses: Option<BTreeMap<String, HarnessEntry>>,
-    pub sqlite_path: Option<String>,
+    pub harnesses: Option<BTreeMap<HarnessSlot, HarnessEntry>>,
+    pub sqlite_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize)]
@@ -368,10 +386,10 @@ pub struct HarnessEntry {
     pub binary: Option<String>,
     pub model: Option<String>,
     pub effort: Option<Effort>,
-    pub cwd: Option<String>,
-    pub home: Option<String>,
+    pub cwd: Option<PathBuf>,
+    pub home: Option<PathBuf>,
     pub models: Option<Vec<String>>,
-    pub efforts: Option<Vec<String>>,
+    pub efforts: Option<Vec<Effort>>,
     pub models_mode: Option<ModelsMode>,
     pub isolation: Option<Isolation>,
     pub allowed_tools: Option<Vec<String>>,
@@ -383,7 +401,7 @@ pub struct TransportSection {
     pub host: Option<String>,
     #[serde(default = "default_transport_port")]
     pub port: u16,
-    pub socket: Option<String>,
+    pub socket: Option<PathBuf>,
     pub auth_token: Option<String>,
     pub require_bearer_on_socket: Option<bool>,
 }

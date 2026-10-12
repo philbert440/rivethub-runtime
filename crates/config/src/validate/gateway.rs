@@ -1,7 +1,5 @@
-use std::str::FromStr;
-
 use crate::enums::{HarnessId, listed};
-use crate::model::GatewaySection;
+use crate::model::{GatewaySection, HarnessSlot};
 use crate::report::ValidationResult;
 
 fn is_loopback(host: &str) -> bool {
@@ -26,7 +24,7 @@ pub(super) fn validate(out: &mut ValidationResult, section: &GatewaySection) {
         );
     }
     if let Some(static_dir) = &section.static_dir
-        && static_dir.is_empty()
+        && static_dir.as_os_str().is_empty()
     {
         out.error(
             "den.static_dir",
@@ -54,16 +52,16 @@ fn allowed_harnesses(out: &mut ValidationResult, section: &GatewaySection) {
     };
     let mut blank_entry = false;
     for (index, entry) in entries.iter().enumerate() {
-        if entry.trim().is_empty() {
-            blank_entry = true;
-        } else if HarnessId::from_str(entry).is_err() {
-            out.warning(
+        match entry {
+            HarnessSlot::Known(_) => {}
+            HarnessSlot::Unknown(id) if id.trim().is_empty() => blank_entry = true,
+            HarnessSlot::Unknown(id) => out.warning(
                 format!("den.allowed_harnesses[{index}]"),
                 format!(
-                    "Unknown harness id \"{entry}\" — expected one of: {}",
+                    "Unknown harness id \"{id}\" — expected one of: {}",
                     listed::<HarnessId>()
                 ),
-            );
+            ),
         }
     }
     if blank_entry {

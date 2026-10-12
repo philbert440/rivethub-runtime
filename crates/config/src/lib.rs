@@ -3,7 +3,7 @@ mod environment;
 pub mod free_form;
 mod load;
 pub mod model;
-mod paths;
+pub mod paths;
 pub mod provider;
 pub mod report;
 mod resolve;
@@ -15,12 +15,10 @@ pub use enums::{
 };
 pub use environment::Environment;
 pub use free_form::FreeForm;
-pub use load::{
-    ConfigError, Loaded, TypeConflict, resolve_config_path, type_document, validate_document,
-};
-pub use model::{Config, RedactionSettings};
-pub use paths::{Paths, install_path, install_root, shared_dir, shared_path};
+pub use load::{ConfigError, Loaded, Typed, resolve_config_path, type_document, validate_document};
+pub use model::{Config, HarnessSlot, RedactionSettings};
+pub use paths::{ConfigLocation, Paths, install_path, install_root, shared_dir, shared_path};
 pub use provider::ProviderType;
-pub use report::{Finding, Severity, ValidationResult, format_validation_result};
+pub use report::{Finding, Severity, ValidationResult};
 pub use resolve::resolve_env_vars_with;
-pub use validate::{PLUGINS_IGNORED, WORKFLOWS_IGNORED};
+pub use validate::{IgnoredPath, PLUGINS_IGNORED, WORKFLOWS_IGNORED};

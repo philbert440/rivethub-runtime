@@ -7,6 +7,8 @@ use crate::model::{
 };
 use crate::report::ValidationResult;
 
+use super::looks_like_api_key;
+
 const NESTED_QUANTIFIER_PATTERN: &str =
     r"\((?:[^\\)]|\\.)*[+*](?:[^\\)]|\\.)*\)(?:[+*?]|\{\d+,?\d*\})";
 
@@ -68,25 +70,13 @@ fn embed_api_key(postgres: &PostgresSection, out: &mut ValidationResult) {
     let Some(key) = &postgres.embed_api_key else {
         return;
     };
-    if key.contains("${") || key.is_empty() || !looks_like_key(key) {
+    if key.contains("${") || key.is_empty() || !looks_like_api_key(key) {
         return;
     }
     out.warning(
         "memory.postgres.embed_api_key",
         "memory.postgres.embed_api_key appears hardcoded — prefer environment variables or embed_token_command",
     );
-}
-
-fn looks_like_key(key: &str) -> bool {
-    key.strip_prefix("sk-").is_some_and(|rest| {
-        rest.len() >= 20
-            && rest
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-    }) || (key.len() >= 64
-        && key
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
 }
 
 fn embed_token_command(postgres: &PostgresSection, out: &mut ValidationResult) {
@@ -107,7 +97,11 @@ fn embed_token_command(postgres: &PostgresSection, out: &mut ValidationResult) {
 }
 
 fn embedded_section(out: &mut ValidationResult, embedded: &EmbeddedSection) {
-    if embedded.data_dir.as_deref() == Some("") {
+    if embedded
+        .data_dir
+        .as_ref()
+        .is_some_and(|dir| dir.as_os_str().is_empty())
+    {
         out.error(
             "memory.postgres.embedded.data_dir",
             "\"data_dir\" must be a non-empty string",
@@ -129,7 +123,7 @@ fn embedded_section(out: &mut ValidationResult, embedded: &EmbeddedSection) {
 
 fn sqlite_section(out: &mut ValidationResult, sqlite: &SqliteSection) {
     match sqlite.path.as_deref() {
-        Some("") => out.error(
+        Some(path) if path.as_os_str().is_empty() => out.error(
             "memory.sqlite.path",
             "\"memory.sqlite.path\" must be a non-empty file path",
         ),
@@ -162,9 +156,9 @@ fn pattern_finding(out: &mut ValidationResult, index: usize, pattern: &str) {
     {
         out.error(
             path,
-            format!(
-                "Pattern looks ReDoS-prone (nested quantifiers); rewrite without nested +/{} groups",
-                "*"
+            concat!(
+                "Pattern looks ReDoS-prone (nested quantifiers); rewrite without nested +/",
+                "* groups"
             ),
         );
         return;

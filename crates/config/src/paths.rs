@@ -1,130 +1,158 @@
+use std::ffi::OsStr;
+use std::path::{Component, Path, PathBuf};
+
 use crate::environment::Environment;
 
 const DEFAULT_SHARED_DIR: &str = "/rivet-shared";
 const DEFAULT_INSTALL_ROOT: &str = "/opt/rivetos";
 
-pub fn shared_dir(env: &Environment) -> String {
-    configured_value(env, "RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR")
-        .unwrap_or_else(|| DEFAULT_SHARED_DIR.to_owned())
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigLocation {
+    Current(PathBuf),
+    Legacy(PathBuf),
 }
 
-pub fn shared_path(env: &Environment, segments: &[&str]) -> String {
-    posix_join(&shared_dir(env), segments)
+impl ConfigLocation {
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::Current(path) | Self::Legacy(path) => path,
+        }
+    }
+
+    pub fn is_legacy(&self) -> bool {
+        matches!(self, Self::Legacy(_))
+    }
 }
 
-pub fn install_root(env: &Environment) -> String {
-    configured_value(env, "RIVETHUB_INSTALL_ROOT", "RIVETOS_INSTALL_ROOT")
-        .unwrap_or_else(|| DEFAULT_INSTALL_ROOT.to_owned())
+pub fn shared_dir(env: &Environment) -> PathBuf {
+    PathBuf::from(
+        configured_value(env, "RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR")
+            .unwrap_or_else(|| DEFAULT_SHARED_DIR.to_owned()),
+    )
 }
 
-pub fn install_path(env: &Environment, segments: &[&str]) -> String {
-    posix_join(&install_root(env), segments)
+pub fn shared_path(env: &Environment, segments: &[&str]) -> PathBuf {
+    join(&shared_dir(env), segments)
+}
+
+pub fn install_root(env: &Environment) -> PathBuf {
+    PathBuf::from(
+        configured_value(env, "RIVETHUB_INSTALL_ROOT", "RIVETOS_INSTALL_ROOT")
+            .unwrap_or_else(|| DEFAULT_INSTALL_ROOT.to_owned()),
+    )
+}
+
+pub fn install_path(env: &Environment, segments: &[&str]) -> PathBuf {
+    join(&install_root(env), segments)
 }
 
 fn configured_value(env: &Environment, new_name: &str, legacy_name: &str) -> Option<String> {
     let raw = env
-        .get(new_name)
-        .or_else(|| env.get(legacy_name))?
+        .text(new_name)
+        .or_else(|| env.text(legacy_name))?
         .trim()
         .to_owned();
     if raw.is_empty() { None } else { Some(raw) }
 }
 
-fn posix_join(root: &str, segments: &[&str]) -> String {
+fn join(root: &Path, segments: &[&str]) -> PathBuf {
     if segments.is_empty() {
-        return root.to_owned();
+        return root.to_path_buf();
     }
-    let mut path = root.to_owned();
+    let mut path = root.to_path_buf();
     for segment in segments {
-        path.push('/');
-        path.push_str(segment);
+        path.push(segment);
     }
-    posix_normalize(&path)
+    normalize(&path)
 }
 
-fn posix_normalize(path: &str) -> String {
-    let absolute = path.starts_with('/');
-    let mut parts: Vec<String> = Vec::new();
-    for piece in path.split('/') {
-        match piece {
-            "" | "." => {}
-            ".." => {
-                let pop = parts.last().is_some_and(|last| last.as_str() != "..");
+fn normalize(path: &Path) -> PathBuf {
+    let absolute = path.is_absolute();
+    let mut parts: Vec<&OsStr> = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::RootDir | Component::CurDir => {}
+            Component::ParentDir => {
+                let pop = parts.last().is_some_and(|last| *last != "..");
                 if pop {
                     parts.pop();
                 } else if !absolute {
-                    parts.push("..".to_owned());
+                    parts.push(OsStr::new(".."));
                 }
             }
-            other => parts.push(other.to_owned()),
+            Component::Prefix(prefix) => parts.push(prefix.as_os_str()),
+            Component::Normal(part) => parts.push(part),
         }
     }
-    let joined = parts.join("/");
+    let mut normalized = PathBuf::new();
     if absolute {
-        format!("/{joined}")
-    } else if joined.is_empty() {
-        ".".to_owned()
-    } else {
-        joined
+        normalized.push(Component::RootDir.as_os_str());
     }
+    for part in parts {
+        normalized.push(part);
+    }
+    if !absolute && normalized.as_os_str().is_empty() {
+        normalized.push(".");
+    }
+    normalized
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Paths {
-    home: Option<String>,
+    home: Option<PathBuf>,
 }
 
 impl Paths {
     pub fn new(env: &Environment) -> Self {
         Self {
-            home: env.home().map(str::to_owned),
+            home: env.home().map(PathBuf::from),
         }
     }
 
-    fn base(&self) -> &str {
-        self.home.as_deref().unwrap_or(".")
+    fn base(&self) -> &Path {
+        self.home.as_deref().unwrap_or_else(|| Path::new("."))
     }
 
-    pub fn home(&self) -> Option<&str> {
+    pub fn home(&self) -> Option<&Path> {
         self.home.as_deref()
     }
 
-    pub fn hub_home(&self) -> String {
-        format!("{}/.rivethub", self.base())
+    pub fn hub_home(&self) -> PathBuf {
+        self.base().join(".rivethub")
     }
 
-    pub fn legacy_home(&self) -> String {
-        format!("{}/.rivetos", self.base())
+    pub fn legacy_home(&self) -> PathBuf {
+        self.base().join(".rivetos")
     }
 
-    pub fn state_dir(&self) -> String {
+    pub fn state_dir(&self) -> PathBuf {
         self.hub_home()
     }
 
-    pub fn logs_dir(&self) -> String {
-        format!("{}/logs", self.state_dir())
+    pub fn logs_dir(&self) -> PathBuf {
+        self.state_dir().join("logs")
     }
 
-    pub fn env_file(&self) -> String {
-        format!("{}/.env", self.state_dir())
+    pub fn env_file(&self) -> PathBuf {
+        self.state_dir().join(".env")
     }
 
-    pub fn pid_file(&self) -> String {
-        format!("{}/rivethub.pid", self.state_dir())
+    pub fn pid_file(&self) -> PathBuf {
+        self.state_dir().join("rivethub.pid")
     }
 
-    pub fn owner_lock(&self, data_dir: &str) -> String {
-        format!("{data_dir}/rivethub-owner.lock")
+    pub fn owner_lock(&self, data_dir: &Path) -> PathBuf {
+        data_dir.join("rivethub-owner.lock")
     }
 
-    pub fn config_candidates(&self) -> Vec<(String, bool)> {
+    pub fn config_candidates(&self) -> Vec<ConfigLocation> {
         let base = self.base();
         vec![
-            (format!("{base}/.rivethub/config.yaml"), false),
-            (format!("{base}/.rivethub/config.yml"), false),
-            (format!("{base}/.rivetos/config.yaml"), true),
-            (format!("{base}/.rivetos/config.yml"), true),
-            ("./config.yaml".to_owned(), false),
+            ConfigLocation::Current(base.join(".rivethub").join("config.yaml")),
+            ConfigLocation::Current(base.join(".rivethub").join("config.yml")),
+            ConfigLocation::Legacy(base.join(".rivetos").join("config.yaml")),
+            ConfigLocation::Legacy(base.join(".rivetos").join("config.yml")),
+            ConfigLocation::Current(PathBuf::from("config.yaml")),
         ]
     }
 }

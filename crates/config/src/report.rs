@@ -1,19 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display)]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum Severity {
     Error,
     Warning,
-}
-
-impl std::fmt::Display for Severity {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Error => f.write_str("error"),
-            Self::Warning => f.write_str("warning"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,30 +60,32 @@ impl ValidationResult {
     }
 }
 
-pub fn format_validation_result(result: &ValidationResult) -> String {
-    let mut blocks: Vec<String> = Vec::new();
-    if !result.errors.is_empty() {
-        let mut block = String::from("Errors:");
-        for finding in &result.errors {
-            block.push_str("\n  \u{274c} ");
-            push_finding(&mut block, finding);
+impl std::fmt::Display for ValidationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut blocks: Vec<String> = Vec::new();
+        if !self.errors.is_empty() {
+            let mut block = String::from("Errors:");
+            for finding in &self.errors {
+                block.push_str("\n  \u{274c} ");
+                push_finding(&mut block, finding);
+            }
+            blocks.push(block);
         }
-        blocks.push(block);
-    }
-    if !result.warnings.is_empty() {
-        let mut block = String::from("Warnings:");
-        for finding in &result.warnings {
-            block.push_str("\n  \u{26a0}\u{fe0f}  ");
-            push_finding(&mut block, finding);
+        if !self.warnings.is_empty() {
+            let mut block = String::from("Warnings:");
+            for finding in &self.warnings {
+                block.push_str("\n  \u{26a0}\u{fe0f}  ");
+                push_finding(&mut block, finding);
+            }
+            blocks.push(block);
         }
-        blocks.push(block);
+        let mut text = blocks.join("\n\n");
+        if !text.is_empty() {
+            text.push_str("\n\n");
+        }
+        text.push_str(&footer(self));
+        f.write_str(&text)
     }
-    let mut text = blocks.join("\n\n");
-    if !text.is_empty() {
-        text.push_str("\n\n");
-    }
-    text.push_str(&footer(result));
-    text
 }
 
 fn push_finding(text: &mut String, finding: &Finding) {

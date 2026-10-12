@@ -1,49 +1,47 @@
 use std::collections::BTreeMap;
+use std::ffi::{OsStr, OsString};
 
 #[derive(Debug, Clone, Default)]
 pub struct Environment {
-    vars: BTreeMap<String, String>,
+    vars: BTreeMap<OsString, OsString>,
 }
 
 impl Environment {
     pub fn from_vars<V, I>(vars: I) -> Self
     where
-        V: Into<String>,
+        V: AsRef<OsStr>,
         I: IntoIterator<Item = (V, V)>,
     {
         Self {
             vars: vars
                 .into_iter()
-                .map(|(key, value)| (key.into(), value.into()))
+                .map(|(key, value)| (key.as_ref().to_owned(), value.as_ref().to_owned()))
                 .collect(),
         }
     }
 
     pub fn from_process() -> Self {
         Self {
-            vars: std::env::vars_os()
-                .map(|(key, value)| {
-                    (
-                        key.to_string_lossy().into_owned(),
-                        value.to_string_lossy().into_owned(),
-                    )
-                })
-                .collect(),
+            vars: std::env::vars_os().collect(),
         }
     }
 
-    pub fn get(&self, name: &str) -> Option<&str> {
-        self.vars.get(name).map(String::as_str)
+    pub fn get(&self, name: &str) -> Option<&OsStr> {
+        self.vars.get(OsStr::new(name)).map(OsString::as_os_str)
+    }
+
+    pub fn text(&self, name: &str) -> Option<&str> {
+        self.get(name).and_then(OsStr::to_str)
     }
 
     pub fn home(&self) -> Option<&str> {
-        self.get("HOME")
+        self.text("HOME")
     }
 
     pub fn term_mux(&self) -> Option<&str> {
         match self
-            .get("RIVETHUB_TERM_MUX")
-            .or_else(|| self.get("RIVETOS_TERM_MUX"))
+            .text("RIVETHUB_TERM_MUX")
+            .or_else(|| self.text("RIVETOS_TERM_MUX"))
         {
             Some("tmux") | None => None,
             Some(value) => Some(value),
@@ -51,7 +49,7 @@ impl Environment {
     }
 
     pub fn legacy_notice(&self, new_name: &str, legacy_name: &str) -> Option<String> {
-        if self.get(new_name).is_some() || self.get(legacy_name).is_none() {
+        if self.text(new_name).is_some() || self.text(legacy_name).is_none() {
             return None;
         }
         Some(format!(
@@ -76,7 +74,7 @@ impl Environment {
         for tool in ["SHELL", "FILE", "SEARCH"] {
             for prefix in ["RIVETHUB", "RIVETOS"] {
                 let name = format!("{prefix}_MCP_ENABLE_{tool}");
-                if self.get(&name).is_some() {
+                if self.text(&name).is_some() {
                     warnings.push(format!(
                         "{name} is deprecated — built-in {} tools were removed (every harness ships its own) and the variable is ignored.",
                         tool.to_lowercase(),
@@ -93,7 +91,7 @@ impl Environment {
         ] {
             for prefix in ["RIVETHUB", "RIVETOS"] {
                 let name = format!("{prefix}_{suffix}");
-                if self.get(&name).is_some() {
+                if self.text(&name).is_some() {
                     warnings.push(format!(
                         "{name} is deprecated — terminal injection settings were removed with tmux support and the variable is ignored."
                     ));
@@ -101,7 +99,7 @@ impl Environment {
             }
         }
         for name in ["RIVETHUB_TERM_MUX", "RIVETOS_TERM_MUX"] {
-            if self.get(name) == Some("tmux") {
+            if self.text(name) == Some("tmux") {
                 warnings.push(format!(
                     "{name}=tmux is ignored — herdr is the only terminal multiplexer and the value is treated as unset."
                 ));
