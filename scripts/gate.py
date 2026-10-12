@@ -36,7 +36,7 @@ PROD = [
     (re.compile(r'\.(unwrap|expect)\('), 'UNWRAP', 'unwrap/expect in production code'),
     (re.compile(r'\bunsafe\b'), 'UNSAFE', 'unsafe'),
     (re.compile(r'\bJs(Value|String|Object|Number|Array)\b'), 'JSMODEL', 'JavaScript value model type'),
-    (re.compile(r'^\s*pub\s+\w+\s*:\s*(serde_json::)?(Value|Map<String,\s*Value>)'), 'UNTYPED', 'untyped JSON in a public field'),
+    (re.compile(r'\bserde_json::(Value|Map)\b|\bMap<String,\s*(serde_json::)?Value>|use serde_json::\{?[^;]*\b(Value|Map)\b'), 'UNTYPED', 'raw serde_json Value/Map outside wire::json (use a typed struct, wire::JsonObject, or wire::Extra)'),
     (re.compile(r'match\s+\w+(\.\w+\(\))*\.as_str\(\)\s*\{'), 'DISPATCH', 'string dispatch on a wire tag (use an enum)'),
     (re.compile(r'\b\w*([Dd]en_|_den\b|Den[A-Z]|[Rr]oom_|_room\b|Room[A-Z])\w*'), 'NAMING', 'den/room identifier'),
     (re.compile(r'tokio::runtime::Builder|#\[tokio::main\]'), 'RUNTIME', 'runtime construction outside the binary'),
@@ -296,6 +296,8 @@ def check_rust_file(rel, text, crate):
                 continue
             if code == 'NAMING' and re.search(r'"[^"]*(den|room)[^"]*"', line):
                 continue
+            if code == 'UNTYPED' and rel.replace(os.sep, '/').endswith('crates/wire/src/json.rs'):
+                continue
             if (in_test or is_test) and code not in ALWAYS:
                 continue
             if rx.search(line):
@@ -310,17 +312,61 @@ def pattern_registry(root):
             block(f'PATTERNS rule {code} has no entry in docs/PATTERNS.md')
 
 
+def snake(name):
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
+
+
+def single_variant_tags(files):
+    single = set()
+    for _, text in files:
+        for m in re.finditer(r'pub enum (\w+)\s*\{([^}]*)\}', text):
+            variants = [v for v in re.findall(r'^\s*([A-Z]\w*)\s*[,(]?', m.group(2), re.M)]
+            if len(variants) == 1:
+                single.add(m.group(1))
+    tag = re.compile(r'^\s*pub\s+r#type\s*:\s*(Option<)?(\w+)')
+    for rel, text in files:
+        for i, line in enumerate(text.split('\n'), 1):
+            m = tag.match(line)
+            if m and (m.group(2) in single or m.group(2) == 'String'):
+                block(f'TAGFIELD {rel}:{i}: constant type tag `{m.group(2)}` as a field (use #[serde(tag = "type")]) → docs/PATTERNS.md#tagfield')
+
+
+def stringly(root, files):
+    single_variant_tags(files)
+    enums = set()
+    for _, text in files:
+        enums.update(re.findall(r'^\s*pub enum (\w+)', text, re.M))
+    names = {}
+    for e in enums:
+        if not re.search(r'(Id|Kind|Status|Role|Phase|Mode|State|Source|Activity)$', e):
+            continue
+        names[snake(e)] = e
+        if e.endswith('Id') and len(e) > 2:
+            names[snake(e[:-2])] = e
+    field = re.compile(r'^\s*pub\s+(\w+)\s*:\s*(Option<)?(Vec<)?String\b')
+    for rel, text in files:
+        for i, line in enumerate(text.split('\n'), 1):
+            m = field.match(line)
+            if m and m.group(1) in names:
+                block(f'STRINGLY {rel}:{i}: field `{m.group(1)}` is a String but enum `{names[m.group(1)]}` exists → docs/PATTERNS.md#stringly')
+
+
 def full(root):
     pattern_registry(root)
     crates = manifests(root)
     dependency_direction(crates)
+    sources = []
     for dp, dn, fn in os.walk(os.path.join(root, 'crates')):
         dn[:] = [d for d in dn if d not in ('target', 'golden', 'fixtures')]
         for f in fn:
             if f.endswith('.rs'):
                 path = os.path.join(dp, f)
                 rel = os.path.relpath(path, root)
-                check_rust_file(rel, open(path, errors='replace').read(), rel.split(os.sep)[1])
+                text = open(path, errors='replace').read()
+                check_rust_file(rel, text, rel.split(os.sep)[1])
+                if '/tests/' not in '/' + rel and rel.split(os.sep)[1] != 'testkit':
+                    sources.append((rel, text))
+    stringly(root, sources)
     priv, sec = load_hashes(root, 'privacy-denylist.json'), load_hashes(root, 'secret-denylist.json')
     for rel in git(root, 'ls-files').split('\n'):
         if not rel or skip_scan(rel):

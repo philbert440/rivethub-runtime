@@ -25,10 +25,27 @@ key-order preservation). Pattern: plain Rust types; the contract defines what is
 not part of it. Check: gate `JSMODEL`.
 
 ## UNTYPED
-Anti-pattern: `serde_json::Value` / `Map<String, Value>` carried in structs and passed around. Pattern: a serde struct or
-enum per payload. Unknown fields the contract says to preserve go in `wire::Extra` (`#[serde(flatten, default)] pub extra:
-Extra`), the one sanctioned holder. Check: gate `UNTYPED`, clippy `disallowed-types` (`wire` and `testkit` are exempt by
-their own `clippy.toml`).
+Anti-pattern: `serde_json::Value` / `Map<String, Value>` in structs, helpers or signatures — including private fields with
+accessors and deserialize helpers that return a raw map. Pattern: a serde struct or enum per payload. Two named types in
+`crates/wire/src/json.rs` are the only holders of free-form JSON: `wire::Extra` for unknown fields the contract preserves
+(`#[serde(flatten, default)] pub extra: Extra`), and `wire::JsonObject` for values the contract defines as arbitrary JSON
+(MCP tool-call arguments, tool input schemas, provider `extra_body`). Nothing else names `serde_json::Value` or `Map`.
+Check: gate `UNTYPED` (everywhere except `wire/src/json.rs`, tests and `testkit`), clippy `disallowed-types`.
+
+## TAGFIELD
+Anti-pattern: a constant discriminator stored as a field, `pub r#type: SnapshotTag` with a one-variant enum. Pattern:
+`#[serde(tag = "type", rename = "snapshot")]` on the struct, or `#[serde(tag = "type")]` on the enum of variants. A `type` field whose enum has several values and whose variants share
+the same fields is fine. Check: gate `TAGFIELD` (a `r#type` field typed as a one-variant enum or a `String`).
+
+## STRINGLY
+Anti-pattern: a `String` field whose values are a closed set that already has an enum (`harness: Option<String>` while
+`HarnessId` exists). Pattern: use the enum. Check: gate `STRINGLY` (a field named after a workspace enum that names a closed category —
+`…Id`, `…Kind`, `…Status`, `…Role`, `…Phase`, `…Mode`, `…State`, `…Source`, `…Activity`; e.g. `harness_id` or `harness` for
+`HarnessId` — must not be `String`).
+
+## JSONMAP
+Anti-pattern: `serde_json::Map<String, T>` as a typed map. Pattern: `BTreeMap<K, T>` (ordered output) or `HashMap<K, T>`, with
+a typed key (`SessionId`) where one exists. Check: gate `UNTYPED` (any `serde_json::Map`).
 
 ## DISPATCH
 Anti-pattern: `match s.as_str() { "a" => … }` on a protocol tag or kind. Pattern: a serde enum
