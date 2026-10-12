@@ -19,8 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly-2026-10-11
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: nightly-2026-10-11
           components: rustc-dev, llvm-tools-preview
       - uses: dtolnay/rust-toolchain@1.99.0
         with:
