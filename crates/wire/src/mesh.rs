@@ -1,12 +1,16 @@
 use crate::{Extra, JsonObject};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshFile {
     pub version: i64,
     pub nodes: std::collections::BTreeMap<String, MeshNode>,
-    pub updated_at: i64,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub updated_at: DateTime<Utc>,
     #[serde(flatten, default)]
     pub extra: Extra,
 }
@@ -27,12 +31,13 @@ pub enum MeshNodeStatus {
     Updating,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshNode {
     pub id: String,
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role: Option<MeshRole>,
     pub agents: Vec<String>,
     pub host: String,
@@ -41,16 +46,14 @@ pub struct MeshNode {
     pub models: Vec<String>,
     pub capabilities: Vec<String>,
     pub status: MeshNodeStatus,
-    pub last_seen: i64,
-    pub registered_at: i64,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub last_seen: DateTime<Utc>,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub registered_at: DateTime<Utc>,
     pub version: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<JsonObject>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ssh_user: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub install_root: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
     #[serde(flatten, default)]
     pub extra: Extra,

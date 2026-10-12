@@ -1,36 +1,44 @@
 use crate::events::ContextSource;
 use crate::message::Role;
 use crate::stream::StreamEvent;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptTurn {
     pub role: Role,
     pub text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ts: Option<i64>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub ts: Option<DateTime<Utc>>,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranscriptResponse {
     pub id: String,
     pub command: String,
     pub turns: Vec<TranscriptTurn>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compact_at: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub compact_at: Option<DateTime<Utc>>,
     pub context_source: Option<ContextSource>,
 }
 
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSummary {
     pub id: String,
-    pub last_active: i64,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub last_active: DateTime<Utc>,
     pub messages: u64,
 }
 
@@ -61,6 +69,8 @@ pub enum SessionMessageRole {
     Assistant,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionMessage {
@@ -68,30 +78,23 @@ pub struct SessionMessage {
     pub session_id: String,
     pub role: SessionMessageRole,
     pub text: String,
-    pub ts: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub ts: DateTime<Utc>,
     pub usage: Option<MessageUsage>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub duration_ms: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
     pub thinking: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<String>>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionPostRequest {
     pub text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking: Option<crate::stream::ThinkingLevel>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
 }
 
@@ -123,6 +126,7 @@ pub enum SessionClientKind {
     Sync,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum SessionWsFrame {
@@ -139,6 +143,7 @@ pub enum SessionWsFrame {
     SessionsDirty,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename = "transcript", rename_all = "camelCase")]
 pub struct TranscriptWsFrame {
@@ -148,6 +153,5 @@ pub struct TranscriptWsFrame {
     pub turns: u64,
     pub total: u64,
     pub command: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub truncated_before: Option<bool>,
 }

@@ -2,31 +2,23 @@ use crate::harness::HarnessId;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
 use std::str::FromStr;
+use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct SessionId(String);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum SessionIdError {
+    #[error("SessionId has leading/trailing whitespace")]
     Whitespace,
+    #[error("SessionId is missing a harness-id prefix")]
     MissingPrefix,
+    #[error("SessionId has an empty native session id")]
     EmptyNative,
+    #[error("unknown harness id: {0}")]
     UnknownHarness(String),
 }
-
-impl Display for SessionIdError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Whitespace => f.write_str("SessionId has leading/trailing whitespace"),
-            Self::MissingPrefix => f.write_str("SessionId is missing a harness-id prefix"),
-            Self::EmptyNative => f.write_str("SessionId has an empty native session id"),
-            Self::UnknownHarness(h) => write!(f, "unknown harness id: {h}"),
-        }
-    }
-}
-
-impl std::error::Error for SessionIdError {}
 
 impl SessionId {
     #[must_use]

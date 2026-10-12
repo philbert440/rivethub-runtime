@@ -19,23 +19,17 @@ pub struct HealthzResponse {
     pub node: String,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayError {
     pub error: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness_id: Option<HarnessId>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retryable: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 

@@ -1,15 +1,19 @@
-use crate::events::Activity;
+use crate::events::{Activity, ProtocolVersion};
 use crate::task::TaskStatus;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshOverview {
-    pub updated_at: i64,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub updated_at: DateTime<Utc>,
     pub nodes: Vec<MeshOverviewNode>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshOverviewNode {
@@ -18,9 +22,7 @@ pub struct MeshOverviewNode {
     #[serde(rename = "denUrl")]
     pub url: String,
     pub online: bool,
-    #[serde(default)]
     pub sessions: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest: Option<MeshLatest>,
 }
 
@@ -71,6 +73,8 @@ pub struct HarnessDriveCapability {
     pub resume: bool,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshDevice {
@@ -78,12 +82,14 @@ pub struct MeshDevice {
     pub name: String,
     pub public_key: String,
     pub address: String,
-    pub created_at: i64,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub created_at: DateTime<Utc>,
     #[serde(default)]
-    pub enrolled_at: Option<i64>,
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub enrolled_at: Option<DateTime<Utc>>,
     #[serde(default)]
-    pub last_handshake: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub last_handshake: Option<DateTime<Utc>>,
     pub pg_role: Option<String>,
 }
 
@@ -109,23 +115,25 @@ pub struct DeviceEnrollConfig {
     pub home_subnet: String,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceEnrollRequest {
     pub token: String,
     pub public_key: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PhonePairingCode {
     pub device_id: String,
     pub gateway: String,
-    pub expires_at: i64,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub expires_at: DateTime<Utc>,
     pub qr_text: String,
-    pub reshown: i64,
+    pub reshown: u32,
     pub added_to_users: bool,
 }
 
@@ -143,24 +151,25 @@ pub struct PhonePairingStatus {
     pub state: PhonePairingState,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PhonePairingAvailability {
     pub available: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gateway: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PhonePairingRequest {
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Notification {
@@ -170,23 +179,25 @@ pub enum Notification {
         agent_id: String,
         summary: String,
         href: String,
-        ts: i64,
+        #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+        ts: DateTime<Utc>,
     },
     #[serde(rename = "task.done", rename_all = "camelCase")]
     TaskDone {
         task_id: String,
         status: TaskStatus,
-        ts: i64,
+        #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+        ts: DateTime<Utc>,
     },
     #[serde(rename = "workflow.gate", rename_all = "camelCase")]
     WorkflowGate {
         run_id: String,
         workflow_id: String,
         label: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         prompt: Option<String>,
         href: String,
-        ts: i64,
+        #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+        ts: DateTime<Utc>,
     },
 }
 
@@ -206,13 +217,14 @@ pub enum AudioMicErrorCode {
     NoRuntime,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AudioMicServerFrame {
     #[serde(rename_all = "camelCase")]
     Ready {
         device: String,
-        sample_rate: i64,
+        sample_rate: u32,
         format: AudioFormat,
         backend: AudioBackend,
     },
@@ -230,49 +242,48 @@ pub enum AudioFormat {
     S16Le,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AudioMicClientFrame {
     #[serde(rename_all = "camelCase")]
     Hello {
-        v: i64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        sample_rate: Option<i64>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        channels: Option<i64>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        v: ProtocolVersion,
+        sample_rate: Option<u32>,
+        channels: Option<u32>,
         format: Option<AudioFormat>,
     },
     Start,
     Stop,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioStatus {
     pub enabled: bool,
     pub backend: AudioBackend,
     pub device: String,
-    pub sample_rate: i64,
-    pub channels: i64,
+    pub sample_rate: u32,
+    pub channels: u32,
     pub format: AudioFormat,
     pub fifo_path: String,
     pub armed: bool,
-    #[serde(default)]
     pub publisher_id: Option<String>,
     #[serde(default)]
-    pub armed_at: Option<i64>,
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub armed_at: Option<DateTime<Utc>>,
     pub bytes_written: u64,
     pub runtime_ready: bool,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VoiceSpeakRequest {
     pub input: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub voice: Option<String>,
 }
 
@@ -306,6 +317,7 @@ pub struct FilesListResponse {
     pub entries: Vec<FileEntry>,
 }
 
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StagedUploadResponse {
@@ -313,5 +325,6 @@ pub struct StagedUploadResponse {
     pub name: String,
     pub mime: String,
     pub size: u64,
-    pub expires_at: i64,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub expires_at: DateTime<Utc>,
 }

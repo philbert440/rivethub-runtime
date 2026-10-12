@@ -8,26 +8,23 @@ pub struct WikiHistoryEntry {
     pub body: String,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiCitation {
     pub summary_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub date: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiSource {
     pub kind: String,
     pub ids: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span: Option<WikiSourceSpan>,
 }
 
@@ -38,6 +35,7 @@ pub struct WikiSourceSpan {
     pub latest: String,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiPageResponse {
@@ -47,20 +45,15 @@ pub struct WikiPageResponse {
     pub tags: Vec<String>,
     pub entities: Vec<String>,
     pub current_state: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub article: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub see_also: Option<Vec<String>>,
     pub history: Vec<WikiHistoryEntry>,
     pub citations: Vec<WikiCitation>,
     pub markdown: String,
     pub sources: Vec<WikiSource>,
-    #[serde(default)]
     pub git_sha: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_verified: Option<String>,
     pub updated_at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub related: Option<Vec<String>>,
 }
 

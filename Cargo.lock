@@ -494,6 +494,7 @@ version = "3.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df9adc193c780ef8f159aee8b61e2d5801aaa555e6eb0947fe45530ec506296f"
 dependencies = [
+ "chrono",
  "serde_core",
  "serde_with_macros",
 ]
@@ -835,6 +836,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "strum",
+ "thiserror",
 ]
 
 [[package]]

@@ -1,7 +1,10 @@
 use crate::harness::HarnessId;
 use crate::task::HarnessExecutorCapabilities;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename = "preset", rename_all = "camelCase")]
 pub struct CatalogPreset {
@@ -9,27 +12,21 @@ pub struct CatalogPreset {
     pub name: String,
     pub node: String,
     pub local: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness_id: Option<HarnessId>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub directory: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub implemented: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gap: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogNode {
     pub id: String,
     pub node: String,
     pub local: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
 }
 
@@ -40,25 +37,24 @@ pub enum CatalogAgent {
     Node(CatalogNode),
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogCommand {
     pub name: String,
     pub description: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub arg_hint: Option<String>,
     pub source: String,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogExecutorEntry {
     pub key: String,
     pub capabilities: HarnessExecutorCapabilities,
     pub commands: Vec<CatalogCommand>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness_id: Option<HarnessId>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub implemented: Option<bool>,
 }
 
@@ -85,6 +81,7 @@ pub struct CatalogAgentsResponse {
     pub agents: Vec<CatalogAgent>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutcomeBucket {
@@ -96,22 +93,17 @@ pub struct OutcomeBucket {
     pub escalated: u64,
     pub diverged: u64,
     pub divergence_rate: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_cost_usd: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avg_duration_ms: Option<i64>,
+    pub avg_duration_ms: Option<u64>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutcomesFilter {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub since: Option<chrono::DateTime<chrono::Utc>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub until: Option<chrono::DateTime<chrono::Utc>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<DateTime<Utc>>,
+    pub until: Option<DateTime<Utc>>,
     pub agent_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
 }
 
@@ -120,7 +112,7 @@ pub struct OutcomesFilter {
 pub struct OutcomesResponse {
     pub filter: OutcomesFilter,
     pub totals: OutcomeBucket,
-    pub by_agent: std::collections::BTreeMap<String, OutcomeBucket>,
-    pub by_executor: std::collections::BTreeMap<String, OutcomeBucket>,
-    pub by_day: std::collections::BTreeMap<String, OutcomeBucket>,
+    pub by_agent: BTreeMap<String, OutcomeBucket>,
+    pub by_executor: BTreeMap<String, OutcomeBucket>,
+    pub by_day: BTreeMap<String, OutcomeBucket>,
 }

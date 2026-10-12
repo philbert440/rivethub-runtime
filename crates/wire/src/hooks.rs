@@ -1,6 +1,8 @@
 use crate::JsonObject;
 use crate::message::Message;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HookEventName {
@@ -38,14 +40,15 @@ pub enum HookEventName {
     DelegationAfter,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HookContextBase {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
-    pub timestamp: i64,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub timestamp: DateTime<Utc>,
     pub metadata: JsonObject,
 }
 
@@ -97,6 +100,7 @@ pub struct HookContext {
     pub kind: HookContextKind,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event")]
 pub enum HookContextKind {
@@ -105,16 +109,14 @@ pub enum HookContextKind {
         provider_id: String,
         model: String,
         messages: Vec<Message>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         skip: Option<bool>,
     },
     #[serde(rename = "provider:after", rename_all = "camelCase")]
     ProviderAfter {
         provider_id: String,
         model: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         usage: Option<HookUsage>,
-        latency_ms: i64,
+        latency_ms: u64,
         has_tool_calls: bool,
     },
     #[serde(rename = "provider:error", rename_all = "camelCase")]
@@ -122,16 +124,13 @@ pub enum HookContextKind {
         provider_id: String,
         model: String,
         error: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         status_code: Option<u16>,
     },
     #[serde(rename = "tool:before", rename_all = "camelCase")]
     ToolBefore {
         tool_name: String,
         args: JsonObject,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         blocked: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         block_reason: Option<String>,
     },
     #[serde(rename = "tool:after", rename_all = "camelCase")]
@@ -139,29 +138,23 @@ pub enum HookContextKind {
         tool_name: String,
         args: JsonObject,
         result: JsonObject,
-        duration_ms: i64,
+        duration_ms: u64,
         is_error: bool,
     },
     #[serde(rename = "session:start", rename_all = "camelCase")]
     SessionStart {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         platform: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         user_id: Option<String>,
     },
     #[serde(rename = "session:end", rename_all = "camelCase")]
     SessionEnd {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         turn_count: Option<u32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         total_tokens: Option<SessionTokens>,
     },
     #[serde(rename = "turn:before", rename_all = "camelCase")]
     TurnBefore {
         user_message: Message,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         skip: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         skip_reason: Option<String>,
     },
     #[serde(rename = "turn:after", rename_all = "camelCase")]
@@ -170,7 +163,6 @@ pub enum HookContextKind {
         tools_used: Vec<String>,
         iterations: u32,
         aborted: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         usage: Option<HookUsage>,
     },
     #[serde(rename = "turn:reflect", rename_all = "camelCase")]
@@ -178,7 +170,6 @@ pub enum HookContextKind {
         response: String,
         tools_used: Vec<String>,
         iterations: u32,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         usage: Option<HookUsage>,
         complexity: TurnComplexity,
         source: ReflectionSource,
@@ -190,9 +181,7 @@ pub enum HookContextKind {
         skill_location: String,
         matched_triggers: Vec<String>,
         match_score: f64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         skip: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         skip_reason: Option<String>,
     },
     #[serde(rename = "skill:after", rename_all = "camelCase")]
@@ -201,8 +190,7 @@ pub enum HookContextKind {
         success: bool,
         tools_used: Vec<String>,
         iterations: u32,
-        duration_ms: i64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: u64,
         usage: Option<HookUsage>,
     },
     #[serde(rename = "compact:before", rename_all = "camelCase")]
@@ -210,7 +198,6 @@ pub enum HookContextKind {
     #[serde(rename = "compact:after", rename_all = "camelCase")]
     CompactAfter {
         remaining_messages: u64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         summary: Option<String>,
     },
     #[serde(rename = "delegation:before", rename_all = "camelCase")]
@@ -219,9 +206,7 @@ pub enum HookContextKind {
         to_agent: String,
         task: String,
         chain_depth: u32,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         blocked: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         block_reason: Option<String>,
     },
     #[serde(rename = "delegation:after", rename_all = "camelCase")]
@@ -230,10 +215,8 @@ pub enum HookContextKind {
         to_agent: String,
         task: String,
         status: DelegationHookStatus,
-        duration_ms: i64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: u64,
         usage: Option<HookUsage>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         tools_used: Option<Vec<String>>,
         cached: bool,
     },
@@ -264,6 +247,7 @@ pub enum HookErrorMode {
     Retry,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HookConfig {
@@ -271,17 +255,11 @@ pub struct HookConfig {
     pub event: HookEventName,
     pub r#type: HookConfigKind,
     pub target: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on_error: Option<HookErrorMode>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_filter: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_filter: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
 }
 

@@ -1,25 +1,21 @@
+use crate::events::ProtocolVersion;
+use crate::session_id::SessionId;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TermSpawnRequest {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub force: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cols: Option<u16>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rows: Option<u16>,
 }
 
@@ -40,24 +36,22 @@ pub enum Mux {
     Herdr,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TermSpawnResponse {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub harness_session_id: Option<String>,
+    pub harness_session_id: Option<SessionId>,
     pub id: String,
     #[serde(rename = "denSession")]
     pub session: String,
     pub command: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
     pub pid: u32,
-    pub created_at: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub created_at: DateTime<Utc>,
     pub mux: Option<Mux>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reattached: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attach: Option<TermAttachInfo>,
 }
 
@@ -68,6 +62,8 @@ pub enum PtyState {
     Exited,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PtyInfo {
@@ -76,25 +72,19 @@ pub struct PtyInfo {
     pub session: String,
     pub command: String,
     pub state: PtyState,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
     pub attached: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i32>,
-    pub created_at: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_output_ts: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub last_output_ts: Option<DateTime<Utc>>,
     pub cols: Option<u16>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rows: Option<u16>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mux: Option<Mux>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub persisted: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reattached: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attach: Option<TermAttachInfo>,
 }
 
@@ -123,25 +113,23 @@ pub struct TermConfig {
     pub commands: Vec<TermCommand>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TermInjectRequest {
     pub session: String,
     pub text: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub submit: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interrupt: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bypass_dialog_gate: Option<bool>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TermInjectResponse {
     pub ok: bool,
     pub pty_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dismissed_dialog: Option<bool>,
 }
 
@@ -152,6 +140,7 @@ pub enum HelloState {
     Exited,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceOwner {
@@ -160,12 +149,14 @@ pub struct DeviceOwner {
     pub self_owner: bool,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum TermServerFrame {
     #[serde(rename_all = "camelCase")]
     Hello {
-        v: i64,
+        v: ProtocolVersion,
         id: String,
         #[serde(rename = "denSession")]
         session: String,
@@ -173,16 +164,12 @@ pub enum TermServerFrame {
         cols: u16,
         rows: u16,
         state: HelloState,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         exit_code: Option<i32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         mux: Option<Mux>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         owner: Option<DeviceOwner>,
     },
     Exit {
         code: Option<i32>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         signal: Option<i32>,
     },
     #[serde(rename_all = "camelCase")]
@@ -190,11 +177,13 @@ pub enum TermServerFrame {
         device: Option<String>,
         #[serde(rename = "self")]
         self_owner: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        since: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        since: Option<DateTime<Utc>>,
     },
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum TermClientFrame {
@@ -205,9 +194,7 @@ pub enum TermClientFrame {
     },
     #[serde(rename_all = "camelCase")]
     Claim {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         cols: Option<u16>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         rows: Option<u16>,
     },
     Kill,

@@ -2,6 +2,7 @@ use crate::JsonObject;
 use crate::message::{Role, ToolResult};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -15,29 +16,19 @@ pub enum MemoryToolName {
     MemoryTags,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct MemorySearchToolArgs {
     pub query: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<MemoryScope>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub since: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expand: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub synthesize: Option<bool>,
 }
 
@@ -56,139 +47,95 @@ pub enum MemoryBrowseOrder {
     Desc,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct MemoryBrowseToolArgs {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub include_tools: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub since: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub order: Option<MemoryBrowseOrder>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct MemoryAppendToolArgs {
     pub session_id: String,
     pub content: String,
     pub role: Role,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_args: Option<JsonObject>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_result: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub persona: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct MemoryIngestMessage {
     pub role: Role,
     pub content: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<MemoryIngestToolCall>>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct MemoryIngestToolCall {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<JsonObject>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct MemoryIngestSessionToolArgs {
     pub session_id: String,
     pub messages: Vec<MemoryIngestMessage>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub persona: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct MemoryTagsToolArgs {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entity_type: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entity_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ids: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_keys: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entries: Option<Vec<TagEntryPair>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_value: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub aliases: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub into: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decided_by: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct TagEntryPair {
     pub key: String,
     pub value: String,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryToolResponse {
@@ -203,29 +150,22 @@ pub enum MemoryHitSource {
     Summary,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemorySearchHit {
     pub id: String,
     pub source: MemoryHitSource,
     pub content: String,
-    pub created_at: String,
+    pub created_at: DateTime<Utc>,
     pub score: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role: Option<Role>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback: Option<MemoryFallback>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<TagWire>>,
 }
 
@@ -242,37 +182,33 @@ pub struct MemoryDegraded {
     pub effect: String,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemorySearchResponse {
     pub query: String,
     pub scope: MemoryScope,
-    #[serde(default)]
     pub degraded: Option<MemoryDegraded>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback: Option<MemoryFallback>,
     pub results: Vec<MemorySearchHit>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryBrowseMessage {
     pub id: String,
     pub role: Role,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
     pub content: String,
-    pub created_at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: DateTime<Utc>,
     pub conversation_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<TagWire>>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryBrowseResponse {
@@ -286,17 +222,20 @@ pub struct TopTool {
     pub count: u64,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecentSession {
     pub session_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     pub agent: String,
-    pub last_active: i64,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub last_active: DateTime<Utc>,
     pub messages: u64,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryStatsResponse {
@@ -326,34 +265,26 @@ pub enum EmbedStatus {
     Unavailable,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmbedHealth {
     pub status: EmbedStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub impact: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checked_at: Option<DateTime<Utc>>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryHealthResponse {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observed_at: Option<DateTime<Utc>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue_status: Option<QueueStatus>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queues: Option<QueueHealth>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compaction: Option<CompactionHealth>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failed_embeddings: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skipped_embeddings: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capture: Option<CaptureHealth>,
     pub status: MemoryHealthStatus,
     pub embeddings: EmbedHealth,
@@ -368,6 +299,7 @@ pub enum QueueStatus {
     Restricted,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueHealth {
@@ -376,8 +308,7 @@ pub struct QueueHealth {
     pub running: u64,
     pub scheduled: u64,
     pub dead: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub oldest_pending_minutes: Option<i64>,
+    pub oldest_pending_minutes: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -417,6 +348,7 @@ pub enum TagAction {
     Remove,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TagWire {
@@ -428,111 +360,90 @@ pub struct TagWire {
     pub display: String,
     pub source: String,
     pub state: TagState,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f64>,
     pub proposed_by: String,
     pub reason: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decided_by: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub decided_at: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
+    pub decided_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingTagWire {
     #[serde(flatten)]
     pub tag: TagWire,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<TagAction>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub excerpt: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct MemoryTagsDecideRequest {
     pub ids: Vec<String>,
     pub state: TagState,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decided_by: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct MemoryTagsAddRequest {
     pub entity_type: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entity_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decided_by: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct MemoryTagsLookupRequest {
     pub session_keys: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub states: Option<Vec<TagState>>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TagTaxonomyEntry {
     pub key: String,
     pub value: String,
     pub display: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_value: Option<String>,
     pub aliases: Vec<String>,
     pub state: TagState,
     pub source: String,
     pub reason: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub decided_at: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
+    pub decided_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TagTaxonomyWire {
     pub key: String,
     pub entries: Vec<TagTaxonomyEntry>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub decided_at: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
+    pub decided_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct TagTaxonomyUpsertRequest {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_value: Option<String>,
 }
 
@@ -561,12 +472,12 @@ pub struct TagCount {
     pub conversations: u64,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectRuleResult {
     pub key: String,
     pub rule: ProjectRule,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub git_root: Option<String>,
 }
 

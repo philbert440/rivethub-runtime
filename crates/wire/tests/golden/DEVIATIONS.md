@@ -7,8 +7,9 @@ id in `roundtrip.rs`. Nothing else is skipped.
 
 The producer sent `"ts":1.7600000045e12` on a `session.start` event: a JavaScript float spelling of the epoch-ms
 value. Epoch milliseconds are integral in the contract (`core-domain.md` §1.2 `AgentEvent.ts` epoch ms; §1.10
-date rule), so `ts` is `i64`, and `i64` cannot parse the float spelling. `Extra` keeps the event's unknown keys
-(including their float spellings). Skipped by id.
+date rule), so `ts` is a `DateTime<Utc>` read with `serde_with::TimestampMilliSeconds`, and that adapter's
+strict integer form cannot parse the float spelling. `Extra` keeps the event's unknown keys (including their
+float spellings). Skipped by id.
 
 ## `term/http.json` — `post-clamp-low`
 

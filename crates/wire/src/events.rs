@@ -1,6 +1,9 @@
 use crate::{Extra, JsonObject, harness::SessionHarness};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use std::collections::BTreeMap;
+use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "u8", into = "u8")]
@@ -8,14 +11,18 @@ pub enum ProtocolVersion {
     V1,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[error("protocol version must be 1")]
+pub struct ProtocolVersionError;
+
 impl TryFrom<u8> for ProtocolVersion {
-    type Error = String;
+    type Error = ProtocolVersionError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         if value == 1 {
             Ok(Self::V1)
         } else {
-            Err("protocol version must be 1".to_string())
+            Err(ProtocolVersionError)
         }
     }
 }
@@ -36,79 +43,84 @@ pub struct AgentEvent {
     pub extra: Extra,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum AgentEventKind {
     #[serde(rename = "session.start", rename_all = "camelCase")]
     SessionStart {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         title: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         harness: Option<SessionHarness>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ts: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
     },
     #[serde(rename = "session.end")]
     SessionEnd {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ts: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
     },
     #[serde(rename = "message.user")]
     MessageUser {
         text: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ts: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
     },
     #[serde(rename = "message.agent", rename_all = "camelCase")]
     MessageAgent {
         text: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         model: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        duration_ms: Option<i64>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u64>,
         usage: Option<AgentUsage>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ts: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
     },
     #[serde(rename = "thinking.delta")]
     ThinkingDelta {
         text: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ts: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
     },
     #[serde(rename = "tool.start", rename_all = "camelCase")]
     ToolStart {
         tool: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
         args: Option<JsonObject>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ts: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
     },
     #[serde(rename = "task.plan")]
     TaskPlan {
         tasks: Vec<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ts: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
     },
     #[serde(rename = "task.check")]
     TaskCheck {
         index: u32,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ts: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
     },
     #[serde(rename = "activity")]
     Activity {
         activity: Activity,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ts: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
     },
     #[serde(rename = "turn.end")]
     TurnEnd {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ts: Option<i64>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
     },
 }
 
@@ -140,22 +152,22 @@ pub enum ContextSource {
     Default,
 }
 
+#[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSummary {
     pub id: String,
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness: Option<SessionHarness>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_event_ts: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub last_event_ts: Option<DateTime<Utc>>,
     pub pty: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compact_at: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub compact_at: Option<DateTime<Utc>>,
     pub context_source: Option<ContextSource>,
 }
 
@@ -166,6 +178,7 @@ pub struct SessionLogLine {
     pub text: String,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionView {
@@ -196,7 +209,7 @@ pub struct StateResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename = "snapshot", rename_all = "camelCase")]
 pub struct Snapshot {
-    pub v: i64,
+    pub v: ProtocolVersion,
     pub sessions: Vec<SessionSummary>,
     #[serde(rename = "rooms")]
     pub views: BTreeMap<String, SessionView>,
@@ -205,7 +218,7 @@ pub struct Snapshot {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename = "session.removed", rename_all = "camelCase")]
 pub struct SessionRemoved {
-    pub v: i64,
+    pub v: ProtocolVersion,
     pub session: String,
 }
 
