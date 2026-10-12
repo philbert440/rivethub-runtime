@@ -53,7 +53,8 @@ Anti-pattern: `match s.as_str() { "a" => … }` on a protocol tag or kind. Patte
 
 ## NAMING
 Anti-pattern: `den` / `room` identifiers inherited from the TypeScript. Pattern: descriptive names (`gateway`, `session`,
-`view`). Wire strings that must stay are serde renames, never Rust identifiers. Check: gate `NAMING`.
+`view`). Wire strings and config keys that must stay (`den:`, `rooms`) are serde renames, never Rust identifiers, modules or file
+names. Check: gate `NAMING` (identifiers, `mod`, file and directory names).
 
 ## RUNTIME
 Anti-pattern: a library building a tokio runtime or using `#[tokio::main]`. Pattern: libraries expose `async fn`; only the
@@ -66,6 +67,13 @@ Anti-pattern: `std::sync::Mutex` / `RwLock`. Pattern: `parking_lot` for short cr
 ## PRINT
 Anti-pattern: `println!` / `eprintln!` in libraries. Pattern: `tracing` events; only `cli` and `rivethub` write to stdout.
 Check: gate `PRINT`, clippy `print_stdout`, `print_stderr`.
+
+## STRSET
+Anti-pattern: `const`/`static` tables of protocol strings — lists of known provider types, of types that accept a base
+URL, of known keys per section — re-encoding one closed set several times. Pattern: one enum
+(`#[derive(Deserialize)] #[serde(rename_all = "kebab-case")] enum ProviderType`) with methods for each property
+(`is_cli()`, `takes_base_url()`), and unknown keys detected by serde (`#[serde(flatten)] unknown: BTreeMap<String,
+IgnoredAny>`), never by a key list. Messages that list allowed values are built from the enum. Check: gate `STRSET`.
 
 ## DYNVALUE
 Anti-pattern: a home-made dynamic value tree (`enum Node { Null, Bool, Int, Str, Seq, Map }`, an order-preserving

@@ -42,6 +42,8 @@ PROD = [
     (re.compile(r'tokio::runtime::Builder|#\[tokio::main\]'), 'RUNTIME', 'runtime construction outside the binary'),
     (re.compile(r'\bstd::sync::(Mutex|RwLock)\b'), 'STDLOCK', 'std lock (use parking_lot or tokio::sync)'),
     (re.compile(r'\b(println|eprintln|print|eprint)!\('), 'PRINT', 'print macro (use tracing; only the binary writes to stdout)'),
+    (re.compile(r'^\s*(pub(\([a-z]+\))?\s+)?(const|static)\s+\w+\s*:\s*(&\[&str\]|\[&str;|&\[\(&str,|\[\(&str,)'), 'STRSET', 'table of protocol strings (use an enum with methods; unknown keys come from serde)'),
+    (re.compile(r'^\s*(pub(\([a-z]+\))?\s+)?mod\s+(den|room|rooms)\b'), 'NAMING', 'den/room module name'),
     (re.compile(r'forward_to_deserialize_any!|impl<\'de>\s+(serde::)?(de::)?Deserializer<\'de>\s+for|^\s*(Null|Bool\(bool\)|Seq\(Vec<)'), 'DYNVALUE', 'home-made dynamic value model (deserialize into typed structs)'),
 ]
 ALWAYS = {'COMMENT', 'UNSAFE'}
@@ -280,6 +282,8 @@ def dependency_direction(crates):
 
 def check_rust_file(rel, text, crate):
     lines = text.split('\n')
+    if re.search(r'(^|/)(den|room|rooms)(\.rs|/)', rel.replace(os.sep, '/')):
+        block(f'NAMING {rel}: den/room file or module name → docs/PATTERNS.md#naming')
     is_test = '/tests/' in '/' + rel or crate == 'testkit' or rel.endswith('/build.rs')
     if not is_test:
         n = sum(1 for l in lines if l.strip())
