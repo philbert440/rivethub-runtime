@@ -2,7 +2,9 @@
 
 You are building one crate of the Rust runtime. Everything you need: this page, CONTRACT.md (your crate's boundary rows),
 ARCHITECTURE.md (where your crate sits and which ports it implements or calls), the inventory section and the recordings your
-brief names. The TypeScript source at /opt/rivetos is REFERENCE for boundary behaviour only.
+brief names. Those are the only inputs. Never open TypeScript or JavaScript source, /opt/rivetos, /rivet-shared/RivetOS or
+any other checkout: the inventories already describe the boundary behaviour, and the lane watchdog discards any work that
+touched source.
 
 1. Behaviour at the boundary, nothing else. Your crate reproduces its contract rows on the recorded inputs. Internals are
    yours to design. Never copy the TypeScript's structure, file layout, workarounds or quirks. If you catch yourself porting a
@@ -19,8 +21,8 @@ brief names. The TypeScript source at /opt/rivetos is REFERENCE for boundary beh
 5. One runtime per process. Never build a tokio runtime in a library; never hold a `parking_lot` lock across `.await`;
    blocking work goes to `spawn_blocking`; long tasks take and honour a `CancellationToken`.
 6. No comments of any kind. No `#[allow]`. No `unwrap`/`expect`/`panic!` in production code. No `unsafe`.
-7. Tests prove the contract. Replay your recordings through `testkit` as ordinary `cargo test`s; port the TypeScript tests
-   that test boundary behaviour; unit-test only logic the replays do not reach. Test files live in `tests/` by responsibility;
+7. Tests prove the contract. Replay your recordings through `testkit` as ordinary `cargo test`s; the recordings and the
+   inventories' documented cases are the boundary tests; unit-test only logic the replays do not reach. Test files live in `tests/` by responsibility;
    small `#[cfg(test)]` modules only for private helpers; fixtures under `tests/fixtures/`, goldens copied under `tests/golden/`
    (never edited). No tests of code that does not exist. Measure coverage (`cargo llvm-cov -p <crate> --summary-only`) and keep
    it from dropping between rounds.
