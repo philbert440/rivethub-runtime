@@ -97,7 +97,20 @@ with tempfile.TemporaryDirectory() as d:
         failures.append('STACK: did not fire on a tracked .ts file')
     if 'STACK scripts/gate.py' in out:
         failures.append('STACK: fired on the gate script itself')
+with tempfile.TemporaryDirectory() as d:
+    shutil.copytree(os.path.join(ROOT, 'docs'), os.path.join(d, 'docs'))
+    shutil.copytree(os.path.join(ROOT, 'scripts'), os.path.join(d, 'scripts'))
+    for name, deps in (('wire', '[dependencies]\nconfig = { path = "../config" }\n'), ('config', '[dependencies]\nwire = { path = "../wire" }\n')):
+        os.makedirs(os.path.join(d, 'crates', name, 'src'))
+        open(os.path.join(d, 'crates', name, 'Cargo.toml'), 'w').write(MANIFEST.replace('"mcp"', f'"{name}"').replace('[lints]', deps + '\n[lints]'))
+        open(os.path.join(d, 'crates', name, 'src', 'lib.rs'), 'w').write('pub fn a() {}\n')
+    subprocess.run(['git', 'init', '-q', d], check=True)
+    out = subprocess.run([sys.executable, os.path.join(d, 'scripts', 'gate.py'), d], capture_output=True, text=True).stdout
+    if 'DEP wire -> config' not in out:
+        failures.append('DEP: wire -> config not refused')
+    if 'DEP config -> wire' in out:
+        failures.append('DEP: config -> wire refused')
 for f in failures:
     print(f)
-print(f'GATE-TEST {"FAIL" if failures else "OK"}: {len(CASES) + len(WIRE) + len(EXTRA) + 3} cases, {len(failures)} failure(s)')
+print(f'GATE-TEST {"FAIL" if failures else "OK"}: {len(CASES) + len(WIRE) + len(EXTRA) + 5} cases, {len(failures)} failure(s)')
 sys.exit(1 if failures else 0)

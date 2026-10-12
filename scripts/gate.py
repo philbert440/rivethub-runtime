@@ -280,6 +280,8 @@ def dependency_direction(crates):
             if d == 'testkit' and d in dev:
                 continue
             sideways = (me == ADAPTER and them in (ADAPTER, SERVICE)) or (me == SERVICE and them in (ADAPTER, SERVICE))
+            if name == 'wire' and d in LAYER:
+                block(f'DEP wire -> {d}: forbidden (wire depends on external crates only)')
             if them > me or sideways:
                 block(f'DEP {name} -> {d}: forbidden (adapters and services see only kernel, wire, config)')
 
