@@ -50,6 +50,13 @@ Anti-pattern: `std::sync::Mutex` / `RwLock`. Pattern: `parking_lot` for short cr
 Anti-pattern: `println!` / `eprintln!` in libraries. Pattern: `tracing` events; only `cli` and `rivethub` write to stdout.
 Check: gate `PRINT`, clippy `print_stdout`, `print_stderr`.
 
+## DYNVALUE
+Anti-pattern: a home-made dynamic value tree (`enum Node { Null, Bool, Int, Str, Seq, Map }`, an order-preserving
+`Mapping`, a hand-written `Deserializer` for it) with validation as lookups over that tree. Pattern: deserialize straight
+into typed structs and enums; validate the typed value. When a pass genuinely needs the raw tree (the `${VAR}` substitution
+over string leaves before typing), use the format crate's own value type (`serde_yaml::Value`) inside that one function and
+convert with `serde_yaml::from_value`; never define a value model. Check: gate `DYNVALUE`.
+
 ## ENV
 Anti-pattern: reading the environment anywhere but configuration. Pattern: the binary builds `config::Environment` from
 `std::env::vars_os()` once and passes `Config` down. Check: clippy `disallowed-methods` (`std::env::var`, `var_os`).

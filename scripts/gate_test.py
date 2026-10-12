@@ -17,6 +17,7 @@ CASES = {
     'NAMING': ('pub struct DenServer;\n', 'pub struct GatewayServer;\n'),
     'RUNTIME': ('pub fn a() { let _ = tokio::runtime::Builder::new_multi_thread(); }\n', 'pub async fn a() {}\n'),
     'STDLOCK': ('pub static A: std::sync::Mutex<u8> = std::sync::Mutex::new(0);\n', 'pub static A: parking_lot::Mutex<u8> = parking_lot::Mutex::new(0);\n'),
+    'DYNVALUE': ('pub enum Node {\n    Null,\n    Bool(bool),\n    Seq(Vec<Node>),\n}\n', 'pub enum Kind {\n    Postgres,\n    Sqlite,\n}\n'),
     'PRINT': ('pub fn a() { println!("x"); }\n', 'pub fn a() { tracing::info!("x"); }\n'),
 }
 MANIFEST = '[package]\nname = "mcp"\nedition.workspace = true\nlicense.workspace = true\nversion.workspace = true\npublish.workspace = true\n\n[lints]\nworkspace = true\n'
