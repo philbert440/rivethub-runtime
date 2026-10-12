@@ -35,11 +35,13 @@ PROD = [
     (re.compile(r'#!?\[(allow|expect)\('), 'ALLOW', 'allow/expect attribute'),
     (re.compile(r'\.(unwrap|expect)\('), 'UNWRAP', 'unwrap/expect in production code'),
     (re.compile(r'\bunsafe\b'), 'UNSAFE', 'unsafe'),
-    (re.compile(r'\bJs(Value|String|Object|Number|Array)\b|\bserde_json::Number\b|use serde_json::\{?[^;]*\bNumber\b'), 'JSMODEL', 'JavaScript value model type'),
+    (re.compile(r'\bJs(Value|String|Object|Number|Array)\b|\bserde_json::Number\b|use serde_json::\{?[^;]*\bNumber\b|\w*truthy\w*|\btypeof\w*|\[object Object\]'), 'JSMODEL', 'JavaScript value model or semantics (truthiness, typeof, [object Object])'),
     (re.compile(r'^impl(<[^>]*>)?\s+(PartialEq|Eq|Clone|Copy|Debug|Default|Hash|PartialOrd|Ord)\s+for\b'), 'MANUALDERIVE', 'hand-written impl of a derivable trait (use #[derive])'),
     (re.compile(r'^impl(<\'de>)?\s+(serde::)?(Serialize|Deserialize<\'de>)\s+for\b|(^|[^_])\bwith\s*=\s*"(?!(::)?serde_with::)|serialize_with\s*=|deserialize_with\s*='), 'CUSTOMSERDE', 'hand-written serde (use derives, #[serde(try_from/into)], strum, serde_with)'),
     (re.compile(r'^\s*pub\s+(port|\w*_port)\s*:\s*(Option<)?(i64|i32|u64|u32|usize)\b|^\s*pub\s+(count|limit|offset|total|inserted|skipped|index|attempts?|moved|dropped|len|\w+_count|\w*_tokens)\s*:\s*(Option<)?(i64|i32)\b'), 'COUNTTYPE', 'signed or oversized integer for a port or count (u16 ports; u32/u64/usize counts)'),
     (re.compile(r'\bserde_json::(Value|Map)\b|\bMap<String,\s*(serde_json::)?Value>|use serde_json::\{?[^;]*\b(Value|Map)\b'), 'UNTYPED', 'raw serde_json Value/Map outside wire::json (use a typed struct, wire::JsonObject, or wire::Extra)'),
+    (re.compile(r'\bserde_yaml::(Value|Mapping|Number|Sequence)\b|use serde_yaml::\{?[^;]*\b(Value|Mapping|Number|Sequence)\b'), 'UNTYPED', 'raw serde_yaml value outside config load/resolve (deserialize into typed fields; wrong types are serde_path_to_error errors)'),
+    (re.compile(r'\bIgnoredAny\b'), 'UNKNOWNKEYS', 'IgnoredAny key capture (report unknown keys with serde_ignored)'),
     (re.compile(r'match\s+\w+(\.\w+\(\))*\.as_str\(\)\s*\{'), 'DISPATCH', 'string dispatch on a wire tag (use an enum)'),
     (re.compile(r'\b\w*([Dd]en_|_den\b|Den[A-Z]|[Rr]oom_|_room\b|Room[A-Z])\w*'), 'NAMING', 'den/room identifier'),
     (re.compile(r'tokio::runtime::Builder|#\[tokio::main\]'), 'RUNTIME', 'runtime construction outside the binary'),
@@ -317,6 +319,8 @@ def check_rust_file(rel, text, crate):
             if code == 'NAMING' and re.search(r'"[^"]*(den|room)[^"]*"', line):
                 continue
             if code == 'UNTYPED' and rel.replace(os.sep, '/').endswith('crates/wire/src/json.rs'):
+                continue
+            if code == 'UNTYPED' and 'serde_yaml' in line and re.search(r'crates/config/src/(load|resolve)\.rs$', rel.replace(os.sep, '/')):
                 continue
             if (in_test or is_test) and code not in ALWAYS:
                 continue

@@ -26,6 +26,7 @@ CASES = {
     'COUNTTYPE': ('pub struct A {\n    pub port: i64,\n    pub limit: i64,\n}\n', 'pub struct A {\n    pub port: u16,\n    pub limit: u32,\n}\n'),
     'DUPNAMES': ('pub fn n(h: H) -> &\'static str { match h { Self::A => "a", Self::B => "b", Self::C => "c" } }\n', '#[derive(strum::Display)]\npub enum H {\n    A,\n}\n'),
     'DUPTYPE': ('pub enum Role {\n    System,\n    User,\n    Tool,\n}\npub enum CaptureRole {\n    System,\n    User,\n    Tool,\n}\n', 'pub enum Role {\n    System,\n    User,\n    Tool,\n}\n'),
+    'UNKNOWNKEYS': ('pub struct A {\n    pub unknown: std::collections::BTreeMap<String, serde::de::IgnoredAny>,\n}\n', 'pub struct A {\n    pub port: u16,\n}\n'),
     'PRINT': ('pub fn a() { println!("x"); }\n', 'pub fn a() { tracing::info!("x"); }\n'),
 }
 MANIFEST = '[package]\nname = "mcp"\nedition.workspace = true\nlicense.workspace = true\nversion.workspace = true\npublish.workspace = true\n\n[lints]\nworkspace = true\n'
@@ -55,7 +56,27 @@ for code, (bad, good) in CASES.items():
         failures.append(f'{code}: did not fire on the anti-pattern')
     if code in gate(good):
         failures.append(f'{code}: fired on the proper pattern')
+EXTRA = [
+    ('JSMODEL', 'pub fn is_truthy(v: &str) -> bool { !v.is_empty() }\n', 'pub fn is_enabled(v: bool) -> bool { v }\n'),
+    ('UNTYPED', 'pub struct A {\n    pub temperature: serde_yaml::Value,\n}\n', 'pub struct A {\n    pub temperature: Option<f64>,\n}\n'),
+]
+for code, bad, good in EXTRA:
+    if code not in gate(bad, 'config'):
+        failures.append(f'{code}: did not fire on the anti-pattern (extra case)')
+    if code in gate(good, 'config'):
+        failures.append(f'{code}: fired on the proper pattern (extra case)')
+with tempfile.TemporaryDirectory() as d:
+    shutil.copytree(os.path.join(ROOT, 'docs'), os.path.join(d, 'docs'))
+    shutil.copytree(os.path.join(ROOT, 'scripts'), os.path.join(d, 'scripts'))
+    os.makedirs(os.path.join(d, 'crates', 'config', 'src'))
+    open(os.path.join(d, 'crates', 'config', 'Cargo.toml'), 'w').write(MANIFEST.replace('"mcp"', '"config"'))
+    open(os.path.join(d, 'crates', 'config', 'src', 'lib.rs'), 'w').write('mod resolve;\n')
+    open(os.path.join(d, 'crates', 'config', 'src', 'resolve.rs'), 'w').write('pub fn parse(t: &str) -> Result<serde_yaml::Value, serde_yaml::Error> { serde_yaml::from_str(t) }\n')
+    subprocess.run(['git', 'init', '-q', d], check=True)
+    out = subprocess.run([sys.executable, os.path.join(d, 'scripts', 'gate.py'), d], capture_output=True, text=True).stdout
+    if 'UNTYPED' in out:
+        failures.append('UNTYPED: fired on serde_yaml::Value in config resolve.rs')
 for f in failures:
     print(f)
-print(f'GATE-TEST {"FAIL" if failures else "OK"}: {len(CASES) + len(WIRE)} rules, {len(failures)} failure(s)')
+print(f'GATE-TEST {"FAIL" if failures else "OK"}: {len(CASES) + len(WIRE) + len(EXTRA) + 1} cases, {len(failures)} failure(s)')
 sys.exit(1 if failures else 0)
