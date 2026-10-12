@@ -24,6 +24,7 @@ use kernel::memory::TagAction;
 use kernel::model::ModelChunk;
 use kernel::model::ModelProvider;
 use kernel::model::ModelRequest;
+use kernel::queue::FixedJob;
 use kernel::queue::Job;
 use kernel::queue::JobKeyMode;
 use kernel::queue::JobName;
@@ -109,7 +110,7 @@ fn job_queue_claims_in_order() {
         let queue: Arc<dyn JobQueue> = Arc::new(FakeJobQueue::default());
         queue
             .enqueue(Job {
-                name: JobName::EmbedTarget,
+                name: JobName::Fixed(FixedJob::EmbedTarget),
                 payload: wire::JsonObject::default(),
                 key: Some("task:1".to_string()),
                 key_mode: JobKeyMode::Replace,
@@ -123,7 +124,7 @@ fn job_queue_claims_in_order() {
             .await
             .unwrap()
             .expect("expected one queued job");
-        assert_eq!(claimed.name, JobName::EmbedTarget);
+        assert_eq!(claimed.name, JobName::Fixed(FixedJob::EmbedTarget));
         queue.complete(claimed.id).await.unwrap();
         assert!(queue.claim(WorkerRole::Embedder).await.unwrap().is_none());
     });

@@ -1,24 +1,50 @@
 use std::str::FromStr;
 
+use kernel::queue::FixedJob;
 use kernel::queue::JobName;
 use kernel::queue::JobNameError;
+use strum::IntoEnumIterator;
 
 const FIXED: [(&str, JobName); 15] = [
-    ("embed-target", JobName::EmbedTarget),
-    ("enqueue-unembedded", JobName::EnqueueUnembedded),
-    ("enqueue-unchunked", JobName::EnqueueUnchunked),
-    ("compact-conversation", JobName::CompactConversation),
-    ("synthesize-tool-call", JobName::SynthesizeToolCall),
-    ("suggest-tags", JobName::SuggestTags),
-    ("enqueue-idle", JobName::EnqueueIdle),
-    ("extract-wiki", JobName::ExtractWiki),
-    ("enqueue-wiki-backfill", JobName::EnqueueWikiBackfill),
-    ("consolidate-wiki", JobName::ConsolidateWiki),
-    ("recompile-wiki", JobName::RecompileWiki),
-    ("enqueue-stale-wiki", JobName::EnqueueStaleWiki),
-    ("enqueue-stale-compaction", JobName::EnqueueStaleCompaction),
-    ("reap-dead-jobs", JobName::ReapDeadJobs),
-    ("run-task", JobName::RunTask),
+    ("embed-target", JobName::Fixed(FixedJob::EmbedTarget)),
+    (
+        "enqueue-unembedded",
+        JobName::Fixed(FixedJob::EnqueueUnembedded),
+    ),
+    (
+        "enqueue-unchunked",
+        JobName::Fixed(FixedJob::EnqueueUnchunked),
+    ),
+    (
+        "compact-conversation",
+        JobName::Fixed(FixedJob::CompactConversation),
+    ),
+    (
+        "synthesize-tool-call",
+        JobName::Fixed(FixedJob::SynthesizeToolCall),
+    ),
+    ("suggest-tags", JobName::Fixed(FixedJob::SuggestTags)),
+    ("enqueue-idle", JobName::Fixed(FixedJob::EnqueueIdle)),
+    ("extract-wiki", JobName::Fixed(FixedJob::ExtractWiki)),
+    (
+        "enqueue-wiki-backfill",
+        JobName::Fixed(FixedJob::EnqueueWikiBackfill),
+    ),
+    (
+        "consolidate-wiki",
+        JobName::Fixed(FixedJob::ConsolidateWiki),
+    ),
+    ("recompile-wiki", JobName::Fixed(FixedJob::RecompileWiki)),
+    (
+        "enqueue-stale-wiki",
+        JobName::Fixed(FixedJob::EnqueueStaleWiki),
+    ),
+    (
+        "enqueue-stale-compaction",
+        JobName::Fixed(FixedJob::EnqueueStaleCompaction),
+    ),
+    ("reap-dead-jobs", JobName::Fixed(FixedJob::ReapDeadJobs)),
+    ("run-task", JobName::Fixed(FixedJob::RunTask)),
 ];
 
 #[test]
@@ -26,6 +52,21 @@ fn fixed_names_round_trip_through_the_wire_string() {
     for (wire, name) in FIXED {
         assert_eq!(name.to_string(), wire);
         assert_eq!(JobName::from_str(wire), Ok(name));
+    }
+}
+
+#[test]
+fn every_fixed_variant_round_trips_through_job_name() {
+    for fixed in FixedJob::iter() {
+        let name = JobName::Fixed(fixed);
+        assert_eq!(name.to_string(), fixed.to_string());
+        assert_eq!(JobName::from_str(&name.to_string()), Ok(name.clone()));
+        let parsed: JobName = serde_json::from_str(&serde_json::to_string(&name).unwrap()).unwrap();
+        assert_eq!(parsed, name);
+        assert_eq!(
+            serde_json::to_string(&parsed).unwrap(),
+            format!("\"{fixed}\"")
+        );
     }
 }
 
@@ -126,7 +167,7 @@ fn serde_uses_the_wire_string() {
         "\"run-task:node-b\""
     );
     assert_eq!(
-        serde_json::to_string(&JobName::RunTask).unwrap(),
+        serde_json::to_string(&JobName::Fixed(FixedJob::RunTask)).unwrap(),
         "\"run-task\""
     );
     for (wire, name) in FIXED {

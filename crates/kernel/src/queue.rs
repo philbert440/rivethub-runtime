@@ -6,7 +6,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
 use std::str::FromStr;
-use strum::AsRefStr;
 use thiserror::Error;
 use wire::JsonObject;
 
@@ -55,10 +54,21 @@ pub enum JobNameError {
     EmptyNode,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRefStr)]
-#[serde(try_from = "String", into = "String")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    strum::Display,
+    strum::EnumString,
+    strum::EnumIter,
+)]
 #[strum(serialize_all = "kebab-case")]
-pub enum JobName {
+pub enum FixedJob {
     EmbedTarget,
     EnqueueUnembedded,
     EnqueueUnchunked,
@@ -74,50 +84,22 @@ pub enum JobName {
     EnqueueStaleCompaction,
     ReapDeadJobs,
     RunTask,
-    Heartbeat { agent: String, index: u32 },
-    RunTaskOn { node: String },
 }
 
-impl JobName {
-    const FIXED: [Self; 15] = [
-        Self::EmbedTarget,
-        Self::EnqueueUnembedded,
-        Self::EnqueueUnchunked,
-        Self::CompactConversation,
-        Self::SynthesizeToolCall,
-        Self::SuggestTags,
-        Self::EnqueueIdle,
-        Self::ExtractWiki,
-        Self::EnqueueWikiBackfill,
-        Self::ConsolidateWiki,
-        Self::RecompileWiki,
-        Self::EnqueueStaleWiki,
-        Self::EnqueueStaleCompaction,
-        Self::ReapDeadJobs,
-        Self::RunTask,
-    ];
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub enum JobName {
+    Fixed(FixedJob),
+    Heartbeat { agent: String, index: u32 },
+    RunTaskOn { node: String },
 }
 
 impl fmt::Display for JobName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Fixed(fixed) => write!(f, "{fixed}"),
             Self::Heartbeat { agent, index } => write!(f, "heartbeat-{agent}-{index}"),
             Self::RunTaskOn { node } => write!(f, "run-task:{node}"),
-            other @ (Self::EmbedTarget
-            | Self::EnqueueUnembedded
-            | Self::EnqueueUnchunked
-            | Self::CompactConversation
-            | Self::SynthesizeToolCall
-            | Self::SuggestTags
-            | Self::EnqueueIdle
-            | Self::ExtractWiki
-            | Self::EnqueueWikiBackfill
-            | Self::ConsolidateWiki
-            | Self::RecompileWiki
-            | Self::EnqueueStaleWiki
-            | Self::EnqueueStaleCompaction
-            | Self::ReapDeadJobs
-            | Self::RunTask) => f.write_str(other.as_ref()),
         }
     }
 }
@@ -146,10 +128,9 @@ impl FromStr for JobName {
                 node: node.to_string(),
             });
         }
-        Self::FIXED
-            .into_iter()
-            .find(|name| name.as_ref() == value)
-            .ok_or_else(|| JobNameError::Unknown(value.to_string()))
+        FixedJob::from_str(value)
+            .map(Self::Fixed)
+            .map_err(|_| JobNameError::Unknown(value.to_string()))
     }
 }
 
