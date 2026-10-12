@@ -27,6 +27,10 @@ CASES = {
     'DUPNAMES': ('pub fn n(h: H) -> &\'static str { match h { Self::A => "a", Self::B => "b", Self::C => "c" } }\n', '#[derive(strum::Display)]\npub enum H {\n    A,\n}\n'),
     'DUPTYPE': ('pub enum Role {\n    System,\n    User,\n    Tool,\n}\npub enum CaptureRole {\n    System,\n    User,\n    Tool,\n}\n', 'pub enum Role {\n    System,\n    User,\n    Tool,\n}\n'),
     'UNKNOWNKEYS': ('pub struct A {\n    pub unknown: std::collections::BTreeMap<String, serde::de::IgnoredAny>,\n}\n', 'pub struct A {\n    pub port: u16,\n}\n'),
+    'TYPEMACRO': ('macro_rules! closed {\n    ($n:ident) => { pub enum $n {} };\n}\n', 'pub enum Effort {\n    Low,\n}\n'),
+    'OPAQUE': ('#[derive(Deserialize)]\npub struct OpaqueSection {}\n', '#[derive(Deserialize)]\npub struct Safety {\n    pub enabled: bool,\n}\n'),
+    'NULLABLE': ('pub struct Hit {\n    pub title: Option<Option<String>>,\n}\n', 'pub struct TagPatch {\n    pub title: Option<Option<String>>,\n}\n'),
+    'REDUNDANTRENAME': ('pub struct A {\n    #[serde(rename = "max_tokens")]\n    pub max_tokens: u32,\n}\n', 'pub struct A {\n    #[serde(rename = "agentId")]\n    pub agent_id: u32,\n}\n'),
     'PRINT': ('pub fn a() { println!("x"); }\n', 'pub fn a() { tracing::info!("x"); }\n'),
 }
 MANIFEST = '[package]\nname = "mcp"\nedition.workspace = true\nlicense.workspace = true\nversion.workspace = true\npublish.workspace = true\n\n[lints]\nworkspace = true\n'
@@ -58,6 +62,8 @@ for code, (bad, good) in CASES.items():
         failures.append(f'{code}: fired on the proper pattern')
 EXTRA = [
     ('JSMODEL', 'pub fn is_truthy(v: &str) -> bool { !v.is_empty() }\n', 'pub fn is_enabled(v: bool) -> bool { v }\n'),
+    ('COUNTTYPE', 'pub struct A {\n    pub timeout_ms: Option<f64>,\n}\n', 'pub struct A {\n    pub timeout_ms: Option<u64>,\n}\n'),
+    ('JSMODEL', 'pub enum NumberOrText {\n    N(f64),\n}\n', 'pub struct A {\n    pub timeout_ms: u64,\n}\n'),
     ('UNTYPED', 'pub struct A {\n    pub temperature: serde_yaml::Value,\n}\n', 'pub struct A {\n    pub temperature: Option<f64>,\n}\n'),
 ]
 for code, bad, good in EXTRA:

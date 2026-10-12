@@ -36,8 +36,11 @@ accessors and deserialize helpers that return a raw map. Pattern: a serde struct
 (`#[serde(flatten, default)] pub extra: Extra`), and `wire::JsonObject` for values the contract defines as arbitrary JSON
 (MCP tool-call arguments, tool input schemas, provider `extra_body`). Nothing else names `serde_json::Value` or `Map`.
 The same holds for `serde_yaml::Value`/`Mapping`/`Number`: only `crates/config/src/load.rs` and `resolve.rs` touch the raw
-document (parse, `${VAR}` substitution over string leaves, `serde_yaml::from_value`); no typed struct holds one.
-Check: gate `UNTYPED` (everywhere except `wire/src/json.rs`, config `load.rs`/`resolve.rs`, tests and `testkit`), clippy
+document (parse, `${VAR}` substitution over string leaves, `serde_yaml::from_value`), and `crates/config/src/free_form.rs`
+holds `config::FreeForm` (`#[serde(transparent)]` over `BTreeMap<String, serde_yaml::Value>`), the one type for config values
+the contract defines as arbitrary (provider `extra_body`, `chat_template_kwargs`, `mm_processor_kwargs`).
+Check: gate `UNTYPED` (everywhere except `wire/src/json.rs`, config `load.rs`/`resolve.rs`/`free_form.rs`, tests and
+`testkit`), clippy
 `disallowed-types`.
 
 ## TAGFIELD
@@ -102,6 +105,29 @@ every field can report its own wrong-type message. Pattern: fields are `T` / `Op
 (ranges, required sections, cross-references) run over the typed value afterwards and keep their verbatim messages.
 Check: gate `CUSTOMSERDE` and `UNTYPED` (the wrapper needs both).
 
+## OPAQUE
+Anti-pattern: an empty struct (`pub struct OpaqueSection {}`) that accepts a section and throws its contents away, so the
+setting never reaches the code that needs it. Pattern: type the section from the inventory; a removed key is not a field
+at all (`serde_ignored` reports it, and the error text comes from an enum of removed paths); a value the contract defines
+as arbitrary uses the sanctioned holder (`wire::JsonObject`, `config::FreeForm`). Check: gate `OPAQUE`.
+
+## TYPEMACRO
+Anti-pattern: `macro_rules!` that stamps out structs, enums or their impls (`closed!(Effort { Low, High })`,
+`provider_entry!(...)`) to save derive lines. The types disappear from grep, docs and the reader. Pattern: write each type
+out with its derives; share fields with `#[serde(flatten)]` of a common struct. Check: gate `TYPEMACRO`.
+
+## REDUNDANTRENAME
+Anti-pattern: `#[serde(rename = "max_tokens")] pub max_tokens`. Pattern: no attribute when the names match; `rename_all`
+on the container when a whole struct uses another case; `alias` for an accepted second spelling (`agentId`), never a
+second field. Check: gate `REDUNDANTRENAME`.
+
+## NULLABLE
+Anti-pattern: `Option<Option<T>>` (with `serde_with::rust::double_option`) to reproduce whether a recorded server sent
+`null` or left a field out. Clients treat both the same. Pattern: `Option<T>` with `skip_serializing_if`; roundtrip tests
+compare JSON with null-valued object members removed on both sides. `Option<Option<T>>` is only for request bodies where
+the contract gives `null` its own meaning ("clear this field"), and such a type is named `…Patch` or `…Update`.
+Check: gate `NULLABLE`.
+
 ## ENV
 Anti-pattern: reading the environment anywhere but configuration. Pattern: the binary builds `config::Environment` from
 `std::env::vars_os()` once and passes `Config` down. Check: clippy `disallowed-methods` (`std::env::var`, `var_os`).
@@ -136,8 +162,10 @@ renames, plus `FromStr` that round-trips through a deserializer. Pattern: one na
 
 ## COUNTTYPE
 Anti-pattern: JavaScript-number habits in integer fields — `port: i64`, `limit: i64`, token counts as `i64`. Pattern:
-`u16` for ports, `u32`/`u64`/`usize` for counts and limits; `i64` only for signed quantities and epoch milliseconds.
-Check: gate `COUNTTYPE`.
+`u16` for ports, `u32`/`u64`/`usize` for counts and limits; `i64` only for signed quantities and epoch milliseconds; `u32`
+for a pid. Settings that are durations, sizes or counts (`timeout_ms`, `embed_expected_dims`, quiet-hour `start`) are
+unsigned integers, never `f64`; a fractional value in a config file is a type error. Measured values a server reports
+(`prompt_ms: 12.4`) stay `f64`. Check: gate `COUNTTYPE`.
 
 ## DUPTYPE
 Anti-pattern: the same enum defined in several modules (`Role`, `CaptureRole`, `stream::Role`). Pattern: one definition,

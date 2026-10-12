@@ -35,7 +35,7 @@ PROD = [
     (re.compile(r'#!?\[(allow|expect)\('), 'ALLOW', 'allow/expect attribute'),
     (re.compile(r'\.(unwrap|expect)\('), 'UNWRAP', 'unwrap/expect in production code'),
     (re.compile(r'\bunsafe\b'), 'UNSAFE', 'unsafe'),
-    (re.compile(r'\bJs(Value|String|Object|Number|Array)\b|\bserde_json::Number\b|use serde_json::\{?[^;]*\bNumber\b|\w*truthy\w*|\btypeof\w*|\[object Object\]'), 'JSMODEL', 'JavaScript value model or semantics (truthiness, typeof, [object Object])'),
+    (re.compile(r'\bJs(Value|String|Object|Number|Array)\b|\bserde_json::Number\b|use serde_json::\{?[^;]*\bNumber\b|\w*truthy\w*|\btypeof\w*|\[object Object\]|\b\w*(NumberOr|OrNumber)\w*'), 'JSMODEL', 'JavaScript value model or semantics (truthiness, typeof, [object Object])'),
     (re.compile(r'^impl(<[^>]*>)?\s+(PartialEq|Eq|Clone|Copy|Debug|Default|Hash|PartialOrd|Ord)\s+for\b'), 'MANUALDERIVE', 'hand-written impl of a derivable trait (use #[derive])'),
     (re.compile(r'^impl(<\'de>)?\s+(serde::)?(Serialize|Deserialize<\'de>)\s+for\b|(^|[^_])\bwith\s*=\s*"(?!(::)?serde_with::)|serialize_with\s*=|deserialize_with\s*='), 'CUSTOMSERDE', 'hand-written serde (use derives, #[serde(try_from/into)], strum, serde_with)'),
     (re.compile(r'^\s*pub\s+(port|\w*_port)\s*:\s*(Option<)?(i64|i32|u64|u32|usize)\b|^\s*pub\s+(count|limit|offset|total|inserted|skipped|index|attempts?|moved|dropped|len|\w+_count|\w*_tokens)\s*:\s*(Option<)?(i64|i32)\b'), 'COUNTTYPE', 'signed or oversized integer for a port or count (u16 ports; u32/u64/usize counts)'),
@@ -49,6 +49,8 @@ PROD = [
     (re.compile(r'\b(println|eprintln|print|eprint)!\('), 'PRINT', 'print macro (use tracing; only the binary writes to stdout)'),
     (re.compile(r'^\s*(pub(\([a-z]+\))?\s+)?(const|static)\s+\w+\s*:\s*(&\[&str\]|\[&str;|&\[\(&str,|\[\(&str,)'), 'STRSET', 'table of protocol strings (use an enum with methods; unknown keys come from serde)'),
     (re.compile(r'^\s*(pub(\([a-z]+\))?\s+)?mod\s+(den|room|rooms)\b'), 'NAMING', 'den/room module name'),
+    (re.compile(r'^\s*macro_rules!'), 'TYPEMACRO', 'macro_rules! in production code (write the types and impls out)'),
+    (re.compile(r'^\s*(pub(\([a-z]+\))?\s+)?struct\s+\w+\s*\{\s*\}'), 'OPAQUE', 'empty struct that swallows a section (type its fields, or hold free-form data in the sanctioned holder)'),
     (re.compile(r'forward_to_deserialize_any!|impl<\'de>\s+(serde::)?(de::)?Deserializer<\'de>\s+for|^\s*(Null|Bool\(bool\)|Seq\(Vec<)'), 'DYNVALUE', 'home-made dynamic value model (deserialize into typed structs)'),
 ]
 ALWAYS = {'COMMENT', 'UNSAFE'}
@@ -300,6 +302,33 @@ def check_rust_file(rel, text, crate):
                 in_payload = False
             elif in_payload and re.match(r'^    [a-z_][a-z0-9_]*\s*:', line):
                 block(f'WIREPUB {rel}:{i}: private field on a wire payload (wire payloads have pub fields, no accessors) → docs/PATTERNS.md#wirepub')
+    is_prod = '/tests/' not in '/' + rel.replace(os.sep, '/') and crate != 'testkit'
+    if is_prod:
+        struct_name = ''
+        pending_rename = None
+        for i, line in enumerate(lines, 1):
+            if '#[cfg(test)]' in line:
+                break
+            m = re.match(r'\s*(pub(\([a-z]+\))?\s+)?(struct|enum)\s+(\w+)', line)
+            if m:
+                struct_name = m.group(4)
+            if 'Option<Option<' in line and not re.search(r'(Patch|Update)$', struct_name):
+                block(f'NULLABLE {rel}:{i}: Option<Option<T>> outside a *Patch/*Update body (absent and null are the same unless null means "clear") → docs/PATTERNS.md#nullable')
+            r = re.search(r'#\[serde\([^\]]*\brename\s*=\s*"(\w+)"', line)
+            if r:
+                pending_rename = (r.group(1), i)
+                continue
+            if pending_rename and re.match(r'\s*#\[', line):
+                continue
+            if pending_rename:
+                f = re.match(r'\s*(pub(\([a-z]+\))?\s+)?(r#)?(\w+)\s*:', line)
+                if f and f.group(4) == pending_rename[0]:
+                    block(f'REDUNDANTRENAME {rel}:{pending_rename[1]}: serde rename equal to the field name → docs/PATTERNS.md#redundantrename')
+                pending_rename = None
+            if crate == 'config' and re.match(r'\s*pub\s+(\w+_ms|\w*timeout\w*|\w+_tokens|\w+_dims|\w*minutes|\w*hours|start|end|port|\w+_count|\w+_window)\s*:\s*(Option<)?f(32|64)\b', line):
+                block(f'COUNTTYPE {rel}:{i}: float for a duration, count or size setting (use u64/u32/u16/u8) → docs/PATTERNS.md#counttype')
+            if re.match(r'\s*pub\s+pid\s*:\s*(Option<)?i(32|64)\b', line):
+                block(f'COUNTTYPE {rel}:{i}: signed pid (use u32) → docs/PATTERNS.md#counttype')
     if re.search(r'(^|/)(den|room|rooms)(\.rs|/)', rel.replace(os.sep, '/')):
         block(f'NAMING {rel}: den/room file or module name → docs/PATTERNS.md#naming')
     is_test = '/tests/' in '/' + rel or crate == 'testkit' or rel.endswith('/build.rs')
@@ -320,7 +349,7 @@ def check_rust_file(rel, text, crate):
                 continue
             if code == 'UNTYPED' and rel.replace(os.sep, '/').endswith('crates/wire/src/json.rs'):
                 continue
-            if code == 'UNTYPED' and 'serde_yaml' in line and re.search(r'crates/config/src/(load|resolve)\.rs$', rel.replace(os.sep, '/')):
+            if code == 'UNTYPED' and 'serde_yaml' in line and re.search(r'crates/config/src/(load|resolve|free_form)\.rs$', rel.replace(os.sep, '/')):
                 continue
             if (in_test or is_test) and code not in ALWAYS:
                 continue
