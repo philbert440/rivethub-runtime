@@ -26,8 +26,8 @@ brief names. The TypeScript source at /opt/rivetos is REFERENCE for boundary beh
    it from dropping between rounds.
 8. Size. Stay near the target in ARCHITECTURE.md; every source file under 600 lines. If you are far over, you are porting:
    stop and redesign.
-9. Done means: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`,
-   `cargo build --workspace`, `python3 /rivet-shared/plans/rust-runtime/tools/gate.py .` all green; replays green; notes file
+9. Done means: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace`,
+   `cargo build --workspace`, `python3 scripts/gate.py .` all green; replays green; notes file
    written (decisions, deliberate deviations with contract evidence, coverage before/after); one Conventional Commit on your
    branch (`feat(rust): <crate> — <what>`), no trailers, no push, no rebase, no reset, no edits outside your crate except the
    workspace manifests.
