@@ -2,7 +2,7 @@ use crate::Extra;
 use crate::json::JsonObject;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString};
+use strum::{Display, EnumIter, EnumString};
 
 #[derive(
     Debug,
@@ -17,6 +17,7 @@ use strum::{Display, EnumString};
     Deserialize,
     Display,
     EnumString,
+    EnumIter,
 )]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]

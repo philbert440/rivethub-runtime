@@ -41,7 +41,8 @@ pub struct NodeCapabilities {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Subsystems {
-    pub den: bool,
+    #[serde(rename = "den")]
+    pub gateway: bool,
     pub devices: bool,
     pub mesh: bool,
 }

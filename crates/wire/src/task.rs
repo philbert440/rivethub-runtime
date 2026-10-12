@@ -2,6 +2,7 @@ use crate::JsonObject;
 use crate::events::AgentEvent;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumIter, EnumString};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -95,9 +96,12 @@ pub struct TaskUsage {
     pub wall_clock_ms: i64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString, EnumIter,
+)]
 #[serde(rename_all = "camelCase")]
-pub enum TaskEffort {
+#[strum(serialize_all = "camelCase")]
+pub enum Effort {
     Low,
     Medium,
     High,
@@ -133,7 +137,7 @@ pub struct TaskSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effort: Option<TaskEffort>,
+    pub effort: Option<Effort>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system_prompt_append: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

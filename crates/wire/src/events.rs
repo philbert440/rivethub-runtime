@@ -198,7 +198,8 @@ pub struct StateResponse {
 pub struct Snapshot {
     pub v: i64,
     pub sessions: Vec<SessionSummary>,
-    pub rooms: BTreeMap<String, SessionView>,
+    #[serde(rename = "rooms")]
+    pub views: BTreeMap<String, SessionView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

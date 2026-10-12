@@ -1,5 +1,6 @@
 use crate::{JsonObject, message::Role, message::ToolCall};
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumIter, EnumString};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -149,8 +150,11 @@ pub struct LlmChunk {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString, EnumIter,
+)]
 #[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "camelCase")]
 pub enum ThinkingLevel {
     Off,
     Low,

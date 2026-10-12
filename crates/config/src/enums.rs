@@ -1,3 +1,7 @@
+pub use wire::harness::HarnessId;
+pub use wire::stream::ThinkingLevel;
+pub use wire::task::Effort;
+
 #[derive(
     Debug,
     Clone,
@@ -16,32 +20,6 @@ pub enum DeploymentTarget {
     Proxmox,
     Kubernetes,
     Manual,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString, strum::EnumIter)]
-#[strum(serialize_all = "kebab-case")]
-pub enum HarnessId {
-    ClaudeCode,
-    GrokBuild,
-    KimiCode,
-    Hermes,
-    Codex,
-    Opencode,
-    Pi,
-    QwenCode,
-    Cursor,
-    Cowork,
-}
-
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, strum::Display, strum::EnumString,
-)]
-#[serde(rename_all = "kebab-case")]
-#[strum(serialize_all = "kebab-case")]
-pub enum Effort {
-    Low,
-    Medium,
-    High,
 }
 
 #[derive(
@@ -73,19 +51,6 @@ pub enum ModelsMode {
 pub enum VerifierExecutor {
     ChatLoop,
     HarnessSession,
-}
-
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, strum::Display, strum::EnumString,
-)]
-#[serde(rename_all = "kebab-case")]
-#[strum(serialize_all = "kebab-case")]
-pub enum ThinkingLevel {
-    Off,
-    Low,
-    Medium,
-    High,
-    Xhigh,
 }
 
 #[derive(

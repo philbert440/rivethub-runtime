@@ -109,7 +109,8 @@ pub struct PtyList {
 pub struct TermCommand {
     pub id: String,
     pub label: String,
-    pub room: bool,
+    #[serde(rename = "room")]
+    pub session: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
