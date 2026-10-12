@@ -78,7 +78,7 @@ TOKEN_RES = [
 ALLOWED_HOME_USERS = {'ubuntu', 'runner', 'rivet', 'rivetos', 'rivethub', 'user', 'example'}
 SKIP_SCAN_RE = [
     re.compile(r'^scripts/(privacy|secret)-denylist\.json$'),
-    re.compile(r'^scripts/gate\.py$'),
+    re.compile(r'^scripts/house-identities\.json$'),
     re.compile(r'(^|/)Cargo\.lock$'),
     re.compile(r'\.(png|jpg|jpeg|gif|webp|ico|svg|pdf|zip|gz|woff2?|ttf|otf|mp3|wav|ogg|mp4|webm|so|a|bin|wasm)$', re.I),
 ]
@@ -90,9 +90,6 @@ LINUX_AFTER_RE = re.compile(r'\s+Linux\b')
 IDENT_CHAR = re.compile(r'[A-Za-z0-9-]')
 PATH_MARKER_RE = [re.compile(r'(^|/)README(\.[A-Za-z0-9]+)?$', re.I), re.compile(r'(^|/)docs/'), re.compile(r'(^|/)fixtures/'), re.compile(r'\.(md|mdx)$', re.I)]
 AUTHORSHIP = {
-    'house': [('rivet philbot', 'rivetphilbot@gmail.com'), ('rivet', 'rivetphilbot@gmail.com'), ('philip', 'philbert440@gmail.com'),
-              ('philip', 'philbert440@users.noreply.github.com'), ('philbert440', 'philbert440@gmail.com'),
-              ('philbert440', 'philbert440@users.noreply.github.com')],
     'blocked_trailers': re.compile(r'^(Co-authored-by|Claude-Session|Signed-off-by):', re.I | re.M),
     'blocked_text': re.compile(r'(claude|anthropic|cursor|copilot|chatgpt|openai|generated with)', re.I),
 }
@@ -505,7 +502,8 @@ def staged(root):
 
 
 def identity_ok(name, email):
-    return (name.lower().strip(), email.lower().strip()) in AUTHORSHIP['house']
+    digest = sha(f'{name.lower().strip()} <{email.lower().strip()}>')
+    return digest in set(json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'house-identities.json')))['sha256'])
 
 
 def commit_message(text, author=None):

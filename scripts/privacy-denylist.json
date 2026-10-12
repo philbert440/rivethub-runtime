@@ -1,5 +1,5 @@
 {
-  "_comment": "SHA-256 hashes of denylisted UUIDs, emails, persona tokens, hyphenated tags, and tool-call ids (lowercased). Plaintext is intentionally absent. Add a hash with: node scripts/privacy-denylist-add.mjs '<value>'",
+  "_comment": "SHA-256 hashes of denylisted UUIDs, emails, persona tokens, hyphenated tags, and tool-call ids (lowercased). Plaintext is intentionally absent. Add a hash with: printf '%s' '<value>' | tr A-Z a-z | sha256sum",
   "sha256": [
     "064d3b00ec17d015e7a09ded0f53f563cc7ada05dad98718eda6cf646f2243e4",
     "082a359c45a78483e3ffd99bafcac269ae46e1f5e78afa19555e17b7c680fd48",
