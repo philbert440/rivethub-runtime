@@ -1,28 +1,24 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::atomic::AtomicI64;
+use std::sync::atomic::Ordering;
 
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::ToolContext;
-use kernel::harness::Command;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::HarnessAdapterError;
-use kernel::harness::PlanEntry;
-use kernel::harness::PlanPriority;
 use kernel::harness::SessionEvent;
 use kernel::harness::SessionOption;
 use kernel::harness::SessionSpec;
-use kernel::harness::ToolCallInfo;
-use kernel::harness::ToolCallStatus;
-use kernel::harness::ToolCallUpdate;
 use kernel::harness::TurnInput;
 use kernel::memory::BrowseFilter;
 use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
 use kernel::memory::SearchQuery;
 use kernel::memory::TagAction;
+use kernel::memory::TagOutcome;
 use kernel::model::Embedding;
 use kernel::model::ModelChunk;
 use kernel::model::ModelProvider;
@@ -30,11 +26,10 @@ use kernel::model::ModelProviderError;
 use kernel::model::ModelRequest;
 use kernel::queue::ClaimedJob;
 use kernel::queue::Job;
-use kernel::queue::JobKeyMode;
-use kernel::queue::JobName;
 use kernel::queue::JobQueue;
 use kernel::queue::JobQueueError;
 use kernel::queue::WorkerRole;
+use kernel::terminal::PtyInfo;
 use kernel::terminal::TermSize;
 use kernel::terminal::TerminalMux;
 use kernel::terminal::TerminalMuxError;
@@ -46,22 +41,15 @@ use kernel::transcript::Turn;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::Receiver;
 use wire::gateway::memory::MemoryStatsResponse;
-use wire::harness::ApprovalDecision as Decision;
+use wire::harness::ApprovalDecision;
 use wire::memory::MemoryEntry;
 use wire::memory::MemorySearchResult;
 use wire::session_id::SessionId;
+use wire::stream::LlmResponse;
 
 #[derive(Debug, Default)]
 pub struct FakeMemoryStore {
     entries: Mutex<Vec<MemoryEntry>>,
-}
-
-impl FakeMemoryStore {
-    pub fn new() -> Self {
-        Self {
-            entries: Mutex::new(Vec::new()),
-        }
-    }
 }
 
 #[async_trait]
@@ -132,11 +120,8 @@ impl MemoryStore for FakeMemoryStore {
             .cloned())
     }
 
-    async fn tags(
-        &self,
-        _action: TagAction,
-    ) -> Result<kernel::memory::TagOutcome, MemoryStoreError> {
-        Ok(kernel::memory::TagOutcome {
+    async fn tags(&self, _action: TagAction) -> Result<TagOutcome, MemoryStoreError> {
+        Ok(TagOutcome {
             moved: 0,
             dropped: 0,
         })
@@ -160,27 +145,13 @@ impl MemoryStore for FakeMemoryStore {
 #[derive(Debug, Default)]
 pub struct FakeJobQueue {
     jobs: Mutex<BTreeMap<i64, Job>>,
-    next_id: Mutex<i64>,
-}
-
-impl FakeJobQueue {
-    pub fn new() -> Self {
-        Self {
-            jobs: Mutex::new(BTreeMap::new()),
-            next_id: Mutex::new(1),
-        }
-    }
+    next_id: AtomicI64,
 }
 
 #[async_trait]
 impl JobQueue for FakeJobQueue {
     async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
-        let id = {
-            let mut next = self.next_id.lock().await;
-            let id = *next;
-            *next += 1;
-            id
-        };
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         self.jobs.lock().await.insert(id, job);
         Ok(())
     }
@@ -214,77 +185,131 @@ impl JobQueue for FakeJobQueue {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum Script {
+    Chat(LlmResponse),
+    Stream(Vec<ModelChunk>),
+    Embed(Vec<Embedding>),
+    Models(Vec<String>),
+}
+
 #[derive(Debug, Default)]
-pub struct FakeModelProvider;
+pub struct FakeProvider {
+    script: Mutex<Vec<Script>>,
+}
+
+impl FakeProvider {
+    pub fn new(script: Vec<Script>) -> Self {
+        Self {
+            script: Mutex::new(script),
+        }
+    }
+
+    async fn scripted<T>(&self, keep: fn(&Script) -> Option<T>) -> Option<T> {
+        let mut script = self.script.lock().await;
+        let index = script.iter().position(|s| keep(s).is_some())?;
+        let entry = script.get(index).cloned()?;
+        let chosen = keep(&entry);
+        script.remove(index);
+        drop(script);
+        chosen
+    }
+}
+
+fn default_response() -> LlmResponse {
+    LlmResponse {
+        r#type: wire::stream::LlmResponseKind::Text,
+        content: Some("ok".to_string()),
+        tool_calls: None,
+        usage: None,
+    }
+}
 
 #[async_trait]
-impl ModelProvider for FakeModelProvider {
-    async fn chat(
-        &self,
-        _request: ModelRequest,
-    ) -> Result<wire::stream::LlmResponse, ModelProviderError> {
-        Ok(wire::stream::LlmResponse {
-            r#type: wire::stream::LlmResponseKind::Text,
-            content: Some("ok".to_string()),
-            tool_calls: None,
-            usage: None,
-        })
+impl ModelProvider for FakeProvider {
+    async fn chat(&self, _request: ModelRequest) -> Result<LlmResponse, ModelProviderError> {
+        Ok(self
+            .scripted(|s| match s {
+                Script::Chat(response) => Some(response.clone()),
+                Script::Stream(_) | Script::Embed(_) | Script::Models(_) => None,
+            })
+            .await
+            .unwrap_or_else(default_response))
     }
 
     async fn stream(
         &self,
         request: ModelRequest,
     ) -> Result<Receiver<ModelChunk>, ModelProviderError> {
-        let (tx, rx) = tokio::sync::mpsc::channel(8);
-        let text = request
-            .messages
-            .last()
-            .map(|m| match &m.content {
-                wire::message::MessageContent::Text(t) => t.clone(),
-                wire::message::MessageContent::Parts(_) => String::new(),
+        let chunks = self
+            .scripted(|s| match s {
+                Script::Stream(chunks) => Some(chunks.clone()),
+                Script::Chat(_) | Script::Embed(_) | Script::Models(_) => None,
             })
-            .unwrap_or_default();
-        tokio::spawn(async move {
-            let _ = tx.send(ModelChunk::Text { delta: text }).await;
-            let _ = tx.send(ModelChunk::Done).await;
+            .await;
+        let chunks = chunks.unwrap_or_else(|| {
+            vec![
+                ModelChunk::Text {
+                    delta: request
+                        .messages
+                        .last()
+                        .map(|m| match &m.content {
+                            wire::message::MessageContent::Text(t) => t.clone(),
+                            wire::message::MessageContent::Parts(_) => String::new(),
+                        })
+                        .unwrap_or_default(),
+                },
+                ModelChunk::Done,
+            ]
         });
+        let (tx, rx) = tokio::sync::mpsc::channel(chunks.len().max(1));
+        for chunk in chunks {
+            let _ = tx.try_send(chunk);
+        }
         Ok(rx)
     }
 
     async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
-        Ok(texts
-            .into_iter()
-            .map(|t| Embedding {
-                vector: vec![f32::from(u16::try_from(t.len()).unwrap_or(u16::MAX))],
+        Ok(self
+            .scripted(|s| match s {
+                Script::Embed(vectors) => Some(vectors.clone()),
+                Script::Chat(_) | Script::Stream(_) | Script::Models(_) => None,
             })
-            .collect())
+            .await
+            .unwrap_or_else(|| {
+                texts
+                    .into_iter()
+                    .map(|t| Embedding {
+                        vector: vec![f32::from(u16::try_from(t.len()).unwrap_or(u16::MAX))],
+                    })
+                    .collect()
+            }))
     }
 
     async fn list_models(&self) -> Result<Vec<String>, ModelProviderError> {
-        Ok(vec!["fake-model".to_string()])
+        Ok(self
+            .scripted(|s| match s {
+                Script::Models(models) => Some(models.clone()),
+                Script::Chat(_) | Script::Stream(_) | Script::Embed(_) => None,
+            })
+            .await
+            .unwrap_or_else(|| vec!["fake-model".to_string()]))
     }
 }
 
+#[derive(Debug)]
 struct SessionStream {
     tx: tokio::sync::mpsc::Sender<SessionEvent>,
     rx: Option<Receiver<SessionEvent>>,
 }
 
 #[derive(Debug, Default)]
-pub struct FakeHarnessAdapter {
+pub struct FakeHarness {
     queued: Mutex<Vec<SessionEvent>>,
     sessions: Mutex<BTreeMap<SessionId, SessionStream>>,
 }
 
-impl std::fmt::Debug for SessionStream {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SessionStream")
-            .field("rx_taken", &self.rx.is_none())
-            .finish_non_exhaustive()
-    }
-}
-
-impl FakeHarnessAdapter {
+impl FakeHarness {
     pub fn new(events: Vec<SessionEvent>) -> Self {
         Self {
             queued: Mutex::new(events),
@@ -294,7 +319,7 @@ impl FakeHarnessAdapter {
 }
 
 #[async_trait]
-impl HarnessAdapter for FakeHarnessAdapter {
+impl HarnessAdapter for FakeHarness {
     async fn new_session(&self, spec: SessionSpec) -> Result<SessionId, HarnessAdapterError> {
         let (tx, rx) = tokio::sync::mpsc::channel(16);
         self.sessions
@@ -342,7 +367,7 @@ impl HarnessAdapter for FakeHarnessAdapter {
         &self,
         _session: &SessionId,
         _request_id: &str,
-        _decision: Decision,
+        _decision: ApprovalDecision,
     ) -> Result<(), HarnessAdapterError> {
         Ok(())
     }
@@ -370,22 +395,13 @@ impl HarnessAdapter for FakeHarnessAdapter {
 }
 
 #[derive(Debug, Default)]
-pub struct FakeTerminalMux {
+pub struct FakeMux {
     ptys: Mutex<Vec<(String, SessionId, bool)>>,
-    next_id: Mutex<i64>,
-}
-
-impl FakeTerminalMux {
-    pub fn new() -> Self {
-        Self {
-            ptys: Mutex::new(Vec::new()),
-            next_id: Mutex::new(1),
-        }
-    }
+    next_id: AtomicI64,
 }
 
 #[async_trait]
-impl TerminalMux for FakeTerminalMux {
+impl TerminalMux for FakeMux {
     async fn spawn(
         &self,
         session: &SessionId,
@@ -393,12 +409,7 @@ impl TerminalMux for FakeTerminalMux {
         _cwd: &std::path::Path,
         _size: TermSize,
     ) -> Result<String, TerminalMuxError> {
-        let id = {
-            let mut next = self.next_id.lock().await;
-            let id = format!("pty-{}", *next);
-            *next += 1;
-            id
-        };
+        let id = format!("pty-{}", self.next_id.fetch_add(1, Ordering::Relaxed));
         self.ptys
             .lock()
             .await
@@ -455,13 +466,13 @@ impl TerminalMux for FakeTerminalMux {
         }
     }
 
-    async fn list(&self) -> Result<Vec<kernel::terminal::PtyInfo>, TerminalMuxError> {
+    async fn list(&self) -> Result<Vec<PtyInfo>, TerminalMuxError> {
         Ok(self
             .ptys
             .lock()
             .await
             .iter()
-            .map(|(id, session, running)| kernel::terminal::PtyInfo {
+            .map(|(id, session, running)| PtyInfo {
                 id: id.clone(),
                 session: session.clone(),
                 running: *running,
@@ -471,11 +482,11 @@ impl TerminalMux for FakeTerminalMux {
 }
 
 #[derive(Debug)]
-pub struct EchoTool {
+pub struct FakeTool {
     name: String,
 }
 
-impl EchoTool {
+impl FakeTool {
     pub fn new(name: &str) -> Self {
         Self {
             name: name.to_string(),
@@ -484,7 +495,7 @@ impl EchoTool {
 }
 
 #[async_trait]
-impl Tool for EchoTool {
+impl Tool for FakeTool {
     fn definition(&self) -> rmcp::model::Tool {
         let schema = serde_json::json!({
             "type": "object",
@@ -515,18 +526,18 @@ impl Tool for EchoTool {
 }
 
 #[derive(Debug)]
-pub struct FakeTranscriptReader {
+pub struct FakeReader {
     turns: BTreeMap<String, Vec<Turn>>,
 }
 
-impl FakeTranscriptReader {
+impl FakeReader {
     pub fn new(turns: BTreeMap<String, Vec<Turn>>) -> Self {
         Self { turns }
     }
 }
 
 #[async_trait]
-impl TranscriptReader for FakeTranscriptReader {
+impl TranscriptReader for FakeReader {
     async fn sessions(
         &self,
         _store: &std::path::Path,
@@ -558,258 +569,4 @@ impl TranscriptReader for FakeTranscriptReader {
             .filter(|turn| turn.at > since)
             .collect())
     }
-}
-
-fn memory_entry(session: &str, content: &str, at: DateTime<Utc>) -> MemoryEntry {
-    MemoryEntry {
-        id: Some(format!("m-{}", content.len())),
-        session_id: session.to_string(),
-        agent: "agent-a".to_string(),
-        channel: "test".to_string(),
-        role: wire::message::Role::User,
-        content: content.to_string(),
-        tool_name: None,
-        tool_args: None,
-        tool_result: None,
-        metadata: None,
-        created_at: Some(at),
-    }
-}
-
-#[tokio::test]
-async fn memory_store_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
-    let store = FakeMemoryStore::new();
-    let bounded: std::sync::Arc<dyn MemoryStore> = std::sync::Arc::new(store);
-    let now = Utc::now();
-    let inserted = bounded
-        .append(vec![memory_entry("claude-code:abc", "hello world", now)])
-        .await?;
-    assert_eq!(inserted, 1);
-    let hits = bounded
-        .search(SearchQuery {
-            text: "hello".to_string(),
-            agent: None,
-            limit: 10,
-        })
-        .await?;
-    assert_eq!(hits.len(), 1);
-    let stats = bounded.stats().await?;
-    assert_eq!(stats.messages, 1);
-    let browsed = bounded
-        .browse(BrowseFilter {
-            session_key: Some("claude-code:abc".to_string()),
-            agent: None,
-            limit: 10,
-        })
-        .await?;
-    assert_eq!(browsed.len(), 1);
-    let full = bounded.get_full("m-11").await?;
-    assert!(full.is_some());
-    let context = bounded.context("claude-code:abc", now).await?;
-    assert_eq!(context, "hello world");
-    Ok(())
-}
-
-#[tokio::test]
-async fn job_queue_claims_in_order() -> Result<(), Box<dyn std::error::Error>> {
-    let queue: std::sync::Arc<dyn JobQueue> = std::sync::Arc::new(FakeJobQueue::new());
-    queue
-        .enqueue(Job {
-            name: JobName::EmbedTarget,
-            payload: wire::JsonObject::default(),
-            key: Some("task:1".to_string()),
-            key_mode: JobKeyMode::Replace,
-            priority: 0,
-            run_at: None,
-        })
-        .await?;
-    let claimed = queue
-        .claim(WorkerRole::Embedder)
-        .await?
-        .ok_or("expected one queued job")?;
-    assert_eq!(claimed.name, JobName::EmbedTarget);
-    queue.complete(claimed.id).await?;
-    assert!(queue.claim(WorkerRole::Embedder).await?.is_none());
-    Ok(())
-}
-
-#[tokio::test]
-async fn model_provider_streams_text() -> Result<(), Box<dyn std::error::Error>> {
-    let provider: std::sync::Arc<dyn ModelProvider> = std::sync::Arc::new(FakeModelProvider);
-    let request = ModelRequest {
-        model: "fake-model".to_string(),
-        messages: vec![wire::message::Message {
-            role: wire::message::Role::User,
-            content: wire::message::MessageContent::Text("hi".to_string()),
-            tool_calls: None,
-            tool_call_id: None,
-        }],
-        tools: Vec::new(),
-        thinking: Some(wire::stream::ThinkingLevel::Medium),
-        max_tokens: None,
-        temperature: None,
-    };
-    let mut rx = provider.stream(request).await?;
-    let first = rx.recv().await.ok_or("expected a chunk")?;
-    assert_eq!(
-        first,
-        ModelChunk::Text {
-            delta: "hi".to_string()
-        }
-    );
-    let embeddings = provider.embed(vec!["abc".to_string()]).await?;
-    assert_eq!(
-        embeddings.first().map(|e| e.vector.clone()),
-        Some(vec![3.0_f32])
-    );
-    let models = provider.list_models().await?;
-    assert_eq!(models, vec!["fake-model".to_string()]);
-    Ok(())
-}
-
-#[tokio::test]
-async fn harness_adapter_delivers_session_events() -> Result<(), Box<dyn std::error::Error>> {
-    let session = SessionId::from_str("grok-build:native-1")?;
-    let events = vec![
-        SessionEvent::ToolCall(ToolCallInfo {
-            tool_call_id: "t1".to_string(),
-            name: "shell".to_string(),
-            input: wire::JsonObject::default(),
-        }),
-        SessionEvent::ToolCallUpdate(ToolCallUpdate {
-            tool_call_id: "t1".to_string(),
-            status: ToolCallStatus::Completed,
-            output: Some("done".to_string()),
-        }),
-        SessionEvent::Plan(vec![PlanEntry {
-            content: "step".to_string(),
-            priority: PlanPriority::High,
-        }]),
-        SessionEvent::AvailableCommands(vec![Command {
-            name: "compact".to_string(),
-            description: "compact context".to_string(),
-        }]),
-        SessionEvent::TurnEnded,
-    ];
-    let adapter: std::sync::Arc<dyn HarnessAdapter> =
-        std::sync::Arc::new(FakeHarnessAdapter::new(events));
-    let created = adapter
-        .new_session(SessionSpec {
-            session: session.clone(),
-            harness: wire::harness::HarnessId::GrokBuild,
-            model: None,
-            effort: None,
-            working_dir: Some(PathBuf::from("/work/acme")),
-        })
-        .await?;
-    assert_eq!(created, session);
-    let mut rx = adapter.events(&session).await?;
-    assert!(adapter.events(&session).await.is_err());
-    adapter
-        .prompt(&session, TurnInput::Text("go".to_string()))
-        .await?;
-    let mut seen = Vec::new();
-    for _ in 0..5 {
-        let event = rx.recv().await.ok_or("expected an event")?;
-        seen.push(event);
-    }
-    assert_eq!(seen.len(), 5);
-    adapter
-        .answer_permission(&session, "r1", Decision::Allow)
-        .await?;
-    adapter
-        .set_option(&session, SessionOption::Model("m".to_string()))
-        .await?;
-    Ok(())
-}
-
-#[tokio::test]
-async fn terminal_mux_spawn_kill_list() -> Result<(), Box<dyn std::error::Error>> {
-    let mux: std::sync::Arc<dyn TerminalMux> = std::sync::Arc::new(FakeTerminalMux::new());
-    let session = SessionId::from_str("claude-code:11111111-2222-4333-8444-555555555555")?;
-    let id = mux
-        .spawn(
-            &session,
-            vec!["bash".to_string()],
-            std::path::Path::new("/work/acme"),
-            TermSize { cols: 80, rows: 24 },
-        )
-        .await?;
-    let rx = mux.attach(&id).await?;
-    mux.input(&id, b"ls\n".to_vec()).await?;
-    mux.resize(
-        &id,
-        TermSize {
-            cols: 120,
-            rows: 40,
-        },
-    )
-    .await?;
-    let listed = mux.list().await?;
-    assert!(listed.first().is_some_and(|pty| pty.running));
-    mux.kill(&id).await?;
-    let listed = mux.list().await?;
-    assert!(listed.first().is_some_and(|pty| !pty.running));
-    drop(rx);
-    Ok(())
-}
-
-#[tokio::test]
-async fn tool_echoes_text_argument() -> Result<(), Box<dyn std::error::Error>> {
-    let tool: std::sync::Arc<dyn Tool> = std::sync::Arc::new(EchoTool::new("echo"));
-    let definition = tool.definition();
-    assert_eq!(definition.name.as_ref(), "echo");
-    let args = serde_json::json!({"text": "ping"});
-    let result = tool
-        .call(
-            args.as_object().cloned(),
-            ToolContext {
-                agent_id: Some("agent-a".to_string()),
-                working_dir: None,
-                session: None,
-            },
-        )
-        .await?;
-    assert!(!result.is_error.unwrap_or(false));
-    let missing = tool
-        .call(
-            None,
-            ToolContext {
-                agent_id: None,
-                working_dir: None,
-                session: None,
-            },
-        )
-        .await;
-    assert!(missing.is_err());
-    Ok(())
-}
-
-#[tokio::test]
-async fn transcript_reader_reads_and_tails() -> Result<(), Box<dyn std::error::Error>> {
-    let session = SessionId::from_str("codex:native-9")?;
-    let early = Turn {
-        role: wire::message::Role::User,
-        content: "early".to_string(),
-        at: DateTime::parse_from_rfc3339("2026-10-12T00:00:00Z")?.with_timezone(&Utc),
-    };
-    let late = Turn {
-        role: wire::message::Role::Assistant,
-        content: "late".to_string(),
-        at: DateTime::parse_from_rfc3339("2026-10-12T01:00:00Z")?.with_timezone(&Utc),
-    };
-    let mut turns = BTreeMap::new();
-    turns.insert(session.to_string(), vec![early.clone(), late.clone()]);
-    let reader: std::sync::Arc<dyn TranscriptReader> =
-        std::sync::Arc::new(FakeTranscriptReader::new(turns));
-    let listed = reader
-        .sessions(std::path::Path::new("/work/acme/.claude"))
-        .await?;
-    assert_eq!(listed, vec![session.clone()]);
-    let read = reader.read(&session).await?;
-    assert_eq!(read.len(), 2);
-    let since = DateTime::parse_from_rfc3339("2026-10-12T00:30:00Z")?.with_timezone(&Utc);
-    let tail = reader.tail(&session, since).await?;
-    assert_eq!(tail, vec![late]);
-    Ok(())
 }

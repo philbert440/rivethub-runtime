@@ -1,0 +1,40 @@
+[package]
+name = "testkit"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version.workspace = true
+repository.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+axum = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+httparse = { workspace = true }
+kernel = { workspace = true }
+parking_lot = { workspace = true }
+regex = { workspace = true }
+rmcp = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["net", "sync"] }
+wire = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+libtest-mimic = { workspace = true }
+similar-asserts = { workspace = true }
+tokio = { workspace = true, features = ["rt", "io-util"] }
+
+[[test]]
+name = "replay"
+harness = false
+
+[lints]
+workspace = true
