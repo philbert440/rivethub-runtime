@@ -1,3 +1,4 @@
+use crate::BoxError;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
@@ -8,10 +9,14 @@ use wire::memory::MemorySearchResult;
 
 #[derive(Debug, Error)]
 pub enum MemoryStoreError {
-    #[error("memory store is unavailable: {0}")]
-    Unavailable(String),
-    #[error("memory query failed: {0}")]
-    Query(String),
+    #[error("memory store is unavailable")]
+    Unavailable(#[source] BoxError),
+    #[error("memory query failed: {message}")]
+    Query {
+        message: String,
+        #[source]
+        source: BoxError,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

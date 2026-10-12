@@ -1,3 +1,4 @@
+use crate::BoxError;
 use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
@@ -7,10 +8,18 @@ use wire::stream::ThinkingLevel;
 
 #[derive(Debug, Error)]
 pub enum ModelProviderError {
-    #[error("provider request failed: {0}")]
-    Request(String),
-    #[error("provider stream ended early: {0}")]
-    Stream(String),
+    #[error("provider request failed: {message}")]
+    Request {
+        message: String,
+        #[source]
+        source: BoxError,
+    },
+    #[error("provider stream ended early: {message}")]
+    Stream {
+        message: String,
+        #[source]
+        source: BoxError,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

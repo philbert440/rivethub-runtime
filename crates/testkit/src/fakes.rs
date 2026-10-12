@@ -26,11 +26,13 @@ use kernel::model::ModelProviderError;
 use kernel::model::ModelRequest;
 use kernel::queue::ClaimedJob;
 use kernel::queue::Job;
+use kernel::queue::JobId;
 use kernel::queue::JobQueue;
 use kernel::queue::JobQueueError;
 use kernel::queue::WorkerRole;
 use kernel::terminal::PtyInfo;
 use kernel::terminal::TermSize;
+use kernel::terminal::TerminalId;
 use kernel::terminal::TerminalMux;
 use kernel::terminal::TerminalMuxError;
 use kernel::tool::Tool;
@@ -144,14 +146,14 @@ impl MemoryStore for FakeMemoryStore {
 
 #[derive(Debug, Default)]
 pub struct FakeJobQueue {
-    jobs: Mutex<BTreeMap<i64, Job>>,
+    jobs: Mutex<BTreeMap<JobId, Job>>,
     next_id: AtomicI64,
 }
 
 #[async_trait]
 impl JobQueue for FakeJobQueue {
     async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let id = JobId::new(self.next_id.fetch_add(1, Ordering::Relaxed));
         self.jobs.lock().await.insert(id, job);
         Ok(())
     }
@@ -175,12 +177,12 @@ impl JobQueue for FakeJobQueue {
         Ok(claimed)
     }
 
-    async fn complete(&self, id: i64) -> Result<(), JobQueueError> {
+    async fn complete(&self, id: JobId) -> Result<(), JobQueueError> {
         self.jobs.lock().await.remove(&id);
         Ok(())
     }
 
-    async fn fail(&self, _id: i64, _error: &str) -> Result<(), JobQueueError> {
+    async fn fail(&self, _id: JobId, _error: &str) -> Result<(), JobQueueError> {
         Ok(())
     }
 }
@@ -349,7 +351,7 @@ impl HarnessAdapter for FakeHarness {
             let sessions = self.sessions.lock().await;
             sessions
                 .get(session)
-                .ok_or_else(|| HarnessAdapterError::UnknownSession(session.to_string()))?
+                .ok_or_else(|| HarnessAdapterError::UnknownSession(session.clone()))?
                 .tx
                 .clone()
         };
@@ -387,16 +389,16 @@ impl HarnessAdapter for FakeHarness {
         let mut sessions = self.sessions.lock().await;
         let stream = sessions
             .get_mut(session)
-            .ok_or_else(|| HarnessAdapterError::UnknownSession(session.to_string()))?;
+            .ok_or_else(|| HarnessAdapterError::UnknownSession(session.clone()))?;
         let taken = stream.rx.take();
         drop(sessions);
-        taken.ok_or_else(|| HarnessAdapterError::EventStreamTaken(session.to_string()))
+        taken.ok_or_else(|| HarnessAdapterError::EventStreamTaken(session.clone()))
     }
 }
 
 #[derive(Debug, Default)]
 pub struct FakeMux {
-    ptys: Mutex<Vec<(String, SessionId, bool)>>,
+    ptys: Mutex<Vec<(TerminalId, SessionId, bool)>>,
     next_id: AtomicI64,
 }
 
@@ -408,8 +410,11 @@ impl TerminalMux for FakeMux {
         _argv: Vec<String>,
         _cwd: &std::path::Path,
         _size: TermSize,
-    ) -> Result<String, TerminalMuxError> {
-        let id = format!("pty-{}", self.next_id.fetch_add(1, Ordering::Relaxed));
+    ) -> Result<TerminalId, TerminalMuxError> {
+        let id = TerminalId::new(format!(
+            "pty-{}",
+            self.next_id.fetch_add(1, Ordering::Relaxed)
+        ));
         self.ptys
             .lock()
             .await
@@ -417,38 +422,38 @@ impl TerminalMux for FakeMux {
         Ok(id)
     }
 
-    async fn attach(&self, id: &str) -> Result<Receiver<Vec<u8>>, TerminalMuxError> {
+    async fn attach(&self, id: &TerminalId) -> Result<Receiver<Vec<u8>>, TerminalMuxError> {
         self.ptys
             .lock()
             .await
             .iter()
             .find(|(pty, _, _)| pty == id)
-            .ok_or_else(|| TerminalMuxError::UnknownTerminal(id.to_string()))?;
+            .ok_or_else(|| TerminalMuxError::UnknownTerminal(id.clone()))?;
         let (_tx, rx) = tokio::sync::mpsc::channel(1);
         Ok(rx)
     }
 
-    async fn input(&self, id: &str, _bytes: Vec<u8>) -> Result<(), TerminalMuxError> {
+    async fn input(&self, id: &TerminalId, _bytes: Vec<u8>) -> Result<(), TerminalMuxError> {
         self.ptys
             .lock()
             .await
             .iter()
             .find(|(pty, _, _)| pty == id)
-            .ok_or_else(|| TerminalMuxError::UnknownTerminal(id.to_string()))?;
+            .ok_or_else(|| TerminalMuxError::UnknownTerminal(id.clone()))?;
         Ok(())
     }
 
-    async fn resize(&self, id: &str, _size: TermSize) -> Result<(), TerminalMuxError> {
+    async fn resize(&self, id: &TerminalId, _size: TermSize) -> Result<(), TerminalMuxError> {
         self.ptys
             .lock()
             .await
             .iter()
             .find(|(pty, _, _)| pty == id)
-            .ok_or_else(|| TerminalMuxError::UnknownTerminal(id.to_string()))?;
+            .ok_or_else(|| TerminalMuxError::UnknownTerminal(id.clone()))?;
         Ok(())
     }
 
-    async fn kill(&self, id: &str) -> Result<(), TerminalMuxError> {
+    async fn kill(&self, id: &TerminalId) -> Result<(), TerminalMuxError> {
         let killed = {
             let mut ptys = self.ptys.lock().await;
             match ptys.iter_mut().find(|(pty, _, _)| pty == id) {
@@ -462,7 +467,7 @@ impl TerminalMux for FakeMux {
         if killed {
             Ok(())
         } else {
-            Err(TerminalMuxError::UnknownTerminal(id.to_string()))
+            Err(TerminalMuxError::UnknownTerminal(id.clone()))
         }
     }
 

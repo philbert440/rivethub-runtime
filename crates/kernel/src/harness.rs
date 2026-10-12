@@ -1,3 +1,4 @@
+use crate::BoxError;
 use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
@@ -10,15 +11,19 @@ use wire::stream::ThinkingLevel;
 #[derive(Debug, Error)]
 pub enum HarnessAdapterError {
     #[error("harness rejected the session id: {0}")]
-    InvalidSession(String),
+    InvalidSession(SessionId),
     #[error("harness session is unknown: {0}")]
-    UnknownSession(String),
+    UnknownSession(SessionId),
     #[error("harness turn is already in flight: {0}")]
-    TurnInFlight(String),
+    TurnInFlight(SessionId),
     #[error("harness event stream was already taken: {0}")]
-    EventStreamTaken(String),
-    #[error("harness failed: {0}")]
-    Failed(String),
+    EventStreamTaken(SessionId),
+    #[error("harness failed: {message}")]
+    Failed {
+        message: String,
+        #[source]
+        source: BoxError,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,7 +95,7 @@ pub enum SessionEvent {
     AvailableCommands(Vec<Command>),
     CurrentMode { mode: String },
     TurnEnded,
-    Exited { code: Option<i64> },
+    Exited { code: Option<i32> },
     Permission(PermissionRequest),
     TerminalBytes { data: Vec<u8> },
     TerminalResize { cols: u16, rows: u16 },

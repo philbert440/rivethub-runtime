@@ -1,3 +1,4 @@
+use crate::BoxError;
 use crate::ToolContext;
 use async_trait::async_trait;
 use thiserror::Error;
@@ -8,8 +9,12 @@ pub enum ToolError {
     Unknown(String),
     #[error("tool arguments are invalid: {0}")]
     InvalidArguments(String),
-    #[error("tool execution failed: {0}")]
-    Execution(String),
+    #[error("tool execution failed: {message}")]
+    Execution {
+        message: String,
+        #[source]
+        source: BoxError,
+    },
 }
 
 #[async_trait]

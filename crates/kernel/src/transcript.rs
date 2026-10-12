@@ -1,3 +1,4 @@
+use crate::BoxError;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
@@ -7,10 +8,14 @@ use wire::session_id::SessionId;
 
 #[derive(Debug, Error)]
 pub enum TranscriptReaderError {
-    #[error("transcript store is unavailable: {0}")]
-    Unavailable(String),
-    #[error("transcript read failed: {0}")]
-    Read(String),
+    #[error("transcript store is unavailable")]
+    Unavailable(#[source] BoxError),
+    #[error("transcript read failed: {message}")]
+    Read {
+        message: String,
+        #[source]
+        source: BoxError,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,26 +1,62 @@
+use crate::BoxError;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
-use strum::Display;
-use strum::EnumString;
+use serde::Deserialize;
+use serde::Serialize;
+use std::fmt;
+use std::str::FromStr;
+use strum::AsRefStr;
 use thiserror::Error;
 use wire::JsonObject;
 
 #[derive(Debug, Error)]
 pub enum JobQueueError {
-    #[error("job queue is unavailable: {0}")]
-    Unavailable(String),
-    #[error("job claim failed: {0}")]
-    Claim(String),
+    #[error("job queue is unavailable")]
+    Unavailable(#[source] BoxError),
+    #[error("job claim failed: {message}")]
+    Claim {
+        message: String,
+        #[source]
+        source: BoxError,
+    },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum JobKeyMode {
-    KeepRunAt,
-    Replace,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct JobId(i64);
+
+impl JobId {
+    #[must_use]
+    pub fn new(value: i64) -> Self {
+        Self(value)
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display, EnumString)]
+impl fmt::Display for JobId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<JobId> for i64 {
+    fn from(value: JobId) -> Self {
+        value.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum JobNameError {
+    #[error("unknown job name: {0}")]
+    Unknown(String),
+    #[error("heartbeat job name needs a numeric index after the last dash: {0}")]
+    HeartbeatIndex(String),
+    #[error("run-task job name has an empty node")]
+    EmptyNode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, AsRefStr)]
+#[serde(try_from = "String", into = "String")]
 #[strum(serialize_all = "kebab-case")]
 pub enum JobName {
     EmbedTarget,
@@ -38,9 +74,106 @@ pub enum JobName {
     EnqueueStaleCompaction,
     ReapDeadJobs,
     RunTask,
+    Heartbeat { agent: String, index: u32 },
+    RunTaskOn { node: String },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+impl JobName {
+    const FIXED: [Self; 15] = [
+        Self::EmbedTarget,
+        Self::EnqueueUnembedded,
+        Self::EnqueueUnchunked,
+        Self::CompactConversation,
+        Self::SynthesizeToolCall,
+        Self::SuggestTags,
+        Self::EnqueueIdle,
+        Self::ExtractWiki,
+        Self::EnqueueWikiBackfill,
+        Self::ConsolidateWiki,
+        Self::RecompileWiki,
+        Self::EnqueueStaleWiki,
+        Self::EnqueueStaleCompaction,
+        Self::ReapDeadJobs,
+        Self::RunTask,
+    ];
+}
+
+impl fmt::Display for JobName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Heartbeat { agent, index } => write!(f, "heartbeat-{agent}-{index}"),
+            Self::RunTaskOn { node } => write!(f, "run-task:{node}"),
+            other @ (Self::EmbedTarget
+            | Self::EnqueueUnembedded
+            | Self::EnqueueUnchunked
+            | Self::CompactConversation
+            | Self::SynthesizeToolCall
+            | Self::SuggestTags
+            | Self::EnqueueIdle
+            | Self::ExtractWiki
+            | Self::EnqueueWikiBackfill
+            | Self::ConsolidateWiki
+            | Self::RecompileWiki
+            | Self::EnqueueStaleWiki
+            | Self::EnqueueStaleCompaction
+            | Self::ReapDeadJobs
+            | Self::RunTask) => f.write_str(other.as_ref()),
+        }
+    }
+}
+
+impl FromStr for JobName {
+    type Err = JobNameError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if let Some(rest) = value.strip_prefix("heartbeat-") {
+            let Some((agent, index)) = rest.rsplit_once('-') else {
+                return Err(JobNameError::HeartbeatIndex(value.to_string()));
+            };
+            let index = index
+                .parse::<u32>()
+                .map_err(|_| JobNameError::HeartbeatIndex(value.to_string()))?;
+            return Ok(Self::Heartbeat {
+                agent: agent.to_string(),
+                index,
+            });
+        }
+        if let Some(node) = value.strip_prefix("run-task:") {
+            if node.is_empty() {
+                return Err(JobNameError::EmptyNode);
+            }
+            return Ok(Self::RunTaskOn {
+                node: node.to_string(),
+            });
+        }
+        Self::FIXED
+            .into_iter()
+            .find(|name| name.as_ref() == value)
+            .ok_or_else(|| JobNameError::Unknown(value.to_string()))
+    }
+}
+
+impl TryFrom<String> for JobName {
+    type Error = JobNameError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::from_str(&value)
+    }
+}
+
+impl From<JobName> for String {
+    fn from(value: JobName) -> Self {
+        value.to_string()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JobKeyMode {
+    KeepRunAt,
+    Replace,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerRole {
     Embedder,
     Summarizer,
@@ -60,7 +193,7 @@ pub struct Job {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClaimedJob {
-    pub id: i64,
+    pub id: JobId,
     pub name: JobName,
     pub payload: JsonObject,
     pub attempt: u32,
@@ -72,7 +205,7 @@ pub trait JobQueue: Send + Sync {
 
     async fn claim(&self, role: WorkerRole) -> Result<Option<ClaimedJob>, JobQueueError>;
 
-    async fn complete(&self, id: i64) -> Result<(), JobQueueError>;
+    async fn complete(&self, id: JobId) -> Result<(), JobQueueError>;
 
-    async fn fail(&self, id: i64, error: &str) -> Result<(), JobQueueError>;
+    async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError>;
 }
