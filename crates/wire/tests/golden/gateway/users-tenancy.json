@@ -1,0 +1,21 @@
+{
+  "ownerUserId": "owner",
+  "unmappedIsOwner": false,
+  "users": {
+    "owner": {
+      "pgUrl": "postgres://owner.invalid/rivet"
+    },
+    "alice": {
+      "devices": [
+        "device:test"
+      ],
+      "pgUrl": "postgres://alice.invalid/rivet",
+      "persona": "alice"
+    },
+    "user-b": {
+      "devices": [
+        "device:nodb"
+      ]
+    }
+  }
+}

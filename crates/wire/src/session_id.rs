@@ -1,0 +1,80 @@
+use crate::harness::HarnessId;
+use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display};
+use std::str::FromStr;
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct SessionId(String);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionIdError {
+    Whitespace,
+    MissingPrefix,
+    EmptyNative,
+    UnknownHarness(String),
+}
+
+impl Display for SessionIdError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Whitespace => f.write_str("SessionId has leading/trailing whitespace"),
+            Self::MissingPrefix => f.write_str("SessionId is missing a harness-id prefix"),
+            Self::EmptyNative => f.write_str("SessionId has an empty native session id"),
+            Self::UnknownHarness(h) => write!(f, "unknown harness id: {h}"),
+        }
+    }
+}
+
+impl std::error::Error for SessionIdError {}
+
+impl SessionId {
+    #[must_use]
+    pub fn new(harness: HarnessId, native: &str) -> Self {
+        Self(format!("{harness}:{native}"))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Display for SessionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl FromStr for SessionId {
+    type Err = SessionIdError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        if value.starts_with(char::is_whitespace) || value.ends_with(char::is_whitespace) {
+            return Err(SessionIdError::Whitespace);
+        }
+        let Some((prefix, native)) = value.split_once(':') else {
+            return Err(SessionIdError::MissingPrefix);
+        };
+        if native.is_empty() {
+            return Err(SessionIdError::EmptyNative);
+        }
+        HarnessId::from_str(prefix)
+            .map_err(|_| SessionIdError::UnknownHarness(prefix.to_string()))?;
+        Ok(Self(value.to_string()))
+    }
+}
+
+impl TryFrom<String> for SessionId {
+    type Error = SessionIdError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::from_str(&value)
+    }
+}
+
+impl From<SessionId> for String {
+    fn from(value: SessionId) -> Self {
+        value.0
+    }
+}

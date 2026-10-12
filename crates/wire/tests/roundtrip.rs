@@ -1,0 +1,665 @@
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+
+const GOLDEN_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden");
+
+const SKIPPED_CASES: &[&str] = &[
+    "post-clamp-low",
+    "post-clamp-nonnumber",
+    "claim-a-sized",
+    "garbage-ignored",
+    "post-reserialize",
+    "event-reserialize",
+];
+
+fn load(rel: &str) -> Result<Value, String> {
+    let path = format!("{GOLDEN_DIR}/{rel}");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{rel}: {e}"))?;
+    serde_json::from_str(&text).map_err(|e| format!("{rel}: {e}"))
+}
+
+fn strip_nulls(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            map.retain(|_, member| !member.is_null());
+            for member in map.values_mut() {
+                strip_nulls(member);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                strip_nulls(item);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
+fn roundtrip_as<T>(label: &str, raw: &str) -> Result<(), String>
+where
+    T: DeserializeOwned + Serialize,
+{
+    let parsed: Value = serde_json::from_str(raw).map_err(|e| format!("{label}: parse: {e}"))?;
+    let typed: T =
+        serde_json::from_value(parsed.clone()).map_err(|e| format!("{label}: type: {e}"))?;
+    let out = serde_json::to_value(&typed).map_err(|e| format!("{label}: serialize: {e}"))?;
+    let mut want = parsed;
+    let mut got = out;
+    strip_nulls(&mut want);
+    strip_nulls(&mut got);
+    if got != want {
+        return Err(format!(
+            "{label}: roundtrip mismatch\n  in : {want}\n  out: {got}"
+        ));
+    }
+    Ok(())
+}
+
+fn request_head(head: &str) -> (&str, &str) {
+    let first = head.split("\r\n").next().unwrap_or_default();
+    let mut parts = first.split(' ');
+    let method = parts.next().unwrap_or_default();
+    let target = parts.next().unwrap_or_default();
+    (method, target)
+}
+
+fn path_of(target: &str) -> &str {
+    target.split('?').next().unwrap_or_default()
+}
+
+fn status_of(status_line: &str) -> u16 {
+    status_line
+        .split(' ')
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
+
+fn get<'a>(value: &'a Value, key: &str) -> &'a Value {
+    value.get(key).unwrap_or(&Value::Null)
+}
+
+fn error_payload(label: &str, body: &str, parsed: &Value, errors: &mut Vec<String>) {
+    if parsed.get("available").is_some() {
+        errors.push_result(roundtrip_as::<
+            wire::gateway::devices::PhonePairingAvailability,
+        >(label, body));
+    } else if parsed.get("error").is_some() {
+        errors.push_result(roundtrip_as::<wire::gateway::GatewayError>(label, body));
+    }
+}
+
+fn success_payload(
+    path: &str,
+    status: u16,
+    body: &str,
+    parsed: &Value,
+    label: &str,
+    errors: &mut Vec<String>,
+) {
+    let ok_body = parsed.get("ok").is_some();
+    match path {
+        "/healthz" => {
+            errors.push_result(roundtrip_as::<wire::gateway::HealthzResponse>(label, body));
+        }
+        "/event" | "/api/events/event" => {
+            errors.push_result(roundtrip_as::<wire::gateway::OkReply>(label, body));
+        }
+        "/events" | "/api/events" => {
+            errors.push_result(roundtrip_as::<wire::gateway::EventsIngested>(label, body));
+        }
+        "/sessions" => errors.push_result(roundtrip_as::<wire::events::SessionList>(label, body)),
+        "/state" => errors.push_result(roundtrip_as::<wire::events::StateResponse>(label, body)),
+        "/mesh.json" | "/api/mesh" => {
+            errors.push_result(roundtrip_as::<wire::gateway::devices::MeshOverview>(
+                label, body,
+            ));
+        }
+        "/term/config" | "/api/terminal/config" => {
+            errors.push_result(roundtrip_as::<wire::gateway::term::TermConfig>(label, body));
+        }
+        "/term" | "/api/terminal" => {
+            if status == 201 {
+                errors.push_result(roundtrip_as::<wire::gateway::term::TermSpawnResponse>(
+                    label, body,
+                ));
+            } else if status == 200 && ok_body {
+                errors.push_result(roundtrip_as::<wire::gateway::OkReply>(label, body));
+            }
+        }
+        "/term/list" | "/api/terminal/list" => {
+            errors.push_result(roundtrip_as::<wire::gateway::term::PtyList>(label, body));
+        }
+        "/term/inject" | "/api/terminal/inject" => {
+            errors.push_result(roundtrip_as::<wire::gateway::term::TermInjectResponse>(
+                label, body,
+            ));
+        }
+        "/term/harness-sessions" | "/api/terminal/harness-sessions" => {
+            errors.push_result(roundtrip_as::<wire::harness::HarnessSessionList>(
+                label, body,
+            ));
+        }
+        "/api/capabilities" => {
+            errors.push_result(roundtrip_as::<wire::gateway::devices::NodeCapabilities>(
+                label, body,
+            ));
+        }
+        "/api/phone-pairing" => {
+            errors.push_result(roundtrip_as::<
+                wire::gateway::devices::PhonePairingAvailability,
+            >(label, body));
+        }
+        "/api/devices/pair" => {
+            if parsed.get("error").is_some() {
+                errors.push_result(roundtrip_as::<wire::gateway::GatewayError>(label, body));
+            }
+        }
+        "/session" | "/layout" => {
+            if status == 200 && ok_body {
+                errors.push_result(roundtrip_as::<wire::gateway::OkReply>(label, body));
+            }
+        }
+        _ => {
+            let transcript = path.ends_with("/transcript")
+                && (path.starts_with("/term/harness-sessions/")
+                    || path.starts_with("/api/terminal/harness-sessions/"));
+            if transcript && status == 200 {
+                errors.push_result(roundtrip_as::<wire::gateway::sessions::TranscriptResponse>(
+                    label, body,
+                ));
+            } else if path.starts_with("/api/phone-pairing/") {
+                errors.push_result(roundtrip_as::<wire::gateway::devices::PhonePairingStatus>(
+                    label, body,
+                ));
+            }
+        }
+    }
+}
+
+fn response_payload(path: &str, status: u16, body: &str, errors: &mut Vec<String>) {
+    let Ok(parsed) = serde_json::from_str::<Value>(body) else {
+        return;
+    };
+    let label = format!("{status} {path}");
+    if status >= 400 {
+        error_payload(&label, body, &parsed, errors);
+    } else {
+        success_payload(path, status, body, &parsed, &label, errors);
+    }
+}
+
+fn roundtrip_request(label: &str, method: &str, path: &str, body: &str) -> Result<(), String> {
+    match (method, path) {
+        ("POST", "/event" | "/api/events/event") => {
+            roundtrip_as::<wire::events::AgentEvent>(label, body)
+        }
+        ("POST", "/events" | "/api/events") => {
+            roundtrip_as::<Vec<wire::events::AgentEvent>>(label, body)
+        }
+        ("POST", "/term" | "/api/terminal") => {
+            roundtrip_as::<wire::gateway::term::TermSpawnRequest>(label, body)
+        }
+        ("POST", "/term/inject" | "/api/terminal/inject") => {
+            roundtrip_as::<wire::gateway::term::TermInjectRequest>(label, body)
+        }
+        ("POST", "/api/devices/pair") => {
+            roundtrip_as::<wire::gateway::PairRedeemRequest>(label, body)
+        }
+        ("POST", "/api/phone-pairing") => {
+            roundtrip_as::<wire::gateway::devices::PhonePairingRequest>(label, body)
+        }
+        _ => Ok(()),
+    }
+}
+
+fn roundtrip_case(case: &Value, errors: &mut Vec<String>) {
+    let id = case.get("id").and_then(Value::as_str).unwrap_or_default();
+    if SKIPPED_CASES.contains(&id) {
+        return;
+    }
+    let Some(head) = get(case, "request").get("head").and_then(Value::as_str) else {
+        return;
+    };
+    let (method, target) = request_head(head);
+    let path = path_of(target);
+    let response = get(case, "response");
+    let status = status_of(
+        response
+            .get("statusLine")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    if let Some(body) = get(case, "request").get("body").and_then(Value::as_str) {
+        let object = serde_json::from_str::<Value>(body)
+            .ok()
+            .filter(Value::is_object);
+        if status < 400
+            && let Some(object) = object
+        {
+            let label = format!("{method} {path}");
+            let before = errors.len();
+            errors.push_result(roundtrip_request(&label, method, path, &object.to_string()));
+            for failure in errors.iter_mut().skip(before) {
+                *failure = format!("{method} {path}: {failure}");
+            }
+        }
+    }
+    if let Some(body) = response.get("body").and_then(Value::as_str) {
+        response_payload(path, status, body, errors);
+    }
+}
+
+fn roundtrip_exchange_file(rel: &str, errors: &mut Vec<String>) -> Result<(), String> {
+    let doc = load(rel)?;
+    let Some(runs) = doc.get("runs").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for (run_name, run) in runs {
+        let Some(cases) = run.get("cases").and_then(Value::as_array) else {
+            continue;
+        };
+        for case in cases {
+            let id = case.get("id").and_then(Value::as_str).unwrap_or_default();
+            let before = errors.len();
+            roundtrip_case(case, errors);
+            for failure in errors.iter_mut().skip(before) {
+                *failure = format!("{rel} {run_name} {id}: {failure}");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn ws_payload(text: &str, errors: &mut Vec<String>) {
+    let Ok(parsed) = serde_json::from_str::<Value>(text) else {
+        return;
+    };
+    let kind = parsed
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let label = format!("ws frame {kind}");
+    match kind {
+        "snapshot" | "session.removed" => {
+            errors.push_result(roundtrip_as::<wire::events::SessionBroadcast>(&label, text));
+        }
+        "session.start" | "session.end" | "message.user" | "message.agent" | "thinking.delta"
+        | "tool.start" | "task.plan" | "task.check" | "activity" | "turn.end" => {
+            errors.push_result(roundtrip_as::<wire::events::AgentEvent>(&label, text));
+        }
+        "hello" | "exit" | "owner" => {
+            errors.push_result(roundtrip_as::<wire::gateway::term::TermServerFrame>(
+                &label, text,
+            ));
+        }
+        "resize" | "claim" | "kill" => {
+            let sized = kind != "resize"
+                || (parsed.get("cols").is_some_and(Value::is_u64)
+                    && parsed.get("rows").is_some_and(Value::is_u64));
+            if sized {
+                errors.push_result(roundtrip_as::<wire::gateway::term::TermClientFrame>(
+                    &label, text,
+                ));
+            }
+        }
+        _ => {}
+    }
+}
+
+fn roundtrip_ws_file(rel: &str, errors: &mut Vec<String>) -> Result<(), String> {
+    let doc = load(rel)?;
+    let Some(runs) = doc.get("runs").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for (run_name, run) in runs {
+        let Some(steps) = run.get("steps").and_then(Value::as_array) else {
+            continue;
+        };
+        for step in steps {
+            let id = step.get("id").and_then(Value::as_str).unwrap_or_default();
+            if SKIPPED_CASES.contains(&id) {
+                continue;
+            }
+            let before = errors.len();
+            if step.get("http").is_some_and(Value::is_object) {
+                roundtrip_case(get(step, "http"), errors);
+            }
+            let text_frames = |frame: &Value, errors: &mut Vec<String>| {
+                if frame.get("type").and_then(Value::as_str) == Some("text")
+                    && let Some(text) = frame.get("text").and_then(Value::as_str)
+                {
+                    ws_payload(text, errors);
+                }
+            };
+            for frame in step
+                .get("sent")
+                .and_then(Value::as_array)
+                .unwrap_or(&Vec::new())
+            {
+                text_frames(frame, errors);
+            }
+            if let Some(frames) = step.get("frames").and_then(Value::as_object) {
+                for client_frames in frames.values() {
+                    for frame in client_frames.as_array().unwrap_or(&Vec::new()) {
+                        text_frames(frame, errors);
+                    }
+                }
+            }
+            for failure in errors.iter_mut().skip(before) {
+                *failure = format!("{rel} {run_name} {id}: {failure}");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn roundtrip_capture_batches(rel: &str, errors: &mut Vec<String>) -> Result<(), String> {
+    let doc = load(rel)?;
+    let Some(entries) = doc.as_array() else {
+        return Ok(());
+    };
+    for entry in entries {
+        let Some(body) = entry.get("body").and_then(Value::as_str) else {
+            continue;
+        };
+        if entry.get("url").and_then(Value::as_str) != Some("/api/capture") {
+            continue;
+        }
+        let before = errors.len();
+        errors.push_result(roundtrip_as::<wire::capture::CaptureBatchRequest>(
+            &format!("{rel} batch"),
+            body,
+        ));
+        for failure in errors.iter_mut().skip(before) {
+            *failure = format!("{rel}: {failure}");
+        }
+    }
+    Ok(())
+}
+
+fn roundtrip_capture_results(errors: &mut Vec<String>) -> Result<(), String> {
+    let doc = load("capture/writer/results.json")?;
+    let Some(results) = doc.as_object() else {
+        return Ok(());
+    };
+    for result in results.values() {
+        let body = result.to_string();
+        errors.push_result(roundtrip_as::<wire::capture::CaptureResult>(
+            "capture/writer/results.json",
+            &body,
+        ));
+    }
+    Ok(())
+}
+
+fn provider_requests(server: &str, scenario: &str, errors: &mut Vec<String>) -> Result<(), String> {
+    let rel = format!("providers/{server}/{scenario}/requests.json");
+    let doc = load(&rel)?;
+    let Some(entries) = doc.as_array() else {
+        return Ok(());
+    };
+    for entry in entries {
+        let Some(body) = entry.get("body").and_then(Value::as_str) else {
+            continue;
+        };
+        let target = entry
+            .get("target")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let before = errors.len();
+        match (server, target) {
+            ("ollama", "/api/chat") => {
+                errors.push_result(roundtrip_as::<wire::stream::OllamaChatRequest>(
+                    &format!("{rel} {target}"),
+                    body,
+                ));
+            }
+            ("ollama", "/api/tags") => {
+                let is_tags =
+                    serde_json::from_str::<Value>(body).is_ok_and(|v| v.get("models").is_some());
+                if is_tags {
+                    errors.push_result(roundtrip_as::<wire::stream::OllamaTags>(
+                        &format!("{rel} {target}"),
+                        body,
+                    ));
+                }
+            }
+            (_, "/v1/chat/completions") => {
+                errors.push_result(roundtrip_as::<wire::stream::openai::ChatCompletionRequest>(
+                    &format!("{rel} {target}"),
+                    body,
+                ));
+            }
+            _ => {}
+        }
+        for failure in errors.iter_mut().skip(before) {
+            *failure = format!("{rel}: {failure}");
+        }
+    }
+    Ok(())
+}
+
+fn typed_chunk(server: &str, label: &str, payload: &str) -> Result<(), String> {
+    if server != "ollama" {
+        return roundtrip_as::<wire::stream::openai::ChatCompletionChunk>(label, payload);
+    }
+    let is_tags = serde_json::from_str::<Value>(payload).is_ok_and(|v| v.get("models").is_some());
+    if is_tags {
+        roundtrip_as::<wire::stream::OllamaTags>(label, payload)
+    } else {
+        roundtrip_as::<wire::stream::OllamaChatChunk>(label, payload)
+    }
+}
+
+fn provider_responses(
+    server: &str,
+    scenario: &str,
+    errors: &mut Vec<String>,
+) -> Result<(), String> {
+    let dir = format!("providers/{server}/{scenario}");
+    let entries =
+        std::fs::read_dir(format!("{GOLDEN_DIR}/{dir}")).map_err(|e| format!("{dir}: {e}"))?;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let is_response = name.starts_with("response-")
+            && name
+                .rsplit('.')
+                .next()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"));
+        if !is_response {
+            continue;
+        }
+        let rel = format!("{dir}/{name}");
+        let text = std::fs::read_to_string(format!("{GOLDEN_DIR}/{rel}"))
+            .map_err(|e| format!("{rel}: {e}"))?;
+        if server != "ollama" && text.trim_start().starts_with('{') {
+            let before = errors.len();
+            errors.push_result(roundtrip_as::<wire::stream::openai::ModelList>(
+                &format!("{rel} body"),
+                text.trim_start(),
+            ));
+            for failure in errors.iter_mut().skip(before) {
+                *failure = format!("{rel}: {failure}");
+            }
+            continue;
+        }
+        for line in text.lines() {
+            let payload = if server == "ollama" {
+                let trimmed = line.trim();
+                (!trimmed.is_empty()).then_some(trimmed)
+            } else {
+                line.trim()
+                    .strip_prefix("data: ")
+                    .map(str::trim)
+                    .filter(|p| !p.is_empty() && *p != "[DONE]")
+            };
+            let Some(payload) = payload else {
+                continue;
+            };
+            let before = errors.len();
+            errors.push_result(typed_chunk(server, &format!("{rel} chunk"), payload));
+            for failure in errors.iter_mut().skip(before) {
+                *failure = format!("{rel}: {failure}");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn provider_chunks(server: &str, scenario: &str, errors: &mut Vec<String>) {
+    let rel = format!("providers/{server}/{scenario}/chunks.json");
+    let Ok(doc) = load(&rel) else {
+        return;
+    };
+    let Some(entries) = doc.as_array() else {
+        return;
+    };
+    for entry in entries {
+        let body = entry.to_string();
+        let before = errors.len();
+        errors.push_result(roundtrip_as::<wire::stream::LlmChunk>(
+            &format!("{rel} chunk"),
+            &body,
+        ));
+        for failure in errors.iter_mut().skip(before) {
+            *failure = format!("{rel}: {failure}");
+        }
+    }
+}
+
+trait PushResult {
+    fn push_result(&mut self, result: Result<(), String>);
+}
+
+impl PushResult for Vec<String> {
+    fn push_result(&mut self, result: Result<(), String>) {
+        if let Err(e) = result {
+            self.push(e);
+        }
+    }
+}
+
+fn check(errors: &[String]) -> Result<(), String> {
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} failure(s):\n{}",
+            errors.len(),
+            errors.join("\n")
+        ))
+    }
+}
+
+#[test]
+fn gateway_http_bodies_roundtrip() -> Result<(), String> {
+    let mut errors = Vec::new();
+    roundtrip_exchange_file("gateway/http-plain.json", &mut errors)?;
+    roundtrip_exchange_file("gateway/http-tls.json", &mut errors)?;
+    check(&errors)
+}
+
+#[test]
+fn gateway_ws_frames_roundtrip() -> Result<(), String> {
+    let mut errors = Vec::new();
+    roundtrip_ws_file("gateway/ws.json", &mut errors)?;
+    check(&errors)
+}
+
+#[test]
+fn term_http_bodies_roundtrip() -> Result<(), String> {
+    let mut errors = Vec::new();
+    roundtrip_exchange_file("term/http.json", &mut errors)?;
+    check(&errors)
+}
+
+#[test]
+fn term_ws_frames_roundtrip() -> Result<(), String> {
+    let mut errors = Vec::new();
+    roundtrip_ws_file("term/ws.json", &mut errors)?;
+    check(&errors)
+}
+
+#[test]
+fn capture_batches_roundtrip() -> Result<(), String> {
+    let mut errors = Vec::new();
+    for name in [
+        "capture/writer/single.input.json",
+        "capture/writer/numbers_and_keys.input.json",
+        "capture/writer/redaction.input.json",
+        "capture/writer/surrogate_cap.input.json",
+        "capture/writer/finalize_multi_chunk.input.json",
+        "capture/writer/elide_tool_args.input.json",
+    ] {
+        let body = load(name)?;
+        errors.push_result(roundtrip_as::<wire::capture::CaptureBatchRequest>(
+            name,
+            &body.to_string(),
+        ));
+    }
+    for name in [
+        "capture/writer/single.posts.json",
+        "capture/writer/numbers_and_keys.posts.json",
+        "capture/writer/redaction.posts.json",
+        "capture/writer/surrogate_cap.posts.json",
+        "capture/writer/finalize_multi_chunk.posts.json",
+        "capture/writer/elide_tool_args.posts.json",
+        "capture/claude-hook/hook-rust.json",
+        "capture/claude-hook/hook-ts.json",
+    ] {
+        roundtrip_capture_batches(name, &mut errors)?;
+    }
+    roundtrip_capture_results(&mut errors)?;
+    check(&errors)
+}
+
+#[test]
+fn provider_payloads_roundtrip() -> Result<(), String> {
+    let mut errors = Vec::new();
+    for server in ["vllm", "llama-server", "ollama"] {
+        for scenario in [
+            "A-text",
+            "B-tool",
+            "C-reasoning",
+            "D-thinking-off",
+            "E-reasoning-tool",
+            "probe",
+        ] {
+            provider_requests(server, scenario, &mut errors)?;
+            provider_responses(server, scenario, &mut errors)?;
+            provider_chunks(server, scenario, &mut errors);
+        }
+    }
+    check(&errors)
+}
+
+#[test]
+fn users_registry_fixtures_roundtrip() -> Result<(), String> {
+    let mut errors = Vec::new();
+    let tenancy = load("gateway/users-tenancy.json")?;
+    errors.push_result(roundtrip_as::<wire::gateway::users::UsersRegistry>(
+        "gateway/users-tenancy.json",
+        &tenancy.to_string(),
+    ));
+    let registry: wire::gateway::users::UsersRegistry =
+        serde_json::from_value(tenancy).map_err(|e| format!("gateway/users-tenancy.json: {e}"))?;
+    let alice = registry.users.get("alice").ok_or("alice missing")?;
+    assert_eq!(
+        alice.persona.clone().ok_or("alice persona missing")?,
+        "alice"
+    );
+    let renamed = registry.users.get("user-b").ok_or("user-b missing")?;
+    assert_eq!(renamed.pg_url, None);
+    assert_eq!(
+        renamed.devices.clone().ok_or("user-b devices missing")?,
+        vec!["device:nodb".to_string()]
+    );
+    let invalid = std::fs::read_to_string(format!("{GOLDEN_DIR}/gateway/users-invalid.json"))
+        .map_err(|e| format!("gateway/users-invalid.json: {e}"))?;
+    if serde_json::from_str::<wire::gateway::users::UsersRegistry>(&invalid).is_ok() {
+        errors.push("gateway/users-invalid.json: truncated registry must not parse".to_string());
+    }
+    check(&errors)
+}
