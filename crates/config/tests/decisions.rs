@@ -1,0 +1,472 @@
+use config::{Config, ConfigError, Environment, MemoryBackend};
+
+fn env_from(pairs: &[(&str, &str)]) -> Environment {
+    Environment::from_vars(
+        pairs
+            .iter()
+            .map(|(key, value)| (key.to_string(), value.to_string())),
+    )
+}
+
+fn config_yaml(provider_entries: &str, sections: &str) -> String {
+    let providers = if provider_entries.is_empty() {
+        "  main-provider:\n    model: acme-model\n".to_owned()
+    } else {
+        provider_entries.to_owned()
+    };
+    format!(
+        "runtime:\n  workspace: /home/user/work\n  default_agent: main\nagents:\n  main:\n    provider: main-provider\nproviders:\n{providers}{sections}"
+    )
+}
+
+fn load(text: &str) -> Result<Config, ConfigError> {
+    let loaded = Config::from_str(&Environment::default(), text)?;
+    Ok(loaded.config)
+}
+
+fn validation_error(text: &str) -> Result<String, String> {
+    match Config::from_str(&Environment::default(), text) {
+        Err(ConfigError::Validation { formatted }) => Ok(formatted),
+        Err(other) => Err(format!("{other}")),
+        Ok(_) => Err("config loaded".to_owned()),
+    }
+}
+
+fn expect_validation_error(text: &str) -> Result<String, Box<dyn std::error::Error>> {
+    validation_error(text)
+        .map_err(|error| format!("expected a validation error, got: {error}").into())
+}
+
+fn expect_loaded(text: &str) -> Result<Config, Box<dyn std::error::Error>> {
+    load(text).map_err(|error| format!("expected the config to load, got: {error}").into())
+}
+
+const HEX_KEY: &str = "0123456789abcdef00112233445566778899aabbccddeeff0011223344556677";
+
+#[test]
+fn decision_16_new_env_names_win_and_legacy_names_warn() {
+    let env = env_from(&[("RIVETOS_SHARED_DIR", "/srv/legacy")]);
+    assert_eq!(config::shared_dir(&env), "/srv/legacy");
+    assert!(
+        env.legacy_notice("RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR")
+            .is_some()
+    );
+
+    let env = env_from(&[
+        ("RIVETHUB_SHARED_DIR", "/srv/new"),
+        ("RIVETOS_SHARED_DIR", "/srv/legacy"),
+    ]);
+    assert_eq!(config::shared_dir(&env), "/srv/new");
+    assert!(
+        env.legacy_notice("RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR")
+            .is_none()
+    );
+}
+
+#[test]
+fn decision_16_probe_prefers_rivethub_home() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::temp_dir().join(format!("rivethub-config-probe-{}", std::process::id()));
+    let hub = root.join(".rivethub");
+    let legacy = root.join(".rivetos");
+    std::fs::create_dir_all(&hub)?;
+    std::fs::create_dir_all(&legacy)?;
+    std::fs::write(hub.join("config.yaml"), "runtime: {}\n")?;
+    std::fs::write(legacy.join("config.yaml"), "runtime: {}\n")?;
+
+    let env = env_from(&[("HOME", root.to_str().ok_or("temp path")?)]);
+    let (path, legacy_flag) =
+        config::resolve_config_path(&env).ok_or("no config candidate found")?;
+    assert!(path.ends_with(".rivethub/config.yaml"));
+    assert!(!legacy_flag);
+
+    std::fs::remove_file(hub.join("config.yaml"))?;
+    let (path, legacy_flag) =
+        config::resolve_config_path(&env).ok_or("no legacy config candidate found")?;
+    assert!(path.ends_with(".rivetos/config.yaml"));
+    assert!(legacy_flag);
+
+    std::fs::remove_file(legacy.join("config.yaml"))?;
+    std::fs::remove_dir_all(&root)?;
+    Ok(())
+}
+
+#[test]
+fn decision_9_memory_backend_resolves() -> Result<(), Box<dyn std::error::Error>> {
+    let config = expect_loaded(&config_yaml(
+        "",
+        "memory:\n  postgres:\n    connection_string: postgres://example.com/db\n",
+    ))?;
+    assert_eq!(config.memory_backend(), MemoryBackend::Postgres);
+    assert!(!config.pglite_import_pending());
+
+    let config = expect_loaded(&config_yaml(
+        "",
+        "memory:\n  postgres:\n    embedded:\n      data_dir: /home/user/.rivetos/pg\n",
+    ))?;
+    assert_eq!(config.memory_backend(), MemoryBackend::Sqlite);
+    assert!(config.pglite_import_pending());
+
+    let config = expect_loaded(&config_yaml("", ""))?;
+    assert_eq!(config.memory_backend(), MemoryBackend::Sqlite);
+
+    let config = expect_loaded(&config_yaml("", "memory:\n  backend: postgres\n"))?;
+    assert_eq!(config.memory_backend(), MemoryBackend::Postgres);
+
+    let config = expect_loaded(&config_yaml(
+        "",
+        "memory:\n  backend: sqlite\n  postgres:\n    connection_string: postgres://example.com/db\n",
+    ))?;
+    assert_eq!(config.memory_backend(), MemoryBackend::Sqlite);
+
+    let formatted = expect_validation_error(&config_yaml("", "memory:\n  backend: pglite\n"))?;
+    assert!(
+        formatted.contains("unknown variant `pglite`"),
+        "unexpected message: {formatted}"
+    );
+    Ok(())
+}
+
+#[test]
+fn decision_10_removed_tool_gates_and_plugin_entries_are_ignored_with_warnings() {
+    let env = env_from(&[
+        ("RIVETHUB_MCP_ENABLE_SHELL", "1"),
+        ("RIVETOS_MCP_ENABLE_FILE", "1"),
+    ]);
+    let warnings = env.deprecation_warnings();
+    assert_eq!(warnings.len(), 2);
+    assert!(warnings.first().is_some_and(|warning| {
+        warning.contains("RIVETHUB_MCP_ENABLE_SHELL") && warning.contains("ignored")
+    }));
+    assert!(warnings.get(1).is_some_and(|warning| {
+        warning.contains("RIVETOS_MCP_ENABLE_FILE") && warning.contains("ignored")
+    }));
+}
+
+#[test]
+fn decision_10_plugin_list_is_accepted_and_ignored() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = Config::from_str(
+        &Environment::default(),
+        &config_yaml(
+            "",
+            "plugins:\n  - plugins/tools/shell\n  - \"@acme/rivetos-plugin\"\n",
+        ),
+    )?;
+    let plugin_warnings: Vec<&String> = loaded
+        .warnings
+        .iter()
+        .map(|finding| &finding.message)
+        .filter(|message| message.contains("plugins/tools/shell"))
+        .collect();
+    assert!(
+        plugin_warnings.is_empty(),
+        "the section warning does not name entries: {plugin_warnings:?}"
+    );
+    assert!(
+        loaded
+            .warnings
+            .iter()
+            .any(|finding| finding.message == config::PLUGINS_IGNORED),
+        "expected the accepted-and-ignored warning"
+    );
+    assert!(
+        loaded
+            .notices
+            .iter()
+            .any(|notice| notice.contains("plugins/tools/shell")),
+        "expected a per-entry load-time notice"
+    );
+    Ok(())
+}
+
+#[test]
+fn decision_11_provider_type_selects_behaviour() -> Result<(), Box<dyn std::error::Error>> {
+    let banned = [
+        ("anthropic", "claude-opus", "claude-code"),
+        ("google", "gemini-2", "gemini"),
+        ("gemini", "gemini-2", "gemini"),
+        ("xai", "grok-4", "grok-build"),
+    ];
+    for (kind, model, harness) in banned {
+        let yaml = config_yaml(
+            &format!(
+                "  main-provider:\n    model: acme-model\n  acme:\n    type: {kind}\n    model: {model}\n"
+            ),
+            "",
+        );
+        let formatted = expect_validation_error(&yaml)?;
+        assert!(
+            formatted.contains(&format!("type \"{kind}\" is not built")),
+            "banned type {kind}: {formatted}"
+        );
+        assert!(
+            formatted.contains(harness),
+            "harness {harness}: {formatted}"
+        );
+    }
+
+    let kept = [
+        "  acme:\n    type: openai-compatible\n    model: acme-model\n    base_url: http://example.com/v1\n",
+        "  acme:\n    type: cli\n",
+    ];
+    for entries in kept {
+        expect_loaded(&config_yaml(
+            &format!("  main-provider:\n    model: acme-model\n{entries}"),
+            "",
+        ))?;
+    }
+
+    let formatted = expect_validation_error(&config_yaml(
+        "  main-provider:\n    model: acme-model\n  acme:\n    type: vllm\n    model: acme-model\n",
+        "",
+    ))?;
+    assert!(
+        formatted.contains("Provider \"acme\" requires \"base_url\""),
+        "unexpected message: {formatted}"
+    );
+
+    let result = Config::from_str(
+        &Environment::default(),
+        &config_yaml(
+            "  main-provider:\n    model: acme-model\n  acme:\n    type: unknown-kind\n    model: m\n",
+            "",
+        ),
+    )?;
+    assert!(
+        result.warnings.iter().any(|finding| finding.message
+            == "Unknown provider type \"unknown-kind\" — make sure a registrar handles it"),
+        "expected the unknown-type warning"
+    );
+    Ok(())
+}
+
+#[test]
+fn decision_12_chat_channel_config_is_accepted_and_ignored_with_warning()
+-> Result<(), Box<dyn std::error::Error>> {
+    let result = Config::from_str(
+        &Environment::default(),
+        &config_yaml(
+            "",
+            "channels:\n  discord:\n    bot_token: acme-bot-token-value\n",
+        ),
+    )?;
+    assert!(
+        result.warnings.iter().any(|finding| finding.message
+            == "Unknown channel type \"discord\" — make sure a registrar handles it"),
+        "expected the unknown-channel warning"
+    );
+    Ok(())
+}
+
+#[test]
+fn decision_13_workflows_section_is_accepted_and_ignored() -> Result<(), Box<dyn std::error::Error>>
+{
+    let result = Config::from_str(
+        &Environment::default(),
+        &config_yaml(
+            "",
+            "workflows:\n  enabled: not-a-boolean\n  runs_dir: 5\n  defs_roots: \"x\"\n",
+        ),
+    )?;
+    let (accepted, others): (Vec<_>, Vec<_>) = result
+        .warnings
+        .iter()
+        .partition(|finding| finding.message == config::WORKFLOWS_IGNORED);
+    assert_eq!(accepted.len(), 1, "expected exactly the accepted warning");
+    assert!(
+        others.iter().all(|finding| finding.path != "workflows"
+            && !finding.path.starts_with("workflows.")
+            && !finding.path.starts_with("workflows[")),
+        "the workflows section must produce no findings beyond the accepted-and-ignored warning"
+    );
+    Ok(())
+}
+
+#[test]
+fn decision_2_tmux_is_ignored_and_treated_as_unset() {
+    let env = env_from(&[("RIVETHUB_TERM_MUX", "tmux")]);
+    assert_eq!(env.term_mux(), None);
+    assert!(
+        env.deprecation_warnings()
+            .iter()
+            .any(|warning| warning.contains("RIVETHUB_TERM_MUX=tmux"))
+    );
+
+    let env = env_from(&[("RIVETOS_TERM_MUX", "tmux")]);
+    assert_eq!(env.term_mux(), None);
+    assert!(
+        env.deprecation_warnings()
+            .iter()
+            .any(|warning| warning.contains("RIVETOS_TERM_MUX=tmux"))
+    );
+
+    let env = env_from(&[("RIVETHUB_TERM_MUX", "herdr")]);
+    assert_eq!(env.term_mux(), Some("herdr"));
+    assert_eq!(env.deprecation_warnings(), [] as [std::string::String; 0]);
+}
+
+#[test]
+fn decision_15_redaction_is_a_real_setting() -> Result<(), Box<dyn std::error::Error>> {
+    let config = expect_loaded(&config_yaml("", ""))?;
+    assert!(
+        !config.capture_redaction().enabled,
+        "redaction defaults to off"
+    );
+
+    let config = expect_loaded(&config_yaml(
+        "",
+        "memory:\n  capture:\n    redaction:\n      enabled: true\n      patterns:\n        - \"acme-[0-9]+\"\n",
+    ))?;
+    let redaction = config.capture_redaction();
+    assert!(redaction.enabled);
+    assert!(redaction.builtins);
+    assert_eq!(redaction.patterns, ["acme-[0-9]+"]);
+
+    let result = Config::from_str(
+        &Environment::default(),
+        &config_yaml(
+            "",
+            "memory:\n  capture:\n    redaction:\n      enabled: true\n",
+        ),
+    )?;
+    assert!(
+        result
+            .warnings
+            .iter()
+            .all(|finding| !finding.message.contains("not yet injected")),
+        "decision 15 removes the not-injected warning"
+    );
+    Ok(())
+}
+
+#[test]
+fn inventory_documented_defaults_appear_in_the_typed_config()
+-> Result<(), Box<dyn std::error::Error>> {
+    let config = expect_loaded(&config_yaml(
+        "",
+        "den:\n  host: 127.0.0.1\nmemory:\n  postgres:\n    embedded:\n      data_dir: /home/user/.rivetos/pg\n",
+    ))?;
+    let gateway = config.gateway.as_ref().ok_or("den section missing")?;
+    assert_eq!(gateway.port, 5174, "den.port default");
+    let postgres = config
+        .memory
+        .as_ref()
+        .ok_or("memory section missing")?
+        .postgres
+        .as_ref()
+        .ok_or("memory.postgres missing")?;
+    let embedded = postgres.embedded.as_ref().ok_or("embedded missing")?;
+    assert_eq!(embedded.port, 5433, "embedded.port default");
+    assert!(embedded.auto_migrate, "embedded.auto_migrate default");
+    assert_eq!(
+        embedded.max_connections, 96,
+        "embedded.max_connections default"
+    );
+    Ok(())
+}
+
+#[test]
+fn inventory_messages_that_the_recordings_do_not_reach() -> Result<(), Box<dyn std::error::Error>> {
+    let cases: [(&str, &str, &str); 9] = [
+        (
+            "runtime:\n  workspace: w\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nden:\n  host: \"   \"\n",
+            "\"den.host\" must be a non-empty string (bind address, e.g. 127.0.0.1 or 0.0.0.0)",
+            "blank den.host",
+        ),
+        (
+            "runtime:\n  workspace: w\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nden:\n  port: 0\n",
+            "\"den.port\" must be an integer between 1 and 65535",
+            "den.port 0",
+        ),
+        (
+            "runtime:\n  workspace: w\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nden:\n  allowed_origins:\n    - gateway.example.com\n    - \"\"\n",
+            "\"den.allowed_origins\" must be a list of non-empty strings",
+            "blank allowed_origins entry",
+        ),
+        (
+            "runtime:\n  workspace: w\n  default_agent: main\n  turn_timeout: 0\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\n",
+            "\"runtime.turn_timeout\" must be a positive number (seconds)",
+            "turn_timeout 0",
+        ),
+        (
+            "runtime:\n  workspace: w\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nmesh:\n  advertise_host: \"a b\"\n",
+            concat!("mesh.advertise_host contains shell-un", "safe characters"),
+            "advertise_host characters",
+        ),
+        (
+            "memory:\n  sqlite:\n    path: \"\"\n",
+            "\"memory.sqlite.path\" must be a non-empty file path",
+            "blank sqlite path",
+        ),
+        (
+            "memory:\n  capture:\n    redaction:\n      patterns:\n        - \"\"\n",
+            "Each pattern must be a non-empty string (JS regex source)",
+            "empty pattern",
+        ),
+        (
+            "memory:\n  capture:\n    redaction:\n      patterns:\n        - \"(a+)+b\"\n",
+            concat!(
+                "Pattern looks ReDoS-prone (nested quantifiers); rewrite without nested +/",
+                "* groups"
+            ),
+            "ReDoS pattern",
+        ),
+        (
+            "memory:\n  capture:\n    redaction:\n      patterns:\n        - \"[unclosed\"\n",
+            "Invalid regex: ",
+            "invalid regex",
+        ),
+    ];
+    for (yaml, message, label) in cases {
+        let formatted =
+            expect_validation_error(yaml).map_err(|error| format!("{label}: {error}"))?;
+        assert!(
+            formatted.contains(message),
+            "{label}: expected \"{message}\" in:\n{formatted}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn claude_cli_provider_messages_that_the_recordings_do_not_reach()
+-> Result<(), Box<dyn std::error::Error>> {
+    let formatted = expect_validation_error(&config_yaml(
+        "  main-provider:\n    type: claude-cli\n  acme:\n    type: claude-cli\n    permission_prompts: \"yes\"\n",
+        "",
+    ))?;
+    assert!(
+        formatted.contains(
+            "permission_prompts must be \"ui\" or \"none\" (omit the key to leave spawns unchanged)"
+        ),
+        "unexpected message: {formatted}"
+    );
+
+    let formatted = expect_validation_error(&config_yaml(
+        "  main-provider:\n    type: claude-cli\n  acme:\n    type: claude-cli\n    permission_timeout_ms: 700000\n",
+        "",
+    ))?;
+    assert!(
+        formatted.contains(
+            "permission_timeout_ms must be a positive integer of at most 600000 (default 60000)"
+        ),
+        "unexpected message: {formatted}"
+    );
+    Ok(())
+}
+
+#[test]
+fn pipeline_validates_before_env_resolution() -> Result<(), Box<dyn std::error::Error>> {
+    let yaml = config_yaml(
+        "  main-provider:\n    model: acme-model\n    api_key: \"${ACME_API_KEY}\"\n",
+        "",
+    );
+    let loaded = Config::from_str(&env_from(&[("ACME_API_KEY", HEX_KEY)]), &yaml)?;
+    assert!(
+        loaded
+            .warnings
+            .iter()
+            .all(|finding| !finding.message.contains("hardcoded")),
+        "an unresolved variable must not look hardcoded"
+    );
+    Ok(())
+}

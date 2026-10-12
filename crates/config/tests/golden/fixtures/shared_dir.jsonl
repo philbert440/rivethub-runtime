@@ -1,0 +1,9 @@
+{"fn":"shared_dir","in":{"env":{}},"out":"/rivet-shared"}
+{"fn":"shared_dir","in":{"env":{"RIVETOS_SHARED_DIR":"~/shared"}},"out":"~/shared"}
+{"fn":"shared_dir","in":{"env":{"RIVETOS_SHARED_DIR":"/srv/shared\n"}},"out":"/srv/shared"}
+{"fn":"shared_dir","in":{"env":{"RIVETOS_SHARED_DIR":"/srv/shared/"}},"out":"/srv/shared/"}
+{"fn":"shared_dir","in":{"env":{"RIVETOS_SHARED_DIR":" /srv/shared "}},"out":"/srv/shared"}
+{"fn":"shared_dir","in":{"env":{"RIVETOS_SHARED_DIR":"/home/user/data"}},"out":"/home/user/data"}
+{"fn":"shared_dir","in":{"env":{"RIVETOS_SHARED_DIR":"/srv/shared"}},"out":"/srv/shared"}
+{"fn":"shared_dir","in":{"env":{"RIVETOS_SHARED_DIR":"relative"}},"out":"relative"}
+{"fn":"shared_dir","in":{"env":{"RIVETOS_SHARED_DIR":""}},"out":"/rivet-shared"}

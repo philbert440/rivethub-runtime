@@ -1,0 +1,19 @@
+[package]
+name = "config"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version.workspace = true
+repository.workspace = true
+
+[dependencies]
+regress.workspace = true
+serde = { workspace = true }
+serde_ignored.workspace = true
+serde_path_to_error.workspace = true
+serde_yaml = { workspace = true }
+strum.workspace = true
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

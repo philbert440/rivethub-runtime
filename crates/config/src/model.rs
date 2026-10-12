@@ -1,0 +1,444 @@
+use std::collections::BTreeMap;
+
+use serde::Deserialize;
+
+use crate::enums::{
+    DeploymentTarget, Effort, EmbedWireShape, Isolation, MemoryBackend, ModelsMode, ThinkingLevel,
+    VerifierExecutor,
+};
+use crate::provider::{ProviderSlot, ProviderType};
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct Config {
+    pub runtime: Option<RuntimeSection>,
+    pub agents: Option<BTreeMap<String, AgentEntry>>,
+    #[serde(skip)]
+    pub providers: Option<BTreeMap<String, ProviderSlot>>,
+    pub channels: Option<BTreeMap<String, ChannelEntry>>,
+    pub memory: Option<MemorySection>,
+    pub transports: Option<BTreeMap<String, TransportSection>>,
+    pub deployment: Option<DeploymentSection>,
+    pub mesh: Option<MeshSection>,
+    #[serde(rename = "den")]
+    pub gateway: Option<GatewaySection>,
+    pub tasks: Option<TasksSection>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct RedactionSettings {
+    pub enabled: bool,
+    pub builtins: bool,
+    pub patterns: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct RuntimeSection {
+    pub workspace: Option<String>,
+    pub default_agent: Option<String>,
+    pub turn_timeout: Option<u64>,
+    pub context: Option<ContextSection>,
+    pub skill_dirs: Option<Vec<String>>,
+    pub plugin_dirs: Option<Vec<String>>,
+    pub heartbeats: Vec<HeartbeatEntry>,
+    pub safety: Option<SafetySection>,
+    pub auto_actions: Option<AutoActionsSection>,
+    pub experimental: Option<bool>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct ContextSection {
+    pub soft_nudge_pct: Option<Vec<f64>>,
+    pub hard_nudge_pct: Option<f64>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct SafetySection {
+    #[serde(default = "default_true", alias = "shellDanger")]
+    pub shell_danger: bool,
+    #[serde(default = "default_true")]
+    pub audit: bool,
+    #[serde(alias = "workspaceFence")]
+    pub workspace_fence: Option<WorkspaceFenceSection>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct WorkspaceFenceSection {
+    #[serde(alias = "allowedDirs")]
+    pub allowed_dirs: Option<Vec<String>>,
+    #[serde(alias = "alwaysAllow")]
+    pub always_allow: Option<Vec<String>>,
+    pub tools: Option<Vec<String>>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct AutoActionsSection {
+    pub format: Option<bool>,
+    pub lint: Option<bool>,
+    pub test: Option<bool>,
+    #[serde(alias = "gitCheck")]
+    pub git_check: Option<bool>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct HeartbeatEntry {
+    pub agent: Option<String>,
+    pub schedule: Option<HeartbeatSchedule>,
+    pub prompt: Option<String>,
+    pub timezone: Option<String>,
+    pub output_channel: Option<String>,
+    pub quiet_hours: Option<QuietHours>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum HeartbeatSchedule {
+    Minutes(u32),
+    Expression(String),
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct QuietHours {
+    pub start: Option<u8>,
+    pub end: Option<u8>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct AgentEntry {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub default_thinking: Option<ThinkingLevel>,
+    pub local: Option<bool>,
+    pub tools: Option<ToolsSection>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct ToolsSection {
+    pub exclude: Option<Vec<String>>,
+    pub include: Option<Vec<String>>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct ChannelEntry {
+    pub port: Option<u16>,
+    pub host: Option<String>,
+    pub secret: Option<String>,
+    #[serde(alias = "agentId")]
+    pub agent_id: Option<String>,
+    pub peers: Option<Vec<String>>,
+    pub tls: Option<ChannelTls>,
+    pub bot_token: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct ChannelTls {
+    pub ca: Option<String>,
+    pub cert: Option<String>,
+    pub key: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct MemorySection {
+    pub backend: Option<MemoryBackend>,
+    pub postgres: Option<PostgresSection>,
+    pub sqlite: Option<SqliteSection>,
+    pub capture: CaptureSection,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct PostgresSection {
+    pub connection_string: Option<String>,
+    pub embed_endpoint: Option<String>,
+    pub embed_model: Option<String>,
+    pub embed_api_key: Option<String>,
+    pub embed_token_command: Option<Vec<String>>,
+    pub embed_token_ttl_ms: Option<u64>,
+    pub embed_token_command_timeout_ms: Option<u64>,
+    pub embed_wire_shape: Option<EmbedWireShape>,
+    pub embed_expected_dims: Option<u32>,
+    pub embed_query_instruction: Option<String>,
+    pub embed_timeout_ms: Option<u64>,
+    pub hnsw_ef_search: Option<u64>,
+    pub delegation_tracking: bool,
+    pub embedded: Option<EmbeddedSection>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct EmbeddedSection {
+    pub data_dir: Option<String>,
+    #[serde(default = "default_embedded_port")]
+    pub port: u16,
+    #[serde(default = "default_auto_migrate")]
+    pub auto_migrate: bool,
+    #[serde(default = "default_max_connections")]
+    pub max_connections: u32,
+}
+
+fn default_embedded_port() -> u16 {
+    5433
+}
+
+fn default_auto_migrate() -> bool {
+    true
+}
+
+fn default_max_connections() -> u32 {
+    96
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct SqliteSection {
+    pub path: Option<String>,
+    pub embed_endpoint: Option<String>,
+    pub embed_model: Option<String>,
+    pub embed_api_key: Option<String>,
+    pub embed_token_command: Option<Vec<String>>,
+    pub embed_wire_shape: Option<String>,
+    pub tagging: Option<bool>,
+    pub workers: Option<bool>,
+    pub wiki_dir: Option<String>,
+    pub project_rule: Option<String>,
+    pub tagger_allow_protected_removals: Option<bool>,
+    pub tagger_api_key: Option<String>,
+    pub tagger_token_command: Option<Vec<String>>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct CaptureSection {
+    pub redaction: RedactionSection,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct RedactionSection {
+    pub enabled: Option<bool>,
+    pub builtins: Option<bool>,
+    pub patterns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MeshSection {
+    pub enabled: Option<bool>,
+    pub node_name: Option<String>,
+    #[serde(default = "mesh_tls_disabled")]
+    pub tls: MeshTls,
+    pub advertise_host: Option<String>,
+    pub secret: Option<String>,
+}
+
+fn mesh_tls_disabled() -> MeshTls {
+    MeshTls::Enabled(false)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum MeshTls {
+    Enabled(bool),
+    Paths(MeshTlsPaths),
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct MeshTlsPaths {
+    pub ca_path: Option<String>,
+    pub cert_path: Option<String>,
+    pub key_path: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct GatewaySection {
+    pub enabled: Option<bool>,
+    pub host: Option<String>,
+    #[serde(default = "default_gateway_port")]
+    pub port: u16,
+    pub token: Option<String>,
+    pub tls_cert: Option<String>,
+    pub tls_key: Option<String>,
+    pub terminal: Option<TerminalSection>,
+    pub static_dir: Option<String>,
+    pub root_redirect: Option<String>,
+    pub files_root: Option<String>,
+    pub files_open: bool,
+    pub devices: DevicesSection,
+    pub advertise_mdns: Option<bool>,
+    pub allowed_origins: Vec<String>,
+    pub allowed_hosts: Vec<String>,
+    pub allowed_harnesses: Option<Vec<String>>,
+}
+
+fn default_gateway_port() -> u16 {
+    5174
+}
+
+#[derive(Debug, Default, Clone, Copy, Deserialize)]
+#[serde(default)]
+pub struct TerminalSection {
+    pub enabled: Option<bool>,
+    pub open: Option<bool>,
+    pub idle_ttl_ms: Option<u64>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct DevicesSection {
+    pub enabled: Option<bool>,
+    pub relay_ssh: Option<String>,
+    pub relay_sudo: Option<bool>,
+    pub wg_interface: Option<String>,
+    pub pool: Option<String>,
+    pub wg_endpoint: Option<String>,
+    pub wg_public_key: Option<String>,
+    pub allowed_ips: Option<String>,
+    pub home_subnet: Option<String>,
+    pub relay_forward_src: Option<String>,
+    pub relay_forward_dest: Option<String>,
+    pub shared_host: Option<String>,
+    pub shared_export: Option<String>,
+    pub roster_path: Option<String>,
+    pub gateway_url: Option<String>,
+    pub pg_admin_url: Option<String>,
+    pub pg_device_group: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct TasksSection {
+    pub enabled: Option<bool>,
+    pub pricing: Option<BTreeMap<String, PricingEntry>>,
+    pub eval: Option<EvalSection>,
+    pub harnesses: Option<BTreeMap<String, HarnessEntry>>,
+    pub sqlite_path: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize)]
+#[serde(default)]
+pub struct PricingEntry {
+    pub input_per_mtok: Option<f64>,
+    pub output_per_mtok: Option<f64>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct EvalSection {
+    pub enabled: Option<bool>,
+    pub require_criteria: Option<bool>,
+    pub derive_internal: Option<bool>,
+    pub skip_origins: Option<Vec<String>>,
+    pub max_retries: Option<u32>,
+    pub verifier: Option<VerifierSection>,
+    pub escalation: Option<EscalationSection>,
+}
+
+#[derive(Debug, Default, Clone, Copy, Deserialize)]
+#[serde(default)]
+pub struct VerifierSection {
+    pub executor: Option<VerifierExecutor>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct EscalationSection {
+    pub channel: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct HarnessEntry {
+    pub binary: Option<String>,
+    pub model: Option<String>,
+    pub effort: Option<Effort>,
+    pub cwd: Option<String>,
+    pub home: Option<String>,
+    pub models: Option<Vec<String>>,
+    pub efforts: Option<Vec<String>>,
+    pub models_mode: Option<ModelsMode>,
+    pub isolation: Option<Isolation>,
+    pub allowed_tools: Option<Vec<String>>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct TransportSection {
+    pub host: Option<String>,
+    #[serde(default = "default_transport_port")]
+    pub port: u16,
+    pub socket: Option<String>,
+    pub auth_token: Option<String>,
+    pub require_bearer_on_socket: Option<bool>,
+}
+
+fn default_transport_port() -> u16 {
+    5700
+}
+
+#[derive(Debug, Default, Clone, Copy, Deserialize)]
+#[serde(default)]
+pub struct DeploymentSection {
+    pub target: Option<DeploymentTarget>,
+}
+
+impl Config {
+    pub fn memory_backend(&self) -> MemoryBackend {
+        if let Some(backend) = self.memory.as_ref().and_then(|memory| memory.backend) {
+            return backend;
+        }
+        if self.pglite_import_pending() {
+            return MemoryBackend::Sqlite;
+        }
+        match self.memory.as_ref() {
+            Some(memory) if memory.postgres.is_some() && memory.sqlite.is_none() => {
+                MemoryBackend::Postgres
+            }
+            _ => MemoryBackend::Sqlite,
+        }
+    }
+
+    pub fn pglite_import_pending(&self) -> bool {
+        self.memory
+            .as_ref()
+            .and_then(|memory| memory.postgres.as_ref())
+            .is_some_and(|postgres| postgres.embedded.is_some())
+    }
+
+    pub fn capture_redaction(&self) -> RedactionSettings {
+        let redaction = self
+            .memory
+            .as_ref()
+            .map_or_else(RedactionSection::default, |memory| {
+                memory.capture.redaction.clone()
+            });
+        RedactionSettings {
+            enabled: redaction.enabled.unwrap_or_default(),
+            builtins: redaction.builtins.unwrap_or(true),
+            patterns: redaction.patterns,
+        }
+    }
+
+    pub fn provider_kind(&self, name: &str) -> Option<ProviderType> {
+        self.providers
+            .as_ref()?
+            .get(name)
+            .and_then(|slot| slot.kind)
+    }
+}
