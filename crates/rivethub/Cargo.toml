@@ -1,0 +1,36 @@
+[package]
+name = "rivethub"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+config = { workspace = true }
+gateway = { workspace = true }
+kernel = { workspace = true }
+memory-postgres = { workspace = true }
+nix = { workspace = true, features = ["hostname", "signal"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "signal", "time"] }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+capture = { workspace = true }
+chrono = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+sqlx = { workspace = true, features = ["macros"] }
+tempfile = { workspace = true }
+testkit = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "process"] }
+wire = { workspace = true }
+
+[lints]
+workspace = true

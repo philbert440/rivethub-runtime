@@ -359,8 +359,11 @@ pub enum TaskEvent {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
+)]
 #[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "lowercase")]
 pub enum LogLevel {
     Debug,
     Info,

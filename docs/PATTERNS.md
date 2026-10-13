@@ -262,9 +262,7 @@ a house identity per lane; no trailers. Check: xtask `AUTHORSHIP` (identity agai
 hashes; no Co-authored-by / Signed-off-by / AI-attribution text), enforced by the commit-msg hook and the CI range check.
 
 ## MANIFEST
-Anti-pattern: a crate manifest drifting from the workspace (its own version, a pinned dependency, no `[lints] workspace`).
-Pattern: every member inherits `package.*` from `[workspace.package]`, takes dependencies from `[workspace.dependencies]`,
-and carries `[lints] workspace = true`. Check: xtask `MANIFEST` (via `cargo_metadata` and `toml`).
+Anti-pattern: a crate manifest drifting from the workspace (its own version, a pinned dependency, no `[lints] workspace`), or a workspace member depending on the `rivethub` binary. Pattern: every member inherits `package.*` from `[workspace.package]`, takes dependencies from `[workspace.dependencies]`, carries `[lints] workspace = true`, and never names the composition-root binary as a dependency. Check: xtask `MANIFEST` (via `cargo_metadata` and `toml`).
 
 ## TOOLCONFIG
 Anti-pattern: a tool configuration file below the workspace root — a crate's own `clippy.toml` (or

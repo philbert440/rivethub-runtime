@@ -22,6 +22,22 @@ struct LintsPolicy {
     clippy: Option<toml::Table>,
 }
 
+const BINARY_CRATE: &str = "rivethub";
+
+pub fn binary_dependency(metadata: &cargo_metadata::Metadata, findings: &mut Vec<String>) {
+    for package in &metadata.packages {
+        let depends = package.dependencies.iter().any(|dependency| {
+            dependency.name == BINARY_CRATE || dependency.rename.as_deref() == Some(BINARY_CRATE)
+        });
+        if depends {
+            findings.push(format!(
+                "MANIFEST {}: workspace members must not depend on the {BINARY_CRATE} binary",
+                package.name
+            ));
+        }
+    }
+}
+
 pub fn manifests(root: &Path, findings: &mut Vec<String>) -> Result<Vec<String>> {
     let metadata = cargo_metadata::MetadataCommand::new()
         .manifest_path(root.join("Cargo.toml"))
@@ -101,6 +117,7 @@ pub fn manifests(root: &Path, findings: &mut Vec<String>) -> Result<Vec<String>>
             }
         }
     }
+    binary_dependency(&metadata, findings);
     Ok(names)
 }
 

@@ -1,9 +1,17 @@
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 
+use crate::enums::LogLevel;
+
 #[derive(Debug, Clone, Default)]
 pub struct Environment {
     vars: BTreeMap<OsString, OsString>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogLevelSetting {
+    pub level: LogLevel,
+    pub ignored: Option<String>,
 }
 
 impl Environment {
@@ -36,6 +44,49 @@ impl Environment {
 
     pub fn home(&self) -> Option<&str> {
         self.text("HOME")
+    }
+
+    #[must_use]
+    pub fn log_level(&self) -> LogLevelSetting {
+        let stated = self
+            .text("RIVETOS_LOG_LEVEL")
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        match stated {
+            None => LogLevelSetting {
+                level: LogLevel::Info,
+                ignored: None,
+            },
+            Some(value) => match value.parse::<LogLevel>() {
+                Ok(level) => LogLevelSetting {
+                    level,
+                    ignored: None,
+                },
+                Err(_) => LogLevelSetting {
+                    level: LogLevel::Info,
+                    ignored: Some(value.to_owned()),
+                },
+            },
+        }
+    }
+
+    #[must_use]
+    pub fn node_name(&self, hostname: &str) -> String {
+        ["RIVETOS_DEN_NODE_NAME", "RIVETOS_DEN_NODE_ID"]
+            .into_iter()
+            .find_map(|name| {
+                self.text(name)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+            })
+            .map_or_else(|| local_node_name(hostname), str::to_owned)
+    }
+
+    pub(crate) fn postgres_url(&self) -> Option<String> {
+        self.text("RIVETOS_PG_URL")
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+            .map(str::to_owned)
     }
 
     pub fn term_mux(&self) -> Option<&str> {
@@ -106,5 +157,15 @@ impl Environment {
             }
         }
         warnings
+    }
+}
+
+#[must_use]
+fn local_node_name(hostname: &str) -> String {
+    let trimmed = hostname.trim();
+    if trimmed.is_empty() {
+        "local".to_owned()
+    } else {
+        trimmed.to_owned()
     }
 }

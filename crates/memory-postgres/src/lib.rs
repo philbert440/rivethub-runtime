@@ -12,6 +12,7 @@ mod tags;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 pub use capture::CaptureOptions;
 pub use capture::CaptureWriter;
@@ -47,6 +48,8 @@ impl PostgresMemory {
     pub async fn connect(url: &str) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .max_connections(5)
+            .acquire_timeout(Duration::from_secs(10))
+            .idle_timeout(Duration::from_secs(30))
             .connect(url)
             .await
             .map_err(Error::Connection)?;
@@ -59,7 +62,7 @@ impl PostgresMemory {
         let names: Vec<String> = MIGRATOR
             .migrations
             .iter()
-            .map(|migration| format!("{:04}_{}.sql", migration.version, migration.description))
+            .map(|migration| tracked_name(migration.version, &migration.description))
             .collect();
         let tracked = sqlx::query!(
             "select name from _rivetos_migrations where name = any($1)",
@@ -110,5 +113,22 @@ impl PostgresMemory {
 
     pub(crate) fn set_wiki_available(&self, available: bool) {
         self.wiki_available.store(available, Ordering::Relaxed);
+    }
+}
+
+#[must_use]
+fn tracked_name(version: i64, description: &str) -> String {
+    format!("{version:04}_{}.sql", description.replace(' ', "_"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tracked_name;
+
+    #[test]
+    fn tracked_names_are_the_sql_file_names() {
+        assert_eq!(tracked_name(1, "baseline"), "0001_baseline.sql");
+        assert_eq!(tracked_name(2, "ros tasks"), "0002_ros_tasks.sql");
+        assert_eq!(tracked_name(21, "rh tables"), "0021_rh_tables.sql");
     }
 }

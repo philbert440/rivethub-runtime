@@ -40,7 +40,6 @@ deny = [
   { crate = "workers", wrappers = ["cli", "rivethub"], reason = "services are wired only in the composition root (never a service on a service)" },
   { crate = "tasks", wrappers = ["cli", "rivethub"], reason = "services are wired only in the composition root (never a service on a service)" },
   { crate = "cli", wrappers = ["rivethub"], reason = "the CLI is composition; only the binary links it" },
-  { crate = "rivethub", wrappers = [], reason = "the binary is the top of the graph" },
 ]
 
 [sources]

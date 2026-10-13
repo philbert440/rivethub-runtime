@@ -465,6 +465,47 @@ fn manifest_inheritance_is_enforced() -> Result<(), Box<dyn std::error::Error>> 
 }
 
 #[test]
+fn manifest_member_depending_on_the_binary_fires() -> Result<(), Box<dyn std::error::Error>> {
+    let bad = Repo::new()?;
+    bad.write("Cargo.toml", &workspace_toml())?;
+    bad.write("crates/rivethub/Cargo.toml", &manifest("rivethub", ""))?;
+    bad.write("crates/rivethub/src/main.rs", "fn main() {}\n")?;
+    bad.write(
+        "crates/cli/Cargo.toml",
+        &manifest(
+            "cli",
+            "[dependencies]\nrivethub = { path = \"../rivethub\" }\n",
+        ),
+    )?;
+    bad.write("crates/cli/src/lib.rs", "")?;
+    bad.track()?;
+    let mut findings = Vec::new();
+    manifests::manifests(bad.root(), &mut findings)?;
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.starts_with("MANIFEST cli")
+                && finding.contains("must not depend on the rivethub binary")),
+        "the member linking the binary is reported: {findings:?}"
+    );
+
+    let good = Repo::new()?;
+    good.write("Cargo.toml", &workspace_toml())?;
+    good.write("crates/rivethub/Cargo.toml", &manifest("rivethub", ""))?;
+    good.write("crates/rivethub/src/main.rs", "fn main() {}\n")?;
+    good.write("crates/gateway/Cargo.toml", &manifest("gateway", ""))?;
+    good.write("crates/gateway/src/lib.rs", "")?;
+    good.track()?;
+    let mut findings = Vec::new();
+    manifests::manifests(good.root(), &mut findings)?;
+    assert!(
+        findings.is_empty(),
+        "a member free of the binary passes: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn lint_policy_fires_and_passes() -> Result<(), Box<dyn std::error::Error>> {
     let policy =
         "[lints.rust]\nunsafe_code = \"forbid\"\n\n[lints.clippy]\nunwrap_used = \"deny\"\n";

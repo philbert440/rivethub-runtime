@@ -10,10 +10,10 @@ mod resolve;
 pub mod validate;
 
 pub use enums::{
-    DeploymentTarget, Effort, EmbedWireShape, HarnessId, Isolation, MemoryBackend, ModelsMode,
-    ThinkingLevel, VerifierExecutor,
+    DeploymentTarget, Effort, EmbedWireShape, HarnessId, Isolation, LogLevel, MemoryBackend,
+    ModelsMode, ThinkingLevel, VerifierExecutor,
 };
-pub use environment::Environment;
+pub use environment::{Environment, LogLevelSetting};
 pub use free_form::FreeForm;
 pub use load::{ConfigError, Loaded, Typed, resolve_config_path, type_document, validate_document};
 pub use model::{Config, HarnessSlot, RedactionSettings};

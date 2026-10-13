@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
+use crate::Environment;
 use crate::enums::{
     DeploymentTarget, Effort, EmbedWireShape, HarnessId, Isolation, MemoryBackend, ModelsMode,
     ThinkingLevel, VerifierExecutor,
@@ -430,6 +431,18 @@ impl Config {
             }
             _ => MemoryBackend::Sqlite,
         }
+    }
+
+    #[must_use]
+    pub fn memory_postgres_url(&self, env: &Environment) -> Option<String> {
+        self.memory
+            .as_ref()
+            .and_then(|memory| memory.postgres.as_ref())
+            .and_then(|postgres| postgres.connection_string.as_deref())
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+            .map(str::to_owned)
+            .or_else(|| env.postgres_url())
     }
 
     pub fn pglite_import_pending(&self) -> bool {

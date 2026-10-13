@@ -20,15 +20,18 @@ async-trait = "0.1"
 axum = { version = "0.8", features = ["ws", "macros"] }
 base64 = "0.22"
 bytes = "1"
+capture = { path = "crates/capture", version = "0.1.0" }
 cargo_metadata = "0.23"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 clap = { version = "4", features = ["derive"] }
 config = { path = "crates/config", version = "0.1.0" }
 futures = "0.3"
+gateway = { path = "crates/gateway", version = "0.1.0" }
 hex = "0.4"
 httparse = "1"
 kernel = { path = "crates/kernel", version = "0.1.0" }
 libtest-mimic = "0.8"
+memory-postgres = { path = "crates/memory-postgres", version = "0.1.0" }
 nix = { version = "0.30", features = ["process", "signal", "fs", "user"] }
 parking_lot = "0.12"
 pgvector = { version = "0.4", features = ["sqlx"] }
