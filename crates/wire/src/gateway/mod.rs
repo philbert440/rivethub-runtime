@@ -33,6 +33,52 @@ pub struct GatewayError {
     pub reason: Option<String>,
 }
 
+impl GatewayError {
+    #[must_use]
+    pub fn new(error: impl Into<String>) -> Self {
+        Self {
+            error: error.into(),
+            detail: None,
+            hint: None,
+            code: None,
+            harness_id: None,
+            node: None,
+            retryable: None,
+            reason: None,
+        }
+    }
+
+    #[must_use]
+    pub fn detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    #[must_use]
+    pub fn hint(mut self, hint: impl Into<String>) -> Self {
+        self.hint = Some(hint.into());
+        self
+    }
+
+    #[must_use]
+    pub fn code(mut self, code: impl Into<String>) -> Self {
+        self.code = Some(code.into());
+        self
+    }
+
+    #[must_use]
+    pub fn reason(mut self, reason: impl Into<String>) -> Self {
+        self.reason = Some(reason.into());
+        self
+    }
+
+    #[must_use]
+    pub fn retryable(mut self, retryable: bool) -> Self {
+        self.retryable = Some(retryable);
+        self
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OkReply {

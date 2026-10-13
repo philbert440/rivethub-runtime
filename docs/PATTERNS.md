@@ -171,6 +171,10 @@ as direct dependencies. Pattern: rustls; `thiserror`; `std::sync::LazyLock`/`Onc
 policy in `deny.toml` bans for the first group; `once_cell`/`lazy_static` must not be direct dependencies and is checked
 in review (other crates pull them transitively, so they are not banned in `deny.toml`).
 
+## TLS
+Anti-pattern: two rustls crypto providers in one build (a dependency enabling rustls `ring` while the code assumes another provider), or a rustls config built through the process-level default (`ServerConfig::builder()`, `ClientConfig::builder()`, `WebPkiClientVerifier::builder()`) — with both providers compiled in, rustls cannot pick a process default and the builder panics. Pattern: one provider for the whole workspace, `aws-lc-rs` (the rustls and reqwest default): `rustls` and `tokio-rustls` carry the `aws-lc-rs` feature (never `ring`), `rcgen` (dev) its `aws_lc_rs` feature, sqlx the `tls-rustls-aws-lc-rs` variant; every `ServerConfig`, `ClientConfig` and client-cert verifier names the provider explicitly —
+`ServerConfig::builder_with_provider(Arc::new(rustls::crypto::aws_lc_rs::default_provider())).with_safe_default_protocol_versions()?`, the same builder chain for any `ClientConfig`, `WebPkiClientVerifier::builder_with_provider(roots, provider)` — never the process-level default. Check: the cargo-deny `ring` ban.
+
 ## LINTPOLICY
 Anti-pattern: a lane editing the lint policy to get its own code through. Pattern: fix the code; a lint policy change is
 its own reviewed commit. Check: xtask `LINTPOLICY` (`[workspace.lints]` equals `xtask/lints-policy.toml`, the file the

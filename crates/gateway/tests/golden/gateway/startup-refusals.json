@@ -1,0 +1,44 @@
+{
+  "runs": {
+    "refuse-offloopback-no-tls": {
+      "env": {
+        "host": "0.0.0.0",
+        "port": "{{PORT}}",
+        "tls_cert": null,
+        "tls_key": null,
+        "tls_ca": null
+      },
+      "error": "[den-server] refusing to bind 0.0.0.0: gateway TLS is required off-loopback (set RIVETOS_DEN_TLS_CERT + RIVETOS_DEN_TLS_KEY to the node cert from rivet-ca issue-node; enroll clients with rivet-ca issue-client). Or bind den.host to 127.0.0.1."
+    },
+    "refuse-empty-host": {
+      "env": {
+        "host": "",
+        "port": "{{PORT}}",
+        "tls_cert": null,
+        "tls_key": null,
+        "tls_ca": null
+      },
+      "error": "[den-server] refusing to bind : gateway TLS is required off-loopback (set RIVETOS_DEN_TLS_CERT + RIVETOS_DEN_TLS_KEY to the node cert from rivet-ca issue-node; enroll clients with rivet-ca issue-client). Or bind den.host to 127.0.0.1."
+    },
+    "tls-missing-ca-default": {
+      "env": {
+        "host": "0.0.0.0",
+        "port": "{{PORT}}",
+        "tls_cert": "{{TMP}}/pki/node.crt",
+        "tls_key": "{{TMP}}/pki/node.key",
+        "tls_ca": "{{TMP}}/runs/tls-missing-ca-default/shared/rivet-ca/intermediate/chain.pem"
+      },
+      "error": "[den-server] TLS CA chain missing at {{TMP}}/runs/tls-missing-ca-default/shared/rivet-ca/intermediate/chain.pem — cannot verify device client certs"
+    },
+    "tls-missing-ca-explicit": {
+      "env": {
+        "host": "0.0.0.0",
+        "port": "{{PORT}}",
+        "tls_cert": "{{TMP}}/pki/node.crt",
+        "tls_key": "{{TMP}}/pki/node.key",
+        "tls_ca": "{{TMP}}/runs/tls-missing-ca-explicit/no-such-chain.pem"
+      },
+      "error": "[den-server] TLS CA chain missing at {{TMP}}/runs/tls-missing-ca-explicit/no-such-chain.pem — cannot verify device client certs"
+    }
+  }
+}

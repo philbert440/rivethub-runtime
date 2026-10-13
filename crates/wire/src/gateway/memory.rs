@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::JsonObject;
 use crate::message::{Role, ToolResult};
 use chrono::{DateTime, Utc};
@@ -24,12 +26,7 @@ pub struct MemorySearchToolArgs {
     pub scope: Option<MemoryScope>,
     pub limit: Option<u32>,
     pub agent: Option<String>,
-    pub since: Option<String>,
-    pub before: Option<String>,
-    pub window: Option<String>,
     pub tag: Option<String>,
-    pub expand: Option<bool>,
-    pub synthesize: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,7 +92,7 @@ pub enum BrowseWindowError {
 
 impl BrowseWindow {
     pub fn parse(raw: &str) -> Result<Self, BrowseWindowError> {
-        let normalized = raw.trim().to_ascii_lowercase();
+        let normalized = raw.trim().to_ascii_lowercase().replace(' ', "_");
         if normalized.is_empty() {
             return Err(BrowseWindowError::Empty {
                 expected: Self::expected(),
@@ -172,6 +169,12 @@ pub struct MemoryIngestSessionToolArgs {
     pub persona: Option<String>,
     pub source: Option<String>,
     pub channel: Option<String>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryGetFullToolArgs {
+    pub id: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -455,15 +458,15 @@ pub struct PendingTagWire {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryTagsDecideRequest {
-    pub ids: Vec<String>,
-    pub state: TagState,
+    pub ids: Option<Vec<String>>,
+    pub state: Option<TagState>,
     pub decided_by: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryTagsAddRequest {
-    pub entity_type: String,
+    pub entity_type: Option<String>,
     pub entity_id: Option<String>,
     pub session_key: Option<String>,
     pub agent: Option<String>,
@@ -478,8 +481,8 @@ pub struct MemoryTagsAddRequest {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryTagsLookupRequest {
-    pub session_keys: Vec<String>,
-    pub states: Option<Vec<TagState>>,
+    pub session_keys: Option<Vec<String>>,
+    pub states: Option<Vec<String>>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -513,7 +516,21 @@ pub struct TagTaxonomyWire {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TagTaxonomyUpsertRequest {
+    pub key: Option<String>,
+    pub value: Option<String>,
+    pub display: Option<String>,
     pub parent_value: Option<String>,
+    pub aliases: Option<Vec<String>>,
+    pub reason: Option<String>,
+    pub decided_by: Option<String>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagTaxonomyDecideRequest {
+    pub entries: Option<Vec<TagEntryPair>>,
+    pub state: Option<TagState>,
+    pub decided_by: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -522,6 +539,14 @@ pub struct TagTaxonomyMerge {
     pub key: String,
     pub from: String,
     pub into: String,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagTaxonomyMergeRequest {
+    pub key: Option<String>,
+    pub from: Option<String>,
+    pub into: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -539,6 +564,54 @@ pub struct TagCount {
     pub value: String,
     pub display: String,
     pub conversations: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagListResult {
+    pub tags: Vec<TagWire>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingTagListResult {
+    pub tags: Vec<PendingTagWire>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagCountsResult {
+    pub counts: Vec<TagCount>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagTaxonomyListResult {
+    pub entries: Vec<TagTaxonomyEntry>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagDecisionResult {
+    pub changed: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagAddResult {
+    pub tag: TagWire,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagLookupResult {
+    pub sessions: BTreeMap<String, Vec<TagWire>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagTaxonomyUpsertResult {
+    pub entry: TagTaxonomyEntry,
 }
 
 #[serde_with::skip_serializing_none]
