@@ -8,4 +8,5 @@ pub mod lang;
 pub mod manifests;
 pub mod patterns;
 pub mod privacy;
+pub mod recmcp;
 pub mod toolconfig;

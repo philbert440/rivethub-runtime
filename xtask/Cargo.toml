@@ -6,21 +6,34 @@ publish.workspace = true
 version.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+default-run = "xtask"
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[[bin]]
+name = "record-mcp"
+path = "tests/record-mcp/session.rs"
 
 [dependencies]
 cargo_metadata.workspace = true
+chrono.workspace = true
 hex.workspace = true
 ra-ap-rustc_lexer.workspace = true
 regex.workspace = true
+rmcp = { workspace = true, features = ["client", "server", "transport-child-process"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true
 strum.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["process", "rt", "rt-multi-thread"] }
 toml.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+tokio = { workspace = true, features = ["macros"] }
 
 [lints]
 workspace = true
