@@ -47,11 +47,11 @@ The same holds for `serde_yaml::Value`/`Mapping`/`Number`: only `crates/config/s
 document (parse, `${VAR}` substitution over string leaves, `serde_yaml::from_value`), and `crates/config/src/free_form.rs`
 holds `config::FreeForm` (`#[serde(transparent)]` over `BTreeMap<String, serde_yaml::Value>`), the one type for config values
 the contract defines as arbitrary (provider `extra_body`, `chat_template_kwargs`, `mm_processor_kwargs`).
-Check: clippy `disallowed-types` (serde_json everywhere; wire and testkit keep their own `clippy.toml` for
-`serde_json::Value`); dylint `untyped` (serde_json and serde_yaml with the per-file exemptions clippy cannot express:
-`wire/src/json.rs`, config `load.rs`/`resolve.rs`/`free_form.rs`, tests, `testkit`, whose job is structural JSON
-comparison; every other production rule applies to `testkit/src`; `IgnoredAny` too — `disallowed-types` cannot carry it
-because serde's own derives mention it).
+Check: dylint `untyped` (serde_json and serde_yaml with the exemptions clippy cannot express: the per-file production
+exemptions `wire/src/json.rs` and config `load.rs`/`resolve.rs`/`free_form.rs`, test code in `wire` and `testkit` only —
+the crates whose job is structural JSON comparison; in every other crate tests are held to the same rule — and `testkit`
+wholesale, where every other production rule still applies to `testkit/src`; `IgnoredAny` too — `disallowed-types` cannot
+carry it because serde's own derives mention it).
 
 ## TAGFIELD
 Anti-pattern: a constant discriminator stored as a field, `pub r#type: SnapshotTag` with a one-variant enum. Pattern:
@@ -66,7 +66,8 @@ or `harness` for `HarnessId` — must not be `String`; the scan sees the local c
 
 ## JSONMAP
 Anti-pattern: `serde_json::Map<String, T>` as a typed map. Pattern: `BTreeMap<K, T>` (ordered output) or `HashMap<K, T>`,
-with a typed key (`SessionId`) where one exists. Check: clippy `disallowed-types`; dylint `untyped` (any `serde_json::Map`).
+with a typed key (`SessionId`) where one exists. Check: dylint `untyped` (any `serde_json::Map`; the UNTYPED exemptions
+apply, so test code is exempt only in `wire` and `testkit`).
 
 ## DISPATCH
 Anti-pattern: `match s.as_str() { "a" => … }` on a protocol tag or kind. Pattern: a serde enum
@@ -81,7 +82,8 @@ renames never match — `golden_path` and `NetworkGoldenPath` pass); xtask `NAMI
 ## RUNTIME
 Anti-pattern: a library building a tokio runtime or using `#[tokio::main]`. Pattern: libraries expose `async fn`; only the
 `rivethub` binary builds the runtime. Check: clippy `disallowed-methods` (`tokio::runtime::Builder::new_*`),
-`disallowed-macros` (`tokio::main`); the binary crate carries its own `clippy.toml` when it lands.
+`disallowed-macros` (`tokio::main`); the binary's runtime-build site carries
+`#[expect(lint, reason = "…")]` when it lands.
 
 ## STDLOCK
 Anti-pattern: `std::sync::Mutex` / `RwLock`. Pattern: `parking_lot` for short critical sections never held across `.await`;
@@ -89,7 +91,8 @@ Anti-pattern: `std::sync::Mutex` / `RwLock`. Pattern: `parking_lot` for short cr
 
 ## PRINT
 Anti-pattern: `println!` / `eprintln!` in libraries. Pattern: `tracing` events; only `cli` and `rivethub` write to stdout.
-Check: clippy `print_stdout`, `print_stderr`; `cli` and `rivethub` carry their own `clippy.toml` when they land.
+Check: clippy `print_stdout`, `print_stderr`; the sanctioned stdout writers in `cli` and `rivethub`
+carry `#[expect(lint, reason = "…")]` when they land.
 
 ## STRSET
 Anti-pattern: `const`/`static` tables of protocol strings — lists of known provider types, of types that accept a base
@@ -226,6 +229,17 @@ hashes; no Co-authored-by / Signed-off-by / AI-attribution text), enforced by th
 Anti-pattern: a crate manifest drifting from the workspace (its own version, a pinned dependency, no `[lints] workspace`).
 Pattern: every member inherits `package.*` from `[workspace.package]`, takes dependencies from `[workspace.dependencies]`,
 and carries `[lints] workspace = true`. Check: xtask `MANIFEST` (via `cargo_metadata` and `toml`).
+
+## TOOLCONFIG
+Anti-pattern: a tool configuration file below the workspace root — a crate's own `clippy.toml` (or
+`.clippy.toml`, `rustfmt.toml`, `.rustfmt.toml`, `deny.toml`, `.cargo/config.toml`, `rust-toolchain`,
+`rust-toolchain.toml`): Clippy reads the nearest configuration file, so a crate-level file silently
+replaces the workspace's disallowed types and methods for that crate, and a member manifest without
+`[lints] workspace = true` or with its own `[lints.*]` tables walks out of the workspace policy the
+same way. Pattern: tool configuration lives only at the workspace root (a directory listed in
+`[workspace] exclude` is its own workspace root); every member manifest inherits
+`[lints] workspace = true`, and a spot where a workspace lint is genuinely wrong carries
+`#[expect(lint, reason = "…")]`. Check: xtask `TOOLCONFIG`.
 
 ## SIZE
 Anti-pattern: a production file growing past the point where a reviewer can hold it. Pattern: split by responsibility; a

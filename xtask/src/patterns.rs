@@ -38,6 +38,7 @@ pub fn checks() -> &'static [&'static str] {
         "PRIVACY",
         "SECRET",
         "SIZE",
+        "TOOLCONFIG",
     ]
 }
 

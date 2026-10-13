@@ -46,11 +46,11 @@ impl<'tcx> LateLintPass<'tcx> for Untyped {
         let Some(is_json) = banned else {
             return;
         };
-        if util::in_test_code(cx, ty.hir_id, ty.span) {
-            return;
-        }
         let crate_name = util::crate_name(cx);
         if crate_name == "testkit" {
+            return;
+        }
+        if crate_name.starts_with("wire") && util::in_test_code(cx, ty.hir_id, ty.span) {
             return;
         }
         if crate_name.starts_with("wire")

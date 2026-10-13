@@ -8,8 +8,6 @@ too-many-arguments-threshold = 6
 disallowed-types = [
   { path = "std::sync::Mutex", reason = "use parking_lot::Mutex for short critical sections or tokio::sync::Mutex across awaits" },
   { path = "std::sync::RwLock", reason = "use parking_lot::RwLock or tokio::sync::RwLock" },
-  { path = "serde_json::Value", reason = "boundary payloads are typed; use a serde struct or enum" },
-  { path = "serde_json::Map", reason = "typed maps: BTreeMap/HashMap with a typed key (JSONMAP)" },
   { path = "serde_json::Number", reason = "any-number is not a type; i64 epoch ms, f64 measured, u16/u32/u64 counts (JSMODEL)" },
 ]
 disallowed-methods = [

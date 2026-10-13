@@ -20,6 +20,6 @@ globs = [
   "crates/*/tests/fixtures/**/*.jsonl",
   "crates/*/tests/fixtures/**/*.txt",
   "lints/examples/*.stderr",
-  "lints/ui/*/*.stderr",
+  "lints/ui/**/*.stderr",
   "xtask/data/*.json",
 ]

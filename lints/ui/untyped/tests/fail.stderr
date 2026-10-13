@@ -1,0 +1,10 @@
+warning: serde_json::Value outside its sanctioned holder (a typed struct, wire::JsonObject, or config::FreeForm) → docs/PATTERNS.md#untyped
+  --> $DIR/fail.rs:7:26
+   |
+LL | pub fn build() -> Option<serde_json::Value> {
+   |                          ^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(untyped)]` on by default
+
+warning: 1 warning emitted
+

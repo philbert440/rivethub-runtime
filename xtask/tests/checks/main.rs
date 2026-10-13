@@ -9,6 +9,7 @@ use xtask::lang;
 use xtask::manifests;
 use xtask::patterns;
 use xtask::privacy;
+use xtask::toolconfig;
 
 struct Repo {
     root: PathBuf,
@@ -249,6 +250,148 @@ fn naming_file_names_fires() -> Result<(), Box<dyn std::error::Error>> {
             .iter()
             .any(|finding| finding.contains("gateway.rs")),
         "gateway.rs passes: {findings:?}"
+    );
+    Ok(())
+}
+
+fn config_repo(repo: &Repo) -> Result<(), Box<dyn std::error::Error>> {
+    repo.write(
+        "Cargo.toml",
+        "[workspace]\nresolver = \"3\"\nmembers = [\"crates/*\"]\nexclude = [\"lints\"]\n",
+    )?;
+    repo.write("clippy.toml", "allow-unwrap-in-tests = true\n")?;
+    repo.write("rustfmt.toml", "edition = \"2024\"\n")?;
+    repo.write("deny.toml", "[graph]\nall-features = true\n")?;
+    repo.write(
+        ".cargo/config.toml",
+        "[alias]\nxtask = \"run -q -p xtask --\"\n",
+    )?;
+    repo.write("rust-toolchain.toml", "[toolchain]\nchannel = \"1.99.0\"\n")?;
+    Ok(())
+}
+
+#[test]
+fn toolconfig_root_only_files_pass() -> Result<(), Box<dyn std::error::Error>> {
+    let repo = Repo::new()?;
+    config_repo(&repo)?;
+    repo.write("crates/wire/Cargo.toml", &manifest("wire", ""))?;
+    repo.write("crates/wire/src/lib.rs", "")?;
+    repo.track()?;
+    let mut findings = Vec::new();
+    toolconfig::check(repo.root(), &mut findings)?;
+    assert!(
+        findings.is_empty(),
+        "tool files at the workspace root pass: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn toolconfig_nested_clippy_toml_fires() -> Result<(), Box<dyn std::error::Error>> {
+    let repo = Repo::new()?;
+    config_repo(&repo)?;
+    repo.write("crates/wire/Cargo.toml", &manifest("wire", ""))?;
+    repo.write("crates/wire/clippy.toml", "disallowed-types = []\n")?;
+    repo.track()?;
+    let mut findings = Vec::new();
+    toolconfig::check(repo.root(), &mut findings)?;
+    assert_eq!(findings.len(), 1, "exactly one finding: {findings:?}");
+    assert!(
+        findings
+            .first()
+            .is_some_and(|finding| finding.contains("crates/wire/clippy.toml")),
+        "the finding names the file: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn toolconfig_member_without_lints_fires() -> Result<(), Box<dyn std::error::Error>> {
+    let repo = Repo::new()?;
+    config_repo(&repo)?;
+    repo.write("crates/wire/Cargo.toml", "[package]\nname = \"wire\"\n")?;
+    repo.track()?;
+    let mut findings = Vec::new();
+    toolconfig::check(repo.root(), &mut findings)?;
+    assert_eq!(findings.len(), 1, "exactly one finding: {findings:?}");
+    assert!(
+        findings.first().is_some_and(|finding| {
+            finding.contains("crates/wire/Cargo.toml")
+                && finding.contains("missing [lints] workspace = true")
+        }),
+        "the finding names the manifest: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn toolconfig_member_own_lints_table_fires() -> Result<(), Box<dyn std::error::Error>> {
+    let repo = Repo::new()?;
+    config_repo(&repo)?;
+    repo.write(
+        "crates/wire/Cargo.toml",
+        "[package]\nname = \"wire\"\n\n[lints]\nworkspace = true\n\n[lints.clippy]\nunwrap_used = \"deny\"\n",
+    )?;
+    repo.track()?;
+    let mut findings = Vec::new();
+    toolconfig::check(repo.root(), &mut findings)?;
+    assert_eq!(findings.len(), 1, "exactly one finding: {findings:?}");
+    assert!(
+        findings
+            .first()
+            .is_some_and(|finding| finding.contains("own [lints.clippy] table")),
+        "the finding names the table: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn toolconfig_excluded_directory_is_its_own_root() -> Result<(), Box<dyn std::error::Error>> {
+    let repo = Repo::new()?;
+    config_repo(&repo)?;
+    repo.write("lints/Cargo.toml", "[package]\nname = \"rr_lints\"\n")?;
+    repo.write(
+        "lints/rust-toolchain.toml",
+        "[toolchain]\nchannel = \"nightly\"\n",
+    )?;
+    repo.track()?;
+    let mut findings = Vec::new();
+    toolconfig::check(repo.root(), &mut findings)?;
+    assert!(
+        findings.is_empty(),
+        "an excluded workspace root owns its tool files: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn toolconfig_nested_below_excluded_root_fires() -> Result<(), Box<dyn std::error::Error>> {
+    let repo = Repo::new()?;
+    config_repo(&repo)?;
+    repo.write("lints/inner/clippy.toml", "disallowed-types = []\n")?;
+    repo.track()?;
+    let mut findings = Vec::new();
+    toolconfig::check(repo.root(), &mut findings)?;
+    assert_eq!(findings.len(), 1, "exactly one finding: {findings:?}");
+    assert!(
+        findings
+            .first()
+            .is_some_and(|finding| finding.contains("lints/inner/clippy.toml")),
+        "the finding names the file: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn toolconfig_current_repository_passes() -> Result<(), Box<dyn std::error::Error>> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("xtask must live inside the repository")?;
+    let mut findings = Vec::new();
+    toolconfig::check(root, &mut findings)?;
+    assert!(
+        findings.is_empty(),
+        "the current repository passes: {findings:?}"
     );
     Ok(())
 }

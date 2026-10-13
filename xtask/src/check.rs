@@ -60,7 +60,7 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
     run_tool(root, "cargo", &clippy)?;
     let dylint = Command::new("cargo")
         .current_dir(root)
-        .args(["dylint", "--all", "--workspace"])
+        .args(["dylint", "--all", "--workspace", "--", "--all-targets"])
         .env("DYLINT_RUSTFLAGS", "-Dwarnings")
         .status()
         .map_err(Error::Io)?;
@@ -82,6 +82,7 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
     crate::code::check_code(root, &mut findings)?;
     crate::manifests::manifests(root, &mut findings)?;
     crate::manifests::lint_policy(root, &mut findings)?;
+    crate::toolconfig::check(root, &mut findings)?;
     crate::patterns::check(root, &mut findings)?;
     crate::lang::privacy_and_secrets(root, &mut findings)?;
     finish("cargo xtask check", &findings)
