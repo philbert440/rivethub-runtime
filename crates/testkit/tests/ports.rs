@@ -18,9 +18,20 @@ use kernel::harness::ToolCallStatus;
 use kernel::harness::ToolCallUpdate;
 use kernel::harness::TurnInput;
 use kernel::memory::BrowseFilter;
+use kernel::memory::Limit;
 use kernel::memory::MemoryStore;
+use kernel::memory::SearchMode;
 use kernel::memory::SearchQuery;
-use kernel::memory::TagAction;
+use kernel::memory::TagAdd;
+use kernel::memory::TagCountsQuery;
+use kernel::memory::TagDecision;
+use kernel::memory::TagEntity;
+use kernel::memory::TagId;
+use kernel::memory::TagListQuery;
+use kernel::memory::TagLookup;
+use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyQuery;
+use kernel::memory::TagTaxonomyUpsert;
 use kernel::model::ModelChunk;
 use kernel::model::ModelProvider;
 use kernel::model::ModelRequest;
@@ -42,7 +53,16 @@ use testkit::FakeMux;
 use testkit::FakeProvider;
 use testkit::FakeReader;
 use testkit::FakeTool;
+use testkit::MemoryRequest;
 use testkit::Script;
+use uuid::Uuid;
+use wire::gateway::memory::BrowseWindow;
+use wire::gateway::memory::MemoryBrowseOrder;
+use wire::gateway::memory::MemoryScope;
+use wire::gateway::memory::TagEntityType;
+use wire::gateway::memory::TagEntryPair;
+use wire::gateway::memory::TagState;
+use wire::gateway::memory::TagTaxonomyMerge;
 use wire::harness::ApprovalDecision as Decision;
 use wire::harness::HarnessId;
 use wire::memory::MemoryEntry;
@@ -65,6 +85,33 @@ fn memory_entry(session: &str, content: &str, at: DateTime<Utc>) -> MemoryEntry 
     }
 }
 
+fn search_query(text: &str) -> SearchQuery {
+    SearchQuery {
+        text: text.to_string(),
+        mode: SearchMode::Hybrid,
+        scope: MemoryScope::Both,
+        agent: None,
+        tag: None,
+        limit: Limit::clamped(None, 10, 1..=50),
+    }
+}
+
+fn browse_filter() -> BrowseFilter {
+    BrowseFilter {
+        conversation_id: None,
+        agent: None,
+        role: None,
+        tool_name: None,
+        tag: None,
+        window: None,
+        since: None,
+        before: None,
+        include_tools: true,
+        order: MemoryBrowseOrder::Desc,
+        limit: Limit::clamped(None, 50, 1..=200),
+    }
+}
+
 #[test]
 fn memory_store_roundtrip() {
     block_on(async {
@@ -75,32 +122,202 @@ fn memory_store_roundtrip() {
             .await
             .unwrap();
         assert_eq!(inserted, 1);
-        let hits = store
-            .search(SearchQuery {
-                text: "hello".to_string(),
-                agent: None,
-                limit: 10,
-            })
-            .await
-            .unwrap();
+        let hits = store.search(search_query("hello")).await.unwrap();
         assert_eq!(hits.len(), 1);
         let stats = store.stats().await.unwrap();
         assert_eq!(stats.messages, 1);
-        let browsed = store
-            .browse(BrowseFilter {
-                session_key: Some("claude-code:abc".to_string()),
-                agent: None,
-                limit: 10,
-            })
-            .await
-            .unwrap();
+        let browsed = store.browse(browse_filter()).await.unwrap();
         assert_eq!(browsed.len(), 1);
         let full = store.get_full("m-11").await.unwrap();
         assert!(full.is_some());
         let context = store.context("claude-code:abc", now).await.unwrap();
         assert_eq!(context, "hello world");
-        let tags = store.tags(TagAction::Accept).await.unwrap();
-        assert_eq!((tags.moved, tags.dropped), (0, 0));
+        let changed = store
+            .decide_tags(
+                vec![TagId::from_str("00000000-0000-4000-8000-000000000001").unwrap()],
+                TagDecision::Accept,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(changed, 0);
+    });
+}
+
+#[test]
+fn fake_memory_store_records_typed_requests() {
+    block_on(async {
+        let store = FakeMemoryStore::default();
+        let query = SearchQuery {
+            text: "hello".to_string(),
+            mode: SearchMode::Fts,
+            scope: MemoryScope::Messages,
+            agent: Some("agent-a".to_string()),
+            tag: Some("project:acme".parse().unwrap()),
+            limit: Limit::clamped(Some(500), 20, 1..=50),
+        };
+        store.search(query.clone()).await.unwrap();
+        let filter = BrowseFilter {
+            conversation_id: Some(Uuid::parse_str("00000000-0000-4000-8000-000000000009").unwrap()),
+            agent: Some("agent-a".to_string()),
+            role: Some(Role::User),
+            tool_name: Some("shell".to_string()),
+            tag: Some("project:acme".parse().unwrap()),
+            window: Some(BrowseWindow::Last7d),
+            since: None,
+            before: None,
+            include_tools: false,
+            order: MemoryBrowseOrder::Asc,
+            limit: Limit::clamped(Some(200), 50, 1..=200),
+        };
+        store.browse(filter.clone()).await.unwrap();
+        let requests = store.requests().await;
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests.first(), Some(&MemoryRequest::Search(query)));
+        assert_eq!(requests.get(1), Some(&MemoryRequest::Browse(filter)));
+    });
+}
+
+#[test]
+fn fake_memory_store_records_tag_read_requests() {
+    block_on(async {
+        let store = FakeMemoryStore::default();
+        let list = TagListQuery {
+            entity_type: Some(TagEntityType::Conversation),
+            entity_id: Some(Uuid::parse_str("00000000-0000-4000-8000-000000000002").unwrap()),
+            key: Some("project".to_string()),
+            value: Some("acme".to_string()),
+            states: vec![TagState::Suggested],
+            limit: Limit::clamped(None, 200, 1..=200),
+        };
+        store.list_tags(list.clone()).await.unwrap();
+        let limit = Limit::clamped(None, 50, 1..=200);
+        store.pending_tags(limit).await.unwrap();
+        let counts = TagCountsQuery {
+            key: Some("project".to_string()),
+            limit: Limit::clamped(None, 200, 1..=200),
+        };
+        store.tag_counts(counts.clone()).await.unwrap();
+        let taxonomy = TagTaxonomyQuery {
+            key: Some("project".to_string()),
+            state: Some(TagState::Accepted),
+            limit: Limit::clamped(None, 500, 1..=500),
+        };
+        store.list_tag_taxonomy(taxonomy.clone()).await.unwrap();
+        let requests = store.requests().await;
+        assert_eq!(requests.len(), 4);
+        assert_eq!(requests.first(), Some(&MemoryRequest::ListTags(list)));
+        assert_eq!(requests.get(1), Some(&MemoryRequest::PendingTags(limit)));
+        assert_eq!(requests.get(2), Some(&MemoryRequest::TagCounts(counts)));
+        assert_eq!(requests.get(3), Some(&MemoryRequest::TagTaxonomy(taxonomy)));
+    });
+}
+
+#[test]
+fn fake_memory_store_records_tag_write_requests() {
+    block_on(async {
+        let store = FakeMemoryStore::default();
+        let ids = vec![
+            TagId::from_str("00000000-0000-4000-8000-000000000003").unwrap(),
+            TagId::from_str("00000000-0000-4000-8000-000000000004").unwrap(),
+        ];
+        store
+            .decide_tags(ids.clone(), TagDecision::Reject, Some("owner".to_string()))
+            .await
+            .unwrap();
+        let add = TagAdd {
+            entity_type: TagEntityType::Conversation,
+            entity: TagEntity::SessionKey("claude-code:abc".to_string()),
+            agent: Some("agent-a".to_string()),
+            tag: "project:acme".parse().unwrap(),
+            display: Some("Acme".to_string()),
+            reason: None,
+            decided_by: None,
+        };
+        let added = store.add_tag(add.clone()).await.unwrap();
+        assert_eq!(added.key, "project");
+        assert_eq!(added.value, "acme");
+        assert_eq!(added.state, TagState::Accepted);
+        let lookup = TagLookup {
+            session_keys: vec!["claude-code:abc".to_string()],
+            states: vec![TagState::Accepted],
+        };
+        store.lookup_tags(lookup.clone()).await.unwrap();
+        let upsert = TagTaxonomyUpsert {
+            key: "project".to_string(),
+            value: "acme".to_string(),
+            display: None,
+            parent_value: Some("clients".to_string()),
+            aliases: vec!["acme-corp".to_string()],
+            reason: None,
+        };
+        let entry = store.upsert_tag_taxonomy(upsert.clone()).await.unwrap();
+        assert_eq!(entry.parent_value.as_deref(), Some("clients"));
+        let decision = TagTaxonomyDecision {
+            entries: vec![TagEntryPair {
+                key: "project".to_string(),
+                value: "acme".to_string(),
+            }],
+            decision: TagDecision::Accept,
+            decided_by: None,
+        };
+        store.decide_tag_taxonomy(decision.clone()).await.unwrap();
+        let merge = TagTaxonomyMerge {
+            key: "project".to_string(),
+            from: "acme-corp".to_string(),
+            into: "acme".to_string(),
+        };
+        let merged = store.merge_tag_taxonomy(merge.clone()).await.unwrap();
+        assert_eq!(merged.into, "acme");
+        let requests = store.requests().await;
+        assert_eq!(requests.len(), 6);
+        assert_eq!(
+            requests.first(),
+            Some(&MemoryRequest::DecideTags {
+                ids,
+                decision: TagDecision::Reject,
+                decided_by: Some("owner".to_string()),
+            })
+        );
+        assert_eq!(requests.get(1), Some(&MemoryRequest::AddTag(add)));
+        assert_eq!(requests.get(2), Some(&MemoryRequest::LookupTags(lookup)));
+        assert_eq!(
+            requests.get(3),
+            Some(&MemoryRequest::UpsertTagTaxonomy(upsert))
+        );
+        assert_eq!(
+            requests.get(4),
+            Some(&MemoryRequest::DecideTagTaxonomy(decision))
+        );
+        assert_eq!(
+            requests.get(5),
+            Some(&MemoryRequest::MergeTagTaxonomy(merge))
+        );
+    });
+}
+
+#[test]
+fn fake_memory_store_records_tag_removal_decisions() {
+    block_on(async {
+        let store = FakeMemoryStore::default();
+        let ids = vec![
+            TagId::from_str("00000000-0000-4000-8000-000000000005").unwrap(),
+            TagId::from_str("00000000-0000-4000-8000-000000000006").unwrap(),
+        ];
+        let changed = store
+            .decide_tag_removals(ids.clone(), TagDecision::Accept, Some("owner".to_string()))
+            .await
+            .unwrap();
+        assert_eq!(changed, 0);
+        let requests = store.requests().await;
+        assert_eq!(
+            requests,
+            vec![MemoryRequest::DecideTagRemovals {
+                ids,
+                decision: TagDecision::Accept,
+                decided_by: Some("owner".to_string()),
+            }]
+        );
     });
 }
 

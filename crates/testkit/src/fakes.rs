@@ -13,12 +13,6 @@ use kernel::harness::SessionEvent;
 use kernel::harness::SessionOption;
 use kernel::harness::SessionSpec;
 use kernel::harness::TurnInput;
-use kernel::memory::BrowseFilter;
-use kernel::memory::MemoryStore;
-use kernel::memory::MemoryStoreError;
-use kernel::memory::SearchQuery;
-use kernel::memory::TagAction;
-use kernel::memory::TagOutcome;
 use kernel::model::Embedding;
 use kernel::model::ModelChunk;
 use kernel::model::ModelProvider;
@@ -42,107 +36,9 @@ use kernel::transcript::TranscriptReaderError;
 use kernel::transcript::Turn;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::Receiver;
-use wire::gateway::memory::MemoryStatsResponse;
 use wire::harness::ApprovalDecision;
-use wire::memory::MemoryEntry;
-use wire::memory::MemorySearchResult;
 use wire::session_id::SessionId;
 use wire::stream::LlmResponse;
-
-#[derive(Debug, Default)]
-pub struct FakeMemoryStore {
-    entries: Mutex<Vec<MemoryEntry>>,
-}
-
-#[async_trait]
-impl MemoryStore for FakeMemoryStore {
-    async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
-        let count = u64::try_from(batch.len()).unwrap_or(u64::MAX);
-        self.entries.lock().await.extend(batch);
-        Ok(count)
-    }
-
-    async fn search(
-        &self,
-        query: SearchQuery,
-    ) -> Result<Vec<MemorySearchResult>, MemoryStoreError> {
-        let entries = self.entries.lock().await;
-        Ok(entries
-            .iter()
-            .filter(|e| e.content.contains(query.text.trim()))
-            .map(|e| MemorySearchResult {
-                id: e.id.clone().unwrap_or_default(),
-                content: e.content.clone(),
-                role: e.role,
-                agent: e.agent.clone(),
-                relevance_score: 1.0,
-                created_at: e.created_at.unwrap_or_default(),
-            })
-            .take(usize::try_from(query.limit).unwrap_or(0))
-            .collect())
-    }
-
-    async fn browse(&self, filter: BrowseFilter) -> Result<Vec<MemoryEntry>, MemoryStoreError> {
-        let entries = self.entries.lock().await;
-        Ok(entries
-            .iter()
-            .filter(|e| {
-                filter
-                    .session_key
-                    .as_deref()
-                    .is_none_or(|k| e.session_id == k)
-            })
-            .take(usize::try_from(filter.limit).unwrap_or(0))
-            .cloned()
-            .collect())
-    }
-
-    async fn stats(&self) -> Result<MemoryStatsResponse, MemoryStoreError> {
-        let count = u64::try_from(self.entries.lock().await.len()).unwrap_or(u64::MAX);
-        Ok(MemoryStatsResponse {
-            conversations: 1,
-            messages: count,
-            tool_calls: 0,
-            summaries: 0,
-            embed_queue_depth: 0,
-            embedded_messages: 0,
-            failed_embeddings: 0,
-            top_tools: Vec::new(),
-            recent_sessions: Vec::new(),
-        })
-    }
-
-    async fn get_full(&self, id: &str) -> Result<Option<MemoryEntry>, MemoryStoreError> {
-        Ok(self
-            .entries
-            .lock()
-            .await
-            .iter()
-            .find(|e| e.id.as_deref() == Some(id))
-            .cloned())
-    }
-
-    async fn tags(&self, _action: TagAction) -> Result<TagOutcome, MemoryStoreError> {
-        Ok(TagOutcome {
-            moved: 0,
-            dropped: 0,
-        })
-    }
-
-    async fn context(
-        &self,
-        session: &str,
-        _now: DateTime<Utc>,
-    ) -> Result<String, MemoryStoreError> {
-        let entries = self.entries.lock().await;
-        Ok(entries
-            .iter()
-            .filter(|e| e.session_id == session)
-            .map(|e| e.content.clone())
-            .collect::<Vec<_>>()
-            .join("\n"))
-    }
-}
 
 #[derive(Debug, Default)]
 pub struct FakeJobQueue {

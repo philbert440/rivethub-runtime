@@ -32,6 +32,7 @@ futures = { workspace = true }
 libtest-mimic = { workspace = true }
 similar-asserts = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "rt-multi-thread"] }
+uuid = { workspace = true }
 
 [[test]]
 name = "replay"

@@ -40,11 +40,80 @@ pub enum MemoryScope {
     Both,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MemoryBrowseOrder {
     Asc,
+    #[default]
     Desc,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    strum::Display,
+    strum::EnumString,
+    strum::EnumIter,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum BrowseWindow {
+    Today,
+    Yesterday,
+    ThisMorning,
+    ThisWeek,
+    #[serde(rename = "last_24h")]
+    #[strum(serialize = "last_24h")]
+    Last24h,
+    #[serde(rename = "last_7d")]
+    #[strum(serialize = "last_7d")]
+    Last7d,
+    #[serde(rename = "last_14d")]
+    #[strum(serialize = "last_14d")]
+    Last14d,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum BrowseWindowError {
+    #[error("Invalid window=\"\" — expected one of: {expected}")]
+    Empty { expected: String },
+    #[error(
+        "Unknown window=\"{raw}\" (normalized to \"{normalized}\"). Expected one of: {expected}"
+    )]
+    Unknown {
+        raw: String,
+        normalized: String,
+        expected: String,
+    },
+}
+
+impl BrowseWindow {
+    pub fn parse(raw: &str) -> Result<Self, BrowseWindowError> {
+        let normalized = raw.trim().to_ascii_lowercase();
+        if normalized.is_empty() {
+            return Err(BrowseWindowError::Empty {
+                expected: Self::expected(),
+            });
+        }
+        std::str::FromStr::from_str(&normalized).map_err(|_| BrowseWindowError::Unknown {
+            raw: raw.to_owned(),
+            normalized,
+            expected: Self::expected(),
+        })
+    }
+
+    fn expected() -> String {
+        <Self as strum::IntoEnumIterator>::iter()
+            .map(|window| window.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 #[serde_with::skip_serializing_none]
@@ -341,13 +410,6 @@ pub enum TagState {
     Rejected,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum TagAction {
-    Add,
-    Remove,
-}
-
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -369,13 +431,20 @@ pub struct TagWire {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PendingTagAction {
+    Add,
+    Remove,
+}
+
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingTagWire {
     #[serde(flatten)]
     pub tag: TagWire,
-    pub action: Option<TagAction>,
+    pub action: Option<PendingTagAction>,
     pub session_key: Option<String>,
     pub title: Option<String>,
     pub agent: Option<String>,
