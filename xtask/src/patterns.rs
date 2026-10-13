@@ -16,6 +16,7 @@ pub fn dylint_lints() -> &'static [&'static str] {
         "nullable",
         "opaque",
         "redundant_rename",
+        "runtime",
         "stringly",
         "strset",
         "tagfield",

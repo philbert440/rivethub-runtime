@@ -132,7 +132,8 @@ async fn run_entry(
     })
 }
 
-async fn run_replay() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn claude_hook_replays_recorded_batches() -> Result<(), Box<dyn std::error::Error>> {
     let recording = testkit::recording("capture/claude-hook/hook-ts.json");
     let session_entries = entries(&recording)?;
     let outer = tempfile::tempdir()?;
@@ -183,6 +184,7 @@ async fn run_replay() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+#[tokio::test]
 async fn malformed_payloads_exit_cleanly() -> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
     let state_dir = inner.path().to_path_buf();
@@ -200,6 +202,7 @@ async fn malformed_payloads_exit_cleanly() -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
+#[tokio::test]
 async fn missing_prompt_records_the_fallback_title() -> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
     let state_dir = inner.path().to_path_buf();
@@ -228,6 +231,7 @@ async fn missing_prompt_records_the_fallback_title() -> Result<(), Box<dyn std::
     Ok(())
 }
 
+#[tokio::test]
 async fn a_failed_log_write_does_not_fail_the_run() -> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
     let state_dir = inner.path().to_path_buf();
@@ -243,13 +247,4 @@ async fn a_failed_log_write_does_not_fail_the_run() -> Result<(), Box<dyn std::e
     assert_eq!(run.stderr, "");
     assert_eq!(transport.posts.lock().len(), 1);
     Ok(())
-}
-
-#[test]
-fn claude_hook_replays_recorded_batches() -> Result<(), Box<dyn std::error::Error>> {
-    let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(run_replay())?;
-    runtime.block_on(malformed_payloads_exit_cleanly())?;
-    runtime.block_on(missing_prompt_records_the_fallback_title())?;
-    runtime.block_on(a_failed_log_write_does_not_fail_the_run())
 }

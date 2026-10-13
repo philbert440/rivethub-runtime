@@ -23,6 +23,7 @@ mod naming;
 mod nullable;
 mod opaque;
 mod redundantrename;
+mod runtime;
 mod stringly;
 mod strset;
 mod tagfield;
@@ -52,6 +53,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         nullable::NULLABLE,
         opaque::OPAQUE,
         redundantrename::REDUNDANT_RENAME,
+        runtime::RUNTIME,
         stringly::STRINGLY,
         strset::STRSET,
         tagfield::TAGFIELD,
@@ -60,6 +62,9 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         wirepub::WIREPUB,
     ]);
 
+    lint_store.register_pre_expansion_lint_pass(Box::new(|| {
+        Box::new(runtime::RuntimeEarly::default()) as Box<dyn rustc_lint::EarlyLintPass>
+    }));
     lint_store.register_late_lint_pass(Box::new(|_| Box::new(counttype::Counttype::default())));
     lint_store.register_late_lint_pass(Box::new(|_| Box::new(customserde::Customserde::default())));
     lint_store.register_late_lint_pass(Box::new(|_| Box::new(dispatch::Dispatch::default())));
@@ -76,6 +81,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
     lint_store.register_late_lint_pass(Box::new(|_| {
         Box::new(redundantrename::RedundantRename::default())
     }));
+    lint_store.register_late_lint_pass(Box::new(|_| Box::new(runtime::RuntimeLate::default())));
     lint_store.register_late_lint_pass(Box::new(|_| Box::new(stringly::Stringly::default())));
     lint_store.register_late_lint_pass(Box::new(|_| Box::new(strset::Strset::default())));
     lint_store.register_late_lint_pass(Box::new(|_| Box::new(tagfield::Tagfield::default())));

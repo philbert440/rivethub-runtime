@@ -81,6 +81,7 @@ async fn handle_capture(
     }))
 }
 
+#[tokio::test]
 async fn http_transport_posts_and_parses() -> Result<(), Box<dyn std::error::Error>> {
     let seen: Seen = std::sync::Arc::new(Mutex::new(Vec::new()));
     let routes = axum::Router::new()
@@ -113,6 +114,7 @@ async fn http_transport_posts_and_parses() -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
+#[tokio::test]
 async fn http_transport_maps_4xx_to_client_errors() -> Result<(), Box<dyn std::error::Error>> {
     let routes = axum::Router::new().route(
         "/api/capture",
@@ -146,6 +148,7 @@ async fn http_transport_maps_4xx_to_client_errors() -> Result<(), Box<dyn std::e
     Ok(())
 }
 
+#[tokio::test]
 async fn spool_round_trip_and_dead_letters() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempfile::tempdir()?;
     let spool = capture::spool::CaptureSpool::new(dir.path().to_path_buf());
@@ -190,6 +193,7 @@ async fn spool_round_trip_and_dead_letters() -> Result<(), Box<dyn std::error::E
     Ok(())
 }
 
+#[tokio::test]
 async fn write_spools_when_the_server_fails() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempfile::tempdir()?;
     let spool = capture::spool::CaptureSpool::new(dir.path().join("spool"));
@@ -207,6 +211,7 @@ async fn write_spools_when_the_server_fails() -> Result<(), Box<dyn std::error::
     Ok(())
 }
 
+#[tokio::test]
 async fn write_replays_the_spool_first() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempfile::tempdir()?;
     let spool = capture::spool::CaptureSpool::new(dir.path().join("spool"));
@@ -222,14 +227,4 @@ async fn write_replays_the_spool_first() -> Result<(), Box<dyn std::error::Error
     let remaining = std::fs::read_dir(dir.path().join("spool"))?.count();
     assert_eq!(remaining, 0);
     Ok(())
-}
-
-#[test]
-fn spool_and_transport_behaviours() -> Result<(), Box<dyn std::error::Error>> {
-    let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(http_transport_posts_and_parses())?;
-    runtime.block_on(http_transport_maps_4xx_to_client_errors())?;
-    runtime.block_on(spool_round_trip_and_dead_letters())?;
-    runtime.block_on(write_spools_when_the_server_fails())?;
-    runtime.block_on(write_replays_the_spool_first())
 }

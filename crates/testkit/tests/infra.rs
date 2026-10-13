@@ -9,26 +9,23 @@ use testkit::rows_eq;
 use testkit::sqlite_version;
 use testkit::stub_server;
 
-#[test]
-fn stub_server_answers_router_routes() {
+#[tokio::test]
+async fn stub_server_answers_router_routes() {
     use tokio::io::AsyncReadExt as _;
     use tokio::io::AsyncWriteExt as _;
-    let runtime = tokio::runtime::Runtime::new().expect("dev test runtime");
-    runtime.block_on(async {
-        let app = Router::new().route("/ping", get(|| async { "pong" }));
-        let stub = stub_server(app).await.unwrap();
-        let mut stream = tokio::net::TcpStream::connect(stub.addr).await.unwrap();
-        stream
-            .write_all(b"GET /ping HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
-            .await
-            .unwrap();
-        let mut response = Vec::new();
-        stream.read_to_end(&mut response).await.unwrap();
-        let text = String::from_utf8_lossy(&response);
-        assert!(text.starts_with("HTTP/1.1 200 OK"), "{text}");
-        assert!(text.ends_with("pong"), "{text}");
-        stub.close().await;
-    });
+    let app = Router::new().route("/ping", get(|| async { "pong" }));
+    let stub = stub_server(app).await.unwrap();
+    let mut stream = tokio::net::TcpStream::connect(stub.addr).await.unwrap();
+    stream
+        .write_all(b"GET /ping HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .await
+        .unwrap();
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).await.unwrap();
+    let text = String::from_utf8_lossy(&response);
+    assert!(text.starts_with("HTTP/1.1 200 OK"), "{text}");
+    assert!(text.ends_with("pong"), "{text}");
+    stub.close().await;
 }
 
 #[test]

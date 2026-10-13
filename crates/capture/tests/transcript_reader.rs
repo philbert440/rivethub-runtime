@@ -27,6 +27,7 @@ fn reader(dir: &tempfile::TempDir) -> capture::transcript::ClaudeTranscriptReade
     capture::transcript::ClaudeTranscriptReader::new(dir.path().to_path_buf())
 }
 
+#[tokio::test]
 async fn sessions_list_the_recorded_store() -> Result<(), Box<dyn std::error::Error>> {
     let dir = store()?;
     let sessions = reader(&dir).sessions(dir.path()).await?;
@@ -37,6 +38,7 @@ async fn sessions_list_the_recorded_store() -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
+#[tokio::test]
 async fn read_maps_the_recorded_lines() -> Result<(), Box<dyn std::error::Error>> {
     let dir = store()?;
     let session = SessionId::from_str(&format!("claude-code:{SESSION}"))?;
@@ -81,6 +83,7 @@ async fn read_maps_the_recorded_lines() -> Result<(), Box<dyn std::error::Error>
     }
 }
 
+#[tokio::test]
 async fn tail_returns_turns_after_the_timestamp() -> Result<(), Box<dyn std::error::Error>> {
     let dir = store()?;
     let session = SessionId::from_str(&format!("claude-code:{SESSION}"))?;
@@ -96,6 +99,7 @@ async fn tail_returns_turns_after_the_timestamp() -> Result<(), Box<dyn std::err
     Ok(())
 }
 
+#[tokio::test]
 async fn unknown_sessions_read_empty() -> Result<(), Box<dyn std::error::Error>> {
     let dir = store()?;
     let session = SessionId::from_str("claude-code:44444444-4444-4444-4444-444444444444")?;
@@ -103,6 +107,7 @@ async fn unknown_sessions_read_empty() -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
+#[tokio::test]
 async fn oversized_transcripts_cut_at_a_line_boundary() -> Result<(), Box<dyn std::error::Error>> {
     let dir = store()?;
     let project = dir.path().join("projects").join("-work-big");
@@ -136,17 +141,7 @@ fn unparseable_lines_are_reported_not_dropped_silently() {
     assert_eq!(parsed.skipped.first().map(|line| line.number), Some(2));
 }
 
-#[test]
-fn transcript_reader_behaviours() -> Result<(), Box<dyn std::error::Error>> {
-    let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(sessions_list_the_recorded_store())?;
-    runtime.block_on(read_maps_the_recorded_lines())?;
-    runtime.block_on(tail_returns_turns_after_the_timestamp())?;
-    runtime.block_on(unknown_sessions_read_empty())?;
-    runtime.block_on(oversized_transcripts_cut_at_a_line_boundary())?;
-    runtime.block_on(lines_without_parseable_timestamps_are_not_turns())
-}
-
+#[tokio::test]
 async fn lines_without_parseable_timestamps_are_not_turns() -> Result<(), Box<dyn std::error::Error>>
 {
     let dir = tempfile::tempdir()?;

@@ -133,8 +133,8 @@ fn missing_cert_file_refuses_before_listen() {
     assert!(matches!(error, BindError::Io(_)));
 }
 
-#[test]
-fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
+#[tokio::test]
+async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
     assert!(is_bind_loopback("127.0.0.1"));
     assert!(is_bind_loopback("localhost"));
     assert!(is_bind_loopback("::1"));
@@ -143,158 +143,149 @@ fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
     assert!(!is_bind_loopback(""));
     assert!(!is_bind_loopback("den.example.test"));
 
-    let runtime = tokio::runtime::Runtime::new().expect("dev runtime");
-    runtime.block_on(async {
-        let free = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .expect("probe listener");
-        let port = free.local_addr().expect("addr").port();
-        drop(free);
-        let source = BindSource {
-            host: "localhost".to_string(),
-            port,
-            tls_cert: None,
-            tls_key: None,
-            tls_ca: None,
-        };
-        assert!(gateway::server::bind(&source).await.is_ok());
-        let source = BindSource {
-            host: "::1".to_string(),
-            port,
-            tls_cert: None,
-            tls_key: None,
-            tls_ca: None,
-        };
-        assert!(gateway::server::bind(&source).await.is_ok());
+    let free = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("probe listener");
+    let port = free.local_addr().expect("addr").port();
+    drop(free);
+    let source = BindSource {
+        host: "localhost".to_string(),
+        port,
+        tls_cert: None,
+        tls_key: None,
+        tls_ca: None,
+    };
+    assert!(gateway::server::bind(&source).await.is_ok());
+    let source = BindSource {
+        host: "::1".to_string(),
+        port,
+        tls_cert: None,
+        tls_key: None,
+        tls_ca: None,
+    };
+    assert!(gateway::server::bind(&source).await.is_ok());
 
-        let occupied = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .expect("occupied listener");
-        let port = occupied.local_addr().expect("addr").port();
-        let source = BindSource {
-            host: "127.0.0.1".to_string(),
-            port,
-            tls_cert: None,
-            tls_key: None,
-            tls_ca: None,
-        };
-        let error = gateway::server::bind(&source)
-            .await
-            .expect_err("port in use");
-        assert!(matches!(error, BindError::Io(io) if io.kind() == std::io::ErrorKind::AddrInUse));
-        drop(occupied);
-    });
+    let occupied = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("occupied listener");
+    let port = occupied.local_addr().expect("addr").port();
+    let source = BindSource {
+        host: "127.0.0.1".to_string(),
+        port,
+        tls_cert: None,
+        tls_key: None,
+        tls_ca: None,
+    };
+    let error = gateway::server::bind(&source)
+        .await
+        .expect_err("port in use");
+    assert!(matches!(error, BindError::Io(io) if io.kind() == std::io::ErrorKind::AddrInUse));
+    drop(occupied);
 }
 
-#[test]
-fn serve_answers_healthz_and_shuts_down_on_the_token() {
-    let runtime = tokio::runtime::Runtime::new().expect("dev runtime");
-    runtime.block_on(async {
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .expect("listener");
-        let addr = listener.local_addr().expect("addr");
-        let token = CancellationToken::new();
-        let server_token = token.clone();
-        let server = tokio::spawn(gateway::server::serve(
-            listener,
-            gateway(),
-            None,
-            server_token,
-        ));
-        let mut stream = tokio::net::TcpStream::connect(addr).await.expect("connect");
-        stream
-            .write_all(b"GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
-            .await
-            .expect("request written");
-        let mut raw = Vec::new();
-        stream.read_to_end(&mut raw).await.expect("response read");
-        let text = String::from_utf8_lossy(&raw);
-        assert!(text.starts_with("HTTP/1.1 200 OK"), "{text}");
-        assert!(text.contains("\"ok\":true"), "{text}");
-        assert!(text.contains("\"node\":\"golden-node\""), "{text}");
+#[tokio::test]
+async fn serve_answers_healthz_and_shuts_down_on_the_token() {
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("listener");
+    let addr = listener.local_addr().expect("addr");
+    let token = CancellationToken::new();
+    let server_token = token.clone();
+    let server = tokio::spawn(gateway::server::serve(
+        listener,
+        gateway(),
+        None,
+        server_token,
+    ));
+    let mut stream = tokio::net::TcpStream::connect(addr).await.expect("connect");
+    stream
+        .write_all(b"GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .await
+        .expect("request written");
+    let mut raw = Vec::new();
+    stream.read_to_end(&mut raw).await.expect("response read");
+    let text = String::from_utf8_lossy(&raw);
+    assert!(text.starts_with("HTTP/1.1 200 OK"), "{text}");
+    assert!(text.contains("\"ok\":true"), "{text}");
+    assert!(text.contains("\"node\":\"golden-node\""), "{text}");
 
-        token.cancel();
-        let outcome = tokio::time::timeout(Duration::from_secs(5), server)
-            .await
-            .expect("serve finishes after cancellation")
-            .expect("serve task");
-        assert!(outcome.is_ok());
-    });
+    token.cancel();
+    let outcome = tokio::time::timeout(Duration::from_secs(5), server)
+        .await
+        .expect("serve finishes after cancellation")
+        .expect("serve task");
+    assert!(outcome.is_ok());
 }
 
-#[test]
-fn tls_serving_answers_healthz_over_rustls() {
-    let runtime = tokio::runtime::Runtime::new().expect("dev runtime");
-    runtime.block_on(async {
-        let key_pair = rcgen::KeyPair::generate().expect("test key");
-        let params =
-            rcgen::CertificateParams::new(vec!["127.0.0.1".to_string(), "localhost".to_string()])
-                .expect("cert params");
-        let certificate = params.self_signed(&key_pair).expect("certificate");
-        let tmp = tempdir().expect("temp root");
-        let cert_path = tmp.path().join("node.crt");
-        let key_path = tmp.path().join("node.key");
-        std::fs::write(&cert_path, certificate.pem()).expect("cert written");
-        std::fs::write(&key_path, key_pair.serialize_pem()).expect("key written");
+#[tokio::test]
+async fn tls_serving_answers_healthz_over_rustls() {
+    let key_pair = rcgen::KeyPair::generate().expect("test key");
+    let params =
+        rcgen::CertificateParams::new(vec!["127.0.0.1".to_string(), "localhost".to_string()])
+            .expect("cert params");
+    let certificate = params.self_signed(&key_pair).expect("certificate");
+    let tmp = tempdir().expect("temp root");
+    let cert_path = tmp.path().join("node.crt");
+    let key_path = tmp.path().join("node.key");
+    std::fs::write(&cert_path, certificate.pem()).expect("cert written");
+    std::fs::write(&key_path, key_pair.serialize_pem()).expect("key written");
 
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .expect("listener");
-        let addr = listener.local_addr().expect("addr");
-        let token = CancellationToken::new();
-        let server_token = token.clone();
-        let tls = gateway::server::resolve_tls(&BindSource {
-            host: "127.0.0.1".to_string(),
-            port: addr.port(),
-            tls_cert: Some(cert_path),
-            tls_key: Some(key_path),
-            tls_ca: None,
-        })
-        .expect("tls resolves");
-        let server = tokio::spawn(gateway::server::serve(
-            listener,
-            gateway(),
-            tls,
-            server_token,
-        ));
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .expect("listener");
+    let addr = listener.local_addr().expect("addr");
+    let token = CancellationToken::new();
+    let server_token = token.clone();
+    let tls = gateway::server::resolve_tls(&BindSource {
+        host: "127.0.0.1".to_string(),
+        port: addr.port(),
+        tls_cert: Some(cert_path),
+        tls_key: Some(key_path),
+        tls_ca: None,
+    })
+    .expect("tls resolves");
+    let server = tokio::spawn(gateway::server::serve(
+        listener,
+        gateway(),
+        tls,
+        server_token,
+    ));
 
-        let mut roots = rustls::RootCertStore::empty();
-        roots
-            .add(certificate.der().clone())
-            .expect("self signed root");
-        let client_config = rustls::ClientConfig::builder_with_provider(Arc::new(
-            rustls::crypto::aws_lc_rs::default_provider(),
-        ))
-        .with_safe_default_protocol_versions()
-        .expect("protocol versions")
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-        let connector = tokio_rustls::TlsConnector::from(Arc::new(client_config));
-        let stream = tokio::net::TcpStream::connect(addr).await.expect("connect");
-        let mut tls_stream = connector
-            .connect("127.0.0.1".try_into().expect("server name"), stream)
-            .await
-            .expect("tls handshake");
-        tls_stream
-            .write_all(b"GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
-            .await
-            .expect("request written");
-        let mut raw = Vec::new();
-        tls_stream
-            .read_to_end(&mut raw)
-            .await
-            .expect("response read");
-        let text = String::from_utf8_lossy(&raw);
-        assert!(text.starts_with("HTTP/1.1 200 OK"), "{text}");
+    let mut roots = rustls::RootCertStore::empty();
+    roots
+        .add(certificate.der().clone())
+        .expect("self signed root");
+    let client_config = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("protocol versions")
+    .with_root_certificates(roots)
+    .with_no_client_auth();
+    let connector = tokio_rustls::TlsConnector::from(Arc::new(client_config));
+    let stream = tokio::net::TcpStream::connect(addr).await.expect("connect");
+    let mut tls_stream = connector
+        .connect("127.0.0.1".try_into().expect("server name"), stream)
+        .await
+        .expect("tls handshake");
+    tls_stream
+        .write_all(b"GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .await
+        .expect("request written");
+    let mut raw = Vec::new();
+    tls_stream
+        .read_to_end(&mut raw)
+        .await
+        .expect("response read");
+    let text = String::from_utf8_lossy(&raw);
+    assert!(text.starts_with("HTTP/1.1 200 OK"), "{text}");
 
-        token.cancel();
-        let outcome = tokio::time::timeout(Duration::from_secs(5), server)
-            .await
-            .expect("serve finishes after cancellation")
-            .expect("serve task");
-        assert!(outcome.is_ok());
-    });
+    token.cancel();
+    let outcome = tokio::time::timeout(Duration::from_secs(5), server)
+        .await
+        .expect("serve finishes after cancellation")
+        .expect("serve task");
+    assert!(outcome.is_ok());
 }
 
 #[test]

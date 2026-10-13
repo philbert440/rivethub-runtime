@@ -21,10 +21,6 @@ fn main() -> ExitCode {
     exit.code()
 }
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "rivethub is the composition root; building the process's one tokio runtime is sanctioned here (RUNTIME)"
-)]
 fn build_runtime() -> std::io::Result<tokio::runtime::Runtime> {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()

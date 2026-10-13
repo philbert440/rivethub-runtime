@@ -67,9 +67,9 @@ fn transcript_tool_input_keeps_source_order() {
     );
 }
 
-#[test]
-fn occurrence_count_spans_hook_and_transcript_spellings() -> Result<(), Box<dyn std::error::Error>>
-{
+#[tokio::test]
+async fn occurrence_count_spans_hook_and_transcript_spellings()
+-> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
     let state_dir = inner.path().to_path_buf();
     let transcript_path = inner.path().join("transcript.jsonl");
@@ -85,8 +85,7 @@ fn occurrence_count_spans_hook_and_transcript_spellings() -> Result<(), Box<dyn 
     );
 
     let now: DateTime<Utc> = NOW_TEXT.parse()?;
-    let runtime = tokio::runtime::Runtime::new()?;
-    let run = runtime.block_on(hook.run(&stdin, now, "1791656243919-30e4c5d70"));
+    let run = hook.run(&stdin, now, "1791656243919-30e4c5d70").await;
     assert_eq!(run.exit, 0, "{}", run.stderr);
     assert_eq!(run.stderr, "");
 

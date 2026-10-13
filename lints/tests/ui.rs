@@ -64,6 +64,26 @@ fn redundantrename_pass() {
 }
 
 #[test]
+fn runtime() {
+    dylint_testing::ui_test(env!("CARGO_PKG_NAME"), "ui/runtime");
+}
+
+#[test]
+fn runtime_rivethub_main_tokio_attr() {
+    dylint_testing::ui_test_example(env!("CARGO_PKG_NAME"), "main");
+}
+
+#[test]
+fn runtime_tokio_main_library() {
+    dylint_testing::ui_test_example(env!("CARGO_PKG_NAME"), "tokiofail");
+}
+
+#[test]
+fn runtime_tokio_test_not_flagged() {
+    dylint_testing::ui_test_example(env!("CARGO_PKG_NAME"), "tokiotest");
+}
+
+#[test]
 fn strset() {
     dylint_testing::ui_test(env!("CARGO_PKG_NAME"), "ui/strset");
 }

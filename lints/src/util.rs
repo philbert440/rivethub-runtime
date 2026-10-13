@@ -1,30 +1,56 @@
-use rustc_attr_ir::Attribute;
+use rustc_attr_ir::{Attribute, AttributeKind, CfgEntry};
 use rustc_hir::{
     GenericArg, GenericArgs, HirId, QPath, Ty, TyKind,
     def::{DefKind, Res},
 };
 use rustc_lint::LateContext;
+use rustc_session::Session;
 use rustc_span::{Span, Symbol, def_id::DefId, def_id::LOCAL_CRATE, sym};
+use std::ffi::OsStr;
+use std::path::Path;
 
 pub fn crate_name(cx: &LateContext<'_>) -> String {
     cx.tcx.crate_name(LOCAL_CRATE).to_string()
+}
+
+pub fn sess_crate_name(sess: &Session) -> String {
+    sess.opts.crate_name.clone().unwrap_or_default()
 }
 
 pub fn symbol(name: &str) -> Symbol {
     Symbol::intern(name)
 }
 
-pub fn file_path(cx: &LateContext<'_>, span: Span) -> Option<String> {
-    match cx.tcx.sess.source_map().span_to_filename(span) {
-        rustc_span::FileName::Real(path) => {
-            Some(path.local_path()?.display().to_string())
-        }
+fn sess_file_path(sess: &Session, span: Span) -> Option<String> {
+    match sess.source_map().span_to_filename(span) {
+        rustc_span::FileName::Real(path) => Some(path.local_path()?.display().to_string()),
         _ => None,
     }
 }
 
+pub fn file_path(cx: &LateContext<'_>, span: Span) -> Option<String> {
+    sess_file_path(cx.tcx.sess, span)
+}
+
+fn is_main_file(path: &str) -> bool {
+    Path::new(path).file_name() == Some(OsStr::new("main.rs"))
+}
+
 pub fn in_test_file(cx: &LateContext<'_>, span: Span) -> bool {
     file_path(cx, span).is_some_and(|path| path.contains("/tests/"))
+}
+
+pub fn in_test_file_sess(sess: &Session, span: Span) -> bool {
+    sess_file_path(sess, span).is_some_and(|path| path.contains("/tests/"))
+}
+
+pub fn in_rivethub_main(cx: &LateContext<'_>, span: Span) -> bool {
+    crate_name(cx) == "rivethub" && file_path(cx, span).is_some_and(|path| is_main_file(&path))
+}
+
+pub fn in_rivethub_main_sess(sess: &Session, span: Span) -> bool {
+    sess_crate_name(sess) == "rivethub"
+        && sess_file_path(sess, span).is_some_and(|path| is_main_file(&path))
 }
 
 pub fn in_cfg_test(cx: &LateContext<'_>, hir_id: HirId) -> bool {
@@ -38,10 +64,25 @@ pub fn in_test_code(cx: &LateContext<'_>, hir_id: HirId, span: Span) -> bool {
 }
 
 fn is_cfg_test(attr: &Attribute) -> bool {
+    if let Attribute::Parsed(AttributeKind::CfgTrace(cfgs)) = attr {
+        return cfgs.iter().any(|(entry, _)| cfg_entry_is_test(entry));
+    }
     attr.has_name(sym::cfg)
         && attr
             .meta_item_list()
             .is_some_and(|list| list.iter().any(|item| item.ident().map(|i| i.name) == Some(sym::test)))
+}
+
+fn cfg_entry_is_test(entry: &CfgEntry) -> bool {
+    match entry {
+        CfgEntry::NameValue {
+            name,
+            value: None,
+            span: _,
+        } => *name == sym::test,
+        CfgEntry::All(subs, _) | CfgEntry::Any(subs, _) => subs.iter().any(cfg_entry_is_test),
+        _ => false,
+    }
 }
 
 pub fn has_pub_keyword(cx: &LateContext<'_>, vis_span: Span) -> bool {

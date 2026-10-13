@@ -106,7 +106,7 @@ fn compare(actual: &[String], recorded: &[(String, String)], label: &str) -> Vec
 
 const NOW_TEXT: &str = "2026-10-10T12:00:09.000Z";
 
-async fn run_case(
+async fn writer_replay_case(
     name: &str,
     max_chunk_bytes: usize,
     redaction: Option<capture::redaction::Redaction>,
@@ -158,14 +158,17 @@ async fn run_case(
     }
 }
 
-#[test]
-fn writer_replay_cases() -> Result<(), Box<dyn std::error::Error>> {
-    let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(run_case("single", 768 * 1024, None))?;
-    runtime.block_on(run_case("numbers_and_keys", 768 * 1024, None))?;
-    runtime.block_on(run_case("surrogate_cap", 768 * 1024, None))?;
-    runtime.block_on(run_case("finalize_multi_chunk", 24576, None))?;
-    runtime.block_on(run_case("elide_tool_args", 32768, None))?;
+#[tokio::test]
+async fn writer_replays_recorded_batches() -> Result<(), Box<dyn std::error::Error>> {
+    writer_replay_case("single", 768 * 1024, None).await?;
+    writer_replay_case("numbers_and_keys", 768 * 1024, None).await?;
+    writer_replay_case("surrogate_cap", 768 * 1024, None).await?;
+    writer_replay_case("finalize_multi_chunk", 24576, None).await?;
+    writer_replay_case("elide_tool_args", 32768, None).await
+}
+
+#[tokio::test]
+async fn writer_replays_the_redacted_batch() -> Result<(), Box<dyn std::error::Error>> {
     let env = config::Environment::default();
     let settings = config::RedactionSettings {
         enabled: true,
@@ -174,5 +177,5 @@ fn writer_replay_cases() -> Result<(), Box<dyn std::error::Error>> {
     };
     let redaction =
         capture::redaction::resolve(Some(settings), &env).ok_or("redaction should resolve")?;
-    runtime.block_on(run_case("redaction", 768 * 1024, Some(redaction)))
+    writer_replay_case("redaction", 768 * 1024, Some(redaction)).await
 }

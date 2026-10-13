@@ -32,7 +32,7 @@ wire = { workspace = true }
 futures = { workspace = true }
 libtest-mimic = { workspace = true }
 similar-asserts = { workspace = true }
-tokio = { workspace = true, features = ["io-util", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["io-util", "rt-multi-thread", "macros"] }
 uuid = { workspace = true }
 
 [[test]]

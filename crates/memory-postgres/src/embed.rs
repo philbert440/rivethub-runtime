@@ -330,10 +330,6 @@ impl crate::PostgresMemory {
 
 #[cfg(test)]
 mod tests {
-    #![expect(
-        clippy::disallowed_methods,
-        reason = "the unit tests build current-thread runtimes via #[tokio::test] to drive the paused tokio clock"
-    )]
     use super::*;
     use testkit::FakeProvider;
     use testkit::Script;

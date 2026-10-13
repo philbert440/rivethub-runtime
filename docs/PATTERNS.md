@@ -96,9 +96,8 @@ renames never match — `golden_path` and `NetworkGoldenPath` pass); xtask `NAMI
 
 ## RUNTIME
 Anti-pattern: a library building a tokio runtime or using `#[tokio::main]`. Pattern: libraries expose `async fn`; only the
-`rivethub` binary builds the runtime. Check: clippy `disallowed-methods` (`tokio::runtime::Builder::new_*`),
-`disallowed-macros` (`tokio::main`); the binary's runtime-build site carries
-`#[expect(lint, reason = "…")]` when it lands.
+`rivethub` binary builds the runtime. Check: dylint `runtime` (a runtime build — `Builder::new_multi_thread`,
+`new_current_thread`, `Runtime::new`, `#[tokio::main]` — outside test code and outside the `rivethub` binary's `main.rs`).
 
 ## STDLOCK
 Anti-pattern: `std::sync::Mutex` / `RwLock`. Pattern: `parking_lot` for short critical sections never held across `.await`;
