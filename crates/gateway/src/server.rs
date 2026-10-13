@@ -1,24 +1,45 @@
+use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
-use std::path::Path;
 use std::path::PathBuf;
+use std::pin::Pin;
+use std::pin::pin;
 use std::sync::Arc;
+use std::task::Context;
+use std::task::Poll;
+use std::time::Duration;
 
-use rustls::RootCertStore;
-use rustls::ServerConfig;
-use rustls::pki_types::CertificateDer;
-use rustls::pki_types::PrivateKeyDer;
-use rustls::pki_types::pem::PemObject;
-use rustls::server::WebPkiClientVerifier;
+use axum::Router;
+use axum::extract::ConnectInfo;
+use axum::http::StatusCode;
+use http_body::Frame;
+use http_body::SizeHint;
+use hyper::Request;
+use hyper::Response;
+use hyper::body::Incoming;
+use hyper::server::conn::http1;
+use hyper_util::rt::TokioIo;
+use hyper_util::rt::TokioTimer;
+use hyper_util::service::TowerToHyperService;
+use parking_lot::Mutex;
 use thiserror::Error;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
+use tokio::io::ReadBuf;
 use tokio::net::TcpListener;
+use tokio::net::TcpStream;
+use tokio::sync::watch;
 use tokio_rustls::TlsAcceptor;
-use tokio_rustls::server::TlsStream;
+use tokio_util::either::Either;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 use crate::Gateway;
+use crate::tls::TlsError;
+use crate::tls::TlsPaths;
+use crate::tls::tls_config;
 
-use axum::serve::ListenerExt;
+const ACCEPT_BACKOFF: Duration = Duration::from_millis(50);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindSource {
@@ -54,13 +75,6 @@ impl BindSource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TlsPaths {
-    pub cert: PathBuf,
-    pub key: PathBuf,
-    pub ca: Option<PathBuf>,
-}
-
 #[derive(Debug, Error)]
 pub enum BindError {
     #[error(
@@ -76,43 +90,46 @@ pub enum BindError {
     Io(#[from] io::Error),
 }
 
+#[derive(Debug, Error)]
+pub enum ServeError {
+    #[error(transparent)]
+    Tls(#[from] TlsError),
+    #[error(transparent)]
+    Io(#[from] io::Error),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServeOptions {
+    pub header_read_timeout: Duration,
+    pub request_timeout: Duration,
+    pub keep_alive_idle_timeout: Duration,
+    pub tls_handshake_timeout: Duration,
+}
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        manualderive,
+        reason = "the defaults are the Node 22 server values, not the derive's zeros"
+    )
+)]
+impl Default for ServeOptions {
+    fn default() -> Self {
+        Self {
+            header_read_timeout: Duration::from_secs(60),
+            request_timeout: Duration::from_secs(300),
+            keep_alive_idle_timeout: Duration::from_secs(5),
+            tls_handshake_timeout: Duration::from_secs(120),
+        }
+    }
+}
+
 #[must_use]
 pub fn is_bind_loopback(host: &str) -> bool {
     matches!(
         host.trim().to_ascii_lowercase().as_str(),
         "127.0.0.1" | "::1" | "localhost" | "::ffff:127.0.0.1"
     )
-}
-
-fn non_empty(path: Option<&PathBuf>) -> Option<&Path> {
-    path.filter(|path| !path.as_os_str().is_empty())
-        .map(Path::new)
-}
-
-pub fn resolve_tls(source: &BindSource) -> Result<Option<TlsPaths>, BindError> {
-    let (Some(cert), Some(key)) = (
-        non_empty(source.tls_cert.as_ref()),
-        non_empty(source.tls_key.as_ref()),
-    ) else {
-        if is_bind_loopback(&source.host) {
-            return Ok(None);
-        }
-        return Err(BindError::TlsRequired {
-            host: source.host.clone(),
-        });
-    };
-    std::fs::metadata(cert)?;
-    std::fs::metadata(key)?;
-    if let Some(ca) = &source.tls_ca
-        && !ca.is_file()
-    {
-        return Err(BindError::CaMissing { path: ca.clone() });
-    }
-    Ok(Some(TlsPaths {
-        cert: cert.to_path_buf(),
-        key: key.to_path_buf(),
-        ca: source.tls_ca.clone(),
-    }))
 }
 
 pub async fn bind(source: &BindSource) -> Result<TcpListener, BindError> {
@@ -124,97 +141,420 @@ pub async fn serve(
     gateway: Arc<Gateway>,
     tls: Option<TlsPaths>,
     shutdown: CancellationToken,
-) -> io::Result<()> {
-    let app = gateway.router(tls.is_some());
-    match tls {
-        Some(paths) => {
-            let config = Arc::new(tls_config(&paths)?);
-            let listener = TlsListener {
-                inner: listener,
-                acceptor: TlsAcceptor::from(config),
-            }
-            .tap_io(|_| {});
-            axum::serve(
-                listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .with_graceful_shutdown(shutdown.cancelled_owned())
-            .await
-        }
-        None => {
-            axum::serve(
-                listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .with_graceful_shutdown(shutdown.cancelled_owned())
-            .await
-        }
-    }
+) -> Result<(), ServeError> {
+    serve_with(listener, gateway, tls, shutdown, ServeOptions::default()).await
 }
 
-struct TlsListener {
-    inner: TcpListener,
-    acceptor: TlsAcceptor,
+pub async fn serve_with(
+    listener: TcpListener,
+    gateway: Arc<Gateway>,
+    tls: Option<TlsPaths>,
+    shutdown: CancellationToken,
+    options: ServeOptions,
+) -> Result<(), ServeError> {
+    serve_router_with(
+        listener,
+        gateway.router(tls.is_some()),
+        tls,
+        shutdown,
+        options,
+    )
+    .await
 }
 
-impl axum::serve::Listener for TlsListener {
-    type Io = TlsStream<tokio::net::TcpStream>;
-    type Addr = SocketAddr;
-
-    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
-        loop {
-            let (stream, addr) =
-                <TcpListener as axum::serve::Listener>::accept(&mut self.inner).await;
-            match self.acceptor.accept(stream).await {
-                Ok(tls) => return (tls, addr),
+pub async fn serve_router_with(
+    listener: TcpListener,
+    router: Router,
+    tls: Option<TlsPaths>,
+    shutdown: CancellationToken,
+    options: ServeOptions,
+) -> Result<(), ServeError> {
+    let acceptor = match tls {
+        Some(paths) => Some(TlsAcceptor::from(Arc::new(tls_config(&paths)?))),
+        None => None,
+    };
+    let serving = Serving {
+        options,
+        router,
+        acceptor,
+        shutdown: shutdown.clone(),
+    };
+    let tracker = TaskTracker::new();
+    loop {
+        tokio::select! {
+            () = shutdown.cancelled() => break,
+            accepted = listener.accept() => match accepted {
+                Ok((tcp, remote)) => {
+                    if let Err(error) = tcp.set_nodelay(true) {
+                        tracing::debug!("tcp nodelay failed for {remote}: {error}");
+                    }
+                    tracker.spawn(serving.clone().run(tcp, remote));
+                }
                 Err(error) => {
-                    tracing::warn!("tls handshake from {addr} failed: {error}");
+                    tracing::warn!("gateway accept failed: {error}");
+                    tokio::time::sleep(ACCEPT_BACKOFF).await;
                 }
             }
         }
     }
+    drop(listener);
+    tracker.close();
+    tracker.wait().await;
+    Ok(())
+}
 
-    fn local_addr(&self) -> io::Result<Self::Addr> {
-        self.inner.local_addr()
+#[derive(Clone)]
+struct Serving {
+    options: ServeOptions,
+    router: Router,
+    acceptor: Option<TlsAcceptor>,
+    shutdown: CancellationToken,
+}
+
+impl Serving {
+    async fn run(self, tcp: TcpStream, remote: SocketAddr) {
+        let stream = match self.acceptor {
+            Some(acceptor) => {
+                let handshake =
+                    tokio::time::timeout(self.options.tls_handshake_timeout, acceptor.accept(tcp));
+                tokio::pin!(handshake);
+                tokio::select! {
+                    outcome = &mut handshake => match outcome {
+                        Ok(Ok(tls)) => Either::Right(tls),
+                        Ok(Err(error)) => {
+                            tracing::debug!("tls handshake from {remote} failed: {error}");
+                            return;
+                        }
+                        Err(_) => {
+                            tracing::debug!("tls handshake from {remote} timed out");
+                            return;
+                        }
+                    },
+                    () = self.shutdown.cancelled() => return,
+                }
+            }
+            None => Either::Left(tcp),
+        };
+        let keep_alive = KeepAliveGate::new(self.options.keep_alive_idle_timeout);
+        let clock = RequestClock::default();
+        let socket_gone = CancellationToken::new();
+        let service = TowerToHyperService::new(GatewayService {
+            router: self.router,
+            remote,
+            keep_alive: keep_alive.clone(),
+            clock: clock.clone(),
+            request_timeout: self.options.request_timeout,
+        });
+        let mut builder = http1::Builder::new();
+        builder
+            .timer(TokioTimer::new())
+            .header_read_timeout(self.options.header_read_timeout);
+        {
+            let mut connection = pin!(
+                builder
+                    .serve_connection(
+                        TokioIo::new(ClientActivity {
+                            inner: stream,
+                            keep_alive: keep_alive.clone(),
+                            clock,
+                            socket_gone: socket_gone.clone(),
+                        }),
+                        service,
+                    )
+                    .with_upgrades()
+            );
+            let idle = keep_alive_watchdog(keep_alive.receiver());
+            let mut idle = pin!(idle);
+            tokio::select! {
+                outcome = connection.as_mut() => {
+                    if let Err(error) = outcome {
+                        tracing::debug!("connection from {remote} ended: {error}");
+                    }
+                }
+                () = idle.as_mut() => {
+                    tracing::debug!("closing idle keep-alive connection from {remote}");
+                }
+                () = self.shutdown.cancelled() => {
+                    connection.as_mut().graceful_shutdown();
+                    if let Err(error) = connection.as_mut().await {
+                        tracing::debug!("connection from {remote} ended: {error}");
+                    }
+                }
+            }
+        }
+        socket_gone.cancelled().await;
     }
 }
 
-fn tls_config(paths: &TlsPaths) -> io::Result<ServerConfig> {
-    let certs = load_certs(&paths.cert)?;
-    let key = load_key(&paths.key)?;
-    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
-    let builder = ServerConfig::builder_with_provider(provider.clone())
-        .with_safe_default_protocol_versions()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    let with_certs = match &paths.ca {
-        Some(ca) => {
-            let mut roots = RootCertStore::empty();
-            for cert in load_certs(ca)? {
-                roots
-                    .add(cert)
-                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-            }
-            let verifier = WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider)
-                .build()
-                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-            builder.with_client_cert_verifier(verifier)
+#[derive(Clone)]
+struct GatewayService {
+    router: Router,
+    remote: SocketAddr,
+    keep_alive: KeepAliveGate,
+    clock: RequestClock,
+    request_timeout: Duration,
+}
+
+impl tower::Service<Request<Incoming>> for GatewayService {
+    type Response = Response<KeepAliveBody>;
+    type Error = std::convert::Infallible;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, mut request: Request<Incoming>) -> Self::Future {
+        self.keep_alive.disarm();
+        request.extensions_mut().insert(ConnectInfo(self.remote));
+        let start = self.clock.start();
+        let request = request.map(|body| DeadlineBody::new(body, start, self.request_timeout));
+        let routed = self.router.call(request);
+        let keep_alive = self.keep_alive.clone();
+        let clock = self.clock.clone();
+        Box::pin(async move {
+            let response = routed.await?;
+            let arm = if response.status() == StatusCode::SWITCHING_PROTOCOLS {
+                None
+            } else {
+                Some(keep_alive)
+            };
+            Ok(response.map(|body| KeepAliveBody {
+                inner: body,
+                keep_alive: arm,
+                clock,
+            }))
+        })
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("request did not finish within the deadline")]
+pub struct RequestDeadlineExceeded;
+
+struct DeadlineBody {
+    inner: Pin<Box<Incoming>>,
+    expiry: Pin<Box<tokio::time::Sleep>>,
+}
+
+impl DeadlineBody {
+    fn new(inner: Incoming, start: Option<tokio::time::Instant>, timeout: Duration) -> Self {
+        let at = start.unwrap_or_else(tokio::time::Instant::now) + timeout;
+        Self {
+            inner: Box::pin(inner),
+            expiry: Box::pin(tokio::time::sleep_until(at)),
         }
-        None => builder.with_no_client_auth(),
-    };
-    with_certs
-        .with_single_cert(certs, key)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+    }
 }
 
-fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
-    let certs = CertificateDer::pem_file_iter(path)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    Ok(certs)
+impl http_body::Body for DeadlineBody {
+    type Data = axum::body::Bytes;
+    type Error = axum::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        let this = self.get_mut();
+        if this.expiry.as_mut().poll(cx).is_ready() {
+            return Poll::Ready(Some(Err(axum::Error::new(RequestDeadlineExceeded))));
+        }
+        this.inner
+            .as_mut()
+            .poll_frame(cx)
+            .map(|frame| frame.map(|result| result.map_err(axum::Error::new)))
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        self.inner.size_hint()
+    }
 }
 
-fn load_key(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
-    PrivateKeyDer::from_pem_file(path)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+struct KeepAliveBody {
+    inner: axum::body::Body,
+    keep_alive: Option<KeepAliveGate>,
+    clock: RequestClock,
+}
+
+impl http_body::Body for KeepAliveBody {
+    type Data = axum::body::Bytes;
+    type Error = axum::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        Pin::new(&mut self.get_mut().inner).poll_frame(cx)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        self.inner.size_hint()
+    }
+}
+
+impl Drop for KeepAliveBody {
+    fn drop(&mut self) {
+        self.clock.complete();
+        if let Some(keep_alive) = self.keep_alive.as_ref() {
+            keep_alive.arm();
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct RequestStart {
+    first_byte: Option<tokio::time::Instant>,
+    in_flight: bool,
+}
+
+#[derive(Clone, Default)]
+struct RequestClock(Arc<Mutex<RequestStart>>);
+
+impl RequestClock {
+    fn first_byte(&self) {
+        let mut start = self.0.lock();
+        if !start.in_flight {
+            start.first_byte = Some(tokio::time::Instant::now());
+            start.in_flight = true;
+        }
+    }
+
+    fn start(&self) -> Option<tokio::time::Instant> {
+        let mut start = self.0.lock();
+        start.in_flight = true;
+        start.first_byte.take()
+    }
+
+    fn complete(&self) {
+        let mut start = self.0.lock();
+        start.first_byte = None;
+        start.in_flight = false;
+    }
+}
+
+struct ClientActivity<S> {
+    inner: S,
+    keep_alive: KeepAliveGate,
+    clock: RequestClock,
+    socket_gone: CancellationToken,
+}
+
+impl<S> Drop for ClientActivity<S> {
+    fn drop(&mut self) {
+        self.socket_gone.cancel();
+    }
+}
+
+impl<S> AsyncRead for ClientActivity<S>
+where
+    S: AsyncRead + Unpin,
+{
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        let filled = buf.filled().len();
+        let outcome = Pin::new(&mut this.inner).poll_read(cx, buf);
+        if matches!(outcome, Poll::Ready(Ok(()))) && buf.filled().len() > filled {
+            this.keep_alive.disarm();
+            this.clock.first_byte();
+        }
+        outcome
+    }
+}
+
+impl<S> AsyncWrite for ClientActivity<S>
+where
+    S: AsyncWrite + Unpin,
+{
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.get_mut().inner).poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
+    }
+}
+
+#[derive(Clone)]
+struct KeepAliveGate {
+    idle: Duration,
+    deadline: Arc<watch::Sender<Option<tokio::time::Instant>>>,
+}
+
+impl KeepAliveGate {
+    fn new(idle: Duration) -> Self {
+        Self {
+            idle,
+            deadline: Arc::new(watch::channel(None).0),
+        }
+    }
+
+    fn receiver(&self) -> watch::Receiver<Option<tokio::time::Instant>> {
+        self.deadline.subscribe()
+    }
+
+    fn arm(&self) {
+        let at = tokio::time::Instant::now() + self.idle;
+        self.deadline.send_if_modified(|armed| {
+            if armed.is_some_and(|current| current == at) {
+                false
+            } else {
+                *armed = Some(at);
+                true
+            }
+        });
+    }
+
+    fn disarm(&self) {
+        self.deadline
+            .send_if_modified(|armed| armed.take().is_some());
+    }
+}
+
+async fn keep_alive_watchdog(mut deadline: watch::Receiver<Option<tokio::time::Instant>>) {
+    loop {
+        let Some(armed) = *deadline.borrow_and_update() else {
+            if deadline.changed().await.is_err() {
+                return;
+            }
+            continue;
+        };
+        if armed <= tokio::time::Instant::now() {
+            return;
+        }
+        tokio::select! {
+            changed = deadline.changed() => {
+                if changed.is_err() {
+                    return;
+                }
+            }
+            () = tokio::time::sleep_until(armed) => {
+                if deadline
+                    .borrow_and_update()
+                    .is_some_and(|current| current <= tokio::time::Instant::now())
+                {
+                    return;
+                }
+            }
+        }
+    }
 }

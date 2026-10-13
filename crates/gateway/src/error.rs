@@ -21,6 +21,8 @@ pub enum ApiError {
     MethodNotAllowed,
     #[error("body too large")]
     BodyTooLarge,
+    #[error("request timeout")]
+    RequestTimeout,
     #[error("unauthorized")]
     Unauthorized,
     #[error("forbidden origin")]
@@ -51,6 +53,10 @@ impl ApiError {
             Self::BodyTooLarge => (
                 StatusCode::PAYLOAD_TOO_LARGE,
                 GatewayError::new("body too large"),
+            ),
+            Self::RequestTimeout => (
+                StatusCode::REQUEST_TIMEOUT,
+                GatewayError::new("request timeout"),
             ),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, GatewayError::new("unauthorized")),
             Self::ForbiddenOrigin => (StatusCode::FORBIDDEN, GatewayError::new("forbidden origin")),

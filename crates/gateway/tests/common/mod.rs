@@ -17,11 +17,25 @@ use axum::http::Request;
 use axum::http::Uri;
 use gateway::Gateway;
 use gateway::Settings;
+use kernel::memory::BrowseFilter;
+use kernel::memory::Limit;
 use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::SearchQuery;
+use kernel::memory::TagAdd;
+use kernel::memory::TagCountsQuery;
+use kernel::memory::TagDecision;
+use kernel::memory::TagId;
+use kernel::memory::TagListQuery;
+use kernel::memory::TagLookup;
+use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyQuery;
+use kernel::memory::TagTaxonomyUpsert;
 use testkit::FakeMemoryStore;
 use testkit::Request as Recorded;
 use testkit::Response;
+use tokio::sync::Semaphore;
+use tokio::sync::watch;
 use tower::ServiceExt;
 
 const HOSTNAME: &str = "gold-host";
@@ -178,6 +192,150 @@ impl MemoryStore for FailingStore {
         _merge: wire::gateway::memory::TagTaxonomyMerge,
     ) -> Result<wire::gateway::memory::TagTaxonomyMergeResult, MemoryStoreError> {
         unavailable()
+    }
+}
+
+pub struct GatedStore {
+    inner: FakeMemoryStore,
+    pub entered: watch::Sender<u64>,
+    pub release: Semaphore,
+}
+
+impl Default for GatedStore {
+    fn default() -> Self {
+        Self {
+            inner: FakeMemoryStore::default(),
+            entered: watch::channel(0).0,
+            release: Semaphore::new(0),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl MemoryStore for GatedStore {
+    async fn append(&self, batch: Vec<wire::memory::MemoryEntry>) -> Result<u64, MemoryStoreError> {
+        self.inner.append(batch).await
+    }
+
+    async fn search(
+        &self,
+        query: SearchQuery,
+    ) -> Result<Vec<wire::memory::MemorySearchResult>, MemoryStoreError> {
+        self.entered.send_modify(|count| *count += 1);
+        drop(self.release.acquire().await);
+        self.inner.search(query).await
+    }
+
+    async fn browse(
+        &self,
+        filter: BrowseFilter,
+    ) -> Result<Vec<wire::memory::MemoryEntry>, MemoryStoreError> {
+        self.inner.browse(filter).await
+    }
+
+    async fn stats(&self) -> Result<wire::gateway::memory::MemoryStatsResponse, MemoryStoreError> {
+        self.inner.stats().await
+    }
+
+    async fn get_full(
+        &self,
+        id: &str,
+    ) -> Result<Option<wire::memory::MemoryEntry>, MemoryStoreError> {
+        self.inner.get_full(id).await
+    }
+
+    async fn context(
+        &self,
+        session: &str,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<String, MemoryStoreError> {
+        self.inner.context(session, now).await
+    }
+
+    async fn list_tags(
+        &self,
+        query: TagListQuery,
+    ) -> Result<Vec<wire::gateway::memory::TagWire>, MemoryStoreError> {
+        self.inner.list_tags(query).await
+    }
+
+    async fn pending_tags(
+        &self,
+        limit: Limit,
+    ) -> Result<Vec<wire::gateway::memory::PendingTagWire>, MemoryStoreError> {
+        self.inner.pending_tags(limit).await
+    }
+
+    async fn tag_counts(
+        &self,
+        query: TagCountsQuery,
+    ) -> Result<Vec<wire::gateway::memory::TagCount>, MemoryStoreError> {
+        self.inner.tag_counts(query).await
+    }
+
+    async fn list_tag_taxonomy(
+        &self,
+        query: TagTaxonomyQuery,
+    ) -> Result<Vec<wire::gateway::memory::TagTaxonomyEntry>, MemoryStoreError> {
+        self.inner.list_tag_taxonomy(query).await
+    }
+
+    async fn decide_tags(
+        &self,
+        ids: Vec<TagId>,
+        decision: TagDecision,
+        decided_by: Option<String>,
+    ) -> Result<u64, MemoryStoreError> {
+        self.inner.decide_tags(ids, decision, decided_by).await
+    }
+
+    async fn decide_tag_removals(
+        &self,
+        ids: Vec<TagId>,
+        decision: TagDecision,
+        decided_by: Option<String>,
+    ) -> Result<u64, MemoryStoreError> {
+        self.inner
+            .decide_tag_removals(ids, decision, decided_by)
+            .await
+    }
+
+    async fn add_tag(
+        &self,
+        add: TagAdd,
+    ) -> Result<wire::gateway::memory::TagWire, MemoryStoreError> {
+        self.inner.add_tag(add).await
+    }
+
+    async fn lookup_tags(
+        &self,
+        lookup: TagLookup,
+    ) -> Result<
+        std::collections::BTreeMap<String, Vec<wire::gateway::memory::TagWire>>,
+        MemoryStoreError,
+    > {
+        self.inner.lookup_tags(lookup).await
+    }
+
+    async fn upsert_tag_taxonomy(
+        &self,
+        upsert: TagTaxonomyUpsert,
+    ) -> Result<wire::gateway::memory::TagTaxonomyEntry, MemoryStoreError> {
+        self.inner.upsert_tag_taxonomy(upsert).await
+    }
+
+    async fn decide_tag_taxonomy(
+        &self,
+        decision: TagTaxonomyDecision,
+    ) -> Result<u64, MemoryStoreError> {
+        self.inner.decide_tag_taxonomy(decision).await
+    }
+
+    async fn merge_tag_taxonomy(
+        &self,
+        merge: wire::gateway::memory::TagTaxonomyMerge,
+    ) -> Result<wire::gateway::memory::TagTaxonomyMergeResult, MemoryStoreError> {
+        self.inner.merge_tag_taxonomy(merge).await
     }
 }
 

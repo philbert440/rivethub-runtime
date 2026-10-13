@@ -11,6 +11,9 @@ rust-version.workspace = true
 axum = { workspace = true }
 chrono = { workspace = true }
 config = { workspace = true }
+http-body = { workspace = true }
+hyper = { workspace = true, features = ["http1", "server"] }
+hyper-util = { workspace = true }
 kernel = { workspace = true }
 parking_lot = { workspace = true }
 regex = { workspace = true }
@@ -19,7 +22,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["net", "rt", "sync"] }
+tokio = { workspace = true, features = ["net", "rt", "sync", "time"] }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
@@ -37,6 +40,7 @@ similar-asserts = { workspace = true }
 tempfile = { workspace = true }
 testkit = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "rt-multi-thread", "macros"] }
+tokio-tungstenite = { workspace = true }
 serde_yaml_ng = { workspace = true }
 
 [[test]]

@@ -28,24 +28,17 @@ const DENIAL_LOG_CAP: usize = 100;
 #[derive(Debug, Default)]
 pub(crate) struct DenialLog {
     seen: Mutex<HashSet<String>>,
-    count: Mutex<usize>,
 }
 
 impl DenialLog {
     pub(crate) fn log(&self, reason: &str) {
-        let mut seen = self.seen.lock();
-        if seen.contains(reason) {
-            return;
+        let first = {
+            let mut seen = self.seen.lock();
+            seen.len() < DENIAL_LOG_CAP && seen.insert(reason.to_owned())
+        };
+        if first {
+            tracing::warn!("[den-server] refused browser request: {reason}");
         }
-        let mut count = self.count.lock();
-        if *count >= DENIAL_LOG_CAP {
-            return;
-        }
-        *count += 1;
-        seen.insert(reason.to_string());
-        drop(count);
-        drop(seen);
-        tracing::warn!("[den-server] refused browser request: {reason}");
     }
 }
 

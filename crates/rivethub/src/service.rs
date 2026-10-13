@@ -8,7 +8,8 @@ use gateway::Gateway;
 use gateway::Settings;
 use gateway::server::BindError;
 use gateway::server::BindSource;
-use gateway::server::TlsPaths;
+use gateway::server::ServeError;
+use gateway::tls::TlsPaths;
 use kernel::memory::MemoryStore;
 use memory_postgres::PostgresMemory;
 use thiserror::Error;
@@ -30,6 +31,8 @@ pub enum StartupError {
     Memory(#[from] memory_postgres::Error),
     #[error(transparent)]
     Bind(#[from] BindError),
+    #[error(transparent)]
+    Serve(#[from] ServeError),
     #[error("the gateway listener failed: {0}")]
     Io(#[from] io::Error),
 }
@@ -55,7 +58,7 @@ pub fn compose(
 
 pub async fn listen(config: &Config) -> Result<(TcpListener, Option<TlsPaths>), StartupError> {
     let source = BindSource::from_config(config);
-    let tls = gateway::server::resolve_tls(&source)?;
+    let tls = gateway::tls::resolve_tls(&source)?;
     let listener = gateway::server::bind(&source).await?;
     Ok((listener, tls))
 }

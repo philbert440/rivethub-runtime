@@ -3,6 +3,7 @@ pub mod error;
 pub mod extract;
 pub mod routes;
 pub mod server;
+pub mod tls;
 
 use std::sync::Arc;
 

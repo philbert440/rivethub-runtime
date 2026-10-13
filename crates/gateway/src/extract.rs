@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::future::Future;
 use std::str::FromStr;
 
@@ -23,6 +24,7 @@ use wire::message::Role;
 
 use crate::error::ApiError;
 use crate::error::invalid_json;
+use crate::server::RequestDeadlineExceeded;
 
 #[derive(Debug)]
 pub struct Body<T>(pub T);
@@ -31,14 +33,28 @@ pub async fn limited_bytes<S: Send + Sync>(request: Request, state: &S) -> Resul
     Bytes::from_request(request, state)
         .await
         .map_err(|rejection| {
-            if let BytesRejection::FailedToBufferBody(FailedToBufferBody::LengthLimitError(_)) =
-                rejection
+            if carries_deadline_error(&rejection) {
+                ApiError::RequestTimeout
+            } else if let BytesRejection::FailedToBufferBody(
+                FailedToBufferBody::LengthLimitError(_),
+            ) = rejection
             {
                 ApiError::BodyTooLarge
             } else {
                 invalid_json()
             }
         })
+}
+
+fn carries_deadline_error(rejection: &BytesRejection) -> bool {
+    let mut cause: Option<&(dyn Error + 'static)> = Some(rejection);
+    while let Some(error) = cause {
+        if error.is::<RequestDeadlineExceeded>() {
+            return true;
+        }
+        cause = error.source();
+    }
+    false
 }
 
 impl<S, T> FromRequest<S> for Body<T>

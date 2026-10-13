@@ -31,7 +31,7 @@ impl Exit {
             StartupError::Config(_) | StartupError::Url => Self::Config,
             StartupError::Memory(_) => Self::Memory,
             StartupError::Bind(_) => Self::Bind,
-            StartupError::Io(_) => Self::Serve,
+            StartupError::Serve(_) | StartupError::Io(_) => Self::Serve,
         }
     }
 }
