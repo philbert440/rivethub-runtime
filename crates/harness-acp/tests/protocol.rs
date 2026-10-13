@@ -2,7 +2,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
-use std::time::SystemTime;
 
 use harness_acp::AcpCommand;
 use harness_acp::AcpHarnessAdapter;
@@ -37,51 +36,25 @@ fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
     }
 }
 
-fn fake_agent_path() -> Result<PathBuf, String> {
-    let dir = std::env::current_exe()
-        .map_err(|error| error.to_string())?
-        .parent()
-        .ok_or_else(|| "the test binary has no parent directory".to_owned())?
-        .to_path_buf();
-    let mut newest: Option<(SystemTime, PathBuf)> = None;
-    let entries = std::fs::read_dir(&dir).map_err(|error| error.to_string())?;
-    for entry in entries {
-        let entry = entry.map_err(|error| error.to_string())?;
-        if !entry
-            .file_name()
-            .to_string_lossy()
-            .starts_with("fake_agent")
-        {
-            continue;
-        }
-        let modified = entry
-            .metadata()
-            .and_then(|meta| meta.modified())
-            .map_err(|error| error.to_string())?;
-        if newest.as_ref().is_none_or(|(seen, _)| modified > *seen) {
-            newest = Some((modified, entry.path()));
-        }
-    }
-    newest
-        .map(|(_, path)| path)
-        .ok_or_else(|| "fake_agent must be built alongside these tests".to_owned())
+fn fake_agent_program() -> PathBuf {
+    PathBuf::from(env!("CARGO_BIN_EXE_fake-acp-agent"))
 }
 
-fn launch(steps: &[&str], extra: &[&str]) -> Result<LaunchTable, String> {
+fn launch(steps: &[&str], extra: &[&str]) -> LaunchTable {
     let mut args = vec!["--session-id".to_owned(), SESSION.to_owned()];
     for step in steps {
         args.push("--steps".to_owned());
         args.push((*step).to_owned());
     }
     args.extend(extra.iter().map(|argument| (*argument).to_owned()));
-    Ok(LaunchTable::from_entries([(
+    LaunchTable::from_entries([(
         HarnessId::Opencode,
         AcpLaunch::Native(AcpCommand {
-            program: fake_agent_path()?,
+            program: fake_agent_program(),
             args,
             working_dir: None,
         }),
-    )]))
+    )])
 }
 
 fn spec(cwd: &Path) -> SessionSpec {
@@ -132,22 +105,19 @@ fn expected_events(input: JsonObject) -> Vec<SessionEvent> {
 
 #[test]
 fn a_turn_streams_the_mapped_events_in_order() {
-    let adapter = AcpHarnessAdapter::with_launch_table(
-        launch(
-            &[
-                "text:hello",
-                "thought:pondering",
-                "user:echo",
-                "tool:run build",
-                "tool-update:fake-tool-1:completed",
-                "plan",
-                "commands",
-                "mode:fast",
-            ],
-            &[],
-        )
-        .expect("fake agent launch"),
-    );
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(
+        &[
+            "text:hello",
+            "thought:pondering",
+            "user:echo",
+            "tool:run build",
+            "tool-update:fake-tool-1:completed",
+            "plan",
+            "commands",
+            "mode:fast",
+        ],
+        &[],
+    ));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
@@ -171,9 +141,10 @@ fn a_turn_streams_the_mapped_events_in_order() {
 
 #[test]
 fn a_permission_request_is_answered_through_the_port() {
-    let adapter = Arc::new(AcpHarnessAdapter::with_launch_table(
-        launch(&["tool:run build", "permission"], &[]).expect("fake agent launch"),
-    ));
+    let adapter = Arc::new(AcpHarnessAdapter::with_launch_table(launch(
+        &["tool:run build", "permission"],
+        &[],
+    )));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
@@ -230,9 +201,10 @@ fn a_permission_request_is_answered_through_the_port() {
 
 #[test]
 fn a_denied_permission_ends_the_turn_normally() {
-    let adapter = Arc::new(AcpHarnessAdapter::with_launch_table(
-        launch(&["permission"], &[]).expect("fake agent launch"),
-    ));
+    let adapter = Arc::new(AcpHarnessAdapter::with_launch_table(launch(
+        &["permission"],
+        &[],
+    )));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
@@ -270,9 +242,10 @@ fn a_denied_permission_ends_the_turn_normally() {
 
 #[test]
 fn an_unanswerable_decision_is_a_typed_error() {
-    let adapter = Arc::new(AcpHarnessAdapter::with_launch_table(
-        launch(&["permission"], &[]).expect("fake agent launch"),
-    ));
+    let adapter = Arc::new(AcpHarnessAdapter::with_launch_table(launch(
+        &["permission"],
+        &[],
+    )));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
@@ -312,9 +285,10 @@ fn an_unanswerable_decision_is_a_typed_error() {
 
 #[test]
 fn cancel_ends_a_hanging_turn() {
-    let adapter = Arc::new(AcpHarnessAdapter::with_launch_table(
-        launch(&["text:partial"], &["--hang-until-cancel"]).expect("fake agent launch"),
-    ));
+    let adapter = Arc::new(AcpHarnessAdapter::with_launch_table(launch(
+        &["text:partial"],
+        &["--hang-until-cancel"],
+    )));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
@@ -354,17 +328,15 @@ fn resume_replays_a_loaded_session_on_a_fresh_agent() {
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let session = {
-            let adapter = AcpHarnessAdapter::with_launch_table(
-                launch(&[], &["--on-load", "replay"]).expect("fake agent launch"),
-            );
+            let adapter =
+                AcpHarnessAdapter::with_launch_table(launch(&[], &["--on-load", "replay"]));
             adapter
                 .new_session(spec(cwd.path()))
                 .await
                 .expect("new session")
         };
-        let adapter = AcpHarnessAdapter::with_launch_table(
-            launch(&["text:after"], &["--on-load", "replay"]).expect("fake agent launch"),
-        );
+        let adapter =
+            AcpHarnessAdapter::with_launch_table(launch(&["text:after"], &["--on-load", "replay"]));
         adapter.resume(&session).await.expect("resume");
         let mut events = adapter.events(&session).await.expect("events");
         adapter
@@ -391,9 +363,7 @@ fn resume_replays_a_loaded_session_on_a_fresh_agent() {
 fn resume_of_an_unknown_session_is_a_typed_protocol_error() {
     runtime().expect("test runtime").block_on(async {
         let _cwd = tempdir().expect("cwd");
-        let adapter = AcpHarnessAdapter::with_launch_table(
-            launch(&[], &["--on-load", "reject"]).expect("fake agent launch"),
-        );
+        let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &["--on-load", "reject"]));
         let unknown = SessionId::new(HarnessId::Opencode, "ses_other000000000000000019");
         let error = adapter.resume(&unknown).await.expect_err("load rejected");
         assert!(error.to_string().contains("session/load failed"));
@@ -403,9 +373,7 @@ fn resume_of_an_unknown_session_is_a_typed_protocol_error() {
 
 #[test]
 fn a_crashed_agent_ends_the_stream() {
-    let adapter = AcpHarnessAdapter::with_launch_table(
-        launch(&[], &["--crash-on", "prompt"]).expect("fake agent launch"),
-    );
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &["--crash-on", "prompt"]));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
@@ -433,9 +401,7 @@ fn a_crashed_agent_ends_the_stream() {
 
 #[test]
 fn an_agent_that_dies_at_spawn_is_a_typed_error() {
-    let adapter = AcpHarnessAdapter::with_launch_table(
-        launch(&[], &["--crash-on", "new"]).expect("fake agent launch"),
-    );
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &["--crash-on", "new"]));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let error = adapter
@@ -448,8 +414,7 @@ fn an_agent_that_dies_at_spawn_is_a_typed_error() {
 
 #[test]
 fn set_option_round_trips_model_and_effort() {
-    let adapter =
-        AcpHarnessAdapter::with_launch_table(launch(&[], &[]).expect("fake agent launch"));
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &[]));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
@@ -485,8 +450,7 @@ fn set_option_round_trips_model_and_effort() {
 
 #[test]
 fn the_spec_model_and_effort_are_applied_at_new_session() {
-    let adapter =
-        AcpHarnessAdapter::with_launch_table(launch(&[], &[]).expect("fake agent launch"));
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &[]));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let full = SessionSpec {
@@ -518,8 +482,7 @@ fn the_spec_model_and_effort_are_applied_at_new_session() {
 
 #[test]
 fn port_refusals_are_typed() {
-    let adapter =
-        AcpHarnessAdapter::with_launch_table(launch(&[], &[]).expect("fake agent launch"));
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &[]));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let unknown = SessionId::new(HarnessId::Opencode, "ses_absent000000000000000001");
@@ -570,9 +533,7 @@ fn port_refusals_are_typed() {
 
 #[test]
 fn raw_array_tool_input_has_no_event_form() {
-    let adapter = AcpHarnessAdapter::with_launch_table(
-        launch(&["tool-raw-array"], &[]).expect("fake agent launch"),
-    );
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(&["tool-raw-array"], &[]));
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
@@ -595,9 +556,7 @@ fn raw_array_tool_input_has_no_event_form() {
 fn resume_refuses_an_active_session() {
     runtime().expect("test runtime").block_on(async {
         let cwd = tempdir().expect("cwd");
-        let adapter = AcpHarnessAdapter::with_launch_table(
-            launch(&[], &["--on-load", "replay"]).expect("fake agent launch"),
-        );
+        let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &["--on-load", "replay"]));
         let session = adapter
             .new_session(spec(cwd.path()))
             .await

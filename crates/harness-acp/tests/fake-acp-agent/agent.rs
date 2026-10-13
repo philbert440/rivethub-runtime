@@ -520,9 +520,6 @@ async fn serve(args: FakeArgs) -> Result<(), acp::Error> {
 }
 
 fn main() -> std::process::ExitCode {
-    if std::env::args().count() == 1 {
-        return std::process::ExitCode::SUCCESS;
-    }
     let args = FakeArgs::parse();
     let Ok(runtime) = tokio::runtime::Runtime::new() else {
         return std::process::ExitCode::FAILURE;

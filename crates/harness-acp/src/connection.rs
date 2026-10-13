@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -51,6 +52,41 @@ impl StreamBarrier {
             return;
         }
         notified.await;
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct BarrierSpawner {
+    barrier: Arc<StreamBarrier>,
+    dispatch_spawned: Mutex<bool>,
+}
+
+impl BarrierSpawner {
+    pub(crate) fn new(barrier: Arc<StreamBarrier>) -> Self {
+        Self {
+            barrier,
+            dispatch_spawned: Mutex::new(false),
+        }
+    }
+
+    pub(crate) fn spawn<F>(&self, future: F)
+    where
+        F: Future<Output = ()> + 'static,
+    {
+        let mut dispatch = self.dispatch_spawned.lock();
+        if !*dispatch {
+            *dispatch = true;
+            drop(dispatch);
+            tokio::task::spawn_local(future);
+            return;
+        }
+        drop(dispatch);
+        self.barrier.enter();
+        let barrier = self.barrier.clone();
+        tokio::task::spawn_local(async move {
+            future.await;
+            barrier.leave();
+        });
     }
 }
 
@@ -207,8 +243,8 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
     let bridge = ClientBridge {
         events: events_tx.clone(),
         permissions: permissions.clone(),
-        barrier: barrier.clone(),
     };
+    let spawner = Arc::new(BarrierSpawner::new(barrier.clone()));
     let (ready_tx, ready_rx) = oneshot::channel();
     let wiring = ConnectionWiring {
         stdin,
@@ -222,7 +258,7 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
     let runtime = tokio::runtime::Handle::current();
     tokio::task::spawn_blocking(move || {
         let local = tokio::task::LocalSet::new();
-        runtime.block_on(local.run_until(serve_connection(wiring)));
+        runtime.block_on(local.run_until(serve_connection(wiring, spawner)));
     });
     let initialized = ready_rx.await.map_err(|_| AcpError::Closed {
         method: "initialize",
@@ -253,7 +289,7 @@ struct ConnectionWiring {
     ready_tx: oneshot::Sender<Result<(), acp::Error>>,
 }
 
-async fn serve_connection(wiring: ConnectionWiring) {
+async fn serve_connection(wiring: ConnectionWiring, spawner: Arc<BarrierSpawner>) {
     let ConnectionWiring {
         stdin,
         stdout,
@@ -263,10 +299,12 @@ async fn serve_connection(wiring: ConnectionWiring) {
         commands_rx,
         ready_tx,
     } = wiring;
-    let (conn, io) =
-        acp::ClientSideConnection::new(bridge, stdin.compat_write(), stdout.compat(), |future| {
-            tokio::task::spawn_local(future);
-        });
+    let (conn, io) = acp::ClientSideConnection::new(
+        bridge,
+        stdin.compat_write(),
+        stdout.compat(),
+        move |future| spawner.spawn(future),
+    );
     let conn = Arc::new(conn);
     let mut io = tokio::task::spawn_local(io);
     tokio::task::spawn_local(forward_turn_ends(events_tx, turn_end_rx));
@@ -428,5 +466,76 @@ async fn forward_turn_ends(
         if events.send(SessionEvent::TurnEnded).await.is_err() {
             tracing::debug!("turn end had no listener");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future::ready;
+    use std::sync::Arc;
+
+    use tokio::sync::oneshot;
+
+    use super::BarrierSpawner;
+    use super::StreamBarrier;
+
+    fn single_thread_runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("test runtime")
+    }
+
+    #[test]
+    fn a_turn_end_waits_for_handlers_armed_before_it() {
+        let runtime = single_thread_runtime();
+        let local = tokio::task::LocalSet::new();
+        local.block_on(&runtime, async {
+            let barrier = Arc::new(StreamBarrier::default());
+            let spawner = Arc::new(BarrierSpawner::new(barrier.clone()));
+            spawner.spawn(ready(()));
+            let (release, hold) = oneshot::channel::<()>();
+            spawner.spawn(async move {
+                drop(hold.await);
+            });
+            let (drained, mut drained_rx) = oneshot::channel::<()>();
+            tokio::spawn({
+                let barrier = barrier.clone();
+                async move {
+                    barrier.wait().await;
+                    assert_eq!(drained.send(()), Ok(()));
+                }
+            });
+            tokio::task::yield_now().await;
+            assert!(
+                drained_rx.try_recv().is_err(),
+                "the wait must hold while a handler is armed"
+            );
+            drop(release);
+            tokio::task::yield_now().await;
+            assert_eq!(
+                drained_rx.try_recv(),
+                Ok(()),
+                "the wait must release once the armed handler completes"
+            );
+        });
+    }
+
+    #[test]
+    fn a_turn_end_without_armed_handlers_does_not_wait() {
+        let runtime = single_thread_runtime();
+        runtime.block_on(async {
+            let barrier = Arc::new(StreamBarrier::default());
+            let (drained, mut drained_rx) = oneshot::channel::<()>();
+            tokio::spawn(async move {
+                barrier.wait().await;
+                assert_eq!(drained.send(()), Ok(()));
+            });
+            tokio::task::yield_now().await;
+            assert_eq!(
+                drained_rx.try_recv(),
+                Ok(()),
+                "the wait must release at once with nothing armed"
+            );
+        });
     }
 }

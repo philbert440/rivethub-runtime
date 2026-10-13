@@ -5,14 +5,12 @@ use agent_client_protocol as acp;
 use kernel::harness::SessionEvent;
 use tokio::sync::mpsc;
 
-use crate::connection::StreamBarrier;
 use crate::events;
 use crate::permissions::PermissionRegistry;
 
 pub(crate) struct ClientBridge {
     pub(crate) events: mpsc::Sender<SessionEvent>,
     pub(crate) permissions: Arc<PermissionRegistry>,
-    pub(crate) barrier: Arc<StreamBarrier>,
 }
 
 fn unsupported<T>() -> impl Future<Output = Result<T, acp::Error>> {
@@ -54,8 +52,7 @@ impl acp::Client for ClientBridge {
         &self,
         notification: acp::SessionNotification,
     ) -> Result<(), acp::Error> {
-        self.barrier.enter();
-        let outcome = match events::session_event(notification.update) {
+        match events::session_event(notification.update) {
             Ok(event) => {
                 if self.events.send(event).await.is_err() {
                     Err(acp::Error::internal_error().with_data("session event stream is closed"))
@@ -67,9 +64,7 @@ impl acp::Client for ClientBridge {
                 tracing::warn!(%error, "session update has no session-event form; dropped");
                 Ok(())
             }
-        };
-        self.barrier.leave();
-        outcome
+        }
     }
 
     fn write_text_file(

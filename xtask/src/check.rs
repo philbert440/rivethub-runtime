@@ -75,6 +75,45 @@ pub fn sqlx_prepare_check(root: &Path) -> Result<()> {
     sqlx_prepare_check_with(root, "cargo-sqlx")
 }
 
+fn nextest_list_command(root: &Path, program: &str, args: &[&str]) -> Command {
+    let mut command = Command::new(program);
+    command
+        .current_dir(root)
+        .args(args)
+        .env("SQLX_OFFLINE", "true");
+    command
+}
+
+fn nextest_list_with(root: &Path, program: &str, args: &[&str]) -> Result<()> {
+    let status = nextest_list_command(root, program, args)
+        .status()
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                Error::MissingTool {
+                    tool: "cargo-nextest".to_owned(),
+                    install: "cargo install cargo-nextest --locked".to_owned(),
+                }
+            } else {
+                Error::Io(error)
+            }
+        })?;
+    if status.success() {
+        return Ok(());
+    }
+    Err(Error::Command {
+        command: format!("cargo {}", args.join(" ")),
+        stderr: String::new(),
+    })
+}
+
+fn nextest_list(root: &Path, locked: bool) -> Result<()> {
+    let mut args = vec!["nextest", "list", "--workspace", "--all-features"];
+    if locked {
+        args.push("--locked");
+    }
+    nextest_list_with(root, "cargo-nextest", &args)
+}
+
 fn database_url_set() -> bool {
     std::env::vars_os().any(|(name, _)| name == OsStr::new("DATABASE_URL"))
 }
@@ -126,6 +165,7 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
         "warnings",
     ]);
     run_tool(root, &clippy)?;
+    nextest_list(root, locked)?;
     let dylint = Command::new("cargo")
         .current_dir(root)
         .args(["dylint", "--all", "--workspace", "--", "--all-targets"])
@@ -223,6 +263,8 @@ pub fn install_hooks_from(root: &Path, binary: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::machete_with;
+    use super::nextest_list_command;
+    use super::nextest_list_with;
     use super::offline_cargo;
     use super::sqlx_prepare_check_with;
     use super::sqlx_prepare_command;
@@ -302,6 +344,59 @@ mod tests {
                 OsStr::new("--check")
             ],
             "the direct spawn follows cargo's external-subcommand convention: cargo-sqlx sqlx <args>"
+        );
+    }
+
+    #[test]
+    fn missing_nextest_names_the_install_command() {
+        let error = nextest_list_with(
+            Path::new("."),
+            "xtask-nextest-missing",
+            &["nextest", "list"],
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("cargo install cargo-nextest --locked"),
+            "the error must carry the install command, got: {error}"
+        );
+    }
+
+    #[test]
+    fn nextest_list_failure_is_a_command_error() {
+        let error = nextest_list_with(Path::new("."), "false", &["nextest", "xtask-nextest-fails"])
+            .unwrap_err();
+        assert!(
+            matches!(error, crate::error::Error::Command { ref command, .. }
+                if command == "cargo nextest xtask-nextest-fails"),
+            "a test target that does not speak the list protocol must fail the gate, got: {error}"
+        );
+    }
+
+    #[test]
+    fn nextest_list_child_runs_offline() {
+        let command = nextest_list_command(
+            Path::new("."),
+            "cargo-nextest",
+            &["nextest", "list", "--workspace"],
+        );
+        assert_eq!(command.get_program(), OsStr::new("cargo-nextest"));
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(
+            args,
+            [
+                OsStr::new("nextest"),
+                OsStr::new("list"),
+                OsStr::new("--workspace")
+            ],
+            "the direct spawn follows cargo's external-subcommand convention: cargo-nextest nextest <args>"
+        );
+        let envs: Vec<_> = command.get_envs().collect();
+        assert_eq!(
+            envs,
+            [(OsStr::new("SQLX_OFFLINE"), Some(OsStr::new("true")))],
+            "the nextest child must run offline like every other cargo step"
         );
     }
 }

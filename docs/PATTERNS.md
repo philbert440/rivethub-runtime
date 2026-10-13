@@ -294,6 +294,9 @@ Anti-pattern: a production file growing past the point where a reviewer can hold
 file far over the ceiling means the lane is porting, not designing. Check: xtask `SIZE` (600 non-blank lines per
 production file under `crates/`).
 
+## TESTPROTO
+Anti-pattern: a test target whose process does not speak the libtest list protocol — a `harness = false` helper with a hand-rolled `main` runs under `cargo test` but dies on `--list`, so CI's nextest list fails and only CI finds out — and, the same mistake one level up, a helper that exists to be spawned as a process living as a test target at all. Pattern: every test target speaks the libtest protocol (a custom `main` is a libtest-mimic harness); helpers that are processes are bins the tests name with `CARGO_BIN_EXE_*`, never a scan of `target/`. Check: xtask `TESTPROTO` (`cargo nextest list --workspace --all-features`, the same list CI runs; a target that rejects `--list` fails the local gate, and a missing cargo-nextest is a typed missing-tool error naming the install command).
+
 ## PATTERNS
 Anti-pattern: a rule with no written entry, or an entry whose enforcement drifted. Pattern: every lint and check name has
 an entry here and every entry names the lint or check that enforces it. Check: xtask `PATTERNS`.

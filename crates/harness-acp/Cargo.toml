@@ -11,6 +11,7 @@ rust-version.workspace = true
 agent-client-protocol.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
+clap.workspace = true
 config.workspace = true
 kernel.workspace = true
 parking_lot.workspace = true
@@ -24,15 +25,13 @@ uuid.workspace = true
 wire.workspace = true
 
 [dev-dependencies]
-clap.workspace = true
 libtest-mimic.workspace = true
 serde_yaml_ng.workspace = true
 tempfile.workspace = true
 
-[[test]]
-name = "fake_agent"
-harness = false
-path = "tests/fake_agent.rs"
+[[bin]]
+name = "fake-acp-agent"
+path = "tests/fake-acp-agent/agent.rs"
 
 [[test]]
 name = "real_binaries"

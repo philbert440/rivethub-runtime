@@ -42,6 +42,7 @@ pub fn checks() -> &'static [&'static str] {
         "SECRET",
         "SIZE",
         "SQLOFFLINE",
+        "TESTPROTO",
         "TOOLCONFIG",
     ]
 }
