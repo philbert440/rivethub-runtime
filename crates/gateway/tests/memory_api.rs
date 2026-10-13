@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use common::answer;
 use futures::executor::block_on;
+use gateway::Gateway;
 use kernel::memory::Limit;
 use kernel::memory::MemoryStore;
 use testkit::Request;
@@ -1115,6 +1116,65 @@ fn memory_fallback_and_health_shape() {
     let response = call("GET", "/api/memory/bogus").expect("in-process answer");
     assert_eq!(response.status, 404);
     assert_eq!(error_of(&response).error, "unknown memory resource");
+}
+
+#[test]
+fn search_reports_unwired_embeddings_as_degraded() {
+    let (_store, app) = seeded().expect("seed store");
+    let response = block_on(answer(
+        app.clone(),
+        recorded("GET", "/api/memory/search?q=hello", Vec::new()),
+    ))
+    .expect("in-process answer");
+    assert_eq!(response.status, 200);
+    let parsed: MemorySearchResponse =
+        serde_json::from_slice(&response.body).expect("search response");
+    assert_eq!(
+        parsed.degraded,
+        Some(wire::gateway::memory::MemoryDegraded {
+            reason: "embedding endpoint not configured".to_owned(),
+            effect: "Keyword / FTS ranking only — not meaning-based.".to_owned(),
+        })
+    );
+
+    let response = post(
+        &app,
+        "/api/memory/tool/memory_search",
+        &MemorySearchToolArgs {
+            query: "hello".to_owned(),
+            mode: None,
+            scope: None,
+            limit: None,
+            agent: None,
+            tag: None,
+        },
+    )
+    .expect("in-process answer");
+    let inner: MemorySearchResponse =
+        serde_json::from_str(&tool_text(&response)).expect("tool result is json text");
+    assert_eq!(
+        inner.degraded,
+        Some(wire::gateway::memory::MemoryDegraded {
+            reason: "embedding endpoint not configured".to_owned(),
+            effect: "Keyword / FTS ranking only — not meaning-based.".to_owned(),
+        })
+    );
+}
+
+#[test]
+fn search_with_a_wired_provider_carries_no_degradation() {
+    let store: Arc<dyn MemoryStore> = Arc::new(testkit::FakeMemoryStore::default());
+    let gateway = Arc::new(Gateway::new(store, common::settings()).with_embed_provider());
+    let app = gateway.router(false);
+    let response = block_on(answer(
+        app,
+        recorded("GET", "/api/memory/search?q=hello", Vec::new()),
+    ))
+    .expect("in-process answer");
+    assert_eq!(response.status, 200);
+    let parsed: MemorySearchResponse =
+        serde_json::from_slice(&response.body).expect("search response");
+    assert_eq!(parsed.degraded, None);
 }
 
 #[test]

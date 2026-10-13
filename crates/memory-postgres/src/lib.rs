@@ -1,5 +1,6 @@
 pub mod capture;
 mod conversation;
+pub mod embed;
 pub mod error;
 mod graphile;
 pub mod project;
@@ -21,6 +22,7 @@ pub use capture::ConversationRecord;
 pub use capture::ConversationUpdate;
 pub use capture::ConversationUpsert;
 pub use capture::MessageRow;
+pub use embed::QueryEmbed;
 pub use error::Error;
 pub use graphile::GraphileQueue;
 pub use queue::PostgresQueue;
@@ -34,6 +36,7 @@ static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 pub struct PostgresMemory {
     pool: PgPool,
     wiki_available: AtomicBool,
+    embed: Option<embed::EmbedArm>,
 }
 
 impl PostgresMemory {
@@ -42,7 +45,14 @@ impl PostgresMemory {
         Self {
             pool,
             wiki_available: AtomicBool::new(true),
+            embed: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_query_embed(mut self, embed: QueryEmbed) -> Self {
+        self.embed = Some(embed::EmbedArm::new(embed));
+        self
     }
 
     pub async fn connect(url: &str) -> Result<Self, Error> {

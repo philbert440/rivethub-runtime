@@ -47,6 +47,7 @@ impl Settings {
 pub struct Gateway {
     store: Arc<dyn MemoryStore>,
     settings: Settings,
+    embed_provider: bool,
     policy: auth::OriginPolicy,
     denials: DenialLog,
 }
@@ -61,9 +62,16 @@ impl Gateway {
         Self {
             store,
             settings,
+            embed_provider: false,
             policy,
             denials: DenialLog::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_embed_provider(mut self) -> Self {
+        self.embed_provider = true;
+        self
     }
 
     #[must_use]
@@ -73,6 +81,11 @@ impl Gateway {
 
     pub(crate) fn store(&self) -> &Arc<dyn MemoryStore> {
         &self.store
+    }
+
+    #[must_use]
+    pub fn embeds_wired(&self) -> bool {
+        self.embed_provider
     }
 
     pub(crate) fn policy(&self) -> &auth::OriginPolicy {

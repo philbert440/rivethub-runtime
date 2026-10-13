@@ -6,7 +6,6 @@ use crate::capture::prepare_capture_message;
 use crate::error::Error;
 use crate::project;
 use crate::search::SearchHit;
-use crate::search::SearchOptions;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
@@ -222,19 +221,15 @@ impl MemoryStore for crate::PostgresMemory {
         &self,
         query: SearchQuery,
     ) -> Result<Vec<MemorySearchResult>, MemoryStoreError> {
-        let options = SearchOptions {
-            text: query.text,
-            mode: query.mode,
-            scope: query.scope,
-            limit: query.limit.get(),
-            agent: query.agent,
-            tag: query.tag,
-        };
         let hits = self
-            .search_full(&options)
+            .search_outcome_for(&query)
             .await
             .map_err(MemoryStoreError::from)?;
-        Ok(hits.into_iter().map(SearchHit::into_port_result).collect())
+        Ok(hits
+            .hits
+            .into_iter()
+            .map(SearchHit::into_port_result)
+            .collect())
     }
 
     async fn browse(&self, filter: BrowseFilter) -> Result<Vec<MemoryEntry>, MemoryStoreError> {

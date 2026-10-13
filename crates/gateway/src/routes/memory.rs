@@ -24,6 +24,7 @@ use wire::gateway::memory::MemoryBrowseMessage;
 use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryBrowseResponse;
 use wire::gateway::memory::MemoryBrowseToolArgs;
+use wire::gateway::memory::MemoryDegraded;
 use wire::gateway::memory::MemoryGetFullToolArgs;
 use wire::gateway::memory::MemoryIngestSessionToolArgs;
 use wire::gateway::memory::MemoryScope;
@@ -53,6 +54,15 @@ const SEARCH_LIMIT_MAX: u32 = 50;
 const SEARCH_TOOL_LIMIT_DEFAULT: u32 = 10;
 const BROWSE_LIMIT_DEFAULT: u32 = 50;
 const BROWSE_LIMIT_MAX: u32 = 200;
+const EMBED_ENDPOINT_REASON: &str = "embedding endpoint not configured";
+const DEGRADED_EFFECT: &str = "Keyword / FTS ranking only — not meaning-based.";
+
+fn degraded_of(gateway: &Gateway) -> Option<MemoryDegraded> {
+    (!gateway.embeds_wired()).then_some(MemoryDegraded {
+        reason: EMBED_ENDPOINT_REASON.to_owned(),
+        effect: DEGRADED_EFFECT.to_owned(),
+    })
+}
 
 pub(crate) fn router() -> Router<Arc<Gateway>> {
     Router::new()
@@ -149,7 +159,7 @@ async fn search(
     Ok(Json(MemorySearchResponse {
         query: text,
         scope,
-        degraded: None,
+        degraded: degraded_of(&gateway),
         fallback: None,
         results: results.into_iter().map(search_hit).collect(),
     }))
@@ -299,7 +309,7 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
     let response = MemorySearchResponse {
         query: args.query,
         scope,
-        degraded: None,
+        degraded: degraded_of(gateway),
         fallback: None,
         results: results.into_iter().map(search_hit).collect(),
     };

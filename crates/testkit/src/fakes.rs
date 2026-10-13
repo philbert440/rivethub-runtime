@@ -88,19 +88,37 @@ pub enum Script {
     Chat(LlmResponse),
     Stream(Vec<ModelChunk>),
     Embed(Vec<Embedding>),
+    EmbedHttpStatus(u16),
+    EmbedNetwork,
+    EmbedHang,
     Models(Vec<String>),
 }
 
 #[derive(Debug, Default)]
 pub struct FakeProvider {
     script: Mutex<Vec<Script>>,
+    fnv_dims: Mutex<Option<usize>>,
+    embed_requests: Mutex<Vec<Vec<String>>>,
 }
 
 impl FakeProvider {
     pub fn new(script: Vec<Script>) -> Self {
         Self {
             script: Mutex::new(script),
+            ..Self::default()
         }
+    }
+
+    #[must_use]
+    pub fn fnv_embeddings(width: usize) -> Self {
+        Self {
+            fnv_dims: Mutex::new(Some(width)),
+            ..Self::default()
+        }
+    }
+
+    pub async fn embed_requests(&self) -> Vec<Vec<String>> {
+        self.embed_requests.lock().await.clone()
     }
 
     async fn scripted<T>(&self, keep: fn(&Script) -> Option<T>) -> Option<T> {
@@ -112,6 +130,34 @@ impl FakeProvider {
         drop(script);
         chosen
     }
+}
+
+fn fnv1a32(bytes: &[u8]) -> u32 {
+    let mut hash = 0x811c_9dc5;
+    for byte in bytes {
+        hash ^= u32::from(*byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash
+}
+
+fn fnv_token_vector(text: &str, dims: usize) -> Embedding {
+    let mut vector = vec![0.0_f32; dims];
+    for token in text
+        .to_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+    {
+        let index = fnv1a32(token.as_bytes()) as usize % dims;
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "the index is a hash modulo the vector width"
+        )]
+        {
+            vector[index] += 1.0;
+        }
+    }
+    Embedding { vector }
 }
 
 fn default_response() -> LlmResponse {
@@ -129,7 +175,12 @@ impl ModelProvider for FakeProvider {
         Ok(self
             .scripted(|s| match s {
                 Script::Chat(response) => Some(response.clone()),
-                Script::Stream(_) | Script::Embed(_) | Script::Models(_) => None,
+                Script::Stream(_)
+                | Script::Embed(_)
+                | Script::EmbedHttpStatus(_)
+                | Script::EmbedNetwork
+                | Script::EmbedHang
+                | Script::Models(_) => None,
             })
             .await
             .unwrap_or_else(default_response))
@@ -142,7 +193,12 @@ impl ModelProvider for FakeProvider {
         let chunks = self
             .scripted(|s| match s {
                 Script::Stream(chunks) => Some(chunks.clone()),
-                Script::Chat(_) | Script::Embed(_) | Script::Models(_) => None,
+                Script::Chat(_)
+                | Script::Embed(_)
+                | Script::EmbedHttpStatus(_)
+                | Script::EmbedNetwork
+                | Script::EmbedHang
+                | Script::Models(_) => None,
             })
             .await;
         let chunks = chunks.unwrap_or_else(|| {
@@ -168,27 +224,95 @@ impl ModelProvider for FakeProvider {
     }
 
     async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
-        Ok(self
+        self.embed_requests.lock().await.push(texts.clone());
+        if let Some(chosen) = self
             .scripted(|s| match s {
                 Script::Embed(vectors) => Some(vectors.clone()),
-                Script::Chat(_) | Script::Stream(_) | Script::Models(_) => None,
+                Script::Chat(_)
+                | Script::Stream(_)
+                | Script::EmbedHttpStatus(_)
+                | Script::EmbedNetwork
+                | Script::EmbedHang
+                | Script::Models(_) => None,
             })
             .await
-            .unwrap_or_else(|| {
-                texts
-                    .into_iter()
-                    .map(|t| Embedding {
-                        vector: vec![f32::from(u16::try_from(t.len()).unwrap_or(u16::MAX))],
-                    })
-                    .collect()
-            }))
+        {
+            return Ok(chosen);
+        }
+        if let Some(status) = self
+            .scripted(|s| match s {
+                Script::EmbedHttpStatus(status) => Some(*status),
+                Script::Chat(_)
+                | Script::Stream(_)
+                | Script::Embed(_)
+                | Script::EmbedNetwork
+                | Script::EmbedHang
+                | Script::Models(_) => None,
+            })
+            .await
+        {
+            return Err(ModelProviderError::Request {
+                message: format!("http {status}"),
+                source: Box::new(std::io::Error::other(format!(
+                    "embed endpoint answered http {status}"
+                ))),
+            });
+        }
+        if self
+            .scripted(|s| match s {
+                Script::EmbedNetwork => Some(()),
+                Script::Chat(_)
+                | Script::Stream(_)
+                | Script::Embed(_)
+                | Script::EmbedHttpStatus(_)
+                | Script::EmbedHang
+                | Script::Models(_) => None,
+            })
+            .await
+            .is_some()
+        {
+            return Err(ModelProviderError::Request {
+                message: "connection refused".to_owned(),
+                source: Box::new(std::io::Error::other("connection refused")),
+            });
+        }
+        if self
+            .scripted(|s| match s {
+                Script::EmbedHang => Some(()),
+                Script::Chat(_)
+                | Script::Stream(_)
+                | Script::Embed(_)
+                | Script::EmbedHttpStatus(_)
+                | Script::EmbedNetwork
+                | Script::Models(_) => None,
+            })
+            .await
+            .is_some()
+        {
+            std::future::pending::<()>().await;
+        }
+        let dims = *self.fnv_dims.lock().await;
+        Ok(texts
+            .into_iter()
+            .map(|text| match dims {
+                Some(width) => fnv_token_vector(&text, width),
+                None => Embedding {
+                    vector: vec![f32::from(u16::try_from(text.len()).unwrap_or(u16::MAX))],
+                },
+            })
+            .collect())
     }
 
     async fn list_models(&self) -> Result<Vec<String>, ModelProviderError> {
         Ok(self
             .scripted(|s| match s {
                 Script::Models(models) => Some(models.clone()),
-                Script::Chat(_) | Script::Stream(_) | Script::Embed(_) => None,
+                Script::Chat(_)
+                | Script::Stream(_)
+                | Script::Embed(_)
+                | Script::EmbedHttpStatus(_)
+                | Script::EmbedNetwork
+                | Script::EmbedHang => None,
             })
             .await
             .unwrap_or_else(|| vec!["fake-model".to_string()]))
