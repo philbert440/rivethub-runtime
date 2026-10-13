@@ -59,6 +59,8 @@ pub enum ModelChunk {
     Done,
 }
 
+pub type ModelStreamItem = Result<ModelChunk, ModelProviderError>;
+
 #[async_trait]
 pub trait ModelProvider: Send + Sync {
     async fn chat(
@@ -69,7 +71,7 @@ pub trait ModelProvider: Send + Sync {
     async fn stream(
         &self,
         request: ModelRequest,
-    ) -> Result<Receiver<ModelChunk>, ModelProviderError>;
+    ) -> Result<Receiver<ModelStreamItem>, ModelProviderError>;
 
     async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError>;
 

@@ -404,15 +404,13 @@ fn roundtrip_capture_results(errors: &mut Vec<String>) -> Result<(), String> {
     Ok(())
 }
 
-const B8_OMITTED_REQUEST_FIELDS: &[&str] = &["temperature", "top_p"];
-
 fn provider_chat_request(label: &str, body: &str) -> Result<(), String> {
     let mut payload: Value =
         serde_json::from_str(body).map_err(|e| format!("{label}: parse: {e}"))?;
     let Some(object) = payload.as_object_mut() else {
         return Ok(());
     };
-    for field in B8_OMITTED_REQUEST_FIELDS {
+    for (field, _) in testkit::provider::B8_OMITTED_REQUEST_FIELDS {
         object.remove(*field);
     }
     roundtrip_as::<wire::stream::openai::ChatCompletionRequest>(label, &payload.to_string())
@@ -420,7 +418,7 @@ fn provider_chat_request(label: &str, body: &str) -> Result<(), String> {
 
 fn provider_requests(server: &str, scenario: &str, errors: &mut Vec<String>) -> Result<(), String> {
     let rel = format!("providers/{server}/{scenario}/requests.json");
-    let doc = load(&rel, &golden(&rel))?;
+    let doc = load(&rel, &recording(&rel))?;
     let Some(entries) = doc.as_array() else {
         return Ok(());
     };
@@ -453,8 +451,8 @@ fn provider_responses(
     errors: &mut Vec<String>,
 ) -> Result<(), String> {
     let dir = format!("providers/{server}/{scenario}");
-    let entries =
-        std::fs::read_dir(format!("{GOLDEN_DIR}/{dir}")).map_err(|e| format!("{dir}: {e}"))?;
+    let dir_path = recording(&dir);
+    let entries = std::fs::read_dir(&dir_path).map_err(|e| format!("{dir}: {e}"))?;
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         let is_response = name.starts_with("response-")
@@ -466,8 +464,8 @@ fn provider_responses(
             continue;
         }
         let rel = format!("{dir}/{name}");
-        let text = std::fs::read_to_string(format!("{GOLDEN_DIR}/{rel}"))
-            .map_err(|e| format!("{rel}: {e}"))?;
+        let text =
+            std::fs::read_to_string(dir_path.join(&name)).map_err(|e| format!("{rel}: {e}"))?;
         if text.trim_start().starts_with('{') {
             let before = errors.len();
             errors.push_result(roundtrip_as::<wire::stream::openai::ModelList>(

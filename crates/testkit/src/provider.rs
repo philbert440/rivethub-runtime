@@ -19,6 +19,44 @@ pub struct CapturedRequest {
     pub method: String,
     pub target: String,
     pub body: String,
+    pub headers: Vec<(String, String)>,
+}
+
+impl CapturedRequest {
+    #[must_use]
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WireDelta {
+    SamplingOnModelServer,
+    OutputLimitOnModelServer,
+    ServerDefaultToolChoice,
+}
+
+pub const B8_OMITTED_REQUEST_FIELDS: &[(&str, WireDelta)] = &[
+    ("temperature", WireDelta::SamplingOnModelServer),
+    ("top_p", WireDelta::SamplingOnModelServer),
+    ("max_tokens", WireDelta::OutputLimitOnModelServer),
+    ("tool_choice", WireDelta::ServerDefaultToolChoice),
+];
+
+pub fn strip_b8_deltas(body: &str) -> Result<String, Error> {
+    let mut parsed: Json = serde_json::from_str(body)
+        .map_err(|error| Error::format(Path::new("providers request body"), error.to_string()))?;
+    let Json::Object(ref mut object) = parsed else {
+        return Ok(body.to_owned());
+    };
+    for (field, _) in B8_OMITTED_REQUEST_FIELDS {
+        object.remove(*field);
+    }
+    serde_json::to_string(&parsed)
+        .map_err(|error| Error::format(Path::new("providers request body"), error.to_string()))
 }
 
 #[derive(Debug, Clone)]
@@ -38,7 +76,19 @@ pub struct RequestRecord {
     #[serde(default)]
     pub body: String,
     #[serde(default)]
+    pub headers: Vec<(String, String)>,
+    #[serde(default)]
     pub served: ServedRecord,
+}
+
+impl RequestRecord {
+    #[must_use]
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -131,6 +181,23 @@ fn compare_request(
             id,
             format!("target {} != recorded {}", got.target, want.target),
         ));
+    }
+    if let Some(recorded_auth) = want.header("authorization") {
+        match got.header("authorization") {
+            Some(sent) if sent == recorded_auth => {}
+            Some(sent) => {
+                return Err(Mismatch::new(
+                    id,
+                    format!("authorization header {sent:?} != recorded {recorded_auth:?}"),
+                ));
+            }
+            None => {
+                return Err(Mismatch::new(
+                    id,
+                    format!("authorization header missing, recorded {recorded_auth:?}"),
+                ));
+            }
+        }
     }
     if want.body.is_empty() {
         if !got.body.is_empty() {

@@ -412,6 +412,7 @@ fn add_provider(trials: &mut Vec<Trial>) {
                         requests: vec![testkit::CapturedRequest {
                             method: "POST".to_string(),
                             target: "/v1/chat/completions".to_string(),
+                            headers: Vec::new(),
                             body: r#"{"stream":true,"messages":[{"content":"Say hi.","role":"user"}],"model":"test-model"}"#
                                 .to_string(),
                         }],
@@ -681,6 +682,7 @@ fn add_provider_drift(trials: &mut Vec<Trial>) {
                 requests: vec![testkit::CapturedRequest {
                     method: "POST".to_string(),
                     target: "/v1/chat/completions".to_string(),
+                    headers: Vec::new(),
                     body: r#"{"model":"other-model","messages":[{"role":"user","content":"Say hi."}],"stream":true}"#
                         .to_string(),
                 }],
@@ -694,6 +696,7 @@ fn add_provider_drift(trials: &mut Vec<Trial>) {
                 requests: vec![testkit::CapturedRequest {
                     method: "POST".to_string(),
                     target: "/v1/chat/completions".to_string(),
+                    headers: Vec::new(),
                     body: r#"{"stream":true,"messages":[{"content":"Say hi.","role":"user"}],"model":"test-model"}"#
                         .to_string(),
                 }],
@@ -701,6 +704,58 @@ fn add_provider_drift(trials: &mut Vec<Trial>) {
             });
             let mismatch = must_fail(outcome, "chunk count drift")?;
             assert_detail(&mismatch, "1 chunk(s), recorded 2", "chunk count drift")
+        }
+    }));
+}
+
+fn add_provider_shared(trials: &mut Vec<Trial>) {
+    trials.push(Trial::test("drift provider fails on drifted auth header", {
+        let path = fixture("provider/A-text");
+        move || {
+            let mut scenario =
+                must_load(testkit::provider::load_scenario(&path), "scenario loads")?;
+            let Some(recorded_request) = scenario.requests.first_mut() else {
+                return Err(Failed::from("the synthetic request: not found in the fixture"));
+            };
+            recorded_request.headers = vec![(
+                "authorization".to_string(),
+                "Bearer <redacted>".to_string(),
+            )];
+            let outcome = testkit::provider::replay(&scenario, |_canned| ProviderTurn {
+                requests: vec![testkit::CapturedRequest {
+                    method: "POST".to_string(),
+                    target: "/v1/chat/completions".to_string(),
+                    headers: vec![(
+                        "Authorization".to_string(),
+                        "Bearer something-else".to_string(),
+                    )],
+                    body: r#"{"stream":true,"messages":[{"content":"Say hi.","role":"user"}],"model":"test-model"}"#
+                        .to_string(),
+                }],
+                chunks: Vec::new(),
+            });
+            let mismatch = must_fail(outcome, "drifted auth")?;
+            assert_detail(&mismatch, "authorization", "drifted auth")
+        }
+    }));
+    trials.push(Trial::test("provider strip_b8_deltas removes exactly the B8 fields", {
+        move || {
+            let stripped = testkit::provider::strip_b8_deltas(
+                r#"{"model":"m","max_tokens":4096,"temperature":0.7,"top_p":0.95,"messages":[],"tool_choice":"auto","stream":true}"#,
+            )
+            .map_err(|error| Failed::from(error.to_string()))?;
+            let parsed: Json = serde_json::from_str(&stripped)
+                .map_err(|error| Failed::from(error.to_string()))?;
+            if testkit::json_eq(
+                &parsed,
+                &json!({"model":"m","messages":[],"stream":true}),
+            ) {
+                Ok(())
+            } else {
+                Err(Failed::from(format!(
+                    "the strip left the wrong body: {parsed}"
+                )))
+            }
         }
     }));
 }
@@ -744,6 +799,7 @@ fn main() {
     add_capture_drift(&mut trials);
     add_pg_drift(&mut trials);
     add_provider_drift(&mut trials);
+    add_provider_shared(&mut trials);
     add_cases_drift(&mut trials);
     run(&args, trials).exit();
 }

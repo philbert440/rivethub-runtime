@@ -18,6 +18,7 @@ use kernel::model::ModelChunk;
 use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
 use kernel::model::ModelRequest;
+use kernel::model::ModelStreamItem;
 use kernel::queue::ClaimedJob;
 use kernel::queue::Job;
 use kernel::queue::JobId;
@@ -189,7 +190,7 @@ impl ModelProvider for FakeProvider {
     async fn stream(
         &self,
         request: ModelRequest,
-    ) -> Result<Receiver<ModelChunk>, ModelProviderError> {
+    ) -> Result<Receiver<ModelStreamItem>, ModelProviderError> {
         let chunks = self
             .scripted(|s| match s {
                 Script::Stream(chunks) => Some(chunks.clone()),
@@ -218,7 +219,7 @@ impl ModelProvider for FakeProvider {
         });
         let (tx, rx) = tokio::sync::mpsc::channel(chunks.len().max(1));
         for chunk in chunks {
-            drop(tx.try_send(chunk));
+            drop(tx.try_send(Ok(chunk)));
         }
         Ok(rx)
     }

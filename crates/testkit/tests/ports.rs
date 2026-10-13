@@ -362,6 +362,7 @@ fn provider_streams_scripted_then_default() {
             messages: vec![wire::message::Message {
                 role: Role::User,
                 content: wire::message::MessageContent::Text("hi".to_string()),
+                reasoning: None,
                 tool_calls: None,
                 tool_call_id: None,
             }],
@@ -370,22 +371,29 @@ fn provider_streams_scripted_then_default() {
             max_tokens: None,
         };
         let mut rx = provider.stream(request.clone()).await.unwrap();
-        let first = rx.recv().await.expect("expected a chunk");
-        assert_eq!(
-            first,
-            ModelChunk::Text {
-                delta: "scripted".to_string()
-            }
-        );
-        assert_eq!(rx.recv().await, Some(ModelChunk::Done));
+        match rx.recv().await.expect("expected a chunk") {
+            Ok(chunk) => assert_eq!(
+                chunk,
+                ModelChunk::Text {
+                    delta: "scripted".to_string()
+                }
+            ),
+            Err(error) => panic!("the scripted item is a chunk: {error}"),
+        }
+        match rx.recv().await {
+            Some(Ok(ModelChunk::Done)) => {}
+            other => panic!("the scripted stream ends with Done, got {other:?}"),
+        }
         let mut fallback = provider.stream(request.clone()).await.unwrap();
-        let echoed = fallback.recv().await.expect("expected the default chunk");
-        assert_eq!(
-            echoed,
-            ModelChunk::Text {
-                delta: "hi".to_string()
-            }
-        );
+        match fallback.recv().await.expect("expected the default chunk") {
+            Ok(chunk) => assert_eq!(
+                chunk,
+                ModelChunk::Text {
+                    delta: "hi".to_string()
+                }
+            ),
+            Err(error) => panic!("the default item is a chunk: {error}"),
+        }
         let chat = provider.chat(request).await.unwrap();
         assert_eq!(chat.content.as_deref(), Some("ok"));
         let embeddings = provider.embed(vec!["abc".to_string()]).await.unwrap();

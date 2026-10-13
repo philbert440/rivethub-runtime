@@ -1,0 +1,32 @@
+[package]
+name = "providers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+config.workspace = true
+eventsource-stream.workspace = true
+futures.workspace = true
+kernel.workspace = true
+reqwest.workspace = true
+rmcp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+url.workspace = true
+wire.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+parking_lot.workspace = true
+testkit.workspace = true
+tokio = { workspace = true, features = ["io-util", "rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

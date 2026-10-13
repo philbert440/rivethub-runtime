@@ -3,16 +3,23 @@
 Each entry names the recorded exchange that the wire types do not reproduce and why. Skipped cases are skipped by
 id in `roundtrip.rs`; the one field-level delta below is applied where named. Nothing else is skipped.
 
-## `providers/vllm/*/requests.json` — request sampling fields
+## `providers/vllm/*/requests.json` — request fields the runtime omits
 
-Every recorded vLLM request body carries `"temperature":0.7,"top_p":0.95`: the TypeScript provider sent them
-hard-coded when nothing was configured. The runtime sends NO sampling fields to a model server — tuning lives on
-the model server (CONTRACT decision 11, boundary B8) — so `openai::ChatCompletionRequest` has no `temperature`
-or `top_p` and the roundtrip removes exactly those two members from the recorded body before comparing
-(`B8_OMITTED_REQUEST_FIELDS` in `roundtrip.rs`, one typed table). `tool_choice: "auto"` and the `max_tokens`
-default (4096) are not tuning and stay as recorded. The `providers/ollama/` and `providers/llama-server/`
-recordings and their wire types are removed with the provider types they served; the vLLM recordings are the
-provider traffic that remains.
+Every recorded vLLM request body carries `"temperature":0.7,"top_p":0.95`, a `tool_choice:"auto"`
+and `max_tokens:4096`: the TypeScript provider sent the sampling pair hard-coded, `tool_choice`
+with every tools-bearing body, and `max_tokens` from its own default. The runtime sends NONE of
+these to a model server — sampling and tuning live on the model server, `tool_choice` is left at
+the server default (`auto` when `tools` are present), and `max_tokens` is sent only when the
+provider config sets it (CONTRACT decision 11, boundary B8) — so `openai::ChatCompletionRequest`
+has no `temperature`/`top_p`, and the roundtrip removes exactly those four members from the
+recorded body before comparing. The table is typed and shared with the providers replay:
+`testkit::provider::B8_OMITTED_REQUEST_FIELDS` pairs each field with a `WireDelta` reason
+(`SamplingOnModelServer`, `OutputLimitOnModelServer`, `ServerDefaultToolChoice`).
+
+The recordings live once under `crates/testkit/tests/fixtures/providers/vllm/` and this test reads
+them through `testkit::recording`; the `providers/ollama/` and `providers/llama-server/` recordings
+and their wire types were removed with the provider types they served, so the vLLM recordings are
+the provider traffic that remains.
 
 ## `gateway/http.json` — `event-reserialize`, `gateway/ws.json` — `post-reserialize`
 

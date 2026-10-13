@@ -1,0 +1,13 @@
+{"fn":"normalize_api_prefix","in":"/v1/","out":"/v1"}
+{"fn":"normalize_api_prefix","in":"/v1","out":"/v1"}
+{"fn":"normalize_api_prefix","in":" /v1 ","out":"/v1"}
+{"fn":"normalize_api_prefix","in":"v1","out":"/v1"}
+{"fn":"normalize_api_prefix","in":"/openai/v1","out":"/openai/v1"}
+{"fn":"normalize_api_prefix","in":"//","out":""}
+{"fn":"normalize_api_prefix","in":{"$t":"undefined"},"out":"/v1"}
+{"fn":"normalize_api_prefix","in":"   ","out":""}
+{"fn":"normalize_api_prefix","in":"v4","out":"/v4"}
+{"fn":"normalize_api_prefix","in":null,"out":"/v1"}
+{"fn":"normalize_api_prefix","in":"api/v2//","out":"/api/v2"}
+{"fn":"normalize_api_prefix","in":"","out":""}
+{"fn":"normalize_api_prefix","in":"/","out":""}

@@ -1,0 +1,217 @@
+use kernel::model::ModelProviderError;
+use wire::message::ContentPart;
+use wire::message::Message;
+use wire::message::MessageContent;
+use wire::message::Role;
+use wire::stream::openai::ChatCompletionRequest;
+use wire::stream::openai::ChatTemplateKwargs;
+use wire::stream::openai::FunctionDef;
+use wire::stream::openai::MessageToolCall;
+use wire::stream::openai::StreamOptions;
+use wire::stream::openai::Tool;
+
+use crate::Variant;
+
+#[must_use]
+pub fn normalize_api_prefix(prefix: Option<&str>) -> String {
+    let Some(raw) = prefix else {
+        return "/v1".to_owned();
+    };
+    let trimmed = raw.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.starts_with('/') {
+        return trimmed.to_owned();
+    }
+    format!("/{trimmed}")
+}
+
+#[must_use]
+pub fn chat_url(base_url: &str, prefix: &str) -> String {
+    format!(
+        "{}{prefix}/chat/completions",
+        base_url.trim_end_matches('/')
+    )
+}
+
+#[must_use]
+pub fn models_url(base_url: &str, prefix: &str) -> String {
+    format!("{}{prefix}/models", base_url.trim_end_matches('/'))
+}
+
+#[must_use]
+pub fn embeddings_url(endpoint: &str) -> String {
+    format!("{}/v1/embeddings", endpoint.trim_end_matches('/'))
+}
+
+pub fn split_and_fold_system<M>(
+    messages: Vec<M>,
+    role: impl Fn(&M) -> Role,
+    text: impl Fn(&M) -> String,
+    notice: impl Fn(String) -> M,
+) -> (String, Vec<M>) {
+    let mut system = String::new();
+    let mut rest: Vec<M> = Vec::with_capacity(messages.len());
+    let mut leading = true;
+    for message in messages {
+        if role(&message) == Role::System {
+            let body = text(&message);
+            if leading {
+                if !system.is_empty() {
+                    system.push_str("\n\n");
+                }
+                system.push_str(&body);
+                continue;
+            }
+            if body.is_empty() {
+                rest.push(notice("[SYSTEM NOTICE]\n(empty system message)".to_owned()));
+            } else {
+                rest.push(notice(format!("[SYSTEM NOTICE]\n{body}")));
+            }
+            continue;
+        }
+        leading = false;
+        rest.push(message);
+    }
+    (system, rest)
+}
+
+pub fn chat_body(
+    variant: Variant,
+    request: &kernel::model::ModelRequest,
+    configured_max_tokens: Option<u32>,
+) -> Result<ChatCompletionRequest, ModelProviderError> {
+    let (system, messages) = split_and_fold_system(
+        request.messages.clone(),
+        |message| message.role,
+        |message| match &message.content {
+            MessageContent::Text(text) => text.clone(),
+            MessageContent::Parts(parts) => parts
+                .iter()
+                .filter_map(|part| match part {
+                    ContentPart::Text { text } => Some(text.as_str()),
+                    ContentPart::Image(_) | ContentPart::Video(_) => None,
+                })
+                .collect(),
+        },
+        |text| Message {
+            role: Role::User,
+            content: MessageContent::Text(text),
+            reasoning: None,
+            tool_calls: None,
+            tool_call_id: None,
+        },
+    );
+    let mut wire_messages = Vec::with_capacity(messages.len() + usize::from(!system.is_empty()));
+    if !system.is_empty() {
+        wire_messages.push(wire::stream::openai::Message {
+            role: Role::System,
+            content: Some(system),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+        });
+    }
+    for message in messages {
+        wire_messages.push(wire_message(&message)?);
+    }
+    let tools = tools(&request.tools)?;
+    Ok(ChatCompletionRequest {
+        model: request.model.clone(),
+        max_tokens: configured_max_tokens.map(u64::from),
+        messages: wire_messages,
+        tools,
+        tool_choice: None,
+        stream: Some(true),
+        stream_options: Some(StreamOptions {
+            include_usage: true,
+        }),
+        chat_template_kwargs: match (variant, request.thinking) {
+            (Variant::Vllm, Some(wire::stream::ThinkingLevel::Off)) => Some(ChatTemplateKwargs {
+                enable_thinking: false,
+            }),
+            _ => None,
+        },
+        think: None,
+    })
+}
+
+fn wire_message(message: &Message) -> Result<wire::stream::openai::Message, ModelProviderError> {
+    let content = match &message.content {
+        MessageContent::Text(text) if text.is_empty() => None,
+        MessageContent::Text(text) => Some(text.clone()),
+        MessageContent::Parts(_) => {
+            return Err(ModelProviderError::Request {
+                message: "message content parts are not spoken to the model server: video URL \
+                          splicing is out of scope and no recording pins an image shape"
+                    .to_owned(),
+                source: "content parts".into(),
+            });
+        }
+    };
+    let tool_calls = message
+        .tool_calls
+        .as_ref()
+        .map(|calls| calls.iter().map(wire_tool_call).collect())
+        .transpose()?;
+    Ok(wire::stream::openai::Message {
+        role: message.role,
+        content,
+        reasoning_content: message.reasoning.clone(),
+        tool_calls,
+        tool_call_id: message.tool_call_id.clone(),
+    })
+}
+
+fn wire_tool_call(call: &wire::message::ToolCall) -> Result<MessageToolCall, ModelProviderError> {
+    let arguments =
+        serde_json::to_string(&call.arguments).map_err(|source| ModelProviderError::Request {
+            message: format!("tool call arguments for \"{}\" do not serialize", call.name),
+            source: Box::new(source),
+        })?;
+    Ok(MessageToolCall::Function(
+        wire::stream::openai::StreamedPlainToolCall {
+            index: None,
+            id: Some(call.id.clone()),
+            function: wire::stream::openai::FunctionDelta {
+                name: Some(call.name.clone()),
+                arguments: Some(arguments),
+            },
+        },
+    ))
+}
+
+fn tools(tools: &[rmcp::model::Tool]) -> Result<Option<Vec<Tool>>, ModelProviderError> {
+    if tools.is_empty() {
+        return Ok(None);
+    }
+    let mut converted = Vec::with_capacity(tools.len());
+    for tool in tools {
+        let Some(description) = tool.description.as_ref() else {
+            return Err(ModelProviderError::Request {
+                message: format!("tool \"{}\" carries no description", tool.name),
+                source: "tool description".into(),
+            });
+        };
+        let schema = serde_json::to_value(tool.input_schema.as_ref()).map_err(|source| {
+            ModelProviderError::Request {
+                message: format!("tool \"{}\" has an unreadable input schema", tool.name),
+                source: Box::new(source),
+            }
+        })?;
+        let parameters: wire::JsonObject =
+            serde_json::from_value(schema).map_err(|source| ModelProviderError::Request {
+                message: format!("tool \"{}\" has an unreadable input schema", tool.name),
+                source: Box::new(source),
+            })?;
+        converted.push(Tool::Function {
+            function: FunctionDef {
+                name: tool.name.to_string(),
+                description: description.to_string(),
+                parameters,
+            },
+        });
+    }
+    Ok(Some(converted))
+}

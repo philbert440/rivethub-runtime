@@ -40,6 +40,7 @@ pub enum Role {
 pub struct Message {
     pub role: Role,
     pub content: MessageContent,
+    pub reasoning: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub tool_call_id: Option<String>,
 }
