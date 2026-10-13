@@ -44,17 +44,19 @@ struct TagWireRow {
     pub(crate) updated_at: DateTime<Utc>,
 }
 
-impl From<TagWireRow> for TagWire {
-    fn from(row: TagWireRow) -> Self {
-        Self {
+impl TryFrom<TagWireRow> for TagWire {
+    type Error = Error;
+
+    fn try_from(row: TagWireRow) -> Result<Self, Self::Error> {
+        Ok(Self {
             id: row.id,
-            entity_type: parse_entity(&row.entity_type).unwrap_or(TagEntityType::Conversation),
+            entity_type: entity_type_of(&row.entity_type)?,
             entity_id: row.entity_id,
             key: row.key,
             value: row.value,
             display: row.display,
             source: row.source,
-            state: parse_state(&row.state).unwrap_or(TagState::Suggested),
+            state: state_of(&row.state)?,
             confidence: row.confidence,
             proposed_by: row.proposed_by,
             reason: row.reason,
@@ -62,7 +64,7 @@ impl From<TagWireRow> for TagWire {
             decided_at: row.decided_at,
             created_at: row.created_at,
             updated_at: row.updated_at,
-        }
+        })
     }
 }
 
@@ -104,6 +106,16 @@ fn parse_state(raw: &str) -> Option<TagState> {
 
 fn parse_entity(raw: &str) -> Option<TagEntityType> {
     TagEntityType::from_str(raw).ok()
+}
+
+fn state_of(raw: &str) -> Result<TagState, Error> {
+    parse_state(raw)
+        .ok_or_else(|| Error::protocol(format!("tag row has an unknown state \"{raw}\"")))
+}
+
+fn entity_type_of(raw: &str) -> Result<TagEntityType, Error> {
+    parse_entity(raw)
+        .ok_or_else(|| Error::protocol(format!("tag row has an unknown entity_type \"{raw}\"")))
 }
 
 enum TagTables<T> {
@@ -197,7 +209,10 @@ async fn list_tags(pool: &PgPool, query: &TagListQuery) -> Result<Vec<TagWire>, 
         "tags list",
         builder.build_query_as::<TagWireRow>().fetch_all(pool).await,
     )?;
-    Ok(rows.shape().into_iter().map(TagWire::from).collect())
+    rows.shape()
+        .into_iter()
+        .map(|row| TagWire::try_from(row).map_err(MemoryStoreError::from))
+        .collect()
 }
 
 async fn pending_tags(
@@ -227,18 +242,17 @@ async fn pending_tags(
         .await,
     )?
     .shape();
-    Ok(rows
-        .into_iter()
-        .map(|row| PendingTagWire {
-            tag: TagWire {
+    rows.into_iter()
+        .map(|row| -> Result<PendingTagWire, MemoryStoreError> {
+            let tag = TagWire::try_from(TagWireRow {
                 id: row.id,
-                entity_type: parse_entity(&row.entity_type).unwrap_or(TagEntityType::Conversation),
+                entity_type: row.entity_type,
                 entity_id: row.entity_id,
                 key: row.key,
                 value: row.value,
                 display: row.display,
                 source: row.source,
-                state: parse_state(&row.state).unwrap_or(TagState::Suggested),
+                state: row.state,
                 confidence: row.confidence,
                 proposed_by: row.proposed_by,
                 reason: row.reason,
@@ -246,19 +260,23 @@ async fn pending_tags(
                 decided_at: row.decided_at,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
-            },
-            action: if row.is_removal == Some(true) {
-                Some(PendingTagAction::Remove)
-            } else {
-                Some(PendingTagAction::Add)
-            },
-            session_key: row.session_key,
-            title: row.title,
-            agent: row.agent,
-            conversation_id: row.conversation_id,
-            excerpt: row.excerpt,
+            })
+            .map_err(MemoryStoreError::from)?;
+            Ok(PendingTagWire {
+                tag,
+                action: if row.is_removal == Some(true) {
+                    Some(PendingTagAction::Remove)
+                } else {
+                    Some(PendingTagAction::Add)
+                },
+                session_key: row.session_key,
+                title: row.title,
+                agent: row.agent,
+                conversation_id: row.conversation_id,
+                excerpt: row.excerpt,
+            })
         })
-        .collect())
+        .collect()
 }
 
 async fn tag_counts(
@@ -424,7 +442,7 @@ async fn add_tag(pool: &PgPool, add: &TagAdd) -> Result<TagWire, MemoryStoreErro
         value: record.value,
         display: record.display,
         source: record.source,
-        state: parse_state(&record.state).unwrap_or(TagState::Suggested),
+        state: state_of(&record.state)?,
         confidence: record.confidence,
         proposed_by: record.proposed_by,
         reason: record.reason,
@@ -472,7 +490,7 @@ async fn lookup_tags(
         grouped
             .entry(row.session_key)
             .or_insert_with(Vec::new)
-            .push(row.tag.into());
+            .push(TagWire::try_from(row.tag)?);
     }
     Ok(grouped)
 }

@@ -82,7 +82,7 @@ impl FakeMemoryStore {
 #[async_trait]
 impl MemoryStore for FakeMemoryStore {
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
-        let count = u64::try_from(batch.len()).unwrap_or(u64::MAX);
+        let count = batch.len() as u64;
         self.record(MemoryRequest::Append(batch.clone())).await;
         self.entries.lock().await.extend(batch);
         Ok(count)
@@ -99,7 +99,7 @@ impl MemoryStore for FakeMemoryStore {
             .iter()
             .filter(|e| e.content.contains(&needle))
             .filter(|e| query.agent.as_deref().is_none_or(|a| e.agent == a))
-            .take(usize::try_from(query.limit.get()).unwrap_or(0))
+            .take(query.limit.get() as usize)
             .map(|e| MemorySearchResult {
                 id: e.id.clone().unwrap_or_default(),
                 source: MemoryHitSource::Message,
@@ -125,14 +125,14 @@ impl MemoryStore for FakeMemoryStore {
                     .as_deref()
                     .is_none_or(|t| e.tool_name.as_deref() == Some(t))
             })
-            .take(usize::try_from(filter.limit.get()).unwrap_or(0))
+            .take(filter.limit.get() as usize)
             .cloned()
             .collect())
     }
 
     async fn stats(&self) -> Result<MemoryStatsResponse, MemoryStoreError> {
         self.record(MemoryRequest::Stats).await;
-        let count = u64::try_from(self.entries.lock().await.len()).unwrap_or(u64::MAX);
+        let count = self.entries.lock().await.len() as u64;
         Ok(MemoryStatsResponse {
             conversations: 1,
             messages: count,

@@ -2,7 +2,7 @@ use std::path::Path;
 
 use ra_ap_rustc_lexer::{Cursor, FrontmatterAllowed, TokenKind};
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::git;
 
 pub const FILE_CEILING: usize = 600;
@@ -24,12 +24,16 @@ pub fn comments(text: &str) -> Vec<(usize, String)> {
             let end = text[offset..]
                 .find('\n')
                 .map_or(text.len(), |index| offset + index);
-            let snippet = text.get(offset..end).unwrap_or_default().trim().to_owned();
+            let snippet = comment_text(text, offset, end);
             out.push((line_number, snippet));
         }
         offset += token.len as usize;
     }
     out
+}
+
+fn comment_text(text: &str, offset: usize, end: usize) -> String {
+    text[offset..end].trim().to_owned()
 }
 
 pub fn check_source(findings: &mut Vec<String>, rel: &str, text: &str) {
@@ -53,8 +57,10 @@ pub fn check_code(root: &Path, findings: &mut Vec<String>) -> Result<usize> {
         if !rel.starts_with("crates/") || !is_rust(rel) {
             continue;
         }
-        let Ok(text) = std::fs::read_to_string(root.join(rel)) else {
-            continue;
+        let text = match std::fs::read_to_string(root.join(rel)) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::InvalidData => continue,
+            Err(error) => return Err(Error::Io(error)),
         };
         check_source(findings, rel, &text);
         if is_naming_violation(rel) {

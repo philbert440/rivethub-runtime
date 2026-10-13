@@ -158,7 +158,8 @@ fn capture_body_over_the_mebibyte_limit_is_413() {
 }
 
 #[test]
-fn capture_lone_surrogates_become_replacement_characters() {
+fn capture_lone_surrogates_become_replacement_characters() -> Result<(), Box<dyn std::error::Error>>
+{
     let body = concat!(
         "{\"session_key\":\"s-cap\",\"agent\":\"a\",\"messages\":[{\"event_id\":\"e3\",",
         "\"role\":\"user\",\"content\":\"x\\ud800y\\ud83d\\ude00z\"}]}"
@@ -173,17 +174,18 @@ fn capture_lone_surrogates_become_replacement_characters() {
     let parsed: wire::capture::CaptureResult =
         serde_json::from_slice(&response.body).expect("capture result body");
     assert_eq!(parsed.inserted, 1);
-    let entries = block_on(store.browse(filter_all())).unwrap_or_default();
-    let content = entries
-        .first()
-        .map(|entry| entry.content.clone())
-        .unwrap_or_default();
-    assert!(content.contains('\u{FFFD}'));
-    assert!(content.contains('\u{1F600}'));
+    let entries = block_on(store.browse(filter_all()))?;
+    let [entry] = entries.as_slice() else {
+        return Err("expected one stored entry".into());
+    };
+    assert!(entry.content.contains('\u{FFFD}'));
+    assert!(entry.content.contains('\u{1F600}'));
+    Ok(())
 }
 
 #[test]
-fn capture_escaped_backslashes_are_not_surrogate_escapes() {
+fn capture_escaped_backslashes_are_not_surrogate_escapes() -> Result<(), Box<dyn std::error::Error>>
+{
     let (gateway, store) = common::gateway();
     let body = concat!(
         "{\"session_key\":\"s-bslash\",\"agent\":\"a\",\"messages\":[{\"event_id\":\"e4\",",
@@ -195,16 +197,16 @@ fn capture_escaped_backslashes_are_not_surrogate_escapes() {
     ))
     .expect("in-process answer");
     assert_eq!(response.status, 200);
-    let entries = block_on(store.browse(filter_all())).unwrap_or_default();
-    let content = entries
-        .first()
-        .map(|entry| entry.content.clone())
-        .unwrap_or_default();
-    assert_eq!(content, "a\\ud800 b\\ud83d\\ude00 c");
+    let entries = block_on(store.browse(filter_all()))?;
+    let [entry] = entries.as_slice() else {
+        return Err("expected one stored entry".into());
+    };
+    assert_eq!(entry.content, "a\\ud800 b\\ud83d\\ude00 c");
+    Ok(())
 }
 
 #[test]
-fn capture_real_surrogate_pairs_survive_the_sanitizer() {
+fn capture_real_surrogate_pairs_survive_the_sanitizer() -> Result<(), Box<dyn std::error::Error>> {
     let (gateway, store) = common::gateway();
     let body = concat!(
         "{\"session_key\":\"s-pair\",\"agent\":\"a\",\"messages\":[{\"event_id\":\"e5\",",
@@ -216,12 +218,12 @@ fn capture_real_surrogate_pairs_survive_the_sanitizer() {
     ))
     .expect("in-process answer");
     assert_eq!(response.status, 200);
-    let entries = block_on(store.browse(filter_all())).unwrap_or_default();
-    let content = entries
-        .first()
-        .map(|entry| entry.content.clone())
-        .unwrap_or_default();
-    assert_eq!(content, "\u{1F600}");
+    let entries = block_on(store.browse(filter_all()))?;
+    let [entry] = entries.as_slice() else {
+        return Err("expected one stored entry".into());
+    };
+    assert_eq!(entry.content, "\u{1F600}");
+    Ok(())
 }
 
 fn filter_all() -> kernel::memory::BrowseFilter {
@@ -272,8 +274,12 @@ fn message(edit: impl FnOnce(&mut CaptureMessage)) -> CaptureMessage {
     message
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the test literals are constants; a malformed literal must fail the test, not store an empty object"
+)]
 fn object(raw: &str) -> JsonObject {
-    serde_json::from_str(raw).unwrap_or_default()
+    serde_json::from_str(raw).expect("the test literal parses as an object")
 }
 
 #[test]

@@ -57,29 +57,28 @@ fn reqwest_client() -> Result<reqwest::Client, reqwest::Error> {
         .build()
 }
 
-type Seen = std::sync::Arc<Mutex<Vec<(String, String)>>>;
+type Seen = std::sync::Arc<Mutex<Vec<(Option<String>, String)>>>;
 
 async fn handle_capture(
     axum::extract::State(seen): axum::extract::State<Seen>,
     request: axum::extract::Request,
-) -> axum::Json<CaptureResult> {
+) -> Result<axum::Json<CaptureResult>, axum::http::StatusCode> {
     let content_type = request
         .headers()
         .get(axum::http::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
-        .unwrap_or_default()
-        .to_owned();
+        .map(str::to_owned);
     let body = axum::body::to_bytes(request.into_body(), 1024 * 1024)
         .await
-        .unwrap_or_default();
+        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
     seen.lock()
         .push((content_type, String::from_utf8_lossy(&body).to_string()));
-    axum::Json(CaptureResult {
+    Ok(axum::Json(CaptureResult {
         ok: true,
         conversation_id: "c-7".to_owned(),
         inserted: 1,
         skipped: 0,
-    })
+    }))
 }
 
 async fn http_transport_posts_and_parses() -> Result<(), Box<dyn std::error::Error>> {
@@ -99,20 +98,11 @@ async fn http_transport_posts_and_parses() -> Result<(), Box<dyn std::error::Err
     let result = transport.post(body).await?;
     assert_eq!(result.conversation_id, "c-7");
     let recorded = seen.lock().clone();
-    assert_eq!(recorded.len(), 1);
-    assert_eq!(
-        recorded
-            .first()
-            .map(|pair| pair.0.clone())
-            .unwrap_or_default(),
-        "application/json"
-    );
-    let posted: testkit::Json = serde_json::from_str(
-        &recorded
-            .first()
-            .map(|pair| pair.1.clone())
-            .unwrap_or_default(),
-    )?;
+    let [entry] = recorded.as_slice() else {
+        return Err("expected exactly one capture post".into());
+    };
+    assert_eq!(entry.0.as_deref(), Some("application/json"));
+    let posted: testkit::Json = serde_json::from_str(&entry.1)?;
     let event_id = posted
         .get("messages")
         .and_then(|messages| messages.get(0))
@@ -162,13 +152,12 @@ async fn spool_round_trip_and_dead_letters() -> Result<(), Box<dyn std::error::E
     let now = now_at("2026-10-10T12:00:00Z")?;
     let first = spool.spool(r#"{"session_key":"a"}"#, now)?;
     spool.spool(r#"{"session_key":"b"}"#, now + Duration::from_millis(5))?;
-    assert!(
-        first
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .ends_with(".json")
-    );
+    let extension = first
+        .extension()
+        .ok_or("the spool file has no extension")?
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(extension, "json");
     let permissions = std::fs::metadata(&first)?.permissions();
     assert_eq!(
         std::os::unix::fs::PermissionsExt::mode(&permissions) & 0o777,

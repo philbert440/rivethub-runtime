@@ -1,5 +1,5 @@
-use super::parse_state;
 use super::read_rows;
+use super::state_of;
 use super::store_error;
 use chrono::DateTime;
 use chrono::Utc;
@@ -29,21 +29,23 @@ struct TagTaxonomyRow {
     updated_at: DateTime<Utc>,
 }
 
-impl From<TagTaxonomyRow> for TagTaxonomyEntry {
-    fn from(row: TagTaxonomyRow) -> Self {
-        Self {
+impl TryFrom<TagTaxonomyRow> for TagTaxonomyEntry {
+    type Error = MemoryStoreError;
+
+    fn try_from(row: TagTaxonomyRow) -> Result<Self, Self::Error> {
+        Ok(Self {
             key: row.key,
             value: row.value,
             display: row.display,
             parent_value: row.parent_value,
             aliases: row.aliases,
-            state: parse_state(&row.state).unwrap_or(TagState::Suggested),
+            state: state_of(&row.state).map_err(MemoryStoreError::from)?,
             source: row.source,
             reason: row.reason,
             decided_at: row.decided_at,
             created_at: row.created_at,
             updated_at: row.updated_at,
-        }
+        })
     }
 }
 
@@ -71,11 +73,10 @@ async fn list_tag_taxonomy(
             .fetch_all(pool)
             .await,
     )?;
-    Ok(rows
-        .shape()
+    rows.shape()
         .into_iter()
-        .map(TagTaxonomyEntry::from)
-        .collect())
+        .map(TagTaxonomyEntry::try_from)
+        .collect()
 }
 
 async fn upsert_tag_taxonomy(
@@ -106,7 +107,7 @@ async fn upsert_tag_taxonomy(
         display: record.display,
         parent_value: record.parent_value,
         aliases: record.aliases,
-        state: parse_state(&record.state).unwrap_or(TagState::Suggested),
+        state: state_of(&record.state).map_err(MemoryStoreError::from)?,
         source: record.source,
         reason: record.reason,
         decided_at: record.decided_at,
@@ -203,7 +204,7 @@ async fn merge_tag_taxonomy(
         .map_err(|source| store_error("taxonomy merge", source))?;
     Ok(TagTaxonomyMergeResult {
         moved,
-        dropped: u64::try_from(dropped_rows.len()).unwrap_or(u64::MAX),
+        dropped: dropped_rows.len() as u64,
         into: merge.into.clone(),
     })
 }

@@ -63,15 +63,24 @@ pub struct ErrorRecord {
     pub name: String,
 }
 
-static ISO_ONLY: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(ISO_TIMESTAMP).ok());
+#[expect(
+    clippy::expect_used,
+    reason = "the timestamp pattern is a constant; the pg replay tests match it"
+)]
+static ISO_ONLY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(ISO_TIMESTAMP).expect("the ISO timestamp pattern is a constant"));
 
-static UUID: LazyLock<Option<Regex>> = LazyLock::new(|| {
+#[expect(
+    clippy::expect_used,
+    reason = "the uuid pattern is a constant; the pg replay tests match it"
+)]
+static UUID: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z")
-        .ok()
+        .expect("the uuid pattern is a constant")
 });
 
 fn looks_like_uuid(text: &str) -> bool {
-    UUID.as_ref().is_some_and(|uuid| uuid.is_match(text))
+    UUID.is_match(text)
 }
 
 fn placeholder_category(text: &str) -> Option<(&'static str, String)> {
@@ -134,21 +143,20 @@ impl PgNorm {
                 continue;
             }
             let category = if conversations { "conv" } else { "msg" };
-            for row in dumps.as_array().unwrap_or(&Vec::new()) {
-                if let Some(id) = row.get("id").and_then(Json::as_str)
-                    && looks_like_uuid(id)
-                {
-                    self.categories.insert(id.to_string(), category.to_string());
+            if let Some(rows) = dumps.as_array() {
+                for row in rows {
+                    if let Some(id) = row.get("id").and_then(Json::as_str)
+                        && looks_like_uuid(id)
+                    {
+                        self.categories.insert(id.to_string(), category.to_string());
+                    }
                 }
             }
         }
     }
 
     fn normalize_text(&mut self, text: &str, kept: &[String]) -> String {
-        let Some(iso) = ISO_ONLY.as_ref() else {
-            return text.to_string();
-        };
-        let replaced = iso.replace_all(text, |caps: &Captures<'_>| {
+        let replaced = ISO_ONLY.replace_all(text, |caps: &Captures<'_>| {
             let matched = caps.get(0).map_or("", |found| found.as_str());
             self.placeholder(matched, "now")
         });

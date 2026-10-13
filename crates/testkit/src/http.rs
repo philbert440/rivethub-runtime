@@ -35,8 +35,13 @@ pub struct Response {
 }
 
 impl Response {
+    #[expect(
+        clippy::expect_used,
+        reason = "the echo replies serialize recorded typed values; a failure is a harness bug and must fail the trial, not compare an empty body"
+    )]
     pub fn json(status: u16, body: &impl Serialize) -> Self {
-        let bytes = serde_json::to_vec(body).unwrap_or_default();
+        let bytes =
+            serde_json::to_vec(body).expect("an echo of recorded JSON is always serializable");
         Self {
             status,
             headers: vec![("Content-Type".to_string(), "application/json".to_string())],

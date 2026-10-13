@@ -126,25 +126,25 @@ impl<T: CaptureTransport> ClaudeHook<T> {
         }
         match self.writer.write(&batch, now).await {
             Ok(totals) => {
-                self.append_log(&log_line(event, session.as_str(), &totals, now));
+                self.best_effort_log(&log_line(event, session.as_str(), &totals, now));
                 HookRun::done()
             }
             Err(error) => HookRun::failed(error.to_string()),
         }
     }
 
-    fn append_log(&self, line: &str) {
+    fn best_effort_log(&self, line: &str) {
         let dir = self.state_dir.join(LOG_DIR);
         if std::fs::create_dir_all(&dir).is_err() {
             return;
         }
         let target = dir.join(LOG_FILE);
         if !target.exists() {
-            let _ = std::fs::write(&target, b"");
+            drop(std::fs::write(&target, b""));
             set_log_mode(&target);
         }
         if let Ok(mut file) = std::fs::OpenOptions::new().append(true).open(&target) {
-            let _ = file.write_all(format!("{line}\n").as_bytes());
+            drop(file.write_all(format!("{line}\n").as_bytes()));
         }
     }
 }
@@ -171,7 +171,7 @@ fn set_log_mode(target: &Path) {
     if let Ok(metadata) = std::fs::metadata(target) {
         let mut permissions = metadata.permissions();
         permissions.set_mode(0o644);
-        let _ = std::fs::set_permissions(target, permissions);
+        drop(std::fs::set_permissions(target, permissions));
     }
 }
 
@@ -266,17 +266,17 @@ fn user_prompt_batch(
     ingest_key: &str,
 ) -> Result<CaptureBatchRequest, HookError> {
     let mut batch = base_batch(session_key);
-    let prompt = payload.prompt.clone().unwrap_or_default();
-    batch.title = Some(if prompt.is_empty() {
-        FALLBACK_TITLE.to_owned()
-    } else {
-        prompt.clone()
+    let prompt = payload.prompt.clone();
+    batch.title = Some(match prompt.as_deref() {
+        Some(text) if !text.is_empty() => text.to_owned(),
+        Some(_) | None => FALLBACK_TITLE.to_owned(),
     });
-    let suffix = user_ordinal(transcript, &prompt);
+    let prompt_text = prompt.unwrap_or_default();
+    let suffix = user_ordinal(transcript, &prompt_text);
     let message = CaptureMessage {
         event_id: format!("{session_key}:u{suffix}"),
         role: Role::User,
-        content: prompt,
+        content: prompt_text,
         tool_name: None,
         tool_args: None,
         tool_result: None,
@@ -465,7 +465,7 @@ fn assistant_turns(
             path.map(str::to_owned),
             position,
             line.uuid.as_deref(),
-            Some(line.is_sidechain.unwrap_or(false)),
+            Some(sidechain_flag(line)),
             None,
             None,
         )?;
@@ -591,6 +591,10 @@ fn tool_use_issuer<'a>(transcript: &'a [Line], outcome: &ToolOutcome) -> Option<
         }
     }
     None
+}
+
+fn sidechain_flag(line: &Line) -> bool {
+    line.is_sidechain.unwrap_or(false)
 }
 
 fn log_line(event: HookEvent, session_key: &str, totals: &Totals, now: DateTime<Utc>) -> String {

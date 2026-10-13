@@ -23,6 +23,19 @@ Anti-pattern: `.unwrap()` / `.expect()` in production code. Pattern: return the 
 that cannot be absent is made non-optional by its type. Check: clippy `unwrap_used`, `expect_used` (tests exempt via
 `clippy.toml`).
 
+## FALLBACK
+Anti-pattern: a fallback that hides a decision — `unwrap_or_default()` / `unwrap_or(0)` on a value that failed to parse or
+decode, `let _ = …` on a `Result`, `let Ok(..) = .. else`, or a trailing `.ok()`. The value becomes a default, `None` or a
+discarded result and no reader can tell whether anyone decided that. Pattern: every site is one of three things, and the
+types say which. (1) An error: propagate it with `?` into the crate's `thiserror` error. (2) A recorded rule: the inventory
+or a recording says what happens (the hook never fails the harness, so the log write is best effort; a non-UTF-8 header is
+no header) — keep the behaviour, name it (`fn best_effort_log(..)`, `fn header_text(..) -> Option<&str>`) and pin it with a
+test. (3) A real absence: the domain has no value — keep the `Option` to the one place that uses it instead of defaulting
+early. A discard that is genuinely the last write (a final stderr report) takes `#[expect(clippy::let_underscore_must_use,
+reason = "…")]`, never a bare `let _ =`. Check: clippy `let_underscore_must_use`, `let_underscore_untyped` (a discarded
+`Result` or `#[must_use]` value cannot land); the three-way decision itself is review, with the inventory cite recorded in
+the lane notes.
+
 ## UNSAFE
 Anti-pattern: `unsafe`. Pattern: a safe crate API. Check: rustc `unsafe_code = "forbid"` in `[workspace.lints]`.
 

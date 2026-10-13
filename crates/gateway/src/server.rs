@@ -84,35 +84,33 @@ pub fn is_bind_loopback(host: &str) -> bool {
     )
 }
 
+fn non_empty(path: Option<&PathBuf>) -> Option<&Path> {
+    path.filter(|path| !path.as_os_str().is_empty())
+        .map(Path::new)
+}
+
 pub fn resolve_tls(source: &BindSource) -> Result<Option<TlsPaths>, BindError> {
-    let ready = source
-        .tls_cert
-        .as_deref()
-        .is_some_and(|path| !path.as_os_str().is_empty())
-        && source
-            .tls_key
-            .as_deref()
-            .is_some_and(|path| !path.as_os_str().is_empty());
-    if !ready {
+    let (Some(cert), Some(key)) = (
+        non_empty(source.tls_cert.as_ref()),
+        non_empty(source.tls_key.as_ref()),
+    ) else {
         if is_bind_loopback(&source.host) {
             return Ok(None);
         }
         return Err(BindError::TlsRequired {
             host: source.host.clone(),
         });
-    }
-    let cert = source.tls_cert.clone().unwrap_or_default();
-    let key = source.tls_key.clone().unwrap_or_default();
-    std::fs::metadata(&cert)?;
-    std::fs::metadata(&key)?;
+    };
+    std::fs::metadata(cert)?;
+    std::fs::metadata(key)?;
     if let Some(ca) = &source.tls_ca
         && !ca.is_file()
     {
         return Err(BindError::CaMissing { path: ca.clone() });
     }
     Ok(Some(TlsPaths {
-        cert,
-        key,
+        cert: cert.to_path_buf(),
+        key: key.to_path_buf(),
         ca: source.tls_ca.clone(),
     }))
 }

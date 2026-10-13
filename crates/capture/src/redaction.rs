@@ -284,11 +284,7 @@ fn replace_matches(
         match replacement {
             Replacement::Whole => out.push_str(placeholder),
             Replacement::FirstGroup => {
-                let head = found
-                    .group(1)
-                    .and_then(|group| text.get(group))
-                    .unwrap_or_default();
-                out.push_str(head);
+                out.push_str(first_group_or_empty(text, &found));
                 out.push_str(placeholder);
             }
         }
@@ -297,6 +293,13 @@ fn replace_matches(
     }
     out.push_str(&text[copied..]);
     (out, count)
+}
+
+fn first_group_or_empty<'a>(text: &'a str, found: &regress::Match) -> &'a str {
+    found
+        .group(1)
+        .and_then(|group| text.get(group))
+        .unwrap_or("")
 }
 
 fn unsafe_source(source: &str) -> bool {
@@ -392,5 +395,14 @@ mod tests {
             SECRET_KEYS.find("api_key").is_some(),
             "the secret-key pattern is missing"
         );
+    }
+
+    #[test]
+    fn a_capture_group_that_does_not_participate_contributes_nothing() {
+        let regex = Regex::new("x(?:-(y))?").expect("the test pattern is a constant that compiles");
+        let bare = regex.find("x").expect("the bare form matches");
+        assert_eq!(first_group_or_empty("x", &bare), "");
+        let grouped = regex.find("x-y").expect("the grouped form matches");
+        assert_eq!(first_group_or_empty("x-y", &grouped), "y");
     }
 }

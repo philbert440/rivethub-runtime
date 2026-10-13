@@ -12,8 +12,13 @@ use super::looks_like_api_key;
 const NESTED_QUANTIFIER_PATTERN: &str =
     r"\((?:[^\\)]|\\.)*[+*](?:[^\\)]|\\.)*\)(?:[+*?]|\{\d+,?\d*\})";
 
-static NESTED_QUANTIFIERS: LazyLock<Option<Regex>> =
-    LazyLock::new(|| Regex::new(NESTED_QUANTIFIER_PATTERN).ok());
+#[expect(
+    clippy::expect_used,
+    reason = "the nested-quantifier pattern is a constant; the validate tests match it"
+)]
+static NESTED_QUANTIFIERS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(NESTED_QUANTIFIER_PATTERN).expect("the nested-quantifier pattern is a constant")
+});
 
 pub(super) fn validate(out: &mut ValidationResult, memory: &MemorySection) {
     if memory.postgres.is_some() && memory.sqlite.is_some() {
@@ -150,10 +155,7 @@ fn pattern_finding(out: &mut ValidationResult, index: usize, pattern: &str) {
         );
         return;
     }
-    if NESTED_QUANTIFIERS
-        .as_ref()
-        .is_some_and(|regex| regex.find(pattern).is_some())
-    {
+    if NESTED_QUANTIFIERS.find(pattern).is_some() {
         out.error(
             path,
             concat!(

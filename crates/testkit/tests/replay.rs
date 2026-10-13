@@ -101,10 +101,14 @@ fn http_healthz() -> Response {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the png body is a constant in this test; a decode failure must fail the trial, not compare an empty body"
+)]
 fn http_png() -> Response {
     let body = BASE64
         .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
-        .unwrap_or_default();
+        .expect("the test png constant decodes");
     Response {
         status: 200,
         headers: vec![("Content-Type".to_string(), "image/png".to_string())],

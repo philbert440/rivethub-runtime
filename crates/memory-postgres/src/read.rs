@@ -11,6 +11,7 @@ use kernel::memory::BrowseFilter;
 use kernel::memory::SearchMode;
 use std::str::FromStr as _;
 use uuid::Uuid;
+use wire::JsonObject;
 use wire::gateway::memory::BrowseWindow;
 use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryHitSource;
@@ -66,27 +67,28 @@ impl TryFrom<MessageEntryRow> for MemoryEntry {
             role,
             content: row.content,
             tool_name: row.tool_name,
-            tool_args: row
-                .tool_args
-                .as_deref()
-                .and_then(|text| serde_json::from_str(text).ok()),
+            tool_args: stored_json(row.tool_args, "tool_args")?,
             tool_result: row.tool_result,
-            metadata: row
-                .metadata
-                .as_deref()
-                .and_then(|text| serde_json::from_str(text).ok()),
+            metadata: stored_json(row.metadata, "metadata")?,
             created_at: row.created_at,
         })
     }
+}
+
+fn stored_json(raw: Option<String>, column: &'static str) -> Result<Option<JsonObject>, Error> {
+    let Some(text) = raw else {
+        return Ok(None);
+    };
+    serde_json::from_str(&text)
+        .map(Some)
+        .map_err(|source| Error::protocol(format!("stored {column} is not JSON: {source}")))
 }
 
 fn utf16_prefix(text: &str, max: usize) -> String {
     let mut units = 0usize;
     for (idx, ch) in text.char_indices() {
         if units + ch.len_utf16() > max {
-            return text
-                .get(..idx)
-                .map_or_else(|| text.to_string(), str::to_string);
+            return text[..idx].to_string();
         }
         units += ch.len_utf16();
     }

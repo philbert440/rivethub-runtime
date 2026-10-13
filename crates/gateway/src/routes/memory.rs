@@ -272,14 +272,13 @@ fn serialize_tool<T: Serialize>(value: &T) -> Result<String, ApiError> {
 }
 
 async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<String, ApiError> {
-    let mode = match args.mode.as_deref().map(SearchMode::from_str) {
-        Some(Ok(mode)) => mode,
-        Some(Err(_)) => {
-            return Ok(format!(
-                "Search failed: Unknown search mode: {}",
-                args.mode.unwrap_or_default()
-            ));
-        }
+    let mode = match &args.mode {
+        Some(raw) => match SearchMode::from_str(raw) {
+            Ok(mode) => mode,
+            Err(_) => {
+                return Ok(format!("Search failed: Unknown search mode: {raw}"));
+            }
+        },
         None => SearchMode::Hybrid,
     };
     let tag = match args.tag.as_deref().map(TagLiteral::from_str) {

@@ -13,7 +13,7 @@ pub(crate) async fn ingest(
     batch: ValidatedBatch,
 ) -> Result<Json<CaptureResult>, ApiError> {
     let entries = batch.entries();
-    let total = u64::try_from(entries.len()).unwrap_or(u64::MAX);
+    let total = entries.len() as u64;
     let inserted = gateway.store().append(entries).await?;
     Ok(Json(CaptureResult {
         ok: true,

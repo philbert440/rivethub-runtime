@@ -1,11 +1,10 @@
-use std::fmt::Write as _;
 use std::path::Path;
 
 use regex::Regex;
 use serde::Deserialize;
 use std::sync::LazyLock;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::git::git;
 use crate::privacy;
 
@@ -45,9 +44,12 @@ pub fn manifests(root: &Path, findings: &mut Vec<String>) -> Result<Vec<String>>
         .exec()?;
     let mut names = Vec::new();
     for package in &metadata.packages {
-        let Some(source) = package.manifest_path.strip_prefix(root).ok() else {
-            continue;
-        };
+        let source = package.manifest_path.strip_prefix(root).map_err(|_| {
+            Error::Finding(format!(
+                "MANIFEST {}: manifest {} is outside the workspace root",
+                package.name, package.manifest_path
+            ))
+        })?;
         let manifest_path = root.join(source);
         let name = package.name.to_string();
         if name == "xtask" {
@@ -55,70 +57,79 @@ pub fn manifests(root: &Path, findings: &mut Vec<String>) -> Result<Vec<String>>
             continue;
         }
         names.push(name.clone());
-        let dir = manifest_path
-            .parent()
-            .and_then(|parent| parent.file_name())
-            .and_then(|parent| parent.to_str())
-            .unwrap_or_default();
-        if name != dir {
-            findings.push(format!(
-                "MANIFEST {name}: package.name must equal the directory name"
-            ));
-        }
-        let text = std::fs::read_to_string(&manifest_path)?;
-        let value: toml::Table = toml::from_str(&text)?;
-        let lints = value.get("lints");
-        let workspace_flag = lints.and_then(|lints| lints.get("workspace"));
-        let workspace_lints = workspace_flag.is_some_and(toml::Value::is_bool)
-            && workspace_flag.and_then(toml::Value::as_bool) == Some(true);
-        if !workspace_lints {
-            findings.push(format!("MANIFEST {name}: missing [lints] workspace = true"));
-        }
-        let package_table = value
-            .get("package")
-            .and_then(toml::Value::as_table)
-            .cloned()
-            .unwrap_or_default();
-        for key in ["edition", "license", "version", "publish", "rust-version"] {
-            let inherited = package_table
-                .get(key)
-                .and_then(toml::Value::as_table)
-                .and_then(|table| table.get("workspace"))
-                .and_then(toml::Value::as_bool)
-                == Some(true);
-            if !inherited {
-                findings.push(format!(
-                    "MANIFEST {name}: package.{key} must be workspace = true"
-                ));
-            }
-        }
-        for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
-            let Some(entries) = value.get(section).and_then(toml::Value::as_table) else {
-                continue;
-            };
-            for (dep, spec) in entries {
-                if spec
-                    .as_table()
-                    .and_then(|table| table.get("path"))
-                    .is_some()
-                {
-                    continue;
-                }
-                let from_workspace = spec
-                    .as_table()
-                    .and_then(|table| table.get("workspace"))
-                    .and_then(toml::Value::as_bool)
-                    == Some(true);
-                if !from_workspace {
-                    findings.push(format!(
-                        "MANIFEST {name}: {section}.{dep} must come from [workspace.dependencies]"
-                    ));
-                }
-            }
-        }
+        member(&manifest_path, &name, findings)?;
     }
     binary_dependency(&metadata, findings);
     Ok(names)
+}
+
+fn member(manifest_path: &Path, name: &str, findings: &mut Vec<String>) -> Result<()> {
+    let Some(dir) = manifest_path
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|parent| parent.to_str())
+    else {
+        findings.push(format!(
+            "MANIFEST {name}: manifest path has no parent directory"
+        ));
+        return Ok(());
+    };
+    if name != dir {
+        findings.push(format!(
+            "MANIFEST {name}: package.name must equal the directory name"
+        ));
+    }
+    let text = std::fs::read_to_string(manifest_path)?;
+    let value: toml::Table = toml::from_str(&text)?;
+    let Some(package_table) = value.get("package").and_then(toml::Value::as_table) else {
+        findings.push(format!("MANIFEST {name}: manifest has no [package] table"));
+        return Ok(());
+    };
+    let lints = value.get("lints");
+    let workspace_flag = lints.and_then(|lints| lints.get("workspace"));
+    let workspace_lints = workspace_flag.is_some_and(toml::Value::is_bool)
+        && workspace_flag.and_then(toml::Value::as_bool) == Some(true);
+    if !workspace_lints {
+        findings.push(format!("MANIFEST {name}: missing [lints] workspace = true"));
+    }
+    for key in ["edition", "license", "version", "publish", "rust-version"] {
+        let inherited = package_table
+            .get(key)
+            .and_then(toml::Value::as_table)
+            .and_then(|table| table.get("workspace"))
+            .and_then(toml::Value::as_bool)
+            == Some(true);
+        if !inherited {
+            findings.push(format!(
+                "MANIFEST {name}: package.{key} must be workspace = true"
+            ));
+        }
+    }
+    for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
+        let Some(entries) = value.get(section).and_then(toml::Value::as_table) else {
+            continue;
+        };
+        for (dep, spec) in entries {
+            if spec
+                .as_table()
+                .and_then(|table| table.get("path"))
+                .is_some()
+            {
+                continue;
+            }
+            let from_workspace = spec
+                .as_table()
+                .and_then(|table| table.get("workspace"))
+                .and_then(toml::Value::as_bool)
+                == Some(true);
+            if !from_workspace {
+                findings.push(format!(
+                    "MANIFEST {name}: {section}.{dep} must come from [workspace.dependencies]"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn lint_policy(root: &Path, findings: &mut Vec<String>) -> Result<()> {
@@ -193,18 +204,30 @@ pub fn identity_ok(root: &Path, name: &str, email: &str) -> Result<bool> {
     Ok(file.sha256.contains(&digest))
 }
 
-type Cell = LazyLock<std::result::Result<Regex, regex::Error>>;
-
-static BLOCKED_TRAILERS: Cell =
-    LazyLock::new(|| Regex::new(r"(?im)^(Co-authored-by|Claude-Session|Signed-off-by):"));
-static BLOCKED_TEXT: Cell = LazyLock::new(|| {
-    Regex::new(r"(?i)(claude|anthropic|cursor|copilot|chatgpt|openai|generated with)")
+#[expect(
+    clippy::expect_used,
+    reason = "the blocked-trailer pattern is a constant; the authorship tests match it"
+)]
+static BLOCKED_TRAILERS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?im)^(Co-authored-by|Claude-Session|Signed-off-by):")
+        .expect("the blocked-trailer pattern is a constant")
 });
-static AI_TEXT: Cell = LazyLock::new(|| Regex::new(r"(?i)(generated with|session_|co-authored)"));
-
-fn regex_of(cell: &'static Cell) -> Option<&'static Regex> {
-    (**cell).as_ref().ok()
-}
+#[expect(
+    clippy::expect_used,
+    reason = "the blocked-text pattern is a constant; the authorship tests match it"
+)]
+static BLOCKED_TEXT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(claude|anthropic|cursor|copilot|chatgpt|openai|generated with)")
+        .expect("the blocked-text pattern is a constant")
+});
+#[expect(
+    clippy::expect_used,
+    reason = "the AI-text pattern is a constant; the authorship tests match it"
+)]
+static AI_TEXT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(generated with|session_|co-authored)")
+        .expect("the AI-text pattern is a constant")
+});
 
 pub fn commit_message(
     root: &Path,
@@ -212,15 +235,13 @@ pub fn commit_message(
     text: &str,
     author: Option<(&str, &str)>,
 ) -> Result<()> {
-    if regex_of(&BLOCKED_TRAILERS).is_some_and(|regex| regex.is_match(text)) {
+    if BLOCKED_TRAILERS.is_match(text) {
         findings.push(
             "AUTHORSHIP commit message carries a Co-authored-by / Claude-Session / Signed-off-by trailer"
                 .to_owned(),
         );
     }
-    if regex_of(&BLOCKED_TEXT).is_some_and(|regex| regex.is_match(text))
-        && regex_of(&AI_TEXT).is_some_and(|regex| regex.is_match(text))
-    {
+    if BLOCKED_TEXT.is_match(text) && AI_TEXT.is_match(text) {
         findings.push("AUTHORSHIP commit message carries AI attribution text".to_owned());
     }
     if let Some((name, email)) = author
@@ -252,7 +273,9 @@ pub fn commits(root: &Path, range: &str, findings: &mut Vec<String>) -> Result<u
         commit_message(root, findings, body, Some((name, email)))?;
         let suffix = hash.get(..8).unwrap_or(hash).to_owned();
         for finding in findings.iter_mut().skip(before) {
-            let _ = write!(finding, " ({suffix})");
+            finding.push_str(" (");
+            finding.push_str(&suffix);
+            finding.push(')');
         }
     }
     Ok(count)

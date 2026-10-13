@@ -27,7 +27,7 @@ fn parse(args: &[String]) -> Result<Mode> {
                 }
             }
             Ok(Mode::Check {
-                root: check::absolute(&root),
+                root: check::absolute(&root)?,
                 locked,
             })
         }
@@ -76,7 +76,10 @@ fn main() -> ExitCode {
     let mut raw = std::env::args();
     let invoked_as = raw.next();
     let args: Vec<String> = raw.collect();
-    let root = check::absolute(&PathBuf::from("."));
+    let root = match check::absolute(&PathBuf::from(".")) {
+        Ok(root) => root,
+        Err(error) => return best_effort_report(&error),
+    };
     let outcome = match hook_mode(invoked_as.as_deref(), &args) {
         Some(mode) => mode,
         None => parse(&args),
@@ -91,12 +94,22 @@ fn main() -> ExitCode {
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(Error::Finding(_)) => ExitCode::FAILURE,
-        Err(error) => {
-            let stderr = std::io::stderr();
-            let mut out = stderr.lock();
-            let _ = writeln!(out, "xtask: {error}");
-            let _ = out.flush();
-            ExitCode::FAILURE
-        }
+        Err(error) => best_effort_report(&error),
     }
+}
+
+#[expect(
+    clippy::let_underscore_must_use,
+    reason = "the failure report is the process's last write: a broken stderr cannot be reported anywhere else, and the failure exit code stands"
+)]
+#[expect(
+    clippy::let_underscore_untyped,
+    reason = "the failure report is the process's last write: a broken stderr cannot be reported anywhere else, and the failure exit code stands"
+)]
+fn best_effort_report(error: &Error) -> ExitCode {
+    let stderr = std::io::stderr();
+    let mut out = stderr.lock();
+    let _ = writeln!(out, "xtask: {error}");
+    let _ = out.flush();
+    ExitCode::FAILURE
 }

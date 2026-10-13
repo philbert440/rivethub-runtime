@@ -88,20 +88,11 @@ async fn tail_returns_turns_after_the_timestamp() -> Result<(), Box<dyn std::err
         .tail(&session, at("2026-10-10T12:00:02Z")?)
         .await?;
     assert_eq!(turns.len(), 2);
-    assert_eq!(
-        turns
-            .first()
-            .map(|turn| turn.content.clone())
-            .unwrap_or_default(),
-        format!("Two files: {}😀", "z".repeat(16010))
-    );
-    assert_eq!(
-        turns
-            .get(1)
-            .map(|turn| turn.content.clone())
-            .unwrap_or_default(),
-        "no uuid"
-    );
+    let [first, second] = turns.as_slice() else {
+        return Err("expected exactly two turns".into());
+    };
+    assert_eq!(first.content, format!("Two files: {}😀", "z".repeat(16010)));
+    assert_eq!(second.content, "no uuid");
     Ok(())
 }
 

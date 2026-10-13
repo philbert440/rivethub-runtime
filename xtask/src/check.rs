@@ -8,11 +8,11 @@ fn finish(label: &str, findings: &[String]) -> Result<()> {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     for finding in findings {
-        let _ = writeln!(out, "{finding}");
+        writeln!(out, "{finding}")?;
     }
     let state = if findings.is_empty() { "OK" } else { "FAIL" };
-    let _ = writeln!(out, "GATE {state}: {} finding(s), {label}", findings.len());
-    let _ = out.flush();
+    writeln!(out, "GATE {state}: {} finding(s), {label}", findings.len())?;
+    out.flush()?;
     if findings.is_empty() {
         Ok(())
     } else {
@@ -36,11 +36,11 @@ pub fn run_tool(root: &Path, command: &str, args: &[&str]) -> Result<()> {
     }
 }
 
-pub fn absolute(path: &Path) -> PathBuf {
+pub fn absolute(path: &Path) -> Result<PathBuf> {
     if path.is_absolute() {
-        return path.to_path_buf();
+        return Ok(path.to_path_buf());
     }
-    std::env::current_dir().map_or_else(|_| path.to_path_buf(), |cwd| cwd.join(path))
+    Ok(std::env::current_dir()?.join(path))
 }
 
 pub fn machete(root: &Path) -> Result<()> {
@@ -161,11 +161,11 @@ pub fn install_hooks_from(root: &Path, binary: &Path) -> Result<()> {
     git(root, &["config", "core.hooksPath", "target/git-hooks"])?;
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
-    let _ = writeln!(
+    writeln!(
         out,
         "hooks installed: target/git-hooks/pre-commit, target/git-hooks/commit-msg (core.hooksPath = target/git-hooks)"
-    );
-    let _ = out.flush();
+    )?;
+    out.flush()?;
     Ok(())
 }
 

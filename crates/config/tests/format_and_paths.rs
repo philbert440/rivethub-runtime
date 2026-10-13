@@ -69,21 +69,19 @@ struct PathsCase {
 struct PathsInput {
     env: BTreeMap<String, String>,
     #[serde(default)]
-    segments: Option<Vec<String>>,
+    segments: Vec<String>,
 }
 
 fn replay_paths(
     name: &str,
-    apply: fn(&config::Environment, Option<Vec<String>>) -> PathBuf,
+    apply: fn(&config::Environment, &[String]) -> PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let lines = common::read_cases(name)?;
     let mut failures = Vec::new();
     for (index, line) in lines.iter().enumerate() {
         let case: PathsCase = common::parse_case(name, index, line)?;
         let env = config::Environment::from_vars(case.input.env.clone());
-        let actual = apply(&env, case.input.segments.clone())
-            .display()
-            .to_string();
+        let actual = apply(&env, &case.input.segments).display().to_string();
         if actual != case.out {
             failures.push(common::case_failure(
                 &common::case_id(name, index),
@@ -104,23 +102,21 @@ fn replay_paths(
     Ok(())
 }
 
-fn shared_dir(env: &config::Environment, _segments: Option<Vec<String>>) -> PathBuf {
+fn shared_dir(env: &config::Environment, _segments: &[String]) -> PathBuf {
     config::shared_dir(env)
 }
 
-fn install_root(env: &config::Environment, _segments: Option<Vec<String>>) -> PathBuf {
+fn install_root(env: &config::Environment, _segments: &[String]) -> PathBuf {
     config::install_root(env)
 }
 
-fn shared_path(env: &config::Environment, segments: Option<Vec<String>>) -> PathBuf {
-    let owned: Vec<String> = segments.unwrap_or_default();
-    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+fn shared_path(env: &config::Environment, segments: &[String]) -> PathBuf {
+    let refs: Vec<&str> = segments.iter().map(String::as_str).collect();
     config::shared_path(env, &refs)
 }
 
-fn install_path(env: &config::Environment, segments: Option<Vec<String>>) -> PathBuf {
-    let owned: Vec<String> = segments.unwrap_or_default();
-    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+fn install_path(env: &config::Environment, segments: &[String]) -> PathBuf {
+    let refs: Vec<&str> = segments.iter().map(String::as_str).collect();
     config::install_path(env, &refs)
 }
 

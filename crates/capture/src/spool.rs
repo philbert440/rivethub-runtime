@@ -74,9 +74,11 @@ impl CaptureSpool {
                 Err(error) => return Err(ReplayError::Io(error)),
             };
             match post(body).await {
-                Ok(_) => {
-                    let _ = fs::remove_file(&path);
-                }
+                Ok(_) => match fs::remove_file(&path) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(ReplayError::Io(error)),
+                },
                 Err(PostError::Client { .. }) => {
                     self.dead_letter(&path)?;
                 }

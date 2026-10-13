@@ -73,13 +73,13 @@ impl GraphileQueue {
     pub(crate) async fn schema_present(pool: &PgPool) -> Result<bool, Error> {
         let record = sqlx::query!(
             "select to_regclass('graphile_worker._private_jobs') is not null
-             and to_regprocedure('graphile_worker.add_job(text,json,text,timestamptz,int,text,int,text)')
-               is not null as present"
+              and to_regprocedure('graphile_worker.add_job(text,json,text,timestamptz,int,text,int,text)')
+                is not null as \"present!\""
         )
         .fetch_one(pool)
         .await
         .map_err(|source| Error::operation("queue probe", source))?;
-        Ok(record.present.unwrap_or(false))
+        Ok(record.present)
     }
     pub(crate) async fn enqueue(&self, job: &Job) -> Result<JobId, Error> {
         let payload = serde_json::to_string(&job.payload)

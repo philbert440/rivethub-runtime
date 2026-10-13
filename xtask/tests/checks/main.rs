@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
@@ -22,7 +21,7 @@ impl Repo {
     fn new() -> std::io::Result<Self> {
         let guard = tempfile::tempdir()?;
         let root = guard.path().to_path_buf();
-        let _ = git(&root, &["init", "-q"])?;
+        git(&root, &["init", "-q"])?;
         Ok(Self {
             root,
             _guard: guard,
@@ -212,7 +211,9 @@ fn size_ceiling_fires() -> Result<(), Box<dyn std::error::Error>> {
     repo.write("docs/PATTERNS.md", "")?;
     let mut big = String::new();
     for index in 0..610 {
-        let _ = write!(big, "pub fn item_{index}() {{}}\n\n");
+        big.push_str("pub fn item_");
+        big.push_str(&index.to_string());
+        big.push_str("() {}\n\n");
     }
     repo.write("crates/mcp/src/big.rs", &big)?;
     repo.write("crates/mcp/src/small.rs", "pub fn a() {}\n")?;
@@ -629,23 +630,25 @@ fn patterns_registry() -> String {
         "# Patterns\n\n## COMMENT\nAnti-pattern: comments. Pattern: none. Check: xtask `COMMENT`.\n\n\
          ## UNTYPED\nAnti-pattern: raw serde values. Pattern: typed structs. Check: dylint `untyped`, clippy `disallowed-types`.\n\n",
     );
-    let _ = write!(text, "## COUNTTYPE\n... Check: dylint `counttype`.\n");
+    text.push_str("## COUNTTYPE\n... Check: dylint `counttype`.\n");
     for lint in patterns::dylint_lints() {
         if *lint != "untyped" && *lint != "counttype" {
-            let _ = write!(
-                text,
-                "## {name}\n... Check: dylint `{lint}`.\n",
-                name = lint.to_ascii_uppercase()
-            );
+            let heading = lint.to_ascii_uppercase();
+            text.push_str("## ");
+            text.push_str(&heading);
+            text.push_str("\n... Check: dylint `");
+            text.push_str(lint);
+            text.push_str("`.\n");
         }
     }
     for check in patterns::checks() {
         if *check != "COMMENT" {
-            let _ = write!(
-                text,
-                "## {name}\n... Check: xtask `{check}`.\n",
-                name = check.to_ascii_uppercase()
-            );
+            let heading = check.to_ascii_uppercase();
+            text.push_str("## ");
+            text.push_str(&heading);
+            text.push_str("\n... Check: xtask `");
+            text.push_str(check);
+            text.push_str("`.\n");
         }
     }
     text

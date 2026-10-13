@@ -20,6 +20,10 @@ pub fn resolve_env_vars_with(env: &Environment, value: &mut serde_yaml_ng::Value
     }
 }
 
+fn unset_is_empty<'a>(env: &'a Environment, name: &str) -> &'a str {
+    env.text(name).unwrap_or("")
+}
+
 fn substitute(env: &Environment, text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.char_indices().peekable();
@@ -41,7 +45,7 @@ fn substitute(env: &Environment, text: &str) -> String {
         }
         if !name.is_empty() && matches!(chars.peek().copied(), Some((_, '}'))) {
             chars.next();
-            out.push_str(env.text(&name).unwrap_or(""));
+            out.push_str(unset_is_empty(env, &name));
         } else {
             out.push_str("${");
             out.push_str(&name);

@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::Write as _;
 use std::hash::BuildHasher;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -8,7 +7,7 @@ use regex::Regex;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 #[derive(Debug, Default, Deserialize)]
 pub struct DenylistFile {
@@ -42,11 +41,16 @@ pub struct PrivacyRes {
     pub tokens: Vec<(Regex, &'static str)>,
 }
 
-pub static RES: LazyLock<std::result::Result<PrivacyRes, regex::Error>> =
-    LazyLock::new(PrivacyRes::new);
+#[expect(
+    clippy::expect_used,
+    reason = "the denylist patterns are constants; the privacy tests match canaries for every one of them"
+)]
+pub static RES: LazyLock<PrivacyRes> = LazyLock::new(|| {
+    PrivacyRes::new().expect("the privacy denylist patterns are constants that compile")
+});
 
-pub fn res() -> Result<&'static PrivacyRes> {
-    RES.as_ref().map_err(|e| Error::Regex(e.clone()))
+pub fn res() -> &'static PrivacyRes {
+    &RES
 }
 
 impl PrivacyRes {
@@ -101,9 +105,20 @@ impl PrivacyRes {
 }
 
 pub fn sha256(value: &str) -> String {
+    const DIGITS: [char; 16] = [
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
+    ];
     let mut hex = String::with_capacity(64);
     for byte in Sha256::digest(value.as_bytes()) {
-        let _ = write!(hex, "{byte:02x}");
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "a shifted or masked byte nibble is 0..=15, inside DIGITS"
+        )]
+        let pair = [
+            DIGITS[usize::from(byte >> 4)],
+            DIGITS[usize::from(byte & 0x0f)],
+        ];
+        hex.extend(pair);
     }
     hex
 }
@@ -170,9 +185,7 @@ fn is_private_ip(token: &str) -> Option<&'static str> {
 }
 
 fn in_tag_context(line: &str, idx: usize, token: &str) -> bool {
-    let Ok(r) = res() else {
-        return false;
-    };
+    let r = res();
     let bytes = line.as_bytes();
     let end = idx + token.len();
     let mut i = idx;
@@ -242,9 +255,7 @@ fn check_persona(line: &str, idx: usize, token: &str) -> bool {
     if token.len() > 4 {
         return true;
     }
-    let Ok(r) = res() else {
-        return false;
-    };
+    let r = res();
     if r.title.is_match(token) {
         return !line
             .get(idx + token.len()..)
@@ -394,9 +405,7 @@ pub fn scan_line<S: BuildHasher>(
     priv_deny: &HashSet<String, S>,
     sec_deny: &HashSet<String, S>,
 ) -> Hits {
-    let Ok(r) = res() else {
-        return Vec::new();
-    };
+    let r = res();
     let mut out = Hits::new();
     let marker = is_marker_file(file);
     let owner_file = is_owner_identity_file(file);

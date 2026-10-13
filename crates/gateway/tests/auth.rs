@@ -168,6 +168,12 @@ fn plain_http_host_rule_applies_to_loopback_callers_only() {
             reason: "host \"\" is not allowed (add it to den.allowed_hosts)".to_string()
         }
     );
+    assert_eq!(
+        decide(None, None, true),
+        Decision::Deny {
+            reason: "host \"\" is not allowed (add it to den.allowed_hosts)".to_string()
+        }
+    );
     for host in [
         "den.example.test:5174",
         "hub.localhost:5174",
@@ -250,7 +256,7 @@ fn remote_callers_get_unauthorized_json_on_api_paths() {
 }
 
 #[test]
-fn remote_browsers_get_the_html_gate_off_api_paths() {
+fn remote_browsers_get_the_html_gate_off_api_paths() -> Result<(), Box<dyn std::error::Error>> {
     let (gateway, _) = common::gateway();
     let request = Request {
         method: "GET".to_string(),
@@ -272,12 +278,13 @@ fn remote_browsers_get_the_html_gate_off_api_paths() {
         .headers
         .iter()
         .find(|(name, _)| name == "content-type")
-        .map(|(_, value)| value.clone())
-        .unwrap_or_default();
+        .map(|(_, value)| value.as_str())
+        .ok_or("the html gate carries no content-type")?;
     assert_eq!(content_type, "text/html; charset=utf-8");
     let text = String::from_utf8_lossy(&response.body);
     assert!(text.contains("Device certificate required"));
     assert!(text.contains("RivetHub desktop"));
     assert!(text.contains("rivet-ca.sh issue-client"));
     assert!(text.contains("/healthz"));
+    Ok(())
 }

@@ -1,6 +1,8 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::error::Error;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuleSource {
     GitRemote,
@@ -39,11 +41,10 @@ pub fn plan_project_rule_tag(cwd: Option<&str>, allow_filesystem: bool) -> Optio
 pub(crate) async fn resolve_project_tag_blocking(
     cwd: Option<String>,
     allow_filesystem: bool,
-) -> Option<ProjectTag> {
+) -> Result<Option<ProjectTag>, Error> {
     tokio::task::spawn_blocking(move || plan_project_rule_tag(cwd.as_deref(), allow_filesystem))
         .await
-        .ok()
-        .flatten()
+        .map_err(|source| Error::protocol(format!("project tag lookup failed: {source}")))
 }
 
 fn basename_rule(cwd: &str) -> ProjectTag {

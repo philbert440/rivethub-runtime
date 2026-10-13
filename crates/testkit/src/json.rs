@@ -107,21 +107,29 @@ impl TokenClass {
     }
 }
 
-static TOKEN: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(r"\{\{[^{}]*\}\}|<ts>").ok());
+#[expect(
+    clippy::expect_used,
+    reason = "the token pattern is a constant; the mask unit tests match it"
+)]
+static TOKEN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\{\{[^{}]*\}\}|<ts>").expect("the token pattern is a constant"));
 
-static PATTERN_CACHE: LazyLock<Mutex<HashMap<String, Option<Regex>>>> =
-    LazyLock::new(Mutex::default);
+static PATTERN_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> = LazyLock::new(Mutex::default);
 
-fn token_regex() -> Option<&'static Regex> {
-    TOKEN.as_ref()
+fn token_regex() -> &'static Regex {
+    &TOKEN
 }
 
-fn compiled(source: &str) -> Option<Regex> {
+#[expect(
+    clippy::expect_used,
+    reason = "the composed source is built from constant class patterns plus regex::escape'd literals; the mask unit tests compile every class"
+)]
+fn compiled(source: &str) -> Regex {
     let mut cache = PATTERN_CACHE.lock();
     if let Some(built) = cache.get(source) {
         return built.clone();
     }
-    let built = Regex::new(source).ok();
+    let built = Regex::new(source).expect("composed mask patterns are built from constants");
     cache.insert(source.to_string(), built.clone());
     built
 }
@@ -132,7 +140,7 @@ struct Masked {
 }
 
 fn masked_pattern(rec: &str, masks: &Masks) -> Option<Masked> {
-    let finder = token_regex()?;
+    let finder = token_regex();
     let mut source = String::with_capacity(rec.len() + 32);
     source.push_str(r"\A");
     let mut numbered = Vec::new();
@@ -214,9 +222,7 @@ pub fn masked_eq(rec: &str, act: &str, masks: &Masks) -> bool {
     let Some(masked) = masked_pattern(rec, masks) else {
         return false;
     };
-    let Some(regex) = compiled(&masked.source) else {
-        return false;
-    };
+    let regex = compiled(&masked.source);
     let Some(captures) = regex.captures(act) else {
         return false;
     };

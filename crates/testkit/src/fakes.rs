@@ -162,7 +162,7 @@ impl ModelProvider for FakeProvider {
         });
         let (tx, rx) = tokio::sync::mpsc::channel(chunks.len().max(1));
         for chunk in chunks {
-            let _ = tx.try_send(chunk);
+            drop(tx.try_send(chunk));
         }
         Ok(rx)
     }
@@ -252,7 +252,7 @@ impl HarnessAdapter for FakeHarness {
                 .clone()
         };
         for event in events {
-            let _ = tx.send(event).await;
+            drop(tx.send(event).await);
         }
         Ok(())
     }

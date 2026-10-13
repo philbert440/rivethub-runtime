@@ -28,20 +28,22 @@ impl FakeTransport {
 #[async_trait]
 impl capture::writer::CaptureTransport for FakeTransport {
     async fn post(&self, body: String) -> Result<CaptureResult, capture::writer::PostError> {
-        let inserted = serde_json::from_str::<testkit::Json>(&body)
-            .ok()
-            .and_then(|value| {
-                value
-                    .get("messages")
-                    .and_then(testkit::Json::as_array)
-                    .map(Vec::len)
-            })
-            .unwrap_or(0);
+        let parsed: testkit::Json =
+            serde_json::from_str(&body).map_err(|error| capture::writer::PostError::Network {
+                message: format!("the hook posted a body that is not JSON: {error}"),
+            })?;
+        let inserted = parsed
+            .get("messages")
+            .and_then(testkit::Json::as_array)
+            .map(Vec::len)
+            .ok_or_else(|| capture::writer::PostError::Network {
+                message: "the posted batch body carries no messages array".to_owned(),
+            })?;
         self.posts.lock().push(body);
         Ok(CaptureResult {
             ok: true,
             conversation_id: "conv-1".to_owned(),
-            inserted: u64::try_from(inserted).unwrap_or(0),
+            inserted: inserted as u64,
             skipped: 0,
         })
     }
@@ -111,7 +113,7 @@ async fn run_entry(
         })
         .collect();
     let log_path = state_dir.join(".rivetos/claude-capture.log");
-    let log_content = std::fs::read_to_string(&log_path).unwrap_or_default();
+    let log_content = std::fs::read_to_string(&log_path)?;
     let files = vec![HookFile {
         path: ".rivetos/claude-capture.log".to_owned(),
         mode: "644".to_owned(),
@@ -216,6 +218,30 @@ async fn missing_prompt_records_the_fallback_title() -> Result<(), Box<dyn std::
         parsed.get("title").and_then(testkit::Json::as_str),
         Some("Claude Code session")
     );
+    let content = parsed
+        .get("messages")
+        .and_then(testkit::Json::as_array)
+        .and_then(|messages| messages.first())
+        .and_then(|message| message.get("content"))
+        .and_then(testkit::Json::as_str);
+    assert_eq!(content, Some(""));
+    Ok(())
+}
+
+async fn a_failed_log_write_does_not_fail_the_run() -> Result<(), Box<dyn std::error::Error>> {
+    let inner = tempfile::tempdir()?;
+    let state_dir = inner.path().to_path_buf();
+    std::fs::write(state_dir.join(".rivetos"), b"not a directory")?;
+    let transport = FakeTransport::new();
+    let spool = capture::spool::CaptureSpool::new(state_dir.join("spool"));
+    let writer = capture::writer::CaptureWriter::new(transport.clone(), spool, 768 * 1024, None);
+    let hook = capture::hook::ClaudeHook::new(writer, state_dir);
+    let now: DateTime<Utc> = NOW_TEXT.parse()?;
+    let stdin = r#"{"session_id":"33333333-3333-3333-3333-333333333333","hook_event_name":"UserPromptSubmit","prompt":"list the files"}"#;
+    let run = hook.run(stdin, now, "1791656243919-30e4c5d70").await;
+    assert_eq!(run.exit, 0);
+    assert_eq!(run.stderr, "");
+    assert_eq!(transport.posts.lock().len(), 1);
     Ok(())
 }
 
@@ -224,5 +250,6 @@ fn claude_hook_replays_recorded_batches() -> Result<(), Box<dyn std::error::Erro
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(run_replay())?;
     runtime.block_on(malformed_payloads_exit_cleanly())?;
-    runtime.block_on(missing_prompt_records_the_fallback_title())
+    runtime.block_on(missing_prompt_records_the_fallback_title())?;
+    runtime.block_on(a_failed_log_write_does_not_fail_the_run())
 }

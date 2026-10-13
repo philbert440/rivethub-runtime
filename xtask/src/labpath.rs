@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::git;
 
 const LAB_PLANS: &str = concat!("/rivet-shared", "/plans/");
@@ -11,8 +11,10 @@ pub fn check(root: &Path, findings: &mut Vec<String>) -> Result<usize> {
         if !scanned(&rel) {
             continue;
         }
-        let Ok(text) = std::fs::read_to_string(root.join(&rel)) else {
-            continue;
+        let text = match std::fs::read_to_string(root.join(&rel)) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::InvalidData => continue,
+            Err(error) => return Err(Error::Io(error)),
         };
         if text.contains(LAB_PLANS) {
             findings.push(format!(

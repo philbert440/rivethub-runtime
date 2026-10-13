@@ -91,8 +91,10 @@ pub fn privacy_and_secrets(root: &Path, findings: &mut Vec<String>) -> Result<us
         if privacy::skip_scan(rel) {
             continue;
         }
-        let Ok(text) = std::fs::read_to_string(root.join(rel)) else {
-            continue;
+        let text = match std::fs::read_to_string(root.join(rel)) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::InvalidData => continue,
+            Err(error) => return Err(Error::Io(error)),
         };
         privacy::scan_text(findings, &text, rel, &priv_deny, &sec_deny, None);
         scanned += 1;

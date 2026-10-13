@@ -339,9 +339,8 @@ fn sessions_blocking(projects: &Path) -> Result<Vec<SessionId>, TranscriptReader
         if !directory.path().is_dir() {
             continue;
         }
-        let Ok(files) = std::fs::read_dir(directory.path()) else {
-            continue;
-        };
+        let files = std::fs::read_dir(directory.path())
+            .map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))?;
         for file in files {
             let path = file
                 .map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))?

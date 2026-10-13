@@ -58,7 +58,11 @@ async fn replay_public_arm(pool: PgPool) -> TestResult {
                 let wants = step.kind == "ingestHookEvent"
                     && at(at(&step.input, "payload"), "tool_response").is_object();
                 step_orders.push(if wants {
-                    Some(orders.pop_front().unwrap_or_default())
+                    Some(
+                        orders
+                            .pop_front()
+                            .ok_or("a tool_response order for the recorded step")?,
+                    )
                 } else {
                     None
                 });
@@ -108,8 +112,7 @@ async fn replay_public_arm(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test]
-async fn scenario_inventory_is_covered(pool: PgPool) -> TestResult {
-    let _ = &pool;
+async fn scenario_inventory_is_covered(_pool: PgPool) -> TestResult {
     let mut total = 0usize;
     let mut seen: Vec<String> = Vec::new();
     for file in GOLDEN_FILES {

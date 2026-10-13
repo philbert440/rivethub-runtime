@@ -15,12 +15,32 @@ use crate::Json;
 pub(crate) const PG_TS: &str = r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?\+00$";
 pub(crate) const ISO_TS: &str = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})";
 
-static PG_ONLY: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(PG_TS).ok());
-static ISO_ONLY: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(ISO_TS).ok());
-static ISO_EXACT: LazyLock<Option<Regex>> =
-    LazyLock::new(|| Regex::new(&format!("^{ISO_TS}$")).ok());
-static UUID_SHAPE: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}").ok()
+#[expect(
+    clippy::expect_used,
+    reason = "the pg timestamp pattern is a constant; the pg replay tests match it"
+)]
+static PG_ONLY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(PG_TS).expect("the pg timestamp pattern is a constant"));
+#[expect(
+    clippy::expect_used,
+    reason = "the ISO timestamp pattern is a constant; the pg replay tests match it"
+)]
+static ISO_ONLY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(ISO_TS).expect("the ISO timestamp pattern is a constant"));
+#[expect(
+    clippy::expect_used,
+    reason = "the exact ISO pattern is a constant; the pg replay tests match it"
+)]
+static ISO_EXACT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!("^{ISO_TS}$")).expect("the exact ISO pattern is a constant")
+});
+#[expect(
+    clippy::expect_used,
+    reason = "the uuid pattern is a constant; the pg replay tests match it"
+)]
+static UUID_SHAPE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+        .expect("the uuid pattern is a constant")
 });
 
 const CONVERSATION_SELECT: &str = "SELECT id::text, session_key::text, agent::text, channel::text, channel_id::text, \
@@ -39,7 +59,7 @@ pub async fn queue_present(pool: &PgPool) -> Result<bool, sqlx::Error> {
         sqlx::query("select to_regclass('graphile_worker._private_jobs') is not null as present")
             .fetch_one(pool)
             .await?;
-    Ok(row.try_get::<Option<bool>, _>(0)?.unwrap_or(false))
+    row.try_get::<bool, _>("present")
 }
 
 pub async fn capture_tx(pool: &PgPool) -> Result<Transaction<'static, Postgres>, sqlx::Error> {
@@ -254,7 +274,7 @@ fn number_text(raw: &str) -> Json {
 }
 
 fn looks_like_uuid(text: &str) -> bool {
-    UUID_SHAPE.as_ref().is_some_and(|uuid| uuid.is_match(text))
+    UUID_SHAPE.is_match(text)
 }
 
 fn parse_loose(text: &str, started: DateTime<Utc>) -> bool {
@@ -271,13 +291,7 @@ fn parse_loose(text: &str, started: DateTime<Utc>) -> bool {
 }
 
 fn timestamp_text(text: &str, started: DateTime<Utc>) -> bool {
-    let pg = PG_ONLY
-        .as_ref()
-        .is_some_and(|pattern| pattern.is_match(text));
-    let iso = ISO_EXACT
-        .as_ref()
-        .is_some_and(|pattern| pattern.is_match(text));
-    (pg || iso) && parse_loose(text, started)
+    (PG_ONLY.is_match(text) || ISO_EXACT.is_match(text)) && parse_loose(text, started)
 }
 
 #[derive(Debug, Default)]
@@ -338,13 +352,11 @@ impl PgNamer {
             return Json::String(self.now(text));
         }
         let mut replaced = text.to_string();
-        if let Some(iso) = ISO_ONLY.as_ref() {
-            for found in iso.find_iter(text) {
-                let candidate = found.as_str().to_string();
-                if parse_loose(&candidate, started) {
-                    let placeholder = self.now(&candidate);
-                    replaced = replaced.replace(&candidate, &placeholder);
-                }
+        for found in ISO_ONLY.find_iter(text) {
+            let candidate = found.as_str().to_string();
+            if parse_loose(&candidate, started) {
+                let placeholder = self.now(&candidate);
+                replaced = replaced.replace(&candidate, &placeholder);
             }
         }
         Json::String(replaced)
@@ -356,12 +368,10 @@ impl PgNamer {
             return stamped;
         };
         let mut out = stamped.clone();
-        if let Some(uuid) = UUID_SHAPE.as_ref() {
-            for found in uuid.find_iter(&stamped) {
-                let candidate = found.as_str().to_string();
-                let placeholder = self.any(&candidate);
-                out = out.replace(&candidate, &placeholder);
-            }
+        for found in UUID_SHAPE.find_iter(&stamped) {
+            let candidate = found.as_str().to_string();
+            let placeholder = self.any(&candidate);
+            out = out.replace(&candidate, &placeholder);
         }
         Json::String(out)
     }
@@ -388,9 +398,7 @@ pub fn cap_units(text: &str, max: usize) -> String {
     let mut units = 0usize;
     for (index, ch) in text.char_indices() {
         if units + ch.len_utf16() > max {
-            return text
-                .get(..index)
-                .map_or_else(|| text.to_string(), str::to_string);
+            return text[..index].to_string();
         }
         units += ch.len_utf16();
     }
@@ -406,17 +414,24 @@ pub fn cap_and_mark(text: &str, max: usize) -> String {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "serde_json numbers are i64/u64/f64 (arbitrary_precision is off); the pgdump unit tests convert all three"
+)]
+fn number_f64(value: &Json) -> f64 {
+    value
+        .as_f64()
+        .expect("a serde_json number always converts to f64")
+}
+
 pub fn canonical(value: &Json) -> String {
     match value {
         Json::Object(map) => {
-            let mut keys: Vec<&String> = map.keys().collect();
-            keys.sort();
-            let body: Vec<String> = keys
+            let mut members: Vec<(&String, &Json)> = map.iter().collect();
+            members.sort_by(|a, b| a.0.cmp(b.0));
+            let body: Vec<String> = members
                 .iter()
-                .map(|key| {
-                    let leaf = map.get(*key).unwrap_or(&Json::Null);
-                    format!("{key:?}:{}", canonical(leaf))
-                })
+                .map(|(key, leaf)| format!("{key:?}:{}", canonical(leaf)))
                 .collect();
             format!("{{{}}}", body.join(","))
         }
@@ -424,10 +439,7 @@ pub fn canonical(value: &Json) -> String {
             let body: Vec<String> = items.iter().map(canonical).collect();
             format!("[{}]", body.join(","))
         }
-        Json::Number(number) => {
-            let as_f64 = number.as_f64().unwrap_or(f64::NAN);
-            format!("{as_f64:?}")
-        }
+        Json::Number(_) => format!("{:?}", number_f64(value)),
         other @ (Json::Null | Json::Bool(_) | Json::String(_)) => format!("{other}"),
     }
 }
@@ -441,8 +453,8 @@ pub fn js_number(value: &Json) -> Json {
         as_f64 as i64
     }
     match value {
-        Json::Number(number) => {
-            let as_f64 = number.as_f64().unwrap_or(f64::NAN);
+        Json::Number(_) => {
+            let as_f64 = number_f64(value);
             if as_f64.is_finite()
                 && as_f64.fract() == 0.0
                 && as_f64.abs() < 9.007_199_254_740_992e15
@@ -462,19 +474,27 @@ pub fn js_number(value: &Json) -> Json {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "serializing a serde_json value is a fixed pass that cannot fail; the pgdump unit tests stringify recorded values"
+)]
+fn json_text(value: &impl serde::Serialize) -> String {
+    serde_json::to_string(value).expect("a serde_json value always serializes")
+}
+
 pub fn js_stringify(value: &Json, order: Option<&[String]>) -> String {
     match (value, order) {
         (Json::Object(map), Some(keys)) if keys.len() == map.len() => {
             let body: Vec<String> = keys
                 .iter()
-                .map(|key| {
-                    let leaf = map.get(key).unwrap_or(&Json::Null);
-                    format!("{}:{leaf}", serde_json::to_string(key).unwrap_or_default())
+                .filter_map(|key| {
+                    map.get(key)
+                        .map(|leaf| format!("{}:{leaf}", json_text(key)))
                 })
                 .collect();
             format!("{{{}}}", body.join(","))
         }
-        _ => serde_json::to_string(value).unwrap_or_default(),
+        _ => json_text(value),
     }
 }
 

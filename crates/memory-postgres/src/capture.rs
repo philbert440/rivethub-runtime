@@ -93,7 +93,7 @@ impl<'a> CaptureWriter<'a> {
         .fetch_one(&mut *tx)
         .await
         .map_err(|source| Error::operation("capture lock", source))?;
-        let _ = sqlx::query_scalar!(
+        sqlx::query_scalar!(
             "select set_config('rivet.defer_embed_enqueue',
                      case when to_regclass('graphile_worker._private_jobs') is null
                           then 'on' else 'off' end, true) as mode"
@@ -293,14 +293,14 @@ impl<'a> CaptureWriter<'a> {
     ) -> Result<bool, Error> {
         let record = sqlx::query!(
             "select exists(select 1 from rh_messages
-                where conversation_id = $1 and metadata->>'ingest_key' = $2) as seen",
+                where conversation_id = $1 and metadata->>'ingest_key' = $2) as \"seen!\"",
             conversation_id,
             key
         )
         .fetch_one(&mut *self.tx)
         .await
         .map_err(|source| Error::operation("ingest key lookup", source))?;
-        Ok(record.seen.unwrap_or(false))
+        Ok(record.seen)
     }
 
     pub async fn apply_project_tag(
@@ -340,7 +340,7 @@ pub(crate) fn cap_units(text: &str, max: usize) -> (&str, bool) {
     let mut units = 0usize;
     for (idx, ch) in text.char_indices() {
         if units + ch.len_utf16() > max {
-            return (text.get(..idx).unwrap_or_default(), true);
+            return (&text[..idx], true);
         }
         units += ch.len_utf16();
     }
@@ -393,12 +393,20 @@ pub(crate) fn prepare_capture_message(message: &CaptureMessage) -> Result<Prepar
         content: content.to_string(),
         tool_result,
         metadata,
-        created_at: message.created_at.as_deref().and_then(parse_timestamp),
+        created_at: created_at(message)?,
     })
 }
 
-pub(crate) fn parse_timestamp(raw: &str) -> Option<DateTime<Utc>> {
+fn created_at(message: &CaptureMessage) -> Result<Option<DateTime<Utc>>, Error> {
+    let Some(raw) = message.created_at.as_deref() else {
+        return Ok(None);
+    };
     DateTime::parse_from_rfc3339(raw)
-        .ok()
-        .map(|parsed| parsed.with_timezone(&Utc))
+        .map(|parsed| Some(parsed.with_timezone(&Utc)))
+        .map_err(|source| {
+            Error::protocol(format!(
+                "message {} created_at is not an ISO timestamp with an offset: {source}",
+                message.event_id
+            ))
+        })
 }

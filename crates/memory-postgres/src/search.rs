@@ -87,20 +87,27 @@ pub(crate) enum ArmKind {
     Regex,
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the literal-scan pattern is a constant; the search tests match it"
+)]
 pub(crate) fn literal_scan(text: &str) -> bool {
-    static LITERAL: LazyLock<Option<Regex>> =
-        LazyLock::new(|| Regex::new(r"\w[./:_@]\w|\d{1,3}(?:\.\d{1,3}){2,}|[a-z]\d|\d[a-z]").ok());
-    LITERAL
-        .as_ref()
-        .is_some_and(|pattern| pattern.is_match(text))
+    static LITERAL: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"\w[./:_@]\w|\d{1,3}(?:\.\d{1,3}){2,}|[a-z]\d|\d[a-z]")
+            .expect("the literal-scan pattern is a constant")
+    });
+    LITERAL.is_match(text)
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the trigram-fallback pattern is a constant; the search tests match it"
+)]
 fn should_trigram_fallback(text: &str) -> bool {
-    static FALLBACK: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(r"\S[./:-]\S").ok());
-    literal_scan(text)
-        || FALLBACK
-            .as_ref()
-            .is_some_and(|pattern| pattern.is_match(text))
+    static FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"\S[./:-]\S").expect("the trigram-fallback pattern is a constant")
+    });
+    literal_scan(text) || FALLBACK.is_match(text)
 }
 
 #[expect(clippy::cast_precision_loss, reason = "coarse ranking proxy")]
@@ -113,9 +120,10 @@ struct FusedEntry {
     arm_count: u8,
 }
 
-fn fuse(arms: [&[ArmRow]; 3]) -> Vec<FusedEntry> {
+fn fuse(fts: &[ArmRow], trigram: Option<&[ArmRow]>) -> Vec<FusedEntry> {
+    let arms = [Some(fts), trigram];
     let mut entries: HashMap<String, (ArmRow, f64, u8)> = HashMap::new();
-    for (arm_number, arm) in (1u8..).zip(arms) {
+    for (arm_number, arm) in (1u8..).zip(arms.into_iter().flatten()) {
         for (rank, row) in (0u32..).zip(arm.iter()) {
             let contribution = 1.0 / (HYBRID_RRF_K + f64::from(rank) + 1.0);
             let entry = entries
@@ -152,12 +160,7 @@ fn fuse(arms: [&[ArmRow]; 3]) -> Vec<FusedEntry> {
             }
         })
         .collect();
-    fused.sort_by(|a, b| {
-        b.hit
-            .score
-            .partial_cmp(&a.hit.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    fused.sort_by(|a, b| b.hit.score.total_cmp(&a.hit.score));
     fused
 }
 
@@ -200,7 +203,7 @@ fn finish_rows(rows: Vec<ArmRow>, limit: u32, score: fn(&ArmRow) -> f64) -> Vec<
             }
         })
         .collect();
-    hits.truncate(usize::try_from(limit.max(1)).unwrap_or(1));
+    hits.truncate(limit.max(1) as usize);
     hits
 }
 
@@ -250,8 +253,8 @@ impl crate::PostgresMemory {
                 } else {
                     finish_rows(rows, options.limit, composite_score)
                 };
-                hits.truncate(usize::try_from(options.limit).unwrap_or(1));
-                self.bump_access(&hits).await;
+                hits.truncate(options.limit.max(1) as usize);
+                self.bump_access(&hits).await?;
                 Ok(SearchOutcome {
                     hits,
                     degraded: None,
@@ -290,16 +293,15 @@ impl crate::PostgresMemory {
             }
         };
 
-        let empty: Vec<ArmRow> = Vec::new();
-        let fused = fuse([&fts_rows, trigram_rows.as_deref().unwrap_or(&empty), &empty]);
+        let fused = fuse(&fts_rows, trigram_rows.as_deref());
         let top = fused.first().map_or(0.0, |entry| entry.hit.score);
         let mut hits: Vec<SearchHit> = fused
             .into_iter()
             .filter(|entry| entry.arm_count >= 2 || entry.hit.score >= top * GATE_FRACTION)
             .map(|entry| entry.hit)
             .collect();
-        hits.truncate(usize::try_from(options.limit).unwrap_or(1));
-        self.bump_access(&hits).await;
+        hits.truncate(options.limit.max(1) as usize);
+        self.bump_access(&hits).await?;
         Ok(SearchOutcome {
             hits,
             degraded: None,
@@ -307,34 +309,40 @@ impl crate::PostgresMemory {
         })
     }
 
-    async fn bump_access(&self, hits: &[SearchHit]) {
-        let messages: Vec<Uuid> = hits
-            .iter()
-            .filter(|hit| hit.source == MemoryHitSource::Message)
-            .filter_map(|hit| Uuid::parse_str(&hit.id).ok())
-            .collect();
-        let summaries: Vec<Uuid> = hits
-            .iter()
-            .filter(|hit| hit.source == MemoryHitSource::Summary)
-            .filter_map(|hit| Uuid::parse_str(&hit.id).ok())
-            .collect();
+    async fn bump_access(&self, hits: &[SearchHit]) -> Result<(), Error> {
+        let messages: Vec<Uuid> = hit_uuids(hits, MemoryHitSource::Message)?;
+        let summaries: Vec<Uuid> = hit_uuids(hits, MemoryHitSource::Summary)?;
         if !messages.is_empty() {
-            let _ = sqlx::query!(
+            sqlx::query!(
                 "update rh_messages set access_count = access_count + 1,
                         last_accessed_at = now() where id = any($1)",
                 &messages
             )
             .execute(&self.pool)
-            .await;
+            .await
+            .map_err(|source| Error::operation("access bump", source))?;
         }
         if !summaries.is_empty() {
-            let _ = sqlx::query!(
+            sqlx::query!(
                 "update rh_summaries set access_count = access_count + 1,
                         last_accessed_at = now() where id = any($1)",
                 &summaries
             )
             .execute(&self.pool)
-            .await;
+            .await
+            .map_err(|source| Error::operation("access bump", source))?;
         }
+        Ok(())
     }
+}
+
+fn hit_uuids(hits: &[SearchHit], source: MemoryHitSource) -> Result<Vec<Uuid>, Error> {
+    hits.iter()
+        .filter(|hit| hit.source == source)
+        .map(|hit| {
+            Uuid::parse_str(&hit.id).map_err(|error| {
+                Error::protocol(format!("search hit id {} is not a uuid: {error}", hit.id))
+            })
+        })
+        .collect()
 }

@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use similar_asserts::SimpleDiff;
@@ -44,14 +43,9 @@ pub(crate) fn case_failure(
     expected: &str,
     actual: &str,
 ) -> String {
-    let mut report = format!(
-        "=== case {id} — {reason} ===\ninput:\n{}\n",
-        json_text(input)
-    );
-    let _ = writeln!(
-        report,
-        "expected:\n{expected}\nactual:\n{actual}\n{}",
+    format!(
+        "=== case {id} — {reason} ===\ninput:\n{}\nexpected:\n{expected}\nactual:\n{actual}\n{}",
+        json_text(input),
         SimpleDiff::from_str(expected, actual, "expected", "actual")
-    );
-    report
+    )
 }

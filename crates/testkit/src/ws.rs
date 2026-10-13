@@ -180,7 +180,7 @@ pub fn replay(
         step_sent(step, sent, &mut harness)?;
     }
     if let Some(close) = &step.record.sent_close {
-        let _ = harness(WsCall::ClientClose {
+        harness(WsCall::ClientClose {
             client: close.client.clone(),
             code: close.code,
         });
@@ -372,7 +372,7 @@ fn step_sent(
             }
         },
     };
-    let _ = harness(WsCall::Sent(WsSent {
+    harness(WsCall::Sent(WsSent {
         client: sent.client.clone(),
         frame,
     }));

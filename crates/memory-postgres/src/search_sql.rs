@@ -9,15 +9,12 @@ use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryScope;
 use wire::message::Role;
 
-const HYBRID_POOL_MIN: usize = 50;
-const HYBRID_POOL_MAX: usize = 100;
+const HYBRID_POOL_MIN: i64 = 50;
+const HYBRID_POOL_MAX: i64 = 100;
 const MIN_CONTENT_LEN: i64 = 40;
 
 fn hybrid_pool(limit: u32) -> i64 {
-    let pool = usize::try_from(limit).unwrap_or(HYBRID_POOL_MAX) * 3;
-    let clamped = pool.clamp(HYBRID_POOL_MIN, HYBRID_POOL_MAX);
-    i64::try_from(clamped)
-        .unwrap_or_else(|_| i64::from(u32::try_from(HYBRID_POOL_MAX).unwrap_or(100)))
+    (i64::from(limit) * 3).clamp(HYBRID_POOL_MIN, HYBRID_POOL_MAX)
 }
 
 fn boost_expr(alias: &str, is_message: bool) -> String {
@@ -126,11 +123,7 @@ impl crate::PostgresMemory {
                     .await?,
             );
         }
-        rows.sort_by(|a, b| {
-            b.arm_score
-                .partial_cmp(&a.arm_score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        rows.sort_by(|a, b| b.arm_score.total_cmp(&a.arm_score));
         Ok(rows)
     }
 

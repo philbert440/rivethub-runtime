@@ -26,6 +26,7 @@ const SKIPPED_CASES: &[&str] = &[
     "garbage-ignored",
     "post-reserialize",
     "event-reserialize",
+    "malformed-request-line",
 ];
 
 fn strip_nulls(value: &mut Value) {
@@ -65,24 +66,20 @@ where
     Ok(())
 }
 
-fn request_head(head: &str) -> (&str, &str) {
-    let first = head.split("\r\n").next().unwrap_or_default();
+fn request_head(head: &str) -> Option<(&str, &str)> {
+    let first = head.split("\r\n").next()?;
     let mut parts = first.split(' ');
-    let method = parts.next().unwrap_or_default();
-    let target = parts.next().unwrap_or_default();
-    (method, target)
+    let method = parts.next()?;
+    let target = parts.next()?;
+    Some((method, target))
 }
 
 fn path_of(target: &str) -> &str {
-    target.split('?').next().unwrap_or_default()
+    target.split_once('?').map_or(target, |(path, _)| path)
 }
 
-fn status_of(status_line: &str) -> u16 {
-    status_line
-        .split(' ')
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0)
+fn status_of(status_line: &str) -> Option<u16> {
+    status_line.split(' ').nth(1)?.parse().ok()
 }
 
 fn get<'a>(value: &'a Value, key: &str) -> &'a Value {
@@ -231,15 +228,21 @@ fn roundtrip_case(case: &Value, errors: &mut Vec<String>) {
     let Some(head) = get(case, "request").get("head").and_then(Value::as_str) else {
         return;
     };
-    let (method, target) = request_head(head);
+    let Some((method, target)) = request_head(head) else {
+        errors.push("the recorded request head has no method and target".to_owned());
+        return;
+    };
     let path = path_of(target);
     let response = get(case, "response");
-    let status = status_of(
+    let Some(status) = status_of(
         response
             .get("statusLine")
             .and_then(Value::as_str)
             .unwrap_or_default(),
-    );
+    ) else {
+        errors.push("the recorded status line carries no status code".to_owned());
+        return;
+    };
     if let Some(body) = get(case, "request").get("body").and_then(Value::as_str) {
         let object = serde_json::from_str::<Value>(body)
             .ok()

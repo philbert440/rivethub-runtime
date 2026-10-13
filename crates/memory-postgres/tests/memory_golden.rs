@@ -12,16 +12,42 @@ fn store(pool: &PgPool) -> PostgresMemory {
     PostgresMemory::new(pool.clone())
 }
 
-fn at<'a>(value: &'a Value, key: &str) -> &'a Value {
-    value.get(key).unwrap_or(&Value::Null)
+fn field<'a>(value: &'a Value, key: &str) -> Result<&'a Value, String> {
+    value
+        .get(key)
+        .ok_or_else(|| format!("the comparison side carries no {key} member"))
+}
+
+fn text<'a>(value: &'a Value, key: &str) -> Result<&'a str, String> {
+    field(value, key)?
+        .as_str()
+        .ok_or_else(|| format!("the {key} member is not a string"))
+}
+
+fn str_member<'a>(value: &'a Value, key: &str) -> Result<&'a str, String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("the {key} member is not a string"))
+}
+
+fn optional_text(value: &Value, key: &str) -> Result<Option<String>, String> {
+    match value.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(found) => found
+            .as_str()
+            .map(str::to_string)
+            .map(Some)
+            .ok_or_else(|| format!("the {key} member is not a string")),
+    }
 }
 
 #[sqlx::test]
 async fn capture_batch_golden(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let queue = queue_present(&pool).await?;
-    let text = std::fs::read_to_string(testkit::recording("memory/capture-batch.json"))?;
-    let golden: Value = serde_json::from_str(&text)?;
+    let text_body = std::fs::read_to_string(testkit::recording("memory/capture-batch.json"))?;
+    let golden: Value = serde_json::from_str(&text_body)?;
 
     let mut conv_ids: BTreeMap<String, String> = BTreeMap::new();
     let mut uuid_to_label: BTreeMap<String, String> = BTreeMap::new();
@@ -30,18 +56,21 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
         .and_then(Value::as_array)
         .ok_or("golden results are a list")?;
     for entry in recorded_results {
-        let batch: CaptureBatchRequest = serde_json::from_value(at(entry, "batch").clone())?;
+        let batch: CaptureBatchRequest = serde_json::from_value(field(entry, "batch")?.clone())?;
+        let opts = field(entry, "opts")?;
+        let owner_user_id = optional_text(opts, "ownerUserId")?;
+        let allow_filesystem = match opts.get("allowFilesystem") {
+            None | Some(Value::Null) => false,
+            Some(found) => found
+                .as_bool()
+                .ok_or("the allowFilesystem member is not a boolean")?,
+        };
         let options = memory_postgres::CaptureOptions {
-            owner_user_id: at(at(entry, "opts"), "ownerUserId")
-                .as_str()
-                .map(str::to_string),
-            allow_filesystem: *at(at(entry, "opts"), "allowFilesystem") == Value::Bool(true),
+            owner_user_id,
+            allow_filesystem,
         };
         let result = memory.capture_batch(&batch, &options).await?;
-        let recorded_id = at(at(entry, "result"), "conversation_id")
-            .as_str()
-            .ok_or("a recorded conversation id")?
-            .to_string();
+        let recorded_id = text(field(entry, "result")?, "conversation_id")?.to_string();
         conv_ids
             .entry(recorded_id.clone())
             .or_insert_with(|| result.conversation_id.clone());
@@ -54,7 +83,7 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
             "inserted": result.inserted,
             "skipped": result.skipped,
         });
-        let mut expected = at(entry, "result").clone();
+        let mut expected = field(entry, "result")?.clone();
         if let Some(object) = expected.as_object_mut() {
             object.insert(
                 "conversation_id".to_string(),
@@ -90,11 +119,15 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
             "active",
             "owner_user_id",
         ] {
-            assert_eq!(at(actual, key), at(expected, key), "column {key} drifted");
+            assert_eq!(
+                field(actual, key)?,
+                field(expected, key)?,
+                "column {key} drifted"
+            );
         }
         assert_eq!(
-            at(actual, "settings"),
-            at(expected, "settings"),
+            field(actual, "settings")?,
+            field(expected, "settings")?,
             "settings drifted"
         );
     }
@@ -102,14 +135,8 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
     let all_messages = dump_messages(&pool, &uuid_to_label).await?;
     let mut actual_messages: BTreeMap<(String, String), Value> = BTreeMap::new();
     for message in &all_messages {
-        let event_id = at(at(message, "metadata"), "event_id")
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
-        let conversation = at(message, "conversation_id")
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
+        let event_id = str_member(field(message, "metadata")?, "event_id")?.to_string();
+        let conversation = text(message, "conversation_id")?.to_string();
         actual_messages.insert((conversation, event_id), message.clone());
     }
     let recorded_messages = golden
@@ -118,14 +145,8 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
         .ok_or("golden messages are a list")?;
     for expected in recorded_messages {
         let key = (
-            at(expected, "conversation_id")
-                .as_str()
-                .unwrap_or_default()
-                .to_string(),
-            at(at(expected, "metadata"), "event_id")
-                .as_str()
-                .unwrap_or_default()
-                .to_string(),
+            text(expected, "conversation_id")?.to_string(),
+            text(field(expected, "metadata")?, "event_id")?.to_string(),
         );
         let actual = actual_messages
             .get(&key)
@@ -139,17 +160,20 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
             "owner_user_id",
         ] {
             assert_field(
-                at(actual, key),
-                at(expected, key),
+                field(actual, key)?,
+                field(expected, key)?,
                 &format!("message column {key}"),
             );
         }
-        assert_eq!(at(actual, "content_len"), at(expected, "content_len"));
-        assert_eq!(at(actual, "tool_args"), at(expected, "tool_args"));
-        assert_eq!(at(actual, "metadata"), at(expected, "metadata"));
+        assert_eq!(
+            field(actual, "content_len")?,
+            field(expected, "content_len")?
+        );
+        assert_eq!(field(actual, "tool_args")?, field(expected, "tool_args")?);
+        assert_eq!(field(actual, "metadata")?, field(expected, "metadata")?);
         assert_field(
-            at(actual, "content"),
-            at(expected, "content"),
+            field(actual, "content")?,
+            field(expected, "content")?,
             "message content",
         );
     }
@@ -163,29 +187,30 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
         assert_eq!(jobs.len(), recorded_jobs.len());
         for (index, (actual, expected)) in jobs.iter().zip(recorded_jobs).enumerate() {
             assert_eq!(
-                at(actual, "task"),
-                at(expected, "task"),
+                field(actual, "task")?,
+                field(expected, "task")?,
                 "job {index} task drifted"
             );
             let message = all_messages
                 .get(index)
                 .ok_or("a message for the recorded job")?;
-            let actual_target = at(at(actual, "payload"), "targetId")
-                .as_str()
-                .unwrap_or_default();
+            let actual_target = str_member(field(actual, "payload")?, "targetId")?;
             assert_eq!(
-                at(at(expected, "payload"), "targetTable"),
-                at(at(actual, "payload"), "targetTable"),
+                field(field(expected, "payload")?, "targetTable")?,
+                field(field(actual, "payload")?, "targetTable")?,
                 "job {index} targetTable drifted"
             );
             assert!(
-                at(message, "id").as_str() == Some(actual_target),
+                text(message, "id")? == actual_target,
                 "job {index} targets {actual_target}"
             );
-            assert_eq!(at(actual, "max_attempts"), at(expected, "max_attempts"));
-            assert_eq!(at(actual, "priority"), at(expected, "priority"));
-            let actual_key = at(actual, "key").as_str().unwrap_or_default();
-            let expected_suffix = format!("-{}", at(message, "id").as_str().unwrap_or_default());
+            assert_eq!(
+                field(actual, "max_attempts")?,
+                field(expected, "max_attempts")?
+            );
+            assert_eq!(field(actual, "priority")?, field(expected, "priority")?);
+            let actual_key = text(actual, "key")?;
+            let expected_suffix = format!("-{}", text(message, "id")?);
             assert!(
                 actual_key.starts_with("embed-ros_messages-")
                     && actual_key.ends_with(&expected_suffix),
@@ -203,15 +228,10 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
     let by_value = |entries: &[Value]| {
         entries
             .iter()
-            .map(|entry| {
-                (
-                    at(entry, "value").as_str().unwrap_or_default().to_string(),
-                    entry.clone(),
-                )
-            })
-            .collect::<BTreeMap<_, _>>()
+            .map(|entry| Ok((text(entry, "value")?.to_string(), entry.clone())))
+            .collect::<Result<BTreeMap<_, _>, String>>()
     };
-    assert_eq!(by_value(&tags), by_value(recorded_tags));
+    assert_eq!(by_value(&tags)?, by_value(recorded_tags)?);
 
     let finalized = sqlx::query(
         "SELECT created_at::text AS created, updated_at::text AS updated FROM rh_conversations
@@ -246,6 +266,13 @@ fn assert_field(actual: &Value, expected: &Value, label: &str) {
     assert_eq!(actual, expected, "{label} drifted");
 }
 
+fn decode(raw: &str) -> Result<Value, sqlx::Error> {
+    serde_json::from_str(raw).map_err(|source| sqlx::Error::ColumnDecode {
+        index: "json".to_string(),
+        source: Box::new(source),
+    })
+}
+
 async fn dump_conversations(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT session_key::text AS session_key, agent::text AS agent, channel::text AS channel,
@@ -263,7 +290,7 @@ async fn dump_conversations(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
             "agent": row.try_get::<String, _>("agent")?,
             "channel": row.try_get::<String, _>("channel")?,
             "title": row.try_get::<Option<String>, _>("title")?,
-            "settings": serde_json::from_str::<Value>(&settings).unwrap_or_default(),
+            "settings": decode(&settings)?,
             "task_id": row.try_get::<Option<String>, _>("task_id")?,
             "active": row.try_get::<String, _>("active")? == "true",
             "owner_user_id": row.try_get::<Option<String>, _>("owner_user_id")?,
@@ -292,6 +319,7 @@ async fn dump_messages(
     for row in rows {
         let metadata: String = row.try_get("metadata")?;
         let conversation_id: String = row.try_get("conversation_id")?;
+        let tool_args: Option<String> = row.try_get("tool_args")?;
         out.push(serde_json::json!({
             "id": row.try_get::<String, _>("id")?,
             "conversation_id": uuid_to_label.get(&conversation_id).cloned().unwrap_or(conversation_id),
@@ -300,11 +328,9 @@ async fn dump_messages(
             "role": row.try_get::<String, _>("role")?,
             "content": row.try_get::<String, _>("content")?,
             "tool_name": row.try_get::<Option<String>, _>("tool_name")?,
-            "tool_args": row
-                .try_get::<Option<String>, _>("tool_args")?
-                .and_then(|text| serde_json::from_str::<Value>(&text).ok()),
+            "tool_args": tool_args.map(|text| decode(&text)).transpose()?,
             "tool_result": row.try_get::<Option<String>, _>("tool_result")?,
-            "metadata": serde_json::from_str::<Value>(&metadata).unwrap_or_default(),
+            "metadata": decode(&metadata)?,
             "owner_user_id": row.try_get::<Option<String>, _>("owner_user_id")?,
             "content_len": row.try_get::<i32, _>("content_len")?,
         }));
@@ -329,13 +355,21 @@ async fn dump_jobs(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
         let priority: String = row.try_get("priority")?;
         out.push(serde_json::json!({
             "task": row.try_get::<String, _>("task")?,
-            "payload": serde_json::from_str::<Value>(&payload).unwrap_or_default(),
+            "payload": decode(&payload)?,
             "key": row.try_get::<String, _>("key")?,
-            "max_attempts": max_attempts.parse::<i64>().unwrap_or_default(),
-            "priority": priority.parse::<i64>().unwrap_or_default(),
+            "max_attempts": int(&max_attempts)?,
+            "priority": int(&priority)?,
         }));
     }
     Ok(out)
+}
+
+fn int(raw: &str) -> Result<i64, sqlx::Error> {
+    raw.parse::<i64>()
+        .map_err(|source| sqlx::Error::ColumnDecode {
+            index: raw.to_string(),
+            source: Box::new(source),
+        })
 }
 
 async fn dump_tags(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {

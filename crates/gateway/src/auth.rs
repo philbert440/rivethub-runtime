@@ -94,8 +94,7 @@ impl OriginPolicy {
 
     pub fn evaluate(&self, check: &OriginCheck<'_>) -> Decision {
         if check.plain_http && check.caller_loopback {
-            let raw = check.host.unwrap_or_default();
-            let host = host_token(raw);
+            let host = host_header_token(check.host);
             let allowed = is_loopback_host(&host)
                 || host.ends_with(".localhost")
                 || self.allowed_hosts.contains(&host);
@@ -132,6 +131,10 @@ impl OriginPolicy {
             .filter_map(|candidate| normalize_origin(candidate))
             .any(|candidate| candidate == origin)
     }
+}
+
+fn host_header_token(host: Option<&str>) -> String {
+    host.map(host_token).unwrap_or_default()
 }
 
 fn same_origin(origin: &str, host_header: Option<&str>) -> bool {
@@ -175,21 +178,19 @@ fn authority_of(origin: &str) -> Option<(String, Option<u16>)> {
 
 fn host_token(host_header: &str) -> String {
     let trimmed = host_header.trim();
-    let token = if let Some(rest) = trimmed.strip_prefix('[') {
-        let (inner, tail) = rest.split_once(']').unwrap_or((rest, ""));
-        let _ = tail.strip_prefix(':');
-        inner
+    if let Some(rest) = trimmed.strip_prefix('[') {
+        let (inner, _) = rest.split_once(']').unwrap_or((rest, ""));
+        inner.to_ascii_lowercase()
     } else {
         match trimmed.rsplit_once(':') {
             Some((before, after))
                 if !after.is_empty() && after.bytes().all(|b| b.is_ascii_digit()) =>
             {
-                before
+                before.to_ascii_lowercase()
             }
-            _ => trimmed,
+            _ => trimmed.to_ascii_lowercase(),
         }
-    };
-    token.to_ascii_lowercase()
+    }
 }
 
 fn header_port_value(host_header: &str) -> Option<u16> {
@@ -205,6 +206,13 @@ fn header_port_value(host_header: &str) -> Option<u16> {
     after.parse().ok()
 }
 
+fn header_text<'a>(
+    headers: &'a axum::http::HeaderMap,
+    name: &header::HeaderName,
+) -> Option<&'a str> {
+    headers.get(name).and_then(|value| value.to_str().ok())
+}
+
 pub(crate) async fn guard(
     State(state): State<GuardState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -214,14 +222,8 @@ pub(crate) async fn guard(
     let caller_loopback = is_loopback_remote(addr);
     request.headers_mut().remove("x-rivetos-user");
     let path = request.uri().path().to_string();
-    let origin = request
-        .headers()
-        .get(header::ORIGIN)
-        .and_then(|value| value.to_str().ok());
-    let host = request
-        .headers()
-        .get(header::HOST)
-        .and_then(|value| value.to_str().ok());
+    let origin = header_text(request.headers(), &header::ORIGIN);
+    let host = header_text(request.headers(), &header::HOST);
     let check = OriginCheck {
         origin,
         host,
@@ -242,12 +244,7 @@ pub(crate) async fn guard(
     }
     if path != "/healthz" && !(state.secure || caller_loopback) {
         let mut unauthorized = unauthorized(&request, &path);
-        if unauthorized
-            .headers()
-            .get(header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            == Some("application/json")
-        {
+        if header_text(unauthorized.headers(), &header::CONTENT_TYPE) == Some("application/json") {
             append_cors(&mut unauthorized, echo.as_deref());
         }
         return unauthorized;
@@ -261,10 +258,7 @@ fn unauthorized(request: &Request, path: &str) -> Response {
     let method = request.method();
     let wants_html = (method == Method::GET || method == Method::HEAD)
         && !path.starts_with("/api/")
-        && request
-            .headers()
-            .get(header::ACCEPT)
-            .and_then(|value| value.to_str().ok())
+        && header_text(request.headers(), &header::ACCEPT)
             .is_some_and(|accept| accept.contains("text/html"));
     if wants_html {
         return html_unauthorized();
@@ -309,4 +303,26 @@ fn append_cors(response: &mut Response, echo: Option<&str>) {
         header::ACCESS_CONTROL_ALLOW_HEADERS,
         HeaderValue::from_static(CORS_HEADERS),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::HeaderMap;
+    use axum::http::HeaderValue;
+    use axum::http::header;
+
+    use super::header_text;
+
+    #[test]
+    fn a_non_utf8_header_value_is_no_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_bytes(&[0xff, 0xfe]).expect("opaque bytes form a header value"),
+        );
+        headers.insert(header::HOST, HeaderValue::from_static("127.0.0.1:5174"));
+        assert_eq!(header_text(&headers, &header::ORIGIN), None);
+        assert_eq!(header_text(&headers, &header::HOST), Some("127.0.0.1:5174"));
+        assert_eq!(header_text(&headers, &header::ACCEPT), None);
+    }
 }

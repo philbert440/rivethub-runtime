@@ -48,7 +48,7 @@ impl crate::PostgresMemory {
             .and_then(|settings| settings.get("cwd"))
             .and_then(|value| value.as_str())
             .map(str::to_string);
-        let tag = project::resolve_project_tag_blocking(cwd, options.allow_filesystem).await;
+        let tag = project::resolve_project_tag_blocking(cwd, options.allow_filesystem).await?;
         let owner = options.owner_user_id.as_deref();
         let mut writer = CaptureWriter::begin(&self.pool, &batch.session_key).await?;
         let conversation_id = writer

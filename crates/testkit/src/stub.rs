@@ -17,11 +17,13 @@ pub async fn stub_server(routes: Router) -> std::io::Result<Stub> {
     let addr = listener.local_addr()?;
     let (shutdown, rx) = oneshot::channel();
     let task = tokio::spawn(async move {
-        let _ = axum::serve(listener, routes)
-            .with_graceful_shutdown(async {
-                let _ = rx.await;
-            })
-            .await;
+        drop(
+            axum::serve(listener, routes)
+                .with_graceful_shutdown(async {
+                    drop(rx.await);
+                })
+                .await,
+        );
     });
     Ok(Stub {
         addr,
@@ -32,7 +34,9 @@ pub async fn stub_server(routes: Router) -> std::io::Result<Stub> {
 
 impl Stub {
     pub async fn close(self) {
-        let _ = self.shutdown.send(());
-        let _ = self.task.await;
+        match self.shutdown.send(()) {
+            Ok(()) | Err(()) => {}
+        }
+        drop(self.task.await);
     }
 }

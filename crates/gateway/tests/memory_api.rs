@@ -66,6 +66,15 @@ fn seeded() -> Result<(Arc<testkit::FakeMemoryStore>, axum::Router), String> {
 }
 
 fn entry(id: &str, content: &str, created_at: &str) -> MemoryEntry {
+    #[expect(
+        clippy::expect_used,
+        reason = "the test literals are constants; a malformed literal must fail the test, not drop the timestamp"
+    )]
+    fn at(created_at: &str) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::parse_from_rfc3339(created_at)
+            .expect("entry created_at is an RFC 3339 literal")
+            .with_timezone(&chrono::Utc)
+    }
     MemoryEntry {
         id: Some(id.to_owned()),
         session_id: SESSION.to_owned(),
@@ -77,9 +86,7 @@ fn entry(id: &str, content: &str, created_at: &str) -> MemoryEntry {
         tool_args: None,
         tool_result: None,
         metadata: None,
-        created_at: chrono::DateTime::parse_from_rfc3339(created_at)
-            .ok()
-            .map(|parsed| parsed.with_timezone(&chrono::Utc)),
+        created_at: Some(at(created_at)),
     }
 }
 
@@ -89,13 +96,12 @@ fn error_of(response: &testkit::Response) -> GatewayError {
 }
 
 fn tool_text(response: &testkit::Response) -> String {
-    let parsed: MemoryToolResponse =
-        serde_json::from_slice(&response.body).unwrap_or_else(|_| MemoryToolResponse {
-            ok: false,
-            result: wire::message::ToolResult::Text(String::new()),
-        });
+    let body = String::from_utf8_lossy(&response.body).into_owned();
+    let Ok(parsed) = serde_json::from_str::<MemoryToolResponse>(&body) else {
+        return format!("<not a tool reply: {body}>");
+    };
     let wire::message::ToolResult::Text(text) = parsed.result else {
-        return String::new();
+        return format!("<not a text tool reply: {body}>");
     };
     text
 }
@@ -581,7 +587,7 @@ fn append_tool_writes_through_the_port() {
     let inner: wire::gateway::OkReply =
         serde_json::from_str(&tool_text(&response)).expect("ok reply");
     assert!(inner.ok);
-    let all = block_on(store.browse(full_browse_filter())).unwrap_or_default();
+    let all = block_on(store.browse(full_browse_filter())).expect("browse succeeds");
     assert_eq!(all.len(), 3);
 }
 
@@ -618,7 +624,7 @@ fn ingest_session_tool_writes_through_the_port() {
     let inner: wire::capture::CaptureResult =
         serde_json::from_str(&tool_text(&response)).expect("capture result");
     assert_eq!(inner.inserted, 2);
-    let all = block_on(store.browse(full_browse_filter())).unwrap_or_default();
+    let all = block_on(store.browse(full_browse_filter())).expect("browse succeeds");
     assert_eq!(all.len(), 4);
 }
 

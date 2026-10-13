@@ -17,7 +17,6 @@ pub struct HookPost {
     pub content_type: String,
     pub body: String,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HookFile {
     pub path: String,
@@ -78,22 +77,31 @@ pub struct FileRecord {
 
 pub const ISO_TIMESTAMP: &str = "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:[.][0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})";
 
-static VOLATILE: LazyLock<Option<Regex>> = LazyLock::new(|| {
+#[expect(
+    clippy::expect_used,
+    reason = "the normalization patterns are constants; the capture replay tests match them"
+)]
+static VOLATILE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(
         "({ISO_TIMESTAMP})|([0-9]{{13}}-[0-9a-z]{{6,}})|(<ts>)"
     ))
-    .ok()
+    .expect("the volatile-text pattern is a constant")
 });
 
-static ESCAPE: LazyLock<Option<Regex>> =
-    LazyLock::new(|| Regex::new(r"\\\\|\\u[0-9a-fA-F]{4}").ok());
+#[expect(
+    clippy::expect_used,
+    reason = "the escape pattern is a constant; the capture replay tests match it"
+)]
+static ESCAPE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\\\\|\\u[0-9a-fA-F]{4}").expect("the escape pattern is a constant")
+});
 
-pub(crate) fn volatile_regex() -> Option<&'static Regex> {
-    VOLATILE.as_ref()
+pub(crate) fn volatile_regex() -> &'static Regex {
+    &VOLATILE
 }
 
-pub(crate) fn escape_regex() -> Option<&'static Regex> {
-    ESCAPE.as_ref()
+pub(crate) fn escape_regex() -> &'static Regex {
+    &ESCAPE
 }
 
 pub fn entries(recording: &Path) -> Result<Vec<EntryRecord>, Error> {
@@ -125,10 +133,7 @@ pub fn replay(
 }
 
 pub(crate) fn normalize_capture_text(text: &str) -> String {
-    let Some(volatile) = volatile_regex() else {
-        return text.to_string();
-    };
-    volatile
+    volatile_regex()
         .replace_all(text, |caps: &Captures<'_>| {
             if caps.get(2).is_some() {
                 "<KEY>"
@@ -260,13 +265,10 @@ fn pair_follows(text: &str, at: usize) -> bool {
 }
 
 pub(crate) fn sanitize_surrogates(text: &str) -> Cow<'_, str> {
-    let Some(escape) = escape_regex() else {
-        return Cow::Borrowed(text);
-    };
     let mut owned: Option<String> = None;
     let mut copied = 0;
     let mut pair_tail: Option<usize> = None;
-    for found in escape.find_iter(text) {
+    for found in escape_regex().find_iter(text) {
         if pair_tail == Some(found.start()) {
             pair_tail = None;
             continue;
@@ -290,13 +292,13 @@ pub(crate) fn sanitize_surrogates(text: &str) -> Cow<'_, str> {
             continue;
         }
         let out = owned.get_or_insert_with(String::new);
-        out.push_str(text.get(copied..found.start()).unwrap_or_default());
+        out.push_str(&text[copied..found.start()]);
         out.push_str(r"\ufffd");
         copied = found.end();
     }
     match owned {
         Some(mut out) => {
-            out.push_str(text.get(copied..).unwrap_or_default());
+            out.push_str(&text[copied..]);
             Cow::Owned(out)
         }
         None => Cow::Borrowed(text),

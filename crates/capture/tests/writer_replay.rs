@@ -25,52 +25,54 @@ impl RecordingTransport {
             posts: Arc::new(Mutex::new(Vec::new())),
         }
     }
-
-    fn respond(body: &str) -> CaptureResult {
-        let messages = serde_json::from_str::<testkit::Json>(body)
-            .ok()
-            .and_then(|value| {
-                value
-                    .get("messages")
-                    .and_then(testkit::Json::as_array)
-                    .map(Vec::len)
-            })
-            .unwrap_or(0);
-        CaptureResult {
-            ok: true,
-            conversation_id: "c-1".to_owned(),
-            inserted: u64::try_from(messages).unwrap_or(0),
-            skipped: 0,
-        }
-    }
 }
 
 #[async_trait]
 impl capture::writer::CaptureTransport for RecordingTransport {
     async fn post(&self, body: String) -> Result<CaptureResult, capture::writer::PostError> {
-        let response = Self::respond(&body);
+        let parsed: testkit::Json =
+            serde_json::from_str(&body).map_err(|error| capture::writer::PostError::Network {
+                message: format!("the writer posted a body that is not JSON: {error}"),
+            })?;
+        let messages = parsed
+            .get("messages")
+            .and_then(testkit::Json::as_array)
+            .map(Vec::len)
+            .ok_or_else(|| capture::writer::PostError::Network {
+                message: "the posted batch body carries no messages array".to_owned(),
+            })?;
+        let response = CaptureResult {
+            ok: true,
+            conversation_id: "c-1".to_owned(),
+            inserted: messages as u64,
+            skipped: 0,
+        };
         self.posts.lock().push(body);
         Ok(response)
     }
 }
 
 fn recorded_posts(name: &str) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
-    let text = std::fs::read_to_string(format!("{}.posts.json", recording(name)))?;
+    let path = format!("{}.posts.json", recording(name));
+    let text = std::fs::read_to_string(&path)?;
     let parsed: testkit::Json = serde_json::from_str(&text)?;
     let mut posts = Vec::new();
     for post in parsed.as_array().ok_or("posts file is not an array")? {
-        posts.push((
-            post.get("url")
-                .and_then(testkit::Json::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-            post.get("body")
-                .and_then(testkit::Json::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-        ));
+        let url = post
+            .get("url")
+            .and_then(testkit::Json::as_str)
+            .ok_or_else(|| format!("{path}: a recorded post carries no url string"))?;
+        let body = post
+            .get("body")
+            .and_then(testkit::Json::as_str)
+            .ok_or_else(|| format!("{path}: a recorded post carries no body string"))?;
+        posts.push((url.to_owned(), body.to_owned()));
     }
     Ok(posts)
+}
+
+fn pretty_json(value: &testkit::Json) -> String {
+    serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
 
 fn compare(actual: &[String], recorded: &[(String, String)], label: &str) -> Vec<String> {
@@ -94,8 +96,8 @@ fn compare(actual: &[String], recorded: &[(String, String)], label: &str) -> Vec
         if !json_eq(&recorded_value, &actual_value) {
             failures.push(format!(
                 "{label} post {index}: batch body mismatch\n    recorded: {}\n    actual:   {}",
-                serde_json::to_string_pretty(&recorded_value).unwrap_or_default(),
-                serde_json::to_string_pretty(&actual_value).unwrap_or_default(),
+                pretty_json(&recorded_value),
+                pretty_json(&actual_value),
             ));
         }
     }
@@ -127,20 +129,18 @@ async fn run_case(
             totals.conversation_id
         ));
     }
-    let total_messages = posts
-        .iter()
-        .filter_map(|body| {
-            serde_json::from_str::<testkit::Json>(body)
-                .ok()
-                .and_then(|value| {
-                    value
-                        .get("messages")
-                        .and_then(testkit::Json::as_array)
-                        .map(Vec::len)
-                })
-        })
-        .sum::<usize>();
-    if totals.inserted != u64::try_from(total_messages).unwrap_or(u64::MAX) || totals.skipped != 0 {
+    let mut total_messages = 0usize;
+    for body in &posts {
+        let value: testkit::Json = serde_json::from_str(body)
+            .map_err(|error| format!("{name}: a posted body is not JSON: {error}"))?;
+        let count = value
+            .get("messages")
+            .and_then(testkit::Json::as_array)
+            .map(Vec::len)
+            .ok_or_else(|| format!("{name}: a posted body carries no messages array"))?;
+        total_messages += count;
+    }
+    if totals.inserted != total_messages as u64 || totals.skipped != 0 {
         failures.push(format!(
             "{name}: totals inserted {} skipped {}",
             totals.inserted, totals.skipped
