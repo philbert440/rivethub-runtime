@@ -13,8 +13,10 @@ or a test. Check: xtask `COMMENT` (a real Rust lexer over `crates/**.rs`, commen
 ## ALLOW
 Anti-pattern: `#[allow(...)]`, or `#[expect(...)]` without a reason, to silence a lint. Pattern: fix the code. Where a lint
 is genuinely wrong for one spot, `#[expect(lint, reason = "…")]` — the compiler re-checks it every build, so it cannot go
-stale. A lint wrong for the whole workspace is a reviewed change to `[workspace.lints]`. Check: Clippy `allow_attributes`
-and `allow_attributes_without_reason`.
+stale. A Dylint lint wrong for one spot takes `#[cfg_attr(dylint_lib = "rr_lints", expect(<lint>, reason = "…"))]` — the
+`dylint_lib` cfg keeps the unknown lint name off the plain rustc/Clippy legs, and `[workspace.lints.rust]` declares the cfg
+once so `unexpected_cfgs` stays quiet (no per-crate `build.rs`). A lint wrong for the whole workspace is a reviewed change
+to `[workspace.lints]`. Check: Clippy `allow_attributes` and `allow_attributes_without_reason`.
 
 ## UNWRAP
 Anti-pattern: `.unwrap()` / `.expect()` in production code. Pattern: return the crate's `thiserror` error with `?`; a value

@@ -39,6 +39,7 @@ pub use json::substitute;
 pub use memory::FakeMemoryStore;
 pub use memory::MemoryRequest;
 pub use paths::golden_path;
+pub use paths::recording;
 pub use provider::Canned;
 pub use provider::CapturedRequest;
 pub use provider::ProviderTurn;

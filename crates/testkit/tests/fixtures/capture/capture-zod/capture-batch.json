@@ -1,0 +1,524 @@
+{
+ "zod": "4.6.5",
+ "note": "error.message from captureBatchSchema.parse; the den server returns it as the 400 error text",
+ "cases": {
+  "empty object": {
+   "input": {},
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"session_key\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  },\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"agent\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  },\n  {\n    \"expected\": \"array\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\"\n    ],\n    \"message\": \"Invalid input: expected array, received undefined\"\n  }\n]"
+  },
+  "null body": {
+   "input": null,
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [],\n    \"message\": \"Invalid input: expected object, received null\"\n  }\n]"
+  },
+  "array body": {
+   "input": [],
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [],\n    \"message\": \"Invalid input: expected object, received array\"\n  }\n]"
+  },
+  "string body": {
+   "input": "x",
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [],\n    \"message\": \"Invalid input: expected object, received string\"\n  }\n]"
+  },
+  "number body": {
+   "input": 1,
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [],\n    \"message\": \"Invalid input: expected object, received number\"\n  }\n]"
+  },
+  "session_key missing": {
+   "input": {
+    "agent": "a",
+    "messages": []
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"session_key\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  }\n]"
+  },
+  "session_key empty": {
+   "input": {
+    "session_key": "",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"session_key\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"session_key\"\n    ],\n    \"message\": \"Invalid input\"\n  }\n]"
+  },
+  "session_key spaces": {
+   "input": {
+    "session_key": "   ",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"session_key\"\n    ],\n    \"message\": \"Invalid input\"\n  }\n]"
+  },
+  "session_key number": {
+   "input": {
+    "session_key": 5,
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"session_key\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  }\n]"
+  },
+  "agent empty": {
+   "input": {
+    "session_key": "s",
+    "agent": "",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"agent\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"agent\"\n    ],\n    \"message\": \"Invalid input\"\n  }\n]"
+  },
+  "agent spaces": {
+   "input": {
+    "session_key": "s",
+    "agent": " \t",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"agent\"\n    ],\n    \"message\": \"Invalid input\"\n  }\n]"
+  },
+  "agent null": {
+   "input": {
+    "session_key": "s",
+    "agent": null,
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"agent\"\n    ],\n    \"message\": \"Invalid input: expected string, received null\"\n  }\n]"
+  },
+  "messages missing": {
+   "input": {
+    "session_key": "s",
+    "agent": "a"
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"array\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\"\n    ],\n    \"message\": \"Invalid input: expected array, received undefined\"\n  }\n]"
+  },
+  "messages object": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": {}
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"array\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\"\n    ],\n    \"message\": \"Invalid input: expected array, received object\"\n  }\n]"
+  },
+  "messages string": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": "x"
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"array\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\"\n    ],\n    \"message\": \"Invalid input: expected array, received string\"\n  }\n]"
+  },
+  "message null": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     null
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"object\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\",\n      0\n    ],\n    \"message\": \"Invalid input: expected object, received null\"\n  }\n]"
+  },
+  "event_id empty": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "",
+      "role": "user",
+      "content": "hi"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"messages\",\n      0,\n      \"event_id\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  }\n]"
+  },
+  "event_id missing": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "role": "user",
+      "content": "x"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\",\n      0,\n      \"event_id\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  }\n]"
+  },
+  "role bad": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "bot",
+      "content": "hi"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"system\",\n      \"user\",\n      \"assistant\",\n      \"tool\"\n    ],\n    \"path\": [\n      \"messages\",\n      0,\n      \"role\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"system\\\"|\\\"user\\\"|\\\"assistant\\\"|\\\"tool\\\"\"\n  }\n]"
+  },
+  "role number": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": 1,
+      "content": "hi"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"system\",\n      \"user\",\n      \"assistant\",\n      \"tool\"\n    ],\n    \"path\": [\n      \"messages\",\n      0,\n      \"role\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"system\\\"|\\\"user\\\"|\\\"assistant\\\"|\\\"tool\\\"\"\n  }\n]"
+  },
+  "content missing": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e",
+      "role": "user"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\",\n      0,\n      \"content\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  }\n]"
+  },
+  "content number": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": 5
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\",\n      0,\n      \"content\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  }\n]"
+  },
+  "tool_name number": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi",
+      "tool_name": 1
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\",\n      0,\n      \"tool_name\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  }\n]"
+  },
+  "tool_result object": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi",
+      "tool_result": {}
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\",\n      0,\n      \"tool_result\"\n    ],\n    \"message\": \"Invalid input: expected string, received object\"\n  }\n]"
+  },
+  "metadata array": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi",
+      "metadata": []
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"record\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\",\n      0,\n      \"metadata\"\n    ],\n    \"message\": \"Invalid input: expected record, received array\"\n  }\n]"
+  },
+  "metadata string": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi",
+      "metadata": "x"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"record\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\",\n      0,\n      \"metadata\"\n    ],\n    \"message\": \"Invalid input: expected record, received string\"\n  }\n]"
+  },
+  "message created_at bad": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi",
+      "created_at": "yesterday"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"datetime\",\n    \"pattern\": \"/^(?:(?:\\\\d\\\\d[2468][048]|\\\\d\\\\d[13579][26]|\\\\d\\\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\\\d|30)|(?:02)-(?:0[1-9]|1\\\\d|2[0-8])))T(?:(?:[01]\\\\d|2[0-3]):[0-5]\\\\d:[0-5]\\\\d(?:\\\\.\\\\d+)?(?:Z|([+-](?:[01]\\\\d|2[0-3]):[0-5]\\\\d)))$/\",\n    \"path\": [\n      \"messages\",\n      0,\n      \"created_at\"\n    ],\n    \"message\": \"Invalid ISO datetime\"\n  }\n]"
+  },
+  "message created_at no offset": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi",
+      "created_at": "2026-10-10T12:00:00"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"datetime\",\n    \"pattern\": \"/^(?:(?:\\\\d\\\\d[2468][048]|\\\\d\\\\d[13579][26]|\\\\d\\\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\\\d|30)|(?:02)-(?:0[1-9]|1\\\\d|2[0-8])))T(?:(?:[01]\\\\d|2[0-3]):[0-5]\\\\d:[0-5]\\\\d(?:\\\\.\\\\d+)?(?:Z|([+-](?:[01]\\\\d|2[0-3]):[0-5]\\\\d)))$/\",\n    \"path\": [\n      \"messages\",\n      0,\n      \"created_at\"\n    ],\n    \"message\": \"Invalid ISO datetime\"\n  }\n]"
+  },
+  "created_at bad": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ],
+    "created_at": "2026-13-01T00:00:00Z"
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"invalid_format\",\n    \"format\": \"datetime\",\n    \"pattern\": \"/^(?:(?:\\\\d\\\\d[2468][048]|\\\\d\\\\d[13579][26]|\\\\d\\\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\\\d|30)|(?:02)-(?:0[1-9]|1\\\\d|2[0-8])))T(?:(?:[01]\\\\d|2[0-3]):[0-5]\\\\d:[0-5]\\\\d(?:\\\\.\\\\d+)?(?:Z|([+-](?:[01]\\\\d|2[0-3]):[0-5]\\\\d)))$/\",\n    \"path\": [\n      \"created_at\"\n    ],\n    \"message\": \"Invalid ISO datetime\"\n  }\n]"
+  },
+  "updated_at number": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ],
+    "updated_at": 1
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"updated_at\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  }\n]"
+  },
+  "finalize string": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ],
+    "finalize": "yes"
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"boolean\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"finalize\"\n    ],\n    \"message\": \"Invalid input: expected boolean, received string\"\n  }\n]"
+  },
+  "channel number": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ],
+    "channel": 1
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"channel\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  }\n]"
+  },
+  "title null": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ],
+    "title": null
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"title\"\n    ],\n    \"message\": \"Invalid input: expected string, received null\"\n  }\n]"
+  },
+  "settings array": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ],
+    "settings": []
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"record\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"settings\"\n    ],\n    \"message\": \"Invalid input: expected record, received array\"\n  }\n]"
+  },
+  "task_id number": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ],
+    "task_id": 7
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"task_id\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  }\n]"
+  },
+  "second message bad": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     },
+     {
+      "event_id": "",
+      "role": "x",
+      "content": 1
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"messages\",\n      1,\n      \"event_id\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  },\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"system\",\n      \"user\",\n      \"assistant\",\n      \"tool\"\n    ],\n    \"path\": [\n      \"messages\",\n      1,\n      \"role\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"system\\\"|\\\"user\\\"|\\\"assistant\\\"|\\\"tool\\\"\"\n  },\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\",\n      1,\n      \"content\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  }\n]"
+  },
+  "many errors": {
+   "input": {
+    "session_key": "",
+    "agent": 3,
+    "finalize": "x",
+    "messages": [
+     {
+      "event_id": "",
+      "role": "nope"
+     }
+    ]
+   },
+   "ok": false,
+   "message": "[\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"session_key\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  },\n  {\n    \"code\": \"custom\",\n    \"path\": [\n      \"session_key\"\n    ],\n    \"message\": \"Invalid input\"\n  },\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"agent\"\n    ],\n    \"message\": \"Invalid input: expected string, received number\"\n  },\n  {\n    \"expected\": \"boolean\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"finalize\"\n    ],\n    \"message\": \"Invalid input: expected boolean, received string\"\n  },\n  {\n    \"origin\": \"string\",\n    \"code\": \"too_small\",\n    \"minimum\": 1,\n    \"inclusive\": true,\n    \"path\": [\n      \"messages\",\n      0,\n      \"event_id\"\n    ],\n    \"message\": \"Too small: expected string to have >=1 characters\"\n  },\n  {\n    \"code\": \"invalid_value\",\n    \"values\": [\n      \"system\",\n      \"user\",\n      \"assistant\",\n      \"tool\"\n    ],\n    \"path\": [\n      \"messages\",\n      0,\n      \"role\"\n    ],\n    \"message\": \"Invalid option: expected one of \\\"system\\\"|\\\"user\\\"|\\\"assistant\\\"|\\\"tool\\\"\"\n  },\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"messages\",\n      0,\n      \"content\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  }\n]"
+  },
+  "valid with extras": {
+   "input": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi",
+      "extra": 2
+     }
+    ],
+    "extra": 1
+   },
+   "ok": true,
+   "parsed": {
+    "session_key": "s",
+    "agent": "a",
+    "messages": [
+     {
+      "event_id": "e1",
+      "role": "user",
+      "content": "hi"
+     }
+    ]
+   }
+  }
+ }
+}
