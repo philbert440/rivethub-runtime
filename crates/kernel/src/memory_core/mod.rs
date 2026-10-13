@@ -31,4 +31,5 @@ pub use scoring::W_SEMANTIC;
 pub use scoring::W_TEMPORAL;
 pub use scoring::composite_score;
 pub use scoring::temporal_decay;
+pub use window::TimeRange;
 pub use window::resolve_window;

@@ -5,6 +5,7 @@ use chrono::Local;
 use chrono::Utc;
 use kernel::memory::BrowseFilter;
 use kernel::memory::SearchMode;
+use kernel::memory_core::TimeRange;
 use std::str::FromStr as _;
 use uuid::Uuid;
 use wire::JsonObject;
@@ -99,16 +100,17 @@ fn count(value: i64) -> Result<u64, Error> {
     u64::try_from(value).map_err(|source| Error::protocol(source.to_string()))
 }
 
-pub(crate) fn window_bounds(
-    window: BrowseWindow,
-) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {
+pub(crate) fn window_bounds(window: BrowseWindow) -> TimeRange {
     kernel::memory_core::resolve_window(window, Utc::now(), &Local)
 }
 
-fn filter_bounds(filter: &BrowseFilter) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {
+fn filter_bounds(filter: &BrowseFilter) -> TimeRange {
     match (filter.since, filter.before, filter.window) {
         (None, None, Some(window)) => window_bounds(window),
-        _ => (filter.since, filter.before),
+        _ => TimeRange {
+            since: filter.since,
+            before: filter.before,
+        },
     }
 }
 
@@ -159,12 +161,12 @@ impl crate::PostgresMemory {
         if let Some(tag) = &filter.tag {
             push_tag_condition(&mut query, tag);
         }
-        let (since, before) = filter_bounds(filter);
-        if let Some(since) = since {
+        let bounds = filter_bounds(filter);
+        if let Some(since) = bounds.since {
             query.push(" and m.created_at >= ");
             query.push_bind(since);
         }
-        if let Some(before) = before {
+        if let Some(before) = bounds.before {
             query.push(" and m.created_at < ");
             query.push_bind(before);
         }

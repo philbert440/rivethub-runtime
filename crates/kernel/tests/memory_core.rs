@@ -1,4 +1,11 @@
 use chrono::DateTime;
+use chrono::Duration;
+use chrono::FixedOffset;
+use chrono::LocalResult;
+use chrono::NaiveDate;
+use chrono::NaiveDateTime;
+use chrono::NaiveTime;
+use chrono::TimeZone;
 use chrono::Utc;
 use kernel::memory_core::DECAY_LAMBDA;
 use kernel::memory_core::EMBED_INPUT_MAX;
@@ -251,17 +258,17 @@ fn resolve_window_replays_the_recording() -> Result<(), String> {
                 let now = DateTime::parse_from_rfc3339(&now_raw)
                     .unwrap()
                     .with_timezone(&Utc);
-                let (since, before) = resolve_window(window, now, &Utc);
+                let bounds = resolve_window(window, now, &Utc);
                 let expected = case.out.expect("a parseable window has a recording result");
                 assert!(case.throws.is_none());
-                assert_eq!(stamp(since), expected.since, "{raw} at {now_raw}");
+                assert_eq!(stamp(bounds.since), expected.since, "{raw} at {now_raw}");
                 if window == BrowseWindow::ThisMorning {
                     assert!(expected.before.is_none(), "{raw}");
-                    let noon = since.map(|start| start + chrono::Duration::hours(12));
-                    assert_eq!(before, noon, "{raw}");
+                    let noon = bounds.since.map(|start| start + Duration::hours(12));
+                    assert_eq!(bounds.before, noon, "{raw}");
                     morning += 1;
                 } else {
-                    assert_eq!(stamp(before), expected.before, "{raw} at {now_raw}");
+                    assert_eq!(stamp(bounds.before), expected.before, "{raw} at {now_raw}");
                     matched += 1;
                 }
             }
@@ -441,4 +448,238 @@ fn literal_scan_matches_paths_addresses_and_mixed_tokens() {
     assert!(should_trigram_fallback("a.b"));
     assert!(should_trigram_fallback("notes.md"));
     assert!(!should_trigram_fallback("plain words"));
+}
+
+#[derive(Clone, Copy)]
+struct Transition {
+    before: FixedOffset,
+    after: FixedOffset,
+    at_utc: NaiveDateTime,
+    later_first: bool,
+}
+
+impl Transition {
+    fn maps(self, local: &NaiveDateTime, offset: FixedOffset) -> bool {
+        local
+            .checked_sub_offset(offset)
+            .is_some_and(|utc| self.offset_from_utc_datetime(&utc) == offset)
+    }
+
+    fn fold_pair(self) -> (FixedOffset, FixedOffset) {
+        if self.before.local_minus_utc() >= self.after.local_minus_utc() {
+            (self.before, self.after)
+        } else {
+            (self.after, self.before)
+        }
+    }
+
+    fn later_instant_first(mut self) -> Self {
+        self.later_first = true;
+        self
+    }
+}
+
+impl TimeZone for Transition {
+    type Offset = FixedOffset;
+
+    fn from_offset(offset: &FixedOffset) -> Self {
+        Self {
+            before: *offset,
+            after: *offset,
+            at_utc: DateTime::<Utc>::UNIX_EPOCH.naive_utc(),
+            later_first: false,
+        }
+    }
+
+    fn offset_from_local_date(&self, local: &NaiveDate) -> LocalResult<FixedOffset> {
+        self.offset_from_local_datetime(&NaiveDateTime::new(*local, NaiveTime::MIN))
+    }
+
+    fn offset_from_local_datetime(&self, local: &NaiveDateTime) -> LocalResult<FixedOffset> {
+        match (self.maps(local, self.before), self.maps(local, self.after)) {
+            (true, false) => LocalResult::Single(self.before),
+            (false, true) => LocalResult::Single(self.after),
+            (true, true) if self.before == self.after => LocalResult::Single(self.before),
+            (true, true) => {
+                let (earlier, later) = self.fold_pair();
+                if self.later_first {
+                    LocalResult::Ambiguous(later, earlier)
+                } else {
+                    LocalResult::Ambiguous(earlier, later)
+                }
+            }
+            (false, false) => LocalResult::None,
+        }
+    }
+
+    fn offset_from_utc_date(&self, utc: &NaiveDate) -> FixedOffset {
+        self.offset_from_utc_datetime(&NaiveDateTime::new(*utc, NaiveTime::MIN))
+    }
+
+    fn offset_from_utc_datetime(&self, utc: &NaiveDateTime) -> FixedOffset {
+        if *utc < self.at_utc {
+            self.before
+        } else {
+            self.after
+        }
+    }
+}
+
+fn utc(text: &str) -> Result<DateTime<Utc>, String> {
+    DateTime::parse_from_rfc3339(text)
+        .map(|parsed| parsed.with_timezone(&Utc))
+        .map_err(|error| error.to_string())
+}
+
+fn offset_hours(hours: i32) -> Result<FixedOffset, String> {
+    FixedOffset::east_opt(hours * 3600).ok_or_else(|| format!("offset {hours}h is out of range"))
+}
+
+fn transition(before_hours: i32, after_hours: i32, at: &str) -> Result<Transition, String> {
+    Ok(Transition {
+        before: offset_hours(before_hours)?,
+        after: offset_hours(after_hours)?,
+        at_utc: utc(at)?.naive_utc(),
+        later_first: false,
+    })
+}
+
+fn local_midnight(year: i32, month: u32, day: u32) -> Result<NaiveDateTime, String> {
+    let date = NaiveDate::from_ymd_opt(year, month, day)
+        .ok_or_else(|| format!("date {year}-{month:02}-{day:02} is not a calendar day"))?;
+    date.and_hms_opt(0, 0, 0)
+        .ok_or_else(|| format!("date {year}-{month:02}-{day:02} has no midnight"))
+}
+
+fn assert_day_start(
+    zone: &Transition,
+    window: BrowseWindow,
+    now: DateTime<Utc>,
+    expected: DateTime<Utc>,
+) {
+    let bounds = resolve_window(window, now, zone);
+    assert_eq!(bounds.since, Some(expected), "{window:?} at {now}");
+    let date = expected.with_timezone(zone).date_naive();
+    let prev = expected - Duration::seconds(1);
+    assert_ne!(
+        prev.with_timezone(zone).date_naive(),
+        date,
+        "{window:?} at {now}"
+    );
+}
+
+#[test]
+fn calendar_windows_keep_the_earlier_midnight_when_the_clock_falls_back() -> Result<(), String> {
+    let zone = transition(-3, -4, "2024-04-01T04:00:00Z")?;
+    let midnight = local_midnight(2024, 4, 1)?;
+    assert!(matches!(
+        zone.from_local_datetime(&midnight),
+        LocalResult::Ambiguous(_, _)
+    ));
+    let earliest = utc("2024-04-01T03:00:00Z")?;
+    let monday = utc("2024-04-01T12:00:00Z")?;
+    let tuesday = utc("2024-04-02T12:00:00Z")?;
+    assert_day_start(&zone, BrowseWindow::Today, monday, earliest);
+    assert_day_start(&zone, BrowseWindow::ThisMorning, monday, earliest);
+    assert_day_start(&zone, BrowseWindow::ThisWeek, monday, earliest);
+    assert_day_start(&zone, BrowseWindow::Yesterday, tuesday, earliest);
+    let morning = resolve_window(BrowseWindow::ThisMorning, monday, &zone);
+    assert_eq!(
+        morning.before,
+        morning.since.map(|start| start + Duration::hours(12))
+    );
+    let yesterday = resolve_window(BrowseWindow::Yesterday, tuesday, &zone);
+    assert_eq!(yesterday.before, Some(utc("2024-04-02T04:00:00Z")?));
+    assert_eq!(
+        resolve_window(BrowseWindow::Last24h, monday, &zone).since,
+        Some(monday - Duration::hours(24))
+    );
+    Ok(())
+}
+
+#[test]
+fn calendar_windows_keep_the_first_instant_when_midnight_does_not_exist() -> Result<(), String> {
+    let zone = transition(-4, -3, "2024-04-01T04:00:00Z")?;
+    let midnight = local_midnight(2024, 4, 1)?;
+    assert!(matches!(
+        zone.from_local_datetime(&midnight),
+        LocalResult::None
+    ));
+    let first = utc("2024-04-01T04:00:00Z")?;
+    let monday = utc("2024-04-01T12:00:00Z")?;
+    let tuesday = utc("2024-04-02T12:00:00Z")?;
+    let wednesday = utc("2024-04-03T12:00:00Z")?;
+    assert_day_start(&zone, BrowseWindow::Today, monday, first);
+    assert_day_start(&zone, BrowseWindow::ThisMorning, monday, first);
+    assert_day_start(&zone, BrowseWindow::ThisWeek, monday, first);
+    assert_day_start(&zone, BrowseWindow::Yesterday, tuesday, first);
+    assert_day_start(
+        &zone,
+        BrowseWindow::Today,
+        wednesday,
+        utc("2024-04-03T03:00:00Z")?,
+    );
+    let morning = resolve_window(BrowseWindow::ThisMorning, monday, &zone);
+    assert_eq!(
+        morning.before,
+        morning.since.map(|start| start + Duration::hours(12))
+    );
+    let yesterday = resolve_window(BrowseWindow::Yesterday, tuesday, &zone);
+    assert_eq!(yesterday.before, Some(utc("2024-04-02T03:00:00Z")?));
+    Ok(())
+}
+
+#[test]
+fn a_midnight_inside_the_gap_is_the_end_of_the_gap() -> Result<(), String> {
+    let zone = transition(-4, -2, "2024-04-01T03:00:00Z")?;
+    assert!(matches!(
+        zone.from_local_datetime(&local_midnight(2024, 4, 1)?),
+        LocalResult::None
+    ));
+    assert_day_start(
+        &zone,
+        BrowseWindow::Today,
+        utc("2024-04-01T12:00:00Z")?,
+        utc("2024-04-01T03:00:00Z")?,
+    );
+    Ok(())
+}
+
+#[test]
+fn calendar_windows_keep_the_earlier_midnight_when_local_lists_the_later_instant_first()
+-> Result<(), String> {
+    let zone = transition(-4, -5, "2016-11-06T05:00:00Z")?.later_instant_first();
+    let midnight = local_midnight(2016, 11, 6)?;
+    let LocalResult::Ambiguous(later, earlier) = zone.from_local_datetime(&midnight) else {
+        return Err(String::from("havana midnight is not ambiguous"));
+    };
+    assert_eq!(later.with_timezone(&Utc), utc("2016-11-06T05:00:00Z")?);
+    assert_eq!(earlier.with_timezone(&Utc), utc("2016-11-06T04:00:00Z")?);
+    let start = utc("2016-11-06T04:00:00Z")?;
+    let sunday = utc("2016-11-06T12:00:00Z")?;
+    let next_day = utc("2016-11-07T12:00:00Z")?;
+    assert_day_start(&zone, BrowseWindow::Today, sunday, start);
+    assert_day_start(&zone, BrowseWindow::ThisMorning, sunday, start);
+    assert_day_start(&zone, BrowseWindow::Yesterday, next_day, start);
+    assert_day_start(
+        &zone,
+        BrowseWindow::ThisWeek,
+        sunday,
+        utc("2016-10-31T04:00:00Z")?,
+    );
+    let morning = resolve_window(BrowseWindow::ThisMorning, sunday, &zone);
+    assert_eq!(
+        morning.before,
+        morning.since.map(|since| since + Duration::hours(12))
+    );
+    let yesterday = resolve_window(BrowseWindow::Yesterday, next_day, &zone);
+    assert_eq!(yesterday.before, Some(utc("2016-11-07T05:00:00Z")?));
+    let week = transition(-3, -4, "2024-04-01T04:00:00Z")?.later_instant_first();
+    assert_day_start(
+        &week,
+        BrowseWindow::ThisWeek,
+        utc("2024-04-01T12:00:00Z")?,
+        utc("2024-04-01T03:00:00Z")?,
+    );
+    Ok(())
 }
