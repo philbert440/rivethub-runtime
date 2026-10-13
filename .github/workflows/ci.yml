@@ -13,6 +13,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  SQLX_OFFLINE: "true"
+
 jobs:
   gate:
     name: Gate (cargo xtask check)
@@ -52,6 +55,20 @@ jobs:
   rust:
     name: Tests (coverage) and build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.0
@@ -61,8 +78,16 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest,cargo-llvm-cov,cargo-machete
+      - name: sqlx-cli
+        run: cargo install sqlx-cli --locked --no-default-features --features rustls,postgres
       - name: Tests under the coverage floor
         run: cargo llvm-cov nextest --workspace --all-features --locked --fail-under-lines "$(cat coverage-floor.txt)" --summary-only
+      - name: Query data is current
+        run: |
+          cargo sqlx migrate run --source crates/memory-postgres/migrations
+          cargo sqlx prepare --workspace --check
+        env:
+          SQLX_OFFLINE: "false"
       - name: Doc tests
         run: cargo test --doc --workspace --all-features --locked
       - name: Unused dependencies
