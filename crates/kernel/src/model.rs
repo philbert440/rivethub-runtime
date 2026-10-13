@@ -29,7 +29,6 @@ pub struct ModelRequest {
     pub tools: Vec<rmcp::model::Tool>,
     pub thinking: Option<ThinkingLevel>,
     pub max_tokens: Option<u32>,
-    pub temperature: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

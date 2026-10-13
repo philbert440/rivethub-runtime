@@ -2,8 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use config::{Finding, PLUGINS_IGNORED, ProviderType, WORKFLOWS_IGNORED};
+use config::{Finding, PLUGINS_IGNORED, ProviderType, RemovedProviderType, WORKFLOWS_IGNORED};
 use libtest_mimic::{Arguments, Failed, Trial};
+use std::str::FromStr;
 
 #[expect(
     clippy::redundant_pub_crate,
@@ -70,6 +71,7 @@ struct Replay {
     recorded_accepted: bool,
     contract: Vec<Finding>,
     deviation: Option<Deviation>,
+    removed: RemovedDeltas,
 }
 
 fn golden_path(subpath: &str) -> PathBuf {
@@ -112,7 +114,7 @@ fn section_value<'a>(
     }
 }
 
-fn removed_provider_ids(input: &serde_yaml_ng::Value) -> Vec<(String, ProviderType)> {
+fn removed_provider_ids(input: &serde_yaml_ng::Value) -> Vec<(String, RemovedProviderType)> {
     let Some(providers) =
         section_value(input, "providers").and_then(|providers| providers.as_mapping())
     else {
@@ -125,21 +127,20 @@ fn removed_provider_ids(input: &serde_yaml_ng::Value) -> Vec<(String, ProviderTy
         };
         let declared = entry.get("type").and_then(serde_yaml_ng::Value::as_str);
         let kind = match declared {
-            Some(text) => text.parse::<ProviderType>().ok(),
-            None => id.parse::<ProviderType>().ok(),
+            Some(text) => text.parse::<RemovedProviderType>().ok(),
+            None => id.parse::<RemovedProviderType>().ok(),
         };
-        match kind {
-            Some(kind) if kind.is_removed() || kind == ProviderType::OpenaiCompat => {
-                removed.push((id.to_owned(), kind));
-            }
-            Some(_) | None => {}
+        if let Some(kind) = kind {
+            removed.push((id.to_owned(), kind));
         }
     }
     removed
 }
 
 const DECISION_15_WARNING: &str = "memory.capture.redaction is validated but not yet injected into harness hook processes; set RIVETOS_CAPTURE_REDACTION or pass CaptureWriterOptions.redaction to enable at runtime";
-const OPENAI_COMPAT_SPLIT: &str = "The \"openai-compat\" provider was split into dedicated providers. Use \"vllm\" for a vLLM server, or \"llama-server\" for llama.cpp's llama-server — both take base_url.";
+
+const REMOVED_BY_DECISION_ROWS: usize = 17_091;
+const REMOVED_BY_DECISION_CASES: usize = 5_478;
 
 fn decision_replacements(input: &serde_yaml_ng::Value) -> Vec<(String, bool, String, String)> {
     let mut replacements = Vec::new();
@@ -160,16 +161,15 @@ fn decision_replacements(input: &serde_yaml_ng::Value) -> Vec<(String, bool, Str
         ));
     }
     for (id, kind) in removed_provider_ids(input) {
-        let (path, message) = match kind.removed_harness() {
-            Some(harness) => (
-                format!("providers.{id}.type"),
-                format!(
-                    "Provider \"{id}\" type \"{kind}\" is not built — reach {kind} models through the {harness} harness instead."
-                ),
+        replacements.push((
+            format!("providers.{id}"),
+            true,
+            format!("providers.{id}.type"),
+            format!(
+                "Provider \"{id}\" type \"{kind}\" is not built — {}.",
+                kind.message()
             ),
-            None => (format!("providers.{id}"), OPENAI_COMPAT_SPLIT.to_owned()),
-        };
-        replacements.push((format!("providers.{id}"), true, path, message));
+        ));
     }
     replacements
 }
@@ -178,6 +178,148 @@ fn covered(path: &str, section: &str) -> bool {
     path == section
         || path.starts_with(&format!("{section}."))
         || path.starts_with(&format!("{section}["))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "snake_case")]
+enum RemovedProviderKey {
+    TokenCommand,
+    TokenTtlMs,
+    TokenCommandTimeoutMs,
+    Temperature,
+    TopP,
+    TopK,
+    MinP,
+    PresencePenalty,
+    FrequencyPenalty,
+    Seed,
+    Stop,
+    RepetitionPenalty,
+    MinTokens,
+    DefaultToolChoice,
+    MmProcessorKwargs,
+    ChatTemplateKwargs,
+    ExtraBody,
+    Models,
+    ModelsTtlMs,
+    ModelsUrl,
+    VerifyModelOnInit,
+    NumCtx,
+    KeepAlive,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+enum RemovedEmbedKey {
+    #[strum(serialize = "embed_token_command")]
+    TokenCommand,
+    #[strum(serialize = "embed_token_ttl_ms")]
+    TokenTtlMs,
+    #[strum(serialize = "embed_token_command_timeout_ms")]
+    TokenCommandTimeoutMs,
+    #[strum(serialize = "embed_wire_shape")]
+    WireShape,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+enum RemovedByDecision {
+    ProviderKey(RemovedProviderKey),
+    EmbedKey(RemovedEmbedKey),
+}
+
+fn key_warning(path: String, key: &str) -> Finding {
+    Finding::warning(
+        path,
+        format!("{key} is set on the model server, not in RivetHub"),
+    )
+}
+
+#[derive(Debug, Default)]
+struct RemovedDeltas {
+    paths: Vec<String>,
+    findings: Vec<(RemovedByDecision, Finding)>,
+}
+
+impl RemovedDeltas {
+    fn push(&mut self, path: &str, reason: RemovedByDecision, finding: Finding) {
+        self.paths.push(path.to_owned());
+        self.findings.push((reason, finding));
+    }
+}
+
+fn provider_key_deltas(input: &serde_yaml_ng::Value, deltas: &mut RemovedDeltas) {
+    let Some(providers) =
+        section_value(input, "providers").and_then(|providers| providers.as_mapping())
+    else {
+        return;
+    };
+    for (id, entry) in providers {
+        let Some(id) = id.as_str() else {
+            continue;
+        };
+        let Some(entry) = entry.as_mapping() else {
+            continue;
+        };
+        let declared = entry.get("type").and_then(serde_yaml_ng::Value::as_str);
+        let name = declared.unwrap_or(id);
+        if name.parse::<ProviderType>().is_err() {
+            continue;
+        }
+        for (key, _) in entry {
+            let Some(key) = key.as_str() else {
+                continue;
+            };
+            let Ok(removed) = RemovedProviderKey::from_str(key) else {
+                continue;
+            };
+            deltas.push(
+                &format!("providers.{id}.{key}"),
+                RemovedByDecision::ProviderKey(removed),
+                key_warning(format!("providers.{id}.{key}"), &removed.to_string()),
+            );
+        }
+    }
+}
+
+fn embed_key_deltas(input: &serde_yaml_ng::Value, deltas: &mut RemovedDeltas) {
+    let Some(memory) = section_value(input, "memory").and_then(|memory| memory.as_mapping()) else {
+        return;
+    };
+    let mut embed_keys = |entries: &serde_yaml_ng::Value, prefix: &str| {
+        let Some(entries) = entries.as_mapping() else {
+            return;
+        };
+        for (key, _) in entries {
+            let Some(key) = key.as_str() else {
+                continue;
+            };
+            let Ok(removed) = RemovedEmbedKey::from_str(key) else {
+                continue;
+            };
+            deltas.push(
+                &format!("{prefix}.{key}"),
+                RemovedByDecision::EmbedKey(removed),
+                key_warning(format!("{prefix}.{key}"), &removed.to_string()),
+            );
+        }
+    };
+    for section in ["postgres", "sqlite"] {
+        if let Some(entries) = memory.get(section) {
+            embed_keys(entries, &format!("memory.{section}"));
+        }
+    }
+    if let Some(embedded) = memory
+        .get("postgres")
+        .and_then(|postgres| postgres.get("embedded"))
+    {
+        embed_keys(embedded, "memory.postgres.embedded");
+    }
+}
+
+fn removed_by_decision(input: &serde_yaml_ng::Value) -> RemovedDeltas {
+    let mut deltas = RemovedDeltas::default();
+    provider_key_deltas(input, &mut deltas);
+    embed_key_deltas(input, &mut deltas);
+    deltas
 }
 
 fn contract_findings(input: &serde_yaml_ng::Value, recorded: &Recorded) -> Vec<Finding> {
@@ -296,13 +438,7 @@ fn replay_case(case: &Replay) -> Result<(), String> {
     if config::type_document(&case.input).is_err() {
         return replay_type_confused(case, &actual);
     }
-    let actual_findings: Vec<Finding> = actual
-        .errors
-        .iter()
-        .chain(&actual.warnings)
-        .cloned()
-        .collect();
-    let expected = match &case.deviation {
+    let mut expected_findings: Vec<Finding> = match &case.deviation {
         Some(Deviation {
             class: DeviationClass::Rejected,
             ..
@@ -314,10 +450,23 @@ fn replay_case(case: &Replay) -> Result<(), String> {
                 "a well-typed document",
             ));
         }
-        Some(deviation) => &deviation.findings,
-        None => &case.contract,
+        Some(deviation) => deviation.findings.clone(),
+        None => case.contract.clone(),
     };
-    replay_well_typed(case, expected, &actual_findings)
+    expected_findings.retain(|finding| !case.removed.paths.contains(&finding.path));
+    expected_findings.extend(
+        case.removed
+            .findings
+            .iter()
+            .map(|(_, finding)| finding.clone()),
+    );
+    let actual_findings: Vec<Finding> = actual
+        .errors
+        .iter()
+        .chain(&actual.warnings)
+        .cloned()
+        .collect();
+    replay_well_typed(case, &expected_findings, &actual_findings)
 }
 
 fn replay_file(name: &str, deviations: &BTreeMap<String, Deviation>) -> Result<(), Failed> {
@@ -331,6 +480,7 @@ fn replay_file(name: &str, deviations: &BTreeMap<String, Deviation>) -> Result<(
             recorded_accepted: case.out.errors.is_empty(),
             contract: contract_findings(&case.input, &case.out),
             deviation: deviations.get(&id).cloned(),
+            removed: removed_by_decision(&case.input),
         };
         if let Err(failure) = replay_case(&replay) {
             failures.push(failure);
@@ -346,6 +496,22 @@ fn replay_file(name: &str, deviations: &BTreeMap<String, Deviation>) -> Result<(
         failures.join("\n\n")
     )
     .into())
+}
+
+fn removed_by_decision_table_size() -> Result<(usize, usize), String> {
+    let mut rows = 0usize;
+    let mut cases = 0usize;
+    for name in GOLDEN_FILES {
+        for case in read_cases(name)? {
+            let deltas = removed_by_decision(&case.input);
+            if deltas.findings.is_empty() {
+                continue;
+            }
+            cases += 1;
+            rows += deltas.findings.len();
+        }
+    }
+    Ok((rows, cases))
 }
 
 fn deviations_are_documented() -> Result<(), Failed> {
@@ -403,6 +569,16 @@ fn collect_trials() -> Result<Vec<Trial>, String> {
         "deviations_are_documented".to_owned(),
         deviations_are_documented,
     ));
+    trials.push(Trial::test("removed_by_decision_table".to_owned(), || {
+        let (rows, cases) = removed_by_decision_table_size()?;
+        if rows != REMOVED_BY_DECISION_ROWS || cases != REMOVED_BY_DECISION_CASES {
+            return Err(format!(
+                "the RemovedByDecision table drifted: pinned {REMOVED_BY_DECISION_ROWS} rows over {REMOVED_BY_DECISION_CASES} cases, table holds {rows} rows over {cases} cases"
+            )
+            .into());
+        }
+        Ok(())
+    }));
     Ok(trials)
 }
 

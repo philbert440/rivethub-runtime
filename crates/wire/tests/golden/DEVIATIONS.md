@@ -1,7 +1,18 @@
 # Deviations from the recordings
 
 Each entry names the recorded exchange that the wire types do not reproduce and why. Skipped cases are skipped by
-id in `roundtrip.rs`. Nothing else is skipped.
+id in `roundtrip.rs`; the one field-level delta below is applied where named. Nothing else is skipped.
+
+## `providers/vllm/*/requests.json` — request sampling fields
+
+Every recorded vLLM request body carries `"temperature":0.7,"top_p":0.95`: the TypeScript provider sent them
+hard-coded when nothing was configured. The runtime sends NO sampling fields to a model server — tuning lives on
+the model server (CONTRACT decision 11, boundary B8) — so `openai::ChatCompletionRequest` has no `temperature`
+or `top_p` and the roundtrip removes exactly those two members from the recorded body before comparing
+(`B8_OMITTED_REQUEST_FIELDS` in `roundtrip.rs`, one typed table). `tool_choice: "auto"` and the `max_tokens`
+default (4096) are not tuning and stay as recorded. The `providers/ollama/` and `providers/llama-server/`
+recordings and their wire types are removed with the provider types they served; the vLLM recordings are the
+provider traffic that remains.
 
 ## `gateway/http.json` — `event-reserialize`, `gateway/ws.json` — `post-reserialize`
 

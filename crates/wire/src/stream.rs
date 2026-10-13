@@ -1,4 +1,5 @@
-use crate::{JsonObject, message::Role, message::ToolCall};
+use crate::JsonObject;
+use crate::message::ToolCall;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -247,12 +248,10 @@ pub mod openai {
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub struct ChatCompletionRequest {
         pub model: String,
         pub max_tokens: Option<u64>,
-        pub temperature: Option<f64>,
-        pub top_p: Option<f64>,
         pub messages: Vec<Message>,
         pub tools: Option<Vec<Tool>>,
         pub tool_choice: Option<String>,
@@ -379,99 +378,4 @@ pub mod openai {
         pub meta: Option<JsonObject>,
         pub permission: Option<Vec<JsonObject>>,
     }
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OllamaChatRequest {
-    pub model: String,
-    pub messages: Vec<OllamaMessage>,
-    pub think: Option<bool>,
-    pub tools: Option<Vec<openai::Tool>>,
-    pub tool_choice: Option<String>,
-    pub stream: Option<bool>,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OllamaPlainToolCall {
-    pub id: Option<String>,
-    pub function: OllamaMessageFunction,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum FunctionToolCallTagOllama {
-    #[serde(rename = "function")]
-    Function {
-        id: Option<String>,
-        function: OllamaMessageFunction,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum OllamaToolCall {
-    Function(FunctionToolCallTagOllama),
-    Plain(OllamaPlainToolCall),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OllamaMessageFunction {
-    pub name: String,
-    pub arguments: JsonObject,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OllamaMessage {
-    pub role: Role,
-    pub content: String,
-    pub thinking: Option<String>,
-    pub tool_calls: Option<Vec<OllamaToolCall>>,
-    pub tool_call_id: Option<String>,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OllamaChatChunk {
-    pub model: String,
-    pub created_at: String,
-    pub message: OllamaMessage,
-    pub done: bool,
-    pub done_reason: Option<String>,
-    pub total_duration: Option<u64>,
-    pub load_duration: Option<u64>,
-    pub prompt_eval_count: Option<u64>,
-    pub prompt_eval_duration: Option<u64>,
-    pub eval_count: Option<u64>,
-    pub eval_duration: Option<u64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OllamaTags {
-    pub models: Vec<OllamaModel>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OllamaModel {
-    pub name: String,
-    pub model: String,
-    pub modified_at: DateTime<Utc>,
-    pub size: u64,
-    pub digest: String,
-    pub details: OllamaModelDetails,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OllamaModelDetails {
-    pub parent_model: String,
-    pub format: String,
-    pub family: String,
-    pub families: Vec<String>,
-    pub parameter_size: String,
-    pub quantization_level: String,
 }

@@ -404,6 +404,20 @@ fn roundtrip_capture_results(errors: &mut Vec<String>) -> Result<(), String> {
     Ok(())
 }
 
+const B8_OMITTED_REQUEST_FIELDS: &[&str] = &["temperature", "top_p"];
+
+fn provider_chat_request(label: &str, body: &str) -> Result<(), String> {
+    let mut payload: Value =
+        serde_json::from_str(body).map_err(|e| format!("{label}: parse: {e}"))?;
+    let Some(object) = payload.as_object_mut() else {
+        return Ok(());
+    };
+    for field in B8_OMITTED_REQUEST_FIELDS {
+        object.remove(*field);
+    }
+    roundtrip_as::<wire::stream::openai::ChatCompletionRequest>(label, &payload.to_string())
+}
+
 fn provider_requests(server: &str, scenario: &str, errors: &mut Vec<String>) -> Result<(), String> {
     let rel = format!("providers/{server}/{scenario}/requests.json");
     let doc = load(&rel, &golden(&rel))?;
@@ -419,30 +433,8 @@ fn provider_requests(server: &str, scenario: &str, errors: &mut Vec<String>) -> 
             .and_then(Value::as_str)
             .unwrap_or_default();
         let before = errors.len();
-        match (server, target) {
-            ("ollama", "/api/chat") => {
-                errors.push_result(roundtrip_as::<wire::stream::OllamaChatRequest>(
-                    &format!("{rel} {target}"),
-                    body,
-                ));
-            }
-            ("ollama", "/api/tags") => {
-                let is_tags =
-                    serde_json::from_str::<Value>(body).is_ok_and(|v| v.get("models").is_some());
-                if is_tags {
-                    errors.push_result(roundtrip_as::<wire::stream::OllamaTags>(
-                        &format!("{rel} {target}"),
-                        body,
-                    ));
-                }
-            }
-            (_, "/v1/chat/completions") => {
-                errors.push_result(roundtrip_as::<wire::stream::openai::ChatCompletionRequest>(
-                    &format!("{rel} {target}"),
-                    body,
-                ));
-            }
-            _ => {}
+        if target == "/v1/chat/completions" {
+            errors.push_result(provider_chat_request(&format!("{rel} {target}"), body));
         }
         for failure in errors.iter_mut().skip(before) {
             *failure = format!("{rel}: {failure}");
@@ -451,16 +443,8 @@ fn provider_requests(server: &str, scenario: &str, errors: &mut Vec<String>) -> 
     Ok(())
 }
 
-fn typed_chunk(server: &str, label: &str, payload: &str) -> Result<(), String> {
-    if server != "ollama" {
-        return roundtrip_as::<wire::stream::openai::ChatCompletionChunk>(label, payload);
-    }
-    let is_tags = serde_json::from_str::<Value>(payload).is_ok_and(|v| v.get("models").is_some());
-    if is_tags {
-        roundtrip_as::<wire::stream::OllamaTags>(label, payload)
-    } else {
-        roundtrip_as::<wire::stream::OllamaChatChunk>(label, payload)
-    }
+fn typed_chunk(label: &str, payload: &str) -> Result<(), String> {
+    roundtrip_as::<wire::stream::openai::ChatCompletionChunk>(label, payload)
 }
 
 fn provider_responses(
@@ -484,7 +468,7 @@ fn provider_responses(
         let rel = format!("{dir}/{name}");
         let text = std::fs::read_to_string(format!("{GOLDEN_DIR}/{rel}"))
             .map_err(|e| format!("{rel}: {e}"))?;
-        if server != "ollama" && text.trim_start().starts_with('{') {
+        if text.trim_start().starts_with('{') {
             let before = errors.len();
             errors.push_result(roundtrip_as::<wire::stream::openai::ModelList>(
                 &format!("{rel} body"),
@@ -496,20 +480,16 @@ fn provider_responses(
             continue;
         }
         for line in text.lines() {
-            let payload = if server == "ollama" {
-                let trimmed = line.trim();
-                (!trimmed.is_empty()).then_some(trimmed)
-            } else {
-                line.trim()
-                    .strip_prefix("data: ")
-                    .map(str::trim)
-                    .filter(|p| !p.is_empty() && *p != "[DONE]")
-            };
-            let Some(payload) = payload else {
+            let Some(payload) = line
+                .trim()
+                .strip_prefix("data: ")
+                .map(str::trim)
+                .filter(|p| !p.is_empty() && *p != "[DONE]")
+            else {
                 continue;
             };
             let before = errors.len();
-            errors.push_result(typed_chunk(server, &format!("{rel} chunk"), payload));
+            errors.push_result(typed_chunk(&format!("{rel} chunk"), payload));
             for failure in errors.iter_mut().skip(before) {
                 *failure = format!("{rel}: {failure}");
             }
@@ -636,19 +616,18 @@ fn capture_batches_roundtrip() -> Result<(), String> {
 #[test]
 fn provider_payloads_roundtrip() -> Result<(), String> {
     let mut errors = Vec::new();
-    for server in ["vllm", "llama-server", "ollama"] {
-        for scenario in [
-            "A-text",
-            "B-tool",
-            "C-reasoning",
-            "D-thinking-off",
-            "E-reasoning-tool",
-            "probe",
-        ] {
-            provider_requests(server, scenario, &mut errors)?;
-            provider_responses(server, scenario, &mut errors)?;
-            provider_chunks(server, scenario, &mut errors);
-        }
+    let server = "vllm";
+    for scenario in [
+        "A-text",
+        "B-tool",
+        "C-reasoning",
+        "D-thinking-off",
+        "E-reasoning-tool",
+        "probe",
+    ] {
+        provider_requests(server, scenario, &mut errors)?;
+        provider_responses(server, scenario, &mut errors)?;
+        provider_chunks(server, scenario, &mut errors);
     }
     check(&errors)
 }

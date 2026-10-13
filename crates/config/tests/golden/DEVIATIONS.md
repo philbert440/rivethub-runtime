@@ -8,7 +8,8 @@ diff). Proof frame:
 - A case is WELL-TYPED when `serde_path_to_error::deserialize` of the document
   into the typed `Config` succeeds. Well-typed cases must match the recorded
   findings exactly, compared as a sorted multiset of (severity, path, message).
-  The CONTRACT §3 decisions (11, 12/20, 13, 15) are applied to the recorded
+  The CONTRACT §3 decisions (11, 12/20, 13, 15) and the 2026-10-13 provider
+  prune (below) are applied to the recorded
   side first — they are boundary behaviour, not deviations.
 - A TYPE-CONFUSED case (typed deserialization fails) produces exactly one error
   finding at serde's path, message `"<path>" has the wrong type: <serde
@@ -21,8 +22,10 @@ The deviations below are the cases where the recording's expected findings are
 not reproduced verbatim. They are pinned as data in
 `tests/golden/deviations.jsonl` (one row per case: id, class, and the expected
 findings that replace the recorded ones); `deviations_are_documented` asserts
-the per-file counts against this document. 5,825 of 6,008 validate cases match
-the recording exactly (after the decision replacements); the remaining cases
+the per-file counts against this document. Every well-typed case replays
+against the recorded findings adjusted only by the CONTRACT decisions (Decision
+11 above) and the config prune (below); 5,478 of the 6,008 validate cases
+carry `RemovedByDecision` table rows. The remaining divergences
 fall into the four classes below.
 
 ## Accepted-but-rejected (115 cases)
@@ -37,7 +40,7 @@ document is type-confused. CONTRACT §2 puts these inputs outside the boundary
 - `validate_config.jsonl` — 2 accepted-but-rejected; ids: validate_config.jsonl:125, validate_config.jsonl:384
 - `validate_config_agents_providers.jsonl` — 17 accepted-but-rejected; ids: validate_config_agents_providers.jsonl:61, validate_config_agents_providers.jsonl:86, validate_config_agents_providers.jsonl:166, validate_config_agents_providers.jsonl:235, validate_config_agents_providers.jsonl:249
 - `validate_config_den.jsonl` — 2 accepted-but-rejected; ids: validate_config_den.jsonl:164, validate_config_den.jsonl:753
-- `validate_config_memory.jsonl` — 28 accepted-but-rejected; ids: validate_config_memory.jsonl:58, validate_config_memory.jsonl:94, validate_config_memory.jsonl:201, validate_config_memory.jsonl:245, validate_config_memory.jsonl:291
+- `validate_config_memory.jsonl` — 26 accepted-but-rejected; ids: validate_config_memory.jsonl:58, validate_config_memory.jsonl:94, validate_config_memory.jsonl:201, validate_config_memory.jsonl:245, validate_config_memory.jsonl:291
 - `validate_config_mesh_channels_misc.jsonl` — 24 accepted-but-rejected; ids: validate_config_mesh_channels_misc.jsonl:9, validate_config_mesh_channels_misc.jsonl:18, validate_config_mesh_channels_misc.jsonl:57, validate_config_mesh_channels_misc.jsonl:60, validate_config_mesh_channels_misc.jsonl:135
 - `validate_config_runtime.jsonl` — 36 accepted-but-rejected; ids: validate_config_runtime.jsonl:2, validate_config_runtime.jsonl:24, validate_config_runtime.jsonl:44, validate_config_runtime.jsonl:51, validate_config_runtime.jsonl:85
 - `validate_config_tasks_workflows.jsonl` — 6 accepted-but-rejected; ids: validate_config_tasks_workflows.jsonl:37, validate_config_tasks_workflows.jsonl:179, validate_config_tasks_workflows.jsonl:335, validate_config_tasks_workflows.jsonl:395, validate_config_tasks_workflows.jsonl:412
@@ -58,7 +61,7 @@ Paths, severities and the name multisets match; only the in-message order
 differs. Five examples per file:
 
 - `validate_config.jsonl` — 13 order-only Available lists; ids: validate_config.jsonl:31, validate_config.jsonl:65, validate_config.jsonl:88, validate_config.jsonl:336, validate_config.jsonl:339
-- `validate_config_agents_providers.jsonl` — 25 order-only Available lists; ids: validate_config_agents_providers.jsonl:71, validate_config_agents_providers.jsonl:97, validate_config_agents_providers.jsonl:114, validate_config_agents_providers.jsonl:126, validate_config_agents_providers.jsonl:175
+- `validate_config_agents_providers.jsonl` — 26 order-only Available lists; ids: validate_config_agents_providers.jsonl:71, validate_config_agents_providers.jsonl:97, validate_config_agents_providers.jsonl:114, validate_config_agents_providers.jsonl:126, validate_config_agents_providers.jsonl:175
 - `validate_config_runtime.jsonl` — 20 order-only Available lists; ids: validate_config_runtime.jsonl:54, validate_config_runtime.jsonl:68, validate_config_runtime.jsonl:143, validate_config_runtime.jsonl:209, validate_config_runtime.jsonl:211
 
 ## Sequence-shaped sections and entries (3 cases)
@@ -125,15 +128,51 @@ silent. Examples:
 
 ## Decision 11 — provider types the runtime does not build
 
-- Decision: a provider whose type is `anthropic`, `google`, `gemini` or `xai`
-  — given by `type` or implied by the provider id — produces exactly one error
-  naming the harness to reach those models through instead (`claude-code` /
-  `gemini` / `grok-build`): `Provider "<id>" type "<type>" is not built — reach
-  <type> models through the <harness> harness instead.` The id `openai-compat`
-  keeps its recorded split message. Recorded per-entry findings (model
+- Decision: a provider whose type is a removed type — given by `type` or
+  implied by the provider id — produces exactly one error at
+  `providers.<id>.type`: `Provider "<id>" type "<type>" is not built — <the
+  type's alternative>.` The removed types and their alternatives (one match in
+  `provider.rs`, `RemovedProviderType::message`): `anthropic` → the claude-code
+  harness, `google`/`gemini` → the gemini harness, `xai` → the grok-build
+  harness, `ollama` → a harness or `openai-compatible` against
+  `http://<host>:11434/v1`, `llama-server` → `openai-compatible` against
+  `<server>/v1`, `openai-compat` → spelled `openai-compatible` (this replaces
+  the old split message and its entry-level path), `cli`/`pi-cli`/`qwen-code` →
+  no CLI provider of that type, use a harness (`qwen-code` stays a harness id;
+  only the provider type is removed). Recorded per-entry findings (model
   required, token-command family, unknown-key warnings) are not reproduced.
 - The replay drops every recorded finding under `providers.<id>` and adds the
   decision error. Recordings never carry a `type:` key, so the id decides.
+
+## The config prune — removed provider keys warn
+
+- Decision (Phil 2026-10-13): model-server tuning belongs on the model server,
+  so the provider keys `token_command`, `token_ttl_ms`,
+  `token_command_timeout_ms`, `temperature`, `top_p`, `top_k`, `min_p`,
+  `presence_penalty`, `frequency_penalty`, `seed`, `stop`,
+  `repetition_penalty`, `min_tokens`, `default_tool_choice`,
+  `mm_processor_kwargs`, `chat_template_kwargs`, `extra_body`, `models`,
+  `models_ttl_ms`, `models_url`, `verify_model_on_init`, `num_ctx` and
+  `keep_alive` are gone from `providers.<openai-family id>`, and the embed keys
+  `embed_token_command`, `embed_token_ttl_ms`,
+  `embed_token_command_timeout_ms` and `embed_wire_shape` are gone from
+  `memory.postgres` (and `memory.postgres.embedded`) and `memory.sqlite`. A
+  config that still sets one gets ONE warning per key,
+  `<key> is set on the model server, not in RivetHub`, instead of the recorded
+  silence; removed keys under a removed provider type stay silent (the entry
+  error above replaces everything under `providers.<id>`).
+- The replay computes the expected warnings per case from the input and pins
+  them in ONE typed table keyed by case id (`RemovedByDecision` in
+  `tests/validate/main.rs`: reason plus the expected findings); the trial
+  `removed_by_decision_table` pins the table's size. The table also retires the
+  recorded findings at a removed key's path — the recorded wrong-value errors
+  for `embed_wire_shape` and `embed_token_command`, for example — because the
+  key no longer has a type or range to violate. Three
+  `accepted-but-rejected`-adjacent rows changed for the same reason: with the
+  typed fields gone, `validate_config_memory.jsonl` :665 and :713 deserialize
+  and replay as well-typed (their `rejected` rows left the table), and
+  `validate_config_agents_providers.jsonl` :543 stopped being type-confused and
+  gained an `order` row for its Available lists.
 
 ## Decision 9 — no embedded Postgres (PGlite)
 

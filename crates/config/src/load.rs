@@ -9,7 +9,8 @@ use crate::environment::Environment;
 use crate::model::Config;
 use crate::paths::{ConfigLocation, Paths};
 use crate::provider::{
-    CliProvider, OpenaiProvider, ProviderBody, ProviderSlot, ProviderType, UnknownProvider,
+    CliProvider, OpenaiProvider, ProviderBody, ProviderSlot, ProviderType, RemovedProviderType,
+    UnknownProvider,
 };
 use crate::report::{Finding, ValidationResult};
 use crate::resolve::resolve_env_vars_with;
@@ -123,22 +124,17 @@ fn provider_map(
     for (id, raw) in &entries {
         let prefix = format!("providers.{id}");
         let declared = declared_type(raw, &prefix)?;
-        let kind = match declared.as_deref() {
-            Some(text) => ProviderType::from_str(text).ok(),
-            None => ProviderType::from_str(id).ok(),
-        };
+        let name = declared.as_deref().unwrap_or(id);
+        let kind = ProviderType::from_str(name).ok();
         let body = match kind {
-            Some(kind) if kind.is_removed() || kind == ProviderType::OpenaiCompat => {
-                ProviderBody::Removed
-            }
             Some(kind) if kind.is_openai_family() => {
-                ProviderBody::Openai(tracked::<OpenaiProvider>(raw, &prefix, ignored)?)
+                ProviderBody::Openai(Box::new(tracked::<OpenaiProvider>(raw, &prefix, ignored)?))
             }
-            Some(kind) if kind.is_cli_family() => {
-                ProviderBody::Cli(tracked::<CliProvider>(raw, &prefix, ignored)?)
-            }
-            Some(_) => ProviderBody::Removed,
-            None => ProviderBody::Unknown(tracked::<UnknownProvider>(raw, &prefix, ignored)?),
+            Some(_) => ProviderBody::Cli(Box::new(tracked::<CliProvider>(raw, &prefix, ignored)?)),
+            None => match RemovedProviderType::from_str(name) {
+                Ok(removed) => ProviderBody::Removed(removed),
+                Err(_) => ProviderBody::Unknown(tracked::<UnknownProvider>(raw, &prefix, ignored)?),
+            },
         };
         map.insert(id.clone(), ProviderSlot { kind, body });
     }

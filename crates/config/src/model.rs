@@ -6,8 +6,8 @@ use serde::Deserialize;
 
 use crate::Environment;
 use crate::enums::{
-    DeploymentTarget, Effort, EmbedWireShape, HarnessId, Isolation, MemoryBackend, ModelsMode,
-    ThinkingLevel, VerifierExecutor,
+    DeploymentTarget, Effort, HarnessId, Isolation, MemoryBackend, ModelsMode, ThinkingLevel,
+    VerifierExecutor,
 };
 use crate::provider::{ProviderSlot, ProviderType};
 
@@ -187,10 +187,6 @@ pub struct PostgresSection {
     pub embed_endpoint: Option<String>,
     pub embed_model: Option<String>,
     pub embed_api_key: Option<String>,
-    pub embed_token_command: Option<Vec<String>>,
-    pub embed_token_ttl_ms: Option<u64>,
-    pub embed_token_command_timeout_ms: Option<u64>,
-    pub embed_wire_shape: Option<EmbedWireShape>,
     pub embed_expected_dims: Option<u32>,
     pub embed_query_instruction: Option<String>,
     pub embed_timeout_ms: Option<u64>,
@@ -230,8 +226,6 @@ pub struct SqliteSection {
     pub embed_endpoint: Option<String>,
     pub embed_model: Option<String>,
     pub embed_api_key: Option<String>,
-    pub embed_token_command: Option<Vec<String>>,
-    pub embed_wire_shape: Option<EmbedWireShape>,
     pub tagging: Option<bool>,
     pub workers: Option<bool>,
     pub wiki_dir: Option<PathBuf>,

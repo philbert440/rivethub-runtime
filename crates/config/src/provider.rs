@@ -3,93 +3,69 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 use crate::enums::Effort;
-use crate::free_form::FreeForm;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "kebab-case")]
 pub enum ProviderType {
     OpenaiCompatible,
     Vllm,
-    LlamaServer,
-    Ollama,
-    Cli,
     ClaudeCli,
     CodexCli,
     GrokCli,
     HermesCli,
     KimiCode,
     OpencodeCli,
+}
+
+impl ProviderType {
+    pub fn is_openai_family(self) -> bool {
+        matches!(self, Self::OpenaiCompatible | Self::Vllm)
+    }
+
+    pub fn is_cli_family(self) -> bool {
+        matches!(
+            self,
+            Self::ClaudeCli
+                | Self::CodexCli
+                | Self::GrokCli
+                | Self::HermesCli
+                | Self::KimiCode
+                | Self::OpencodeCli
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "kebab-case")]
+pub enum RemovedProviderType {
+    Ollama,
+    LlamaServer,
+    OpenaiCompat,
+    Cli,
     PiCli,
     QwenCode,
     Anthropic,
     Google,
     Gemini,
     Xai,
-    OpenaiCompat,
 }
 
-impl ProviderType {
-    pub fn is_removed(self) -> bool {
-        self.removed_harness().is_some()
-    }
-
-    pub fn removed_harness(self) -> Option<&'static str> {
+impl RemovedProviderType {
+    pub fn message(self) -> &'static str {
         match self {
-            Self::Anthropic => Some("claude-code"),
-            Self::Google | Self::Gemini => Some("gemini"),
-            Self::Xai => Some("grok-build"),
-            Self::OpenaiCompatible
-            | Self::Vllm
-            | Self::LlamaServer
-            | Self::Ollama
-            | Self::Cli
-            | Self::ClaudeCli
-            | Self::CodexCli
-            | Self::GrokCli
-            | Self::HermesCli
-            | Self::KimiCode
-            | Self::OpencodeCli
-            | Self::PiCli
-            | Self::QwenCode
-            | Self::OpenaiCompat => None,
+            Self::Ollama => {
+                "reach Ollama through a harness, or use type: openai-compatible with base_url http://<host>:11434/v1"
+            }
+            Self::LlamaServer => "use type: openai-compatible with base_url <server>/v1",
+            Self::OpenaiCompat => "spelled openai-compatible",
+            Self::Cli | Self::PiCli | Self::QwenCode => {
+                "no CLI provider of that type; use a harness"
+            }
+            Self::Anthropic => "reach anthropic models through the claude-code harness instead",
+            Self::Google => "reach google models through the gemini harness instead",
+            Self::Gemini => "reach gemini models through the gemini harness instead",
+            Self::Xai => "reach xai models through the grok-build harness instead",
         }
-    }
-
-    pub fn is_openai_family(self) -> bool {
-        matches!(
-            self,
-            Self::OpenaiCompatible | Self::Vllm | Self::LlamaServer | Self::Ollama
-        )
-    }
-
-    pub fn is_cli_family(self) -> bool {
-        matches!(
-            self,
-            Self::Cli
-                | Self::ClaudeCli
-                | Self::CodexCli
-                | Self::GrokCli
-                | Self::HermesCli
-                | Self::KimiCode
-                | Self::OpencodeCli
-                | Self::PiCli
-                | Self::QwenCode
-        )
-    }
-
-    pub fn takes_base_url(self) -> bool {
-        self.is_openai_family()
-    }
-
-    pub fn takes_token_command(self) -> bool {
-        matches!(
-            self,
-            Self::OpenaiCompatible | Self::Vllm | Self::LlamaServer
-        )
-    }
-
-    pub fn takes_catalog(self) -> bool {
-        self.takes_token_command()
     }
 }
 
@@ -101,10 +77,10 @@ pub struct ProviderSlot {
 
 #[derive(Debug)]
 pub enum ProviderBody {
-    Openai(OpenaiProvider),
-    Cli(CliProvider),
+    Openai(Box<OpenaiProvider>),
+    Cli(Box<CliProvider>),
     Unknown(UnknownProvider),
-    Removed,
+    Removed(RemovedProviderType),
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -118,32 +94,9 @@ pub struct OpenaiProvider {
     pub declared: Option<String>,
     pub base_url: Option<String>,
     pub api_key: Option<String>,
-    pub token_command: Option<Vec<String>>,
-    pub token_ttl_ms: Option<u64>,
-    pub token_command_timeout_ms: Option<u64>,
-    pub models: Option<Vec<String>>,
-    pub models_ttl_ms: Option<u64>,
-    pub max_tokens: Option<u32>,
-    pub temperature: Option<f64>,
-    pub top_p: Option<f64>,
-    pub top_k: Option<i32>,
-    pub min_p: Option<f64>,
-    pub presence_penalty: Option<f64>,
-    pub frequency_penalty: Option<f64>,
-    pub seed: Option<i64>,
-    pub default_tool_choice: Option<String>,
-    pub verify_model_on_init: Option<bool>,
-    pub repetition_penalty: Option<f64>,
-    pub min_tokens: Option<u32>,
-    pub stop: Option<Vec<String>>,
-    pub mm_processor_kwargs: Option<FreeForm>,
-    pub chat_template_kwargs: Option<FreeForm>,
-    pub extra_body: Option<FreeForm>,
     pub api_prefix: Option<String>,
-    pub models_url: Option<String>,
+    pub max_tokens: Option<u32>,
     pub probe_models: Option<bool>,
-    pub num_ctx: Option<u32>,
-    pub keep_alive: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -186,6 +139,5 @@ pub struct UnknownProvider {
     pub declared: Option<String>,
     pub model: Option<String>,
     pub max_tokens: Option<u32>,
-    pub temperature: Option<f64>,
     pub api_key: Option<String>,
 }

@@ -21,7 +21,7 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 | B5 | SQLite memory file (`memory.sqlite`, schema v7 and its upgrade ladder through cutover; schema v8 adds a sqlite-vec index afterwards) | standalone nodes, TypeScript nodes during cutover | data-layer.md §3; sqlite plugin | `golden/memory-sqlite/` (20 files incl. fixture DBs, upgrades, search results) | same `sqlite_master`, same rows, same search ranks; files open both ways |
 | B6 | Memory read API: search / browse / stats / get_full / tags (HTTP and MCP) | RivetHub clients, MCP clients (Claude Code etc.), agents | data-layer.md §3.7–§3.11; gateway-api.md §11 | `golden/memory-sqlite/` search cases; gateway recordings | same results and ranking on the same data |
 | B7 | MCP sidecar: RivetHub's own tools only (`echo`, `memory_*`, `wiki_*`, `delegate_task`, `list_agents`, `skill_list`, `skill_manage`), their schemas, transports (stdio, HTTP, den) | Claude Code, codex, every MCP client | mcp-tools-providers.md §2–§3 | tool catalog in the inventory; (recording to add: `tools/list` + sample calls) | identical `tools/list` output for the kept tools; identical results for recorded calls |
-| B8 | Provider wire traffic: the OpenAI-compatible chat (streamed) and embeddings API as spoken to vLLM, SGLang, llama-server, Ollama and hosted OpenAI-compatible endpoints | the model servers | mcp-tools-providers.md §5.4–§5.5 | the vllm, llama-server and ollama scenarios in `golden/providers/` (request+response) | byte-equal request bodies (headers filtered), same parsed responses and stream chunks |
+| B8 | Provider wire traffic: the OpenAI-compatible chat (streamed) and embeddings API as spoken to vLLM, SGLang and hosted OpenAI-compatible endpoints through one client (no Ollama, no llama-server type) | the model servers | mcp-tools-providers.md §5.4–§5.5 | the vllm scenarios in `golden/providers/` (request+response) | byte-equal request bodies (headers filtered) except one intentional wire delta: the runtime sends NO sampling fields where the TypeScript sent hard-coded `temperature: 0.7`/`top_p: 0.95` (`tool_choice: "auto"` and the `max_tokens` 4096 default stay as recorded); same parsed responses and stream chunks |
 | B9 | CLI: command tree, flags, output text, exit codes, prompts | operators, systemd units, scripts, `rh update --mesh` | cli.md §0–§19 | `tests` listed in cli.md §21; (recording to add: CLI golden transcripts) | same stdout/stderr/exit for the same argv on the same state |
 | B10 | `config.yaml` keys, defaults, validation messages; environment variables | operators, deploy tooling | config-and-boot.md §1–§2 | `golden/diff/config/` (realistic cases) | same accept/reject and same messages for the same file |
 | B11 | On-disk state: `~/.rivethub/` layout, pid and lock files, `mesh.json`, agent presets, device/pairing files, uploads, layouts, wiki pages (markdown + frontmatter), skills `_meta.json`, `codex-threads.json` | other nodes, backups, humans, TypeScript during cutover | config-and-boot.md §3.9; core-domain.md §1.11; gateway-api.md §8 | fixtures under `golden/` and the inventories' documented formats | files written by Rust are read by TypeScript and vice versa |
@@ -73,11 +73,27 @@ sqlite-vec arrives as schema v8 after cutover while v7 brute-force search holds 
 deleted (memory shows no RivetHub use of the first five; every harness ships its own shell, file, search and web tools, so the web
 tools do not belong in the sidecar either). B7 narrows to the sidecar's RivetHub-owned tools; the `RIVETHUB_MCP_ENABLE_{SHELL,
 FILE,SEARCH}` gates and the `plugins/tools/*` plugin entries are accepted and ignored by `config` with a deprecation warning.
-(11) One model client: `providers` is a single OpenAI-compatible implementation (chat with streamed text/reasoning/tool-call
-deltas, usage, cancellation, extra-body passthrough; embeddings) plus the cli-backed provider over a headless ACP session.
-The native Anthropic Messages, Gemini and xAI Responses clients are not built (no node configures them; those models are
-reached through their harnesses); `providers.<id>.type` values for them are a config error naming the harness to use instead.
-The agent loop stays, minimal, for Discord, the task engine's API agents and `/v1`.
+(11) One model client: `providers` is a single OpenAI-compatible implementation
+(chat with streamed text/reasoning/tool-call deltas, usage, cancellation;
+embeddings) plus the cli-backed provider over a headless ACP session. Provider
+types are `openai-compatible`, `vllm`, `claude-cli`, `codex-cli`, `grok-cli`,
+`hermes-cli`, `opencode-cli` and `kimi-code`; the removed types `ollama`,
+`llama-server`, `openai-compat`, `cli`, `pi-cli`, `qwen-code`, `anthropic`,
+`google`, `gemini` and `xai` are a config error at `providers.<id>.type` naming
+the alternative (a harness, or `openai-compatible` with the server's base URL;
+`qwen-code` remains a harness id). Auth is the static `api_key` /
+`embed_api_key`: `token_command`, `token_ttl_ms`, `token_command_timeout_ms`,
+`embed_token_command`, `embed_token_ttl_ms` and `embed_token_command_timeout_ms`
+are removed. Sampling and model-server tuning are configured on the model
+server, not in RivetHub: the tuning keys `temperature`, `top_p`, `top_k`,
+`min_p`, `presence_penalty`, `frequency_penalty`, `seed`, `stop`,
+`repetition_penalty`, `min_tokens`, `default_tool_choice`, `mm_processor_kwargs`,
+`chat_template_kwargs`, `extra_body`, `models`, `models_ttl_ms`, `models_url`,
+`verify_model_on_init`, `num_ctx`, `keep_alive` and `embed_wire_shape` are
+removed, a config that still sets one warns
+(`<key> is set on the model server, not in RivetHub`), and the runtime sends no
+sampling fields on the wire. The agent loop stays, minimal, for Discord, the
+task engine's API agents and `/v1`.
 (12) Chat-channel bots (Discord, Telegram, voice) live in `rivethub-channels`; `channels.discord/telegram/voice` config is
 accepted and ignored with a warning. (13) Workflows kept but outside the runtime: the separate `rivethub-workflows` workspace package
 (own binary, depends on `wire` + HTTP client only) drives sessions and tasks over the public API; not linked into `rivethub`.

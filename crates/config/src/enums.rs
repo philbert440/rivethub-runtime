@@ -59,16 +59,6 @@ pub enum VerifierExecutor {
 )]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
-pub enum EmbedWireShape {
-    Openai,
-    Native,
-}
-
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, strum::Display, strum::EnumString,
-)]
-#[serde(rename_all = "kebab-case")]
-#[strum(serialize_all = "kebab-case")]
 pub enum MemoryBackend {
     Postgres,
     Sqlite,

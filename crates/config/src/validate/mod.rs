@@ -9,9 +9,10 @@ mod runtime;
 mod tasks;
 
 use std::path::Path;
+use std::str::FromStr;
 
 use crate::model::{AgentEntry, Config};
-use crate::report::ValidationResult;
+use crate::report::{Finding, ValidationResult};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IgnoredPath(Vec<Segment>);
@@ -153,6 +154,85 @@ impl RemovedKey {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "snake_case")]
+enum RemovedProviderKey {
+    TokenCommand,
+    TokenTtlMs,
+    TokenCommandTimeoutMs,
+    Temperature,
+    TopP,
+    TopK,
+    MinP,
+    PresencePenalty,
+    FrequencyPenalty,
+    Seed,
+    Stop,
+    RepetitionPenalty,
+    MinTokens,
+    DefaultToolChoice,
+    MmProcessorKwargs,
+    ChatTemplateKwargs,
+    ExtraBody,
+    Models,
+    ModelsTtlMs,
+    ModelsUrl,
+    VerifyModelOnInit,
+    NumCtx,
+    KeepAlive,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+enum RemovedEmbedKey {
+    #[strum(serialize = "embed_token_command")]
+    TokenCommand,
+    #[strum(serialize = "embed_token_ttl_ms")]
+    TokenTtlMs,
+    #[strum(serialize = "embed_token_command_timeout_ms")]
+    TokenCommandTimeoutMs,
+    #[strum(serialize = "embed_wire_shape")]
+    WireShape,
+}
+
+fn removed_key_warning(path: String, key: &impl std::fmt::Display) -> Finding {
+    Finding::warning(
+        path,
+        format!("{key} is set on the model server, not in RivetHub"),
+    )
+}
+
+fn removed_key_finding(
+    config: &Config,
+    path: &IgnoredPath,
+    segments: &[Segment],
+) -> Option<Finding> {
+    match segments {
+        [Segment::Key(head), Segment::Key(id), Segment::Key(key)] if head == "providers" => {
+            let key = RemovedProviderKey::from_str(key).ok()?;
+            let slot = config.providers.as_ref()?.get(id)?;
+            slot.kind?;
+            Some(removed_key_warning(path.to_string(), &key))
+        }
+        [Segment::Key(head), Segment::Key(section), Segment::Key(key)]
+            if head == "memory" && (section == "postgres" || section == "sqlite") =>
+        {
+            Some(removed_key_warning(
+                path.to_string(),
+                &RemovedEmbedKey::from_str(key).ok()?,
+            ))
+        }
+        [
+            Segment::Key(head),
+            Segment::Key(grand),
+            Segment::Key(parent),
+            Segment::Key(key),
+        ] if head == "memory" && grand == "postgres" && parent == "embedded" => Some(
+            removed_key_warning(path.to_string(), &RemovedEmbedKey::from_str(key).ok()?),
+        ),
+        _ => None,
+    }
+}
+
 pub const PLUGINS_IGNORED: &str = "\"plugins\" is ignored — the Rust runtime loads no plugins.";
 pub const WORKFLOWS_IGNORED: &str = "\"workflows\" is ignored — workflows moved out of the runtime into the rivethub-workflows package.";
 
@@ -220,6 +300,8 @@ fn ignored_findings(config: &Config, ignored: &[IgnoredPath], out: &mut Validati
     for path in ignored {
         if let Some(message) = RemovedKey::from_path(&path.0).map(|removed| removed.to_string()) {
             out.error(path.to_string(), message);
+        } else if let Some(finding) = removed_key_finding(config, path, &path.0) {
+            out.push(finding);
         } else if let Some(message) = ignored_message(config, &path.0) {
             out.warning(path.to_string(), message);
         }

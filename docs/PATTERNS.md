@@ -59,16 +59,13 @@ RPC frames. Pattern: a serde struct or enum per payload (or the crate's own prot
 arbitrary is built through the format crate's own type or a typed struct serialized with `serde_json::to_value`, never
 `json!`). Two named types in `crates/wire/src/json.rs` are the only holders of free-form JSON: `wire::Extra` for unknown
 fields the contract preserves (`#[serde(flatten, default)] pub extra: Extra`), and `wire::JsonObject` for values the
-contract defines as arbitrary JSON (MCP tool-call arguments, tool input schemas, provider `extra_body`). Nothing else names
+contract defines as arbitrary JSON (MCP tool-call arguments, tool input schemas). Nothing else names
 `serde_json::Value` or `Map`. The same holds for `serde_yaml::Value`/`Mapping`/`Number`: only `crates/config/src/load.rs`
-and `resolve.rs` touch the raw document (parse, `${VAR}` substitution over string leaves, `serde_yaml::from_value`), and
-`crates/config/src/free_form.rs` holds `config::FreeForm` (`#[serde(transparent)]` over `BTreeMap<String,
-serde_yaml::Value>`), the one type for config values the contract defines as arbitrary (provider `extra_body`,
-`chat_template_kwargs`, `mm_processor_kwargs`).
+and `resolve.rs` touch the raw document (parse, `${VAR}` substitution over string leaves, `serde_yaml::from_value`).
 Check: dylint `untyped` (serde_json and serde_yaml, the `json!` macro call site read through the expansion —
 `ExpnKind::Macro` with the `serde_json::json` def path — and `IgnoredAny`, none of which clippy's `disallowed-types` can
 carry, with the exemptions clippy cannot express: the per-file production exemptions `wire/src/json.rs` and config
-`load.rs`/`resolve.rs`/`free_form.rs`; test code in `wire` and `testkit` only — the crates whose job is structural JSON
+`load.rs`/`resolve.rs`; test code in `wire` and `testkit` only — the crates whose job is structural JSON
 comparison, attributed to the package by file path so a test target compiled under its own crate name is not mistaken for a
 third crate — and `testkit` wholesale, where every other production rule still applies to `testkit/src`).
 
@@ -144,7 +141,7 @@ Check: dylint `customserde` and `untyped` (the wrapper needs both).
 Anti-pattern: an empty struct (`pub struct OpaqueSection {}`) that accepts a section and throws its contents away, so the
 setting never reaches the code that needs it. Pattern: type the section from the inventory; a removed key is not a field
 at all (`serde_ignored` reports it, and the error text comes from an enum of removed paths); a value the contract defines
-as arbitrary uses the sanctioned holder (`wire::JsonObject`, `config::FreeForm`). Check: dylint `opaque`.
+as arbitrary uses the sanctioned holder (`wire::JsonObject`). Check: dylint `opaque`.
 
 ## TYPEMACRO
 Anti-pattern: `macro_rules!` that stamps out structs, enums or their impls (`closed!(Effort { Low, High })`,

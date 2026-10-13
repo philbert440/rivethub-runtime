@@ -206,7 +206,7 @@ fn decision_11_provider_type_selects_behaviour() -> Result<(), Box<dyn std::erro
 
     let kept = [
         "  acme:\n    type: openai-compatible\n    model: acme-model\n    base_url: http://example.com/v1\n",
-        "  acme:\n    type: cli\n",
+        "  acme:\n    type: codex-cli\n",
     ];
     for entries in kept {
         expect_loaded(&config_yaml(
@@ -236,6 +236,136 @@ fn decision_11_provider_type_selects_behaviour() -> Result<(), Box<dyn std::erro
             == "Unknown provider type \"unknown-kind\" — make sure a registrar handles it"),
         "expected the unknown-type warning"
     );
+    Ok(())
+}
+
+#[test]
+fn decision_11_removed_provider_types_name_their_alternative()
+-> Result<(), Box<dyn std::error::Error>> {
+    let cases = [
+        (
+            "ollama",
+            "reach Ollama through a harness, or use type: openai-compatible with base_url http://<host>:11434/v1",
+        ),
+        (
+            "llama-server",
+            "use type: openai-compatible with base_url <server>/v1",
+        ),
+        ("openai-compat", "spelled openai-compatible"),
+        ("cli", "no CLI provider of that type; use a harness"),
+        ("pi-cli", "no CLI provider of that type; use a harness"),
+        ("qwen-code", "no CLI provider of that type; use a harness"),
+    ];
+    for (kind, alternative) in cases {
+        let yaml = config_yaml(
+            &format!("  main-provider:\n    model: acme-model\n  acme:\n    type: {kind}\n"),
+            "",
+        );
+        let formatted = expect_validation_error(&yaml)?;
+        let expected = format!("Provider \"acme\" type \"{kind}\" is not built — {alternative}.");
+        assert!(
+            formatted.contains(&expected),
+            "removed type {kind}: expected \"{expected}\" in:\n{formatted}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn removed_provider_keys_warn_and_the_provider_still_boots()
+-> Result<(), Box<dyn std::error::Error>> {
+    let loaded = Config::from_str(
+        &Environment::default(),
+        &config_yaml(
+            "  main-provider:\n    model: acme-model\n  acme:\n    type: vllm\n    model: acme-model\n    base_url: http://example.com/v1\n    temperature: 0.7\n    top_p: 0.95\n    models:\n      - acme-model\n    models_ttl_ms: 60000\n    token_command:\n      - /home/user/bin/token\n    keep_alive: 5m\n",
+            "",
+        ),
+    )?;
+    let warnings: Vec<&String> = loaded
+        .warnings
+        .iter()
+        .map(|finding| &finding.path)
+        .collect();
+    for key in [
+        "providers.acme.temperature",
+        "providers.acme.top_p",
+        "providers.acme.models",
+        "providers.acme.models_ttl_ms",
+        "providers.acme.token_command",
+        "providers.acme.keep_alive",
+    ] {
+        assert!(
+            warnings.contains(&&key.to_owned()),
+            "expected a warning at {key}: {warnings:?}"
+        );
+    }
+    assert!(
+        loaded.warnings.iter().all(|finding| {
+            !finding.message.contains("token_command wins")
+                && !finding.message.contains("typical range")
+        }),
+        "the token_command and temperature validations are gone: {warnings:?}"
+    );
+    for finding in &loaded.warnings {
+        if finding.path.starts_with("providers.acme.") {
+            let Some(key) = finding.path.rsplit('.').next() else {
+                continue;
+            };
+            assert_eq!(
+                finding.message,
+                format!("{key} is set on the model server, not in RivetHub"),
+                "unexpected message: {:?}",
+                finding
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn removed_embed_keys_warn_the_same_way() -> Result<(), Box<dyn std::error::Error>> {
+    let postgres = Config::from_str(
+        &Environment::default(),
+        &config_yaml(
+            "",
+            "memory:\n  postgres:\n    connection_string: postgres://example.com/db\n    embed_token_command:\n      - /home/user/bin/token\n    embed_wire_shape: openai\n",
+        ),
+    )?;
+    let sqlite = Config::from_str(
+        &Environment::default(),
+        &config_yaml(
+            "",
+            "memory:\n  sqlite:\n    path: ':memory:'\n    embed_token_command:\n      - /home/user/bin/token\n    embed_wire_shape: openai\n",
+        ),
+    )?;
+    for loaded in [postgres, sqlite] {
+        let paths: Vec<&String> = loaded
+            .warnings
+            .iter()
+            .map(|finding| &finding.path)
+            .collect();
+        let section = if paths.contains(&&"memory.sqlite.embed_wire_shape".to_owned()) {
+            "memory.sqlite"
+        } else {
+            "memory.postgres"
+        };
+        for key in ["embed_token_command", "embed_wire_shape"] {
+            let path = format!("{section}.{key}");
+            assert!(
+                paths.contains(&&path),
+                "expected a warning at {path}: {paths:?}"
+            );
+        }
+        assert!(
+            loaded.warnings.iter().all(|finding| finding.message
+                == "embed_token_command is set on the model server, not in RivetHub"
+                || finding.message
+                    == "embed_wire_shape is set on the model server, not in RivetHub"
+                || finding.path == "providers.main-provider"),
+            "unexpected messages: {:?}",
+            loaded.warnings
+        );
+    }
     Ok(())
 }
 

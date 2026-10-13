@@ -44,19 +44,6 @@ fn postgres_section(out: &mut ValidationResult, postgres: &PostgresSection) {
         );
     }
     embed_api_key(postgres, out);
-    embed_token_command(postgres, out);
-    super::positive(
-        out,
-        "memory.postgres.embed_token_ttl_ms",
-        postgres.embed_token_ttl_ms,
-        "memory.postgres embed_token_ttl_ms must be a positive number",
-    );
-    super::positive(
-        out,
-        "memory.postgres.embed_token_command_timeout_ms",
-        postgres.embed_token_command_timeout_ms,
-        "memory.postgres embed_token_command_timeout_ms must be a positive number",
-    );
     if postgres
         .embed_expected_dims
         .is_some_and(|dims| dims != 1024)
@@ -80,25 +67,8 @@ fn embed_api_key(postgres: &PostgresSection, out: &mut ValidationResult) {
     }
     out.warning(
         "memory.postgres.embed_api_key",
-        "memory.postgres.embed_api_key appears hardcoded — prefer environment variables or embed_token_command",
+        "memory.postgres.embed_api_key appears hardcoded — prefer environment variables",
     );
-}
-
-fn embed_token_command(postgres: &PostgresSection, out: &mut ValidationResult) {
-    if let Some(entries) = &postgres.embed_token_command
-        && entries.is_empty()
-    {
-        out.error(
-            "memory.postgres.embed_token_command",
-            "memory.postgres embed_token_command must be a non-empty argv array of strings",
-        );
-    }
-    if postgres.embed_api_key.is_some() && postgres.embed_token_command.is_some() {
-        out.warning(
-            "memory.postgres.embed_token_command",
-            "memory.postgres has both embed_api_key and embed_token_command — embed_token_command wins",
-        );
-    }
 }
 
 fn embedded_section(out: &mut ValidationResult, embedded: &EmbeddedSection) {

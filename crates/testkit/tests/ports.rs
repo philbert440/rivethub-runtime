@@ -368,7 +368,6 @@ fn provider_streams_scripted_then_default() {
             tools: Vec::new(),
             thinking: Some(wire::stream::ThinkingLevel::Medium),
             max_tokens: None,
-            temperature: None,
         };
         let mut rx = provider.stream(request.clone()).await.unwrap();
         let first = rx.recv().await.expect("expected a chunk");
