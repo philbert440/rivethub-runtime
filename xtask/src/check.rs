@@ -43,6 +43,25 @@ pub fn absolute(path: &Path) -> PathBuf {
     std::env::current_dir().map_or_else(|_| path.to_path_buf(), |cwd| cwd.join(path))
 }
 
+pub fn machete(root: &Path) -> Result<()> {
+    machete_with(root, "cargo-machete")
+}
+
+fn machete_with(root: &Path, program: &str) -> Result<()> {
+    match Command::new(program).current_dir(root).status() {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Err(Error::MissingTool {
+            tool: program.to_owned(),
+            install: "cargo install cargo-machete --locked".to_owned(),
+        }),
+        Err(error) => Err(Error::Io(error)),
+        Ok(status) if status.success() => Ok(()),
+        Ok(_) => Err(Error::Command {
+            command: program.to_owned(),
+            stderr: String::new(),
+        }),
+    }
+}
+
 pub fn check(root: &Path, locked: bool) -> Result<()> {
     run_tool(root, "cargo", &["fmt", "--all", "--check"])?;
     let mut clippy = vec!["clippy"];
@@ -76,6 +95,7 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
     }
     deny.push("check");
     run_tool(root, "cargo", &deny)?;
+    machete(root)?;
 
     let mut findings = Vec::new();
     crate::lang::check(root, &mut findings)?;
@@ -147,4 +167,30 @@ pub fn install_hooks_from(root: &Path, binary: &Path) -> Result<()> {
     );
     let _ = out.flush();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::machete_with;
+    use std::path::Path;
+
+    #[test]
+    fn missing_machete_names_the_install_command() {
+        let error = machete_with(Path::new("."), "xtask-machete-missing").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("cargo install cargo-machete --locked"),
+            "the error must carry the install command, got: {error}"
+        );
+    }
+
+    #[test]
+    fn machete_failure_is_a_command_error() {
+        let error = machete_with(Path::new("."), "false").unwrap_err();
+        assert!(
+            matches!(error, crate::error::Error::Command { ref command, .. } if command == "false"),
+            "a non-zero exit must fail the gate as a command error, got: {error}"
+        );
+    }
 }

@@ -71,7 +71,7 @@ pub fn check(root: &Path, findings: &mut Vec<String>) -> Result<()> {
         .collect();
     known.extend(checks().iter().map(|name| name.to_ascii_lowercase()));
     known.extend(
-        ["clippy", "deny.toml", "rustc", "deny"]
+        ["clippy", "deny.toml", "rustc", "deny", "machete"]
             .iter()
             .map(|name| (*name).to_owned()),
     );

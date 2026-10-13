@@ -166,10 +166,13 @@ Anti-pattern: `std::process::exit` outside `main`. Pattern: return an error; the
 Check: clippy `exit`, `disallowed-methods`.
 
 ## DEPS
-Anti-pattern: a crate outside the policy (OpenSSL, `anyhow`, a second async runtime, tmux), or `once_cell`/`lazy_static`
-as direct dependencies. Pattern: rustls; `thiserror`; `std::sync::LazyLock`/`OnceLock`; tokio; herdr. Check: the DEPS
+Anti-pattern: a crate outside the policy (OpenSSL, `anyhow`, a second async runtime, tmux), `once_cell`/`lazy_static`
+as direct dependencies, or a dependency declared in a manifest the crate never uses. Pattern: rustls; `thiserror`;
+`std::sync::LazyLock`/`OnceLock`; tokio; herdr; a dependency lands in the manifest with the commit that uses it and is
+removed when its last use goes (never excused with a `cargo-machete` ignore list). Check: the DEPS
 policy in `deny.toml` bans for the first group; `once_cell`/`lazy_static` must not be direct dependencies and is checked
-in review (other crates pull them transitively, so they are not banned in `deny.toml`).
+in review (other crates pull them transitively, so they are not banned in `deny.toml`); `cargo machete` in
+`cargo xtask check` fails the gate on an unused direct dependency.
 
 ## TLS
 Anti-pattern: two rustls crypto providers in one build (a dependency enabling rustls `ring` while the code assumes another provider), or a rustls config built through the process-level default (`ServerConfig::builder()`, `ClientConfig::builder()`, `WebPkiClientVerifier::builder()`) — with both providers compiled in, rustls cannot pick a process default and the builder panics. Pattern: one provider for the whole workspace, `aws-lc-rs` (the rustls and reqwest default): `rustls` and `tokio-rustls` carry the `aws-lc-rs` feature (never `ring`), `rcgen` (dev) its `aws_lc_rs` feature, sqlx the `tls-rustls-aws-lc-rs` variant; every `ServerConfig`, `ClientConfig` and client-cert verifier names the provider explicitly —

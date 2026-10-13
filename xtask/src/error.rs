@@ -16,6 +16,8 @@ pub enum Error {
     Metadata(#[from] cargo_metadata::Error),
     #[error("command {command} failed: {stderr}")]
     Command { command: String, stderr: String },
+    #[error("{tool} is missing; install it with `{install}`")]
+    MissingTool { tool: String, install: String },
     #[error("{0}")]
     Usage(String),
 }

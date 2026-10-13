@@ -34,6 +34,7 @@ jobs:
         run: |
           cargo install cargo-dylint dylint-link --locked
           cargo install cargo-deny --locked
+          cargo install cargo-machete --locked
       - name: cargo xtask check
         run: cargo xtask check --locked
 
@@ -77,7 +78,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest,cargo-llvm-cov,cargo-machete
+          tool: cargo-nextest,cargo-llvm-cov
       - name: sqlx-cli
         run: cargo install sqlx-cli --locked --no-default-features --features rustls,postgres
       - name: Tests under the coverage floor
@@ -90,7 +91,5 @@ jobs:
           SQLX_OFFLINE: "false"
       - name: Doc tests
         run: cargo test --doc --workspace --all-features --locked
-      - name: Unused dependencies
-        run: cargo machete
       - name: Build
         run: cargo build --workspace --locked
