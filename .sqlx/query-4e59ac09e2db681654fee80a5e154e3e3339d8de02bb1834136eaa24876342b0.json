@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select name from _rivetos_migrations where name = any($1)",
+  "query": "SELECT name FROM _rivetos_migrations",
   "describe": {
     "columns": [
       {
@@ -16,13 +16,11 @@
       }
     ],
     "parameters": {
-      "Left": [
-        "TextArray"
-      ]
+      "Left": []
     },
     "nullable": [
       false
     ]
   },
-  "hash": "cdfec4ef53542663022bc687619212ee4568fa4b9fb0daab818d1f1b7b1366d3"
+  "hash": "4e59ac09e2db681654fee80a5e154e3e3339d8de02bb1834136eaa24876342b0"
 }

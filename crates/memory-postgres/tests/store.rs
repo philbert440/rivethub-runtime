@@ -155,7 +155,7 @@ fn browse_filter() -> BrowseFilter {
     }
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn append_is_idempotent_per_event_id(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let entry = |content: &str, event: &str| MemoryEntry {
@@ -208,7 +208,7 @@ fn entry_metadata(event: &str) -> wire::JsonObject {
     .unwrap_or_default()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
     seed(&pool).await?;
     let memory = store(&pool);
@@ -271,7 +271,7 @@ async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResult {
     seed(&pool).await?;
     let memory = store(&pool);
@@ -372,7 +372,7 @@ async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResu
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn stats_get_full_and_context(pool: PgPool) -> TestResult {
     seed(&pool).await?;
     let memory = store(&pool);
@@ -438,7 +438,7 @@ async fn stats_get_full_and_context(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn browse_honours_every_filter_field(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let mut b1 = message("b1", Role::User, "older user prompt");

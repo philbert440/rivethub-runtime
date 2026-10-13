@@ -1,12 +1,12 @@
-use memory_postgres::PostgresMemory;
+use migrate::POSTGRES;
 use sqlx::PgPool;
 use sqlx::Row as _;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
-    PostgresMemory::migrate(&pool).await?;
+    POSTGRES.run(&pool).await?;
 
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
@@ -17,6 +17,8 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
         .fetch_one(&pool)
         .await?;
     assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 21);
+
+    migrate::postgres_pool(&pool).await?;
 
     for table in [
         "rh_conversations",
@@ -146,7 +148,7 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
 
 #[sqlx::test(migrations = false)]
 async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
-    for migration in PostgresMemory::migrator().migrations.iter().take(20) {
+    for migration in POSTGRES.migrations.iter().take(20) {
         let sql: &'static str = Box::leak(migration.sql.as_str().to_string().into_boxed_str());
         sqlx::raw_sql(sql).execute(&pool).await?;
     }
@@ -173,7 +175,7 @@ async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
         "0020_tag_removals must have applied before 0021"
     );
 
-    PostgresMemory::migrate(&pool).await?;
+    POSTGRES.run(&pool).await?;
 
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
@@ -211,9 +213,9 @@ async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn migration_0021_views_mirror_the_rh_tables(pool: PgPool) -> TestResult {
-    PostgresMemory::migrate(&pool).await?;
+    POSTGRES.run(&pool).await?;
     let queue = testkit::queue_present(&pool).await?;
 
     let mut tx = testkit::capture_tx(&pool).await?;
@@ -283,6 +285,27 @@ async fn migration_0021_views_mirror_the_rh_tables(pool: PgPool) -> TestResult {
         .await?
         .flatten();
         assert_eq!(job.as_deref(), Some("embed-target"));
+    }
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_missing_tracking_row_is_a_typed_error(pool: PgPool) -> TestResult {
+    sqlx::query("DELETE FROM _rivetos_migrations WHERE name = '0004_task_eval.sql'")
+        .execute(&pool)
+        .await?;
+    match migrate::postgres_pool(&pool).await {
+        Err(migrate::Error::TrackingMissing { missing }) => {
+            assert!(
+                missing.contains("0004_task_eval.sql"),
+                "the error must name the missing row: {missing}"
+            );
+            assert!(
+                !missing.contains("0001_baseline.sql"),
+                "present rows must not be named: {missing}"
+            );
+        }
+        other => panic!("expected TrackingMissing, got {other:?}"),
     }
     Ok(())
 }

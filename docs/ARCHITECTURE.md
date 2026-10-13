@@ -10,9 +10,10 @@ Design artifact (visual, authoritative): https://claude.ai/artifact/L7cAvh16cYEZ
 | kernel | `kernel` (ports = traits, domain types; no I/O), `testkit` (dev-only: replayers, fakes, stubs) | wire, config |
 | adapters | `memory-postgres`, `memory-sqlite`, `providers`, `harness-acp`, `terminal`, `mcp`, `capture` | kernel, wire, config, externals — NEVER another adapter or a service |
 | services | `gateway` (with the session registry and mesh), `agent-loop`, `workers`, `tasks` (sessions over the gateway API) | kernel, wire, config — NEVER an adapter |
+| operations | `migrate` (every Postgres and SQLite schema change; the `rivethub-migrate` binary) | wire, config, externals (sqlx, rusqlite); depended on only by `cli` as a normal dependency and by tests as a dev-dependency — NEVER by a runtime crate (`rivethub` is checked transitively by the xtask MANIFEST rule) |
 | composition | `cli`, `rivethub` (binary; one composition root per service process) | everything |
 
-The gate (`tools/gate.py`) fails any Cargo.toml that breaks this.
+The gate (`cargo xtask check`) fails any Cargo.toml that breaks this.
 
 ## Ports (kernel traits) and who implements them
 
@@ -60,7 +61,7 @@ portable-pty · rcgen + rustls-webpki · thiserror · tracing · tokio-util (Can
 
 wire 3,000 · config 2,000 · kernel 800 · testkit 1,200 · gateway 8,200 · agent-loop 2,600 · workers 4,000 ·
 memory-postgres 5,000 · memory-sqlite 4,000 · providers 900 · harness-acp 1,600 · terminal 2,000 · mcp 2,400 ·
-capture 4,500 · tasks 2,000 · cli 4,900 · rivethub 500. Total ≈ 50,000 against ≈ 120,000 lines of
+capture 4,500 · tasks 2,000 · cli 4,900 · rivethub 500 · migrate 1,000. Total ≈ 50,000 against ≈ 120,000 lines of
 TypeScript. Not separate crates: hooks (agent-loop), skills (mcp), agent presets (gateway), wiki builder (workers),
 certificate authority (cli), harness store readers (capture). No local-db: standalone runs on SQLite (sqlite-vec as schema v8
 after cutover). Workflows stays in the monorepo as a separate workspace package with its own binary (`rivethub-workflows`: depends on
@@ -77,6 +78,13 @@ mesh, memory-sqlite; B5 B13 B14) → Wave 5 operations (cli incl. CA, standalone
 B16) → cutover. Each wave's gate is a boundary working end to end against the recordings.
 
 Standalone: `rh local` composes every service into one process on the SQLite store (one composition root, same crates).
-Mesh (registry, heartbeat, agent channel) is a gateway module; ssh helpers are in cli; mesh.json types in wire. 17 crates.
+Mesh (registry, heartbeat, agent channel) is a gateway module; ssh helpers are in cli; mesh.json types in wire. 18 crates.
+Schema changes never run inside the runtime: `rivethub-migrate postgres|sqlite` applies them (Postgres from the
+`migrate` crate's `sqlx::migrate!` chain, SQLite through the v7 creation and the v1→v7 upgrade ladder with a
+`<file>.v<N>.bak` copy of the original file before any read-write connection), and the stores verify one schema version each
+(`memory_postgres::SCHEMA_VERSION`, `memory_sqlite::SCHEMA_VERSION`) and refuse to start behind it.
+`migrate`'s line budget is 1,000, not the 600-line file ceiling: the crate now holds the moved ladder and the
+`rivethub-migrate` binary. Measured `crates/migrate/src` is 874 lines (schema 215, the binary 210, postgres 155,
+upgrade 128, version 91, error 50, lib 25); 1,000 leaves headroom. Every file stays under the 600-line file cap.
 No runtime plugin loading: extension points are adapter crates behind ports, the public API, and MCP. `plugins:` and
 `channels.*` are accepted-and-ignored compatibility keys.

@@ -1,4 +1,4 @@
-use crate::error::SqliteError;
+use crate::error::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SchemaVersion {
@@ -32,7 +32,7 @@ impl SchemaVersion {
 }
 
 impl TryFrom<i64> for SchemaVersion {
-    type Error = SqliteError;
+    type Error = Error;
 
     fn try_from(found: i64) -> Result<Self, Self::Error> {
         match found {
@@ -43,7 +43,7 @@ impl TryFrom<i64> for SchemaVersion {
             5 => Ok(Self::V5),
             6 => Ok(Self::V6),
             7 => Ok(Self::V7),
-            other => Err(SqliteError::UnsupportedSchema { found: other }),
+            other => Err(Error::Unsupported { found: other }),
         }
     }
 }
@@ -51,7 +51,7 @@ impl TryFrom<i64> for SchemaVersion {
 #[cfg(test)]
 mod tests {
     use super::SchemaVersion;
-    use crate::error::SqliteError;
+    use crate::error::Error;
 
     #[test]
     fn every_recorded_user_version_maps_to_a_schema_version() {
@@ -67,7 +67,7 @@ mod tests {
     fn versions_outside_the_ladder_are_typed_errors() {
         for found in [-3, 0, 8, 99] {
             match SchemaVersion::try_from(found) {
-                Err(SqliteError::UnsupportedSchema { found: reported }) => {
+                Err(Error::Unsupported { found: reported }) => {
                     assert_eq!(reported, found);
                 }
                 other => panic!("user_version {found} must be unsupported, got {other:?}"),

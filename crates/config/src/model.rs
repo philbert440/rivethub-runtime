@@ -201,18 +201,12 @@ pub struct EmbeddedSection {
     pub data_dir: Option<PathBuf>,
     #[serde(default = "default_embedded_port")]
     pub port: u16,
-    #[serde(default = "default_auto_migrate")]
-    pub auto_migrate: bool,
     #[serde(default = "default_max_connections")]
     pub max_connections: u32,
 }
 
 fn default_embedded_port() -> u16 {
     5433
-}
-
-fn default_auto_migrate() -> bool {
-    true
 }
 
 fn default_max_connections() -> u32 {

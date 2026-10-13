@@ -164,9 +164,10 @@ async fn post_recorded_batches(
     Ok(expected)
 }
 
-#[sqlx::test]
+#[sqlx::test(migrations = false)]
 async fn recorded_batches_land_and_read_back_through_the_memory_api(pool: PgPool) -> TestResult {
     let url = pool.connect_options().to_url_lossy().to_string();
+    migrate::postgres_pool(&pool).await?;
     let env = Environment::from_vars([("RIVETOS_PG_URL".to_owned(), url)]);
     let config: Config = serde_yaml_ng::from_str("den:\n  host: 127.0.0.1\n  port: 0\n")?;
     let store = rivethub::service::connect(&config, &env).await?;
@@ -328,9 +329,10 @@ async fn get_full_text(
     Ok(text)
 }
 
-#[sqlx::test]
+#[sqlx::test(migrations = false)]
 async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPool) -> TestResult {
     let url = pool.connect_options().to_url_lossy();
+    migrate::postgres_pool(&pool).await?;
     let home = tempdir()?;
     let hub_home = home.path().join(".rivethub");
     std::fs::create_dir_all(&hub_home)?;

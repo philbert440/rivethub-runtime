@@ -27,9 +27,7 @@ fn recorded_upgrade_files_reach_the_migrated_state() -> TestResult<()> {
     for case in &recording.cases {
         let fixture = fixture_copy(&case.input_file)?;
         let migrated = &case.migrated;
-        {
-            let _store = SqliteStore::open_at(fixture.path(), instant(&migrated.clock)?)?;
-        }
+        migrate::sqlite_at(fixture.path(), instant(&migrated.clock)?)?;
         let conn = connection(fixture.path())?;
         replay_search_access(&conn, migrated)?;
         assert_eq!(

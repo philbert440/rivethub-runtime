@@ -139,7 +139,7 @@ fn removed_provider_ids(input: &serde_yaml_ng::Value) -> Vec<(String, RemovedPro
 
 const DECISION_15_WARNING: &str = "memory.capture.redaction is validated but not yet injected into harness hook processes; set RIVETOS_CAPTURE_REDACTION or pass CaptureWriterOptions.redaction to enable at runtime";
 
-const REMOVED_BY_DECISION_ROWS: usize = 17_091;
+const REMOVED_BY_DECISION_ROWS: usize = 17_846;
 const REMOVED_BY_DECISION_CASES: usize = 5_478;
 
 fn decision_replacements(input: &serde_yaml_ng::Value) -> Vec<(String, bool, String, String)> {
@@ -224,6 +224,7 @@ enum RemovedEmbedKey {
 enum RemovedByDecision {
     ProviderKey(RemovedProviderKey),
     EmbedKey(RemovedEmbedKey),
+    GoneAutoMigrate,
 }
 
 fn key_warning(path: String, key: &str) -> Finding {
@@ -315,10 +316,33 @@ fn embed_key_deltas(input: &serde_yaml_ng::Value, deltas: &mut RemovedDeltas) {
     }
 }
 
+fn auto_migrate_deltas(input: &serde_yaml_ng::Value, deltas: &mut RemovedDeltas) {
+    let Some(embedded) = section_value(input, "memory")
+        .and_then(serde_yaml_ng::Value::as_mapping)
+        .and_then(|memory| memory.get("postgres"))
+        .and_then(serde_yaml_ng::Value::as_mapping)
+        .and_then(|postgres| postgres.get("embedded"))
+        .and_then(serde_yaml_ng::Value::as_mapping)
+    else {
+        return;
+    };
+    if embedded.get("auto_migrate").is_some() {
+        deltas.push(
+            "memory.postgres.embedded.auto_migrate",
+            RemovedByDecision::GoneAutoMigrate,
+            Finding::warning(
+                "memory.postgres.embedded.auto_migrate",
+                "auto_migrate is gone; run rivethub-migrate",
+            ),
+        );
+    }
+}
+
 fn removed_by_decision(input: &serde_yaml_ng::Value) -> RemovedDeltas {
     let mut deltas = RemovedDeltas::default();
     provider_key_deltas(input, &mut deltas);
     embed_key_deltas(input, &mut deltas);
+    auto_migrate_deltas(input, &mut deltas);
     deltas
 }
 

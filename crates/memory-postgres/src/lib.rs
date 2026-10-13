@@ -11,8 +11,9 @@ mod search_sql;
 mod store_impl;
 mod tags;
 
+use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::Ordering as AtomicOrdering;
 use std::time::Duration;
 
 pub use capture::CaptureOptions;
@@ -30,7 +31,7 @@ pub use queue::PostgresQueue;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
+pub const SCHEMA_VERSION: i64 = 21;
 
 #[derive(Debug)]
 pub struct PostgresMemory {
@@ -68,39 +69,20 @@ impl PostgresMemory {
     }
 
     pub async fn prepare(pool: &PgPool) -> Result<(), Error> {
-        MIGRATOR.run(pool).await.map_err(Error::Migrate)?;
-        let names: Vec<String> = MIGRATOR
-            .migrations
-            .iter()
-            .map(|migration| tracked_name(migration.version, &migration.description))
-            .collect();
-        let tracked = sqlx::query!(
-            "select name from _rivetos_migrations where name = any($1)",
-            &names
-        )
-        .fetch_all(pool)
-        .await
-        .map_err(|source| Error::operation("migration tracking", source))?;
-        let missing: Vec<String> = names
-            .iter()
-            .filter(|name| !tracked.iter().any(|row| row.name == **name))
-            .cloned()
-            .collect();
-        if missing.is_empty() {
-            return Ok(());
+        let found = newest_applied(pool).await?;
+        match found.cmp(&SCHEMA_VERSION) {
+            Ordering::Equal => Ok(()),
+            Ordering::Greater => {
+                tracing::warn!(
+                    "the memory schema reports version {found}, this build requires {SCHEMA_VERSION} — rolling updates migrate first; continuing"
+                );
+                Ok(())
+            }
+            Ordering::Less => Err(Error::SchemaBehind {
+                found,
+                required: SCHEMA_VERSION,
+            }),
         }
-        Err(Error::Schema {
-            message: format!("_rivetos_migrations is missing {}", missing.join(", ")),
-        })
-    }
-
-    pub async fn migrate(pool: &PgPool) -> Result<(), Error> {
-        MIGRATOR.run(pool).await.map_err(Error::Migrate)
-    }
-
-    #[must_use]
-    pub fn migrator() -> &'static sqlx::migrate::Migrator {
-        &MIGRATOR
     }
 
     #[must_use]
@@ -118,27 +100,24 @@ impl PostgresMemory {
 
     #[must_use]
     pub fn wiki_available(&self) -> bool {
-        self.wiki_available.load(Ordering::Relaxed)
+        self.wiki_available.load(AtomicOrdering::Relaxed)
     }
 
     pub(crate) fn set_wiki_available(&self, available: bool) {
-        self.wiki_available.store(available, Ordering::Relaxed);
+        self.wiki_available
+            .store(available, AtomicOrdering::Relaxed);
     }
 }
 
-#[must_use]
-fn tracked_name(version: i64, description: &str) -> String {
-    format!("{version:04}_{}.sql", description.replace(' ', "_"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::tracked_name;
-
-    #[test]
-    fn tracked_names_are_the_sql_file_names() {
-        assert_eq!(tracked_name(1, "baseline"), "0001_baseline.sql");
-        assert_eq!(tracked_name(2, "ros tasks"), "0002_ros_tasks.sql");
-        assert_eq!(tracked_name(21, "rh tables"), "0021_rh_tables.sql");
+async fn newest_applied(pool: &PgPool) -> Result<i64, Error> {
+    match sqlx::query!(
+        "select coalesce(max(version), 0) as \"applied!\" from _sqlx_migrations where success"
+    )
+    .fetch_one(pool)
+    .await
+    {
+        Ok(row) => Ok(row.applied),
+        Err(source) if Error::relation_missing(&source) => Err(Error::NotAdopted),
+        Err(source) => Err(Error::operation("schema version check", source)),
     }
 }

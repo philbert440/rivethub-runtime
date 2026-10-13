@@ -1,21 +1,18 @@
 pub mod error;
-pub mod schema;
-pub mod upgrade;
-pub mod version;
 
 use std::path::Path;
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use chrono::DateTime;
-use chrono::Utc;
 use parking_lot::Mutex;
 use rusqlite::Connection;
 
 pub use error::SqliteError;
-pub use version::SchemaVersion;
+
+pub const SCHEMA_VERSION: i64 = 7;
 
 const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
+
+#[cfg(test)]
 const MEMORY_PRAGMAS: &str = "PRAGMA foreign_keys = ON;";
 
 #[derive(Debug)]
@@ -25,31 +22,20 @@ pub struct SqliteStore {
 
 impl SqliteStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SqliteError> {
-        Self::open_at(path, Utc::now())
-    }
-
-    pub fn open_at(path: impl AsRef<Path>, now: DateTime<Utc>) -> Result<Self, SqliteError> {
         let path = path.as_ref();
-        let mut conn = Connection::open(path).map_err(|source| SqliteError::Open {
+        if !path.exists() {
+            return Err(SqliteError::NotInitialised {
+                path: path.to_path_buf(),
+            });
+        }
+        let found = read_user_version(path)?;
+        verify(path, found)?;
+        let conn = Connection::open(path).map_err(|source| SqliteError::Open {
             path: path.to_path_buf(),
             source,
         })?;
         conn.execute_batch(FILE_PRAGMAS)
             .map_err(SqliteError::Pragma)?;
-        schema::prepare(&mut conn, now)?;
-        Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
-        })
-    }
-
-    pub fn open_in_memory() -> Result<Self, SqliteError> {
-        let mut conn = Connection::open_in_memory().map_err(|source| SqliteError::Open {
-            path: PathBuf::from(":memory:"),
-            source,
-        })?;
-        conn.execute_batch(MEMORY_PRAGMAS)
-            .map_err(SqliteError::Pragma)?;
-        schema::prepare(&mut conn, Utc::now())?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -65,6 +51,53 @@ impl SqliteStore {
             Ok(result) => result,
             Err(source) => Err(SqliteError::Join(source)),
         }
+    }
+}
+
+fn read_user_version(path: &Path) -> Result<i64, SqliteError> {
+    let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|source| SqliteError::Open {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    conn.query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(SqliteError::Pragma)
+}
+
+fn verify(path: &Path, found: i64) -> Result<(), SqliteError> {
+    match found {
+        0 => Err(SqliteError::NotInitialised {
+            path: path.to_path_buf(),
+        }),
+        SCHEMA_VERSION => Ok(()),
+        unsupported if !(0..=SCHEMA_VERSION).contains(&unsupported) => {
+            Err(SqliteError::UnsupportedSchema { found: unsupported })
+        }
+        behind => Err(SqliteError::SchemaBehind {
+            path: path.to_path_buf(),
+            found: behind,
+            required: SCHEMA_VERSION,
+        }),
+    }
+}
+
+#[cfg(test)]
+use std::path::PathBuf;
+
+#[cfg(test)]
+impl SqliteStore {
+    fn open_in_memory() -> Result<Self, migrate::Error> {
+        let mut conn =
+            Connection::open_in_memory().map_err(|source| migrate::Error::SqliteOpen {
+                path: PathBuf::from(":memory:"),
+                source,
+            })?;
+        conn.execute_batch(MEMORY_PRAGMAS)
+            .map_err(migrate::Error::SqlitePragma)?;
+        migrate::sqlite_connection(&mut conn, chrono::Utc::now())?;
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
     }
 }
 

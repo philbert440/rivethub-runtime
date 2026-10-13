@@ -507,6 +507,141 @@ fn manifest_member_depending_on_the_binary_fires() -> Result<(), Box<dyn std::er
 }
 
 #[test]
+fn manifest_rivethub_must_not_reach_the_migrate_crate() -> Result<(), Box<dyn std::error::Error>> {
+    let transitively = Repo::new()?;
+    transitively.write("Cargo.toml", &workspace_toml())?;
+    transitively.write("crates/migrate/Cargo.toml", &manifest("migrate", ""))?;
+    transitively.write("crates/migrate/src/lib.rs", "")?;
+    transitively.write(
+        "crates/gateway/Cargo.toml",
+        &manifest(
+            "gateway",
+            "[dependencies]\nmigrate = { path = \"../migrate\" }\n",
+        ),
+    )?;
+    transitively.write("crates/gateway/src/lib.rs", "")?;
+    transitively.write(
+        "crates/rivethub/Cargo.toml",
+        &manifest(
+            "rivethub",
+            "[dependencies]\ngateway = { path = \"../gateway\" }\n",
+        ),
+    )?;
+    transitively.write("crates/rivethub/src/main.rs", "fn main() {}\n")?;
+    transitively.track()?;
+    let mut findings = Vec::new();
+    manifests::manifests(transitively.root(), &mut findings)?;
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.starts_with("MANIFEST rivethub")
+                && finding.contains("must not depend on the migrate crate")),
+        "a transitive normal dependency on migrate is reported: {findings:?}"
+    );
+
+    let direct = Repo::new()?;
+    direct.write("Cargo.toml", &workspace_toml())?;
+    direct.write("crates/migrate/Cargo.toml", &manifest("migrate", ""))?;
+    direct.write("crates/migrate/src/lib.rs", "")?;
+    direct.write(
+        "crates/rivethub/Cargo.toml",
+        &manifest(
+            "rivethub",
+            "[dependencies]\nmigrate = { path = \"../migrate\" }\n",
+        ),
+    )?;
+    direct.write("crates/rivethub/src/main.rs", "fn main() {}\n")?;
+    direct.track()?;
+    let mut findings = Vec::new();
+    manifests::manifests(direct.root(), &mut findings)?;
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.starts_with("MANIFEST rivethub")
+                && finding.contains("must not depend on the migrate crate")),
+        "a direct normal dependency on migrate is reported: {findings:?}"
+    );
+
+    let dev_only = Repo::new()?;
+    dev_only.write("Cargo.toml", &workspace_toml())?;
+    dev_only.write("crates/migrate/Cargo.toml", &manifest("migrate", ""))?;
+    dev_only.write("crates/migrate/src/lib.rs", "")?;
+    dev_only.write(
+        "crates/rivethub/Cargo.toml",
+        &manifest(
+            "rivethub",
+            "[dev-dependencies]\nmigrate = { path = \"../migrate\" }\n",
+        ),
+    )?;
+    dev_only.write("crates/rivethub/src/main.rs", "fn main() {}\n")?;
+    dev_only.track()?;
+    let mut findings = Vec::new();
+    manifests::manifests(dev_only.root(), &mut findings)?;
+    assert!(
+        !findings
+            .iter()
+            .any(|finding| finding.contains("must not depend on the migrate crate")),
+        "a dev-dependency on migrate stays legal: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn manifest_migrate_depends_only_downward() -> Result<(), Box<dyn std::error::Error>> {
+    let upward = Repo::new()?;
+    upward.write("Cargo.toml", &workspace_toml())?;
+    upward.write(
+        "crates/memory-postgres/Cargo.toml",
+        &manifest("memory-postgres", ""),
+    )?;
+    upward.write("crates/memory-postgres/src/lib.rs", "")?;
+    upward.write(
+        "crates/migrate/Cargo.toml",
+        &manifest(
+            "migrate",
+            "[dependencies]\nmemory-postgres = { path = \"../memory-postgres\" }\n",
+        ),
+    )?;
+    upward.write("crates/migrate/src/lib.rs", "")?;
+    upward.track()?;
+    let mut findings = Vec::new();
+    manifests::manifests(upward.root(), &mut findings)?;
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.starts_with("MANIFEST migrate")
+                && finding.contains("may depend only on wire, config and external crates")),
+        "a normal dependency from migrate on an adapter is reported: {findings:?}"
+    );
+
+    let dev_reach = Repo::new()?;
+    dev_reach.write("Cargo.toml", &workspace_toml())?;
+    dev_reach.write(
+        "crates/memory-postgres/Cargo.toml",
+        &manifest("memory-postgres", ""),
+    )?;
+    dev_reach.write("crates/memory-postgres/src/lib.rs", "")?;
+    dev_reach.write(
+        "crates/migrate/Cargo.toml",
+        &manifest(
+            "migrate",
+            "[dev-dependencies]\nmemory-postgres = { path = \"../memory-postgres\" }\n",
+        ),
+    )?;
+    dev_reach.write("crates/migrate/src/lib.rs", "")?;
+    dev_reach.track()?;
+    let mut findings = Vec::new();
+    manifests::manifests(dev_reach.root(), &mut findings)?;
+    assert!(
+        !findings
+            .iter()
+            .any(|finding| finding.contains("may depend only on wire, config and external crates")),
+        "migrate's dev-dependencies on the adapters stay legal: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn lint_policy_fires_and_passes() -> Result<(), Box<dyn std::error::Error>> {
     let policy =
         "[lints.rust]\nunsafe_code = \"forbid\"\n\n[lints.clippy]\nunwrap_used = \"deny\"\n";

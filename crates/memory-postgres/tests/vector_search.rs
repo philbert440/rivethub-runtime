@@ -146,7 +146,7 @@ async fn seed_all_four(pool: &PgPool, provider: &FakeProvider) -> TestResult {
     .await
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn vector_mode_ranks_seeded_embeddings(pool: PgPool) -> TestResult {
     seed_four(&pool).await?;
     let seeder = FakeProvider::fnv_embeddings(WIDTH);
@@ -183,7 +183,7 @@ async fn vector_mode_ranks_seeded_embeddings(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn vector_mode_without_a_provider_searches_fts_silently(pool: PgPool) -> TestResult {
     seed_four(&pool).await?;
     let memory = unwired(&pool);
@@ -200,7 +200,7 @@ async fn vector_mode_without_a_provider_searches_fts_silently(pool: PgPool) -> T
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn hybrid_without_a_provider_carries_no_degradation(pool: PgPool) -> TestResult {
     seed_four(&pool).await?;
     let memory = unwired(&pool);
@@ -217,7 +217,7 @@ async fn hybrid_without_a_provider_carries_no_degradation(pool: PgPool) -> TestR
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn hybrid_with_a_failing_provider_degrades_and_counts(pool: PgPool) -> TestResult {
     seed_four(&pool).await?;
     let (memory, _) = wired(
@@ -245,7 +245,7 @@ async fn hybrid_with_a_failing_provider_degrades_and_counts(pool: PgPool) -> Tes
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn hybrid_fuses_the_vector_arm_with_the_text_arms(pool: PgPool) -> TestResult {
     seed_four(&pool).await?;
     let bare = unwired(&pool)
@@ -279,7 +279,7 @@ async fn hybrid_fuses_the_vector_arm_with_the_text_arms(pool: PgPool) -> TestRes
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn vector_mode_fallbacks_record_every_degraded_reason(pool: PgPool) -> TestResult {
     seed_four(&pool).await?;
     let (memory, _) = wired(
@@ -306,7 +306,7 @@ async fn vector_mode_fallbacks_record_every_degraded_reason(pool: PgPool) -> Tes
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn explicit_fts_embeds_for_semantics_and_degrades_quietly(pool: PgPool) -> TestResult {
     seed_four(&pool).await?;
     let seeder = FakeProvider::fnv_embeddings(WIDTH);
@@ -345,7 +345,7 @@ async fn explicit_fts_embeds_for_semantics_and_degrades_quietly(pool: PgPool) ->
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn the_query_input_is_the_instruction_plus_normalized_text(pool: PgPool) -> TestResult {
     seed_four(&pool).await?;
     let (memory, provider) = wired(&pool, FakeProvider::fnv_embeddings(WIDTH));
@@ -366,7 +366,7 @@ fn basis(dim: usize, value: f32) -> Vec<f32> {
         .collect()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn the_chunk_arm_surfaces_and_merges_parents(pool: PgPool) -> TestResult {
     seed_four(&pool).await?;
     let query_vector = basis(0, 1.0);

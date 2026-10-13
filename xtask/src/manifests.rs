@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use regex::Regex;
@@ -22,6 +24,12 @@ struct LintsPolicy {
 }
 
 const BINARY_CRATE: &str = "rivethub";
+const MIGRATIONS_CRATE: &str = "migrate";
+
+#[must_use]
+fn allowed_migrate_dependency(name: &str) -> bool {
+    matches!(name, "wire" | "config")
+}
 
 pub fn binary_dependency(metadata: &cargo_metadata::Metadata, findings: &mut Vec<String>) {
     for package in &metadata.packages {
@@ -35,6 +43,65 @@ pub fn binary_dependency(metadata: &cargo_metadata::Metadata, findings: &mut Vec
             ));
         }
     }
+}
+
+pub fn migrations_leave_the_runtime(
+    metadata: &cargo_metadata::Metadata,
+    findings: &mut Vec<String>,
+) {
+    let members: BTreeSet<&str> = metadata
+        .packages
+        .iter()
+        .map(|package| package.name.as_str())
+        .collect();
+    let mut edges: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for package in &metadata.packages {
+        let next = package
+            .dependencies
+            .iter()
+            .filter(|dependency| dependency.kind == cargo_metadata::DependencyKind::Normal)
+            .filter(|dependency| members.contains(dependency.name.as_str()))
+            .map(|dependency| dependency.name.as_str())
+            .collect();
+        edges.insert(package.name.as_str(), next);
+    }
+    if reaches(&edges, BINARY_CRATE, MIGRATIONS_CRATE) {
+        findings.push(format!(
+            "MANIFEST {BINARY_CRATE}: must not depend on the {MIGRATIONS_CRATE} crate — schema changes are applied only by rivethub-migrate, outside the runtime (dev-dependencies stay legal)"
+        ));
+    }
+    for package in &metadata.packages {
+        if package.name != MIGRATIONS_CRATE {
+            continue;
+        }
+        for dependency in &package.dependencies {
+            let name = dependency.name.as_str();
+            if dependency.kind == cargo_metadata::DependencyKind::Normal
+                && members.contains(name)
+                && !allowed_migrate_dependency(name)
+            {
+                findings.push(format!(
+                    "MANIFEST {MIGRATIONS_CRATE}: depends on {name} — the migrations crate may depend only on wire, config and external crates (dev-dependencies stay legal)"
+                ));
+            }
+        }
+    }
+}
+
+fn reaches(edges: &BTreeMap<&str, Vec<&str>>, from: &str, target: &str) -> bool {
+    let mut seen: BTreeSet<&str> = BTreeSet::from([from]);
+    let mut queue = vec![from];
+    while let Some(current) = queue.pop() {
+        for next in edges.get(current).into_iter().flatten() {
+            if *next == target {
+                return true;
+            }
+            if seen.insert(next) {
+                queue.push(next);
+            }
+        }
+    }
+    false
 }
 
 pub fn manifests(root: &Path, findings: &mut Vec<String>) -> Result<Vec<String>> {
@@ -60,6 +127,7 @@ pub fn manifests(root: &Path, findings: &mut Vec<String>) -> Result<Vec<String>>
         member(&manifest_path, &name, findings)?;
     }
     binary_dependency(&metadata, findings);
+    migrations_leave_the_runtime(&metadata, findings);
     Ok(names)
 }
 

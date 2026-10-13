@@ -42,7 +42,7 @@ fn optional_text(value: &Value, key: &str) -> Result<Option<String>, String> {
     }
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn capture_batch_golden(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let queue = queue_present(&pool).await?;

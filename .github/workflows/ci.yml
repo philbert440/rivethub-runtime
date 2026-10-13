@@ -88,7 +88,7 @@ jobs:
         run: cargo llvm-cov nextest --workspace --all-features --locked --fail-under-lines "$(cat coverage-floor.txt)" --summary-only
       - name: Query data is current
         run: |
-          cargo sqlx migrate run --source crates/memory-postgres/migrations
+          cargo sqlx migrate run --source crates/migrate/migrations
           cargo sqlx prepare --workspace --check
         env:
           SQLX_OFFLINE: "false"

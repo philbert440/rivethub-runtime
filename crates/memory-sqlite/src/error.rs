@@ -10,16 +10,20 @@ pub enum SqliteError {
         #[source]
         source: rusqlite::Error,
     },
+    #[error(
+        "the memory file at {path} is not initialised — run rivethub-migrate sqlite --path {path}"
+    )]
+    NotInitialised { path: PathBuf },
+    #[error(
+        "the memory schema is behind: the file reports version {found}, this build requires {required} — run rivethub-migrate sqlite --path {path}"
+    )]
+    SchemaBehind {
+        path: PathBuf,
+        found: i64,
+        required: i64,
+    },
     #[error("a memory schema pragma failed")]
     Pragma(#[source] rusqlite::Error),
-    #[error("the memory schema could not be brought to version 7")]
-    Create(#[source] rusqlite::Error),
-    #[error("the memory schema upgrade to version {version} failed")]
-    Upgrade {
-        version: i64,
-        #[source]
-        source: rusqlite::Error,
-    },
     #[error("the memory schema version {found} is not supported by this build")]
     UnsupportedSchema { found: i64 },
     #[error("the blocking memory database worker did not complete")]

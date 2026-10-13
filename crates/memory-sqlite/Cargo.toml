@@ -8,19 +8,18 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-chrono = { workspace = true }
 parking_lot = { workspace = true }
 rusqlite = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
-hex = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
+chrono = { workspace = true }
 sha2 = { workspace = true }
+migrate = { workspace = true }
 tempfile = { workspace = true }
 testkit = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

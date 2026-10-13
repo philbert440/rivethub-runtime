@@ -15,7 +15,6 @@ use common::read_pragmas;
 use common::read_row_count;
 use common::read_table_columns;
 use common::schema_recording;
-use memory_sqlite::SqliteStore;
 use sha2::Digest;
 use sha2::Sha256;
 use tempfile::tempdir;
@@ -39,9 +38,7 @@ fn a_fresh_file_matches_the_recorded_schema() -> TestResult<()> {
     let recording = schema_recording()?;
     let dir = tempdir()?;
     let path = dir.path().join("memory.sqlite");
-    {
-        let _store = SqliteStore::open(&path)?;
-    }
+    migrate::sqlite(&path)?;
     let conn = connection(&path)?;
     assert_eq!(read_pragmas(&conn)?, recording.fresh.pragmas);
     assert_eq!(
@@ -63,9 +60,7 @@ fn a_fresh_file_matches_the_recorded_schema() -> TestResult<()> {
 fn the_recorded_v7_fixture_opens_unchanged() -> TestResult<()> {
     let recording = schema_recording()?;
     let fixture = fixture_copy("fixture-v7.sqlite")?;
-    {
-        let _store = SqliteStore::open(fixture.path())?;
-    }
+    migrate::sqlite(fixture.path())?;
     let conn = connection(fixture.path())?;
     assert_eq!(read_pragmas(&conn)?, recording.fixture.pragmas);
     assert!(
@@ -98,10 +93,56 @@ fn the_recorded_v7_fixture_opens_unchanged() -> TestResult<()> {
 fn opening_a_v7_file_writes_nothing() -> TestResult<()> {
     let fixture = fixture_copy("fixture-v7.sqlite")?;
     let before = fs::read(fixture.path())?;
-    {
-        let _store = SqliteStore::open(fixture.path())?;
-    }
+    migrate::sqlite(fixture.path())?;
     let after = fs::read(fixture.path())?;
     assert_eq!(before, after, "a current file must open without rewrites");
     Ok(())
+}
+
+#[test]
+fn a_delete_mode_v5_backup_is_the_original_file() -> TestResult<()> {
+    let dir = tempdir()?;
+    let path = delete_mode_v5(dir.path())?;
+    let original = fs::read(&path)?;
+    let status = migrate::sqlite(&path)?;
+    assert_eq!(status.current, 7);
+    let backup = dir.path().join("memory.sqlite.v5.bak");
+    assert_eq!(
+        fs::read(&backup)?,
+        original,
+        "the .v5.bak must be the delete-mode original"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_existing_backup_is_not_replaced() -> TestResult<()> {
+    let dir = tempdir()?;
+    let path = delete_mode_v5(dir.path())?;
+    let original = fs::read(&path)?;
+    let backup = dir.path().join("memory.sqlite.v5.bak");
+    let marker = b"pre-existing backup must stay untouched";
+    fs::write(&backup, marker)?;
+    match migrate::sqlite(&path) {
+        Err(migrate::Error::BackupExists { path: reported }) => assert_eq!(reported, backup),
+        other => panic!("expected BackupExists, got {other:?}"),
+    }
+    assert_eq!(
+        fs::read(&path)?,
+        original,
+        "the database must stay unchanged"
+    );
+    assert_eq!(fs::read(&backup)?, marker, "the backup must stay unchanged");
+    Ok(())
+}
+
+fn delete_mode_v5(dir: &std::path::Path) -> TestResult<std::path::PathBuf> {
+    let path = dir.join("memory.sqlite");
+    fs::copy(common::recording("upgrade-v5.sqlite"), &path)?;
+    let conn = rusqlite::Connection::open(&path)?;
+    let mode: String = conn.query_row("PRAGMA journal_mode = DELETE", [], |row| row.get(0))?;
+    assert_eq!(mode, "delete");
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(version, 5);
+    Ok(path)
 }

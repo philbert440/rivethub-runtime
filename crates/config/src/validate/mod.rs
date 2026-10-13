@@ -226,6 +226,21 @@ fn removed_key_finding(
             Segment::Key(grand),
             Segment::Key(parent),
             Segment::Key(key),
+        ] if head == "memory"
+            && grand == "postgres"
+            && parent == "embedded"
+            && key == "auto_migrate" =>
+        {
+            Some(Finding::warning(
+                path.to_string(),
+                "auto_migrate is gone; run rivethub-migrate",
+            ))
+        }
+        [
+            Segment::Key(head),
+            Segment::Key(grand),
+            Segment::Key(parent),
+            Segment::Key(key),
         ] if head == "memory" && grand == "postgres" && parent == "embedded" => Some(
             removed_key_warning(path.to_string(), &RemovedEmbedKey::from_str(key).ok()?),
         ),

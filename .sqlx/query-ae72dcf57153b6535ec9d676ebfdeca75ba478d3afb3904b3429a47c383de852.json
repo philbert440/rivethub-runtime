@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select coalesce(max(version), 0) as \"applied!\" from _sqlx_migrations where success",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "applied!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ae72dcf57153b6535ec9d676ebfdeca75ba478d3afb3904b3429a47c383de852"
+}

@@ -37,7 +37,7 @@ async fn reset(pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn replay_public_arm(pool: PgPool) -> TestResult {
     let queue = queue_present(&pool).await?;
     for file in GOLDEN_FILES {
@@ -111,7 +111,7 @@ async fn replay_public_arm(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn scenario_inventory_is_covered(_pool: PgPool) -> TestResult {
     let mut total = 0usize;
     let mut seen: Vec<String> = Vec::new();

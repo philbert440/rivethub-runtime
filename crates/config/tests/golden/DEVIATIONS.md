@@ -202,11 +202,13 @@ Each carries a table test in `tests/decisions.rs` naming the decision:
 
 `tests/decisions.rs` also pins the inventory's documented defaults that the
 typed config exposes (`den.port` 5174, `memory.postgres.embedded.port` 5433,
-`auto_migrate` true, `max_connections` 96) and verbatim messages the
+`max_connections` 96) and verbatim messages the
 recordings do not reach (blank `den.host`, `den.port: 0`, blank
 `den.allowed_origins` entries, `runtime.turn_timeout: 0`, shell-unsafe
 `mesh.advertise_host`, empty/ReDoS/invalid redaction patterns, claude-cli
 `permission_prompts` / `permission_timeout_ms`).
+`memory.postgres.embedded.auto_migrate` is not one of those defaults: the key
+is gone, and a document that sets it warns once.
 
 ## Diagnostic-text allowance (CONTRACT §3)
 

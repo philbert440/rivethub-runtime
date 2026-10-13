@@ -486,7 +486,6 @@ fn inventory_documented_defaults_appear_in_the_typed_config()
         .ok_or("memory.postgres missing")?;
     let embedded = postgres.embedded.as_ref().ok_or("embedded missing")?;
     assert_eq!(embedded.port, 5433, "embedded.port default");
-    assert!(embedded.auto_migrate, "embedded.auto_migrate default");
     assert_eq!(
         embedded.max_connections, 96,
         "embedded.max_connections default"

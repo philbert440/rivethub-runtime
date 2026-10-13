@@ -100,7 +100,7 @@ fn list_query(limit: u32) -> TagListQuery {
     }
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn add_tag_accepts_ids_and_session_keys(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let conversation = seed_conversation(&pool, "claude-code:tags").await?;
@@ -193,7 +193,7 @@ async fn add_tag_accepts_ids_and_session_keys(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn list_pending_counts_and_lookup_read_the_tags(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let conversation = seed_conversation(&pool, "claude-code:read").await?;
@@ -292,7 +292,7 @@ async fn list_pending_counts_and_lookup_read_the_tags(pool: PgPool) -> TestResul
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn decide_tags_updates_exactly_the_given_ids(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let conversation = seed_conversation(&pool, "claude-code:decide").await?;
@@ -352,7 +352,7 @@ async fn decide_tags_updates_exactly_the_given_ids(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn decide_tag_removals_follows_the_removal_rules(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let conversation = seed_conversation(&pool, "claude-code:removal").await?;
@@ -422,7 +422,7 @@ async fn decide_tag_removals_follows_the_removal_rules(pool: PgPool) -> TestResu
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn taxonomy_upsert_decide_and_merge(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let conversation = seed_conversation(&pool, "claude-code:taxonomy").await?;
@@ -548,7 +548,7 @@ async fn taxonomy_upsert_decide_and_merge(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn pre_0019_databases_get_empty_reads_and_refused_writes(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     sqlx::query("DROP TABLE rh_tag_taxonomy CASCADE")

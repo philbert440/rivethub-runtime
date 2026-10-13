@@ -1,0 +1,36 @@
+[package]
+name = "migrate"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+clap = { workspace = true }
+config = { workspace = true }
+rusqlite = { workspace = true }
+sqlx = { workspace = true, features = ["macros"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt"] }
+
+[dev-dependencies]
+hex = { workspace = true }
+memory-postgres = { workspace = true }
+memory-sqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+testkit = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+uuid = { workspace = true }
+
+[[bin]]
+name = "rivethub-migrate"
+path = "src/bin/rivethub-migrate.rs"
+
+[lints]
+workspace = true

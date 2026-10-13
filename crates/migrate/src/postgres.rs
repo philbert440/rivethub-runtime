@@ -1,0 +1,155 @@
+use std::collections::BTreeSet;
+use std::time::Duration;
+
+use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
+
+use crate::Status;
+use crate::error::Error;
+use crate::error::relation_missing;
+
+pub static POSTGRES: sqlx::migrate::Migrator = sqlx::migrate!();
+
+pub async fn postgres(url: &str) -> Result<Status, Error> {
+    let pool = PgPoolOptions::new()
+        .max_connections(2)
+        .acquire_timeout(Duration::from_secs(10))
+        .connect(url)
+        .await
+        .map_err(Error::PostgresConnect)?;
+    let status = postgres_pool(&pool).await;
+    pool.close().await;
+    status
+}
+
+pub async fn postgres_pool(pool: &PgPool) -> Result<Status, Error> {
+    POSTGRES.run(pool).await.map_err(Error::PostgresMigrate)?;
+    require_tracked(pool).await?;
+    postgres_status_pool(pool).await
+}
+
+pub async fn postgres_status(url: &str) -> Result<Status, Error> {
+    let pool = PgPoolOptions::new()
+        .max_connections(2)
+        .acquire_timeout(Duration::from_secs(10))
+        .connect(url)
+        .await
+        .map_err(Error::PostgresConnect)?;
+    let status = postgres_status_pool(&pool).await;
+    pool.close().await;
+    status
+}
+
+pub async fn postgres_status_pool(pool: &PgPool) -> Result<Status, Error> {
+    let required = required()?;
+    let current = newest_applied(pool).await?;
+    Ok(Status {
+        current,
+        required,
+        pending: POSTGRES
+            .migrations
+            .iter()
+            .filter(|migration| migration.version > current)
+            .count(),
+    })
+}
+
+pub fn required() -> Result<i64, Error> {
+    POSTGRES
+        .migrations
+        .iter()
+        .map(|migration| migration.version)
+        .max()
+        .ok_or(Error::PostgresEmpty)
+}
+
+async fn require_tracked(pool: &PgPool) -> Result<(), Error> {
+    let present = tracked_names(pool).await?;
+    let missing: Vec<String> = expected_migration_files()
+        .into_iter()
+        .filter(|name| !present.contains(name))
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::TrackingMissing {
+            missing: missing.join(", "),
+        })
+    }
+}
+
+fn expected_migration_files() -> BTreeSet<String> {
+    POSTGRES
+        .migrations
+        .iter()
+        .filter(|migration| migration.migration_type.is_up_migration())
+        .map(migration_file_name)
+        .collect()
+}
+
+fn migration_file_name(migration: &sqlx::migrate::Migration) -> String {
+    let description = migration.description.replace(' ', "_");
+    format!(
+        "{:04}_{description}{}",
+        migration.version,
+        migration.migration_type.suffix()
+    )
+}
+
+async fn tracked_names(pool: &PgPool) -> Result<BTreeSet<String>, Error> {
+    match sqlx::query_scalar!("SELECT name FROM _rivetos_migrations")
+        .fetch_all(pool)
+        .await
+    {
+        Ok(names) => Ok(names.into_iter().collect()),
+        Err(source) if relation_missing(&source) => Ok(BTreeSet::new()),
+        Err(source) => Err(Error::PostgresVersion(source)),
+    }
+}
+
+async fn newest_applied(pool: &PgPool) -> Result<i64, Error> {
+    match sqlx::query!(
+        "select coalesce(max(version), 0) as \"applied!\" from _sqlx_migrations where success"
+    )
+    .fetch_one(pool)
+    .await
+    {
+        Ok(row) => Ok(row.applied),
+        Err(source) if relation_missing(&source) => Ok(0),
+        Err(source) => Err(Error::PostgresVersion(source)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::POSTGRES;
+    use super::migration_file_name;
+
+    #[test]
+    fn migration_file_names_are_the_sql_files() {
+        let mut from_migrator: Vec<String> = POSTGRES
+            .migrations
+            .iter()
+            .map(migration_file_name)
+            .collect();
+        from_migrator.sort();
+        let mut on_disk = Vec::new();
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        for entry in std::fs::read_dir(dir).expect("migrations directory") {
+            let path = entry.expect("migration entry").path();
+            if path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("sql"))
+            {
+                on_disk.push(
+                    path.file_name()
+                        .expect("migration file name")
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
+        on_disk.sort();
+        assert_eq!(from_migrator, on_disk);
+    }
+}

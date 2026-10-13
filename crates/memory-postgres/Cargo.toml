@@ -25,6 +25,7 @@ uuid = { workspace = true }
 wire = { workspace = true }
 
 [dev-dependencies]
+migrate = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
 testkit = { workspace = true }

@@ -4,14 +4,18 @@ use rusqlite::OptionalExtension;
 use rusqlite::Transaction;
 use rusqlite::params;
 
-use crate::error::SqliteError;
+use crate::error::Error;
 use crate::version::SchemaVersion;
 
-pub(super) fn ladder(
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "the upgrade module is private, so rustc's unreachable_pub rejects plain pub; crate visibility is the widest reachable form"
+)]
+pub(crate) fn ladder(
     conn: &mut Connection,
     from: SchemaVersion,
     now: DateTime<Utc>,
-) -> Result<(), SqliteError> {
+) -> Result<(), Error> {
     let mut current = from;
     while let Some(next) = current.next() {
         step(conn, next, now)?;
@@ -20,7 +24,7 @@ pub(super) fn ladder(
     Ok(())
 }
 
-fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<(), SqliteError> {
+fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<(), Error> {
     match to {
         SchemaVersion::V1 | SchemaVersion::V2 | SchemaVersion::V4 | SchemaVersion::V5 => Ok(()),
         SchemaVersion::V3 => in_transaction(conn, to, |tx| {
@@ -36,8 +40,8 @@ fn in_transaction(
     conn: &mut Connection,
     to: SchemaVersion,
     run: impl FnOnce(&Transaction<'_>) -> rusqlite::Result<()>,
-) -> Result<(), SqliteError> {
-    let failed = |source: rusqlite::Error| SqliteError::Upgrade {
+) -> Result<(), Error> {
+    let failed = |source: rusqlite::Error| Error::SqliteUpgrade {
         version: to.number(),
         source,
     };

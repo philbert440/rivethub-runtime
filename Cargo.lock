@@ -1626,6 +1626,7 @@ dependencies = [
  "chrono",
  "hex",
  "kernel",
+ "migrate",
  "parking_lot",
  "pgvector",
  "serde",
@@ -1646,16 +1647,36 @@ name = "memory-sqlite"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "hex",
+ "migrate",
  "parking_lot",
  "rusqlite",
- "serde",
- "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "testkit",
  "thiserror 2.0.21",
  "tokio",
+]
+
+[[package]]
+name = "migrate"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "config",
+ "hex",
+ "memory-postgres",
+ "memory-sqlite",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tempfile",
+ "testkit",
+ "thiserror 2.0.21",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -2182,6 +2203,7 @@ dependencies = [
  "gateway",
  "kernel",
  "memory-postgres",
+ "migrate",
  "nix 0.30.1",
  "reqwest",
  "serde",

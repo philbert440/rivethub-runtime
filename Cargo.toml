@@ -34,7 +34,9 @@ hyper = { version = "1", default-features = false }
 hyper-util = { version = "0.1", default-features = false, features = ["service", "tokio"] }
 kernel = { path = "crates/kernel", version = "0.1.0" }
 libtest-mimic = "0.8"
+migrate = { path = "crates/migrate", version = "0.1.0" }
 memory-postgres = { path = "crates/memory-postgres", version = "0.1.0" }
+memory-sqlite = { path = "crates/memory-sqlite", version = "0.1.0" }
 nix = { version = "0.30", features = ["process", "signal", "fs", "user"] }
 parking_lot = "0.12"
 pgvector = { version = "0.4", features = ["sqlx"] }

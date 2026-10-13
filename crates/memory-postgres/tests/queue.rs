@@ -76,7 +76,7 @@ fn embed_job() -> Job {
     }
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn enqueue_claims_and_completes_through_the_public_api(pool: PgPool) -> TestResult {
     if !gated(&pool).await? {
         return Ok(());
@@ -135,7 +135,7 @@ async fn enqueue_claims_and_completes_through_the_public_api(pool: PgPool) -> Te
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
     if !gated(&pool).await? {
         return Ok(());
@@ -182,7 +182,7 @@ async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn role_scoping_keeps_the_task_lists_apart(pool: PgPool) -> TestResult {
     if !gated(&pool).await? {
         return Ok(());
@@ -252,7 +252,7 @@ async fn role_scoping_keeps_the_task_lists_apart(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn queue_health_reports_buckets(pool: PgPool) -> TestResult {
     if !gated(&pool).await? {
         return Ok(());
@@ -288,7 +288,7 @@ async fn queue_health_reports_buckets(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn the_store_reports_the_queue_as_unavailable(pool: PgPool) -> TestResult {
     if gated(&pool).await? {
         return Ok(());
