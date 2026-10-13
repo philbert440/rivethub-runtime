@@ -1,5 +1,6 @@
 use crate::json::JsonObject;
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumIter, EnumString};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -21,8 +22,11 @@ pub struct MediaFields {
     pub mime_type: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString, EnumIter,
+)]
 #[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "camelCase")]
 pub enum Role {
     System,
     User,

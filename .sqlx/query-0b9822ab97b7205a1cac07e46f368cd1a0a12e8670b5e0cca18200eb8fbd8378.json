@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into rh_conversations (session_key, agent, channel, title, settings,\n                                           task_id, owner_user_id)\n             values ($1, $2, $3, $4, coalesce($5, '{}'::jsonb), $6::text::uuid, $7)\n             on conflict (session_key, agent) do update set updated_at = now(),\n               title = case when $8 then excluded.title\n                            else rh_conversations.title end,\n               settings = case when $9 then excluded.settings\n                               else rh_conversations.settings end,\n               task_id = case when $10 then excluded.task_id\n                              else rh_conversations.task_id end,\n               owner_user_id = coalesce(rh_conversations.owner_user_id, excluded.owner_user_id)\n             returning id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Text",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0b9822ab97b7205a1cac07e46f368cd1a0a12e8670b5e0cca18200eb8fbd8378"
+}

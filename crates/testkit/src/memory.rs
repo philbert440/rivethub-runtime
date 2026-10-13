@@ -19,6 +19,7 @@ use kernel::memory::TagTaxonomyDecision;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
 use tokio::sync::Mutex;
+use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryStatsResponse;
 use wire::gateway::memory::PendingTagWire;
 use wire::gateway::memory::TagCount;
@@ -101,9 +102,10 @@ impl MemoryStore for FakeMemoryStore {
             .take(usize::try_from(query.limit.get()).unwrap_or(0))
             .map(|e| MemorySearchResult {
                 id: e.id.clone().unwrap_or_default(),
+                source: MemoryHitSource::Message,
                 content: e.content.clone(),
-                role: e.role,
-                agent: e.agent.clone(),
+                role: Some(e.role),
+                agent: Some(e.agent.clone()),
                 relevance_score: 1.0,
                 created_at: e.created_at.unwrap_or_default(),
             })

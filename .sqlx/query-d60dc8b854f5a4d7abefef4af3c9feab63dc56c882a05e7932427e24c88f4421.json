@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select exists(select 1 from rh_messages\n                where conversation_id = $1 and metadata->>'ingest_key' = $2) as seen",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seen",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d60dc8b854f5a4d7abefef4af3c9feab63dc56c882a05e7932427e24c88f4421"
+}

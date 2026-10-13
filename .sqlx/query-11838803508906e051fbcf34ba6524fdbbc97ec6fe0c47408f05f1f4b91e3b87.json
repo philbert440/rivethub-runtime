@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update rh_tag_taxonomy set aliases = array_append(aliases, $2), updated_at = now() where key = $1 and value = $3 and not ($2 = any(aliases))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "11838803508906e051fbcf34ba6524fdbbc97ec6fe0c47408f05f1f4b91e3b87"
+}

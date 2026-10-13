@@ -205,6 +205,14 @@ unsigned integers, never `f64`; a fractional value in a config file is a type er
 (`prompt_ms: 12.4`) stay `f64`, as do sampling weights (`temperature`, `top_p`); `top_k` is an integer (`i32`, -1 disables).
 Check: dylint `counttype` (ports, counts, pids everywhere; the float settings rule in `config`).
 
+## ROWGET
+Anti-pattern: `sqlx::Row::get` on a query result — it panics on a missing column or a type mismatch, so a drifted column or
+a changed column width is a panic in the request path, and a fallback chained onto it silently substitutes a value.
+Pattern: every query reads into a typed row: `#[derive(sqlx::FromRow)]` with `QueryBuilder::build_query_as` where the
+statement is dynamic and `query_as!` where it is static, so a mismatch is a typed error; each arm's SQL casts derived
+columns to one declared type instead of the reader negotiating widths; `try_get` with `?` for the odd single column, and a
+decode failure is an error, never a substituted value. Check: clippy `disallowed-methods` (`sqlx::Row::get`).
+
 ## DUPTYPE
 Anti-pattern: the same enum defined in several modules (`Role`, `CaptureRole`, `stream::Role`). Pattern: one definition,
 imported where needed; a wire payload that genuinely differs gets a type that differs. Check: dylint `duptype` (same

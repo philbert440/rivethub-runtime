@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from rh_tag_taxonomy where key = $1 and value = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "53a3fbfcc6871837e7e13717ba1cfa89e7126828fb587b5a0f7f31cfdfdef24f"
+}

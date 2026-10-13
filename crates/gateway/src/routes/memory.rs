@@ -25,7 +25,6 @@ use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryBrowseResponse;
 use wire::gateway::memory::MemoryBrowseToolArgs;
 use wire::gateway::memory::MemoryGetFullToolArgs;
-use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryIngestSessionToolArgs;
 use wire::gateway::memory::MemoryScope;
 use wire::gateway::memory::MemorySearchHit;
@@ -159,12 +158,12 @@ async fn search(
 fn search_hit(result: wire::memory::MemorySearchResult) -> MemorySearchHit {
     MemorySearchHit {
         id: result.id,
-        source: MemoryHitSource::Message,
+        source: result.source,
         content: result.content,
         created_at: result.created_at,
         score: result.relevance_score,
-        role: Some(result.role),
-        agent: Some(result.agent),
+        role: result.role,
+        agent: result.agent,
         kind: None,
         tool_name: None,
         conversation_id: None,

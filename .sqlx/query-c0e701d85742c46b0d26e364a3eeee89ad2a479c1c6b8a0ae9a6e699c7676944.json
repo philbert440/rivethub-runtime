@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update rh_tags set value = $3, updated_at = now() where key = $1 and value = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c0e701d85742c46b0d26e364a3eeee89ad2a479c1c6b8a0ae9a6e699c7676944"
+}

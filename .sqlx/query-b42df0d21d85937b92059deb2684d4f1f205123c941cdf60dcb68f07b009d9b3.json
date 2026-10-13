@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from rh_tags t where t.key = $1 and t.value = $2 and exists (select 1 from rh_tags k where k.key = $1 and k.value = $3 and k.entity_type = t.entity_type and k.entity_id = t.entity_id) returning 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "?column?",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b42df0d21d85937b92059deb2684d4f1f205123c941cdf60dcb68f07b009d9b3"
+}

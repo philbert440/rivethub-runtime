@@ -12,6 +12,8 @@ paths = [
 globs = [
   ".github/*.md",
   ".github/workflows/*.yml",
+  ".sqlx/*.json",
+  "crates/*/migrations/*.sql",
   "crates/*/tests/golden/**/*.json",
   "crates/*/tests/golden/**/*.jsonl",
   "crates/*/tests/golden/**/*.md",

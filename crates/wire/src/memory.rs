@@ -1,4 +1,5 @@
 use crate::JsonObject;
+use crate::gateway::memory::MemoryHitSource;
 use crate::message::Role;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,9 +25,10 @@ pub struct MemoryEntry {
 #[serde(rename_all = "camelCase")]
 pub struct MemorySearchResult {
     pub id: String,
+    pub source: MemoryHitSource,
     pub content: String,
-    pub role: Role,
-    pub agent: String,
+    pub role: Option<Role>,
+    pub agent: Option<String>,
     pub relevance_score: f64,
     pub created_at: DateTime<Utc>,
 }

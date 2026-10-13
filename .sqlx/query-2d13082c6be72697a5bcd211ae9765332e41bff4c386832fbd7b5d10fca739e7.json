@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select\n                (select count(*) from rh_conversations) as \"conversations!\",\n                (select count(*) from rh_messages) as \"messages!\",\n                (select count(*) from rh_messages\n                  where role = 'tool' or tool_name is not null) as \"tool_calls!\",\n                (select count(*) from rh_summaries) as \"summaries!\",\n                (select count(embedding) from rh_messages) as \"embedded_messages!\",\n                (select count(*) from rh_messages\n                  where embedding is null\n                    and embed_status is distinct from 'unembeddable'\n                    and embed_status is distinct from 'failed'\n                    and (length(coalesce(content, '')) > 0\n                         or length(coalesce(tool_result, '')) > 0))\n                  + (select count(*) from rh_summaries\n                      where embedding is null\n                        and embed_status is distinct from 'unembeddable'\n                        and embed_status is distinct from 'failed')\n                  as \"embed_queue_depth!\",\n                (select count(*) from rh_messages where embed_status = 'failed')\n                  + (select count(*) from rh_summaries where embed_status = 'failed')\n                  as \"failed_embeddings!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "conversations!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "messages!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "tool_calls!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "summaries!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "embedded_messages!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "embed_queue_depth!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "failed_embeddings!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "2d13082c6be72697a5bcd211ae9765332e41bff4c386832fbd7b5d10fca739e7"
+}

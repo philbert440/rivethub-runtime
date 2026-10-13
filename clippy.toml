@@ -16,6 +16,7 @@ disallowed-methods = [
   { path = "tokio::runtime::Builder::new_current_thread", reason = "only the rivethub binary builds a runtime (RUNTIME)" },
   { path = "std::env::var", reason = "the environment is read once by the config crate (ENV)" },
   { path = "std::env::var_os", reason = "the environment is read once by the config crate (ENV)" },
+  { path = "sqlx::Row::get", reason = "panics on a missing column or a type mismatch; read into a `FromRow` struct or use `try_get` with `?`" },
 ]
 disallowed-macros = [
   { path = "tokio::main", reason = "libraries expose async fns; only the rivethub binary builds a runtime (RUNTIME)" },

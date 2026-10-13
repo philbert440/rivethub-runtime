@@ -36,6 +36,8 @@ pub struct ScenarioRecord {
     #[serde(default)]
     pub name: String,
     #[serde(default)]
+    pub schema: String,
+    #[serde(default)]
     pub steps: Vec<StepRecord>,
 }
 

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update rh_messages set access_count = access_count + 1,\n                        last_accessed_at = now() where id = any($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "485b0dc9d105f2b523a3b2ab98abb06f3c34a00dcb05e88afdd8a496fd2a6a88"
+}

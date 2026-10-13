@@ -398,15 +398,21 @@ pub struct CaptureHealth {
     pub impact: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
+)]
 #[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "snake_case")]
 pub enum TagEntityType {
     Conversation,
     Summary,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
+)]
 #[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "snake_case")]
 pub enum TagState {
     Suggested,
     Accepted,

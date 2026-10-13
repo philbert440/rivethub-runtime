@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update rh_tags set state = $2, source = case when source = 'rule' and $2 = 'accepted' then 'user' else source end, decided_by = coalesce($3, decided_by), decided_at = now(), updated_at = now() where id = any($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9f1ad8fcd98eb1c9f01f68bb1d387afdb73fc4d25ec6eaaab08e78e41b4ae3a7"
+}

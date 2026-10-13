@@ -168,7 +168,7 @@ pub struct Job {
     pub payload: JsonObject,
     pub key: Option<String>,
     pub key_mode: JobKeyMode,
-    pub priority: i64,
+    pub priority: i16,
     pub run_at: Option<DateTime<Utc>>,
 }
 

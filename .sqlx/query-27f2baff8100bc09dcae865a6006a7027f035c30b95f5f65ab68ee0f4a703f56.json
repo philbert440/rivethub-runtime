@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select pg_advisory_xact_lock(hashtext($1)) is not null as locked",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "locked",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "27f2baff8100bc09dcae865a6006a7027f035c30b95f5f65ab68ee0f4a703f56"
+}

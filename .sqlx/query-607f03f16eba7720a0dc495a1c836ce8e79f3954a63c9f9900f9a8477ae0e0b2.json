@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select c.id::text as \"session_id!\", c.title, c.agent, c.updated_at,\n                    (select count(*) from rh_messages m where m.conversation_id = c.id)\n                      as \"messages!\"\n               from rh_conversations c order by c.updated_at desc limit 12",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "agent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "agent"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "messages!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "607f03f16eba7720a0dc495a1c836ce8e79f3954a63c9f9900f9a8477ae0e0b2"
+}
