@@ -227,7 +227,9 @@ a changed column width is a panic in the request path, and a fallback chained on
 Pattern: every query reads into a typed row: `#[derive(sqlx::FromRow)]` with `QueryBuilder::build_query_as` where the
 statement is dynamic and `query_as!` where it is static, so a mismatch is a typed error; each arm's SQL casts derived
 columns to one declared type instead of the reader negotiating widths; `try_get` with `?` for the odd single column, and a
-decode failure is an error, never a substituted value. Check: clippy `disallowed-methods` (`sqlx::Row::get`).
+decode failure is an error, never a substituted value. Check: clippy `disallowed-methods` (`sqlx::Row::get`); xtask
+`SQLOFFLINE` (every cargo command in `cargo xtask check` runs with `SQLX_OFFLINE=true`, so a stale `.sqlx/` fails the local
+gate exactly as it fails CI, and `cargo sqlx prepare --workspace --check` runs when `DATABASE_URL` is set).
 
 ## DUPTYPE
 Anti-pattern: the same enum defined in several modules (`Role`, `CaptureRole`, `stream::Role`). Pattern: one definition,

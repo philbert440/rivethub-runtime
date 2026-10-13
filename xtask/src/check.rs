@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
 use crate::git::git;
+use std::ffi::OsStr;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -20,17 +21,22 @@ fn finish(label: &str, findings: &[String]) -> Result<()> {
     }
 }
 
-pub fn run_tool(root: &Path, command: &str, args: &[&str]) -> Result<()> {
-    let status = Command::new(command)
+fn offline_cargo(root: &Path, args: &[&str]) -> Command {
+    let mut command = Command::new("cargo");
+    command
         .current_dir(root)
         .args(args)
-        .status()
-        .map_err(Error::Io)?;
+        .env("SQLX_OFFLINE", "true");
+    command
+}
+
+pub fn run_tool(root: &Path, args: &[&str]) -> Result<()> {
+    let status = offline_cargo(root, args).status().map_err(Error::Io)?;
     if status.success() {
         Ok(())
     } else {
         Err(Error::Command {
-            command: format!("{command} {}", args.join(" ")),
+            command: format!("cargo {}", args.join(" ")),
             stderr: String::new(),
         })
     }
@@ -62,8 +68,51 @@ fn machete_with(root: &Path, program: &str) -> Result<()> {
     }
 }
 
+pub fn sqlx_prepare_check(root: &Path) -> Result<()> {
+    if !database_url_set() {
+        return Ok(());
+    }
+    sqlx_prepare_check_with(root, "cargo-sqlx")
+}
+
+fn database_url_set() -> bool {
+    std::env::vars_os().any(|(name, _)| name == OsStr::new("DATABASE_URL"))
+}
+
+fn sqlx_prepare_command(root: &Path, program: &str) -> Command {
+    let mut command = Command::new(program);
+    command
+        .current_dir(root)
+        .args(["sqlx", "prepare", "--workspace", "--check"])
+        .env("SQLX_OFFLINE", "false");
+    command
+}
+
+fn sqlx_prepare_check_with(root: &Path, program: &str) -> Result<()> {
+    let status = sqlx_prepare_command(root, program)
+        .status()
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                Error::MissingTool {
+                    tool: "sqlx-cli".to_owned(),
+                    install: "cargo install sqlx-cli --locked --no-default-features --features rustls,postgres"
+                        .to_owned(),
+                }
+            } else {
+                Error::Io(error)
+            }
+        })?;
+    if status.success() {
+        return Ok(());
+    }
+    Err(Error::Command {
+        command: "cargo sqlx prepare --workspace --check".to_owned(),
+        stderr: String::new(),
+    })
+}
+
 pub fn check(root: &Path, locked: bool) -> Result<()> {
-    run_tool(root, "cargo", &["fmt", "--all", "--check"])?;
+    run_tool(root, &["fmt", "--all", "--check"])?;
     let mut clippy = vec!["clippy"];
     if locked {
         clippy.push("--locked");
@@ -76,11 +125,12 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
         "-D",
         "warnings",
     ]);
-    run_tool(root, "cargo", &clippy)?;
+    run_tool(root, &clippy)?;
     let dylint = Command::new("cargo")
         .current_dir(root)
         .args(["dylint", "--all", "--workspace", "--", "--all-targets"])
         .env("DYLINT_RUSTFLAGS", "-Dwarnings")
+        .env("SQLX_OFFLINE", "true")
         .status()
         .map_err(Error::Io)?;
     if !dylint.success() {
@@ -94,8 +144,9 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
         deny.push("--locked");
     }
     deny.push("check");
-    run_tool(root, "cargo", &deny)?;
+    run_tool(root, &deny)?;
     machete(root)?;
+    sqlx_prepare_check(root)?;
 
     let mut findings = Vec::new();
     crate::lang::check(root, &mut findings)?;
@@ -172,6 +223,10 @@ pub fn install_hooks_from(root: &Path, binary: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::machete_with;
+    use super::offline_cargo;
+    use super::sqlx_prepare_check_with;
+    use super::sqlx_prepare_command;
+    use std::ffi::OsStr;
     use std::path::Path;
 
     #[test]
@@ -191,6 +246,62 @@ mod tests {
         assert!(
             matches!(error, crate::error::Error::Command { ref command, .. } if command == "false"),
             "a non-zero exit must fail the gate as a command error, got: {error}"
+        );
+    }
+
+    #[test]
+    fn missing_sqlx_names_the_install_command() {
+        let error = sqlx_prepare_check_with(Path::new("."), "xtask-sqlx-missing").unwrap_err();
+        assert!(
+            error.to_string().contains(
+                "cargo install sqlx-cli --locked --no-default-features --features rustls,postgres"
+            ),
+            "the error must carry the install command, got: {error}"
+        );
+    }
+
+    #[test]
+    fn sqlx_prepare_failure_is_a_command_error() {
+        let error = sqlx_prepare_check_with(Path::new("."), "false").unwrap_err();
+        assert!(
+            matches!(error, crate::error::Error::Command { ref command, .. }
+                if command == "cargo sqlx prepare --workspace --check"),
+            "a non-zero exit must fail the gate as a command error, got: {error}"
+        );
+    }
+
+    #[test]
+    fn cargo_children_run_offline() {
+        let command = offline_cargo(Path::new("."), &["clippy", "--workspace"]);
+        assert_eq!(command.get_program(), OsStr::new("cargo"));
+        let envs: Vec<_> = command.get_envs().collect();
+        assert_eq!(
+            envs,
+            [(OsStr::new("SQLX_OFFLINE"), Some(OsStr::new("true")))],
+            "every cargo child command must run offline"
+        );
+    }
+
+    #[test]
+    fn sqlx_prepare_child_runs_against_the_database() {
+        let command = sqlx_prepare_command(Path::new("."), "cargo-sqlx");
+        assert_eq!(command.get_program(), OsStr::new("cargo-sqlx"));
+        let envs: Vec<_> = command.get_envs().collect();
+        assert_eq!(
+            envs,
+            [(OsStr::new("SQLX_OFFLINE"), Some(OsStr::new("false")))],
+            "the sqlx child must read the live database, not the cache"
+        );
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(
+            args,
+            [
+                OsStr::new("sqlx"),
+                OsStr::new("prepare"),
+                OsStr::new("--workspace"),
+                OsStr::new("--check")
+            ],
+            "the direct spawn follows cargo's external-subcommand convention: cargo-sqlx sqlx <args>"
         );
     }
 }

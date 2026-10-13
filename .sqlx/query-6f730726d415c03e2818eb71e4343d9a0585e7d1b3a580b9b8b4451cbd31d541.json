@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select to_regclass('graphile_worker._private_jobs') is not null\n              and to_regprocedure('graphile_worker.add_job(text,json,text,timestamptz,int,text,int,text)')\n                is not null as \"present!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "present!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6f730726d415c03e2818eb71e4343d9a0585e7d1b3a580b9b8b4451cbd31d541"
+}
