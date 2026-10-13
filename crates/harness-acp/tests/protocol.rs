@@ -18,6 +18,8 @@ use kernel::harness::ToolCallInfo;
 use kernel::harness::ToolCallStatus;
 use kernel::harness::ToolCallUpdate;
 use kernel::harness::TurnInput;
+use serde::Deserialize;
+use serde::Serialize;
 use tempfile::tempdir;
 use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
@@ -26,6 +28,11 @@ use wire::session_id::SessionId;
 use wire::stream::ThinkingLevel;
 
 const SESSION: &str = "ses_fake0123456789abcdefgh";
+
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
+struct CommandInput {
+    command: String,
+}
 
 fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
     static RUNTIME: OnceLock<Result<tokio::runtime::Runtime, String>> = OnceLock::new();
@@ -133,8 +140,13 @@ fn a_turn_streams_the_mapped_events_in_order() {
         let collected = collect_until_turn_end(&mut events)
             .await
             .expect("events before turn end");
-        let input: JsonObject =
-            serde_json::from_value(serde_json::json!({"command": "ls -1"})).expect("object input");
+        let input: JsonObject = serde_json::from_value(
+            serde_json::to_value(CommandInput {
+                command: "ls -1".to_owned(),
+            })
+            .expect("input serializes"),
+        )
+        .expect("object input");
         assert_eq!(collected, expected_events(input));
     });
 }
@@ -178,10 +190,10 @@ fn a_permission_request_is_answered_through_the_port() {
         assert_eq!(request.name, "run the build");
         assert_eq!(request.tool_call_id.as_deref(), Some("fake-tool-1"));
         assert_eq!(request.reason, None);
-        assert_eq!(
-            request.input.as_map().get("command"),
-            Some(&serde_json::json!("cargo build"))
-        );
+        let input: CommandInput =
+            serde_json::from_value(serde_json::to_value(&request.input).expect("input serializes"))
+                .expect("input decodes");
+        assert_eq!(input.command, "cargo build");
         adapter
             .answer_permission(&session, &request.request_id, ApprovalDecision::Allow)
             .await

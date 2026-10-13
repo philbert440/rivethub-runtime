@@ -77,12 +77,7 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
         uuid_to_label
             .entry(result.conversation_id.clone())
             .or_insert_with(|| recorded_id.clone());
-        let actual = serde_json::json!({
-            "ok": result.ok,
-            "conversation_id": result.conversation_id,
-            "inserted": result.inserted,
-            "skipped": result.skipped,
-        });
+        let actual = serde_json::to_value(&result)?;
         let mut expected = field(entry, "result")?.clone();
         if let Some(object) = expected.as_object_mut() {
             object.insert(
@@ -273,7 +268,18 @@ fn decode(raw: &str) -> Result<Value, sqlx::Error> {
     })
 }
 
-async fn dump_conversations(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
+async fn dump_conversations(pool: &PgPool) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+    #[derive(serde::Serialize)]
+    struct GoldenConversation {
+        session_key: String,
+        agent: String,
+        channel: String,
+        title: Option<String>,
+        settings: Value,
+        task_id: Option<String>,
+        active: bool,
+        owner_user_id: Option<String>,
+    }
     let rows = sqlx::query(
         "SELECT session_key::text AS session_key, agent::text AS agent, channel::text AS channel,
                 title::text AS title, settings::text AS settings, task_id::text AS task_id,
@@ -285,16 +291,16 @@ async fn dump_conversations(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
     let mut out = Vec::new();
     for row in rows {
         let settings: String = row.try_get("settings")?;
-        out.push(serde_json::json!({
-            "session_key": row.try_get::<String, _>("session_key")?,
-            "agent": row.try_get::<String, _>("agent")?,
-            "channel": row.try_get::<String, _>("channel")?,
-            "title": row.try_get::<Option<String>, _>("title")?,
-            "settings": decode(&settings)?,
-            "task_id": row.try_get::<Option<String>, _>("task_id")?,
-            "active": row.try_get::<String, _>("active")? == "true",
-            "owner_user_id": row.try_get::<Option<String>, _>("owner_user_id")?,
-        }));
+        out.push(serde_json::to_value(GoldenConversation {
+            session_key: row.try_get("session_key")?,
+            agent: row.try_get("agent")?,
+            channel: row.try_get("channel")?,
+            title: row.try_get("title")?,
+            settings: decode(&settings)?,
+            task_id: row.try_get("task_id")?,
+            active: row.try_get::<String, _>("active")? == "true",
+            owner_user_id: row.try_get("owner_user_id")?,
+        })?);
     }
     Ok(out)
 }
@@ -302,7 +308,22 @@ async fn dump_conversations(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
 async fn dump_messages(
     pool: &PgPool,
     uuid_to_label: &BTreeMap<String, String>,
-) -> Result<Vec<Value>, sqlx::Error> {
+) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+    #[derive(serde::Serialize)]
+    struct GoldenMessage {
+        id: String,
+        conversation_id: String,
+        agent: String,
+        channel: String,
+        role: String,
+        content: String,
+        tool_name: Option<String>,
+        tool_args: Option<Value>,
+        tool_result: Option<String>,
+        metadata: Value,
+        owner_user_id: Option<String>,
+        content_len: i32,
+    }
     let rows = sqlx::query(
         "SELECT m.id::text AS id, m.conversation_id::text AS conversation_id,
                 m.agent::text AS agent,
@@ -320,25 +341,36 @@ async fn dump_messages(
         let metadata: String = row.try_get("metadata")?;
         let conversation_id: String = row.try_get("conversation_id")?;
         let tool_args: Option<String> = row.try_get("tool_args")?;
-        out.push(serde_json::json!({
-            "id": row.try_get::<String, _>("id")?,
-            "conversation_id": uuid_to_label.get(&conversation_id).cloned().unwrap_or(conversation_id),
-            "agent": row.try_get::<String, _>("agent")?,
-            "channel": row.try_get::<String, _>("channel")?,
-            "role": row.try_get::<String, _>("role")?,
-            "content": row.try_get::<String, _>("content")?,
-            "tool_name": row.try_get::<Option<String>, _>("tool_name")?,
-            "tool_args": tool_args.map(|text| decode(&text)).transpose()?,
-            "tool_result": row.try_get::<Option<String>, _>("tool_result")?,
-            "metadata": decode(&metadata)?,
-            "owner_user_id": row.try_get::<Option<String>, _>("owner_user_id")?,
-            "content_len": row.try_get::<i32, _>("content_len")?,
-        }));
+        out.push(serde_json::to_value(GoldenMessage {
+            id: row.try_get("id")?,
+            conversation_id: uuid_to_label
+                .get(&conversation_id)
+                .cloned()
+                .unwrap_or(conversation_id),
+            agent: row.try_get("agent")?,
+            channel: row.try_get("channel")?,
+            role: row.try_get("role")?,
+            content: row.try_get("content")?,
+            tool_name: row.try_get("tool_name")?,
+            tool_args: tool_args.map(|text| decode(&text)).transpose()?,
+            tool_result: row.try_get("tool_result")?,
+            metadata: decode(&metadata)?,
+            owner_user_id: row.try_get("owner_user_id")?,
+            content_len: row.try_get("content_len")?,
+        })?);
     }
     Ok(out)
 }
 
-async fn dump_jobs(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
+async fn dump_jobs(pool: &PgPool) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+    #[derive(serde::Serialize)]
+    struct GoldenJob {
+        task: String,
+        payload: Value,
+        key: String,
+        max_attempts: i64,
+        priority: i64,
+    }
     let rows = sqlx::query(
         "SELECT t.identifier AS task, j.payload::text AS payload, j.key::text AS key,
                 j.max_attempts::text AS max_attempts, j.priority::text AS priority
@@ -353,13 +385,13 @@ async fn dump_jobs(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
         let payload: String = row.try_get("payload")?;
         let max_attempts: String = row.try_get("max_attempts")?;
         let priority: String = row.try_get("priority")?;
-        out.push(serde_json::json!({
-            "task": row.try_get::<String, _>("task")?,
-            "payload": decode(&payload)?,
-            "key": row.try_get::<String, _>("key")?,
-            "max_attempts": int(&max_attempts)?,
-            "priority": int(&priority)?,
-        }));
+        out.push(serde_json::to_value(GoldenJob {
+            task: row.try_get("task")?,
+            payload: decode(&payload)?,
+            key: row.try_get("key")?,
+            max_attempts: int(&max_attempts)?,
+            priority: int(&priority)?,
+        })?);
     }
     Ok(out)
 }
@@ -372,7 +404,15 @@ fn int(raw: &str) -> Result<i64, sqlx::Error> {
         })
 }
 
-async fn dump_tags(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
+async fn dump_tags(pool: &PgPool) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+    #[derive(serde::Serialize)]
+    struct GoldenTag {
+        entity_type: String,
+        key: String,
+        value: String,
+        state: String,
+        source: String,
+    }
     let rows = sqlx::query(
         "SELECT entity_type::text AS entity_type, key::text AS key, value::text AS value,
                 state::text AS state, source::text AS source
@@ -382,13 +422,13 @@ async fn dump_tags(pool: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
     .await?;
     let mut out = Vec::new();
     for row in rows {
-        out.push(serde_json::json!({
-            "entity_type": row.try_get::<String, _>("entity_type")?,
-            "key": row.try_get::<String, _>("key")?,
-            "value": row.try_get::<String, _>("value")?,
-            "state": row.try_get::<String, _>("state")?,
-            "source": row.try_get::<String, _>("source")?,
-        }));
+        out.push(serde_json::to_value(GoldenTag {
+            entity_type: row.try_get("entity_type")?,
+            key: row.try_get("key")?,
+            value: row.try_get("value")?,
+            state: row.try_get("state")?,
+            source: row.try_get("source")?,
+        })?);
     }
     Ok(out)
 }

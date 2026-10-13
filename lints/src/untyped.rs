@@ -1,16 +1,21 @@
+use rustc_hir::Node;
 use rustc_lint::{LateContext, LateLintPass};
+use rustc_span::{ExpnId, ExpnKind, MacroKind, Span, def_id::DefId};
 
 use crate::util;
 
 dylint_linting::impl_late_lint!(
     pub(crate) UNTYPED,
     Warn,
-    "raw serde value outside its sanctioned holders (a typed struct, wire::JsonObject, or config::FreeForm) → docs/PATTERNS.md#untyped",
+    "raw serde value or json! outside its sanctioned holders (a typed struct, wire::JsonObject, or config::FreeForm) → docs/PATTERNS.md#untyped",
     Untyped::default()
 );
 
 #[derive(Default)]
 pub(crate) struct Untyped;
+
+const JSON_MACRO: &str = "serde_json::json";
+const JSON_MACRO_TAIL: &str = "::serde_json::json";
 
 const BANNED: [(&str, &str, bool); 6] = [
     ("serde_json", "Value", true),
@@ -20,6 +25,34 @@ const BANNED: [(&str, &str, bool); 6] = [
     ("serde_yaml", "Number", false),
     ("serde_yaml", "Sequence", false),
 ];
+
+fn is_json_macro(cx: &LateContext<'_>, def_id: DefId) -> bool {
+    let path = cx.tcx.def_path_str(def_id);
+    path == JSON_MACRO || path.ends_with(JSON_MACRO_TAIL)
+}
+
+fn json_macro_expn(cx: &LateContext<'_>, span: Span) -> Option<ExpnId> {
+    if span.ctxt().is_root() {
+        return None;
+    }
+    let mut expn = span.ctxt().outer_expn();
+    while expn != ExpnId::root() {
+        let data = expn.expn_data();
+        if let ExpnKind::Macro(MacroKind::Bang, name) = &data.kind {
+            let invoked = name.as_str();
+            if invoked == JSON_MACRO
+                || (invoked == "json"
+                    && data
+                        .macro_def_id
+                        .is_some_and(|def_id| is_json_macro(cx, def_id)))
+            {
+                return Some(expn);
+            }
+        }
+        expn = data.parent;
+    }
+    None
+}
 
 impl<'tcx> LateLintPass<'tcx> for Untyped {
     fn check_ty(
@@ -46,20 +79,20 @@ impl<'tcx> LateLintPass<'tcx> for Untyped {
         let Some(is_json) = banned else {
             return;
         };
-        let crate_name = util::crate_name(cx);
-        if crate_name == "testkit" {
+        let pkg = util::package_or_crate(cx, ty.span);
+        if pkg == "testkit" {
             return;
         }
-        if crate_name.starts_with("wire") && util::in_test_code(cx, ty.hir_id, ty.span) {
+        if pkg.starts_with("wire") && util::in_test_code(cx, ty.hir_id, ty.span) {
             return;
         }
-        if crate_name.starts_with("wire")
+        if pkg.starts_with("wire")
             && is_json
             && util::file_path(cx, ty.span).is_some_and(|path| path.ends_with("src/json.rs"))
         {
             return;
         }
-        if crate_name == "config"
+        if pkg == "config"
             && !is_json
             && util::file_path(cx, ty.span).is_some_and(|path| {
                 ["src/load.rs", "src/resolve.rs", "src/free_form.rs"]
@@ -76,6 +109,38 @@ impl<'tcx> LateLintPass<'tcx> for Untyped {
             ty.span,
             format!(
                 "{head}::{last} outside its sanctioned holder (a typed struct, wire::JsonObject, or config::FreeForm) → docs/PATTERNS.md#untyped"
+            ),
+        );
+    }
+
+    fn check_expr(&mut self, cx: &LateContext<'tcx>, expr: &'tcx rustc_hir::Expr<'tcx>) {
+        let Some(expn) = json_macro_expn(cx, expr.span) else {
+            return;
+        };
+        if let Node::Expr(parent) = cx.tcx.parent_hir_node(expr.hir_id)
+            && json_macro_expn(cx, parent.span) == Some(expn)
+        {
+            return;
+        }
+        let data = expn.expn_data();
+        let pkg = util::package_or_crate(cx, data.call_site);
+        if pkg == "testkit" {
+            return;
+        }
+        if pkg.starts_with("wire")
+            && (util::in_test_code(cx, expr.hir_id, data.call_site)
+                || util::file_path(cx, data.call_site)
+                    .is_some_and(|path| path.ends_with("src/json.rs")))
+        {
+            return;
+        }
+        util::lint(
+            cx,
+            UNTYPED,
+            expr.hir_id,
+            data.call_site,
+            format!(
+                "{JSON_MACRO} builds untyped JSON — a typed serde struct or enum (or the crate's own protocol types) instead of json! → docs/PATTERNS.md#untyped"
             ),
         );
     }

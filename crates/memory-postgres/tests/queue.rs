@@ -12,8 +12,28 @@ use wire::JsonObject;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn object(payload: testkit::Json) -> JsonObject {
-    serde_json::from_value(payload).unwrap_or_default()
+fn object<T: serde::Serialize>(payload: &T) -> JsonObject {
+    serde_json::from_value(serde_json::to_value(payload).unwrap_or_default()).unwrap_or_default()
+}
+
+#[derive(serde::Serialize)]
+struct EmbedTargetPayload<'a> {
+    #[serde(rename = "targetTable")]
+    target_table: &'a str,
+    #[serde(rename = "targetId")]
+    target_id: &'a str,
+}
+
+#[derive(serde::Serialize)]
+struct CompactConversationPayload<'a> {
+    #[serde(rename = "conversationId")]
+    conversation_id: &'a str,
+}
+
+#[derive(serde::Serialize)]
+struct ExtractWikiPayload<'a> {
+    #[serde(rename = "summaryId")]
+    summary_id: &'a str,
 }
 
 async fn queue(pool: &PgPool) -> Result<PostgresQueue, Box<dyn std::error::Error>> {
@@ -45,10 +65,10 @@ async fn stored_jobs(
 fn embed_job() -> Job {
     Job {
         name: JobName::Fixed(FixedJob::EmbedTarget),
-        payload: object(serde_json::json!({
-            "targetTable": "ros_messages",
-            "targetId": "abc"
-        })),
+        payload: object(&EmbedTargetPayload {
+            target_table: "ros_messages",
+            target_id: "abc",
+        }),
         key: Some("embed-ros_messages-abc".to_string()),
         key_mode: JobKeyMode::Replace,
         priority: 0,
@@ -130,13 +150,13 @@ async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
         run_at: None,
     };
 
-    jobs.enqueue(compact(object(
-        serde_json::json!({"conversationId": "one"}),
-    )))
+    jobs.enqueue(compact(object(&CompactConversationPayload {
+        conversation_id: "one",
+    })))
     .await?;
-    jobs.enqueue(compact(object(
-        serde_json::json!({"conversationId": "two"}),
-    )))
+    jobs.enqueue(compact(object(&CompactConversationPayload {
+        conversation_id: "two",
+    })))
     .await?;
     let rows = stored_jobs(&pool).await?;
     assert_eq!(rows.len(), 1, "replace must reuse the keyed row");
@@ -144,9 +164,9 @@ async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
     sqlx::query("UPDATE graphile_worker._private_jobs SET attempts = max_attempts")
         .execute(&pool)
         .await?;
-    jobs.enqueue(compact(object(
-        serde_json::json!({"conversationId": "three"}),
-    )))
+    jobs.enqueue(compact(object(&CompactConversationPayload {
+        conversation_id: "three",
+    })))
     .await?;
     let rows = stored_jobs(&pool).await?;
     assert_eq!(
@@ -184,7 +204,7 @@ async fn role_scoping_keeps_the_task_lists_apart(pool: PgPool) -> TestResult {
 
     jobs.enqueue(Job {
         name: JobName::Fixed(FixedJob::ExtractWiki),
-        payload: object(serde_json::json!({"summaryId": "s1"})),
+        payload: object(&ExtractWikiPayload { summary_id: "s1" }),
         key: Some("wiki-ext-s1".to_string()),
         key_mode: JobKeyMode::Replace,
         priority: 5,
@@ -240,7 +260,7 @@ async fn queue_health_reports_buckets(pool: PgPool) -> TestResult {
     let jobs = queue(&pool).await?;
     jobs.enqueue(Job {
         name: JobName::Fixed(FixedJob::ExtractWiki),
-        payload: object(serde_json::json!({"summaryId": "s1"})),
+        payload: object(&ExtractWikiPayload { summary_id: "s1" }),
         key: None,
         key_mode: JobKeyMode::Replace,
         priority: 5,

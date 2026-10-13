@@ -54,19 +54,23 @@ names, `[object Object]` and `JSON.stringify` strings).
 
 ## UNTYPED
 Anti-pattern: `serde_json::Value` / `Map<String, Value>` in structs, helpers or signatures — including private fields with
-accessors and deserialize helpers that return a raw map. Pattern: a serde struct or enum per payload. Two named types in
-`crates/wire/src/json.rs` are the only holders of free-form JSON: `wire::Extra` for unknown fields the contract preserves
-(`#[serde(flatten, default)] pub extra: Extra`), and `wire::JsonObject` for values the contract defines as arbitrary JSON
-(MCP tool-call arguments, tool input schemas, provider `extra_body`). Nothing else names `serde_json::Value` or `Map`.
-The same holds for `serde_yaml::Value`/`Mapping`/`Number`: only `crates/config/src/load.rs` and `resolve.rs` touch the raw
-document (parse, `${VAR}` substitution over string leaves, `serde_yaml::from_value`), and `crates/config/src/free_form.rs`
-holds `config::FreeForm` (`#[serde(transparent)]` over `BTreeMap<String, serde_yaml::Value>`), the one type for config values
-the contract defines as arbitrary (provider `extra_body`, `chat_template_kwargs`, `mm_processor_kwargs`).
-Check: dylint `untyped` (serde_json and serde_yaml with the exemptions clippy cannot express: the per-file production
-exemptions `wire/src/json.rs` and config `load.rs`/`resolve.rs`/`free_form.rs`, test code in `wire` and `testkit` only —
-the crates whose job is structural JSON comparison; in every other crate tests are held to the same rule — and `testkit`
-wholesale, where every other production rule still applies to `testkit/src`; `IgnoredAny` too — `disallowed-types` cannot
-carry it because serde's own derives mention it).
+accessors and deserialize helpers that return a raw map — or a `serde_json::json!(…)` invocation building request bodies and
+RPC frames. Pattern: a serde struct or enum per payload (or the crate's own protocol types; a value the contract defines as
+arbitrary is built through the format crate's own type or a typed struct serialized with `serde_json::to_value`, never
+`json!`). Two named types in `crates/wire/src/json.rs` are the only holders of free-form JSON: `wire::Extra` for unknown
+fields the contract preserves (`#[serde(flatten, default)] pub extra: Extra`), and `wire::JsonObject` for values the
+contract defines as arbitrary JSON (MCP tool-call arguments, tool input schemas, provider `extra_body`). Nothing else names
+`serde_json::Value` or `Map`. The same holds for `serde_yaml::Value`/`Mapping`/`Number`: only `crates/config/src/load.rs`
+and `resolve.rs` touch the raw document (parse, `${VAR}` substitution over string leaves, `serde_yaml::from_value`), and
+`crates/config/src/free_form.rs` holds `config::FreeForm` (`#[serde(transparent)]` over `BTreeMap<String,
+serde_yaml::Value>`), the one type for config values the contract defines as arbitrary (provider `extra_body`,
+`chat_template_kwargs`, `mm_processor_kwargs`).
+Check: dylint `untyped` (serde_json and serde_yaml, the `json!` macro call site read through the expansion —
+`ExpnKind::Macro` with the `serde_json::json` def path — and `IgnoredAny`, none of which clippy's `disallowed-types` can
+carry, with the exemptions clippy cannot express: the per-file production exemptions `wire/src/json.rs` and config
+`load.rs`/`resolve.rs`/`free_form.rs`; test code in `wire` and `testkit` only — the crates whose job is structural JSON
+comparison, attributed to the package by file path so a test target compiled under its own crate name is not mistaken for a
+third crate — and `testkit` wholesale, where every other production rule still applies to `testkit/src`).
 
 ## TAGFIELD
 Anti-pattern: a constant discriminator stored as a field, `pub r#type: SnapshotTag` with a one-variant enum. Pattern:

@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 use agent_client_protocol as acp;
 use agent_client_protocol::Client as _;
 use clap::Parser;
+use serde::Serialize;
 use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -103,6 +104,14 @@ fn unsupported<T>() -> impl Future<Output = Result<T, acp::Error>> {
     std::future::ready(Err(acp::Error::method_not_found()))
 }
 
+#[derive(Serialize)]
+struct CommandInput {
+    command: &'static str,
+}
+
+#[derive(Serialize)]
+struct ArrayInput(&'static [&'static str]);
+
 fn tool_update(id: &str, fields: acp::ToolCallUpdateFields) -> acp::SessionUpdate {
     acp::SessionUpdate::ToolCallUpdate(acp::ToolCallUpdate {
         id: acp::ToolCallId(id.to_owned().into()),
@@ -119,7 +128,9 @@ fn tool_call_update(title: String) -> acp::SessionUpdate {
         status: acp::ToolCallStatus::InProgress,
         content: Vec::new(),
         locations: Vec::new(),
-        raw_input: Some(serde_json::json!({"command": "ls -1"})),
+        raw_input: Some(
+            serde_json::to_value(CommandInput { command: "ls -1" }).unwrap_or_default(),
+        ),
         raw_output: None,
         meta: None,
     })
@@ -133,7 +144,9 @@ fn raw_array_tool_call() -> acp::SessionUpdate {
         status: acp::ToolCallStatus::InProgress,
         content: Vec::new(),
         locations: Vec::new(),
-        raw_input: Some(serde_json::json!(["not", "an", "object"])),
+        raw_input: Some(
+            serde_json::to_value(ArrayInput(&["not", "an", "object"])).unwrap_or_default(),
+        ),
         raw_output: None,
         meta: None,
     })
@@ -294,7 +307,12 @@ impl FakeAgent {
                         fields: acp::ToolCallUpdateFields {
                             status: Some(acp::ToolCallStatus::Pending),
                             title: Some("run the build".to_owned()),
-                            raw_input: Some(serde_json::json!({"command": "cargo build"})),
+                            raw_input: Some(
+                                serde_json::to_value(CommandInput {
+                                    command: "cargo build",
+                                })
+                                .unwrap_or_default(),
+                            ),
                             ..Default::default()
                         },
                         meta: None,

@@ -4,6 +4,8 @@ use kernel::memory::MemoryStore as _;
 use kernel::memory::SearchMode;
 use kernel::memory::SearchQuery;
 use memory_postgres::CaptureOptions;
+use wire::capture::CaptureBatchRequest;
+use wire::capture::CaptureMessage;
 use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryScope;
@@ -12,12 +14,39 @@ use wire::message::Role;
 
 use sqlx::PgPool;
 use sqlx::Row as _;
-use wire::capture::CaptureBatchRequest;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 fn store(pool: &PgPool) -> memory_postgres::PostgresMemory {
     memory_postgres::PostgresMemory::new(pool.clone())
+}
+
+fn batch(session_key: &str, messages: Vec<CaptureMessage>) -> CaptureBatchRequest {
+    CaptureBatchRequest {
+        session_key: session_key.to_string(),
+        agent: "rivet".to_string(),
+        channel: Some("claude-code".to_string()),
+        title: None,
+        settings: None,
+        task_id: None,
+        finalize: None,
+        created_at: None,
+        updated_at: None,
+        messages,
+    }
+}
+
+fn message(event_id: &str, role: Role, content: &str) -> CaptureMessage {
+    CaptureMessage {
+        event_id: event_id.to_string(),
+        role,
+        content: content.to_string(),
+        tool_name: None,
+        tool_args: None,
+        tool_result: None,
+        metadata: None,
+        created_at: None,
+    }
 }
 
 const MESSAGES: [&str; 10] = [
@@ -46,32 +75,26 @@ const OLDER_AUTOMATION_MESSAGE: &str =
 
 async fn seed(pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
     let memory = store(pool);
-    for (index, message) in MESSAGES.iter().enumerate() {
-        let batch: CaptureBatchRequest = serde_json::from_value(serde_json::json!({
-            "session_key": "claude-code:seed",
-            "agent": "rivet",
-            "channel": "claude-code",
-            "messages": [{
-                "event_id": format!("m{index}"),
-                "role": if index.is_multiple_of(2) { "user" } else { "assistant" },
-                "content": message,
-            }],
-        }))?;
+    for (index, text) in MESSAGES.iter().enumerate() {
+        let batch = batch(
+            "claude-code:seed",
+            vec![message(
+                &format!("m{index}"),
+                if index.is_multiple_of(2) {
+                    Role::User
+                } else {
+                    Role::Assistant
+                },
+                text,
+            )],
+        );
         memory
             .capture_batch(&batch, &CaptureOptions::default())
             .await?;
     }
-    let older: CaptureBatchRequest = serde_json::from_value(serde_json::json!({
-        "session_key": "claude-code:seed",
-        "agent": "rivet",
-        "channel": "claude-code",
-        "messages": [{
-            "event_id": "m-old",
-            "role": "assistant",
-            "content": OLDER_AUTOMATION_MESSAGE,
-            "created_at": "2026-01-01T10:00:00Z",
-        }],
-    }))?;
+    let mut older = message("m-old", Role::Assistant, OLDER_AUTOMATION_MESSAGE);
+    older.created_at = Some("2026-01-01T10:00:00Z".to_string());
+    let older = batch("claude-code:seed", vec![older]);
     memory
         .capture_batch(&older, &CaptureOptions::default())
         .await?;
@@ -175,7 +198,14 @@ async fn append_is_idempotent_per_event_id(pool: PgPool) -> TestResult {
 }
 
 fn entry_metadata(event: &str) -> wire::JsonObject {
-    serde_json::from_value(serde_json::json!({"event_id": event})).unwrap_or_default()
+    #[derive(serde::Serialize)]
+    struct EntryMetadata<'a> {
+        event_id: &'a str,
+    }
+    serde_json::from_value(
+        serde_json::to_value(EntryMetadata { event_id: event }).unwrap_or_default(),
+    )
+    .unwrap_or_default()
 }
 
 #[sqlx::test]
@@ -258,12 +288,10 @@ async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResu
         "hybrid mode still ranks the seeded data"
     );
 
-    let short: CaptureBatchRequest = serde_json::from_value(serde_json::json!({
-        "session_key": "claude-code:trigram",
-        "agent": "rivet",
-        "channel": "claude-code",
-        "messages": [{"event_id": "t1", "role": "user", "content": "deploy checklist"}],
-    }))?;
+    let short = batch(
+        "claude-code:trigram",
+        vec![message("t1", Role::User, "deploy checklist")],
+    );
     memory
         .capture_batch(&short, &CaptureOptions::default())
         .await?;
@@ -413,22 +441,17 @@ async fn stats_get_full_and_context(pool: PgPool) -> TestResult {
 #[sqlx::test]
 async fn browse_honours_every_filter_field(pool: PgPool) -> TestResult {
     let memory = store(&pool);
-    let batch: CaptureBatchRequest = serde_json::from_value(serde_json::json!({
-        "session_key": "claude-code:browse",
-        "agent": "rivet",
-        "channel": "claude-code",
-        "messages": [
-            {"event_id": "b1", "role": "user", "content": "older user prompt",
-             "created_at": "2026-01-01T10:00:00Z"},
-            {"event_id": "b2", "role": "assistant", "content": "assistant reply",
-             "created_at": "2026-01-01T10:00:01Z"},
-            {"event_id": "b3", "role": "tool", "content": "[tool call] Grep",
-             "tool_name": "Grep", "tool_result": "match found",
-             "created_at": "2026-01-01T10:00:02Z"},
-            {"event_id": "b4", "role": "user", "content": "newer user prompt",
-             "created_at": "2026-01-02T10:00:00Z"}
-        ],
-    }))?;
+    let mut b1 = message("b1", Role::User, "older user prompt");
+    b1.created_at = Some("2026-01-01T10:00:00Z".to_string());
+    let mut b2 = message("b2", Role::Assistant, "assistant reply");
+    b2.created_at = Some("2026-01-01T10:00:01Z".to_string());
+    let mut b3 = message("b3", Role::Tool, "[tool call] Grep");
+    b3.tool_name = Some("Grep".to_string());
+    b3.tool_result = Some("match found".to_string());
+    b3.created_at = Some("2026-01-01T10:00:02Z".to_string());
+    let mut b4 = message("b4", Role::User, "newer user prompt");
+    b4.created_at = Some("2026-01-02T10:00:00Z".to_string());
+    let batch = batch("claude-code:browse", vec![b1, b2, b3, b4]);
     memory
         .capture_batch(&batch, &CaptureOptions::default())
         .await?;

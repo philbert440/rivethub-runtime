@@ -32,6 +32,24 @@ pub fn file_path(cx: &LateContext<'_>, span: Span) -> Option<String> {
     sess_file_path(cx.tcx.sess, span)
 }
 
+pub fn package(cx: &LateContext<'_>, span: Span) -> Option<String> {
+    let path = file_path(cx, span)?;
+    let mut components = Path::new(&path).components();
+    while let Some(component) = components.next() {
+        if component.as_os_str() != "crates" {
+            continue;
+        }
+        return components
+            .next()
+            .map(|next| next.as_os_str().to_string_lossy().to_string());
+    }
+    None
+}
+
+pub fn package_or_crate(cx: &LateContext<'_>, span: Span) -> String {
+    package(cx, span).unwrap_or_else(|| crate_name(cx))
+}
+
 fn is_main_file(path: &str) -> bool {
     Path::new(path).file_name() == Some(OsStr::new("main.rs"))
 }

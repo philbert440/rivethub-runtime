@@ -1,10 +1,16 @@
 warning: serde_json::Value outside its sanctioned holder (a typed struct, wire::JsonObject, or config::FreeForm) → docs/PATTERNS.md#untyped
-  --> $DIR/fail.rs:7:26
+  --> $DIR/fail.rs:13:26
    |
 LL | pub fn build() -> Option<serde_json::Value> {
    |                          ^^^^^^^^^^^^^^^^^
    |
    = note: `#[warn(untyped)]` on by default
 
-warning: 1 warning emitted
+warning: serde_json::json builds untyped JSON — a typed serde struct or enum (or the crate's own protocol types) instead of json! → docs/PATTERNS.md#untyped
+  --> $DIR/fail.rs:18:5
+   |
+LL |     serde_json::json!({"kind": "ping"})
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 2 warnings emitted
 

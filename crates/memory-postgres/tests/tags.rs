@@ -16,10 +16,12 @@ use sqlx::PgPool;
 use sqlx::Row as _;
 use std::collections::BTreeMap;
 use wire::capture::CaptureBatchRequest;
+use wire::capture::CaptureMessage;
 use wire::gateway::memory::TagEntityType;
 use wire::gateway::memory::TagEntryPair;
 use wire::gateway::memory::TagState;
 use wire::gateway::memory::TagTaxonomyMerge;
+use wire::message::Role;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -32,12 +34,27 @@ async fn seed_conversation(
     session: &str,
 ) -> Result<sqlx::types::Uuid, Box<dyn std::error::Error>> {
     let memory = store(pool);
-    let batch: CaptureBatchRequest = serde_json::from_value(serde_json::json!({
-        "session_key": session,
-        "agent": "rivet",
-        "channel": "claude-code",
-        "messages": [{"event_id": "only", "role": "user", "content": "tagged turn"}],
-    }))?;
+    let batch = CaptureBatchRequest {
+        session_key: session.to_string(),
+        agent: "rivet".to_string(),
+        channel: Some("claude-code".to_string()),
+        title: None,
+        settings: None,
+        task_id: None,
+        finalize: None,
+        created_at: None,
+        updated_at: None,
+        messages: vec![CaptureMessage {
+            event_id: "only".to_string(),
+            role: Role::User,
+            content: "tagged turn".to_string(),
+            tool_name: None,
+            tool_args: None,
+            tool_result: None,
+            metadata: None,
+            created_at: None,
+        }],
+    };
     memory
         .capture_batch(&batch, &memory_postgres::CaptureOptions::default())
         .await?;

@@ -2,6 +2,7 @@ use crate::error::Error;
 use crate::project;
 use chrono::DateTime;
 use chrono::Utc;
+use serde::Serialize;
 use sqlx::Acquire as _;
 use sqlx::PgPool;
 use sqlx::Transaction;
@@ -354,6 +355,17 @@ pub(crate) struct PreparedMessage {
     pub(crate) created_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Serialize)]
+struct CaptureProvenance<'a> {
+    event_id: &'a str,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    truncated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    full_content_length: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    full_tool_result_length: Option<u64>,
+}
+
 pub(crate) fn prepare_capture_message(message: &CaptureMessage) -> Result<PreparedMessage, Error> {
     let (content, content_truncated) = cap_units(&message.content, MAX_CONTENT_UNITS);
     let full_content = utf16_len(&message.content);
@@ -368,24 +380,25 @@ pub(crate) fn prepare_capture_message(message: &CaptureMessage) -> Result<Prepar
     let metadata: JsonObject = message.metadata.clone().unwrap_or_default();
     let mut metadata =
         serde_json::to_value(metadata).map_err(|source| Error::protocol(source.to_string()))?;
-    if !metadata.is_object() {
-        metadata = serde_json::json!({});
-    }
-    if let Some(object) = metadata.as_object_mut() {
-        object.insert("event_id".to_string(), serde_json::json!(message.event_id));
-        if content_truncated {
-            object.insert("truncated".to_string(), serde_json::json!(true));
-            object.insert(
-                "full_content_length".to_string(),
-                serde_json::json!(full_content),
-            );
-        }
-        if tool_truncated {
-            object.insert(
-                "full_tool_result_length".to_string(),
-                serde_json::json!(full_tool_result),
-            );
-        }
+    let provenance = serde_json::to_value(CaptureProvenance {
+        event_id: message.event_id.as_str(),
+        truncated: content_truncated,
+        full_content_length: content_truncated.then_some(full_content),
+        full_tool_result_length: tool_truncated.then_some(full_tool_result),
+    })
+    .map_err(|source| Error::protocol(source.to_string()))?;
+    let Some(object) = metadata.as_object_mut() else {
+        return Err(Error::protocol(
+            "capture metadata did not serialize as an object".to_owned(),
+        ));
+    };
+    let Some(provenance) = provenance.as_object() else {
+        return Err(Error::protocol(
+            "capture provenance did not serialize as an object".to_owned(),
+        ));
+    };
+    for (key, value) in provenance {
+        object.insert(key.clone(), value.clone());
     }
     let metadata: JsonObject =
         serde_json::from_value(metadata).map_err(|source| Error::protocol(source.to_string()))?;

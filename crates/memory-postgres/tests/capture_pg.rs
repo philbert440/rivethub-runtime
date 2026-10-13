@@ -177,7 +177,9 @@ async fn run_step(step: &capture_pg::PgStep, context: &mut StepContext<'_>) -> P
     outcome.rows = Some(
         match dump_rivetos(context.pool, context.started, context.namer).await {
             Ok(rows) => rows,
-            Err(mismatch) => serde_json::json!({"dump_error": format!("{mismatch}")}),
+            Err(mismatch) => encoded(DumpError {
+                dump_error: format!("{mismatch}"),
+            }),
         },
     );
     outcome
@@ -223,6 +225,114 @@ fn now_stamp() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
 }
 
+fn encoded<T: serde::Serialize>(value: T) -> Json {
+    serde_json::to_value(value).unwrap_or_default()
+}
+
+#[derive(serde::Serialize)]
+struct HookOutcomeBody {
+    #[serde(rename = "sessionKey")]
+    session_key: String,
+    #[serde(rename = "conversationId")]
+    conversation_id: String,
+    created: bool,
+    inserted: u64,
+    #[serde(rename = "alreadyStored", skip_serializing_if = "Option::is_none")]
+    already_stored: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    skipped: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct HookSettings<'a> {
+    source: &'a str,
+    last_event: &'a str,
+    last_ingest_at: String,
+    session_id: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cwd: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct TranscriptSettings {
+    source: &'static str,
+    file: String,
+    session_id: Option<String>,
+    pr_url: Option<String>,
+    last_event: Option<String>,
+    last_ingest_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cwd: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct DumpError {
+    dump_error: String,
+}
+
+#[derive(serde::Serialize)]
+struct HookEventMetadata {
+    source: &'static str,
+    hook_event: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ingest_key: Option<String>,
+    #[serde(flatten)]
+    herdr: HerdrMetadata,
+}
+
+#[derive(serde::Serialize)]
+struct TranscriptMetadata {
+    source: &'static str,
+    uuid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sidechain: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hook_event: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recovered: Option<bool>,
+    #[serde(flatten)]
+    herdr: HerdrMetadata,
+}
+
+#[derive(serde::Serialize, Default, Clone)]
+struct HerdrMetadata {
+    #[serde(rename = "herdr_pane_id", skip_serializing_if = "Option::is_none")]
+    pane_id: Option<String>,
+    #[serde(rename = "herdr_workspace_id", skip_serializing_if = "Option::is_none")]
+    workspace_id: Option<String>,
+    #[serde(rename = "herdr_host", skip_serializing_if = "Option::is_none")]
+    host: Option<String>,
+}
+
+impl HerdrMetadata {
+    fn from_opts(opts: &Value) -> Self {
+        opts.get("herdr").map_or_else(Self::default, |herdr| Self {
+            pane_id: str_at(herdr, "paneId"),
+            workspace_id: str_at(herdr, "workspaceId"),
+            host: str_at(herdr, "host"),
+        })
+    }
+}
+
+impl TranscriptMetadata {
+    fn build(
+        uuid: Option<&str>,
+        sidechain: Option<bool>,
+        hook_event: Option<&str>,
+        recovered: Option<bool>,
+        herdr: HerdrMetadata,
+    ) -> Result<wire::JsonObject, IngestError> {
+        Ok(serde_json::from_value(encoded(Self {
+            source: "claude-code-hook",
+            uuid: uuid.map(str::to_string),
+            sidechain,
+            hook_event: hook_event.map(str::to_string),
+            recovered,
+            herdr,
+        }))?)
+    }
+}
+
 fn parse_stamp(raw: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     chrono::DateTime::parse_from_rfc3339(raw)
         .ok()
@@ -244,43 +354,6 @@ fn routed_user(opts: &Value) -> Option<String> {
 fn task_id(opts: &Value) -> Option<String> {
     let raw = str_at(opts, "taskId")?;
     uuid::Uuid::parse_str(&raw).ok().map(|_| raw)
-}
-
-fn herdr_metadata(opts: &Value) -> Vec<(String, Value)> {
-    let mut pairs = Vec::new();
-    if let Some(herdr) = opts.get("herdr") {
-        for (key, name) in [
-            ("paneId", "herdr_pane_id"),
-            ("workspaceId", "herdr_workspace_id"),
-            ("host", "herdr_host"),
-        ] {
-            if let Some(value) = str_at(herdr, key) {
-                pairs.push((name.to_string(), Value::String(value)));
-            }
-        }
-    }
-    pairs
-}
-
-fn build_metadata(
-    uuid: Option<&str>,
-    sidechain: Option<bool>,
-    extra: Vec<(String, Value)>,
-    herdr: Vec<(String, Value)>,
-) -> Result<wire::JsonObject, IngestError> {
-    let mut json = serde_json::json!({
-        "source": "claude-code-hook",
-        "uuid": uuid.map_or(Value::Null, |u| Value::String(u.to_string())),
-    });
-    if let Some(object) = json.as_object_mut() {
-        if let Some(sidechain) = sidechain {
-            object.insert("sidechain".into(), Value::Bool(sidechain));
-        }
-        for (key, value) in extra.into_iter().chain(herdr) {
-            object.insert(key, value);
-        }
-    }
-    Ok(serde_json::from_value(json)?)
 }
 
 fn path_key(path: &str) -> String {
@@ -401,15 +474,23 @@ async fn ingest_hook_event(
 ) -> Result<Json, IngestError> {
     let event = str_at(payload, "hook_event_name").unwrap_or_default();
     let Some(session_id) = str_at(payload, "session_id") else {
-        return Ok(serde_json::json!({
-            "sessionKey": "", "conversationId": "", "created": false,
-            "inserted": 0, "skipped": "no session_id"
+        return Ok(encoded(HookOutcomeBody {
+            session_key: String::new(),
+            conversation_id: String::new(),
+            created: false,
+            inserted: 0,
+            already_stored: None,
+            skipped: Some("no session_id".to_string()),
         }));
     };
     if event != "UserPromptSubmit" && event != "PostToolUse" {
-        return Ok(serde_json::json!({
-            "sessionKey": format!("claude-code:{session_id}"), "conversationId": "",
-            "created": false, "inserted": 0, "skipped": format!("unhandled event {event}")
+        return Ok(encoded(HookOutcomeBody {
+            session_key: format!("claude-code:{session_id}"),
+            conversation_id: String::new(),
+            created: false,
+            inserted: 0,
+            already_stored: None,
+            skipped: Some(format!("unhandled event {event}")),
         }));
     }
     let session_key =
@@ -417,9 +498,13 @@ async fn ingest_hook_event(
 
     let prompt = str_at(payload, "prompt");
     if event == "UserPromptSubmit" && prompt.as_deref().is_none_or(|p| p.trim().is_empty()) {
-        return Ok(serde_json::json!({
-            "sessionKey": session_key, "conversationId": "", "created": false,
-            "inserted": 0, "skipped": "empty prompt"
+        return Ok(encoded(HookOutcomeBody {
+            session_key: session_key.clone(),
+            conversation_id: String::new(),
+            created: false,
+            inserted: 0,
+            already_stored: None,
+            skipped: Some("empty prompt".to_string()),
         }));
     }
 
@@ -430,18 +515,13 @@ async fn ingest_hook_event(
         }
         _ => "Claude Code session".to_string(),
     };
-    let mut settings = serde_json::json!({
-        "source": "claude-code-hook",
-        "last_event": event,
-        "last_ingest_at": now_stamp(),
-    });
-    if let Some(object) = settings.as_object_mut() {
-        if let Some(cwd) = str_at(payload, "cwd") {
-            object.insert("cwd".into(), Value::String(cwd.trim().to_string()));
-        }
-        object.insert("session_id".into(), Value::String(session_id.clone()));
-    }
-    let settings: wire::JsonObject = serde_json::from_value(settings)?;
+    let settings: wire::JsonObject = serde_json::from_value(encoded(HookSettings {
+        source: "claude-code-hook",
+        last_event: &event,
+        last_ingest_at: now_stamp(),
+        session_id: &session_id,
+        cwd: str_at(payload, "cwd").map(|cwd| cwd.trim().to_string()),
+    }))?;
 
     let mut writer = memory_postgres::CaptureWriter::begin(pool, &session_key).await?;
     let owner = routed_user(opts);
@@ -470,21 +550,16 @@ async fn ingest_hook_event(
     if duplicate {
         skipped = Some("duplicate ingest_key".to_string());
     } else {
-        let mut metadata = serde_json::json!({
-            "source": "claude-code-hook",
-            "hook_event": event,
-        });
-        if let Some(object) = metadata.as_object_mut() {
-            for (key, value) in herdr_metadata(opts) {
-                object.entry(key).or_insert(value);
-            }
+        let mut metadata = HookEventMetadata {
+            source: "claude-code-hook",
+            hook_event: event.clone(),
+            ingest_key: None,
+            herdr: HerdrMetadata::from_opts(opts),
+        };
+        if let Some(key) = &idempotency {
+            metadata.ingest_key = Some(key.clone());
         }
-        if let Some(key) = &idempotency
-            && let Some(object) = metadata.as_object_mut()
-        {
-            object.insert("ingest_key".into(), Value::String(key.clone()));
-        }
-        let metadata: wire::JsonObject = serde_json::from_value(metadata)?;
+        let metadata: wire::JsonObject = serde_json::from_value(encoded(metadata))?;
         let prompt_content;
         let tool_name;
         let tool_content;
@@ -536,18 +611,14 @@ async fn ingest_hook_event(
     }
     writer.commit().await?;
 
-    let mut result = serde_json::json!({
-        "sessionKey": session_key,
-        "conversationId": record.id,
-        "created": record.created,
-        "inserted": inserted,
-    });
-    if let Some(skip) = skipped
-        && let Some(object) = result.as_object_mut()
-    {
-        object.insert("skipped".into(), Value::String(skip));
-    }
-    Ok(result)
+    Ok(encoded(HookOutcomeBody {
+        session_key,
+        conversation_id: record.id.to_string(),
+        created: record.created,
+        inserted,
+        already_stored: None,
+        skipped,
+    }))
 }
 
 struct Transcript {
@@ -684,9 +755,13 @@ async fn ingest_transcript(
     opts: &Value,
 ) -> Result<Json, IngestError> {
     let Some(lines) = lines else {
-        return Ok(serde_json::json!({
-            "sessionKey": path_key(path), "conversationId": "", "created": false,
-            "inserted": 0, "alreadyStored": 0, "skipped": "transcript file does not exist"
+        return Ok(encoded(HookOutcomeBody {
+            session_key: path_key(path),
+            conversation_id: String::new(),
+            created: false,
+            inserted: 0,
+            already_stored: Some(0),
+            skipped: Some("transcript file does not exist".to_string()),
         }));
     };
     let decoded: Vec<Value> = lines
@@ -698,9 +773,13 @@ async fn ingest_transcript(
         .collect();
     let parsed = parse_lines(&decoded);
     if !parsed.ingestable {
-        return Ok(serde_json::json!({
-            "sessionKey": path_key(path), "conversationId": "", "created": false,
-            "inserted": 0, "alreadyStored": 0, "skipped": "nothing to ingest"
+        return Ok(encoded(HookOutcomeBody {
+            session_key: path_key(path),
+            conversation_id: String::new(),
+            created: false,
+            inserted: 0,
+            already_stored: Some(0),
+            skipped: Some("nothing to ingest".to_string()),
         }));
     }
     let session_id = str_at(opts, "sessionId").or_else(|| parsed.session_id.clone());
@@ -711,18 +790,15 @@ async fn ingest_transcript(
             None => path_key(path),
         },
     };
-    let mut settings = serde_json::json!({
-        "source": "claude-code-hook",
-        "file": path,
-        "session_id": session_id.clone().map_or(Value::Null, Value::String),
-        "pr_url": parsed.pr_url.clone().map_or(Value::Null, Value::String),
-        "last_event": str_at(opts, "event").map_or(Value::Null, Value::String),
-        "last_ingest_at": now_stamp(),
-    });
-    if let (Some(object), Some(cwd)) = (settings.as_object_mut(), &parsed.cwd) {
-        object.insert("cwd".into(), Value::String(cwd.clone()));
-    }
-    let settings: wire::JsonObject = serde_json::from_value(settings)?;
+    let settings: wire::JsonObject = serde_json::from_value(encoded(TranscriptSettings {
+        source: "claude-code-hook",
+        file: path.to_string(),
+        session_id: session_id.clone(),
+        pr_url: parsed.pr_url.clone(),
+        last_event: str_at(opts, "event"),
+        last_ingest_at: now_stamp(),
+        cwd: parsed.cwd.clone(),
+    }))?;
 
     let fallback_title = parsed.users.first().map(|user| user.content.clone());
     let latest_ai_title = parsed.ai_titles.last().cloned();
@@ -732,7 +808,7 @@ async fn ingest_transcript(
 
     let mut writer = memory_postgres::CaptureWriter::begin(pool, &session_key).await?;
     let owner = routed_user(opts);
-    let herdr = herdr_metadata(opts);
+    let herdr = HerdrMetadata::from_opts(opts);
     let record = writer
         .ensure_conversation(&memory_postgres::ConversationEnsure {
             session_key: &session_key,
@@ -762,10 +838,11 @@ async fn ingest_transcript(
             already_stored += 1;
             continue;
         }
-        let metadata = build_metadata(
+        let metadata = TranscriptMetadata::build(
             line.uuid.as_deref(),
             Some(line.sidechain),
-            Vec::new(),
+            None,
+            None,
             herdr.clone(),
         )?;
         writer
@@ -809,13 +886,11 @@ async fn ingest_transcript(
                 already_stored += 1;
                 continue;
             }
-            let metadata = build_metadata(
+            let metadata = TranscriptMetadata::build(
                 line.uuid.as_deref(),
                 None,
-                vec![
-                    ("hook_event".into(), Value::String("PostToolUse".into())),
-                    ("recovered".into(), Value::Bool(true)),
-                ],
+                Some("PostToolUse"),
+                Some(true),
                 herdr.clone(),
             )?;
             let args: wire::JsonObject = serde_json::from_value(testkit::pgdump::js_number(input))?;
@@ -846,12 +921,8 @@ async fn ingest_transcript(
             skipped_users += 1;
             continue;
         }
-        let metadata = build_metadata(
-            line.uuid.as_deref(),
-            None,
-            vec![("recovered".into(), Value::Bool(true))],
-            herdr.clone(),
-        )?;
+        let metadata =
+            TranscriptMetadata::build(line.uuid.as_deref(), None, None, Some(true), herdr.clone())?;
         writer
             .insert_message(&memory_postgres::MessageRow {
                 conversation_id: record.id,
@@ -901,11 +972,12 @@ async fn ingest_transcript(
     }
     writer.commit().await?;
 
-    Ok(serde_json::json!({
-        "sessionKey": session_key,
-        "conversationId": record.id,
-        "created": record.created,
-        "inserted": inserted,
-        "alreadyStored": already_stored,
+    Ok(encoded(HookOutcomeBody {
+        session_key,
+        conversation_id: record.id.to_string(),
+        created: record.created,
+        inserted,
+        already_stored: Some(already_stored),
+        skipped: None,
     }))
 }

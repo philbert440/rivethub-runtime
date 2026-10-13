@@ -13,7 +13,9 @@ use sqlx::PgPool;
 use testkit::FakeProvider;
 use testkit::Script;
 use wire::capture::CaptureBatchRequest;
+use wire::capture::CaptureMessage;
 use wire::gateway::memory::MemoryScope;
+use wire::message::Role;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -55,20 +57,36 @@ fn contents(hits: &[memory_postgres::search::SearchHit]) -> Vec<String> {
     hits.iter().map(|hit| hit.content.clone()).collect()
 }
 
-async fn capture(pool: &PgPool, event_id: &str, content: &str) -> TestResult {
-    let batch: CaptureBatchRequest = serde_json::from_value(serde_json::json!({
-        "session_key": "claude-code:vector",
-        "agent": "rivet",
-        "channel": "claude-code",
-        "messages": [{
-            "event_id": event_id,
-            "role": "user",
-            "content": content,
-            "created_at": OLD,
+fn batch(event_id: &str, content: &str) -> CaptureBatchRequest {
+    CaptureBatchRequest {
+        session_key: "claude-code:vector".to_string(),
+        agent: "rivet".to_string(),
+        channel: Some("claude-code".to_string()),
+        title: None,
+        settings: None,
+        task_id: None,
+        finalize: None,
+        created_at: None,
+        updated_at: None,
+        messages: vec![CaptureMessage {
+            event_id: event_id.to_string(),
+            role: Role::User,
+            content: content.to_string(),
+            tool_name: None,
+            tool_args: None,
+            tool_result: None,
+            metadata: None,
+            created_at: Some(OLD.to_string()),
         }],
-    }))?;
+    }
+}
+
+async fn capture(pool: &PgPool, event_id: &str, content: &str) -> TestResult {
     unwired(pool)
-        .capture_batch(&batch, &memory_postgres::CaptureOptions::default())
+        .capture_batch(
+            &batch(event_id, content),
+            &memory_postgres::CaptureOptions::default(),
+        )
         .await?;
     Ok(())
 }

@@ -197,7 +197,9 @@ fn merge_event_id(metadata: &JsonObject, event_id: &str) -> Result<JsonObject, E
     let mut json =
         serde_json::to_value(metadata).map_err(|source| Error::protocol(source.to_string()))?;
     if let Some(object) = json.as_object_mut() {
-        object.insert("event_id".to_string(), serde_json::json!(event_id));
+        let member =
+            serde_json::to_value(event_id).map_err(|source| Error::protocol(source.to_string()))?;
+        object.insert("event_id".to_string(), member);
     }
     serde_json::from_value(json).map_err(|source| Error::protocol(source.to_string()))
 }
