@@ -3,6 +3,7 @@ pub mod code;
 pub mod dupfixture;
 pub mod error;
 pub mod git;
+pub mod labpath;
 pub mod lang;
 pub mod manifests;
 pub mod patterns;

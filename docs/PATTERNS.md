@@ -228,6 +228,16 @@ identical files inside one crate (separate scenarios that recorded the same byte
 Check: xtask `DUPFIXTURE` (a tracked file under any `crates/*/tests/golden/` or `crates/*/tests/fixtures/` whose bytes
 equal a file in a different crate's fixture tree is a finding naming both paths).
 
+## LABPATH
+Anti-pattern: a repository file reading or naming the lab plans tree (`/rivet-shared/plans/…`) — tests that read
+recordings from the share pass only on the lab machine and fail on a CI runner with NotFound; the plans tree is the
+lab's, never the repository's. Pattern: a recording shared by crates is vendored once under
+`crates/testkit/tests/fixtures/` (see DUPFIXTURE) and read through testkit's path helper (`testkit::recording`);
+`/rivet-shared` on its own stays legal — it is a product default (config's shared dir, the mesh CA path). Recorded
+data under `crates/*/tests/golden/` and `crates/*/tests/fixtures/` is exempt: a recording keeps its recorded bytes,
+including note fields that quote the lab as recorded. Check: xtask `LABPATH` (a tracked file under `crates/` or
+`xtask/` containing `/rivet-shared/plans/`).
+
 ## WIREPUB
 Anti-pattern: private fields with accessor methods on `wire` payload structs. Pattern: wire payloads are plain data with
 `pub` fields; invariants live in validated newtypes (`SessionId`). Check: dylint `wirepub` (a payload type — one with a

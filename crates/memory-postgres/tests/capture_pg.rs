@@ -1,6 +1,5 @@
 use serde_json::Value;
 use sqlx::PgPool;
-use std::path::Path;
 use testkit::Json;
 use testkit::capture_pg;
 use testkit::capture_pg::PgOutcome;
@@ -10,7 +9,6 @@ use testkit::pgdump::tool_response_orders;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-const GOLDEN_PG: &str = "/rivet-shared/plans/rust-rewrite/golden/capture/pg";
 const GOLDEN_FILES: [&str; 5] = [
     "transcript.json",
     "task.json",
@@ -43,11 +41,11 @@ async fn reset(pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
 async fn replay_public_arm(pool: PgPool) -> TestResult {
     let queue = queue_present(&pool).await?;
     for file in GOLDEN_FILES {
-        let path = format!("{GOLDEN_PG}/{file}");
+        let path = testkit::recording(&format!("capture/pg/{file}"));
         let text = std::fs::read_to_string(&path)?;
         let mut orders: std::collections::VecDeque<Vec<String>> =
             tool_response_orders(&text).into();
-        for scenario in capture_pg::scenarios(Path::new(&path))? {
+        for scenario in capture_pg::scenarios(&path)? {
             if scenario.schema != "public" {
                 continue;
             }
@@ -115,8 +113,8 @@ async fn scenario_inventory_is_covered(pool: PgPool) -> TestResult {
     let mut total = 0usize;
     let mut seen: Vec<String> = Vec::new();
     for file in GOLDEN_FILES {
-        let path = format!("{GOLDEN_PG}/{file}");
-        for scenario in capture_pg::scenarios(Path::new(&path))? {
+        let path = testkit::recording(&format!("capture/pg/{file}"));
+        for scenario in capture_pg::scenarios(&path)? {
             seen.push(format!("{} ({})", scenario.name, scenario.schema));
             total += 1;
         }

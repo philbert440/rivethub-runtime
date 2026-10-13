@@ -6,6 +6,7 @@ use tempfile::TempDir;
 use xtask::check;
 use xtask::code;
 use xtask::dupfixture;
+use xtask::labpath;
 use xtask::lang;
 use xtask::manifests;
 use xtask::patterns;
@@ -740,6 +741,84 @@ fn dupfixture_one_crate_copies_pass() -> Result<(), Box<dyn std::error::Error>> 
     assert!(
         findings.is_empty(),
         "identical files inside one crate and differing files across crates pass: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn labpath_fires_and_passes() -> Result<(), Box<dyn std::error::Error>> {
+    let needle = concat!("/rivet-shared", "/plans/rust-rewrite/golden");
+    let repo = Repo::new()?;
+    repo.write("docs/PATTERNS.md", "")?;
+    repo.write(
+        "crates/memory-postgres/tests/capture_pg.rs",
+        &format!("const GOLDEN_PG: &str = \"{needle}\";\n"),
+    )?;
+    repo.write(
+        "xtask/src/notes.md",
+        &format!("re-record from {needle}/capture/pg\n"),
+    )?;
+    repo.write(
+        "crates/config/src/paths.rs",
+        "const DEFAULT_SHARED_DIR: &str = \"/rivet-shared\";\n",
+    )?;
+    repo.write(
+        "crates/wire/tests/golden/gateway/http-tls.json",
+        &format!("{{\"note\": \"the inventory ({needle}/inventory/gateway-api.md)\"}}\n"),
+    )?;
+    repo.write(
+        "crates/testkit/tests/fixtures/capture/pg/README.md",
+        &format!("re-record from {needle}/capture/pg\n"),
+    )?;
+    repo.write("docs/CONTRACT.md", &format!("reference: {needle}/\n"))?;
+    repo.track()?;
+    let mut findings = Vec::new();
+    let count = labpath::check(repo.root(), &mut findings)?;
+    assert_eq!(count, 2, "one crates/ and one xtask/ finding: {findings:?}");
+    assert!(
+        findings.iter().any(
+            |finding| finding.starts_with("LABPATH crates/memory-postgres/tests/capture_pg.rs")
+        ),
+        "a test naming the plans tree is reported: {findings:?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.starts_with("LABPATH xtask/src/notes.md")),
+        "an xtask file naming the plans tree is reported: {findings:?}"
+    );
+    assert!(
+        !findings
+            .iter()
+            .any(|finding| finding.contains("crates/config/src/paths.rs")),
+        "`/rivet-shared` on its own stays legal: {findings:?}"
+    );
+    assert!(
+        !findings
+            .iter()
+            .any(|finding| finding.contains("tests/golden/")
+                || finding.contains("tests/fixtures/")),
+        "recorded data keeps its recorded bytes: {findings:?}"
+    );
+    assert!(
+        !findings
+            .iter()
+            .any(|finding| finding.starts_with("LABPATH docs/")),
+        "files outside crates/ and xtask/ are not scanned: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn labpath_current_repository_passes() -> Result<(), Box<dyn std::error::Error>> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("xtask must live inside the repository")?;
+    let mut findings = Vec::new();
+    labpath::check(root, &mut findings)?;
+    assert!(
+        findings.is_empty(),
+        "the current repository passes: {findings:?}"
     );
     Ok(())
 }

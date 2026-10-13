@@ -1,0 +1,1755 @@
+{
+  "group": "task",
+  "generator": "tools/capture-pg-goldens.mjs",
+  "captureAgent": "rivet-claude",
+  "scenarios": [
+    {
+      "name": "task-id-present-transcript",
+      "schema": "public",
+      "schemaDescription": "full TypeScript migrations 0001-0020 (task_id 0011 and owner_user_id 0013 present) plus graphile-worker",
+      "steps": [
+        {
+          "kind": "ingestTranscript",
+          "label": "create with task id",
+          "input": {
+            "transcriptPath": "__FIXTURES__/task1.jsonl",
+            "transcriptLines": [
+              "{\"type\":\"user\",\"sessionId\":\"11111111-0000-4000-8000-000000000001\",\"uuid\":\"u1\",\"timestamp\":\"2026-01-01T00:00:01.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"user\",\"content\":\"task work\"}}",
+              "{\"type\":\"assistant\",\"sessionId\":\"11111111-0000-4000-8000-000000000001\",\"uuid\":\"a1\",\"timestamp\":\"2026-01-01T00:00:02.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"assistant\",\"model\":\"claude-x\",\"content\":\"done\"}}"
+            ],
+            "options": {
+              "sessionId": "11111111-0000-4000-8000-000000000001",
+              "event": "Stop",
+              "taskId": "cccccccc-3333-4333-8333-cccccccccccc",
+              "pgUrl": "<pg-url>"
+            }
+          },
+          "result": {
+            "sessionKey": "claude-code:11111111-0000-4000-8000-000000000001",
+            "conversationId": "conv-1",
+            "created": true,
+            "inserted": 2,
+            "alreadyStored": 0
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:11111111-0000-4000-8000-000000000001"
+              ]
+            },
+            {
+              "text": "SELECT EXISTS (\n       SELECT 1 FROM pg_attribute\n        WHERE attrelid = to_regclass('ros_conversations')\n          AND attname = 'task_id'\n          AND NOT attisdropped\n     ) AS present",
+              "values": []
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:11111111-0000-4000-8000-000000000001",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_conversations\n       (session_key, agent, channel, title, settings, active, created_at, updated_at\n        , task_id)\n     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,now()),COALESCE($8,now())\n        , $9)\n     RETURNING id",
+              "values": [
+                "claude-code:11111111-0000-4000-8000-000000000001",
+                "rivet-claude",
+                "claude-code",
+                "task work",
+                "{\"source\":\"claude-code-hook\",\"file\":\"__FIXTURES__/task1.jsonl\",\"session_id\":\"11111111-0000-4000-8000-000000000001\",\"pr_url\":null,\"cwd\":\"/work/demo\",\"last_event\":\"Stop\",\"last_ingest_at\":\"<now-1>\"}",
+                true,
+                "2026-01-01T00:00:01.000Z",
+                "2026-01-01T00:00:02.000Z",
+                "cccccccc-3333-4333-8333-cccccccccccc"
+              ]
+            },
+            {
+              "text": "SELECT metadata->>'uuid' AS uuid FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'assistant' AND metadata ? 'uuid'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "assistant",
+                "done",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"a1\",\"sidechain\":false}",
+                "2026-01-01T00:00:02.000Z"
+              ]
+            },
+            {
+              "text": "SELECT tool_name, tool_args::text AS args FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'tool'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "SELECT content FROM ros_messages WHERE conversation_id = $1 AND role = 'user'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "task work",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"u1\",\"recovered\":true}",
+                "2026-01-01T00:00:01.000Z"
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations\n         SET updated_at = COALESCE($2, now()),\n             active = $3,\n             title = COALESCE($4, title),\n             settings = $5\n       WHERE id = $1",
+              "values": [
+                "conv-1",
+                "2026-01-01T00:00:02.000Z",
+                true,
+                null,
+                "{\"source\":\"claude-code-hook\",\"file\":\"__FIXTURES__/task1.jsonl\",\"session_id\":\"11111111-0000-4000-8000-000000000001\",\"pr_url\":null,\"cwd\":\"/work/demo\",\"last_event\":\"Stop\",\"last_ingest_at\":\"<now-1>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:11111111-0000-4000-8000-000000000001",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": "task work",
+                "settings": "{\"cwd\": \"/work/demo\", \"file\": \"__FIXTURES__/task1.jsonl\", \"pr_url\": null, \"source\": \"claude-code-hook\", \"last_event\": \"Stop\", \"session_id\": \"11111111-0000-4000-8000-000000000001\", \"last_ingest_at\": \"<now-1>\"}",
+                "active": true,
+                "created_at": "2026-01-01 00:00:01+00",
+                "updated_at": "2026-01-01 00:00:02+00",
+                "task_id": "cccccccc-3333-4333-8333-cccccccccccc",
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "assistant",
+                "content": "done",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"uuid\": \"a1\", \"source\": \"claude-code-hook\", \"sidechain\": false}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "2026-01-01 00:00:02+00",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              },
+              {
+                "id": "msg-2",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "task work",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"uuid\": \"u1\", \"source\": \"claude-code-hook\", \"recovered\": true}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "2026-01-01 00:00:01+00",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              }
+            ],
+            "graphile_jobs": [
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-1\"}",
+                "key": "embed-ros_messages-msg-1",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              },
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-2\"}",
+                "key": "embed-ros_messages-msg-2",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              }
+            ],
+            "ros_summaries_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "task-id-backfill-never-repoint",
+      "schema": "public",
+      "schemaDescription": "full TypeScript migrations 0001-0020 (task_id 0011 and owner_user_id 0013 present) plus graphile-worker",
+      "steps": [
+        {
+          "kind": "sql",
+          "label": "another writer creates the conversation without task_id",
+          "sql": "INSERT INTO ros_conversations (session_key, agent) VALUES ('claude-code:spawn-three', 'rivet-claude')",
+          "params": [],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:spawn-three",
+                "agent": "rivet-claude",
+                "channel": "unknown",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": null,
+                "settings": "{}",
+                "active": true,
+                "created_at": "<now-1>",
+                "updated_at": "<now-1>",
+                "task_id": null,
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [],
+            "graphile_jobs": [],
+            "ros_summaries_count": 0
+          }
+        },
+        {
+          "kind": "ingestHookEvent",
+          "label": "task ingest backfills",
+          "input": {
+            "payload": {
+              "hook_event_name": "UserPromptSubmit",
+              "session_id": "spawn-three",
+              "prompt": "resumed"
+            },
+            "taskId": "cccccccc-3333-4333-8333-cccccccccccc",
+            "pgUrl": "<pg-url>"
+          },
+          "result": {
+            "sessionKey": "claude-code:spawn-three",
+            "conversationId": "conv-1",
+            "created": false,
+            "inserted": 1
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:spawn-three"
+              ]
+            },
+            {
+              "text": "SELECT EXISTS (\n       SELECT 1 FROM pg_attribute\n        WHERE attrelid = to_regclass('ros_conversations')\n          AND attname = 'task_id'\n          AND NOT attisdropped\n     ) AS present",
+              "values": []
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:spawn-three",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations SET task_id = $2 WHERE id = $1 AND task_id IS NULL",
+              "values": [
+                "conv-1",
+                "cccccccc-3333-4333-8333-cccccccccccc"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "resumed",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"hook_event\":\"UserPromptSubmit\"}",
+                null
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations SET updated_at = now(), settings = $2 WHERE id = $1",
+              "values": [
+                "conv-1",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"spawn-three\",\"last_event\":\"UserPromptSubmit\",\"last_ingest_at\":\"<now-2>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:spawn-three",
+                "agent": "rivet-claude",
+                "channel": "unknown",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": null,
+                "settings": "{\"source\": \"claude-code-hook\", \"last_event\": \"UserPromptSubmit\", \"session_id\": \"spawn-three\", \"last_ingest_at\": \"<now-2>\"}",
+                "active": true,
+                "created_at": "<now-1>",
+                "updated_at": "<now-3>",
+                "task_id": "cccccccc-3333-4333-8333-cccccccccccc",
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "resumed",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "<now-3>",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              }
+            ],
+            "graphile_jobs": [
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-1\"}",
+                "key": "embed-ros_messages-msg-1",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              }
+            ],
+            "ros_summaries_count": 0
+          }
+        },
+        {
+          "kind": "ingestHookEvent",
+          "label": "a second task context does not repoint",
+          "input": {
+            "payload": {
+              "hook_event_name": "UserPromptSubmit",
+              "session_id": "spawn-three",
+              "prompt": "a stray second task context"
+            },
+            "taskId": "dddddddd-4444-4444-8444-dddddddddddd",
+            "pgUrl": "<pg-url>"
+          },
+          "result": {
+            "sessionKey": "claude-code:spawn-three",
+            "conversationId": "conv-1",
+            "created": false,
+            "inserted": 1
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:spawn-three"
+              ]
+            },
+            {
+              "text": "SELECT EXISTS (\n       SELECT 1 FROM pg_attribute\n        WHERE attrelid = to_regclass('ros_conversations')\n          AND attname = 'task_id'\n          AND NOT attisdropped\n     ) AS present",
+              "values": []
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:spawn-three",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations SET task_id = $2 WHERE id = $1 AND task_id IS NULL",
+              "values": [
+                "conv-1",
+                "dddddddd-4444-4444-8444-dddddddddddd"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "a stray second task context",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"hook_event\":\"UserPromptSubmit\"}",
+                null
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations SET updated_at = now(), settings = $2 WHERE id = $1",
+              "values": [
+                "conv-1",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"spawn-three\",\"last_event\":\"UserPromptSubmit\",\"last_ingest_at\":\"<now-4>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:spawn-three",
+                "agent": "rivet-claude",
+                "channel": "unknown",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": null,
+                "settings": "{\"source\": \"claude-code-hook\", \"last_event\": \"UserPromptSubmit\", \"session_id\": \"spawn-three\", \"last_ingest_at\": \"<now-4>\"}",
+                "active": true,
+                "created_at": "<now-1>",
+                "updated_at": "<now-5>",
+                "task_id": "cccccccc-3333-4333-8333-cccccccccccc",
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "resumed",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "<now-3>",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              },
+              {
+                "id": "msg-2",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "a stray second task context",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "<now-5>",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              }
+            ],
+            "graphile_jobs": [
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-1\"}",
+                "key": "embed-ros_messages-msg-1",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              },
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-2\"}",
+                "key": "embed-ros_messages-msg-2",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              }
+            ],
+            "ros_summaries_count": 0
+          }
+        },
+        {
+          "kind": "ingestTranscript",
+          "label": "transcript with a third task id does not repoint either",
+          "input": {
+            "transcriptPath": "__FIXTURES__/task-bf.jsonl",
+            "transcriptLines": [
+              "{\"type\":\"user\",\"sessionId\":\"spawn-three\",\"uuid\":\"u9\",\"timestamp\":\"2026-01-01T00:00:09.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"user\",\"content\":\"from transcript\"}}"
+            ],
+            "options": {
+              "sessionId": "spawn-three",
+              "taskId": "dddddddd-4444-4444-8444-dddddddddddd",
+              "pgUrl": "<pg-url>"
+            }
+          },
+          "result": {
+            "sessionKey": "claude-code:spawn-three",
+            "conversationId": "conv-1",
+            "created": false,
+            "inserted": 1,
+            "alreadyStored": 2
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:spawn-three"
+              ]
+            },
+            {
+              "text": "SELECT EXISTS (\n       SELECT 1 FROM pg_attribute\n        WHERE attrelid = to_regclass('ros_conversations')\n          AND attname = 'task_id'\n          AND NOT attisdropped\n     ) AS present",
+              "values": []
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:spawn-three",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations SET task_id = $2 WHERE id = $1 AND task_id IS NULL",
+              "values": [
+                "conv-1",
+                "dddddddd-4444-4444-8444-dddddddddddd"
+              ]
+            },
+            {
+              "text": "SELECT metadata->>'uuid' AS uuid FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'assistant' AND metadata ? 'uuid'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "SELECT tool_name, tool_args::text AS args FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'tool'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "SELECT content FROM ros_messages WHERE conversation_id = $1 AND role = 'user'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "from transcript",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"u9\",\"recovered\":true}",
+                "2026-01-01T00:00:09.000Z"
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations\n         SET updated_at = COALESCE($2, now()),\n             active = $3,\n             title = COALESCE($4, title),\n             settings = $5\n       WHERE id = $1",
+              "values": [
+                "conv-1",
+                "2026-01-01T00:00:09.000Z",
+                true,
+                null,
+                "{\"source\":\"claude-code-hook\",\"file\":\"__FIXTURES__/task-bf.jsonl\",\"session_id\":\"spawn-three\",\"pr_url\":null,\"cwd\":\"/work/demo\",\"last_event\":null,\"last_ingest_at\":\"<now-6>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:spawn-three",
+                "agent": "rivet-claude",
+                "channel": "unknown",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": null,
+                "settings": "{\"cwd\": \"/work/demo\", \"file\": \"__FIXTURES__/task-bf.jsonl\", \"pr_url\": null, \"source\": \"claude-code-hook\", \"last_event\": null, \"session_id\": \"spawn-three\", \"last_ingest_at\": \"<now-6>\"}",
+                "active": true,
+                "created_at": "<now-1>",
+                "updated_at": "2026-01-01 00:00:09+00",
+                "task_id": "cccccccc-3333-4333-8333-cccccccccccc",
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "resumed",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "<now-3>",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              },
+              {
+                "id": "msg-2",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "a stray second task context",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "<now-5>",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              },
+              {
+                "id": "msg-3",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "from transcript",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"uuid\": \"u9\", \"source\": \"claude-code-hook\", \"recovered\": true}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "2026-01-01 00:00:09+00",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              }
+            ],
+            "graphile_jobs": [
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-1\"}",
+                "key": "embed-ros_messages-msg-1",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              },
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-2\"}",
+                "key": "embed-ros_messages-msg-2",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              },
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-3\"}",
+                "key": "embed-ros_messages-msg-3",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              }
+            ],
+            "ros_summaries_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "task-id-uppercase",
+      "schema": "public",
+      "schemaDescription": "full TypeScript migrations 0001-0020 (task_id 0011 and owner_user_id 0013 present) plus graphile-worker",
+      "steps": [
+        {
+          "kind": "ingestHookEvent",
+          "label": "uppercase UUID accepted, stored lowercase",
+          "input": {
+            "payload": {
+              "hook_event_name": "UserPromptSubmit",
+              "session_id": "spawn-upper",
+              "prompt": "upper"
+            },
+            "taskId": "CCCCCCCC-3333-4333-8333-CCCCCCCCCCCC",
+            "pgUrl": "<pg-url>"
+          },
+          "result": {
+            "sessionKey": "claude-code:spawn-upper",
+            "conversationId": "conv-1",
+            "created": true,
+            "inserted": 1
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:spawn-upper"
+              ]
+            },
+            {
+              "text": "SELECT EXISTS (\n       SELECT 1 FROM pg_attribute\n        WHERE attrelid = to_regclass('ros_conversations')\n          AND attname = 'task_id'\n          AND NOT attisdropped\n     ) AS present",
+              "values": []
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:spawn-upper",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_conversations\n       (session_key, agent, channel, title, settings, active, created_at, updated_at\n        , task_id)\n     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,now()),COALESCE($8,now())\n        , $9)\n     RETURNING id",
+              "values": [
+                "claude-code:spawn-upper",
+                "rivet-claude",
+                "claude-code",
+                "upper",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"spawn-upper\",\"last_event\":\"UserPromptSubmit\",\"last_ingest_at\":\"<now-1>\"}",
+                true,
+                null,
+                null,
+                "CCCCCCCC-3333-4333-8333-CCCCCCCCCCCC"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "upper",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"hook_event\":\"UserPromptSubmit\"}",
+                null
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations SET updated_at = now(), settings = $2 WHERE id = $1",
+              "values": [
+                "conv-1",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"spawn-upper\",\"last_event\":\"UserPromptSubmit\",\"last_ingest_at\":\"<now-1>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:spawn-upper",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": "upper",
+                "settings": "{\"source\": \"claude-code-hook\", \"last_event\": \"UserPromptSubmit\", \"session_id\": \"spawn-upper\", \"last_ingest_at\": \"<now-1>\"}",
+                "active": true,
+                "created_at": "<now-2>",
+                "updated_at": "<now-2>",
+                "task_id": "cccccccc-3333-4333-8333-cccccccccccc",
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "upper",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "<now-2>",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              }
+            ],
+            "graphile_jobs": [
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-1\"}",
+                "key": "embed-ros_messages-msg-1",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              }
+            ],
+            "ros_summaries_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "task-id-non-uuid",
+      "schema": "public",
+      "schemaDescription": "full TypeScript migrations 0001-0020 (task_id 0011 and owner_user_id 0013 present) plus graphile-worker",
+      "steps": [
+        {
+          "kind": "ingestHookEvent",
+          "label": "hook with non-UUID task id",
+          "input": {
+            "payload": {
+              "hook_event_name": "UserPromptSubmit",
+              "session_id": "spawn-badid",
+              "prompt": "still capture me"
+            },
+            "taskId": "task-env-check",
+            "pgUrl": "<pg-url>"
+          },
+          "result": {
+            "sessionKey": "claude-code:spawn-badid",
+            "conversationId": "conv-1",
+            "created": true,
+            "inserted": 1
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:spawn-badid"
+              ]
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:spawn-badid",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_conversations\n       (session_key, agent, channel, title, settings, active, created_at, updated_at\n        )\n     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,now()),COALESCE($8,now())\n        )\n     RETURNING id",
+              "values": [
+                "claude-code:spawn-badid",
+                "rivet-claude",
+                "claude-code",
+                "still capture me",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"spawn-badid\",\"last_event\":\"UserPromptSubmit\",\"last_ingest_at\":\"<now-1>\"}",
+                true,
+                null,
+                null
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "still capture me",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"hook_event\":\"UserPromptSubmit\"}",
+                null
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations SET updated_at = now(), settings = $2 WHERE id = $1",
+              "values": [
+                "conv-1",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"spawn-badid\",\"last_event\":\"UserPromptSubmit\",\"last_ingest_at\":\"<now-1>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:spawn-badid",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": "still capture me",
+                "settings": "{\"source\": \"claude-code-hook\", \"last_event\": \"UserPromptSubmit\", \"session_id\": \"spawn-badid\", \"last_ingest_at\": \"<now-1>\"}",
+                "active": true,
+                "created_at": "<now-2>",
+                "updated_at": "<now-2>",
+                "task_id": null,
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "still capture me",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "<now-2>",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              }
+            ],
+            "graphile_jobs": [
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-1\"}",
+                "key": "embed-ros_messages-msg-1",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              }
+            ],
+            "ros_summaries_count": 0
+          }
+        },
+        {
+          "kind": "ingestTranscript",
+          "label": "transcript with non-UUID task id",
+          "input": {
+            "transcriptPath": "__FIXTURES__/task-bad.jsonl",
+            "transcriptLines": [
+              "{\"type\":\"user\",\"sessionId\":\"22222222-0000-4000-8000-000000000002\",\"uuid\":\"u1\",\"timestamp\":\"2026-01-01T00:00:01.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"user\",\"content\":\"bad id\"}}"
+            ],
+            "options": {
+              "sessionId": "22222222-0000-4000-8000-000000000002",
+              "taskId": "task-env-check",
+              "pgUrl": "<pg-url>"
+            }
+          },
+          "result": {
+            "sessionKey": "claude-code:22222222-0000-4000-8000-000000000002",
+            "conversationId": "conv-2",
+            "created": true,
+            "inserted": 1,
+            "alreadyStored": 0
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:22222222-0000-4000-8000-000000000002"
+              ]
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:22222222-0000-4000-8000-000000000002",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_conversations\n       (session_key, agent, channel, title, settings, active, created_at, updated_at\n        )\n     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,now()),COALESCE($8,now())\n        )\n     RETURNING id",
+              "values": [
+                "claude-code:22222222-0000-4000-8000-000000000002",
+                "rivet-claude",
+                "claude-code",
+                "bad id",
+                "{\"source\":\"claude-code-hook\",\"file\":\"__FIXTURES__/task-bad.jsonl\",\"session_id\":\"22222222-0000-4000-8000-000000000002\",\"pr_url\":null,\"cwd\":\"/work/demo\",\"last_event\":null,\"last_ingest_at\":\"<now-3>\"}",
+                true,
+                "2026-01-01T00:00:01.000Z",
+                "2026-01-01T00:00:01.000Z"
+              ]
+            },
+            {
+              "text": "SELECT metadata->>'uuid' AS uuid FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'assistant' AND metadata ? 'uuid'",
+              "values": [
+                "conv-2"
+              ]
+            },
+            {
+              "text": "SELECT tool_name, tool_args::text AS args FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'tool'",
+              "values": [
+                "conv-2"
+              ]
+            },
+            {
+              "text": "SELECT content FROM ros_messages WHERE conversation_id = $1 AND role = 'user'",
+              "values": [
+                "conv-2"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-2",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "bad id",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"u1\",\"recovered\":true}",
+                "2026-01-01T00:00:01.000Z"
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations\n         SET updated_at = COALESCE($2, now()),\n             active = $3,\n             title = COALESCE($4, title),\n             settings = $5\n       WHERE id = $1",
+              "values": [
+                "conv-2",
+                "2026-01-01T00:00:01.000Z",
+                true,
+                null,
+                "{\"source\":\"claude-code-hook\",\"file\":\"__FIXTURES__/task-bad.jsonl\",\"session_id\":\"22222222-0000-4000-8000-000000000002\",\"pr_url\":null,\"cwd\":\"/work/demo\",\"last_event\":null,\"last_ingest_at\":\"<now-3>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-2",
+                "session_key": "claude-code:22222222-0000-4000-8000-000000000002",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": "bad id",
+                "settings": "{\"cwd\": \"/work/demo\", \"file\": \"__FIXTURES__/task-bad.jsonl\", \"pr_url\": null, \"source\": \"claude-code-hook\", \"last_event\": null, \"session_id\": \"22222222-0000-4000-8000-000000000002\", \"last_ingest_at\": \"<now-3>\"}",
+                "active": true,
+                "created_at": "2026-01-01 00:00:01+00",
+                "updated_at": "2026-01-01 00:00:01+00",
+                "task_id": null,
+                "owner_user_id": null
+              },
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:spawn-badid",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": "still capture me",
+                "settings": "{\"source\": \"claude-code-hook\", \"last_event\": \"UserPromptSubmit\", \"session_id\": \"spawn-badid\", \"last_ingest_at\": \"<now-1>\"}",
+                "active": true,
+                "created_at": "<now-2>",
+                "updated_at": "<now-2>",
+                "task_id": null,
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "still capture me",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "<now-2>",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              },
+              {
+                "id": "msg-2",
+                "conversation_id": "conv-2",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "bad id",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"uuid\": \"u1\", \"source\": \"claude-code-hook\", \"recovered\": true}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "2026-01-01 00:00:01+00",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              }
+            ],
+            "graphile_jobs": [
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-1\"}",
+                "key": "embed-ros_messages-msg-1",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              },
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-2\"}",
+                "key": "embed-ros_messages-msg-2",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              }
+            ],
+            "ros_summaries_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "task-id-legacy-override",
+      "schema": "public",
+      "schemaDescription": "full TypeScript migrations 0001-0020 (task_id 0011 and owner_user_id 0013 present) plus graphile-worker",
+      "steps": [
+        {
+          "kind": "ingestHookEvent",
+          "label": "RIVETOS_SESSION_KEY=task:<id> used verbatim",
+          "input": {
+            "payload": {
+              "hook_event_name": "UserPromptSubmit",
+              "session_id": "spawn-legacy",
+              "prompt": "mid-flight turn"
+            },
+            "sessionKeyOverride": "task:cccccccc-3333-4333-8333-cccccccccccc",
+            "taskId": "cccccccc-3333-4333-8333-cccccccccccc",
+            "pgUrl": "<pg-url>"
+          },
+          "result": {
+            "sessionKey": "task:cccccccc-3333-4333-8333-cccccccccccc",
+            "conversationId": "conv-1",
+            "created": true,
+            "inserted": 1
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "task:cccccccc-3333-4333-8333-cccccccccccc"
+              ]
+            },
+            {
+              "text": "SELECT EXISTS (\n       SELECT 1 FROM pg_attribute\n        WHERE attrelid = to_regclass('ros_conversations')\n          AND attname = 'task_id'\n          AND NOT attisdropped\n     ) AS present",
+              "values": []
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "task:cccccccc-3333-4333-8333-cccccccccccc",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_conversations\n       (session_key, agent, channel, title, settings, active, created_at, updated_at\n        , task_id)\n     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,now()),COALESCE($8,now())\n        , $9)\n     RETURNING id",
+              "values": [
+                "task:cccccccc-3333-4333-8333-cccccccccccc",
+                "rivet-claude",
+                "claude-code",
+                "mid-flight turn",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"spawn-legacy\",\"last_event\":\"UserPromptSubmit\",\"last_ingest_at\":\"<now-1>\"}",
+                true,
+                null,
+                null,
+                "cccccccc-3333-4333-8333-cccccccccccc"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "mid-flight turn",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"hook_event\":\"UserPromptSubmit\"}",
+                null
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations SET updated_at = now(), settings = $2 WHERE id = $1",
+              "values": [
+                "conv-1",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"spawn-legacy\",\"last_event\":\"UserPromptSubmit\",\"last_ingest_at\":\"<now-1>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "task:cccccccc-3333-4333-8333-cccccccccccc",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": "mid-flight turn",
+                "settings": "{\"source\": \"claude-code-hook\", \"last_event\": \"UserPromptSubmit\", \"session_id\": \"spawn-legacy\", \"last_ingest_at\": \"<now-1>\"}",
+                "active": true,
+                "created_at": "<now-2>",
+                "updated_at": "<now-2>",
+                "task_id": "cccccccc-3333-4333-8333-cccccccccccc",
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "mid-flight turn",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "<now-2>",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              }
+            ],
+            "graphile_jobs": [
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-1\"}",
+                "key": "embed-ros_messages-msg-1",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              }
+            ],
+            "ros_summaries_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "task-id-absent-column",
+      "schema": "pre0011",
+      "schemaDescription": "task-association.test.ts SCRATCH_DDL only: no task_id, no owner_user_id",
+      "steps": [
+        {
+          "kind": "ingestHookEvent",
+          "label": "hook on a schema without task_id",
+          "input": {
+            "payload": {
+              "hook_event_name": "UserPromptSubmit",
+              "session_id": "spawn-unmigrated",
+              "prompt": "capture must not break"
+            },
+            "taskId": "cccccccc-3333-4333-8333-cccccccccccc",
+            "pgUrl": "<pg-url>"
+          },
+          "result": {
+            "sessionKey": "claude-code:spawn-unmigrated",
+            "conversationId": "conv-1",
+            "created": true,
+            "inserted": 1
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:spawn-unmigrated"
+              ]
+            },
+            {
+              "text": "SELECT EXISTS (\n       SELECT 1 FROM pg_attribute\n        WHERE attrelid = to_regclass('ros_conversations')\n          AND attname = 'task_id'\n          AND NOT attisdropped\n     ) AS present",
+              "values": []
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:spawn-unmigrated",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_conversations\n       (session_key, agent, channel, title, settings, active, created_at, updated_at\n        )\n     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,now()),COALESCE($8,now())\n        )\n     RETURNING id",
+              "values": [
+                "claude-code:spawn-unmigrated",
+                "rivet-claude",
+                "claude-code",
+                "capture must not break",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"spawn-unmigrated\",\"last_event\":\"UserPromptSubmit\",\"last_ingest_at\":\"<now-1>\"}",
+                true,
+                null,
+                null
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "capture must not break",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"hook_event\":\"UserPromptSubmit\"}",
+                null
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations SET updated_at = now(), settings = $2 WHERE id = $1",
+              "values": [
+                "conv-1",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"spawn-unmigrated\",\"last_event\":\"UserPromptSubmit\",\"last_ingest_at\":\"<now-1>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:spawn-unmigrated",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "title": "capture must not break",
+                "settings": "{\"source\": \"claude-code-hook\", \"last_event\": \"UserPromptSubmit\", \"session_id\": \"spawn-unmigrated\", \"last_ingest_at\": \"<now-1>\"}",
+                "active": true,
+                "created_at": "<now-2>",
+                "updated_at": "<now-2>"
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "capture must not break",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "created_at": "<now-2>"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "ingestTranscript",
+          "label": "transcript on a schema without task_id",
+          "input": {
+            "transcriptPath": "__FIXTURES__/task-pre.jsonl",
+            "transcriptLines": [
+              "{\"type\":\"user\",\"sessionId\":\"33333333-0000-4000-8000-000000000003\",\"uuid\":\"u1\",\"timestamp\":\"2026-01-01T00:00:01.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"user\",\"content\":\"pre 0011\"}}",
+              "{\"type\":\"assistant\",\"sessionId\":\"33333333-0000-4000-8000-000000000003\",\"uuid\":\"a1\",\"timestamp\":\"2026-01-01T00:00:02.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"assistant\",\"model\":\"claude-x\",\"content\":\"fine\"}}"
+            ],
+            "options": {
+              "sessionId": "33333333-0000-4000-8000-000000000003",
+              "taskId": "cccccccc-3333-4333-8333-cccccccccccc",
+              "pgUrl": "<pg-url>"
+            }
+          },
+          "result": {
+            "sessionKey": "claude-code:33333333-0000-4000-8000-000000000003",
+            "conversationId": "conv-2",
+            "created": true,
+            "inserted": 2,
+            "alreadyStored": 0
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:33333333-0000-4000-8000-000000000003"
+              ]
+            },
+            {
+              "text": "SELECT EXISTS (\n       SELECT 1 FROM pg_attribute\n        WHERE attrelid = to_regclass('ros_conversations')\n          AND attname = 'task_id'\n          AND NOT attisdropped\n     ) AS present",
+              "values": []
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:33333333-0000-4000-8000-000000000003",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_conversations\n       (session_key, agent, channel, title, settings, active, created_at, updated_at\n        )\n     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,now()),COALESCE($8,now())\n        )\n     RETURNING id",
+              "values": [
+                "claude-code:33333333-0000-4000-8000-000000000003",
+                "rivet-claude",
+                "claude-code",
+                "pre 0011",
+                "{\"source\":\"claude-code-hook\",\"file\":\"__FIXTURES__/task-pre.jsonl\",\"session_id\":\"33333333-0000-4000-8000-000000000003\",\"pr_url\":null,\"cwd\":\"/work/demo\",\"last_event\":null,\"last_ingest_at\":\"<now-3>\"}",
+                true,
+                "2026-01-01T00:00:01.000Z",
+                "2026-01-01T00:00:02.000Z"
+              ]
+            },
+            {
+              "text": "SELECT metadata->>'uuid' AS uuid FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'assistant' AND metadata ? 'uuid'",
+              "values": [
+                "conv-2"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-2",
+                "rivet-claude",
+                "claude-code",
+                "assistant",
+                "fine",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"a1\",\"sidechain\":false}",
+                "2026-01-01T00:00:02.000Z"
+              ]
+            },
+            {
+              "text": "SELECT tool_name, tool_args::text AS args FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'tool'",
+              "values": [
+                "conv-2"
+              ]
+            },
+            {
+              "text": "SELECT content FROM ros_messages WHERE conversation_id = $1 AND role = 'user'",
+              "values": [
+                "conv-2"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-2",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "pre 0011",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"u1\",\"recovered\":true}",
+                "2026-01-01T00:00:01.000Z"
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations\n         SET updated_at = COALESCE($2, now()),\n             active = $3,\n             title = COALESCE($4, title),\n             settings = $5\n       WHERE id = $1",
+              "values": [
+                "conv-2",
+                "2026-01-01T00:00:02.000Z",
+                true,
+                null,
+                "{\"source\":\"claude-code-hook\",\"file\":\"__FIXTURES__/task-pre.jsonl\",\"session_id\":\"33333333-0000-4000-8000-000000000003\",\"pr_url\":null,\"cwd\":\"/work/demo\",\"last_event\":null,\"last_ingest_at\":\"<now-3>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-2",
+                "session_key": "claude-code:33333333-0000-4000-8000-000000000003",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "title": "pre 0011",
+                "settings": "{\"cwd\": \"/work/demo\", \"file\": \"__FIXTURES__/task-pre.jsonl\", \"pr_url\": null, \"source\": \"claude-code-hook\", \"last_event\": null, \"session_id\": \"33333333-0000-4000-8000-000000000003\", \"last_ingest_at\": \"<now-3>\"}",
+                "active": true,
+                "created_at": "2026-01-01 00:00:01+00",
+                "updated_at": "2026-01-01 00:00:02+00"
+              },
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:spawn-unmigrated",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "title": "capture must not break",
+                "settings": "{\"source\": \"claude-code-hook\", \"last_event\": \"UserPromptSubmit\", \"session_id\": \"spawn-unmigrated\", \"last_ingest_at\": \"<now-1>\"}",
+                "active": true,
+                "created_at": "<now-2>",
+                "updated_at": "<now-2>"
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "capture must not break",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"source\": \"claude-code-hook\", \"hook_event\": \"UserPromptSubmit\"}",
+                "created_at": "<now-2>"
+              },
+              {
+                "id": "msg-2",
+                "conversation_id": "conv-2",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "assistant",
+                "content": "fine",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"uuid\": \"a1\", \"source\": \"claude-code-hook\", \"sidechain\": false}",
+                "created_at": "2026-01-01 00:00:02+00"
+              },
+              {
+                "id": "msg-3",
+                "conversation_id": "conv-2",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "pre 0011",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"uuid\": \"u1\", \"source\": \"claude-code-hook\", \"recovered\": true}",
+                "created_at": "2026-01-01 00:00:01+00"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,654 @@
+{
+  "group": "errors",
+  "generator": "tools/capture-pg-goldens.mjs",
+  "captureAgent": "rivet-claude",
+  "scenarios": [
+    {
+      "name": "transcript-error-new-conversation",
+      "schema": "public",
+      "schemaDescription": "full TypeScript migrations 0001-0020 (task_id 0011 and owner_user_id 0013 present) plus graphile-worker",
+      "note": "tool_args jsonb rejects \\u0000 (22P05) after the conversation and assistant rows were inserted: ROLLBACK leaves nothing",
+      "steps": [
+        {
+          "kind": "ingestTranscript",
+          "label": "ingest fails mid-transaction",
+          "input": {
+            "transcriptPath": "__FIXTURES__/err1.jsonl",
+            "transcriptLines": [
+              "{\"type\":\"user\",\"sessionId\":\"11111111-0000-4000-8000-000000000001\",\"uuid\":\"u1\",\"timestamp\":\"2026-01-01T00:00:01.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"user\",\"content\":\"break it\"}}",
+              "{\"type\":\"assistant\",\"sessionId\":\"11111111-0000-4000-8000-000000000001\",\"uuid\":\"a1\",\"timestamp\":\"2026-01-01T00:00:02.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"assistant\",\"model\":\"claude-x\",\"content\":\"about to fail\"}}",
+              "{\"type\":\"assistant\",\"sessionId\":\"11111111-0000-4000-8000-000000000001\",\"uuid\":\"a2\",\"timestamp\":\"2026-01-01T00:00:03.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"assistant\",\"model\":\"claude-x\",\"content\":[{\"type\":\"text\",\"text\":\"bad call\"},{\"type\":\"tool_use\",\"id\":\"z1\",\"name\":\"Bash\",\"input\":{\"cmd\":\"a\\u0000b\"}}]}}"
+            ],
+            "options": {
+              "sessionId": "11111111-0000-4000-8000-000000000001",
+              "event": "Stop",
+              "pgUrl": "<pg-url>"
+            }
+          },
+          "error": {
+            "name": "error",
+            "message": "unsupported Unicode escape sequence",
+            "code": "22P05"
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:11111111-0000-4000-8000-000000000001"
+              ]
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:11111111-0000-4000-8000-000000000001",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_conversations\n       (session_key, agent, channel, title, settings, active, created_at, updated_at\n        )\n     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,now()),COALESCE($8,now())\n        )\n     RETURNING id",
+              "values": [
+                "claude-code:11111111-0000-4000-8000-000000000001",
+                "rivet-claude",
+                "claude-code",
+                "break it",
+                "{\"source\":\"claude-code-hook\",\"file\":\"__FIXTURES__/err1.jsonl\",\"session_id\":\"11111111-0000-4000-8000-000000000001\",\"pr_url\":null,\"cwd\":\"/work/demo\",\"last_event\":\"Stop\",\"last_ingest_at\":\"<now-1>\"}",
+                true,
+                "2026-01-01T00:00:01.000Z",
+                "2026-01-01T00:00:03.000Z"
+              ]
+            },
+            {
+              "text": "SELECT metadata->>'uuid' AS uuid FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'assistant' AND metadata ? 'uuid'",
+              "values": [
+                "id-1"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "id-1",
+                "rivet-claude",
+                "claude-code",
+                "assistant",
+                "about to fail",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"a1\",\"sidechain\":false}",
+                "2026-01-01T00:00:02.000Z"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "id-1",
+                "rivet-claude",
+                "claude-code",
+                "assistant",
+                "bad call",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"a2\",\"sidechain\":false}",
+                "2026-01-01T00:00:03.000Z"
+              ]
+            },
+            {
+              "text": "SELECT tool_name, tool_args::text AS args FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'tool'",
+              "values": [
+                "id-1"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "id-1",
+                "rivet-claude",
+                "claude-code",
+                "tool",
+                "[tool call] Bash",
+                "Bash",
+                "{\"cmd\":\"a\\u0000b\"}",
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"a2\",\"hook_event\":\"PostToolUse\",\"recovered\":true}",
+                "2026-01-01T00:00:03.000Z"
+              ]
+            },
+            {
+              "text": "ROLLBACK",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [],
+            "ros_messages": [],
+            "graphile_jobs": [],
+            "ros_summaries_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "transcript-error-existing-conversation",
+      "schema": "public",
+      "schemaDescription": "full TypeScript migrations 0001-0020 (task_id 0011 and owner_user_id 0013 present) plus graphile-worker",
+      "steps": [
+        {
+          "kind": "ingestTranscript",
+          "label": "good first ingest",
+          "input": {
+            "transcriptPath": "__FIXTURES__/err2.jsonl",
+            "transcriptLines": [
+              "{\"type\":\"user\",\"sessionId\":\"22222222-0000-4000-8000-000000000002\",\"uuid\":\"u1\",\"timestamp\":\"2026-01-01T00:00:01.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"user\",\"content\":\"fine\"}}",
+              "{\"type\":\"assistant\",\"sessionId\":\"22222222-0000-4000-8000-000000000002\",\"uuid\":\"a1\",\"timestamp\":\"2026-01-01T00:00:02.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"assistant\",\"model\":\"claude-x\",\"content\":\"fine too\"}}"
+            ],
+            "options": {
+              "sessionId": "22222222-0000-4000-8000-000000000002",
+              "event": "Stop",
+              "pgUrl": "<pg-url>"
+            }
+          },
+          "result": {
+            "sessionKey": "claude-code:22222222-0000-4000-8000-000000000002",
+            "conversationId": "conv-1",
+            "created": true,
+            "inserted": 2,
+            "alreadyStored": 0
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:22222222-0000-4000-8000-000000000002"
+              ]
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:22222222-0000-4000-8000-000000000002",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_conversations\n       (session_key, agent, channel, title, settings, active, created_at, updated_at\n        )\n     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,now()),COALESCE($8,now())\n        )\n     RETURNING id",
+              "values": [
+                "claude-code:22222222-0000-4000-8000-000000000002",
+                "rivet-claude",
+                "claude-code",
+                "fine",
+                "{\"source\":\"claude-code-hook\",\"file\":\"__FIXTURES__/err2.jsonl\",\"session_id\":\"22222222-0000-4000-8000-000000000002\",\"pr_url\":null,\"cwd\":\"/work/demo\",\"last_event\":\"Stop\",\"last_ingest_at\":\"<now-1>\"}",
+                true,
+                "2026-01-01T00:00:01.000Z",
+                "2026-01-01T00:00:02.000Z"
+              ]
+            },
+            {
+              "text": "SELECT metadata->>'uuid' AS uuid FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'assistant' AND metadata ? 'uuid'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "assistant",
+                "fine too",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"a1\",\"sidechain\":false}",
+                "2026-01-01T00:00:02.000Z"
+              ]
+            },
+            {
+              "text": "SELECT tool_name, tool_args::text AS args FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'tool'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "SELECT content FROM ros_messages WHERE conversation_id = $1 AND role = 'user'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "user",
+                "fine",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"u1\",\"recovered\":true}",
+                "2026-01-01T00:00:01.000Z"
+              ]
+            },
+            {
+              "text": "UPDATE ros_conversations\n         SET updated_at = COALESCE($2, now()),\n             active = $3,\n             title = COALESCE($4, title),\n             settings = $5\n       WHERE id = $1",
+              "values": [
+                "conv-1",
+                "2026-01-01T00:00:02.000Z",
+                true,
+                null,
+                "{\"source\":\"claude-code-hook\",\"file\":\"__FIXTURES__/err2.jsonl\",\"session_id\":\"22222222-0000-4000-8000-000000000002\",\"pr_url\":null,\"cwd\":\"/work/demo\",\"last_event\":\"Stop\",\"last_ingest_at\":\"<now-1>\"}"
+              ]
+            },
+            {
+              "text": "COMMIT",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:22222222-0000-4000-8000-000000000002",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": "fine",
+                "settings": "{\"cwd\": \"/work/demo\", \"file\": \"__FIXTURES__/err2.jsonl\", \"pr_url\": null, \"source\": \"claude-code-hook\", \"last_event\": \"Stop\", \"session_id\": \"22222222-0000-4000-8000-000000000002\", \"last_ingest_at\": \"<now-1>\"}",
+                "active": true,
+                "created_at": "2026-01-01 00:00:01+00",
+                "updated_at": "2026-01-01 00:00:02+00",
+                "task_id": null,
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "assistant",
+                "content": "fine too",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"uuid\": \"a1\", \"source\": \"claude-code-hook\", \"sidechain\": false}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "2026-01-01 00:00:02+00",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              },
+              {
+                "id": "msg-2",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "fine",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"uuid\": \"u1\", \"source\": \"claude-code-hook\", \"recovered\": true}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "2026-01-01 00:00:01+00",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              }
+            ],
+            "graphile_jobs": [
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-1\"}",
+                "key": "embed-ros_messages-msg-1",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              },
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-2\"}",
+                "key": "embed-ros_messages-msg-2",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              }
+            ],
+            "ros_summaries_count": 0
+          }
+        },
+        {
+          "kind": "ingestTranscript",
+          "label": "grown with a bad tool call and an ai-title: rolled back, rows and settings unchanged",
+          "input": {
+            "transcriptPath": "__FIXTURES__/err2.jsonl",
+            "transcriptLines": [
+              "{\"type\":\"user\",\"sessionId\":\"22222222-0000-4000-8000-000000000002\",\"uuid\":\"u1\",\"timestamp\":\"2026-01-01T00:00:01.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"user\",\"content\":\"fine\"}}",
+              "{\"type\":\"assistant\",\"sessionId\":\"22222222-0000-4000-8000-000000000002\",\"uuid\":\"a1\",\"timestamp\":\"2026-01-01T00:00:02.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"assistant\",\"model\":\"claude-x\",\"content\":\"fine too\"}}",
+              "{\"type\":\"assistant\",\"sessionId\":\"22222222-0000-4000-8000-000000000002\",\"uuid\":\"a2\",\"timestamp\":\"2026-01-01T00:00:03.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"assistant\",\"model\":\"claude-x\",\"content\":\"new text\"}}",
+              "{\"type\":\"assistant\",\"sessionId\":\"22222222-0000-4000-8000-000000000002\",\"uuid\":\"a3\",\"timestamp\":\"2026-01-01T00:00:04.000Z\",\"cwd\":\"/work/demo\",\"message\":{\"role\":\"assistant\",\"model\":\"claude-x\",\"content\":[{\"type\":\"text\",\"text\":\"bad\"},{\"type\":\"tool_use\",\"id\":\"z2\",\"name\":\"Bash\",\"input\":{\"cmd\":\"a\\u0000b\"}}]}}",
+              "{\"type\":\"ai-title\",\"sessionId\":\"22222222-0000-4000-8000-000000000002\",\"aiTitle\":\"never applied\"}"
+            ],
+            "options": {
+              "sessionId": "22222222-0000-4000-8000-000000000002",
+              "event": "SessionEnd",
+              "markInactive": true,
+              "pgUrl": "<pg-url>"
+            }
+          },
+          "error": {
+            "name": "error",
+            "message": "unsupported Unicode escape sequence",
+            "code": "22P05"
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:22222222-0000-4000-8000-000000000002"
+              ]
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:22222222-0000-4000-8000-000000000002",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "SELECT metadata->>'uuid' AS uuid FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'assistant' AND metadata ? 'uuid'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "assistant",
+                "new text",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"a2\",\"sidechain\":false}",
+                "2026-01-01T00:00:03.000Z"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "assistant",
+                "bad",
+                null,
+                null,
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"a3\",\"sidechain\":false}",
+                "2026-01-01T00:00:04.000Z"
+              ]
+            },
+            {
+              "text": "SELECT tool_name, tool_args::text AS args FROM ros_messages\n        WHERE conversation_id = $1 AND role = 'tool'",
+              "values": [
+                "conv-1"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "conv-1",
+                "rivet-claude",
+                "claude-code",
+                "tool",
+                "[tool call] Bash",
+                "Bash",
+                "{\"cmd\":\"a\\u0000b\"}",
+                null,
+                "{\"source\":\"claude-code-hook\",\"uuid\":\"a3\",\"hook_event\":\"PostToolUse\",\"recovered\":true}",
+                "2026-01-01T00:00:04.000Z"
+              ]
+            },
+            {
+              "text": "ROLLBACK",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [
+              {
+                "id": "conv-1",
+                "session_key": "claude-code:22222222-0000-4000-8000-000000000002",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "channel_id": null,
+                "bot_identity": null,
+                "title": "fine",
+                "settings": "{\"cwd\": \"/work/demo\", \"file\": \"__FIXTURES__/err2.jsonl\", \"pr_url\": null, \"source\": \"claude-code-hook\", \"last_event\": \"Stop\", \"session_id\": \"22222222-0000-4000-8000-000000000002\", \"last_ingest_at\": \"<now-1>\"}",
+                "active": true,
+                "created_at": "2026-01-01 00:00:01+00",
+                "updated_at": "2026-01-01 00:00:02+00",
+                "task_id": null,
+                "owner_user_id": null
+              }
+            ],
+            "ros_messages": [
+              {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "assistant",
+                "content": "fine too",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"uuid\": \"a1\", \"source\": \"claude-code-hook\", \"sidechain\": false}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "2026-01-01 00:00:02+00",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              },
+              {
+                "id": "msg-2",
+                "conversation_id": "conv-1",
+                "agent": "rivet-claude",
+                "channel": "claude-code",
+                "role": "user",
+                "content": "fine",
+                "tool_name": null,
+                "tool_args": null,
+                "tool_result": null,
+                "metadata": "{\"uuid\": \"u1\", \"source\": \"claude-code-hook\", \"recovered\": true}",
+                "access_count": 0,
+                "last_accessed_at": null,
+                "created_at": "2026-01-01 00:00:01+00",
+                "embed_failures": 0,
+                "embed_error": null,
+                "embed_status": null,
+                "owner_user_id": null,
+                "content_hash": null
+              }
+            ],
+            "graphile_jobs": [
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-1\"}",
+                "key": "embed-ros_messages-msg-1",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              },
+              {
+                "task": "embed-target",
+                "queue": null,
+                "payload": "{\"targetTable\" : \"ros_messages\", \"targetId\" : \"msg-2\"}",
+                "key": "embed-ros_messages-msg-2",
+                "priority": 0,
+                "max_attempts": 5,
+                "attempts": 0
+              }
+            ],
+            "ros_summaries_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "hook-error",
+      "schema": "public",
+      "schemaDescription": "full TypeScript migrations 0001-0020 (task_id 0011 and owner_user_id 0013 present) plus graphile-worker",
+      "steps": [
+        {
+          "kind": "ingestHookEvent",
+          "label": "PostToolUse with \\u0000 in tool_input: rolled back, no conversation",
+          "input": {
+            "payload": {
+              "hook_event_name": "PostToolUse",
+              "session_id": "33333333-0000-4000-8000-000000000003",
+              "tool_name": "Bash",
+              "tool_input": {
+                "cmd": "a\u0000b"
+              },
+              "tool_response": "x"
+            },
+            "idempotencyKey": "1791656214170-errerr",
+            "pgUrl": "<pg-url>"
+          },
+          "error": {
+            "name": "error",
+            "message": "unsupported Unicode escape sequence",
+            "code": "22P05"
+          },
+          "sql": [
+            {
+              "text": "SET idle_in_transaction_session_timeout = '30s'",
+              "values": []
+            },
+            {
+              "text": "SET statement_timeout = '60s'",
+              "values": []
+            },
+            {
+              "text": "BEGIN",
+              "values": []
+            },
+            {
+              "text": "SELECT pg_advisory_xact_lock(hashtext($1))",
+              "values": [
+                "claude-code:33333333-0000-4000-8000-000000000003"
+              ]
+            },
+            {
+              "text": "SELECT id, title FROM ros_conversations WHERE session_key = $1 AND agent = $2",
+              "values": [
+                "claude-code:33333333-0000-4000-8000-000000000003",
+                "rivet-claude"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_conversations\n       (session_key, agent, channel, title, settings, active, created_at, updated_at\n        )\n     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,now()),COALESCE($8,now())\n        )\n     RETURNING id",
+              "values": [
+                "claude-code:33333333-0000-4000-8000-000000000003",
+                "rivet-claude",
+                "claude-code",
+                "Claude Code session",
+                "{\"source\":\"claude-code-hook\",\"session_id\":\"33333333-0000-4000-8000-000000000003\",\"last_event\":\"PostToolUse\",\"last_ingest_at\":\"<now-1>\"}",
+                true,
+                null,
+                null
+              ]
+            },
+            {
+              "text": "SELECT 1 FROM ros_messages\n            WHERE conversation_id = $1 AND metadata->>'ingest_key' = $2\n            LIMIT 1",
+              "values": [
+                "id-1",
+                "1791656214170-errerr"
+              ]
+            },
+            {
+              "text": "INSERT INTO ros_messages\n       (conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, created_at)\n     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10,now()))",
+              "values": [
+                "id-1",
+                "rivet-claude",
+                "claude-code",
+                "tool",
+                "[tool call] Bash",
+                "Bash",
+                "{\"cmd\":\"a\\u0000b\"}",
+                "x",
+                "{\"source\":\"claude-code-hook\",\"hook_event\":\"PostToolUse\",\"ingest_key\":\"1791656214170-errerr\"}",
+                null
+              ]
+            },
+            {
+              "text": "ROLLBACK",
+              "values": []
+            }
+          ],
+          "rows": {
+            "ros_conversations": [],
+            "ros_messages": [],
+            "graphile_jobs": [],
+            "ros_summaries_count": 0
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -8,8 +8,6 @@ use wire::capture::CaptureBatchRequest;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-const GOLDEN_MEMORY: &str = "/rivet-shared/plans/rust-rewrite/golden/memory/capture-batch.json";
-
 fn store(pool: &PgPool) -> PostgresMemory {
     PostgresMemory::new(pool.clone())
 }
@@ -22,7 +20,7 @@ fn at<'a>(value: &'a Value, key: &str) -> &'a Value {
 async fn capture_batch_golden(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let queue = queue_present(&pool).await?;
-    let text = std::fs::read_to_string(GOLDEN_MEMORY)?;
+    let text = std::fs::read_to_string(testkit::recording("memory/capture-batch.json"))?;
     let golden: Value = serde_json::from_str(&text)?;
 
     let mut conv_ids: BTreeMap<String, String> = BTreeMap::new();
