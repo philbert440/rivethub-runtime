@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 cargo_metadata.workspace = true
+hex.workspace = true
 ra-ap-rustc_lexer.workspace = true
 regex.workspace = true
 serde = { workspace = true, features = ["derive"] }

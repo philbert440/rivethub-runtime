@@ -84,6 +84,7 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
     crate::manifests::lint_policy(root, &mut findings)?;
     crate::toolconfig::check(root, &mut findings)?;
     crate::patterns::check(root, &mut findings)?;
+    crate::dupfixture::check(root, &mut findings)?;
     crate::lang::privacy_and_secrets(root, &mut findings)?;
     finish("cargo xtask check", &findings)
 }

@@ -15,5 +15,8 @@ serde_with = { workspace = true, features = ["chrono"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+testkit = { workspace = true }
+
 [lints]
 workspace = true

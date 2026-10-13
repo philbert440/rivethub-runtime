@@ -12,10 +12,6 @@ use testkit::HookPost;
 use testkit::capture::entries;
 use wire::capture::CaptureResult;
 
-fn goldens() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden")
-}
-
 #[derive(Clone)]
 struct FakeTransport {
     posts: Arc<Mutex<Vec<String>>>,
@@ -58,7 +54,7 @@ fn prepare_store(root: &Path) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(&store)?;
     let target = store.join("33333333-3333-3333-3333-333333333333.jsonl");
     std::fs::copy(
-        goldens().join("capture/claude-hook/transcript.jsonl"),
+        testkit::recording("capture/claude-hook/transcript.jsonl"),
         &target,
     )?;
     Ok(target)
@@ -135,7 +131,7 @@ async fn run_entry(
 }
 
 async fn run_replay() -> Result<(), Box<dyn std::error::Error>> {
-    let recording = goldens().join("capture/claude-hook/hook-ts.json");
+    let recording = testkit::recording("capture/claude-hook/hook-ts.json");
     let session_entries = entries(&recording)?;
     let outer = tempfile::tempdir()?;
     let transcript = prepare_store(outer.path())?;

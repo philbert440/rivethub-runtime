@@ -2820,6 +2820,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "strum",
+ "testkit",
  "thiserror",
 ]
 
@@ -2840,6 +2841,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "cargo_metadata",
+ "hex",
  "ra-ap-rustc_lexer",
  "regex",
  "serde",

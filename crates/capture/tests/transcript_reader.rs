@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use chrono::DateTime;
@@ -7,10 +6,6 @@ use kernel::transcript::TranscriptReader;
 use wire::message::Role;
 use wire::session_id::SessionId;
 
-fn goldens() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden")
-}
-
 const SESSION: &str = "33333333-3333-3333-3333-333333333333";
 
 fn store() -> Result<tempfile::TempDir, Box<dyn std::error::Error>> {
@@ -18,7 +13,7 @@ fn store() -> Result<tempfile::TempDir, Box<dyn std::error::Error>> {
     let project = dir.path().join("projects").join("-work-demo");
     std::fs::create_dir_all(&project)?;
     std::fs::copy(
-        goldens().join("capture/claude-hook/transcript.jsonl"),
+        testkit::recording("capture/claude-hook/transcript.jsonl"),
         project.join(format!("{SESSION}.jsonl")),
     )?;
     Ok(dir)

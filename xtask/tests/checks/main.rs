@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use xtask::check;
 use xtask::code;
+use xtask::dupfixture;
 use xtask::lang;
 use xtask::manifests;
 use xtask::patterns;
@@ -662,6 +663,83 @@ fn entry_without_check_line_fires() -> Result<(), Box<dyn std::error::Error>> {
             .iter()
             .any(|finding| finding.contains("STRSET: entry has no Check: line")),
         "an entry without a Check line is reported: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn dupfixture_cross_crate_duplicate_fires() -> Result<(), Box<dyn std::error::Error>> {
+    let repo = Repo::new()?;
+    repo.write(
+        "crates/wire/tests/golden/capture/writer/results.json",
+        "{\"single\":{\"ok\":true}}\n",
+    )?;
+    repo.write(
+        "crates/testkit/tests/fixtures/capture/writer/results.json",
+        "{\"single\":{\"ok\":true}}\n",
+    )?;
+    repo.write(
+        "crates/wire/tests/golden/capture/claude-hook/hook-ts.json",
+        "{\"entries\":[]}\n",
+    )?;
+    repo.write(
+        "crates/capture/tests/golden/capture/claude-hook/hook-ts.json",
+        "{\"entries\":[]}\n",
+    )?;
+    repo.track()?;
+    let mut findings = Vec::new();
+    dupfixture::check(repo.root(), &mut findings)?;
+    assert_eq!(findings.len(), 2, "both pairs fire: {findings:?}");
+    assert!(
+        findings
+            .iter()
+            .all(|finding| finding.starts_with("DUPFIXTURE ")),
+        "findings carry the DUPFIXTURE label: {findings:?}"
+    );
+    assert!(
+        findings.iter().any(|finding| {
+            finding.contains("crates/testkit/tests/fixtures/capture/writer/results.json")
+                && finding.contains("crates/wire/tests/golden/capture/writer/results.json")
+        }),
+        "the writer pair is named: {findings:?}"
+    );
+    assert!(
+        findings.iter().any(|finding| {
+            finding.contains("crates/capture/tests/golden/capture/claude-hook/hook-ts.json")
+                && finding.contains("crates/wire/tests/golden/capture/claude-hook/hook-ts.json")
+        }),
+        "the claude-hook pair is named: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn dupfixture_one_crate_copies_pass() -> Result<(), Box<dyn std::error::Error>> {
+    let repo = Repo::new()?;
+    let chunks = "{\"chunks\":[]}\n";
+    repo.write(
+        "crates/wire/tests/golden/providers/vllm/A-text/chunks.json",
+        chunks,
+    )?;
+    repo.write(
+        "crates/wire/tests/golden/providers/ollama/A-text/chunks.json",
+        chunks,
+    )?;
+    repo.write(
+        "crates/wire/tests/fixtures/provider/A-text/chunks.json",
+        chunks,
+    )?;
+    repo.write("crates/wire/tests/golden/DEVIATIONS.md", "# deviations\n")?;
+    repo.write(
+        "crates/config/tests/golden/DEVIATIONS.md",
+        "# other deviations\n",
+    )?;
+    repo.track()?;
+    let mut findings = Vec::new();
+    dupfixture::check(repo.root(), &mut findings)?;
+    assert!(
+        findings.is_empty(),
+        "identical files inside one crate and differing files across crates pass: {findings:?}"
     );
     Ok(())
 }

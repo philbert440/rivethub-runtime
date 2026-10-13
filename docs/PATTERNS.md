@@ -211,6 +211,15 @@ imported where needed; a wire payload that genuinely differs gets a type that di
 variant set and the same final name word, e.g. `Role`/`CaptureRole`, across the crate and its dependencies — renaming
 must not hide it).
 
+## DUPFIXTURE
+Anti-pattern: the same recording vendored by more than one crate (`capture/writer/*` under `crates/wire/tests/golden/`
+and again under `crates/testkit/tests/fixtures/`); the copies drift when a re-recording updates one and not the other.
+Pattern: a recording shared by more than one crate lives once, under `crates/testkit/tests/fixtures/`, and every crate
+reads it through testkit's path helper (`testkit::recording`); a recording only one crate uses stays in that crate, and
+identical files inside one crate (separate scenarios that recorded the same bytes, e.g. provider chunks) are fine.
+Check: xtask `DUPFIXTURE` (a tracked file under any `crates/*/tests/golden/` or `crates/*/tests/fixtures/` whose bytes
+equal a file in a different crate's fixture tree is a finding naming both paths).
+
 ## WIREPUB
 Anti-pattern: private fields with accessor methods on `wire` payload structs. Pattern: wire payloads are plain data with
 `pub` fields; invariants live in validated newtypes (`SessionId`). Check: dylint `wirepub` (a payload type — one with a

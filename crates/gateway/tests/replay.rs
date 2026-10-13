@@ -239,7 +239,7 @@ const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
 ];
 
 fn golden(name: &str) -> PathBuf {
-    testkit::golden_path(env!("CARGO_MANIFEST_DIR"), "tests/golden").join(name)
+    testkit::recording(name)
 }
 
 fn masks() -> testkit::Masks {

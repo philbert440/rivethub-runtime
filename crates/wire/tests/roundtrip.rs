@@ -1,8 +1,23 @@
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use std::path::Path;
+use std::path::PathBuf;
 
 const GOLDEN_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden");
+
+fn golden(rel: &str) -> PathBuf {
+    Path::new(GOLDEN_DIR).join(rel)
+}
+
+fn recording(rel: &str) -> PathBuf {
+    testkit::recording(rel)
+}
+
+fn load(rel: &str, path: &Path) -> Result<Value, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{rel}: {e}"))?;
+    serde_json::from_str(&text).map_err(|e| format!("{rel}: {e}"))
+}
 
 const SKIPPED_CASES: &[&str] = &[
     "post-clamp-low",
@@ -12,12 +27,6 @@ const SKIPPED_CASES: &[&str] = &[
     "post-reserialize",
     "event-reserialize",
 ];
-
-fn load(rel: &str) -> Result<Value, String> {
-    let path = format!("{GOLDEN_DIR}/{rel}");
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("{rel}: {e}"))?;
-    serde_json::from_str(&text).map_err(|e| format!("{rel}: {e}"))
-}
 
 fn strip_nulls(value: &mut Value) {
     match value {
@@ -251,8 +260,8 @@ fn roundtrip_case(case: &Value, errors: &mut Vec<String>) {
     }
 }
 
-fn roundtrip_exchange_file(rel: &str, errors: &mut Vec<String>) -> Result<(), String> {
-    let doc = load(rel)?;
+fn roundtrip_exchange_file(rel: &str, path: &Path, errors: &mut Vec<String>) -> Result<(), String> {
+    let doc = load(rel, path)?;
     let Some(runs) = doc.get("runs").and_then(Value::as_object) else {
         return Ok(());
     };
@@ -308,8 +317,8 @@ fn ws_payload(text: &str, errors: &mut Vec<String>) {
     }
 }
 
-fn roundtrip_ws_file(rel: &str, errors: &mut Vec<String>) -> Result<(), String> {
-    let doc = load(rel)?;
+fn roundtrip_ws_file(rel: &str, path: &Path, errors: &mut Vec<String>) -> Result<(), String> {
+    let doc = load(rel, path)?;
     let Some(runs) = doc.get("runs").and_then(Value::as_object) else {
         return Ok(());
     };
@@ -356,7 +365,7 @@ fn roundtrip_ws_file(rel: &str, errors: &mut Vec<String>) -> Result<(), String> 
 }
 
 fn roundtrip_capture_batches(rel: &str, errors: &mut Vec<String>) -> Result<(), String> {
-    let doc = load(rel)?;
+    let doc = load(rel, &recording(rel))?;
     let Some(entries) = doc.as_array() else {
         return Ok(());
     };
@@ -380,23 +389,21 @@ fn roundtrip_capture_batches(rel: &str, errors: &mut Vec<String>) -> Result<(), 
 }
 
 fn roundtrip_capture_results(errors: &mut Vec<String>) -> Result<(), String> {
-    let doc = load("capture/writer/results.json")?;
+    let rel = "capture/writer/results.json";
+    let doc = load(rel, &recording(rel))?;
     let Some(results) = doc.as_object() else {
         return Ok(());
     };
     for result in results.values() {
         let body = result.to_string();
-        errors.push_result(roundtrip_as::<wire::capture::CaptureResult>(
-            "capture/writer/results.json",
-            &body,
-        ));
+        errors.push_result(roundtrip_as::<wire::capture::CaptureResult>(rel, &body));
     }
     Ok(())
 }
 
 fn provider_requests(server: &str, scenario: &str, errors: &mut Vec<String>) -> Result<(), String> {
     let rel = format!("providers/{server}/{scenario}/requests.json");
-    let doc = load(&rel)?;
+    let doc = load(&rel, &golden(&rel))?;
     let Some(entries) = doc.as_array() else {
         return Ok(());
     };
@@ -510,7 +517,7 @@ fn provider_responses(
 
 fn provider_chunks(server: &str, scenario: &str, errors: &mut Vec<String>) {
     let rel = format!("providers/{server}/{scenario}/chunks.json");
-    let Ok(doc) = load(&rel) else {
+    let Ok(doc) = load(&rel, &golden(&rel)) else {
         return;
     };
     let Some(entries) = doc.as_array() else {
@@ -556,29 +563,37 @@ fn check(errors: &[String]) -> Result<(), String> {
 #[test]
 fn gateway_http_bodies_roundtrip() -> Result<(), String> {
     let mut errors = Vec::new();
-    roundtrip_exchange_file("gateway/http-plain.json", &mut errors)?;
-    roundtrip_exchange_file("gateway/http-tls.json", &mut errors)?;
+    roundtrip_exchange_file(
+        "gateway/http-plain.json",
+        &recording("gateway/http-plain.json"),
+        &mut errors,
+    )?;
+    roundtrip_exchange_file(
+        "gateway/http-tls.json",
+        &golden("gateway/http-tls.json"),
+        &mut errors,
+    )?;
     check(&errors)
 }
 
 #[test]
 fn gateway_ws_frames_roundtrip() -> Result<(), String> {
     let mut errors = Vec::new();
-    roundtrip_ws_file("gateway/ws.json", &mut errors)?;
+    roundtrip_ws_file("gateway/ws.json", &golden("gateway/ws.json"), &mut errors)?;
     check(&errors)
 }
 
 #[test]
 fn term_http_bodies_roundtrip() -> Result<(), String> {
     let mut errors = Vec::new();
-    roundtrip_exchange_file("term/http.json", &mut errors)?;
+    roundtrip_exchange_file("term/http.json", &golden("term/http.json"), &mut errors)?;
     check(&errors)
 }
 
 #[test]
 fn term_ws_frames_roundtrip() -> Result<(), String> {
     let mut errors = Vec::new();
-    roundtrip_ws_file("term/ws.json", &mut errors)?;
+    roundtrip_ws_file("term/ws.json", &golden("term/ws.json"), &mut errors)?;
     check(&errors)
 }
 
@@ -593,7 +608,7 @@ fn capture_batches_roundtrip() -> Result<(), String> {
         "capture/writer/finalize_multi_chunk.input.json",
         "capture/writer/elide_tool_args.input.json",
     ] {
-        let body = load(name)?;
+        let body = load(name, &recording(name))?;
         errors.push_result(roundtrip_as::<wire::capture::CaptureBatchRequest>(
             name,
             &body.to_string(),
@@ -638,7 +653,10 @@ fn provider_payloads_roundtrip() -> Result<(), String> {
 #[test]
 fn users_registry_fixtures_roundtrip() -> Result<(), String> {
     let mut errors = Vec::new();
-    let tenancy = load("gateway/users-tenancy.json")?;
+    let tenancy = load(
+        "gateway/users-tenancy.json",
+        &golden("gateway/users-tenancy.json"),
+    )?;
     errors.push_result(roundtrip_as::<wire::gateway::users::UsersRegistry>(
         "gateway/users-tenancy.json",
         &tenancy.to_string(),
