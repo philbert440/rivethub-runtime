@@ -1,0 +1,300 @@
+{"fn":"normalize_query_text","in":"is search\t\r\n on queue","out":"is search on queue"}
+{"fn":"normalize_query_text","in":"trigram stuck yesterday\t","out":"trigram stuck yesterday"}
+{"fn":"normalize_query_text","in":"fix search","out":"fix search"}
+{"fn":"normalize_query_text","in":"café","out":"café"}
+{"fn":"normalize_query_text","in":"　Straße did","out":"Straße did"}
+{"fn":"normalize_query_text","in":"den\tis","out":"den is"}
+{"fn":"normalize_query_text","in":"on search memory node\t\t café den hnsw","out":"on search memory node café den hnsw"}
+{"fn":"normalize_query_text","in":"\tnode index\r\n","out":"node index"}
+{"fn":"normalize_query_text","in":"build\n","out":"build"}
+{"fn":"normalize_query_text","in":"\ndid server","out":"did server"}
+{"fn":"normalize_query_text","in":"we","out":"we"}
+{"fn":"normalize_query_text","in":"config server CI\r\nAcmeApp","out":"config server CI AcmeApp"}
+{"fn":"normalize_query_text","in":"build 🚀\t  \tdid den","out":"build 🚀 did den"}
+{"fn":"normalize_query_text","in":"the config agent","out":"the config agent"}
+{"fn":"normalize_query_text","in":"why for  pick\nhnsw server","out":"why for pick hnsw server"}
+{"fn":"normalize_query_text","in":"config hnsw postgres café cert why compaction config","out":"config hnsw postgres café cert why compaction config"}
+{"fn":"normalize_query_text","in":"CI\r\n   trigram server　 “quoted” ","out":"CI trigram server “quoted”"}
+{"fn":"normalize_query_text","in":"CI config yesterday summary AcmeApp","out":"CI config yesterday summary AcmeApp"}
+{"fn":"normalize_query_text","in":"fallback\n\n\r\nden why hnsw","out":"fallback den why hnsw"}
+{"fn":"normalize_query_text","in":"embedding CI search hnsw  🚀 TLS","out":"embedding CI search hnsw 🚀 TLS"}
+{"fn":"normalize_query_text","in":"mesh","out":"mesh"}
+{"fn":"normalize_query_text","in":"den","out":"den"}
+{"fn":"normalize_query_text","in":"hnsw\thnsw the deploy \r\ntag failed postgres failed","out":"hnsw hnsw the deploy tag failed postgres failed"}
+{"fn":"normalize_query_text","in":"embedding server build　\ntag","out":"embedding server build tag"}
+{"fn":"normalize_query_text","in":"cert did\r\n\nsession hnsw","out":"cert did session hnsw"}
+{"fn":"normalize_query_text","in":"build pick index summary project rust","out":"build pick index summary project rust"}
+{"fn":"normalize_query_text","in":" is the　  \tqueue\n\tfailed hnsw TLS　","out":"is the queue failed hnsw TLS"}
+{"fn":"normalize_query_text","in":"résumé mesh stuck \nsummary  ","out":"résumé mesh stuck summary"}
+{"fn":"normalize_query_text","in":"TLS we build on","out":"TLS we build on"}
+{"fn":"normalize_query_text","in":"\nrust build did 🚀 search","out":"rust build did 🚀 search"}
+{"fn":"normalize_query_text","in":"search deploy server summary ","out":"search deploy server summary"}
+{"fn":"normalize_query_text","in":"tag\tsummary index hnsw config fallback den　   project","out":"tag summary index hnsw config fallback den project"}
+{"fn":"normalize_query_text","in":"  mesh node\r\n   why\r\n \nthe failed","out":"mesh node why the failed"}
+{"fn":"normalize_query_text","in":"session node deploy we config den","out":"session node deploy we config den"}
+{"fn":"normalize_query_text","in":"node the\trewrite for index TLS yesterday","out":"node the rewrite for index TLS yesterday"}
+{"fn":"normalize_query_text","in":"\t“quoted” node \r\n  deploy","out":"“quoted” node deploy"}
+{"fn":"normalize_query_text","in":"compaction","out":"compaction"}
+{"fn":"normalize_query_text","in":"cert →","out":"cert →"}
+{"fn":"normalize_query_text","in":"　yesterday fix\r\nfor trigram summary Straße","out":"yesterday fix for trigram summary Straße"}
+{"fn":"normalize_query_text","in":" naïve rust we why search\r\n","out":"naïve rust we why search"}
+{"fn":"normalize_query_text","in":"\nAcmeApp postgres did for den\t\nmesh summary","out":"AcmeApp postgres did for den mesh summary"}
+{"fn":"normalize_query_text","in":"node memory　","out":"node memory"}
+{"fn":"normalize_query_text","in":"is search den for project why","out":"is search den for project why"}
+{"fn":"normalize_query_text","in":"den\t\r\nwhy\t\n den","out":"den why den"}
+{"fn":"normalize_query_text","in":"den — embedding yesterday\r\n","out":"den — embedding yesterday"}
+{"fn":"normalize_query_text","in":"stuck build postgres \r\nproject memory \r\n\r\nserver","out":"stuck build postgres project memory server"}
+{"fn":"normalize_query_text","in":"postgres fix 日本語 fix rewrite   → tag\r\nindex  ","out":"postgres fix 日本語 fix rewrite → tag index"}
+{"fn":"normalize_query_text","in":"TLS　  日本語 rust AcmeApp  　　the\t   fallback","out":"TLS 日本語 rust AcmeApp the fallback"}
+{"fn":"normalize_query_text","in":"pick failed for\tTLS naïve \t  index","out":"pick failed for TLS naïve index"}
+{"fn":"normalize_query_text","in":"queue mesh   we TLS","out":"queue mesh we TLS"}
+{"fn":"normalize_query_text","in":"🚀　we café on mesh is ","out":"🚀 we café on mesh is"}
+{"fn":"normalize_query_text","in":"tag compaction cert","out":"tag compaction cert"}
+{"fn":"normalize_query_text","in":"\nconfig why the config postgres we the","out":"config why the config postgres we the"}
+{"fn":"normalize_query_text","in":"summary fix　\n  hnsw café failed session","out":"summary fix hnsw café failed session"}
+{"fn":"normalize_query_text","in":"deploy CI did the","out":"deploy CI did the"}
+{"fn":"normalize_query_text","in":"fallback　fallback —","out":"fallback fallback —"}
+{"fn":"normalize_query_text","in":"— memory","out":"— memory"}
+{"fn":"normalize_query_text","in":"— trigram   　for","out":"— trigram for"}
+{"fn":"normalize_query_text","in":"cert","out":"cert"}
+{"fn":"normalize_query_text","in":"fix tag　  CI","out":"fix tag CI"}
+{"fn":"normalize_query_text","in":"rust","out":"rust"}
+{"fn":"normalize_query_text","in":"stuck　why on yesterday\nsession　 on stuck TLS","out":"stuck why on yesterday session on stuck TLS"}
+{"fn":"normalize_query_text","in":" embedding failed\n\tsession TLS search rust\r\n　cert","out":"embedding failed session TLS search rust cert"}
+{"fn":"normalize_query_text","in":" index session memory","out":"index session memory"}
+{"fn":"normalize_query_text","in":"— on","out":"— on"}
+{"fn":"normalize_query_text","in":"TLS","out":"TLS"}
+{"fn":"normalize_query_text","in":"project\t","out":"project"}
+{"fn":"normalize_query_text","in":"  postgres\tdeploy  ","out":"postgres deploy"}
+{"fn":"normalize_query_text","in":"build","out":"build"}
+{"fn":"normalize_query_text","in":"postgres den\r\n project fix　 on “quoted” build","out":"postgres den project fix on “quoted” build"}
+{"fn":"normalize_query_text","in":"  rust","out":"rust"}
+{"fn":"normalize_query_text","in":"rust\r\n\tembedding　\n　session summary ","out":"rust embedding session summary"}
+{"fn":"normalize_query_text","in":"hnsw config","out":"hnsw config"}
+{"fn":"normalize_query_text","in":"memory rewrite","out":"memory rewrite"}
+{"fn":"normalize_query_text","in":"  why summary","out":"why summary"}
+{"fn":"normalize_query_text","in":"pick rust\r\nthe on","out":"pick rust the on"}
+{"fn":"normalize_query_text","in":"den  Straße\r\n \nstuck\r\nmesh  embedding","out":"den Straße stuck mesh embedding"}
+{"fn":"normalize_query_text","in":"\r\nindex AcmeApp we agent","out":"index AcmeApp we agent"}
+{"fn":"normalize_query_text","in":"hnsw the session queue CI build rust \n\t“quoted”\n","out":"hnsw the session queue CI build rust “quoted”"}
+{"fn":"normalize_query_text","in":"is summary search config deploy queue ","out":"is summary search config deploy queue"}
+{"fn":"normalize_query_text","in":"why","out":"why"}
+{"fn":"normalize_query_text","in":"CI deploy trigram rust postgres","out":"CI deploy trigram rust postgres"}
+{"fn":"normalize_query_text","in":"tag postgres rust node fix session mesh","out":"tag postgres rust node fix session mesh"}
+{"fn":"normalize_query_text","in":"den 　 fallback Ω","out":"den fallback Ω"}
+{"fn":"normalize_query_text","in":"index summary   agent project session  　 we  compaction search","out":"index summary agent project session we compaction search"}
+{"fn":"normalize_query_text","in":"→ mesh rust","out":"→ mesh rust"}
+{"fn":"normalize_query_text","in":"yesterday for queue","out":"yesterday for queue"}
+{"fn":"normalize_query_text","in":"search 😀 résumé \r\n\nCI\r\nserver did  ","out":"search 😀 résumé CI server did"}
+{"fn":"normalize_query_text","in":"hnsw\n　rust memory project","out":"hnsw rust memory project"}
+{"fn":"normalize_query_text","in":"deploy cert 　\r\nfallback　cert for   embedding yesterday cert","out":"deploy cert fallback cert for embedding yesterday cert"}
+{"fn":"normalize_query_text","in":"failed index project \t“quoted” summary\r\n  \r\ncompaction","out":"failed index project “quoted” summary compaction"}
+{"fn":"normalize_query_text","in":"memory fix 🚀 deploy trigram Ω","out":"memory fix 🚀 deploy trigram Ω"}
+{"fn":"normalize_query_text","in":"\r\nbuild queue deploy agent fix on","out":"build queue deploy agent fix on"}
+{"fn":"normalize_query_text","in":"hnsw \r\nembedding the build\n","out":"hnsw embedding the build"}
+{"fn":"normalize_query_text","in":"trigram yesterday CI queue did\r\nbuild stuck AcmeApp","out":"trigram yesterday CI queue did build stuck AcmeApp"}
+{"fn":"normalize_query_text","in":"memory did\r\nfallback","out":"memory did fallback"}
+{"fn":"normalize_query_text","in":"node \r\nrewrite \r\nserver deploy cert","out":"node rewrite server deploy cert"}
+{"fn":"normalize_query_text","in":" server fallback queue","out":"server fallback queue"}
+{"fn":"normalize_query_text","in":"search AcmeApp\tindex hnsw embedding","out":"search AcmeApp index hnsw embedding"}
+{"fn":"normalize_query_text","in":"node project build on 😀","out":"node project build on 😀"}
+{"fn":"normalize_query_text","in":"embedding 日本語 session rust","out":"embedding 日本語 session rust"}
+{"fn":"normalize_query_text","in":"rust　\nmesh we\nwhy　\r\nrewrite index","out":"rust mesh we why rewrite index"}
+{"fn":"normalize_query_text","in":"failed","out":"failed"}
+{"fn":"normalize_query_text","in":"embedding  for yesterday fallback　we index \t\tAcmeApp","out":"embedding for yesterday fallback we index AcmeApp"}
+{"fn":"normalize_query_text","in":"summary yesterday cert   　“quoted”","out":"summary yesterday cert “quoted”"}
+{"fn":"normalize_query_text","in":"fix session","out":"fix session"}
+{"fn":"normalize_query_text","in":"— session embedding fallback  🚀 we","out":"— session embedding fallback 🚀 we"}
+{"fn":"normalize_query_text","in":"server fallback rust agent\n日本語 den trigram \n\r\nserver","out":"server fallback rust agent 日本語 den trigram server"}
+{"fn":"normalize_query_text","in":"\nstuck","out":"stuck"}
+{"fn":"normalize_query_text","in":"index","out":"index"}
+{"fn":"normalize_query_text","in":"Straße trigram session    summary tag build rewrite","out":"Straße trigram session summary tag build rewrite"}
+{"fn":"normalize_query_text","in":"😀 mesh\nserver CI mesh for\r\n","out":"😀 mesh server CI mesh for"}
+{"fn":"normalize_query_text","in":"did failed fallback rewrite failed\n","out":"did failed fallback rewrite failed"}
+{"fn":"normalize_query_text","in":"Straße résumé\t\n  hnsw for mesh","out":"Straße résumé hnsw for mesh"}
+{"fn":"normalize_query_text","in":"the cert summary","out":"the cert summary"}
+{"fn":"normalize_query_text","in":"rust the deploy config  \t the TLS mesh café ","out":"rust the deploy config the TLS mesh café"}
+{"fn":"normalize_query_text","in":"why did","out":"why did"}
+{"fn":"normalize_query_text","in":"failed trigram fallback compaction","out":"failed trigram fallback compaction"}
+{"fn":"normalize_query_text","in":"config cert embedding TLS cert ","out":"config cert embedding TLS cert"}
+{"fn":"normalize_query_text","in":"did fallback why","out":"did fallback why"}
+{"fn":"normalize_query_text","in":"config the","out":"config the"}
+{"fn":"normalize_query_text","in":"node session summary cert CI memory mesh yesterday","out":"node session summary cert CI memory mesh yesterday"}
+{"fn":"normalize_query_text","in":" tag the config is deploy \r\n　hnsw is agent","out":"tag the config is deploy hnsw is agent"}
+{"fn":"normalize_query_text","in":"deploy","out":"deploy"}
+{"fn":"normalize_query_text","in":"rust trigram fallback rewrite on\r\n  hnsw search ","out":"rust trigram fallback rewrite on hnsw search"}
+{"fn":"normalize_query_text","in":"“quoted”\t rust failed stuck AcmeApp CI tag config ","out":"“quoted” rust failed stuck AcmeApp CI tag config"}
+{"fn":"normalize_query_text","in":"yesterday Ω\n　\r\nden  ","out":"yesterday Ω den"}
+{"fn":"normalize_query_text","in":"the　 \r\n—","out":"the —"}
+{"fn":"normalize_query_text","in":"stuck\r\n","out":"stuck"}
+{"fn":"normalize_query_text","in":"did yesterday","out":"did yesterday"}
+{"fn":"normalize_query_text","in":"index pick server \r\nfix","out":"index pick server fix"}
+{"fn":"normalize_query_text","in":"mesh café node the we   index hnsw rewrite","out":"mesh café node the we index hnsw rewrite"}
+{"fn":"normalize_query_text","in":"cert failed summary 　\nserver\t“quoted”","out":"cert failed summary server “quoted”"}
+{"fn":"normalize_query_text","in":"build mesh","out":"build mesh"}
+{"fn":"normalize_query_text","in":"fallback session summary","out":"fallback session summary"}
+{"fn":"normalize_query_text","in":"trigram embedding node hnsw","out":"trigram embedding node hnsw"}
+{"fn":"normalize_query_text","in":"deploy\r\nindex 🚀 for fix\t　— postgres","out":"deploy index 🚀 for fix — postgres"}
+{"fn":"normalize_query_text","in":" rewrite tag\n project agent","out":"rewrite tag project agent"}
+{"fn":"normalize_query_text","in":"  server we résumé memory","out":"server we résumé memory"}
+{"fn":"normalize_query_text","in":" embedding\t\r\n  rewrite memory café","out":"embedding rewrite memory café"}
+{"fn":"normalize_query_text","in":"fallback tag for rewrite  　\r\nproject\n \tproject","out":"fallback tag for rewrite project project"}
+{"fn":"normalize_query_text","in":"project\r\nhnsw queue fix stuck","out":"project hnsw queue fix stuck"}
+{"fn":"normalize_query_text","in":" hnsw deploy postgres postgres","out":"hnsw deploy postgres postgres"}
+{"fn":"normalize_query_text","in":"the　  \nthe why yesterday mesh","out":"the the why yesterday mesh"}
+{"fn":"normalize_query_text","in":"why yesterday","out":"why yesterday"}
+{"fn":"normalize_query_text","in":"rust queue is compaction\t　 CI trigram","out":"rust queue is compaction CI trigram"}
+{"fn":"normalize_query_text","in":"mesh résumé den hnsw\n","out":"mesh résumé den hnsw"}
+{"fn":"normalize_query_text","in":"cert \tden fallback\t is we pick tag","out":"cert den fallback is we pick tag"}
+{"fn":"normalize_query_text","in":"compaction →","out":"compaction →"}
+{"fn":"normalize_query_text","in":"did\t mesh search project rewrite","out":"did mesh search project rewrite"}
+{"fn":"normalize_query_text","in":"\r\nagent config\n\t cert fallback","out":"agent config cert fallback"}
+{"fn":"normalize_query_text","in":"\r\nembedding\t","out":"embedding"}
+{"fn":"normalize_query_text","in":"queue yesterday why config CI","out":"queue yesterday why config CI"}
+{"fn":"normalize_query_text","in":"hnsw\n　server search fallback for  postgres","out":"hnsw server search fallback for postgres"}
+{"fn":"normalize_query_text","in":"compaction rewrite we TLS  ","out":"compaction rewrite we TLS"}
+{"fn":"normalize_query_text","in":"  Ω failed node the the","out":"Ω failed node the the"}
+{"fn":"normalize_query_text","in":"mesh\r\nis the rust","out":"mesh is the rust"}
+{"fn":"normalize_query_text","in":"Straße cert is","out":"Straße cert is"}
+{"fn":"normalize_query_text","in":"stuck Ω résumé","out":"stuck Ω résumé"}
+{"fn":"normalize_query_text","in":"build fix summary node TLS mesh","out":"build fix summary node TLS mesh"}
+{"fn":"normalize_query_text","in":"　AcmeApp pick\r\n\t\r\non","out":"AcmeApp pick on"}
+{"fn":"normalize_query_text","in":"stuck fallback","out":"stuck fallback"}
+{"fn":"normalize_query_text","in":"den search on rewrite deploy for  index — ","out":"den search on rewrite deploy for index —"}
+{"fn":"normalize_query_text","in":"　on   failed\r\n  why Straße fallback fallback fix tag","out":"on failed why Straße fallback fallback fix tag"}
+{"fn":"normalize_query_text","in":"embedding config rewrite for pick the is","out":"embedding config rewrite for pick the is"}
+{"fn":"normalize_query_text","in":"fallback build embedding the compaction failed","out":"fallback build embedding the compaction failed"}
+{"fn":"normalize_query_text","in":"\r\nmemory rewrite\n  the","out":"memory rewrite the"}
+{"fn":"normalize_query_text","in":"memory\r\nfallback failed server queue for rewrite embedding","out":"memory fallback failed server queue for rewrite embedding"}
+{"fn":"normalize_query_text","in":"\tfailed fallback","out":"failed fallback"}
+{"fn":"normalize_query_text","in":"\tpick","out":"pick"}
+{"fn":"normalize_query_text","in":"agent Ω","out":"agent Ω"}
+{"fn":"normalize_query_text","in":"\tcert stuck agent index cert \n\r\ndid","out":"cert stuck agent index cert did"}
+{"fn":"normalize_query_text","in":"stuck TLS pick TLS index","out":"stuck TLS pick TLS index"}
+{"fn":"normalize_query_text","in":"we we","out":"we we"}
+{"fn":"normalize_query_text","in":"fix session\r\n","out":"fix session"}
+{"fn":"normalize_query_text","in":" did \r\nTLS","out":"did TLS"}
+{"fn":"normalize_query_text","in":"mesh hnsw\tfailed","out":"mesh hnsw failed"}
+{"fn":"normalize_query_text","in":"  index index　\n  search yesterday tag","out":"index index search yesterday tag"}
+{"fn":"normalize_query_text","in":"\r\nAcmeApp build stuck mesh\r\n\nhnsw hnsw","out":"AcmeApp build stuck mesh hnsw hnsw"}
+{"fn":"normalize_query_text","in":"search\t \r\non\nmemory mesh　 　memory TLS mesh","out":"search on memory mesh memory TLS mesh"}
+{"fn":"normalize_query_text","in":"memory　","out":"memory"}
+{"fn":"normalize_query_text","in":"stuck TLS　  fallback stuck failed\tmesh\r\n we","out":"stuck TLS fallback stuck failed mesh we"}
+{"fn":"normalize_query_text","in":"\r\nmesh fallback summary server config   \tsummary mesh","out":"mesh fallback summary server config summary mesh"}
+{"fn":"normalize_query_text","in":"index — on  \nyesterday we why","out":"index — on yesterday we why"}
+{"fn":"normalize_query_text","in":"deploy\n for failed session AcmeApp summary yesterday\r\n　 tag","out":"deploy for failed session AcmeApp summary yesterday tag"}
+{"fn":"normalize_query_text","in":"project postgres tag tag cert\tqueue","out":"project postgres tag tag cert queue"}
+{"fn":"normalize_query_text","in":"did rust embedding","out":"did rust embedding"}
+{"fn":"normalize_query_text","in":"\n","out":""}
+{"fn":"normalize_query_text","in":"did for node CI ","out":"did for node CI"}
+{"fn":"normalize_query_text","in":"rust  \nnode did　for build server","out":"rust node did for build server"}
+{"fn":"normalize_query_text","in":"summary \r\n build\n  embedding rust　\nrewrite on","out":"summary build embedding rust rewrite on"}
+{"fn":"normalize_query_text","in":"stuck\n  for café\n","out":"stuck for café"}
+{"fn":"normalize_query_text","in":"pick\t  CI AcmeApp pick","out":"pick CI AcmeApp pick"}
+{"fn":"normalize_query_text","in":"summary TLS\r\n \nstuck compaction　the mesh\nrewrite","out":"summary TLS stuck compaction the mesh rewrite"}
+{"fn":"normalize_query_text","in":"server 　 mesh \tserver\ntrigram fix we\n","out":"server mesh server trigram fix we"}
+{"fn":"normalize_query_text","in":"summary on project the is Straße  ","out":"summary on project the is Straße"}
+{"fn":"normalize_query_text","in":"\nembedding　","out":"embedding"}
+{"fn":"normalize_query_text","in":"café fix cert server config → build fix\t","out":"café fix cert server config → build fix"}
+{"fn":"normalize_query_text","in":"\tfallback\t\t  tag","out":"fallback tag"}
+{"fn":"normalize_query_text","in":"yesterday agent","out":"yesterday agent"}
+{"fn":"normalize_query_text","in":"  trigram deploy postgres","out":"trigram deploy postgres"}
+{"fn":"normalize_query_text","in":" server CI pick did is agent\nsummary queue","out":"server CI pick did is agent summary queue"}
+{"fn":"normalize_query_text","in":"we postgres　","out":"we postgres"}
+{"fn":"normalize_query_text","in":"fallback session","out":"fallback session"}
+{"fn":"normalize_query_text","in":"cert naïve","out":"cert naïve"}
+{"fn":"normalize_query_text","in":"queue queue failed  \r\nmemory naïve\r\n\n tag node  ","out":"queue queue failed memory naïve tag node"}
+{"fn":"normalize_query_text","in":"queue mesh mesh the　the","out":"queue mesh mesh the the"}
+{"fn":"normalize_query_text","in":"search hnsw session","out":"search hnsw session"}
+{"fn":"normalize_query_text","in":"search","out":"search"}
+{"fn":"normalize_query_text","in":"trigram node session\n","out":"trigram node session"}
+{"fn":"normalize_query_text","in":"hnsw summary → rust TLS　 server","out":"hnsw summary → rust TLS server"}
+{"fn":"normalize_query_text","in":" den\r\n\ttag　server we　\ntag","out":"den tag server we tag"}
+{"fn":"normalize_query_text","in":"memory","out":"memory"}
+{"fn":"normalize_query_text","in":"the  \nmesh server project pick","out":"the mesh server project pick"}
+{"fn":"normalize_query_text","in":"hnsw\t\n pick we\r\nthe Ω queue","out":"hnsw pick we the Ω queue"}
+{"fn":"normalize_query_text","in":"　failed is tag cert cert","out":"failed is tag cert cert"}
+{"fn":"normalize_query_text","in":"TLS\n\r\ntag café","out":"TLS tag café"}
+{"fn":"normalize_query_text","in":"cert rust build\tdid TLS is","out":"cert rust build did TLS is"}
+{"fn":"normalize_query_text","in":" did \tCI the\t 　why server Straße\n  CI \r\nTLS","out":"did CI the why server Straße CI TLS"}
+{"fn":"normalize_query_text","in":"memory  \npostgres\r\n\tqueue hnsw","out":"memory postgres queue hnsw"}
+{"fn":"normalize_query_text","in":"the","out":"the"}
+{"fn":"normalize_query_text","in":" on","out":"on"}
+{"fn":"normalize_query_text","in":"is summary we  \t\r\npick","out":"is summary we pick"}
+{"fn":"normalize_query_text","in":"config  AcmeApp → AcmeApp","out":"config AcmeApp → AcmeApp"}
+{"fn":"normalize_query_text","in":"for summary build the","out":"for summary build the"}
+{"fn":"normalize_query_text","in":"index CI","out":"index CI"}
+{"fn":"normalize_query_text","in":"rewrite \r\nfix summary","out":"rewrite fix summary"}
+{"fn":"normalize_query_text","in":"on index Ω we embedding\n\r\n mesh session","out":"on index Ω we embedding mesh session"}
+{"fn":"normalize_query_text","in":"\r\npick","out":"pick"}
+{"fn":"normalize_query_text","in":"　tag    cert memory CI den is we\n","out":"tag cert memory CI den is we"}
+{"fn":"normalize_query_text","in":"the tag\n \nΩ build agent","out":"the tag Ω build agent"}
+{"fn":"normalize_query_text","in":"  tag\n","out":"tag"}
+{"fn":"normalize_query_text","in":"server why","out":"server why"}
+{"fn":"normalize_query_text","in":"→ project queue stuck mesh café\t compaction","out":"→ project queue stuck mesh café compaction"}
+{"fn":"normalize_query_text","in":"😀 we","out":"😀 we"}
+{"fn":"normalize_query_text","in":"session AcmeApp","out":"session AcmeApp"}
+{"fn":"normalize_query_text","in":"cert index trigram\n \nagent trigram den\n\nhnsw summary","out":"cert index trigram agent trigram den hnsw summary"}
+{"fn":"normalize_query_text","in":"日本語 is café","out":"日本語 is café"}
+{"fn":"normalize_query_text","in":"project     mesh\r\n   tag embedding pick","out":"project mesh tag embedding pick"}
+{"fn":"normalize_query_text","in":"stuck config session 😀\tnode the","out":"stuck config session 😀 node the"}
+{"fn":"normalize_query_text","in":"node mesh node server cert we    \r\npostgres\r\n\r\nfailed","out":"node mesh node server cert we postgres failed"}
+{"fn":"normalize_query_text","in":"server TLS\r\n","out":"server TLS"}
+{"fn":"normalize_query_text","in":"AcmeApp fix summary trigram fix on config embedding","out":"AcmeApp fix summary trigram fix on config embedding"}
+{"fn":"normalize_query_text","in":"did failed","out":"did failed"}
+{"fn":"normalize_query_text","in":" fix search pick deploy embedding","out":"fix search pick deploy embedding"}
+{"fn":"normalize_query_text","in":"config compaction project\t mesh\n\r\nyesterday\r\n","out":"config compaction project mesh yesterday"}
+{"fn":"normalize_query_text","in":"yesterday  failed　  yesterday for  　stuck 😀 memory agent","out":"yesterday failed yesterday for stuck 😀 memory agent"}
+{"fn":"normalize_query_text","in":"fallback rust  \nnode TLS compaction   　session  Straße \t\r\nfallback","out":"fallback rust node TLS compaction session Straße fallback"}
+{"fn":"normalize_query_text","in":"stuck memory why for search for","out":"stuck memory why for search for"}
+{"fn":"normalize_query_text","in":"why    CI postgres\tbuild","out":"why CI postgres build"}
+{"fn":"normalize_query_text","in":"\nbuild we TLS fix agent","out":"build we TLS fix agent"}
+{"fn":"normalize_query_text","in":" stuck hnsw config compaction index","out":"stuck hnsw config compaction index"}
+{"fn":"normalize_query_text","in":"is memory fallback index memory build why failed ","out":"is memory fallback index memory build why failed"}
+{"fn":"normalize_query_text","in":"did\tsummary   node","out":"did summary node"}
+{"fn":"normalize_query_text","in":"postgres CI AcmeApp　did on TLS","out":"postgres CI AcmeApp did on TLS"}
+{"fn":"normalize_query_text","in":"hnsw\r\n cert summary search trigram","out":"hnsw cert summary search trigram"}
+{"fn":"normalize_query_text","in":"did den","out":"did den"}
+{"fn":"normalize_query_text","in":"yesterday","out":"yesterday"}
+{"fn":"normalize_query_text","in":"fallback　postgres \nAcmeApp　\tthe\nthe \t\tbuild project CI","out":"fallback postgres AcmeApp the the build project CI"}
+{"fn":"normalize_query_text","in":"rust\t　deploy\t\ndeploy\tthe fix project we","out":"rust deploy deploy the fix project we"}
+{"fn":"normalize_query_text","in":"mesh why rewrite\t　mesh\r\npostgres","out":"mesh why rewrite mesh postgres"}
+{"fn":"normalize_query_text","in":"deploy 日本語 search for","out":"deploy 日本語 search for"}
+{"fn":"normalize_query_text","in":"session　the project","out":"session the project"}
+{"fn":"normalize_query_text","in":"the failed\r\n  embedding project","out":"the failed embedding project"}
+{"fn":"normalize_query_text","in":"\r\nbuild\r\n　  trigram","out":"build trigram"}
+{"fn":"normalize_query_text","in":"trigram\r\n","out":"trigram"}
+{"fn":"normalize_query_text","in":" session failed queue cert project\t failed trigram postgres","out":"session failed queue cert project failed trigram postgres"}
+{"fn":"normalize_query_text","in":"fallback is the\n\r\nAcmeApp tag\n","out":"fallback is the AcmeApp tag"}
+{"fn":"normalize_query_text","in":" deploy　postgres  \tthe config failed　 　build postgres","out":"deploy postgres the config failed build postgres"}
+{"fn":"normalize_query_text","in":"project fallback ","out":"project fallback"}
+{"fn":"normalize_query_text","in":"\nwhy  fallback\nfailed build\r\ndid build “quoted”","out":"why fallback failed build did build “quoted”"}
+{"fn":"normalize_query_text","in":"den config did  \r\npick den","out":"den config did pick den"}
+{"fn":"normalize_query_text","in":"　project \t server node mesh build","out":"project server node mesh build"}
+{"fn":"normalize_query_text","in":"index  \tsummary CI  mesh server server project","out":"index summary CI mesh server server project"}
+{"fn":"normalize_query_text","in":"→ yesterday server compaction\r\n","out":"→ yesterday server compaction"}
+{"fn":"normalize_query_text","in":"CI config why index is","out":"CI config why index is"}
+{"fn":"normalize_query_text","in":"\r\ndid\n","out":"did"}
+{"fn":"normalize_query_text","in":"mesh we node trigram mesh　CI　","out":"mesh we node trigram mesh CI"}
+{"fn":"normalize_query_text","in":"🚀\nrewrite\n\r\ntag we memory","out":"🚀 rewrite tag we memory"}
+{"fn":"normalize_query_text","in":"TLS config for project trigram","out":"TLS config for project trigram"}
+{"fn":"normalize_query_text","in":"is failed","out":"is failed"}
+{"fn":"normalize_query_text","in":"config\r\n\nTLS\n 　summary index on TLS why ","out":"config TLS summary index on TLS why"}
+{"fn":"normalize_query_text","in":"\tmesh TLS node   deploy the summary yesterday","out":"mesh TLS node deploy the summary yesterday"}
+{"fn":"normalize_query_text","in":"compaction on\n　  — yesterday\t\ndeploy AcmeApp we deploy","out":"compaction on — yesterday deploy AcmeApp we deploy"}
+{"fn":"normalize_query_text","in":" the memory fallback rewrite","out":"the memory fallback rewrite"}
+{"fn":"normalize_query_text","in":"yesterday cert","out":"yesterday cert"}
+{"fn":"normalize_query_text","in":"tag","out":"tag"}
+{"fn":"normalize_query_text","in":"yesterday config hnsw","out":"yesterday config hnsw"}
+{"fn":"normalize_query_text","in":"did fallback","out":"did fallback"}
+{"fn":"normalize_query_text","in":"config agent tag →","out":"config agent tag →"}
+{"fn":"normalize_query_text","in":" we CI ","out":"we CI"}
+{"fn":"normalize_query_text","in":"　node deploy cert  queue    we TLS node","out":"node deploy cert queue we TLS node"}
+{"fn":"normalize_query_text","in":" is we postgres trigram index \nthe yesterday agent","out":"is we postgres trigram index the yesterday agent"}
+{"fn":"normalize_query_text","in":"Straße\r\n \r\nStraße for \t　“quoted” search","out":"Straße Straße for “quoted” search"}
+{"fn":"normalize_query_text","in":"project","out":"project"}
+{"fn":"normalize_query_text","in":"hnsw\n \tembedding index 　why CI → 😀　\r\n search","out":"hnsw embedding index why CI → 😀 search"}
+{"fn":"normalize_query_text","in":"\tCI den\n\trust\r\n　pick AcmeApp session queue the","out":"CI den rust pick AcmeApp session queue the"}
+{"fn":"normalize_query_text","in":"→","out":"→"}
+{"fn":"normalize_query_text","in":"\nthe yesterday why","out":"the yesterday why"}
+{"fn":"normalize_query_text","in":"rust \ncompaction agent\nsearch　the    config","out":"rust compaction agent search the config"}

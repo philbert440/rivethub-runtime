@@ -4,19 +4,19 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::SearchMode;
 use kernel::memory::TagLiteral;
-use regex::Regex;
-use std::collections::BTreeMap;
-use std::sync::LazyLock;
+use kernel::memory_core::FusionItem;
+use kernel::memory_core::HYBRID_RRF_K;
+use kernel::memory_core::fusion_score;
+use kernel::memory_core::literal_scan;
+use kernel::memory_core::passes_fusion_gate;
+use kernel::memory_core::reciprocal_rank_fusion;
+use kernel::memory_core::should_trigram_fallback;
 use uuid::Uuid;
 use wire::gateway::memory::MemoryFallback;
 use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryScope;
 use wire::memory::MemorySearchResult;
 use wire::message::Role;
-
-const HYBRID_RRF_K: f64 = 20.0;
-const SUMMARY_FUSION_BONUS: f64 = 1.3;
-const GATE_FRACTION: f64 = 0.5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SearchOptions {
@@ -81,6 +81,20 @@ pub(crate) struct ArmRow {
     pub(crate) boost: f64,
 }
 
+impl FusionItem for ArmRow {
+    fn fusion_id(&self) -> &str {
+        &self.id
+    }
+
+    fn fusion_source(&self) -> MemoryHitSource {
+        self.source
+    }
+
+    fn fusion_boost(&self) -> f64 {
+        self.boost
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ArmKind {
     Fts,
@@ -89,79 +103,48 @@ pub(crate) enum ArmKind {
     Regex,
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "the literal-scan pattern is a constant; the search tests match it"
-)]
-pub(crate) fn literal_scan(text: &str) -> bool {
-    static LITERAL: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"\w[./:_@]\w|\d{1,3}(?:\.\d{1,3}){2,}|[a-z]\d|\d[a-z]")
-            .expect("the literal-scan pattern is a constant")
-    });
-    LITERAL.is_match(text)
-}
-
-#[expect(
-    clippy::expect_used,
-    reason = "the trigram-fallback pattern is a constant; the search tests match it"
-)]
-fn should_trigram_fallback(text: &str) -> bool {
-    static FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"\S[./:-]\S").expect("the trigram-fallback pattern is a constant")
-    });
-    literal_scan(text) || FALLBACK.is_match(text)
-}
-
 struct FusedEntry {
     hit: SearchHit,
-    arm_count: u8,
+    arm_count: u32,
 }
 
 fn fuse(fts: &[ArmRow], vector: Option<&[ArmRow]>, trigram: Option<&[ArmRow]>) -> Vec<FusedEntry> {
-    let arms = [Some(fts), vector, trigram];
-    let mut entries: BTreeMap<String, (ArmRow, f64, u8)> = BTreeMap::new();
-    for arm in arms.into_iter().flatten() {
-        for (rank, row) in (0u32..).zip(arm.iter()) {
-            let contribution = 1.0 / (HYBRID_RRF_K + f64::from(rank) + 1.0);
-            let entry = entries
-                .entry(row.id.clone())
-                .or_insert_with(|| (row.clone(), 0.0, 0));
-            entry.1 += contribution;
-            entry.2 += 1;
-        }
+    let mut arms: Vec<&[ArmRow]> = Vec::with_capacity(3);
+    arms.push(fts);
+    if let Some(rows) = vector {
+        arms.push(rows);
     }
-    let mut fused: Vec<FusedEntry> = entries
-        .into_values()
-        .map(|(row, rrf, arm_count)| {
-            let bonus = if row.source == MemoryHitSource::Summary {
-                SUMMARY_FUSION_BONUS
-            } else {
-                1.0
-            };
-            let score = rrf * (1.0 + row.boost) * bonus;
+    if let Some(rows) = trigram {
+        arms.push(rows);
+    }
+    let mut fused: Vec<FusedEntry> = reciprocal_rank_fusion(&arms, HYBRID_RRF_K)
+        .into_iter()
+        .map(|ranked| {
+            let row = ranked.item;
             FusedEntry {
-                arm_count,
+                arm_count: ranked.arm_count,
                 hit: SearchHit {
-                    id: row.id,
+                    id: row.id.clone(),
                     source: row.source,
-                    content: row.content,
+                    content: row.content.clone(),
                     role: row.role,
-                    agent: row.agent,
-                    kind: row.kind,
-                    tool_name: row.tool_name,
-                    conversation_id: row.conversation_id,
+                    agent: row.agent.clone(),
+                    kind: row.kind.clone(),
+                    tool_name: row.tool_name.clone(),
+                    conversation_id: row.conversation_id.clone(),
                     created_at: row.created_at,
-                    score,
+                    score: fusion_score(ranked.rrf, row),
                     fallback: None,
                 },
             }
         })
         .collect();
-    fused.sort_by(|a, b| {
-        b.hit
+    fused.sort_by(|left, right| {
+        right
+            .hit
             .score
-            .total_cmp(&a.hit.score)
-            .then_with(|| a.hit.id.cmp(&b.hit.id))
+            .total_cmp(&left.hit.score)
+            .then_with(|| left.hit.id.cmp(&right.hit.id))
     });
     fused
 }
@@ -180,16 +163,12 @@ impl From<&TagLiteral> for TagFilter {
     }
 }
 
-#[expect(clippy::suboptimal_flops, reason = "mirrors recorded scoring")]
-fn composite_score(row: &ArmRow) -> f64 {
-    row.arm_score * 0.3 + row.semantic * 0.3 + row.boost
-}
-
 fn finish_rows(rows: Vec<ArmRow>, limit: u32) -> Vec<SearchHit> {
     let mut hits: Vec<SearchHit> = rows
         .into_iter()
         .map(|row| {
-            let score = composite_score(&row);
+            let score =
+                kernel::memory_core::composite_score(row.arm_score, row.semantic, row.boost);
             SearchHit {
                 id: row.id,
                 source: row.source,
@@ -412,7 +391,7 @@ impl crate::PostgresMemory {
         let top = fused.first().map_or(0.0, |entry| entry.hit.score);
         let mut hits: Vec<SearchHit> = fused
             .into_iter()
-            .filter(|entry| entry.arm_count >= 2 || entry.hit.score >= top * GATE_FRACTION)
+            .filter(|entry| passes_fusion_gate(entry.arm_count, entry.hit.score, top))
             .map(|entry| entry.hit)
             .collect();
         hits.truncate(options.limit.max(1) as usize);

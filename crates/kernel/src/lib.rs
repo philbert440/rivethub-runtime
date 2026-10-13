@@ -1,5 +1,6 @@
 pub mod harness;
 pub mod memory;
+pub mod memory_core;
 pub mod model;
 pub mod queue;
 pub mod terminal;

@@ -9,9 +9,9 @@ use kernel::model::ModelProviderError;
 use parking_lot::Mutex;
 use tokio::time::Instant;
 
-pub const DEFAULT_EMBED_QUERY_INSTRUCTION: &str =
-    "Instruct: Given a search query, retrieve relevant passages that answer the query\nQuery: ";
-const EMBED_INPUT_MAX: usize = 8_000;
+pub use kernel::memory_core::DEFAULT_EMBED_QUERY_INSTRUCTION;
+pub(crate) use kernel::memory_core::compose_query_input;
+
 const EMBED_TIMEOUT_DEFAULT_MS: u64 = 8_000;
 const EMBED_TIMEOUT_MIN_MS: u64 = 500;
 const EMBED_TIMEOUT_MAX_MS: u64 = 60_000;
@@ -288,20 +288,6 @@ fn validated_vector(embeddings: &[Embedding]) -> Result<Vec<f32>, EmbedFailure> 
     }
 }
 
-#[must_use]
-pub(crate) fn normalize_query_text(text: &str) -> String {
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-#[must_use]
-pub(crate) fn compose_query_input(instruction: &str, text: &str) -> String {
-    let mut input = format!("{instruction}{}", normalize_query_text(text));
-    if input.chars().count() > EMBED_INPUT_MAX {
-        input = input.chars().take(EMBED_INPUT_MAX).collect();
-    }
-    input
-}
-
 impl crate::PostgresMemory {
     pub(crate) async fn embed_query(&self, text: &str) -> EmbedAttempt {
         match &self.embed {
@@ -513,7 +499,7 @@ mod tests {
     #[test]
     fn normalize_query_text_trims_and_collapses_whitespace() {
         assert_eq!(
-            normalize_query_text("  deploy   the\trelease\nnow  "),
+            kernel::memory_core::normalize_query_text("  deploy   the\trelease\nnow  "),
             "deploy the release now"
         );
     }
@@ -526,6 +512,6 @@ mod tests {
         );
         assert_eq!(compose_query_input("", "raw text"), "raw text");
         let long = compose_query_input(DEFAULT_EMBED_QUERY_INSTRUCTION, &"word ".repeat(4_000));
-        assert_eq!(long.chars().count(), EMBED_INPUT_MAX);
+        assert_eq!(long.chars().count(), kernel::memory_core::EMBED_INPUT_MAX);
     }
 }

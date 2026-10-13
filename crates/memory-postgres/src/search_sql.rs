@@ -4,6 +4,13 @@ use crate::search::ArmRow;
 use crate::search::SearchOptions;
 use crate::search::TagFilter;
 use chrono::Utc;
+use kernel::memory_core::DECAY_LAMBDA;
+use kernel::memory_core::HYBRID_MIN_CONTENT_LEN;
+use kernel::memory_core::REINFORCEMENT_ALPHA;
+use kernel::memory_core::REINFORCEMENT_CAP;
+use kernel::memory_core::W_IMPORTANCE;
+use kernel::memory_core::W_TEMPORAL;
+use kernel::memory_core::hybrid_pool;
 use pgvector::HalfVector;
 use sqlx::QueryBuilder;
 use std::collections::BTreeMap;
@@ -12,15 +19,8 @@ use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryScope;
 use wire::message::Role;
 
-const HYBRID_POOL_MIN: i64 = 50;
-const HYBRID_POOL_MAX: i64 = 100;
-const MIN_CONTENT_LEN: i64 = 40;
 const CHUNK_POOL_MULTIPLIER: i64 = 4;
 const CHUNK_POOL_MAX: i64 = 400;
-
-fn hybrid_pool(limit: u32) -> i64 {
-    (i64::from(limit) * 3).clamp(HYBRID_POOL_MIN, HYBRID_POOL_MAX)
-}
 
 fn chunk_pool(limit: u32) -> i64 {
     (hybrid_pool(limit) * CHUNK_POOL_MULTIPLIER).min(CHUNK_POOL_MAX)
@@ -42,9 +42,9 @@ fn boost_expr(alias: &str, is_message: bool) -> String {
         "0.6".to_string()
     };
     format!(
-        "(EXP(-0.05 * EXTRACT(EPOCH FROM (now() - {alias}.created_at)) / 86400.0)
-            * (1.0 + 0.01 * LEAST(COALESCE({alias}.access_count, 0), 25))) * 0.3
-         + {importance} * 0.1"
+        "(EXP(-{DECAY_LAMBDA} * EXTRACT(EPOCH FROM (now() - {alias}.created_at)) / 86400.0)
+            * (1.0 + {REINFORCEMENT_ALPHA} * LEAST(COALESCE({alias}.access_count, 0), {REINFORCEMENT_CAP}))) * {W_TEMPORAL}
+         + {importance} * {W_IMPORTANCE}"
     )
 }
 
@@ -295,11 +295,11 @@ impl crate::PostgresMemory {
                 query.push(format!(
                     " AND CASE WHEN m.role = 'tool'
                                 THEN length(btrim(coalesce(m.tool_result, '')))
-                                ELSE length(btrim(m.content)) END >= {MIN_CONTENT_LEN}"
+                                ELSE length(btrim(m.content)) END >= {HYBRID_MIN_CONTENT_LEN}"
                 ));
             } else {
                 query.push(format!(
-                    " AND length(btrim(s.content)) >= {MIN_CONTENT_LEN}"
+                    " AND length(btrim(s.content)) >= {HYBRID_MIN_CONTENT_LEN}"
                 ));
             }
         }
@@ -468,5 +468,14 @@ fn merge_chunk_arm_or_parent_only(
             merged.into_values().collect()
         }
         Err(_) => parents,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn boost_expr_interpolates_the_scoring_constants() {
+        let expected = "(EXP(-0.05 * EXTRACT(EPOCH FROM (now() - s.created_at)) / 86400.0)\n            * (1.0 + 0.01 * LEAST(COALESCE(s.access_count, 0), 25))) * 0.3\n         + 0.6 * 0.1";
+        assert_eq!(super::boost_expr("s", false), expected);
     }
 }

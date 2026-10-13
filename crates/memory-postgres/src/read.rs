@@ -1,11 +1,7 @@
 use crate::error::Error;
 use crate::search::SearchOptions;
 use chrono::DateTime;
-use chrono::Datelike as _;
-use chrono::Duration;
 use chrono::Local;
-use chrono::NaiveDate;
-use chrono::TimeZone as _;
 use chrono::Utc;
 use kernel::memory::BrowseFilter;
 use kernel::memory::SearchMode;
@@ -103,38 +99,10 @@ fn count(value: i64) -> Result<u64, Error> {
     u64::try_from(value).map_err(|source| Error::protocol(source.to_string()))
 }
 
-fn local_midnight_utc(date: NaiveDate) -> Option<DateTime<Utc>> {
-    Local
-        .from_local_datetime(&date.and_hms_opt(0, 0, 0)?)
-        .single()
-        .map(|local| local.with_timezone(&Utc))
-}
-
 pub(crate) fn window_bounds(
     window: BrowseWindow,
 ) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {
-    let today = Local::now().date_naive();
-    let now = Utc::now();
-    match window {
-        BrowseWindow::Today => (local_midnight_utc(today), None),
-        BrowseWindow::Yesterday => (
-            local_midnight_utc(today - Duration::days(1)),
-            local_midnight_utc(today),
-        ),
-        BrowseWindow::ThisMorning => (
-            local_midnight_utc(today),
-            local_midnight_utc(today).map(|start| start + Duration::hours(12)),
-        ),
-        BrowseWindow::ThisWeek => (
-            local_midnight_utc(
-                today - Duration::days(i64::from(today.weekday().num_days_from_monday())),
-            ),
-            None,
-        ),
-        BrowseWindow::Last24h => (Some(now - Duration::hours(24)), None),
-        BrowseWindow::Last7d => (Some(now - Duration::days(7)), None),
-        BrowseWindow::Last14d => (Some(now - Duration::days(14)), None),
-    }
+    kernel::memory_core::resolve_window(window, Utc::now(), &Local)
 }
 
 fn filter_bounds(filter: &BrowseFilter) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {

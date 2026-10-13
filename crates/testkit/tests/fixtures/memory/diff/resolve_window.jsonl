@@ -1,0 +1,500 @@
+{"fn":"resolve_window","in":["last_24h","2027-07-29T12:00:00.000Z"],"out":{"since":"2027-07-28T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["TODAY","2027-11-16T00:00:01.000Z"],"out":{"since":"2027-11-16T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past-14h","2026-12-12T23:59:59.233Z"],"throws":{"name":"Error","message":"Unknown window=\"past-14h\" (normalized to \"past_14h\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_morning hours","2027-03-20T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_morning hours\" (normalized to \"last_morning_hours\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["recently","2027-08-04T12:00:00.171Z"],"throws":{"name":"Error","message":"Unknown window=\"recently\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past_14_days","2027-06-19T00:00:01.000Z"],"out":{"since":"2027-06-05T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["week","2026-06-08T00:00:01.000Z"],"out":{"since":"2026-06-08T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past week","2027-03-03T12:00:00.000Z"],"out":{"since":"2027-02-24T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past-sevenh","2027-07-31T06:23:07.000Z"],"throws":{"name":"Error","message":"Unknown window=\"past-sevenh\" (normalized to \"past_sevenh\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this_morning","2027-06-02T23:59:59.442Z"],"out":{"since":"2027-06-02T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last seven days","2026-09-10T00:00:00.877Z"],"out":{"since":"2026-09-03T00:00:00.877Z","before":null}}
+{"fn":"resolve_window","in":["this_morning","2026-08-04T00:00:00.000Z"],"out":{"since":"2026-08-04T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7_days","2026-05-30T23:59:59.000Z"],"out":{"since":"2026-05-23T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["TODAY","2027-05-01T12:00:00.546Z"],"out":{"since":"2027-05-01T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today","2026-03-13T23:59:59.000Z"],"out":{"since":"2026-03-13T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["week","2026-01-25T00:00:00.000Z"],"out":{"since":"2026-01-19T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24h","2027-03-24T00:00:01.000Z"],"out":{"since":"2027-03-23T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last_24h","2027-10-30T12:00:00.127Z"],"out":{"since":"2027-10-29T12:00:00.127Z","before":null}}
+{"fn":"resolve_window","in":["7d","2027-02-13T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last week","2026-09-12T12:00:00.000Z"],"out":{"since":"2026-09-05T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this  dayh","2027-01-09T00:00:01.625Z"],"throws":{"name":"Error","message":"Unknown window=\"this  dayh\" (normalized to \"this_dayh\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this morning","2026-01-22T00:00:01.000Z"],"out":{"since":"2026-01-22T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this-week","2026-01-28T02:13:18.000Z"],"out":{"since":"2026-01-26T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2026-02-07T23:59:59.000Z"],"out":{"since":"2026-01-24T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last week","2026-03-21T15:02:44.000Z"],"out":{"since":"2026-03-14T15:02:44.000Z","before":null}}
+{"fn":"resolve_window","in":["last-dayh","2027-03-14T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last-dayh\" (normalized to \"last_dayh\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["today","2027-01-23T00:00:01.010Z"],"out":{"since":"2027-01-23T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today!","2027-05-18T00:00:00.000Z"],"out":{"since":"2027-05-18T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_week","2027-05-28T23:59:59.000Z"],"out":{"since":"2027-05-24T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today!","2026-11-19T02:17:50.000Z"],"out":{"since":"2026-11-19T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last-24h","2027-06-21T12:00:00.000Z"],"out":{"since":"2027-06-20T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7d","2027-01-20T12:00:00.000Z"],"out":{"since":"2027-01-13T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 7 days","2027-10-12T01:35:52.000Z"],"out":{"since":"2027-10-05T01:35:52.000Z","before":null}}
+{"fn":"resolve_window","in":["recent","2027-05-15T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recent\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past_14_days","2027-09-14T00:00:00.774Z"],"out":{"since":"2027-08-31T00:00:00.774Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2026-02-06T06:00:00.000Z"],"out":{"since":"2026-01-23T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["week","2026-06-19T06:00:00.113Z"],"out":{"since":"2026-06-15T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["recent","2026-01-27T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recent\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last7d","2026-07-29T00:00:01.000Z"],"out":{"since":"2026-07-22T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["Today","2026-02-11T23:59:59.000Z"],"out":{"since":"2026-02-11T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["recent","2026-12-18T12:05:33.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recent\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this seven hours","2026-02-27T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this seven hours\" (normalized to \"this_seven_hours\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last  seven weeks","2027-07-29T09:21:26.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last  seven weeks\" (normalized to \"last_seven_weeks\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this week","2026-05-25T00:00:00.000Z"],"out":{"since":"2026-05-25T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7_days","2026-02-17T11:22:14.850Z"],"out":{"since":"2026-02-10T11:22:14.850Z","before":null}}
+{"fn":"resolve_window","in":[" today ","2026-07-20T00:00:00.000Z"],"out":{"since":"2026-07-20T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this week","2026-10-16T00:00:01.000Z"],"out":{"since":"2026-10-12T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today!","2027-09-29T04:15:21.000Z"],"out":{"since":"2027-09-29T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past_14_days","2026-02-08T00:00:01.000Z"],"out":{"since":"2026-01-25T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["past week","2026-06-06T11:07:46.000Z"],"out":{"since":"2026-05-30T11:07:46.000Z","before":null}}
+{"fn":"resolve_window","in":["7d","2026-04-21T23:59:59.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 24h","2026-02-02T17:36:17.000Z"],"out":{"since":"2026-02-01T17:36:17.000Z","before":null}}
+{"fn":"resolve_window","in":["recent","2027-05-19T12:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recent\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last  day weeks","2026-05-12T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last  day weeks\" (normalized to \"last_24h_weeks\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["yesterday?","2027-07-28T12:00:00.000Z"],"out":{"since":"2027-07-27T00:00:00.000Z","before":"2027-07-28T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["","2027-04-02T12:00:00.462Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["today","2026-06-13T06:00:00.000Z"],"out":{"since":"2026-06-13T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past two weeks","2027-06-23T06:00:00.000Z"],"out":{"since":"2027-06-09T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2026-08-16T23:59:59.000Z"],"out":{"since":"2026-08-02T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["recently","2027-06-02T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recently\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_weekd","2026-07-22T17:43:35.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_weekd\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_7_days","2027-11-05T23:59:59.000Z"],"out":{"since":"2027-10-29T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["   ","2027-03-05T23:59:59.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["-","2026-11-13T23:59:59.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last seven days","2027-10-05T00:00:00.000Z"],"out":{"since":"2027-09-28T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7d","2027-06-10T00:00:01.000Z"],"out":{"since":"2027-06-03T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last-24h","2026-03-03T10:22:04.000Z"],"out":{"since":"2026-03-02T10:22:04.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7d","2027-04-18T00:00:00.000Z"],"out":{"since":"2027-04-11T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["recent","2026-07-31T20:29:52.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recent\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past_24 days","2026-01-31T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"past_24 days\" (normalized to \"past_24_days\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":[" today ","2026-11-20T12:00:00.000Z"],"out":{"since":"2026-11-20T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["-","2027-10-04T17:36:46.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last-24h","2027-04-02T23:59:59.000Z"],"out":{"since":"2027-04-01T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["7d","2027-10-14T12:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past_14_days","2027-03-27T14:27:25.000Z"],"out":{"since":"2027-03-13T14:27:25.000Z","before":null}}
+{"fn":"resolve_window","in":["this week","2026-05-18T06:00:00.000Z"],"out":{"since":"2026-05-18T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["week","2027-10-12T00:00:01.000Z"],"out":{"since":"2027-10-11T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last week","2027-09-01T12:00:00.000Z"],"out":{"since":"2027-08-25T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["morning","2026-12-07T23:59:59.000Z"],"out":{"since":"2026-12-07T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7d","2026-04-16T12:00:00.000Z"],"out":{"since":"2026-04-09T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["7d","2026-08-20T18:03:03.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this_morning","2027-07-18T23:59:59.000Z"],"out":{"since":"2027-07-18T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["TODAY","2027-02-08T00:00:00.759Z"],"out":{"since":"2027-02-08T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2026-06-13T14:22:40.000Z"],"out":{"since":"2026-06-06T14:22:40.000Z","before":null}}
+{"fn":"resolve_window","in":["TODAY","2026-06-20T00:00:01.000Z"],"out":{"since":"2026-06-20T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["   ","2027-02-21T23:59:59.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last two weeks","2026-08-10T23:59:59.000Z"],"out":{"since":"2026-07-27T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last_24h","2027-05-27T00:00:01.314Z"],"out":{"since":"2027-05-26T00:00:01.314Z","before":null}}
+{"fn":"resolve_window","in":["past week","2027-06-01T23:59:59.910Z"],"out":{"since":"2027-05-25T23:59:59.910Z","before":null}}
+{"fn":"resolve_window","in":["last two weeks","2026-08-19T12:00:00.208Z"],"out":{"since":"2026-08-05T12:00:00.208Z","before":null}}
+{"fn":"resolve_window","in":["morning","2026-01-08T00:00:01.507Z"],"out":{"since":"2026-01-08T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7d","2026-12-10T00:42:56.000Z"],"out":{"since":"2026-12-03T00:42:56.000Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2026-08-09T00:00:01.126Z"],"out":{"since":"2026-07-26T00:00:01.126Z","before":null}}
+{"fn":"resolve_window","in":["-","2026-07-30T07:52:28.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last week","2027-07-16T23:59:59.000Z"],"out":{"since":"2027-07-09T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["","2026-12-11T00:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_24h","2027-07-12T14:23:50.000Z"],"out":{"since":"2027-07-11T14:23:50.000Z","before":null}}
+{"fn":"resolve_window","in":["past 24h","2027-07-24T23:59:59.000Z"],"out":{"since":"2027-07-23T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["past week","2027-05-16T00:00:01.000Z"],"out":{"since":"2027-05-09T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24 hours","2026-08-05T01:55:57.000Z"],"out":{"since":"2026-08-04T01:55:57.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2027-05-19T06:00:00.114Z"],"out":{"since":"2027-05-12T06:00:00.114Z","before":null}}
+{"fn":"resolve_window","in":["Today","2027-08-09T12:00:00.000Z"],"out":{"since":"2027-08-09T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today!","2026-10-17T19:42:06.000Z"],"out":{"since":"2026-10-17T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_30d","2026-05-28T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["","2027-09-30T23:59:59.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 24 hours","2026-07-30T12:00:00.000Z"],"out":{"since":"2026-07-29T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24h","2027-12-01T10:00:23.000Z"],"out":{"since":"2027-11-30T10:00:23.000Z","before":null}}
+{"fn":"resolve_window","in":["past 7 days","2027-05-13T00:00:00.000Z"],"out":{"since":"2027-05-06T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7 days","2027-10-27T00:00:00.604Z"],"out":{"since":"2027-10-20T00:00:00.604Z","before":null}}
+{"fn":"resolve_window","in":["last 24h","2027-02-24T09:47:36.028Z"],"out":{"since":"2027-02-23T09:47:36.028Z","before":null}}
+{"fn":"resolve_window","in":["last 14 days","2026-06-14T22:01:21.000Z"],"out":{"since":"2026-05-31T22:01:21.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24 hours","2026-09-22T00:00:01.000Z"],"out":{"since":"2026-09-21T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["this morning","2026-10-28T23:59:59.000Z"],"out":{"since":"2026-10-28T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last month","2026-03-22T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last month\" (normalized to \"last_month\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this twod","2026-11-30T19:17:06.713Z"],"throws":{"name":"Error","message":"Unknown window=\"this twod\" (normalized to \"this_twod\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last day","2026-11-08T12:00:00.000Z"],"out":{"since":"2026-11-07T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["week","2026-11-19T12:00:00.462Z"],"out":{"since":"2026-11-16T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["recently","2026-01-22T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recently\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past week","2026-06-24T00:00:01.000Z"],"out":{"since":"2026-06-17T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24 hours","2027-03-02T00:00:00.135Z"],"out":{"since":"2027-03-01T00:00:00.135Z","before":null}}
+{"fn":"resolve_window","in":["last 24h","2026-07-09T05:15:24.000Z"],"out":{"since":"2026-07-08T05:15:24.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24 hours","2026-02-05T00:00:01.000Z"],"out":{"since":"2026-02-04T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["-","2027-10-26T23:59:59.713Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["yesterday","2027-03-17T00:00:00.000Z"],"out":{"since":"2027-03-16T00:00:00.000Z","before":"2027-03-17T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["last_30d","2027-05-09T23:59:59.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this_week","2027-07-07T23:59:59.000Z"],"out":{"since":"2027-07-05T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last month","2026-08-15T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last month\" (normalized to \"last_month\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last month","2026-03-22T12:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last month\" (normalized to \"last_month\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this_morning","2027-04-12T12:00:00.000Z"],"out":{"since":"2027-04-12T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2026-02-12T23:59:59.000Z"],"out":{"since":"2026-01-29T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2027-02-06T00:00:00.791Z"],"out":{"since":"2027-01-30T00:00:00.791Z","before":null}}
+{"fn":"resolve_window","in":["today!","2026-05-21T00:00:00.000Z"],"out":{"since":"2026-05-21T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 14 days","2026-12-11T12:00:00.000Z"],"out":{"since":"2026-11-27T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today!","2027-10-03T00:00:00.000Z"],"out":{"since":"2027-10-03T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past week","2027-05-28T23:59:59.000Z"],"out":{"since":"2027-05-21T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["yesterday?","2026-08-25T06:00:00.000Z"],"out":{"since":"2026-08-24T00:00:00.000Z","before":"2026-08-25T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["past two weeks","2026-11-24T00:00:00.130Z"],"out":{"since":"2026-11-10T00:00:00.130Z","before":null}}
+{"fn":"resolve_window","in":["past_14_days","2026-11-23T23:59:59.000Z"],"out":{"since":"2026-11-09T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7d","2026-12-05T00:00:01.046Z"],"out":{"since":"2026-11-28T00:00:01.046Z","before":null}}
+{"fn":"resolve_window","in":["yesterday","2027-01-01T00:00:00.000Z"],"out":{"since":"2026-12-31T00:00:00.000Z","before":"2027-01-01T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["last-24h","2027-04-25T00:00:00.000Z"],"out":{"since":"2027-04-24T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_week","2026-02-09T23:59:59.692Z"],"out":{"since":"2026-02-09T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7d","2026-04-19T00:00:01.000Z"],"out":{"since":"2026-04-12T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2027-08-01T23:59:59.000Z"],"out":{"since":"2027-07-25T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["this  morning days","2026-02-21T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this  morning days\" (normalized to \"this_morning_days\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past two weeks","2027-02-08T00:00:00.000Z"],"out":{"since":"2027-01-25T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 7 days","2027-01-15T00:00:01.000Z"],"out":{"since":"2027-01-08T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["-","2026-10-10T23:59:59.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_24h","2027-07-31T00:00:00.000Z"],"out":{"since":"2027-07-30T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["yesterday?","2027-02-11T18:53:59.000Z"],"out":{"since":"2027-02-10T00:00:00.000Z","before":"2027-02-11T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["7d","2027-05-07T14:26:29.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last month","2027-09-11T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last month\" (normalized to \"last_month\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last month","2027-05-24T12:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last month\" (normalized to \"last_month\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last day","2026-10-16T00:00:00.000Z"],"out":{"since":"2026-10-15T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2027-08-18T23:59:59.000Z"],"out":{"since":"2027-08-04T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7_days","2026-08-29T12:00:00.000Z"],"out":{"since":"2026-08-22T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 7 days","2026-10-28T00:00:01.000Z"],"out":{"since":"2026-10-21T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["this week","2027-06-18T00:00:01.000Z"],"out":{"since":"2027-06-14T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last two weeks","2027-08-07T06:00:00.194Z"],"out":{"since":"2027-07-24T06:00:00.194Z","before":null}}
+{"fn":"resolve_window","in":["last day","2027-10-07T06:00:00.000Z"],"out":{"since":"2027-10-06T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_30d","2027-09-05T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["recently","2027-03-26T14:45:32.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recently\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this_morning","2027-02-27T10:10:33.000Z"],"out":{"since":"2027-02-27T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 14 days","2027-05-13T12:00:00.000Z"],"out":{"since":"2027-04-29T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last-24h","2027-04-02T06:00:00.000Z"],"out":{"since":"2027-04-01T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["TODAY","2027-01-25T00:00:01.935Z"],"out":{"since":"2027-01-25T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past two weeks","2026-10-19T20:04:35.000Z"],"out":{"since":"2026-10-05T20:04:35.000Z","before":null}}
+{"fn":"resolve_window","in":["-","2026-10-01T06:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["   ","2027-05-14T22:44:34.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["yesterday","2027-04-14T06:00:00.000Z"],"out":{"since":"2027-04-13T00:00:00.000Z","before":"2027-04-14T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["last month","2026-10-13T07:36:55.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last month\" (normalized to \"last_month\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past_morning days","2027-07-02T12:00:00.744Z"],"throws":{"name":"Error","message":"Unknown window=\"past_morning days\" (normalized to \"past_morning_days\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this morningd","2027-02-13T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this morningd\" (normalized to \"this_morningd\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["yesterday","2026-06-10T12:00:00.000Z"],"out":{"since":"2026-06-09T00:00:00.000Z","before":"2026-06-10T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["7d","2027-05-01T23:59:59.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last month","2026-04-12T12:00:00.065Z"],"throws":{"name":"Error","message":"Unknown window=\"last month\" (normalized to \"last_month\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 14 days","2026-08-21T12:00:00.000Z"],"out":{"since":"2026-08-07T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["yesterday?","2027-06-07T00:00:00.000Z"],"out":{"since":"2027-06-06T00:00:00.000Z","before":"2027-06-07T00:00:00.000Z"}}
+{"fn":"resolve_window","in":[" today ","2026-05-06T12:00:00.816Z"],"out":{"since":"2026-05-06T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["24h","2027-04-04T06:00:00.602Z"],"throws":{"name":"Error","message":"Unknown window=\"24h\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past_14_days","2026-05-02T06:00:00.000Z"],"out":{"since":"2026-04-18T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this-24","2026-01-31T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this-24\" (normalized to \"this_24\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["","2027-08-06T00:00:01.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["morning","2027-07-29T12:00:00.000Z"],"out":{"since":"2027-07-29T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["week","2026-07-05T23:59:59.000Z"],"out":{"since":"2026-06-29T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2027-07-17T12:00:00.000Z"],"out":{"since":"2027-07-10T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7 days","2027-04-19T12:00:00.000Z"],"out":{"since":"2027-04-12T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last two weeks","2026-04-12T00:00:01.000Z"],"out":{"since":"2026-03-29T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2027-03-19T00:00:00.000Z"],"out":{"since":"2027-03-05T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["yesterday?","2027-08-21T00:00:01.000Z"],"out":{"since":"2027-08-20T00:00:00.000Z","before":"2027-08-21T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["past day weeks","2027-07-01T00:00:01.753Z"],"throws":{"name":"Error","message":"Unknown window=\"past day weeks\" (normalized to \"past_day_weeks\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 14 days","2026-07-15T12:00:00.593Z"],"out":{"since":"2026-07-01T12:00:00.593Z","before":null}}
+{"fn":"resolve_window","in":["morning","2026-12-01T00:00:01.000Z"],"out":{"since":"2026-12-01T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_two days","2026-10-16T12:00:00.233Z"],"throws":{"name":"Error","message":"Unknown window=\"last_two days\" (normalized to \"last_two_days\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last week","2027-04-14T06:00:00.000Z"],"out":{"since":"2027-04-07T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["recent","2027-12-01T00:00:00.587Z"],"throws":{"name":"Error","message":"Unknown window=\"recent\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past week","2027-10-19T23:59:59.000Z"],"out":{"since":"2027-10-12T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["past week","2026-08-05T23:59:59.000Z"],"out":{"since":"2026-07-29T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last day","2026-02-05T00:00:00.000Z"],"out":{"since":"2026-02-04T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["yesterday?","2027-03-04T00:00:00.000Z"],"out":{"since":"2027-03-03T00:00:00.000Z","before":"2027-03-04T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["last_7_days","2026-03-28T06:00:00.000Z"],"out":{"since":"2026-03-21T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_24h","2026-11-13T07:59:17.043Z"],"out":{"since":"2026-11-12T07:59:17.043Z","before":null}}
+{"fn":"resolve_window","in":["past_14_days","2027-08-17T00:00:00.279Z"],"out":{"since":"2027-08-03T00:00:00.279Z","before":null}}
+{"fn":"resolve_window","in":["this_morning","2027-10-28T23:59:59.000Z"],"out":{"since":"2027-10-28T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7 days","2026-10-29T06:00:00.000Z"],"out":{"since":"2026-10-22T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["   ","2027-12-01T23:59:59.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last-14h","2026-11-11T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last-14h\" (normalized to \"last_14h\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["   ","2027-06-01T23:59:59.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 7 days","2027-05-28T00:00:00.000Z"],"out":{"since":"2027-05-21T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24 hours","2027-07-19T00:00:01.000Z"],"out":{"since":"2027-07-18T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["past week","2027-07-19T00:00:01.301Z"],"out":{"since":"2027-07-12T00:00:01.301Z","before":null}}
+{"fn":"resolve_window","in":["Today","2027-11-11T00:00:00.000Z"],"out":{"since":"2027-11-11T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last seven days","2027-04-30T23:59:59.000Z"],"out":{"since":"2027-04-23T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["past 7 days","2027-07-08T00:00:00.540Z"],"out":{"since":"2027-07-01T00:00:00.540Z","before":null}}
+{"fn":"resolve_window","in":["   ","2027-10-27T12:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["today","2026-12-19T12:00:00.000Z"],"out":{"since":"2026-12-19T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last week","2027-11-19T00:00:00.000Z"],"out":{"since":"2027-11-12T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 7 days","2026-03-27T00:00:01.000Z"],"out":{"since":"2026-03-20T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2027-05-14T12:00:00.000Z"],"out":{"since":"2027-04-30T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this-weekd","2027-06-05T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this-weekd\" (normalized to \"this_weekd\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past 7 days","2027-06-19T00:00:01.000Z"],"out":{"since":"2027-06-12T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["24h","2026-12-29T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"24h\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["","2027-10-03T00:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 7d","2026-05-07T15:07:07.000Z"],"out":{"since":"2026-04-30T15:07:07.000Z","before":null}}
+{"fn":"resolve_window","in":[" today ","2026-08-09T23:59:59.000Z"],"out":{"since":"2026-08-09T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today","2026-09-30T00:00:00.227Z"],"out":{"since":"2026-09-30T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["   ","2027-03-04T06:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this  7 weeks","2026-10-24T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this  7 weeks\" (normalized to \"this_7_weeks\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 24 hours","2027-07-25T00:00:00.000Z"],"out":{"since":"2027-07-24T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7 days","2027-11-11T00:00:00.071Z"],"out":{"since":"2027-11-04T00:00:00.071Z","before":null}}
+{"fn":"resolve_window","in":["past two weeks","2026-11-13T06:00:00.000Z"],"out":{"since":"2026-10-30T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this week","2027-11-16T00:00:00.588Z"],"out":{"since":"2027-11-15T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today","2026-04-23T12:00:00.000Z"],"out":{"since":"2026-04-23T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_30d","2026-06-14T12:00:00.468Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["morning","2027-06-25T00:00:01.000Z"],"out":{"since":"2027-06-25T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":[" today ","2026-06-21T06:00:00.000Z"],"out":{"since":"2026-06-21T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["morning","2027-11-17T00:00:00.944Z"],"out":{"since":"2027-11-17T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_week","2026-09-29T12:00:00.000Z"],"out":{"since":"2026-09-28T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["TODAY","2027-01-09T12:00:00.000Z"],"out":{"since":"2027-01-09T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last seven days","2026-01-07T23:24:15.000Z"],"out":{"since":"2025-12-31T23:24:15.000Z","before":null}}
+{"fn":"resolve_window","in":["this_morning","2027-06-25T06:00:00.000Z"],"out":{"since":"2027-06-25T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_30d","2027-11-10T12:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last week","2027-03-08T00:00:01.000Z"],"out":{"since":"2027-03-01T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["24h","2027-03-18T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"24h\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["today","2027-05-08T23:59:59.000Z"],"out":{"since":"2027-05-08T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["recently","2027-10-27T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recently\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last seven days","2027-01-15T23:59:59.000Z"],"out":{"since":"2027-01-08T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["7d","2026-10-26T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["7d","2027-03-27T06:00:00.029Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["TODAY","2026-11-06T06:00:00.000Z"],"out":{"since":"2026-11-06T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past two weeks","2026-08-05T22:09:34.000Z"],"out":{"since":"2026-07-22T22:09:34.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2026-07-09T00:00:01.000Z"],"out":{"since":"2026-07-02T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["this  seven days","2026-05-24T00:00:01.158Z"],"throws":{"name":"Error","message":"Unknown window=\"this  seven days\" (normalized to \"this_seven_days\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["   ","2027-03-21T12:46:24.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["today!","2026-11-06T11:01:23.000Z"],"out":{"since":"2026-11-06T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last month","2027-01-18T23:59:59.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last month\" (normalized to \"last_month\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["yesterday","2027-06-06T00:00:00.649Z"],"out":{"since":"2027-06-05T00:00:00.000Z","before":"2027-06-06T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["last seven days","2026-08-23T00:00:00.000Z"],"out":{"since":"2026-08-16T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past_14_days","2027-02-25T12:00:00.000Z"],"out":{"since":"2027-02-11T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_30d","2027-04-02T06:00:00.662Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last7d","2026-01-30T12:00:00.000Z"],"out":{"since":"2026-01-23T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7d","2026-09-22T12:00:00.000Z"],"out":{"since":"2026-09-15T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7d","2027-09-23T22:47:07.000Z"],"out":{"since":"2027-09-16T22:47:07.000Z","before":null}}
+{"fn":"resolve_window","in":["past 24h","2026-05-11T10:14:48.000Z"],"out":{"since":"2026-05-10T10:14:48.000Z","before":null}}
+{"fn":"resolve_window","in":["last_30d","2026-01-30T12:00:00.914Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_14d","2026-07-17T06:00:00.000Z"],"out":{"since":"2026-07-03T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_24h","2027-08-02T06:00:00.370Z"],"out":{"since":"2027-08-01T06:00:00.370Z","before":null}}
+{"fn":"resolve_window","in":["24h","2027-04-10T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"24h\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["7d","2026-09-06T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["7d","2026-08-30T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":[" today ","2026-01-31T23:59:59.000Z"],"out":{"since":"2026-01-31T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today!","2026-08-11T12:00:00.516Z"],"out":{"since":"2026-08-11T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last-24h","2027-10-01T00:00:00.000Z"],"out":{"since":"2027-09-30T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last-14 days","2026-07-16T00:00:01.653Z"],"out":{"since":"2026-07-02T00:00:01.653Z","before":null}}
+{"fn":"resolve_window","in":["TODAY","2026-12-14T00:00:00.000Z"],"out":{"since":"2026-12-14T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last two weeks","2026-01-08T00:00:00.000Z"],"out":{"since":"2025-12-25T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["week","2027-01-16T00:00:01.000Z"],"out":{"since":"2027-01-11T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["week","2027-05-08T04:10:02.000Z"],"out":{"since":"2027-05-03T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this  7d","2026-03-03T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this  7d\" (normalized to \"this_7d\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last day","2026-07-29T04:09:41.243Z"],"out":{"since":"2026-07-28T04:09:41.243Z","before":null}}
+{"fn":"resolve_window","in":["past 7 days","2026-09-13T00:00:00.000Z"],"out":{"since":"2026-09-06T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this morning","2026-03-01T09:13:02.000Z"],"out":{"since":"2026-03-01T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 24h","2026-10-29T00:00:00.729Z"],"out":{"since":"2026-10-28T00:00:00.729Z","before":null}}
+{"fn":"resolve_window","in":["this_morning","2027-10-25T00:00:01.487Z"],"out":{"since":"2027-10-25T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past-morning weeks","2026-03-15T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"past-morning weeks\" (normalized to \"past_morning_weeks\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 7 days","2027-06-17T12:00:00.000Z"],"out":{"since":"2027-06-10T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_morning","2027-09-07T00:00:01.000Z"],"out":{"since":"2027-09-07T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_morning","2027-06-04T12:00:00.000Z"],"out":{"since":"2027-06-04T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_morning","2027-06-28T00:00:01.000Z"],"out":{"since":"2027-06-28T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past_14_days","2027-07-23T23:59:59.000Z"],"out":{"since":"2027-07-09T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["this-week","2027-03-26T00:00:00.000Z"],"out":{"since":"2027-03-22T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["   ","2027-07-16T12:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last-24h","2026-10-30T06:00:00.953Z"],"out":{"since":"2026-10-29T06:00:00.953Z","before":null}}
+{"fn":"resolve_window","in":["last_24h","2026-06-18T00:00:01.000Z"],"out":{"since":"2026-06-17T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["7d","2027-11-29T12:00:00.733Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_7_days","2026-11-09T23:59:59.000Z"],"out":{"since":"2026-11-02T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["this-week","2027-09-18T12:00:00.000Z"],"out":{"since":"2027-09-13T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this week","2027-09-05T12:00:00.000Z"],"out":{"since":"2027-08-30T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7_days","2027-04-21T23:59:59.914Z"],"out":{"since":"2027-04-14T23:59:59.914Z","before":null}}
+{"fn":"resolve_window","in":["today!","2027-11-30T00:00:01.000Z"],"out":{"since":"2027-11-30T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["yesterday?","2027-11-29T23:59:59.000Z"],"out":{"since":"2027-11-28T00:00:00.000Z","before":"2027-11-29T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["this_morning","2027-08-11T06:00:00.000Z"],"out":{"since":"2027-08-11T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["morning","2026-05-29T00:00:00.000Z"],"out":{"since":"2026-05-29T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["recently","2026-11-13T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recently\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this_week","2026-06-09T06:00:00.000Z"],"out":{"since":"2026-06-08T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last seven days","2027-08-14T00:00:01.000Z"],"out":{"since":"2027-08-07T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["past two weeks","2027-11-08T12:00:00.000Z"],"out":{"since":"2027-10-25T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last seven days","2027-01-20T00:00:01.000Z"],"out":{"since":"2027-01-13T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["past_14_days","2027-10-29T00:00:01.000Z"],"out":{"since":"2027-10-15T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last-24h","2026-07-15T12:00:00.000Z"],"out":{"since":"2026-07-14T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 24h","2027-08-02T12:00:00.000Z"],"out":{"since":"2027-08-01T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["7d","2026-11-14T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 7 days","2027-03-22T23:59:59.000Z"],"out":{"since":"2027-03-15T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last two weeks","2027-01-16T12:00:00.000Z"],"out":{"since":"2027-01-02T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last week","2027-09-26T23:59:59.897Z"],"out":{"since":"2027-09-19T23:59:59.897Z","before":null}}
+{"fn":"resolve_window","in":["last  two hours","2026-05-22T00:00:01.762Z"],"throws":{"name":"Error","message":"Unknown window=\"last  two hours\" (normalized to \"last_two_hours\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last two weeks","2027-07-18T00:00:01.000Z"],"out":{"since":"2027-07-04T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7d","2027-07-29T06:00:00.000Z"],"out":{"since":"2027-07-22T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 7 days","2027-05-30T00:00:01.000Z"],"out":{"since":"2027-05-23T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["morning","2026-10-20T23:59:59.000Z"],"out":{"since":"2026-10-20T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["","2027-08-03T00:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last two weeks","2026-01-19T23:59:59.000Z"],"out":{"since":"2026-01-05T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["24h","2026-12-11T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"24h\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_7_days","2027-10-04T00:00:00.000Z"],"out":{"since":"2027-09-27T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["Today","2026-11-19T00:00:01.000Z"],"out":{"since":"2026-11-19T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last seven days","2027-10-27T00:00:01.000Z"],"out":{"since":"2027-10-20T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last 14 days","2026-03-14T06:00:00.000Z"],"out":{"since":"2026-02-28T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2027-08-20T23:59:59.000Z"],"out":{"since":"2027-08-06T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":[" today ","2026-10-08T06:00:00.000Z"],"out":{"since":"2026-10-08T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_24h","2026-09-28T00:00:01.000Z"],"out":{"since":"2026-09-27T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2026-04-28T00:00:00.000Z"],"out":{"since":"2026-04-21T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past seven","2027-08-08T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"past seven\" (normalized to \"past_seven\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this-week","2027-10-19T11:16:25.000Z"],"out":{"since":"2027-10-18T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["24h","2026-03-01T14:50:49.548Z"],"throws":{"name":"Error","message":"Unknown window=\"24h\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_24h","2026-11-13T12:12:06.000Z"],"out":{"since":"2026-11-12T12:12:06.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2027-11-01T23:59:59.000Z"],"out":{"since":"2027-10-25T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["past_14_days","2026-05-10T17:15:56.000Z"],"out":{"since":"2026-04-26T17:15:56.000Z","before":null}}
+{"fn":"resolve_window","in":["last_two","2027-09-21T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_two\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this-week","2027-06-22T08:29:59.000Z"],"out":{"since":"2027-06-21T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["","2026-02-03T00:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last7d","2027-08-29T00:00:01.000Z"],"out":{"since":"2027-08-22T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24h","2027-02-27T09:44:31.086Z"],"out":{"since":"2027-02-26T09:44:31.086Z","before":null}}
+{"fn":"resolve_window","in":["last month","2026-03-12T23:59:59.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last month\" (normalized to \"last_month\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 24h","2027-07-16T23:59:59.000Z"],"out":{"since":"2027-07-15T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["yesterday","2026-03-07T23:59:59.000Z"],"out":{"since":"2026-03-06T00:00:00.000Z","before":"2026-03-07T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["past  7 weeks","2026-11-10T06:00:00.410Z"],"throws":{"name":"Error","message":"Unknown window=\"past  7 weeks\" (normalized to \"past_7_weeks\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last day","2026-11-10T23:59:59.000Z"],"out":{"since":"2026-11-09T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["   ","2027-03-05T00:00:01.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_30d","2027-02-17T23:59:59.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_7_days","2026-05-16T12:00:00.000Z"],"out":{"since":"2026-05-09T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["   ","2026-07-04T00:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["today","2027-10-13T00:00:01.386Z"],"out":{"since":"2027-10-13T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 7 days","2027-01-28T23:59:59.000Z"],"out":{"since":"2027-01-21T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last month","2026-05-29T00:00:00.985Z"],"throws":{"name":"Error","message":"Unknown window=\"last month\" (normalized to \"last_month\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 7d","2027-02-11T12:00:00.000Z"],"out":{"since":"2027-02-04T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this-24d","2027-09-16T12:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this-24d\" (normalized to \"this_24d\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past 24h","2026-05-25T06:00:00.000Z"],"out":{"since":"2026-05-24T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_week","2026-10-17T12:00:00.000Z"],"out":{"since":"2026-10-12T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_day hours","2026-09-21T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_day hours\" (normalized to \"last_day_hours\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["   ","2027-08-14T06:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_30d","2026-04-12T12:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["","2027-04-04T12:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 24 hours","2026-12-20T00:00:00.000Z"],"out":{"since":"2026-12-19T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this week","2026-06-03T16:49:09.000Z"],"out":{"since":"2026-06-01T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["recent","2026-08-09T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recent\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["7d","2026-01-17T00:00:00.947Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":[" today ","2026-09-06T00:00:01.000Z"],"out":{"since":"2026-09-06T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["yesterday?","2026-02-25T00:00:01.654Z"],"out":{"since":"2026-02-24T00:00:00.000Z","before":"2026-02-25T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["last-24h","2026-09-01T00:00:01.000Z"],"out":{"since":"2026-08-31T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24h","2027-10-05T06:00:00.000Z"],"out":{"since":"2027-10-04T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7_days","2026-09-23T23:59:59.000Z"],"out":{"since":"2026-09-16T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["past 14 weeks","2027-01-05T17:31:33.000Z"],"throws":{"name":"Error","message":"Unknown window=\"past 14 weeks\" (normalized to \"past_14_weeks\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last week days","2026-06-15T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last week days\" (normalized to \"last_7d_days\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_14d","2027-01-11T12:40:03.471Z"],"out":{"since":"2026-12-28T12:40:03.471Z","before":null}}
+{"fn":"resolve_window","in":["7d","2027-08-27T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last week","2026-01-07T12:00:00.000Z"],"out":{"since":"2025-12-31T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24h","2027-09-23T00:00:00.000Z"],"out":{"since":"2027-09-22T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":[" today ","2026-02-24T23:59:59.000Z"],"out":{"since":"2026-02-24T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last week","2026-09-20T08:51:52.000Z"],"out":{"since":"2026-09-13T08:51:52.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2027-01-19T12:00:00.000Z"],"out":{"since":"2027-01-12T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last seven days","2027-09-24T16:30:05.000Z"],"out":{"since":"2027-09-17T16:30:05.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2027-02-13T00:00:01.712Z"],"out":{"since":"2027-02-06T00:00:01.712Z","before":null}}
+{"fn":"resolve_window","in":["last_7d","2027-03-13T12:00:00.000Z"],"out":{"since":"2027-03-06T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last week","2026-05-22T12:00:00.000Z"],"out":{"since":"2026-05-15T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past day weeks","2027-01-09T23:59:59.000Z"],"throws":{"name":"Error","message":"Unknown window=\"past day weeks\" (normalized to \"past_day_weeks\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this morning","2027-01-03T06:00:00.851Z"],"out":{"since":"2027-01-03T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today!","2026-01-23T23:59:59.232Z"],"out":{"since":"2026-01-23T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":[" today ","2026-07-26T00:00:00.000Z"],"out":{"since":"2026-07-26T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["Today","2026-03-01T12:00:00.000Z"],"out":{"since":"2026-03-01T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past_14_days","2026-11-21T06:00:00.000Z"],"out":{"since":"2026-11-07T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past-twoh","2026-08-01T00:00:01.681Z"],"throws":{"name":"Error","message":"Unknown window=\"past-twoh\" (normalized to \"past_twoh\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 24h","2026-03-08T00:00:01.000Z"],"out":{"since":"2026-03-07T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7 days","2026-07-10T23:59:59.000Z"],"out":{"since":"2026-07-03T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24 hours","2027-02-14T12:00:00.000Z"],"out":{"since":"2027-02-13T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today","2026-08-24T23:59:59.000Z"],"out":{"since":"2026-08-24T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_day","2027-09-03T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this_day\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["-","2026-12-06T00:00:01.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 14 days","2026-10-02T08:43:14.000Z"],"out":{"since":"2026-09-18T08:43:14.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7_days","2027-05-07T12:00:00.000Z"],"out":{"since":"2027-04-30T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 24h","2026-11-09T00:00:00.000Z"],"out":{"since":"2026-11-08T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":[" today ","2026-12-13T09:20:17.904Z"],"out":{"since":"2026-12-13T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past_14_days","2026-08-07T23:59:59.000Z"],"out":{"since":"2026-07-24T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2027-12-01T23:59:59.000Z"],"out":{"since":"2027-11-24T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["today","2027-10-20T00:00:01.000Z"],"out":{"since":"2027-10-20T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 24h","2026-06-12T07:43:53.000Z"],"out":{"since":"2026-06-11T07:43:53.000Z","before":null}}
+{"fn":"resolve_window","in":["morning","2027-10-31T12:00:00.000Z"],"out":{"since":"2027-10-31T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today","2026-01-20T00:00:01.000Z"],"out":{"since":"2026-01-20T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["   ","2026-03-23T06:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this morning","2027-06-05T06:00:00.579Z"],"out":{"since":"2027-06-05T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past_14_days","2027-05-21T13:58:10.000Z"],"out":{"since":"2027-05-07T13:58:10.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7d","2027-07-18T00:00:01.701Z"],"out":{"since":"2027-07-11T00:00:01.701Z","before":null}}
+{"fn":"resolve_window","in":["week","2026-08-14T23:59:59.060Z"],"out":{"since":"2026-08-10T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_morning","2026-12-09T06:00:00.422Z"],"out":{"since":"2026-12-09T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 24h","2026-01-19T13:15:02.314Z"],"out":{"since":"2026-01-18T13:15:02.314Z","before":null}}
+{"fn":"resolve_window","in":["yesterday","2026-02-03T12:00:00.000Z"],"out":{"since":"2026-02-02T00:00:00.000Z","before":"2026-02-03T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["   ","2026-12-26T23:59:59.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["24h","2026-11-06T23:59:59.261Z"],"throws":{"name":"Error","message":"Unknown window=\"24h\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["Today","2027-07-23T23:59:59.694Z"],"out":{"since":"2027-07-23T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["TODAY","2026-02-27T23:59:59.000Z"],"out":{"since":"2026-02-27T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last day","2027-02-08T12:00:00.000Z"],"out":{"since":"2027-02-07T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 24h","2026-03-18T23:59:59.000Z"],"out":{"since":"2026-03-17T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last7d","2027-09-19T00:00:00.351Z"],"out":{"since":"2027-09-12T00:00:00.351Z","before":null}}
+{"fn":"resolve_window","in":["last_day days","2027-08-08T07:48:37.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_day days\" (normalized to \"last_day_days\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this  morning hours","2026-05-13T17:55:04.746Z"],"throws":{"name":"Error","message":"Unknown window=\"this  morning hours\" (normalized to \"this_morning_hours\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last week","2026-10-15T00:00:01.000Z"],"out":{"since":"2026-10-08T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last-24h","2026-12-19T00:00:01.000Z"],"out":{"since":"2026-12-18T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["Today","2027-11-23T00:00:01.219Z"],"out":{"since":"2027-11-23T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last-24h","2026-03-12T06:00:00.000Z"],"out":{"since":"2026-03-11T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["today","2027-08-06T12:00:00.558Z"],"out":{"since":"2027-08-06T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7_days","2026-07-27T00:00:01.000Z"],"out":{"since":"2026-07-20T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last two weeks","2026-08-08T00:00:01.300Z"],"out":{"since":"2026-07-25T00:00:01.300Z","before":null}}
+{"fn":"resolve_window","in":["7d","2027-04-29T06:00:00.417Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["yesterday?","2027-10-20T06:00:00.866Z"],"out":{"since":"2027-10-19T00:00:00.000Z","before":"2027-10-20T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["morning","2027-06-14T00:00:01.000Z"],"out":{"since":"2027-06-14T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2027-06-21T23:59:59.000Z"],"out":{"since":"2027-06-07T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["last_30d","2026-02-28T12:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["","2027-01-21T00:00:01.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["week","2026-08-28T12:00:00.957Z"],"out":{"since":"2026-08-24T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["24h","2026-05-15T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"24h\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last week","2026-02-24T06:00:00.000Z"],"out":{"since":"2026-02-17T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["-","2026-07-22T23:59:59.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 24 hours","2026-11-01T12:00:00.710Z"],"out":{"since":"2026-10-31T12:00:00.710Z","before":null}}
+{"fn":"resolve_window","in":["this_week","2027-06-10T23:59:59.372Z"],"out":{"since":"2027-06-07T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 7 days","2026-02-28T06:00:00.182Z"],"out":{"since":"2026-02-21T06:00:00.182Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2027-07-14T00:00:01.000Z"],"out":{"since":"2027-06-30T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2027-09-03T06:00:00.000Z"],"out":{"since":"2027-08-20T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last 14 days","2026-06-01T00:00:00.000Z"],"out":{"since":"2026-05-18T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past-24d","2027-02-23T10:31:29.000Z"],"throws":{"name":"Error","message":"Unknown window=\"past-24d\" (normalized to \"past_24d\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["yesterday?","2027-06-20T12:00:00.323Z"],"out":{"since":"2027-06-19T00:00:00.000Z","before":"2027-06-20T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["last7d","2026-12-03T00:00:01.962Z"],"out":{"since":"2026-11-26T00:00:01.962Z","before":null}}
+{"fn":"resolve_window","in":["last_14d","2027-01-02T00:00:00.000Z"],"out":{"since":"2026-12-19T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_30d","2027-04-10T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past_14_days","2026-05-15T00:00:01.000Z"],"out":{"since":"2026-05-01T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["this_morning","2027-03-02T18:38:57.000Z"],"out":{"since":"2027-03-02T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["recently","2026-08-16T23:59:59.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recently\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["week","2027-05-23T08:10:45.000Z"],"out":{"since":"2027-05-17T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7_days","2027-02-21T12:00:00.000Z"],"out":{"since":"2027-02-14T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past two weeks","2027-10-26T00:00:01.000Z"],"out":{"since":"2027-10-12T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["past-7h","2026-10-19T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"past-7h\" (normalized to \"past_7h\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this_morning","2026-11-14T00:00:01.000Z"],"out":{"since":"2026-11-14T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_two weeks","2027-11-29T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this_two weeks\" (normalized to \"this_two_weeks\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["yesterday?","2027-03-27T12:00:00.000Z"],"out":{"since":"2027-03-26T00:00:00.000Z","before":"2027-03-27T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["last seven days","2027-07-10T00:00:00.576Z"],"out":{"since":"2027-07-03T00:00:00.576Z","before":null}}
+{"fn":"resolve_window","in":["today","2027-12-02T00:00:00.000Z"],"out":{"since":"2027-12-02T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["morning","2027-01-28T08:36:56.000Z"],"out":{"since":"2027-01-28T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last day","2027-07-26T06:00:00.000Z"],"out":{"since":"2027-07-25T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last-24h","2027-06-03T12:00:00.000Z"],"out":{"since":"2027-06-02T12:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["","2027-10-28T00:00:00.083Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last_30d","2026-02-06T00:00:01.431Z"],"throws":{"name":"Error","message":"Unknown window=\"last_30d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["7d","2026-07-01T23:59:59.000Z"],"throws":{"name":"Error","message":"Unknown window=\"7d\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["recent","2026-06-17T04:01:10.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recent\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["today!","2026-12-27T00:00:01.000Z"],"out":{"since":"2026-12-27T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7d","2027-07-26T23:59:59.915Z"],"out":{"since":"2027-07-19T23:59:59.915Z","before":null}}
+{"fn":"resolve_window","in":["-","2026-11-12T23:59:59.807Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past two weeks","2026-12-27T12:00:00.998Z"],"out":{"since":"2026-12-13T12:00:00.998Z","before":null}}
+{"fn":"resolve_window","in":["this-sevend","2027-10-25T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this-sevend\" (normalized to \"this_sevend\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this  dayd","2027-04-22T06:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this  dayd\" (normalized to \"this_dayd\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["-","2026-01-01T12:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["last 24h","2026-09-18T23:59:59.000Z"],"out":{"since":"2026-09-17T23:59:59.000Z","before":null}}
+{"fn":"resolve_window","in":["yesterday?","2027-04-21T00:00:01.000Z"],"out":{"since":"2027-04-20T00:00:00.000Z","before":"2027-04-21T00:00:00.000Z"}}
+{"fn":"resolve_window","in":["this 24 weeks","2026-09-02T12:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this 24 weeks\" (normalized to \"this_24_weeks\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["","2027-02-16T01:42:35.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this-week","2026-11-27T11:37:17.000Z"],"out":{"since":"2026-11-23T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_week","2027-09-09T00:00:00.192Z"],"out":{"since":"2027-09-06T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last-24h","2027-11-17T06:00:00.000Z"],"out":{"since":"2027-11-16T06:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["last week","2026-10-19T00:00:01.000Z"],"out":{"since":"2026-10-12T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["last_7_days","2027-06-16T00:00:00.830Z"],"out":{"since":"2027-06-09T00:00:00.830Z","before":null}}
+{"fn":"resolve_window","in":["TODAY","2027-02-17T12:00:00.480Z"],"out":{"since":"2027-02-17T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past  7h","2026-11-19T13:51:29.000Z"],"throws":{"name":"Error","message":"Unknown window=\"past  7h\" (normalized to \"past_7h\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["past 7 days","2027-05-05T00:00:01.000Z"],"out":{"since":"2027-04-28T00:00:01.000Z","before":null}}
+{"fn":"resolve_window","in":["this_week","2026-11-28T12:00:00.014Z"],"out":{"since":"2026-11-23T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this_week","2026-03-15T12:00:00.000Z"],"out":{"since":"2026-03-09T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["","2026-11-06T00:00:00.000Z"],"throws":{"name":"Error","message":"Invalid window=\"\" — expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["24h","2027-05-18T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"24h\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["this two","2026-04-20T00:00:01.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this two\" (normalized to \"this_two\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["morning","2026-12-14T00:00:00.000Z"],"out":{"since":"2026-12-14T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["this-morning days","2027-08-25T03:12:40.000Z"],"throws":{"name":"Error","message":"Unknown window=\"this-morning days\" (normalized to \"this_morning_days\"). Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["recent","2027-10-08T00:00:00.000Z"],"throws":{"name":"Error","message":"Unknown window=\"recent\". Expected one of: \"today\", \"yesterday\", \"this_morning\", \"this_week\", \"last_24h\", \"last_7d\", \"last_14d\""}}
+{"fn":"resolve_window","in":["Today","2026-07-08T00:00:01.150Z"],"out":{"since":"2026-07-08T00:00:00.000Z","before":null}}
+{"fn":"resolve_window","in":["past 24h","2027-06-24T06:00:00.000Z"],"out":{"since":"2027-06-23T06:00:00.000Z","before":null}}
