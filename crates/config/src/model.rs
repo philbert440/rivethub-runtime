@@ -418,6 +418,15 @@ pub struct DeploymentSection {
 }
 
 impl Config {
+    #[must_use]
+    pub fn terminal_enabled(&self) -> bool {
+        self.gateway
+            .as_ref()
+            .and_then(|gateway| gateway.terminal.as_ref())
+            .and_then(|terminal| terminal.enabled)
+            .unwrap_or(false)
+    }
+
     pub fn memory_backend(&self) -> MemoryBackend {
         if let Some(backend) = self.memory.as_ref().and_then(|memory| memory.backend) {
             return backend;

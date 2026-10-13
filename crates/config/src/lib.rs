@@ -13,7 +13,7 @@ pub use enums::{
     DeploymentTarget, Effort, EmbedWireShape, HarnessId, Isolation, LogLevel, MemoryBackend,
     ModelsMode, ThinkingLevel, VerifierExecutor,
 };
-pub use environment::{Environment, LogLevelSetting};
+pub use environment::{Environment, LogLevelSetting, TermMuxChoice, TermMuxSetting, TermSettings};
 pub use free_form::FreeForm;
 pub use load::{ConfigError, Loaded, Typed, resolve_config_path, type_document, validate_document};
 pub use model::{Config, HarnessSlot, RedactionSettings};
