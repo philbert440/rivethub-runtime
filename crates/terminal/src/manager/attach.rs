@@ -12,6 +12,8 @@ use crate::error::Error;
 use crate::manager::AttachStream;
 use crate::manager::CHUNK_QUEUE;
 use crate::manager::TerminalManager;
+use crate::manager::TerminalRecord;
+use crate::manager::TerminalState;
 use crate::manager::registry::Runtime;
 use crate::pty;
 
@@ -165,10 +167,15 @@ impl TerminalManager {
         });
     }
 
-    pub(super) fn drain_output(&self, id: TerminalId, mut source: mpsc::Receiver<Vec<u8>>) {
+    pub(super) fn stream_until_exit(
+        &self,
+        id: TerminalId,
+        mut output: mpsc::Receiver<Vec<u8>>,
+        exit: oneshot::Receiver<pty::ExitOutcome>,
+    ) {
         let inner = Arc::clone(&self.inner);
         tokio::spawn(async move {
-            while let Some(chunk) = source.recv().await {
+            while let Some(chunk) = output.recv().await {
                 let mut state = inner.state.lock();
                 let Some(Runtime::Pty {
                     scrollback,
@@ -185,14 +192,8 @@ impl TerminalManager {
                 drop(state);
                 drop(sent);
             }
-        });
-    }
-
-    pub(super) fn await_exit(&self, id: TerminalId, outcome: oneshot::Receiver<pty::ExitOutcome>) {
-        let inner = Arc::clone(&self.inner);
-        tokio::spawn(async move {
-            let code = if let Ok(exit) = outcome.await {
-                exit.code
+            let code = if let Ok(outcome) = exit.await {
+                outcome.code
             } else {
                 tracing::warn!("terminal {id} exit watch dropped — recorded as exit 0");
                 0
@@ -202,14 +203,47 @@ impl TerminalManager {
                 live,
                 exit_code,
                 exited_at,
+                exit_watch,
                 ..
             }) = state.get_mut(&id)
             {
                 live.take();
                 exit_code.get_or_insert(code);
                 exited_at.get_or_insert_with(Instant::now);
+                exit_watch.send_replace(TerminalState::Exited { code });
             }
         });
+    }
+
+    pub async fn wait_exited(&self, id: &TerminalId) -> Result<TerminalRecord, Error> {
+        let mut exit = {
+            let state = self.inner.state.lock();
+            match state.get(id) {
+                Some(Runtime::Pty { exit_watch, .. }) => exit_watch.subscribe(),
+                Some(Runtime::Herdr { .. }) => {
+                    return Err(Error::MuxUnavailable(
+                        "herdr terminals have no manager-visible exit — the gateway owns the /term byte path"
+                            .to_owned(),
+                    ));
+                }
+                None => {
+                    return Err(Error::UnknownTerminal {
+                        terminal: id.clone(),
+                    });
+                }
+            }
+        };
+        while *exit.borrow_and_update() == TerminalState::Running {
+            if exit.changed().await.is_err() {
+                break;
+            }
+        }
+        self.list()
+            .into_iter()
+            .find(|record| record.id == *id)
+            .ok_or_else(|| Error::UnknownTerminal {
+                terminal: id.clone(),
+            })
     }
 
     pub(super) fn mark_detached(&self, id: &TerminalId) {

@@ -98,15 +98,10 @@ async fn wait_exit(
     id: &kernel::terminal::TerminalId,
     name: &str,
 ) -> Result<terminal::TerminalRecord, Failed> {
-    for _ in 0..200 {
-        tokio::time::sleep(Duration::from_millis(25)).await;
-        if let Some(record) = manager.list().into_iter().find(|record| record.id == *id)
-            && record.state != TerminalState::Running
-        {
-            return Ok(record);
-        }
-    }
-    Err(Failed::from(format!("{name}: the child never exited")))
+    manager
+        .wait_exited(id)
+        .await
+        .map_err(|error| Failed::from(format!("{name}: the exit wait failed: {error}")))
 }
 
 async fn replay(case: Case, node: Option<PathBuf>) -> Result<(), Failed> {

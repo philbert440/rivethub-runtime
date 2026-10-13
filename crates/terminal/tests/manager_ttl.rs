@@ -30,21 +30,6 @@ fn record_of(manager: &TerminalManager, id: &TerminalId) -> Option<terminal::Ter
     manager.list().into_iter().find(|record| record.id == *id)
 }
 
-async fn wait_exited(
-    manager: &TerminalManager,
-    id: &TerminalId,
-) -> Result<terminal::TerminalRecord, Failed> {
-    for _ in 0..600 {
-        tick().await;
-        if let Some(record) = record_of(manager, id)
-            && record.state != TerminalState::Running
-        {
-            return Ok(record);
-        }
-    }
-    Err(format!("terminal {id} never exited: {:?}", manager.list()).into())
-}
-
 async fn wait_reaped(manager: &TerminalManager, id: &TerminalId) -> bool {
     for _ in 0..600 {
         tick().await;
@@ -72,7 +57,7 @@ async fn the_exit_linger_keeps_the_record_then_the_reaper_reaps_it() -> Result<(
             &["/bin/sh", "-c", "exit 3"],
         )?)
         .await?;
-    let record = wait_exited(&manager, &id).await?;
+    let record = manager.wait_exited(&id).await?;
     assert_eq!(record.state, TerminalState::Exited { code: 3 });
 
     for _ in 0..200 {
@@ -97,7 +82,7 @@ async fn the_exit_linger_keeps_the_record_then_the_reaper_reaps_it() -> Result<(
         )?)
         .await?;
     assert!(record_of(&manager, &again).is_some());
-    wait_exited(&manager, &again).await?;
+    manager.wait_exited(&again).await?;
     Ok(())
 }
 
@@ -257,7 +242,7 @@ async fn the_cap_evicts_the_lru_idle_viewerless_terminal() -> Result<(), Failed>
             &["/bin/sh", "-c", "sleep 30"],
         )?)
         .await?;
-    let a_record = wait_exited(&manager, &a).await?;
+    let a_record = manager.wait_exited(&a).await?;
     assert_eq!(
         a_record.state,
         TerminalState::Exited { code: 0 },
@@ -301,7 +286,7 @@ async fn the_session_gc_reaps_past_the_linger_when_enabled() -> Result<(), Faile
         )?)
         .await?;
 
-    wait_exited(&manager, &id).await?;
+    manager.wait_exited(&id).await?;
     for _ in 0..250 {
         tick().await;
         assert!(
@@ -331,7 +316,7 @@ async fn close_sighups_every_live_terminal() -> Result<(), Failed> {
         )?)
         .await?;
     manager.close();
-    let record = wait_exited(&manager, &id).await?;
+    let record = manager.wait_exited(&id).await?;
     assert_eq!(record.state, TerminalState::Exited { code: 0 });
     Ok(())
 }

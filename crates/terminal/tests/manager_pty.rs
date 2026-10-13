@@ -199,6 +199,63 @@ async fn the_polite_kill_escalates_to_sigkill_after_three_seconds()
     Ok(())
 }
 
+async fn a_storm_of_shortlived_children_drains_the_last_line_before_the_exit_is_reported()
+-> Result<(), Box<dyn std::error::Error>> {
+    let manager = common::direct_manager(&config::Environment::default());
+    let work = tempfile::tempdir()?;
+    let bound = std::time::Duration::from_secs(60);
+    for i in 0..24 {
+        let expected_code = (i % 255) + 1;
+        let id = manager
+            .start(common::spec(
+                &format!("claude-code:00000000-0000-4000-8000-{i:012}"),
+                work.path(),
+                &[
+                    "/bin/sh",
+                    "-c",
+                    &format!("printf 'bye {i}\\n'; exit {expected_code}"),
+                ],
+            )?)
+            .await?;
+
+        let mut viewer = manager.attach_stream(&id)?.live;
+        let record = tokio::time::timeout(bound, manager.wait_exited(&id)).await??;
+        let line = format!("bye {i}\r\n");
+        assert_eq!(
+            record.state,
+            TerminalState::Exited {
+                code: expected_code
+            },
+            "child {i} recorded the wrong exit"
+        );
+        if let Some(stream) = viewer.as_mut() {
+            let seen = tokio::time::timeout(bound, common::collect(stream, 5_000)).await?;
+            assert!(
+                seen.windows(line.len())
+                    .any(|window| window == line.as_bytes()),
+                "child {i}: the attached viewer must see {line:?} before its stream ends, got {:?}",
+                String::from_utf8_lossy(&seen)
+            );
+        }
+        let late = manager.attach_stream(&id)?;
+        assert!(
+            late.replay
+                .windows(line.len())
+                .any(|window| window == line.as_bytes()),
+            "child {i}: exit is reported only after the last line is drained, replay {:?}",
+            String::from_utf8_lossy(&late.replay)
+        );
+        assert_eq!(
+            late.record.state,
+            TerminalState::Exited {
+                code: expected_code
+            }
+        );
+        assert!(late.live.is_none());
+    }
+    Ok(())
+}
+
 async fn unknown_terminals_are_typed_errors() -> Result<(), Box<dyn std::error::Error>> {
     let manager = common::direct_manager(&config::Environment::default());
     let unknown = kernel::terminal::TerminalId::new("pty-00000000");
@@ -220,6 +277,9 @@ fn the_direct_pty_behaviours() -> Result<(), Box<dyn std::error::Error>> {
     runtime.block_on(signal_deaths_reach_the_record_as_exit_code_zero())?;
     runtime.block_on(spawn_or_get_returns_the_live_record_for_the_same_session())?;
     runtime.block_on(input_to_an_exited_terminal_is_a_typed_error())?;
+    runtime.block_on(
+        a_storm_of_shortlived_children_drains_the_last_line_before_the_exit_is_reported(),
+    )?;
     runtime.block_on(the_polite_kill_escalates_to_sigkill_after_three_seconds())?;
     runtime.block_on(unknown_terminals_are_typed_errors())
 }

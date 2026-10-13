@@ -18,7 +18,6 @@ use terminal::SessionKey;
 use terminal::SpawnSpec;
 use terminal::TerminalManager;
 use terminal::TerminalSettings;
-use terminal::TerminalState;
 use tokio::sync::mpsc;
 
 pub const HOSTNAME: &str = "gold-host";
@@ -68,15 +67,10 @@ pub async fn wait_for_exit(
     manager: &TerminalManager,
     id: &TerminalId,
 ) -> Result<terminal::TerminalRecord, String> {
-    for _ in 0..400 {
-        tokio::time::sleep(Duration::from_millis(25)).await;
-        if let Some(record) = manager.list().into_iter().find(|record| record.id == *id)
-            && record.state != TerminalState::Running
-        {
-            return Ok(record);
-        }
-    }
-    Err(format!("terminal {id} never exited"))
+    manager
+        .wait_exited(id)
+        .await
+        .map_err(|error| format!("terminal {id} exit wait failed: {error}"))
 }
 
 pub fn child_paths(path_var: &str) -> Vec<PathBuf> {

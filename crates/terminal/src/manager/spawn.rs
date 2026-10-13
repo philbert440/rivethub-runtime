@@ -2,6 +2,7 @@ use kernel::terminal::TerminalId;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
+use tokio::sync::watch;
 use tokio::time::Instant;
 
 use crate::error::Error;
@@ -10,6 +11,7 @@ use crate::manager::Backing;
 use crate::manager::CHUNK_QUEUE;
 use crate::manager::SpawnSpec;
 use crate::manager::TerminalManager;
+use crate::manager::TerminalState;
 use crate::manager::registry::LivePty;
 use crate::manager::registry::RecordFields;
 use crate::manager::registry::Runtime;
@@ -35,6 +37,9 @@ impl TerminalManager {
             pty::SpawnOutcome::MissingBinary => {
                 let mut scrollback = Scrollback::new(self.inner.settings.limits.scrollback_bytes);
                 scrollback.push(pty::MISSING_BINARY_OUTPUT);
+                let (exit_watch, _) = watch::channel(TerminalState::Exited {
+                    code: pty::MISSING_BINARY_EXIT,
+                });
                 self.inner.state.lock().insert(
                     id.clone(),
                     Runtime::Pty {
@@ -43,6 +48,7 @@ impl TerminalManager {
                         live: None,
                         exit_code: Some(pty::MISSING_BINARY_EXIT),
                         exited_at: Some(now),
+                        exit_watch,
                     },
                 );
                 self.bind_session(&id, spec.session.as_ref());
@@ -53,6 +59,7 @@ impl TerminalManager {
                 let (output_tx, _) = broadcast::channel(BROADCAST_CAPACITY);
                 let (reader_tx, reader_rx) = mpsc::channel(CHUNK_QUEUE);
                 let (exit_tx, exit_rx) = oneshot::channel();
+                let (exit_watch, _) = watch::channel(TerminalState::Running);
                 let master_reader = spawned
                     .master
                     .try_clone_reader()
@@ -83,11 +90,11 @@ impl TerminalManager {
                         live: Some(live),
                         exit_code: None,
                         exited_at: None,
+                        exit_watch,
                     },
                 );
                 self.bind_session(&id, spec.session.as_ref());
-                self.drain_output(id.clone(), reader_rx);
-                self.await_exit(id.clone(), exit_rx);
+                self.stream_until_exit(id.clone(), reader_rx, exit_rx);
                 Ok(id)
             }
         }

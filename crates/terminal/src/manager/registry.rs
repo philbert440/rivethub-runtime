@@ -3,6 +3,7 @@ use std::sync::Arc;
 use kernel::terminal::TerminalId;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
+use tokio::sync::watch;
 use tokio::time::Instant;
 
 use crate::herdr::HerdrSession;
@@ -35,6 +36,7 @@ pub(super) enum Runtime {
         live: Option<LivePty>,
         exit_code: Option<u32>,
         exited_at: Option<Instant>,
+        exit_watch: watch::Sender<TerminalState>,
     },
     Herdr {
         fields: RecordFields,
