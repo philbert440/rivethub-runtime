@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::path::PathBuf;
 
 use rusqlite::Connection;
 use rusqlite::ToSql;
@@ -10,20 +11,57 @@ use crate::json::Json;
 use crate::json::json_eq;
 
 #[derive(Debug)]
-pub struct FixtureDb {
+pub struct FixtureCopy {
     _dir: TempDir,
-    pub conn: Connection,
+    path: PathBuf,
 }
 
-pub fn open_fixture(path: &Path) -> Result<FixtureDb, Error> {
+impl FixtureCopy {
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+pub fn copy_fixture(path: &Path) -> Result<FixtureCopy, Error> {
     let dir = tempfile::tempdir().map_err(|source| Error::io(path, source))?;
-    let copy = dir.path().join(path.file_name().map_or_else(
+    let target = dir.path().join(path.file_name().map_or_else(
         || "fixture.sqlite".to_string(),
         |n| n.to_string_lossy().to_string(),
     ));
-    std::fs::copy(path, &copy).map_err(|source| Error::io(path, source))?;
-    let conn = Connection::open(&copy)?;
-    Ok(FixtureDb { _dir: dir, conn })
+    std::fs::copy(path, &target).map_err(|source| Error::io(path, source))?;
+    let mut permissions = std::fs::metadata(&target)
+        .map_err(|source| Error::io(&target, source))?
+        .permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        permissions.set_mode(0o644);
+    }
+    std::fs::set_permissions(&target, permissions).map_err(|source| Error::io(&target, source))?;
+    Ok(FixtureCopy {
+        _dir: dir,
+        path: target,
+    })
+}
+
+#[derive(Debug)]
+pub struct FixtureDb {
+    copy: FixtureCopy,
+    pub conn: Connection,
+}
+
+impl FixtureDb {
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        self.copy.path()
+    }
+}
+
+pub fn open_fixture(path: &Path) -> Result<FixtureDb, Error> {
+    let copy = copy_fixture(path)?;
+    let conn = Connection::open(copy.path())?;
+    Ok(FixtureDb { copy, conn })
 }
 
 fn value_to_json(value: ValueRef<'_>) -> Json {

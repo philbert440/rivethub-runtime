@@ -1641,6 +1641,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "memory-sqlite"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hex",
+ "parking_lot",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "testkit",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"

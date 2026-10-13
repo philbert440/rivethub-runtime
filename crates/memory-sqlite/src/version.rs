@@ -1,0 +1,91 @@
+use crate::error::SqliteError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchemaVersion {
+    V1 = 1,
+    V2 = 2,
+    V3 = 3,
+    V4 = 4,
+    V5 = 5,
+    V6 = 6,
+    V7 = 7,
+}
+
+impl SchemaVersion {
+    #[must_use]
+    pub fn number(self) -> i64 {
+        self as i64
+    }
+
+    #[must_use]
+    pub fn next(self) -> Option<Self> {
+        match self {
+            Self::V1 => Some(Self::V2),
+            Self::V2 => Some(Self::V3),
+            Self::V3 => Some(Self::V4),
+            Self::V4 => Some(Self::V5),
+            Self::V5 => Some(Self::V6),
+            Self::V6 => Some(Self::V7),
+            Self::V7 => None,
+        }
+    }
+}
+
+impl TryFrom<i64> for SchemaVersion {
+    type Error = SqliteError;
+
+    fn try_from(found: i64) -> Result<Self, Self::Error> {
+        match found {
+            1 => Ok(Self::V1),
+            2 => Ok(Self::V2),
+            3 => Ok(Self::V3),
+            4 => Ok(Self::V4),
+            5 => Ok(Self::V5),
+            6 => Ok(Self::V6),
+            7 => Ok(Self::V7),
+            other => Err(SqliteError::UnsupportedSchema { found: other }),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SchemaVersion;
+    use crate::error::SqliteError;
+
+    #[test]
+    fn every_recorded_user_version_maps_to_a_schema_version() {
+        for found in 1..=7 {
+            let version = SchemaVersion::try_from(found).unwrap_or_else(|error| {
+                panic!("user_version {found} must map to a schema version: {error}")
+            });
+            assert_eq!(version.number(), found);
+        }
+    }
+
+    #[test]
+    fn versions_outside_the_ladder_are_typed_errors() {
+        for found in [-3, 0, 8, 99] {
+            match SchemaVersion::try_from(found) {
+                Err(SqliteError::UnsupportedSchema { found: reported }) => {
+                    assert_eq!(reported, found);
+                }
+                other => panic!("user_version {found} must be unsupported, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn the_ladder_runs_from_any_version_to_the_seventh() {
+        for from in 1..=7 {
+            let mut current = SchemaVersion::try_from(from).unwrap();
+            let mut visited = Vec::new();
+            while let Some(next) = current.next() {
+                visited.push(next.number());
+                current = next;
+            }
+            let expected: Vec<i64> = (from + 1..=7).collect();
+            assert_eq!(visited, expected, "ladder from user_version {from}");
+        }
+    }
+}

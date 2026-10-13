@@ -21,6 +21,8 @@ globs = [
   "crates/*/tests/fixtures/**/*.json",
   "crates/*/tests/fixtures/**/*.jsonl",
   "crates/*/tests/fixtures/**/*.txt",
+  "crates/memory-sqlite/src/schema/*.sql",
+  "crates/testkit/tests/fixtures/memory-sqlite/*.sqlite",
   "lints/examples/*.stderr",
   "lints/ui/**/*.stderr",
   "xtask/data/*.json",

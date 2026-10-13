@@ -2,6 +2,7 @@ use axum::Router;
 use axum::routing::get;
 use rusqlite::params;
 use tempfile::tempdir;
+use testkit::copy_fixture;
 use testkit::golden_path;
 use testkit::open_fixture;
 use testkit::query_json;
@@ -88,6 +89,28 @@ fn fixture_db_copies_and_queries_rows() {
             .unwrap(),
         1
     );
+}
+
+#[test]
+fn copy_fixture_copies_into_a_private_directory() {
+    let dir = tempdir().unwrap();
+    let original = dir.path().join("orig.sqlite");
+    let conn = rusqlite::Connection::open(&original).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE items (id INTEGER PRIMARY KEY);
+         INSERT INTO items VALUES (1);",
+    )
+    .unwrap();
+    drop(conn);
+    let copy = copy_fixture(&original).unwrap();
+    assert!(copy.path().is_file());
+    assert_ne!(copy.path(), original.as_path());
+    assert_eq!(copy.path().file_name().unwrap(), "orig.sqlite");
+    let count: i64 = rusqlite::Connection::open(copy.path())
+        .unwrap()
+        .query_row("SELECT count(*) FROM items", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(count, 1);
 }
 
 #[test]

@@ -1,0 +1,2480 @@
+{
+  "runtime": {
+    "node": "v22.22.2",
+    "sqlite_version": "3.51.2",
+    "git": "git version 2.43.0",
+    "repo_head": "c72e851fcce336be1bac4d7357323c4f751f7f06"
+  },
+  "schema_version": 7,
+  "schema_text_sha256": "18fc0d32edba16669299ce0120ab054c9043c1c06a3eb049c988a36ed29d9241",
+  "schema_text": "\nCREATE TABLE IF NOT EXISTS ros_conversations (\n    id            TEXT PRIMARY KEY,\n    session_key   TEXT NOT NULL,\n    agent         TEXT NOT NULL,\n    channel       TEXT NOT NULL DEFAULT 'unknown',\n    channel_id    TEXT,\n    bot_identity  TEXT,\n    title         TEXT,\n    settings      TEXT NOT NULL DEFAULT '{}',\n    active        INTEGER NOT NULL DEFAULT 1,\n    task_id       TEXT,\n    created_at    TEXT NOT NULL,\n    updated_at    TEXT NOT NULL,\n    -- v6: whose conversation this is (the user this store belongs to).\n    owner_user_id TEXT\n);\nCREATE UNIQUE INDEX IF NOT EXISTS ux_ros_conversations_session_agent\n    ON ros_conversations (session_key, agent);\nCREATE INDEX IF NOT EXISTS idx_ros_conversations_session\n    ON ros_conversations (session_key, active, updated_at DESC);\nCREATE INDEX IF NOT EXISTS idx_ros_conversations_agent\n    ON ros_conversations (agent, updated_at DESC);\nCREATE INDEX IF NOT EXISTS idx_ros_conversations_task\n    ON ros_conversations (task_id) WHERE task_id IS NOT NULL;\n\nCREATE TABLE IF NOT EXISTS ros_messages (\n    id                TEXT PRIMARY KEY,\n    conversation_id   TEXT NOT NULL REFERENCES ros_conversations(id) ON DELETE CASCADE,\n    agent             TEXT NOT NULL,\n    channel           TEXT NOT NULL,\n    role              TEXT NOT NULL CHECK (role IN ('system','user','assistant','tool')),\n    content           TEXT NOT NULL DEFAULT '',\n    tool_name         TEXT,\n    tool_args         TEXT,\n    tool_result       TEXT,\n    metadata          TEXT NOT NULL DEFAULT '{}',\n    access_count      INTEGER NOT NULL DEFAULT 0,\n    last_accessed_at  TEXT,\n    created_at        TEXT NOT NULL,\n    embed_status      TEXT,\n    -- v3: the vector itself (little-endian float32, L2-normalized) and why\n    -- the last attempt failed. See vectors.ts / embed.ts.\n    embedding         BLOB,\n    embed_error       TEXT,\n    embed_failures    INTEGER NOT NULL DEFAULT 0,\n    -- v6: who this row belongs to (the user this store is for).\n    owner_user_id     TEXT\n);\nCREATE INDEX IF NOT EXISTS idx_ros_messages_conversation\n    ON ros_messages (conversation_id, created_at);\nCREATE INDEX IF NOT EXISTS idx_ros_messages_agent\n    ON ros_messages (agent, created_at DESC);\nCREATE INDEX IF NOT EXISTS idx_ros_messages_created\n    ON ros_messages (created_at DESC);\n\nCREATE VIRTUAL TABLE IF NOT EXISTS ros_messages_fts USING fts5(\n    id UNINDEXED,\n    content,\n    tool_result,\n    tokenize = 'porter unicode61'\n);\n\nCREATE TRIGGER IF NOT EXISTS ros_messages_ai AFTER INSERT ON ros_messages BEGIN\n  INSERT INTO ros_messages_fts(id, content, tool_result)\n  VALUES (new.id, new.content, coalesce(new.tool_result, ''));\nEND;\nCREATE TRIGGER IF NOT EXISTS ros_messages_ad AFTER DELETE ON ros_messages BEGIN\n  DELETE FROM ros_messages_fts WHERE id = old.id;\nEND;\nCREATE TRIGGER IF NOT EXISTS ros_messages_au AFTER UPDATE OF content, tool_result, id ON ros_messages BEGIN\n  DELETE FROM ros_messages_fts WHERE id = old.id;\n  INSERT INTO ros_messages_fts(id, content, tool_result)\n  VALUES (new.id, new.content, coalesce(new.tool_result, ''));\nEND;\n\n-- v3: the in-process job queue (jobs.ts). One row per pending unit of work;\n-- job_key dedupes (\"embed this row\" is queued once). A finished job is\n-- deleted, a job out of attempts stays as 'dead'.\nCREATE TABLE IF NOT EXISTS ros_jobs (\n    id            TEXT PRIMARY KEY NOT NULL,\n    task          TEXT NOT NULL,\n    job_key       TEXT UNIQUE,\n    payload       TEXT NOT NULL DEFAULT 'null',\n    run_at        TEXT NOT NULL,\n    attempts      INTEGER NOT NULL DEFAULT 0,\n    max_attempts  INTEGER NOT NULL DEFAULT 5,\n    state         TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'running', 'dead')),\n    last_error    TEXT,\n    locked_at     TEXT,\n    created_at    TEXT NOT NULL,\n    updated_at    TEXT NOT NULL\n);\nCREATE INDEX IF NOT EXISTS idx_ros_jobs_due\n    ON ros_jobs (state, run_at);\n\n-- v3: small key/value facts about the store (which embedding model wrote the\n-- vectors, and how wide they are).\nCREATE TABLE IF NOT EXISTS ros_meta (\n    key    TEXT PRIMARY KEY NOT NULL,\n    value  TEXT NOT NULL\n);\n\n-- Phase-1 queue, superseded by ros_jobs in v3. Kept so a v1/v2 file opens;\n-- its rows are moved into ros_jobs by the v2 → v3 migration.\nCREATE TABLE IF NOT EXISTS ros_embed_queue (\n    id          TEXT PRIMARY KEY,\n    message_id  TEXT NOT NULL UNIQUE REFERENCES ros_messages(id) ON DELETE CASCADE,\n    enqueued_at TEXT NOT NULL,\n    attempts    INTEGER NOT NULL DEFAULT 0,\n    last_error  TEXT\n);\nCREATE INDEX IF NOT EXISTS idx_ros_embed_queue_enqueued\n    ON ros_embed_queue (enqueued_at);\n\n-- v4: summaries (mirror of the postgres ros_summaries / ros_summary_sources).\n-- A leaf covers a batch of messages (ros_summary_sources); a branch covers\n-- leaves and a root covers branches, linked through parent_id. Written by\n-- compaction.ts; searched through ros_summaries_fts and the stored vector.\nCREATE TABLE IF NOT EXISTS ros_summaries (\n    id                TEXT PRIMARY KEY NOT NULL,\n    conversation_id   TEXT REFERENCES ros_conversations(id) ON DELETE CASCADE,\n    parent_id         TEXT REFERENCES ros_summaries(id) ON DELETE SET NULL,\n    depth             INTEGER NOT NULL DEFAULT 0,\n    content           TEXT NOT NULL,\n    kind              TEXT NOT NULL DEFAULT 'leaf',\n    message_count     INTEGER NOT NULL DEFAULT 0,\n    earliest_at       TEXT,\n    latest_at         TEXT,\n    model             TEXT,\n    pipeline_version  INTEGER NOT NULL DEFAULT 1,\n    access_count      INTEGER NOT NULL DEFAULT 0,\n    last_accessed_at  TEXT,\n    created_at        TEXT NOT NULL,\n    embed_status      TEXT,\n    embedding         BLOB,\n    embed_error       TEXT,\n    embed_failures    INTEGER NOT NULL DEFAULT 0\n);\nCREATE INDEX IF NOT EXISTS idx_ros_summaries_conversation\n    ON ros_summaries (conversation_id, kind, created_at);\nCREATE INDEX IF NOT EXISTS idx_ros_summaries_parent\n    ON ros_summaries (parent_id);\nCREATE INDEX IF NOT EXISTS idx_ros_summaries_time\n    ON ros_summaries (latest_at DESC);\n\nCREATE TABLE IF NOT EXISTS ros_summary_sources (\n    summary_id  TEXT NOT NULL REFERENCES ros_summaries(id) ON DELETE CASCADE,\n    message_id  TEXT NOT NULL REFERENCES ros_messages(id) ON DELETE CASCADE,\n    ordinal     INTEGER NOT NULL DEFAULT 0,\n    PRIMARY KEY (summary_id, message_id)\n);\nCREATE INDEX IF NOT EXISTS idx_ros_summary_sources_message\n    ON ros_summary_sources (message_id);\n\nCREATE VIRTUAL TABLE IF NOT EXISTS ros_summaries_fts USING fts5(\n    id UNINDEXED,\n    content,\n    tokenize = 'porter unicode61'\n);\nCREATE TRIGGER IF NOT EXISTS ros_summaries_ai AFTER INSERT ON ros_summaries BEGIN\n  INSERT INTO ros_summaries_fts(id, content) VALUES (new.id, new.content);\nEND;\nCREATE TRIGGER IF NOT EXISTS ros_summaries_ad AFTER DELETE ON ros_summaries BEGIN\n  DELETE FROM ros_summaries_fts WHERE id = old.id;\nEND;\nCREATE TRIGGER IF NOT EXISTS ros_summaries_au AFTER UPDATE OF content, id ON ros_summaries BEGIN\n  DELETE FROM ros_summaries_fts WHERE id = old.id;\n  INSERT INTO ros_summaries_fts(id, content) VALUES (new.id, new.content);\nEND;\n\n-- Session + summary tags (mirror of postgres 0019_tags.sql, same CHECKs).\n-- entity_id is polymorphic, so no FK. Phase 1 has no ros_summaries table\n-- here: entity_type 'summary' is accepted for parity but nothing backs it\n-- until summaries land in SQLite. Reads and writes are in tags.ts. aliases is a JSON array in TEXT, and\n-- created_at / updated_at have no DEFAULT (like every table here, the writer\n-- supplies ISO timestamps) where postgres defaults to now(). See\n-- packages/types/src/tags.ts for the lifecycle.\nCREATE TABLE IF NOT EXISTS ros_tags (\n    id            TEXT PRIMARY KEY NOT NULL,\n    entity_type   TEXT NOT NULL CHECK (entity_type IN ('conversation', 'summary')),\n    entity_id     TEXT NOT NULL,\n    key           TEXT NOT NULL CHECK (length(key) BETWEEN 1 AND 64 AND key NOT LIKE '%:%'),\n    value         TEXT NOT NULL CHECK (length(value) BETWEEN 1 AND 128),\n    display       TEXT NOT NULL DEFAULT '',\n    source        TEXT NOT NULL,\n    state         TEXT NOT NULL,\n    confidence    REAL CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),\n    proposed_by   TEXT NOT NULL DEFAULT '',\n    reason        TEXT NOT NULL DEFAULT '',\n    decided_by    TEXT,\n    decided_at    TEXT,\n    created_at    TEXT NOT NULL,\n    updated_at    TEXT NOT NULL,\n    -- v7: a model may suggest removing an accepted tag. NULL until then.\n    -- The partial index is created after migrateSchema: an older file does\n    -- not have the column until that migration runs.\n    removal_state  TEXT CHECK (removal_state IS NULL OR removal_state IN ('suggested', 'rejected')),\n    removal_reason TEXT NOT NULL DEFAULT ''\n);\nCREATE UNIQUE INDEX IF NOT EXISTS ux_ros_tags_entity_kv\n    ON ros_tags (entity_type, entity_id, key, value);\nCREATE INDEX IF NOT EXISTS idx_ros_tags_kv_state\n    ON ros_tags (key, value, state);\nCREATE INDEX IF NOT EXISTS idx_ros_tags_pending\n    ON ros_tags (created_at DESC) WHERE state = 'suggested';\n\nCREATE TABLE IF NOT EXISTS ros_tag_taxonomy (\n    key           TEXT NOT NULL CHECK (length(key) BETWEEN 1 AND 64 AND key NOT LIKE '%:%'),\n    value         TEXT NOT NULL CHECK (length(value) BETWEEN 1 AND 128),\n    display       TEXT NOT NULL DEFAULT '',\n    parent_value  TEXT CHECK (parent_value IS NULL OR length(parent_value) BETWEEN 1 AND 128),\n    aliases       TEXT NOT NULL DEFAULT '[]',\n    state         TEXT NOT NULL DEFAULT 'accepted',\n    source        TEXT NOT NULL DEFAULT 'user',\n    reason        TEXT NOT NULL DEFAULT '',\n    decided_at    TEXT,\n    created_at    TEXT NOT NULL,\n    updated_at    TEXT NOT NULL,\n    PRIMARY KEY (key, value),\n    CHECK (parent_value IS NULL OR parent_value <> value)\n);\nCREATE INDEX IF NOT EXISTS idx_ros_tag_taxonomy_parent\n    ON ros_tag_taxonomy (key, parent_value);\n\n-- v5: the wiki index. Page content lives in git-backed files under the wiki\n-- directory; these tables are the search, provenance and idempotency index\n-- over them. List columns (aliases, tags, entities, related, topics_touched)\n-- hold JSON arrays.\nCREATE TABLE IF NOT EXISTS ros_wiki_topics (\n    slug              TEXT PRIMARY KEY NOT NULL,\n    title             TEXT NOT NULL,\n    aliases           TEXT NOT NULL DEFAULT '[]',\n    tags              TEXT NOT NULL DEFAULT '[]',\n    entities          TEXT NOT NULL DEFAULT '[]',\n    related           TEXT NOT NULL DEFAULT '[]',\n    current_state     TEXT NOT NULL DEFAULT '',\n    article           TEXT NOT NULL DEFAULT '',\n    search_text       TEXT NOT NULL DEFAULT '',\n    history_count     INTEGER NOT NULL DEFAULT 0,\n    git_sha           TEXT,\n    last_verified_at  TEXT,\n    created_at        TEXT NOT NULL,\n    updated_at        TEXT NOT NULL,\n    embed_status      TEXT,\n    embedding         BLOB,\n    embed_error       TEXT,\n    embed_failures    INTEGER NOT NULL DEFAULT 0\n);\nCREATE INDEX IF NOT EXISTS idx_ros_wiki_topics_updated\n    ON ros_wiki_topics (updated_at DESC);\n\nCREATE VIRTUAL TABLE IF NOT EXISTS ros_wiki_topics_fts USING fts5(\n    slug UNINDEXED,\n    search_text,\n    tokenize = 'porter unicode61'\n);\nCREATE TRIGGER IF NOT EXISTS ros_wiki_topics_ai AFTER INSERT ON ros_wiki_topics BEGIN\n    INSERT INTO ros_wiki_topics_fts (slug, search_text) VALUES (new.slug, new.search_text);\nEND;\nCREATE TRIGGER IF NOT EXISTS ros_wiki_topics_ad AFTER DELETE ON ros_wiki_topics BEGIN\n    DELETE FROM ros_wiki_topics_fts WHERE slug = old.slug;\nEND;\nCREATE TRIGGER IF NOT EXISTS ros_wiki_topics_au AFTER UPDATE OF search_text ON ros_wiki_topics BEGIN\n    DELETE FROM ros_wiki_topics_fts WHERE slug = old.slug;\n    INSERT INTO ros_wiki_topics_fts (slug, search_text) VALUES (new.slug, new.search_text);\nEND;\n\nCREATE TABLE IF NOT EXISTS ros_wiki_provenance (\n    topic_slug       TEXT NOT NULL REFERENCES ros_wiki_topics(slug) ON DELETE CASCADE,\n    source_kind      TEXT NOT NULL CHECK (source_kind IN ('summary', 'message', 'conversation', 'task')),\n    source_id        TEXT NOT NULL,\n    conversation_id  TEXT,\n    git_sha          TEXT,\n    created_at       TEXT NOT NULL,\n    PRIMARY KEY (topic_slug, source_kind, source_id)\n);\n\nCREATE TABLE IF NOT EXISTS ros_wiki_extractions (\n    summary_id        TEXT PRIMARY KEY NOT NULL REFERENCES ros_summaries(id) ON DELETE CASCADE,\n    status            TEXT NOT NULL CHECK (status IN ('done', 'skipped', 'failed')),\n    pipeline_version  INTEGER NOT NULL,\n    topics_touched    TEXT NOT NULL DEFAULT '[]',\n    git_sha           TEXT,\n    error             TEXT,\n    extracted_at      TEXT NOT NULL\n);\n\nCREATE TABLE IF NOT EXISTS ros_wiki_citations (\n    topic_slug  TEXT NOT NULL REFERENCES ros_wiki_topics(slug) ON DELETE CASCADE,\n    summary_id  TEXT NOT NULL,\n    kind        TEXT,\n    note        TEXT,\n    cited_at    TEXT NOT NULL,\n    PRIMARY KEY (topic_slug, summary_id)\n);\n\nCREATE TABLE IF NOT EXISTS ros_wiki_redirects (\n    from_slug   TEXT PRIMARY KEY NOT NULL,\n    to_slug     TEXT NOT NULL REFERENCES ros_wiki_topics(slug) ON DELETE CASCADE,\n    created_at  TEXT NOT NULL\n);\n",
+  "fresh": {
+    "pragmas": {
+      "user_version": 7,
+      "journal_mode": "wal",
+      "foreign_keys": 1,
+      "page_size": 4096,
+      "encoding": "UTF-8"
+    },
+    "sqlite_master": [
+      {
+        "type": "table",
+        "name": "ros_conversations",
+        "tbl_name": "ros_conversations",
+        "sql": "CREATE TABLE ros_conversations (\n    id            TEXT PRIMARY KEY,\n    session_key   TEXT NOT NULL,\n    agent         TEXT NOT NULL,\n    channel       TEXT NOT NULL DEFAULT 'unknown',\n    channel_id    TEXT,\n    bot_identity  TEXT,\n    title         TEXT,\n    settings      TEXT NOT NULL DEFAULT '{}',\n    active        INTEGER NOT NULL DEFAULT 1,\n    task_id       TEXT,\n    created_at    TEXT NOT NULL,\n    updated_at    TEXT NOT NULL,\n    -- v6: whose conversation this is (the user this store belongs to).\n    owner_user_id TEXT\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_conversations_1",
+        "tbl_name": "ros_conversations",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "ux_ros_conversations_session_agent",
+        "tbl_name": "ros_conversations",
+        "sql": "CREATE UNIQUE INDEX ux_ros_conversations_session_agent\n    ON ros_conversations (session_key, agent)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_conversations_session",
+        "tbl_name": "ros_conversations",
+        "sql": "CREATE INDEX idx_ros_conversations_session\n    ON ros_conversations (session_key, active, updated_at DESC)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_conversations_agent",
+        "tbl_name": "ros_conversations",
+        "sql": "CREATE INDEX idx_ros_conversations_agent\n    ON ros_conversations (agent, updated_at DESC)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_conversations_task",
+        "tbl_name": "ros_conversations",
+        "sql": "CREATE INDEX idx_ros_conversations_task\n    ON ros_conversations (task_id) WHERE task_id IS NOT NULL"
+      },
+      {
+        "type": "table",
+        "name": "ros_messages",
+        "tbl_name": "ros_messages",
+        "sql": "CREATE TABLE ros_messages (\n    id                TEXT PRIMARY KEY,\n    conversation_id   TEXT NOT NULL REFERENCES ros_conversations(id) ON DELETE CASCADE,\n    agent             TEXT NOT NULL,\n    channel           TEXT NOT NULL,\n    role              TEXT NOT NULL CHECK (role IN ('system','user','assistant','tool')),\n    content           TEXT NOT NULL DEFAULT '',\n    tool_name         TEXT,\n    tool_args         TEXT,\n    tool_result       TEXT,\n    metadata          TEXT NOT NULL DEFAULT '{}',\n    access_count      INTEGER NOT NULL DEFAULT 0,\n    last_accessed_at  TEXT,\n    created_at        TEXT NOT NULL,\n    embed_status      TEXT,\n    -- v3: the vector itself (little-endian float32, L2-normalized) and why\n    -- the last attempt failed. See vectors.ts / embed.ts.\n    embedding         BLOB,\n    embed_error       TEXT,\n    embed_failures    INTEGER NOT NULL DEFAULT 0,\n    -- v6: who this row belongs to (the user this store is for).\n    owner_user_id     TEXT\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_messages_1",
+        "tbl_name": "ros_messages",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_messages_conversation",
+        "tbl_name": "ros_messages",
+        "sql": "CREATE INDEX idx_ros_messages_conversation\n    ON ros_messages (conversation_id, created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_messages_agent",
+        "tbl_name": "ros_messages",
+        "sql": "CREATE INDEX idx_ros_messages_agent\n    ON ros_messages (agent, created_at DESC)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_messages_created",
+        "tbl_name": "ros_messages",
+        "sql": "CREATE INDEX idx_ros_messages_created\n    ON ros_messages (created_at DESC)"
+      },
+      {
+        "type": "table",
+        "name": "ros_messages_fts",
+        "tbl_name": "ros_messages_fts",
+        "sql": "CREATE VIRTUAL TABLE ros_messages_fts USING fts5(\n    id UNINDEXED,\n    content,\n    tool_result,\n    tokenize = 'porter unicode61'\n)"
+      },
+      {
+        "type": "table",
+        "name": "ros_messages_fts_data",
+        "tbl_name": "ros_messages_fts_data",
+        "sql": "CREATE TABLE 'ros_messages_fts_data'(id INTEGER PRIMARY KEY, block BLOB)"
+      },
+      {
+        "type": "table",
+        "name": "ros_messages_fts_idx",
+        "tbl_name": "ros_messages_fts_idx",
+        "sql": "CREATE TABLE 'ros_messages_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID"
+      },
+      {
+        "type": "table",
+        "name": "ros_messages_fts_content",
+        "tbl_name": "ros_messages_fts_content",
+        "sql": "CREATE TABLE 'ros_messages_fts_content'(id INTEGER PRIMARY KEY, c0, c1, c2)"
+      },
+      {
+        "type": "table",
+        "name": "ros_messages_fts_docsize",
+        "tbl_name": "ros_messages_fts_docsize",
+        "sql": "CREATE TABLE 'ros_messages_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)"
+      },
+      {
+        "type": "table",
+        "name": "ros_messages_fts_config",
+        "tbl_name": "ros_messages_fts_config",
+        "sql": "CREATE TABLE 'ros_messages_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID"
+      },
+      {
+        "type": "trigger",
+        "name": "ros_messages_ai",
+        "tbl_name": "ros_messages",
+        "sql": "CREATE TRIGGER ros_messages_ai AFTER INSERT ON ros_messages BEGIN\n  INSERT INTO ros_messages_fts(id, content, tool_result)\n  VALUES (new.id, new.content, coalesce(new.tool_result, ''));\nEND"
+      },
+      {
+        "type": "trigger",
+        "name": "ros_messages_ad",
+        "tbl_name": "ros_messages",
+        "sql": "CREATE TRIGGER ros_messages_ad AFTER DELETE ON ros_messages BEGIN\n  DELETE FROM ros_messages_fts WHERE id = old.id;\nEND"
+      },
+      {
+        "type": "trigger",
+        "name": "ros_messages_au",
+        "tbl_name": "ros_messages",
+        "sql": "CREATE TRIGGER ros_messages_au AFTER UPDATE OF content, tool_result, id ON ros_messages BEGIN\n  DELETE FROM ros_messages_fts WHERE id = old.id;\n  INSERT INTO ros_messages_fts(id, content, tool_result)\n  VALUES (new.id, new.content, coalesce(new.tool_result, ''));\nEND"
+      },
+      {
+        "type": "table",
+        "name": "ros_jobs",
+        "tbl_name": "ros_jobs",
+        "sql": "CREATE TABLE ros_jobs (\n    id            TEXT PRIMARY KEY NOT NULL,\n    task          TEXT NOT NULL,\n    job_key       TEXT UNIQUE,\n    payload       TEXT NOT NULL DEFAULT 'null',\n    run_at        TEXT NOT NULL,\n    attempts      INTEGER NOT NULL DEFAULT 0,\n    max_attempts  INTEGER NOT NULL DEFAULT 5,\n    state         TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'running', 'dead')),\n    last_error    TEXT,\n    locked_at     TEXT,\n    created_at    TEXT NOT NULL,\n    updated_at    TEXT NOT NULL\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_jobs_1",
+        "tbl_name": "ros_jobs",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_jobs_2",
+        "tbl_name": "ros_jobs",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_jobs_due",
+        "tbl_name": "ros_jobs",
+        "sql": "CREATE INDEX idx_ros_jobs_due\n    ON ros_jobs (state, run_at)"
+      },
+      {
+        "type": "table",
+        "name": "ros_meta",
+        "tbl_name": "ros_meta",
+        "sql": "CREATE TABLE ros_meta (\n    key    TEXT PRIMARY KEY NOT NULL,\n    value  TEXT NOT NULL\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_meta_1",
+        "tbl_name": "ros_meta",
+        "sql": null
+      },
+      {
+        "type": "table",
+        "name": "ros_embed_queue",
+        "tbl_name": "ros_embed_queue",
+        "sql": "CREATE TABLE ros_embed_queue (\n    id          TEXT PRIMARY KEY,\n    message_id  TEXT NOT NULL UNIQUE REFERENCES ros_messages(id) ON DELETE CASCADE,\n    enqueued_at TEXT NOT NULL,\n    attempts    INTEGER NOT NULL DEFAULT 0,\n    last_error  TEXT\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_embed_queue_1",
+        "tbl_name": "ros_embed_queue",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_embed_queue_2",
+        "tbl_name": "ros_embed_queue",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_embed_queue_enqueued",
+        "tbl_name": "ros_embed_queue",
+        "sql": "CREATE INDEX idx_ros_embed_queue_enqueued\n    ON ros_embed_queue (enqueued_at)"
+      },
+      {
+        "type": "table",
+        "name": "ros_summaries",
+        "tbl_name": "ros_summaries",
+        "sql": "CREATE TABLE ros_summaries (\n    id                TEXT PRIMARY KEY NOT NULL,\n    conversation_id   TEXT REFERENCES ros_conversations(id) ON DELETE CASCADE,\n    parent_id         TEXT REFERENCES ros_summaries(id) ON DELETE SET NULL,\n    depth             INTEGER NOT NULL DEFAULT 0,\n    content           TEXT NOT NULL,\n    kind              TEXT NOT NULL DEFAULT 'leaf',\n    message_count     INTEGER NOT NULL DEFAULT 0,\n    earliest_at       TEXT,\n    latest_at         TEXT,\n    model             TEXT,\n    pipeline_version  INTEGER NOT NULL DEFAULT 1,\n    access_count      INTEGER NOT NULL DEFAULT 0,\n    last_accessed_at  TEXT,\n    created_at        TEXT NOT NULL,\n    embed_status      TEXT,\n    embedding         BLOB,\n    embed_error       TEXT,\n    embed_failures    INTEGER NOT NULL DEFAULT 0\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_summaries_1",
+        "tbl_name": "ros_summaries",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_summaries_conversation",
+        "tbl_name": "ros_summaries",
+        "sql": "CREATE INDEX idx_ros_summaries_conversation\n    ON ros_summaries (conversation_id, kind, created_at)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_summaries_parent",
+        "tbl_name": "ros_summaries",
+        "sql": "CREATE INDEX idx_ros_summaries_parent\n    ON ros_summaries (parent_id)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_summaries_time",
+        "tbl_name": "ros_summaries",
+        "sql": "CREATE INDEX idx_ros_summaries_time\n    ON ros_summaries (latest_at DESC)"
+      },
+      {
+        "type": "table",
+        "name": "ros_summary_sources",
+        "tbl_name": "ros_summary_sources",
+        "sql": "CREATE TABLE ros_summary_sources (\n    summary_id  TEXT NOT NULL REFERENCES ros_summaries(id) ON DELETE CASCADE,\n    message_id  TEXT NOT NULL REFERENCES ros_messages(id) ON DELETE CASCADE,\n    ordinal     INTEGER NOT NULL DEFAULT 0,\n    PRIMARY KEY (summary_id, message_id)\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_summary_sources_1",
+        "tbl_name": "ros_summary_sources",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_summary_sources_message",
+        "tbl_name": "ros_summary_sources",
+        "sql": "CREATE INDEX idx_ros_summary_sources_message\n    ON ros_summary_sources (message_id)"
+      },
+      {
+        "type": "table",
+        "name": "ros_summaries_fts",
+        "tbl_name": "ros_summaries_fts",
+        "sql": "CREATE VIRTUAL TABLE ros_summaries_fts USING fts5(\n    id UNINDEXED,\n    content,\n    tokenize = 'porter unicode61'\n)"
+      },
+      {
+        "type": "table",
+        "name": "ros_summaries_fts_data",
+        "tbl_name": "ros_summaries_fts_data",
+        "sql": "CREATE TABLE 'ros_summaries_fts_data'(id INTEGER PRIMARY KEY, block BLOB)"
+      },
+      {
+        "type": "table",
+        "name": "ros_summaries_fts_idx",
+        "tbl_name": "ros_summaries_fts_idx",
+        "sql": "CREATE TABLE 'ros_summaries_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID"
+      },
+      {
+        "type": "table",
+        "name": "ros_summaries_fts_content",
+        "tbl_name": "ros_summaries_fts_content",
+        "sql": "CREATE TABLE 'ros_summaries_fts_content'(id INTEGER PRIMARY KEY, c0, c1)"
+      },
+      {
+        "type": "table",
+        "name": "ros_summaries_fts_docsize",
+        "tbl_name": "ros_summaries_fts_docsize",
+        "sql": "CREATE TABLE 'ros_summaries_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)"
+      },
+      {
+        "type": "table",
+        "name": "ros_summaries_fts_config",
+        "tbl_name": "ros_summaries_fts_config",
+        "sql": "CREATE TABLE 'ros_summaries_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID"
+      },
+      {
+        "type": "trigger",
+        "name": "ros_summaries_ai",
+        "tbl_name": "ros_summaries",
+        "sql": "CREATE TRIGGER ros_summaries_ai AFTER INSERT ON ros_summaries BEGIN\n  INSERT INTO ros_summaries_fts(id, content) VALUES (new.id, new.content);\nEND"
+      },
+      {
+        "type": "trigger",
+        "name": "ros_summaries_ad",
+        "tbl_name": "ros_summaries",
+        "sql": "CREATE TRIGGER ros_summaries_ad AFTER DELETE ON ros_summaries BEGIN\n  DELETE FROM ros_summaries_fts WHERE id = old.id;\nEND"
+      },
+      {
+        "type": "trigger",
+        "name": "ros_summaries_au",
+        "tbl_name": "ros_summaries",
+        "sql": "CREATE TRIGGER ros_summaries_au AFTER UPDATE OF content, id ON ros_summaries BEGIN\n  DELETE FROM ros_summaries_fts WHERE id = old.id;\n  INSERT INTO ros_summaries_fts(id, content) VALUES (new.id, new.content);\nEND"
+      },
+      {
+        "type": "table",
+        "name": "ros_tags",
+        "tbl_name": "ros_tags",
+        "sql": "CREATE TABLE ros_tags (\n    id            TEXT PRIMARY KEY NOT NULL,\n    entity_type   TEXT NOT NULL CHECK (entity_type IN ('conversation', 'summary')),\n    entity_id     TEXT NOT NULL,\n    key           TEXT NOT NULL CHECK (length(key) BETWEEN 1 AND 64 AND key NOT LIKE '%:%'),\n    value         TEXT NOT NULL CHECK (length(value) BETWEEN 1 AND 128),\n    display       TEXT NOT NULL DEFAULT '',\n    source        TEXT NOT NULL,\n    state         TEXT NOT NULL,\n    confidence    REAL CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),\n    proposed_by   TEXT NOT NULL DEFAULT '',\n    reason        TEXT NOT NULL DEFAULT '',\n    decided_by    TEXT,\n    decided_at    TEXT,\n    created_at    TEXT NOT NULL,\n    updated_at    TEXT NOT NULL,\n    -- v7: a model may suggest removing an accepted tag. NULL until then.\n    -- The partial index is created after migrateSchema: an older file does\n    -- not have the column until that migration runs.\n    removal_state  TEXT CHECK (removal_state IS NULL OR removal_state IN ('suggested', 'rejected')),\n    removal_reason TEXT NOT NULL DEFAULT ''\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_tags_1",
+        "tbl_name": "ros_tags",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "ux_ros_tags_entity_kv",
+        "tbl_name": "ros_tags",
+        "sql": "CREATE UNIQUE INDEX ux_ros_tags_entity_kv\n    ON ros_tags (entity_type, entity_id, key, value)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_tags_kv_state",
+        "tbl_name": "ros_tags",
+        "sql": "CREATE INDEX idx_ros_tags_kv_state\n    ON ros_tags (key, value, state)"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_tags_pending",
+        "tbl_name": "ros_tags",
+        "sql": "CREATE INDEX idx_ros_tags_pending\n    ON ros_tags (created_at DESC) WHERE state = 'suggested'"
+      },
+      {
+        "type": "table",
+        "name": "ros_tag_taxonomy",
+        "tbl_name": "ros_tag_taxonomy",
+        "sql": "CREATE TABLE ros_tag_taxonomy (\n    key           TEXT NOT NULL CHECK (length(key) BETWEEN 1 AND 64 AND key NOT LIKE '%:%'),\n    value         TEXT NOT NULL CHECK (length(value) BETWEEN 1 AND 128),\n    display       TEXT NOT NULL DEFAULT '',\n    parent_value  TEXT CHECK (parent_value IS NULL OR length(parent_value) BETWEEN 1 AND 128),\n    aliases       TEXT NOT NULL DEFAULT '[]',\n    state         TEXT NOT NULL DEFAULT 'accepted',\n    source        TEXT NOT NULL DEFAULT 'user',\n    reason        TEXT NOT NULL DEFAULT '',\n    decided_at    TEXT,\n    created_at    TEXT NOT NULL,\n    updated_at    TEXT NOT NULL,\n    PRIMARY KEY (key, value),\n    CHECK (parent_value IS NULL OR parent_value <> value)\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_tag_taxonomy_1",
+        "tbl_name": "ros_tag_taxonomy",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_tag_taxonomy_parent",
+        "tbl_name": "ros_tag_taxonomy",
+        "sql": "CREATE INDEX idx_ros_tag_taxonomy_parent\n    ON ros_tag_taxonomy (key, parent_value)"
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_topics",
+        "tbl_name": "ros_wiki_topics",
+        "sql": "CREATE TABLE ros_wiki_topics (\n    slug              TEXT PRIMARY KEY NOT NULL,\n    title             TEXT NOT NULL,\n    aliases           TEXT NOT NULL DEFAULT '[]',\n    tags              TEXT NOT NULL DEFAULT '[]',\n    entities          TEXT NOT NULL DEFAULT '[]',\n    related           TEXT NOT NULL DEFAULT '[]',\n    current_state     TEXT NOT NULL DEFAULT '',\n    article           TEXT NOT NULL DEFAULT '',\n    search_text       TEXT NOT NULL DEFAULT '',\n    history_count     INTEGER NOT NULL DEFAULT 0,\n    git_sha           TEXT,\n    last_verified_at  TEXT,\n    created_at        TEXT NOT NULL,\n    updated_at        TEXT NOT NULL,\n    embed_status      TEXT,\n    embedding         BLOB,\n    embed_error       TEXT,\n    embed_failures    INTEGER NOT NULL DEFAULT 0\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_wiki_topics_1",
+        "tbl_name": "ros_wiki_topics",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_wiki_topics_updated",
+        "tbl_name": "ros_wiki_topics",
+        "sql": "CREATE INDEX idx_ros_wiki_topics_updated\n    ON ros_wiki_topics (updated_at DESC)"
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_topics_fts",
+        "tbl_name": "ros_wiki_topics_fts",
+        "sql": "CREATE VIRTUAL TABLE ros_wiki_topics_fts USING fts5(\n    slug UNINDEXED,\n    search_text,\n    tokenize = 'porter unicode61'\n)"
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_topics_fts_data",
+        "tbl_name": "ros_wiki_topics_fts_data",
+        "sql": "CREATE TABLE 'ros_wiki_topics_fts_data'(id INTEGER PRIMARY KEY, block BLOB)"
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_topics_fts_idx",
+        "tbl_name": "ros_wiki_topics_fts_idx",
+        "sql": "CREATE TABLE 'ros_wiki_topics_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID"
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_topics_fts_content",
+        "tbl_name": "ros_wiki_topics_fts_content",
+        "sql": "CREATE TABLE 'ros_wiki_topics_fts_content'(id INTEGER PRIMARY KEY, c0, c1)"
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_topics_fts_docsize",
+        "tbl_name": "ros_wiki_topics_fts_docsize",
+        "sql": "CREATE TABLE 'ros_wiki_topics_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)"
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_topics_fts_config",
+        "tbl_name": "ros_wiki_topics_fts_config",
+        "sql": "CREATE TABLE 'ros_wiki_topics_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID"
+      },
+      {
+        "type": "trigger",
+        "name": "ros_wiki_topics_ai",
+        "tbl_name": "ros_wiki_topics",
+        "sql": "CREATE TRIGGER ros_wiki_topics_ai AFTER INSERT ON ros_wiki_topics BEGIN\n    INSERT INTO ros_wiki_topics_fts (slug, search_text) VALUES (new.slug, new.search_text);\nEND"
+      },
+      {
+        "type": "trigger",
+        "name": "ros_wiki_topics_ad",
+        "tbl_name": "ros_wiki_topics",
+        "sql": "CREATE TRIGGER ros_wiki_topics_ad AFTER DELETE ON ros_wiki_topics BEGIN\n    DELETE FROM ros_wiki_topics_fts WHERE slug = old.slug;\nEND"
+      },
+      {
+        "type": "trigger",
+        "name": "ros_wiki_topics_au",
+        "tbl_name": "ros_wiki_topics",
+        "sql": "CREATE TRIGGER ros_wiki_topics_au AFTER UPDATE OF search_text ON ros_wiki_topics BEGIN\n    DELETE FROM ros_wiki_topics_fts WHERE slug = old.slug;\n    INSERT INTO ros_wiki_topics_fts (slug, search_text) VALUES (new.slug, new.search_text);\nEND"
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_provenance",
+        "tbl_name": "ros_wiki_provenance",
+        "sql": "CREATE TABLE ros_wiki_provenance (\n    topic_slug       TEXT NOT NULL REFERENCES ros_wiki_topics(slug) ON DELETE CASCADE,\n    source_kind      TEXT NOT NULL CHECK (source_kind IN ('summary', 'message', 'conversation', 'task')),\n    source_id        TEXT NOT NULL,\n    conversation_id  TEXT,\n    git_sha          TEXT,\n    created_at       TEXT NOT NULL,\n    PRIMARY KEY (topic_slug, source_kind, source_id)\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_wiki_provenance_1",
+        "tbl_name": "ros_wiki_provenance",
+        "sql": null
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_extractions",
+        "tbl_name": "ros_wiki_extractions",
+        "sql": "CREATE TABLE ros_wiki_extractions (\n    summary_id        TEXT PRIMARY KEY NOT NULL REFERENCES ros_summaries(id) ON DELETE CASCADE,\n    status            TEXT NOT NULL CHECK (status IN ('done', 'skipped', 'failed')),\n    pipeline_version  INTEGER NOT NULL,\n    topics_touched    TEXT NOT NULL DEFAULT '[]',\n    git_sha           TEXT,\n    error             TEXT,\n    extracted_at      TEXT NOT NULL\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_wiki_extractions_1",
+        "tbl_name": "ros_wiki_extractions",
+        "sql": null
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_citations",
+        "tbl_name": "ros_wiki_citations",
+        "sql": "CREATE TABLE ros_wiki_citations (\n    topic_slug  TEXT NOT NULL REFERENCES ros_wiki_topics(slug) ON DELETE CASCADE,\n    summary_id  TEXT NOT NULL,\n    kind        TEXT,\n    note        TEXT,\n    cited_at    TEXT NOT NULL,\n    PRIMARY KEY (topic_slug, summary_id)\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_wiki_citations_1",
+        "tbl_name": "ros_wiki_citations",
+        "sql": null
+      },
+      {
+        "type": "table",
+        "name": "ros_wiki_redirects",
+        "tbl_name": "ros_wiki_redirects",
+        "sql": "CREATE TABLE ros_wiki_redirects (\n    from_slug   TEXT PRIMARY KEY NOT NULL,\n    to_slug     TEXT NOT NULL REFERENCES ros_wiki_topics(slug) ON DELETE CASCADE,\n    created_at  TEXT NOT NULL\n)"
+      },
+      {
+        "type": "index",
+        "name": "sqlite_autoindex_ros_wiki_redirects_1",
+        "tbl_name": "ros_wiki_redirects",
+        "sql": null
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_messages_unembedded",
+        "tbl_name": "ros_messages",
+        "sql": "CREATE INDEX idx_ros_messages_unembedded ON ros_messages (created_at)\n          WHERE embedding IS NULL AND embed_status IS NULL"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_conversations_owner",
+        "tbl_name": "ros_conversations",
+        "sql": "CREATE INDEX idx_ros_conversations_owner ON ros_conversations (owner_user_id)\n          WHERE owner_user_id IS NOT NULL"
+      },
+      {
+        "type": "index",
+        "name": "idx_ros_tags_removal_state",
+        "tbl_name": "ros_tags",
+        "sql": "CREATE INDEX idx_ros_tags_removal_state ON ros_tags (removal_state)\n          WHERE removal_state = 'suggested'"
+      }
+    ],
+    "table_info": {
+      "ros_conversations": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "session_key",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "agent",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "channel",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'unknown'",
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "channel_id",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "bot_identity",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "title",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "settings",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'{}'",
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "active",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "1",
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "task_id",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "owner_user_id",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_messages": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "conversation_id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "agent",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "channel",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "role",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "content",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "''",
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "tool_name",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "tool_args",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "tool_result",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "metadata",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'{}'",
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "access_count",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "last_accessed_at",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 13,
+          "name": "embed_status",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 14,
+          "name": "embedding",
+          "type": "BLOB",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 15,
+          "name": "embed_error",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 16,
+          "name": "embed_failures",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        },
+        {
+          "cid": 17,
+          "name": "owner_user_id",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_messages_fts": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 1,
+          "name": "content",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "tool_result",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_messages_fts_data": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "block",
+          "type": "BLOB",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_messages_fts_idx": [
+        {
+          "cid": 0,
+          "name": "segid",
+          "type": "",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "term",
+          "type": "",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 2
+        },
+        {
+          "cid": 2,
+          "name": "pgno",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_messages_fts_content": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "c0",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "c1",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "c2",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_messages_fts_docsize": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "sz",
+          "type": "BLOB",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_messages_fts_config": [
+        {
+          "cid": 0,
+          "name": "k",
+          "type": "",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "v",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_jobs": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "task",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "job_key",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "payload",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'null'",
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "run_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "attempts",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "max_attempts",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "5",
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "state",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'queued'",
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "last_error",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "locked_at",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_meta": [
+        {
+          "cid": 0,
+          "name": "key",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "value",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_embed_queue": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "message_id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "enqueued_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "attempts",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "last_error",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_summaries": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "conversation_id",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "parent_id",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "depth",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "content",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "kind",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'leaf'",
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "message_count",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "earliest_at",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "latest_at",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "model",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "pipeline_version",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "1",
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "access_count",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "last_accessed_at",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 13,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 14,
+          "name": "embed_status",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 15,
+          "name": "embedding",
+          "type": "BLOB",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 16,
+          "name": "embed_error",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 17,
+          "name": "embed_failures",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        }
+      ],
+      "ros_summary_sources": [
+        {
+          "cid": 0,
+          "name": "summary_id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "message_id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 2
+        },
+        {
+          "cid": 2,
+          "name": "ordinal",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        }
+      ],
+      "ros_summaries_fts": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 1,
+          "name": "content",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_summaries_fts_data": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "block",
+          "type": "BLOB",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_summaries_fts_idx": [
+        {
+          "cid": 0,
+          "name": "segid",
+          "type": "",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "term",
+          "type": "",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 2
+        },
+        {
+          "cid": 2,
+          "name": "pgno",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_summaries_fts_content": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "c0",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "c1",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_summaries_fts_docsize": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "sz",
+          "type": "BLOB",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_summaries_fts_config": [
+        {
+          "cid": 0,
+          "name": "k",
+          "type": "",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "v",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_tags": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "entity_type",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "entity_id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "key",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "value",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "display",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "''",
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "source",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "state",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "confidence",
+          "type": "REAL",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "proposed_by",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "''",
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "reason",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "''",
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "decided_by",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "decided_at",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 13,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 14,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 15,
+          "name": "removal_state",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 16,
+          "name": "removal_reason",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "''",
+          "pk": 0
+        }
+      ],
+      "ros_tag_taxonomy": [
+        {
+          "cid": 0,
+          "name": "key",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "value",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 2
+        },
+        {
+          "cid": 2,
+          "name": "display",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "''",
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "parent_value",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "aliases",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'[]'",
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "state",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'accepted'",
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "source",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'user'",
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "reason",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "''",
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "decided_at",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_wiki_topics": [
+        {
+          "cid": 0,
+          "name": "slug",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "title",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "aliases",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'[]'",
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "tags",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'[]'",
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "entities",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'[]'",
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "related",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'[]'",
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "current_state",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "''",
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "article",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "''",
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "search_text",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "''",
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "history_count",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "git_sha",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "last_verified_at",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 13,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 14,
+          "name": "embed_status",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 15,
+          "name": "embedding",
+          "type": "BLOB",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 16,
+          "name": "embed_error",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 17,
+          "name": "embed_failures",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": "0",
+          "pk": 0
+        }
+      ],
+      "ros_wiki_topics_fts": [
+        {
+          "cid": 0,
+          "name": "slug",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 1,
+          "name": "search_text",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_wiki_topics_fts_data": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "block",
+          "type": "BLOB",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_wiki_topics_fts_idx": [
+        {
+          "cid": 0,
+          "name": "segid",
+          "type": "",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "term",
+          "type": "",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 2
+        },
+        {
+          "cid": 2,
+          "name": "pgno",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_wiki_topics_fts_content": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "c0",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "c1",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_wiki_topics_fts_docsize": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "sz",
+          "type": "BLOB",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_wiki_topics_fts_config": [
+        {
+          "cid": 0,
+          "name": "k",
+          "type": "",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "v",
+          "type": "",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_wiki_provenance": [
+        {
+          "cid": 0,
+          "name": "topic_slug",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "source_kind",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 2
+        },
+        {
+          "cid": 2,
+          "name": "source_id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 3
+        },
+        {
+          "cid": 3,
+          "name": "conversation_id",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "git_sha",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_wiki_extractions": [
+        {
+          "cid": 0,
+          "name": "summary_id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "pipeline_version",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "topics_touched",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": "'[]'",
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "git_sha",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "error",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "extracted_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_wiki_citations": [
+        {
+          "cid": 0,
+          "name": "topic_slug",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "summary_id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 2
+        },
+        {
+          "cid": 2,
+          "name": "kind",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "note",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "cited_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "ros_wiki_redirects": [
+        {
+          "cid": 0,
+          "name": "from_slug",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "to_slug",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ]
+    },
+    "open_logs": []
+  },
+  "populated": {
+    "file": "fixture-v7.sqlite",
+    "pragmas": {
+      "user_version": 7,
+      "journal_mode": "wal",
+      "foreign_keys": 1,
+      "page_size": 4096,
+      "encoding": "UTF-8"
+    },
+    "row_counts": {
+      "ros_conversations": 5,
+      "ros_messages": 17,
+      "ros_jobs": 1,
+      "ros_meta": 2,
+      "ros_embed_queue": 0,
+      "ros_summaries": 3,
+      "ros_summary_sources": 10,
+      "ros_tags": 8,
+      "ros_tag_taxonomy": 3,
+      "ros_wiki_topics": 1,
+      "ros_wiki_provenance": 1,
+      "ros_wiki_extractions": 2,
+      "ros_wiki_citations": 1,
+      "ros_wiki_redirects": 0
+    },
+    "typeof": {
+      "ros_conversations": {
+        "id": {
+          "text": 5
+        },
+        "session_key": {
+          "text": 5
+        },
+        "agent": {
+          "text": 5
+        },
+        "channel": {
+          "text": 5
+        },
+        "channel_id": {
+          "null": 5
+        },
+        "bot_identity": {
+          "null": 5
+        },
+        "title": {
+          "null": 1,
+          "text": 4
+        },
+        "settings": {
+          "text": 5
+        },
+        "active": {
+          "integer": 5
+        },
+        "task_id": {
+          "null": 3,
+          "text": 2
+        },
+        "created_at": {
+          "text": 5
+        },
+        "updated_at": {
+          "text": 5
+        },
+        "owner_user_id": {
+          "text": 5
+        }
+      },
+      "ros_messages": {
+        "id": {
+          "text": 17
+        },
+        "conversation_id": {
+          "text": 17
+        },
+        "agent": {
+          "text": 17
+        },
+        "channel": {
+          "text": 17
+        },
+        "role": {
+          "text": 17
+        },
+        "content": {
+          "text": 17
+        },
+        "tool_name": {
+          "null": 15,
+          "text": 2
+        },
+        "tool_args": {
+          "null": 15,
+          "text": 2
+        },
+        "tool_result": {
+          "null": 15,
+          "text": 2
+        },
+        "metadata": {
+          "text": 17
+        },
+        "access_count": {
+          "integer": 17
+        },
+        "last_accessed_at": {
+          "null": 17
+        },
+        "created_at": {
+          "text": 17
+        },
+        "embed_status": {
+          "text": 17
+        },
+        "embedding": {
+          "blob": 17
+        },
+        "embed_error": {
+          "null": 17
+        },
+        "embed_failures": {
+          "integer": 17
+        },
+        "owner_user_id": {
+          "text": 17
+        }
+      },
+      "ros_jobs": {
+        "id": {
+          "text": 1
+        },
+        "task": {
+          "text": 1
+        },
+        "job_key": {
+          "text": 1
+        },
+        "payload": {
+          "text": 1
+        },
+        "run_at": {
+          "text": 1
+        },
+        "attempts": {
+          "integer": 1
+        },
+        "max_attempts": {
+          "integer": 1
+        },
+        "state": {
+          "text": 1
+        },
+        "last_error": {
+          "null": 1
+        },
+        "locked_at": {
+          "null": 1
+        },
+        "created_at": {
+          "text": 1
+        },
+        "updated_at": {
+          "text": 1
+        }
+      },
+      "ros_meta": {
+        "key": {
+          "text": 2
+        },
+        "value": {
+          "text": 2
+        }
+      },
+      "ros_embed_queue": {
+        "id": {},
+        "message_id": {},
+        "enqueued_at": {},
+        "attempts": {},
+        "last_error": {}
+      },
+      "ros_summaries": {
+        "id": {
+          "text": 3
+        },
+        "conversation_id": {
+          "text": 3
+        },
+        "parent_id": {
+          "null": 1,
+          "text": 2
+        },
+        "depth": {
+          "integer": 3
+        },
+        "content": {
+          "text": 3
+        },
+        "kind": {
+          "text": 3
+        },
+        "message_count": {
+          "integer": 3
+        },
+        "earliest_at": {
+          "text": 3
+        },
+        "latest_at": {
+          "text": 3
+        },
+        "model": {
+          "text": 3
+        },
+        "pipeline_version": {
+          "integer": 3
+        },
+        "access_count": {
+          "integer": 3
+        },
+        "last_accessed_at": {
+          "null": 3
+        },
+        "created_at": {
+          "text": 3
+        },
+        "embed_status": {
+          "text": 3
+        },
+        "embedding": {
+          "blob": 3
+        },
+        "embed_error": {
+          "null": 3
+        },
+        "embed_failures": {
+          "integer": 3
+        }
+      },
+      "ros_summary_sources": {
+        "summary_id": {
+          "text": 10
+        },
+        "message_id": {
+          "text": 10
+        },
+        "ordinal": {
+          "integer": 10
+        }
+      },
+      "ros_tags": {
+        "id": {
+          "text": 8
+        },
+        "entity_type": {
+          "text": 8
+        },
+        "entity_id": {
+          "text": 8
+        },
+        "key": {
+          "text": 8
+        },
+        "value": {
+          "text": 8
+        },
+        "display": {
+          "text": 8
+        },
+        "source": {
+          "text": 8
+        },
+        "state": {
+          "text": 8
+        },
+        "confidence": {
+          "null": 2,
+          "real": 6
+        },
+        "proposed_by": {
+          "text": 8
+        },
+        "reason": {
+          "text": 8
+        },
+        "decided_by": {
+          "null": 5,
+          "text": 3
+        },
+        "decided_at": {
+          "null": 5,
+          "text": 3
+        },
+        "created_at": {
+          "text": 8
+        },
+        "updated_at": {
+          "text": 8
+        },
+        "removal_state": {
+          "null": 8
+        },
+        "removal_reason": {
+          "text": 8
+        }
+      },
+      "ros_tag_taxonomy": {
+        "key": {
+          "text": 3
+        },
+        "value": {
+          "text": 3
+        },
+        "display": {
+          "text": 3
+        },
+        "parent_value": {
+          "null": 3
+        },
+        "aliases": {
+          "text": 3
+        },
+        "state": {
+          "text": 3
+        },
+        "source": {
+          "text": 3
+        },
+        "reason": {
+          "text": 3
+        },
+        "decided_at": {
+          "null": 2,
+          "text": 1
+        },
+        "created_at": {
+          "text": 3
+        },
+        "updated_at": {
+          "text": 3
+        }
+      },
+      "ros_wiki_topics": {
+        "slug": {
+          "text": 1
+        },
+        "title": {
+          "text": 1
+        },
+        "aliases": {
+          "text": 1
+        },
+        "tags": {
+          "text": 1
+        },
+        "entities": {
+          "text": 1
+        },
+        "related": {
+          "text": 1
+        },
+        "current_state": {
+          "text": 1
+        },
+        "article": {
+          "text": 1
+        },
+        "search_text": {
+          "text": 1
+        },
+        "history_count": {
+          "integer": 1
+        },
+        "git_sha": {
+          "text": 1
+        },
+        "last_verified_at": {
+          "text": 1
+        },
+        "created_at": {
+          "text": 1
+        },
+        "updated_at": {
+          "text": 1
+        },
+        "embed_status": {
+          "text": 1
+        },
+        "embedding": {
+          "blob": 1
+        },
+        "embed_error": {
+          "null": 1
+        },
+        "embed_failures": {
+          "integer": 1
+        }
+      },
+      "ros_wiki_provenance": {
+        "topic_slug": {
+          "text": 1
+        },
+        "source_kind": {
+          "text": 1
+        },
+        "source_id": {
+          "text": 1
+        },
+        "conversation_id": {
+          "text": 1
+        },
+        "git_sha": {
+          "text": 1
+        },
+        "created_at": {
+          "text": 1
+        }
+      },
+      "ros_wiki_extractions": {
+        "summary_id": {
+          "text": 2
+        },
+        "status": {
+          "text": 2
+        },
+        "pipeline_version": {
+          "integer": 2
+        },
+        "topics_touched": {
+          "text": 2
+        },
+        "git_sha": {
+          "null": 1,
+          "text": 1
+        },
+        "error": {
+          "null": 1,
+          "text": 1
+        },
+        "extracted_at": {
+          "text": 2
+        }
+      },
+      "ros_wiki_citations": {
+        "topic_slug": {
+          "text": 1
+        },
+        "summary_id": {
+          "text": 1
+        },
+        "kind": {
+          "text": 1
+        },
+        "note": {
+          "text": 1
+        },
+        "cited_at": {
+          "text": 1
+        }
+      },
+      "ros_wiki_redirects": {
+        "from_slug": {},
+        "to_slug": {},
+        "created_at": {}
+      }
+    },
+    "sqlite_master_equals_fresh": true
+  }
+}
