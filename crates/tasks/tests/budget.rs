@@ -1,8 +1,11 @@
-#![expect(
-    clippy::expect_used,
-    reason = "allow-expect-in-tests covers only #[test] functions; helpers panic when a fixture or a local stub fails to set up"
+#[expect(
+    dead_code,
+    reason = "each test binary includes the shared harness and uses a different subset"
 )]
-
+#[expect(
+    clippy::expect_used,
+    reason = "a shared harness reports setup failure by panicking; the message names the step"
+)]
 mod common;
 
 use std::collections::BTreeMap;
@@ -21,6 +24,10 @@ use wire::task::TaskBudget;
 use wire::task::TaskStatus;
 use wire::task::TaskVerdict;
 
+#[expect(
+    clippy::expect_used,
+    reason = "the rate literal is a fixed decimal the helper parses once for every budget case"
+)]
 fn priced() -> BTreeMap<String, TokenRate> {
     let mut rates = BTreeMap::new();
     rates.insert("demo".to_string(), TokenRate::new(3.0, 6.0).expect("rate"));

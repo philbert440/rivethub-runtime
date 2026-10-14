@@ -1,8 +1,11 @@
-#![expect(
-    clippy::expect_used,
-    reason = "allow-expect-in-tests covers only #[test] functions; helpers panic when a fixture or a local stub fails to set up"
+#[expect(
+    dead_code,
+    reason = "each test binary includes the shared harness and uses a different subset"
 )]
-
+#[expect(
+    clippy::expect_used,
+    reason = "a shared harness reports setup failure by panicking; the message names the step"
+)]
 mod common;
 
 use std::collections::BTreeMap;
@@ -36,6 +39,10 @@ fn created(goal: &str, working: Option<&str>) -> tasks::NewTask {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a test helper panics when submit, run, or load fails to set up the refusal case"
+)]
 async fn failed(
     working: Option<&str>,
     root: Option<&std::path::Path>,

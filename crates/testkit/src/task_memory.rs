@@ -12,18 +12,17 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use wire::task::TaskStatus;
 
-use crate::error::ConflictAction;
-use crate::error::Error;
-use crate::jobs::ClaimSelector;
-use crate::jobs::ClaimedJob;
-use crate::jobs::JobWake;
-use crate::jobs::NewJob;
-use crate::jobs::StoredJob;
-use crate::jobs::TaskJobs;
-use crate::record::Finish;
-use crate::record::TaskRecord;
-use crate::record::terminal;
-use crate::store::TaskStore;
+use kernel::tasks::ClaimSelector;
+use kernel::tasks::ClaimedJob;
+use kernel::tasks::ConflictAction;
+use kernel::tasks::Finish;
+use kernel::tasks::NewJob;
+use kernel::tasks::StoredJob;
+use kernel::tasks::TaskError;
+use kernel::tasks::TaskJobs;
+use kernel::tasks::TaskRecord;
+use kernel::tasks::TaskStore;
+use kernel::tasks::terminal;
 
 #[derive(Debug)]
 struct MemoryInner {
@@ -37,7 +36,7 @@ struct MemJob {
     id: i64,
     name: String,
     payload_text: String,
-    payload: crate::payload::TaskJobPayload,
+    payload: kernel::tasks::TaskJobPayload,
     key: String,
     priority: i16,
     max_attempts: i32,
@@ -48,12 +47,12 @@ struct MemJob {
 }
 
 #[derive(Clone, Debug)]
-pub struct Memory {
+pub struct TaskMemory {
     inner: Arc<Mutex<MemoryInner>>,
     fail_enqueue: Arc<AtomicBool>,
 }
 
-impl Memory {
+impl TaskMemory {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(MemoryInner {
@@ -77,32 +76,32 @@ impl Memory {
         reason = "the next job id starts at 1; Default would zero it and the first enqueue would use id 0"
     )
 )]
-impl Default for Memory {
+impl Default for TaskMemory {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait]
-impl TaskStore for Memory {
-    async fn insert(&self, task: &TaskRecord) -> Result<(), Error> {
+impl TaskStore for TaskMemory {
+    async fn insert(&self, task: &TaskRecord) -> Result<(), TaskError> {
         let mut inner = self.inner.lock();
         if inner.tasks.contains_key(&task.id) {
             drop(inner);
-            return Err(Error::Stored("duplicate task".to_string()));
+            return Err(TaskError::Stored("duplicate task".to_string()));
         }
         inner.tasks.insert(task.id, task.clone());
         drop(inner);
         Ok(())
     }
 
-    async fn load(&self, id: Uuid) -> Result<TaskRecord, Error> {
+    async fn load(&self, id: Uuid) -> Result<TaskRecord, TaskError> {
         self.inner
             .lock()
             .tasks
             .get(&id)
             .cloned()
-            .ok_or(Error::Missing { id })
+            .ok_or(TaskError::Missing { id })
     }
 
     async fn mark_running(
@@ -111,9 +110,9 @@ impl TaskStore for Memory {
         claimed_by: &str,
         node: &str,
         now: DateTime<Utc>,
-    ) -> Result<TaskRecord, Error> {
+    ) -> Result<TaskRecord, TaskError> {
         let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(Error::Missing { id })?;
+        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
         let claimable = matches!(task.status, TaskStatus::Queued | TaskStatus::AwaitingInput);
         let affinity = task
             .node_affinity
@@ -122,7 +121,7 @@ impl TaskStore for Memory {
         if !claimable || !affinity {
             let status = task.status;
             drop(inner);
-            return Err(Error::Conflict {
+            return Err(TaskError::Conflict {
                 id,
                 status,
                 action: ConflictAction::Run,
@@ -133,7 +132,7 @@ impl TaskStore for Memory {
         task.attempt = task
             .attempt
             .checked_add(1)
-            .ok_or(Error::Stored("attempt overflow".to_string()))?;
+            .ok_or(TaskError::Stored("attempt overflow".to_string()))?;
         task.started_at = Some(now);
         task.claimed_by = Some(claimed_by.to_string());
         task.last_heartbeat_at = Some(now);
@@ -144,9 +143,9 @@ impl TaskStore for Memory {
         Ok(running)
     }
 
-    async fn finish(&self, id: Uuid, finish: &Finish) -> Result<bool, Error> {
+    async fn finish(&self, id: Uuid, finish: &Finish) -> Result<bool, TaskError> {
         let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(Error::Missing { id })?;
+        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
         if task.status == TaskStatus::Killed {
             drop(inner);
             return Ok(false);
@@ -162,14 +161,14 @@ impl TaskStore for Memory {
         Ok(true)
     }
 
-    async fn sweep(&self, worker: &str, now: DateTime<Utc>) -> Result<(), Error> {
+    async fn sweep(&self, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError> {
         let stale_before = now
             .checked_sub_signed(chrono::Duration::milliseconds(90_000))
-            .ok_or(Error::Clock)?;
+            .ok_or(TaskError::Clock)?;
         let mut inner = self.inner.lock();
         let ids: Vec<Uuid> = inner.tasks.keys().copied().collect();
         for id in ids {
-            let task = inner.tasks.get_mut(&id).ok_or(Error::Missing { id })?;
+            let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
             if task.status == TaskStatus::Running && task.claimed_by.as_deref() == Some(worker) {
                 let stamp = task.last_heartbeat_at.or(task.started_at);
                 if let Some(stamp) = stamp
@@ -195,10 +194,10 @@ impl TaskStore for Memory {
                     Some(ms) => ms,
                     None => 86_400_000,
                 };
-                let ttl_ms = i64::try_from(ttl_ms).map_err(|_| Error::Clock)?;
+                let ttl_ms = i64::try_from(ttl_ms).map_err(|_| TaskError::Clock)?;
                 let deadline = now
                     .checked_sub_signed(chrono::Duration::milliseconds(ttl_ms))
-                    .ok_or(Error::Clock)?;
+                    .ok_or(TaskError::Clock)?;
                 let stamp = match task.last_heartbeat_at.or(task.started_at) {
                     Some(stamp) => stamp,
                     None => task.created_at,
@@ -218,7 +217,7 @@ impl TaskStore for Memory {
         &self,
         session_key: &str,
         now: DateTime<Utc>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), TaskError> {
         let mut inner = self.inner.lock();
         for task in inner.tasks.values_mut() {
             if task.session_key.as_deref() == Some(session_key) && task.status == TaskStatus::Queued
@@ -232,13 +231,13 @@ impl TaskStore for Memory {
         Ok(())
     }
 
-    async fn kill(&self, id: Uuid, now: DateTime<Utc>) -> Result<TaskStatus, Error> {
+    async fn kill(&self, id: Uuid, now: DateTime<Utc>) -> Result<TaskStatus, TaskError> {
         let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(Error::Missing { id })?;
+        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
         let prior = task.status;
         if terminal(prior) {
             drop(inner);
-            return Err(Error::Conflict {
+            return Err(TaskError::Conflict {
                 id,
                 status: prior,
                 action: ConflictAction::Kill,
@@ -253,9 +252,9 @@ impl TaskStore for Memory {
         Ok(prior)
     }
 
-    async fn set_pending(&self, id: Uuid, message: &str) -> Result<(), Error> {
+    async fn set_pending(&self, id: Uuid, message: &str) -> Result<(), TaskError> {
         let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(Error::Missing { id })?;
+        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
         let open = matches!(
             task.status,
             TaskStatus::Queued | TaskStatus::Running | TaskStatus::AwaitingInput
@@ -263,7 +262,7 @@ impl TaskStore for Memory {
         if !open {
             let status = task.status;
             drop(inner);
-            return Err(Error::Conflict {
+            return Err(TaskError::Conflict {
                 id,
                 status,
                 action: ConflictAction::Steer,
@@ -274,9 +273,9 @@ impl TaskStore for Memory {
         Ok(())
     }
 
-    async fn add_harness_session(&self, id: Uuid, session: &str) -> Result<(), Error> {
+    async fn add_harness_session(&self, id: Uuid, session: &str) -> Result<(), TaskError> {
         let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(Error::Missing { id })?;
+        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
         task.harness_session_ids.push(session.to_string());
         drop(inner);
         Ok(())
@@ -284,13 +283,13 @@ impl TaskStore for Memory {
 }
 
 #[async_trait]
-impl TaskJobs for Memory {
-    async fn enqueue(&self, job: &NewJob) -> Result<i64, Error> {
+impl TaskJobs for TaskMemory {
+    async fn enqueue(&self, job: &NewJob) -> Result<i64, TaskError> {
         if self.fail_enqueue.swap(false, Ordering::SeqCst) {
-            return Err(Error::QueueAbsent);
+            return Err(TaskError::QueueAbsent);
         }
         let payload_text = serde_json::to_string(&job.payload)
-            .map_err(|source| Error::Payload(Box::new(source)))?;
+            .map_err(|source| TaskError::Payload(Box::new(source)))?;
         let mut inner = self.inner.lock();
         if let Some(existing) = inner.jobs.values_mut().find(|item| item.key == job.key) {
             existing.name = job.name.to_string();
@@ -310,7 +309,7 @@ impl TaskJobs for Memory {
         inner.next_job = inner
             .next_job
             .checked_add(1)
-            .ok_or(Error::Stored("job id overflow".to_string()))?;
+            .ok_or(TaskError::Stored("job id overflow".to_string()))?;
         inner.jobs.insert(
             id,
             MemJob {
@@ -331,7 +330,7 @@ impl TaskJobs for Memory {
         Ok(id)
     }
 
-    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, Error> {
+    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, TaskError> {
         let mut inner = self.inner.lock();
         let mut choice: Option<i64> = None;
         for job in inner.jobs.values() {
@@ -347,14 +346,17 @@ impl TaskJobs for Memory {
             drop(inner);
             return Ok(None);
         };
-        let job = inner.jobs.get_mut(&id).ok_or(Error::MissingJob { id })?;
+        let job = inner
+            .jobs
+            .get_mut(&id)
+            .ok_or(TaskError::MissingJob { id })?;
         job.attempts = job
             .attempts
             .checked_add(1)
-            .ok_or(Error::Stored("attempt overflow".to_string()))?;
+            .ok_or(TaskError::Stored("attempt overflow".to_string()))?;
         job.locked = true;
         let attempt =
-            u32::try_from(job.attempts).map_err(|_| Error::Stored("attempt".to_string()))?;
+            u32::try_from(job.attempts).map_err(|_| TaskError::Stored("attempt".to_string()))?;
         let claimed = ClaimedJob {
             id,
             identifier: job.name.clone(),
@@ -365,31 +367,34 @@ impl TaskJobs for Memory {
         Ok(Some(claimed))
     }
 
-    async fn complete(&self, id: i64) -> Result<(), Error> {
+    async fn complete(&self, id: i64) -> Result<(), TaskError> {
         let mut inner = self.inner.lock();
         if inner.jobs.remove(&id).is_none() {
             drop(inner);
-            return Err(Error::MissingJob { id });
+            return Err(TaskError::MissingJob { id });
         }
         drop(inner);
         Ok(())
     }
 
-    async fn fail(&self, id: i64, error: &str) -> Result<(), Error> {
+    async fn fail(&self, id: i64, error: &str) -> Result<(), TaskError> {
         let mut inner = self.inner.lock();
-        let job = inner.jobs.get_mut(&id).ok_or(Error::MissingJob { id })?;
+        let job = inner
+            .jobs
+            .get_mut(&id)
+            .ok_or(TaskError::MissingJob { id })?;
         job.last_error = Some(error.to_string());
         job.locked = false;
         drop(inner);
         Ok(())
     }
 
-    async fn read(&self, id: i64) -> Result<Option<StoredJob>, Error> {
+    async fn read(&self, id: i64) -> Result<Option<StoredJob>, TaskError> {
         let inner = self.inner.lock();
         let stored = match inner.jobs.get(&id) {
             Some(job) => {
                 let attempts = u32::try_from(job.attempts)
-                    .map_err(|_| Error::Stored("attempts".to_string()))?;
+                    .map_err(|_| TaskError::Stored("attempts".to_string()))?;
                 Some(StoredJob {
                     id: job.id,
                     identifier: job.name.clone(),
@@ -407,8 +412,9 @@ impl TaskJobs for Memory {
         Ok(stored)
     }
 
-    async fn wake(&self, cancel: CancellationToken) -> Result<JobWake, Error> {
-        Ok(JobWake::Memory { cancel })
+    async fn await_notification(&self, cancel: CancellationToken) -> Result<bool, TaskError> {
+        cancel.cancelled().await;
+        Ok(false)
     }
 }
 

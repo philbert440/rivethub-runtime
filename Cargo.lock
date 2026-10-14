@@ -3735,17 +3735,13 @@ dependencies = [
 name = "tasks"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "axum",
  "chrono",
- "config",
  "kernel",
- "migrate",
  "parking_lot",
  "reqwest",
  "serde",
  "serde_json",
- "sqlx",
  "tempfile",
  "testkit",
  "thiserror 2.0.21",
@@ -3822,6 +3818,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-util",
  "uuid",
  "wire",
 ]

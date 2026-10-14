@@ -14,7 +14,12 @@ pub use search_complete::SearchSynthesis;
 mod store_impl;
 mod summary_store;
 mod tags;
+mod task_db;
+mod task_jobs;
+mod task_rows;
 mod wiki;
+
+pub use task_db::PostgresTasks;
 
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;

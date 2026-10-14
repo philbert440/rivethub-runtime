@@ -1,8 +1,11 @@
-#![expect(
-    clippy::expect_used,
-    reason = "allow-expect-in-tests covers only #[test] functions; helpers panic when a fixture or a local stub fails to set up"
+#[expect(
+    dead_code,
+    reason = "each test binary includes the shared harness and uses a different subset"
 )]
-
+#[expect(
+    clippy::expect_used,
+    reason = "a shared harness reports setup failure by panicking; the message names the step"
+)]
 mod common;
 
 use chrono::DateTime;
@@ -31,6 +34,10 @@ fn input(executor: TaskExecutorKind, agent: &str) -> TargetInput {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the preset stamp is a fixed instant; a parse failure is a broken fixture"
+)]
 fn preset(name: &str, node_name: Option<&str>, effort: &str, base: Option<&str>) -> AgentPreset {
     let stamp = DateTime::<Utc>::from_timestamp_millis(1_760_000_001_000).expect("stamp");
     AgentPreset {
@@ -52,6 +59,10 @@ fn preset(name: &str, node_name: Option<&str>, effort: &str, base: Option<&str>)
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the local base url is a fixed literal; a parse failure is a broken fixture"
+)]
 fn fresh() -> Directory {
     Directory::new("local", Url::parse("http://127.0.0.1:9/").expect("url")).expect("directory")
 }

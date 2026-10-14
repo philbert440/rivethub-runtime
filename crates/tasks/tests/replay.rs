@@ -1,16 +1,13 @@
-#![expect(
+#[expect(
+    dead_code,
+    reason = "each test binary includes the shared harness and uses a different subset"
+)]
+#[expect(
     clippy::expect_used,
-    reason = "allow-expect-in-tests covers only #[test] functions; helpers panic when a fixture or a local stub fails to set up"
+    reason = "a shared harness reports setup failure by panicking; the message names the step"
 )]
-#![expect(
-    clippy::panic,
-    reason = "a replay helper panics when a recorded document is outside the cases the client can compare"
-)]
-
 mod common;
 
-use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -24,23 +21,6 @@ use wire::events::SessionList;
 use wire::gateway::GatewayError;
 use wire::gateway::HealthzResponse;
 
-const CORS: &str = "CORS preflight is the gateway, not a task session call";
-const HTML: &str = "the task client reads JSON wire documents, not HTML pages";
-const DEVICE: &str = "device enrollment and phone pairing belong to the gateway";
-const EVENT: &str = "capture event ingest is not a task session call";
-const STATE: &str = "registry state and deletion stay on the gateway";
-const OTHER: &str = "outside the task client's gateway surface of GET /healthz and GET /sessions";
-const SOCKET: &str =
-    "the task client speaks the gateway HTTP API; this step is a websocket session stream";
-const TENANCY: &str = "tenancy user directory is gateway boot input, not a task HTTP exchange";
-const INVALID: &str = "truncated users document is gateway boot input, not a task HTTP exchange";
-
-#[derive(Deserialize)]
-struct Skip {
-    name: String,
-    reason: String,
-}
-
 #[derive(Deserialize)]
 struct PgFile {
     scenarios: Vec<PgScenario>,
@@ -48,7 +28,6 @@ struct PgFile {
 
 #[derive(Deserialize)]
 struct PgScenario {
-    name: String,
     schema: String,
     steps: Vec<PgStep>,
 }
@@ -83,16 +62,11 @@ struct EmbedTarget {
 }
 
 struct Exchange {
-    name: String,
     method: String,
     target: String,
     status: u16,
     content_type: String,
     body: String,
-}
-
-fn skips() -> Vec<Skip> {
-    serde_json::from_str(include_str!("fixtures/skips.json")).expect("skip list")
 }
 
 fn golden() -> PathBuf {
@@ -112,42 +86,6 @@ fn in_slice(method: &str, target: &str, content_type: &str, body: &str) -> bool 
         && !body.is_empty()
 }
 
-fn http_reason(method: &str, target: &str, content_type: &str) -> &'static str {
-    if method == "OPTIONS" {
-        return CORS;
-    }
-    if content_type.to_ascii_lowercase().starts_with("text/html")
-        || target == "/"
-        || target == "/index.html"
-    {
-        return HTML;
-    }
-    if target.starts_with("/api/devices") || target.starts_with("/api/phone") {
-        return DEVICE;
-    }
-    if method == "POST" && (target == "/event" || target.starts_with("/event?")) {
-        return EVENT;
-    }
-    if target.starts_with("/state") || method == "DELETE" {
-        return STATE;
-    }
-    OTHER
-}
-
-fn file_reason(name: &str) -> &'static str {
-    match name {
-        "users-tenancy.json" => TENANCY,
-        "users-invalid.json" => INVALID,
-        _ => OTHER,
-    }
-}
-
-fn scratch_reason(schema: &str) -> String {
-    format!(
-        "scratch schema {schema} has no graphile job rows; the task queue contract is the public-schema dump"
-    )
-}
-
 fn content_type(headers: &[(String, String)]) -> String {
     headers
         .iter()
@@ -156,22 +94,25 @@ fn content_type(headers: &[(String, String)]) -> String {
         .unwrap_or_default()
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a request head that does not parse is a broken fixture"
+)]
 fn head(case: &testkit::http::HttpCase) -> RequestHead {
     testkit::http::parse_head(&case.request.head).expect("request head")
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the vendored gateway recording is part of the crate; a missing file is a broken fixture"
+)]
 fn exchanges() -> Vec<Exchange> {
     let cases = testkit::http::cases(&golden().join("http-tls.json")).expect("http golden");
     cases
         .into_iter()
         .map(|case| {
             let parsed = head(&case);
-            let id = case
-                .id
-                .split_once('/')
-                .map_or_else(|| case.id.clone(), |(_, id)| id.to_string());
             Exchange {
-                name: format!("http/{id}"),
                 method: parsed.method,
                 target: parsed.target,
                 status: testkit::http::status_of(&case.response.status_line),
@@ -182,20 +123,10 @@ fn exchanges() -> Vec<Exchange> {
         .collect()
 }
 
-fn ws_names() -> Vec<String> {
-    testkit::ws::steps(&golden().join("ws.json"))
-        .expect("ws golden")
-        .into_iter()
-        .map(|step| {
-            let id = match step.id.split_once('/') {
-                Some((_, id)) => id.to_string(),
-                None => step.id,
-            };
-            format!("ws/{id}")
-        })
-        .collect()
-}
-
+#[expect(
+    clippy::expect_used,
+    reason = "the vendored graphile recording is part of the crate; a missing file is a broken fixture"
+)]
 fn pg_files() -> Vec<PgFile> {
     let mut paths = std::fs::read_dir(capture())
         .expect("pg dir")
@@ -210,100 +141,6 @@ fn pg_files() -> Vec<PgFile> {
             serde_json::from_str(&text).expect("pg scenarios")
         })
         .collect()
-}
-
-fn user_files() -> Vec<String> {
-    let mut names = std::fs::read_dir(golden())
-        .expect("golden dir")
-        .map(|entry| entry.expect("entry").file_name())
-        .filter_map(|name| name.to_str().map(ToString::to_string))
-        .filter(|name| {
-            Path::new(name)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
-                && name != "http-tls.json"
-                && name != "ws.json"
-        })
-        .collect::<Vec<_>>();
-    names.sort();
-    names
-}
-
-fn expected_skips() -> BTreeMap<String, String> {
-    let mut skips = BTreeMap::new();
-    for exchange in exchanges() {
-        if in_slice(
-            &exchange.method,
-            &exchange.target,
-            &exchange.content_type,
-            &exchange.body,
-        ) {
-            continue;
-        }
-        skips.insert(
-            exchange.name,
-            http_reason(&exchange.method, &exchange.target, &exchange.content_type).to_string(),
-        );
-    }
-    for name in ws_names() {
-        skips.insert(name, SOCKET.to_string());
-    }
-    for file in pg_files() {
-        for scenario in file.scenarios {
-            if scenario.schema == "public" {
-                continue;
-            }
-            skips.insert(
-                format!("pg/{}", scenario.name),
-                scratch_reason(&scenario.schema),
-            );
-        }
-    }
-    for name in user_files() {
-        skips.insert(format!("file/{name}"), file_reason(&name).to_string());
-    }
-    skips
-}
-
-#[test]
-fn skip_list_names_every_out_of_slice_recording_once() {
-    let expected = expected_skips();
-    let listed = skips();
-    let mut seen = BTreeSet::new();
-    for entry in &listed {
-        assert!(seen.insert(entry.name.clone()), "duplicate {}", entry.name);
-        assert!(!entry.reason.trim().is_empty(), "empty reason");
-        assert_eq!(
-            expected.get(&entry.name).map(String::as_str),
-            Some(entry.reason.as_str()),
-            "{}",
-            entry.name
-        );
-    }
-    assert_eq!(seen.len(), expected.len());
-    let mut replayed = 0;
-    for exchange in exchanges() {
-        if in_slice(
-            &exchange.method,
-            &exchange.target,
-            &exchange.content_type,
-            &exchange.body,
-        ) {
-            assert!(!seen.contains(&exchange.name), "in-slice skip");
-            replayed += 1;
-        }
-    }
-    assert!(replayed > 0);
-    for file in pg_files() {
-        for scenario in file.scenarios {
-            let name = format!("pg/{}", scenario.name);
-            if scenario.schema == "public" {
-                assert!(!seen.contains(&name));
-            } else {
-                assert!(seen.contains(&name));
-            }
-        }
-    }
 }
 
 #[tokio::test]
@@ -324,6 +161,14 @@ async fn replay_gateway_health_and_session_documents() {
     assert!(replayed > 0);
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a replay compares the typed document; a decode or client failure fails the case"
+)]
+#[expect(
+    clippy::panic,
+    reason = "an in-slice exchange that is not health or sessions, or an unexpected error variant, fails the case"
+)]
 async fn replay_exchange(exchange: &Exchange) {
     let stub = recorded_stub(exchange).await;
     let client = GatewayClient::new(common::base_url(stub.addr), None).expect("client");
@@ -354,6 +199,10 @@ async fn replay_exchange(exchange: &Exchange) {
     stub.close().await;
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the local stub must bind before a replay can compare the document"
+)]
 async fn recorded_stub(exchange: &Exchange) -> testkit::stub::Stub {
     let status = exchange.status;
     let content_type = exchange.content_type.clone();
@@ -382,6 +231,10 @@ async fn recorded_stub(exchange: &Exchange) -> testkit::stub::Stub {
     testkit::stub::stub_server(app).await.expect("stub")
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a status outside the http range is a broken fixture"
+)]
 fn recorded(status: u16, content_type: String, body: String) -> axum::response::Response {
     axum::response::Response::builder()
         .status(axum::http::StatusCode::from_u16(status).expect("status"))

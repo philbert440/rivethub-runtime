@@ -11,18 +11,20 @@ use wire::task::TaskPromptMode;
 use wire::task::TaskSpec;
 use wire::task::TaskStatus;
 
+use kernel::tasks::Finish;
+use kernel::tasks::NewJob;
+use kernel::tasks::TaskError;
+use kernel::tasks::TaskJobPayload;
+use kernel::tasks::TaskJobs;
+use kernel::tasks::TaskOrigin;
+use kernel::tasks::TaskRecord;
+use kernel::tasks::TaskStore;
+
 use crate::auth::authorize;
 use crate::directory::Prepared;
 use crate::directory::TargetInput;
 use crate::engine::Engine;
 use crate::error::Error;
-use crate::jobs::NewJob;
-use crate::jobs::TaskJobs;
-use crate::origin::TaskOrigin;
-use crate::payload::TaskJobPayload;
-use crate::record::Finish;
-use crate::record::TaskRecord;
-use crate::store::TaskStore;
 
 #[derive(Debug)]
 pub struct NewTask {
@@ -50,7 +52,7 @@ where
         self.store.insert(&record).await?;
         let job = new_job(&record, &prepared);
         if let Err(error) = self.jobs.enqueue(&job).await {
-            return Err(self.mark_enqueue_failed(id, error).await);
+            return Err(self.mark_enqueue_failed(id, error.into()).await);
         }
         self.notify_jobs();
         Ok(id)
@@ -86,7 +88,7 @@ where
     }
 
     pub async fn load(&self, id: Uuid) -> Result<TaskRecord, Error> {
-        self.store.load(id).await
+        self.store.load(id).await.map_err(Into::into)
     }
 
     pub async fn schedule_heartbeat(&self, spec: HeartbeatSpec) -> Result<Uuid, Error> {
@@ -102,7 +104,7 @@ where
             .await?;
         self.store.insert(&record).await?;
         if let Err(error) = self.jobs.enqueue(&new_job(&record, &prepared)).await {
-            return Err(self.mark_enqueue_failed(record.id, error).await);
+            return Err(self.mark_enqueue_failed(record.id, error.into()).await);
         }
         self.notify_jobs();
         Ok(record.id)
@@ -280,8 +282,8 @@ async fn chain<S: TaskStore>(
     let depth = request.chain_depth.ok_or(Error::ChainDepthRequired)?;
     let loaded = match store.load(parent_id).await {
         Ok(task) => task,
-        Err(Error::Missing { .. }) => return Err(Error::MissingParent),
-        Err(error) => return Err(error),
+        Err(TaskError::Missing { .. }) => return Err(Error::MissingParent),
+        Err(error) => return Err(error.into()),
     };
     let expected = loaded.chain_depth.checked_add(1).ok_or(Error::ChainDepth {
         got: depth,

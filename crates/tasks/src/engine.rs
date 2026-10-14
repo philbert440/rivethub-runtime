@@ -10,12 +10,13 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use uuid::Uuid;
 
+use kernel::tasks::TaskJobs;
+use kernel::tasks::TaskStore;
+
 use crate::directory::Directory;
 use crate::error::Error;
-use crate::jobs::TaskJobs;
 use crate::price::TokenRate;
 use crate::price::table;
-use crate::store::TaskStore;
 
 pub struct Settings {
     pub node: String,

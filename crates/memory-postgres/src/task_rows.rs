@@ -20,14 +20,12 @@ use wire::task::TaskUsage;
 use wire::task::TaskVerdict;
 use wire::task::VerifierResult;
 
-use crate::error::ConflictAction;
-use crate::error::Error;
-use crate::payload::as_text;
-use crate::payload::from_text;
-use crate::record::Finish;
-use crate::record::TaskRecord;
-use crate::sql_job::cell;
-use crate::sql_job::map_sql;
+use crate::task_jobs::cell;
+use crate::task_jobs::map_sql;
+use kernel::tasks::ConflictAction;
+use kernel::tasks::Finish;
+use kernel::tasks::TaskError;
+use kernel::tasks::TaskRecord;
 
 const LOAD_TASK: &str = concat!(
     "SELECT id, goal, context_refs, acceptance_criteria, spec, executor, executor_target, ",
@@ -56,7 +54,10 @@ const MARK_RUNNING: &str = concat!(
     ") SELECT * FROM updated"
 );
 
-pub(crate) async fn insert_task(conn: &mut PgConnection, task: &TaskRecord) -> Result<(), Error> {
+pub(crate) async fn insert_task(
+    conn: &mut PgConnection,
+    task: &TaskRecord,
+) -> Result<(), TaskError> {
     let query = "INSERT INTO rh_tasks (
         id, goal, context_refs, acceptance_criteria, spec, executor, executor_target,
         requested_by, agent_id, origin, parent_task_id, chain_depth, budget, node_affinity,
@@ -89,7 +90,7 @@ pub(crate) async fn insert_task(conn: &mut PgConnection, task: &TaskRecord) -> R
     Ok(())
 }
 
-pub(crate) async fn load_task(conn: &mut PgConnection, id: Uuid) -> Result<TaskRecord, Error> {
+pub(crate) async fn load_task(conn: &mut PgConnection, id: Uuid) -> Result<TaskRecord, TaskError> {
     let row = sqlx::query(LOAD_TASK)
         .bind(id)
         .fetch_optional(&mut *conn)
@@ -97,7 +98,7 @@ pub(crate) async fn load_task(conn: &mut PgConnection, id: Uuid) -> Result<TaskR
         .map_err(|source| map_sql("load task", source))?;
     match row {
         Some(row) => decode_task(&row, "load task"),
-        None => Err(Error::Missing { id }),
+        None => Err(TaskError::Missing { id }),
     }
 }
 
@@ -107,7 +108,7 @@ pub(crate) async fn mark_running(
     claimed_by: &str,
     node: &str,
     now: DateTime<Utc>,
-) -> Result<TaskRecord, Error> {
+) -> Result<TaskRecord, TaskError> {
     let row = sqlx::query(MARK_RUNNING)
         .bind(id)
         .bind(now)
@@ -126,7 +127,7 @@ pub(crate) async fn finish_task(
     conn: &mut PgConnection,
     id: Uuid,
     finish: &Finish,
-) -> Result<bool, Error> {
+) -> Result<bool, TaskError> {
     let result_json = match &finish.result {
         Some(result) => Some(stored_json(&StoredResult::from(result))?),
         None => None,
@@ -155,7 +156,7 @@ pub(crate) async fn finish_task(
         if task.status == TaskStatus::Killed {
             return Ok(false);
         }
-        return Err(Error::Missing { id });
+        return Err(TaskError::Missing { id });
     }
     Ok(true)
 }
@@ -164,7 +165,7 @@ pub(crate) async fn kill_queued_session(
     conn: &mut PgConnection,
     session_key: &str,
     now: DateTime<Utc>,
-) -> Result<(), Error> {
+) -> Result<(), TaskError> {
     sqlx::query(
         "UPDATE rh_tasks SET status = 'killed', completed_at = $2, \
          error = 'replaced by a newer heartbeat' WHERE session_key = $1 AND status = 'queued'",
@@ -181,7 +182,7 @@ pub(crate) async fn kill_task(
     conn: &mut PgConnection,
     id: Uuid,
     now: DateTime<Utc>,
-) -> Result<TaskStatus, Error> {
+) -> Result<TaskStatus, TaskError> {
     let row = sqlx::query(
         "WITH prior AS (SELECT id, status, error FROM rh_tasks WHERE id = $1)
          UPDATE rh_tasks AS task SET status = 'killed', completed_at = $2, \
@@ -208,7 +209,7 @@ pub(crate) async fn set_pending(
     conn: &mut PgConnection,
     id: Uuid,
     message: &str,
-) -> Result<(), Error> {
+) -> Result<(), TaskError> {
     let result = sqlx::query(
         "UPDATE rh_tasks SET pending_message = $2 WHERE id = $1 \
          AND status IN ('queued', 'running', 'awaiting-input')",
@@ -228,7 +229,7 @@ pub(crate) async fn add_harness_session(
     conn: &mut PgConnection,
     id: Uuid,
     session: &str,
-) -> Result<(), Error> {
+) -> Result<(), TaskError> {
     let result = sqlx::query(
         "UPDATE rh_tasks SET harness_session_ids = harness_session_ids || jsonb_build_array($2::text) \
          WHERE id = $1",
@@ -239,7 +240,7 @@ pub(crate) async fn add_harness_session(
     .await
     .map_err(|source| map_sql("add harness session", source))?;
     if result.rows_affected() == 0 {
-        return Err(Error::Missing { id });
+        return Err(TaskError::Missing { id });
     }
     Ok(())
 }
@@ -248,7 +249,7 @@ pub(crate) async fn sweep_tasks(
     conn: &mut PgConnection,
     worker: &str,
     now: DateTime<Utc>,
-) -> Result<(), Error> {
+) -> Result<(), TaskError> {
     sqlx::query(
         "UPDATE rh_tasks SET \
             status = CASE WHEN attempt < max_attempts THEN 'queued' ELSE 'failed' END, \
@@ -280,16 +281,19 @@ async fn conflict_or_missing<T>(
     conn: &mut PgConnection,
     id: Uuid,
     action: ConflictAction,
-) -> Result<T, Error> {
+) -> Result<T, TaskError> {
     let task = load_task(conn, id).await?;
-    Err(Error::Conflict {
+    Err(TaskError::Conflict {
         id,
         status: task.status,
         action,
     })
 }
 
-fn decode_task(row: &sqlx::postgres::PgRow, operation: &'static str) -> Result<TaskRecord, Error> {
+fn decode_task(
+    row: &sqlx::postgres::PgRow,
+    operation: &'static str,
+) -> Result<TaskRecord, TaskError> {
     let context_refs: Json<Vec<ContextRef>> = cell(row, operation, "context_refs")?;
     let acceptance_criteria: Json<Vec<AcceptanceCriterion>> =
         cell(row, operation, "acceptance_criteria")?;
@@ -342,8 +346,8 @@ fn decode_task(row: &sqlx::postgres::PgRow, operation: &'static str) -> Result<T
     })
 }
 
-fn stored_json<T: Serialize>(value: &T) -> Result<String, Error> {
-    serde_json::to_string(value).map_err(|source| Error::Stored(source.to_string()))
+fn stored_json<T: Serialize>(value: &T) -> Result<String, TaskError> {
+    serde_json::to_string(value).map_err(|source| TaskError::Stored(source.to_string()))
 }
 
 #[derive(Serialize)]
@@ -465,10 +469,22 @@ impl<'a> From<&'a TaskSpec> for StoredSpec<'a> {
     }
 }
 
-fn i32_in(value: u32) -> Result<i32, Error> {
-    i32::try_from(value).map_err(|_| Error::Stored("integer overflow".to_string()))
+fn i32_in(value: u32) -> Result<i32, TaskError> {
+    i32::try_from(value).map_err(|_| TaskError::Stored("integer overflow".to_string()))
 }
 
-fn u32_from(value: i32) -> Result<u32, Error> {
-    u32::try_from(value).map_err(|_| Error::Stored("negative integer".to_string()))
+fn u32_from(value: i32) -> Result<u32, TaskError> {
+    u32::try_from(value).map_err(|_| TaskError::Stored("negative integer".to_string()))
+}
+
+fn as_text<T: Serialize>(value: &T) -> Result<String, TaskError> {
+    let encoded =
+        serde_json::to_string(value).map_err(|source| TaskError::Stored(source.to_string()))?;
+    serde_json::from_str(&encoded).map_err(|source| TaskError::Stored(source.to_string()))
+}
+
+fn from_text<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, TaskError> {
+    let encoded =
+        serde_json::to_string(text).map_err(|source| TaskError::Stored(source.to_string()))?;
+    serde_json::from_str(&encoded).map_err(|source| TaskError::Stored(source.to_string()))
 }

@@ -1,34 +1,19 @@
+use kernel::tasks::ConflictAction;
+use kernel::tasks::TaskError;
 use thiserror::Error;
 use uuid::Uuid;
 use wire::gateway::GatewayError;
 use wire::task::TaskStatus;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConflictAction {
-    Run,
-    Steer,
-    Kill,
-}
-
-impl std::fmt::Display for ConflictAction {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(match self {
-            Self::Run => "run",
-            Self::Steer => "steer",
-            Self::Kill => "kill",
-        })
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("database connection failed")]
-    Connection(#[source] Box<sqlx::Error>),
+    Connection(#[source] kernel::BoxError),
     #[error("database operation failed: {operation}")]
     Operation {
         operation: &'static str,
         #[source]
-        source: Box<sqlx::Error>,
+        source: kernel::BoxError,
     },
     #[error("graphile worker queue is absent")]
     QueueAbsent,
@@ -131,4 +116,32 @@ pub enum Error {
     Clock,
     #[error("node name is empty")]
     NodeRequired,
+}
+
+impl From<TaskError> for Error {
+    fn from(value: TaskError) -> Self {
+        match value {
+            TaskError::Unavailable(source) => Self::Connection(source),
+            TaskError::Operation { operation, source } => Self::Operation { operation, source },
+            TaskError::QueueAbsent => Self::QueueAbsent,
+            TaskError::Cleanup {
+                context,
+                primary,
+                cleanup,
+            } => Self::Cleanup {
+                context,
+                primary,
+                cleanup,
+            },
+            TaskError::Payload(source) => match source.downcast::<serde_json::Error>() {
+                Ok(error) => Self::Payload(error),
+                Err(other) => Self::Stored(other.to_string()),
+            },
+            TaskError::Stored(message) => Self::Stored(message),
+            TaskError::Missing { id } => Self::Missing { id },
+            TaskError::MissingJob { id } => Self::MissingJob { id },
+            TaskError::Conflict { id, status, action } => Self::Conflict { id, status, action },
+            TaskError::Clock => Self::Clock,
+        }
+    }
 }

@@ -1,9 +1,3 @@
-#![expect(
-    dead_code,
-    unreachable_pub,
-    reason = "every test binary includes this module and uses a different subset, so a statement-level expect is unfulfilled in the binaries that call the item; every pub item of an integration-test crate is unreachable from outside it"
-)]
-
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -26,10 +20,10 @@ use serde::Serialize;
 use tasks::Directory;
 use tasks::Engine;
 use tasks::LocalAgent;
-use tasks::Memory;
 use tasks::NewTask;
 use tasks::Settings;
 use tasks::TaskOrigin;
+use testkit::TaskMemory;
 use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use url::Url;
@@ -42,28 +36,28 @@ use wire::task::TaskExecutorKind;
 use wire::task::TaskSpec;
 
 #[derive(Debug)]
-pub struct Recorded {
-    pub path: String,
-    pub body: Vec<u8>,
+pub(crate) struct Recorded {
+    pub(crate) path: String,
+    pub(crate) body: Vec<u8>,
 }
 
 #[derive(Clone)]
-pub struct Capture {
+pub(crate) struct Capture {
     posts: mpsc::UnboundedSender<Recorded>,
 }
 
-pub struct Script {
-    pub text: &'static str,
-    pub model: Option<&'static str>,
-    pub prompt_tokens: Option<u64>,
-    pub completion_tokens: Option<u64>,
-    pub hang: bool,
-    pub hold: Option<Arc<Notify>>,
-    pub gateway_timeout: bool,
+pub(crate) struct Script {
+    pub(crate) text: &'static str,
+    pub(crate) model: Option<&'static str>,
+    pub(crate) prompt_tokens: Option<u64>,
+    pub(crate) completion_tokens: Option<u64>,
+    pub(crate) hang: bool,
+    pub(crate) hold: Option<Arc<Notify>>,
+    pub(crate) gateway_timeout: bool,
 }
 
 impl Script {
-    pub fn reply(text: &'static str) -> Self {
+    pub(crate) fn reply(text: &'static str) -> Self {
         Self {
             text,
             model: None,
@@ -76,11 +70,11 @@ impl Script {
     }
 }
 
-pub fn base_url(addr: std::net::SocketAddr) -> Url {
+pub(crate) fn base_url(addr: std::net::SocketAddr) -> Url {
     Url::parse(&format!("http://{addr}/")).expect("base url")
 }
 
-pub fn plain_agent() -> LocalAgent {
+pub(crate) fn plain_agent() -> LocalAgent {
     LocalAgent {
         model: None,
         effort: None,
@@ -90,13 +84,16 @@ pub fn plain_agent() -> LocalAgent {
     }
 }
 
-pub fn directory(base: Url) -> Directory {
+pub(crate) fn directory(base: Url) -> Directory {
     let mut directory = Directory::new("local", base).expect("directory");
     directory.local_agent("worker", plain_agent());
     directory
 }
 
-pub fn settings(root: Option<PathBuf>, pricing: BTreeMap<String, tasks::TokenRate>) -> Settings {
+pub(crate) fn settings(
+    root: Option<PathBuf>,
+    pricing: BTreeMap<String, tasks::TokenRate>,
+) -> Settings {
     Settings {
         node: "local".to_string(),
         worker: "worker-1".to_string(),
@@ -106,18 +103,21 @@ pub fn settings(root: Option<PathBuf>, pricing: BTreeMap<String, tasks::TokenRat
     }
 }
 
-pub fn engine_with(directory: Directory, settings: Settings) -> (Engine<Memory, Memory>, Memory) {
-    let memory = Memory::new();
+pub(crate) fn engine_with(
+    directory: Directory,
+    settings: Settings,
+) -> (Engine<TaskMemory, TaskMemory>, TaskMemory) {
+    let memory = TaskMemory::new();
     let engine = Engine::new(memory.clone(), memory.clone(), directory, settings).expect("engine");
     (engine, memory)
 }
 
-pub fn engine(base: Url) -> Engine<Memory, Memory> {
+pub(crate) fn engine(base: Url) -> Engine<TaskMemory, TaskMemory> {
     let (engine, _) = engine_with(directory(base), settings(None, BTreeMap::new()));
     engine
 }
 
-pub fn request(goal: &str) -> TaskCreateRequest {
+pub(crate) fn request(goal: &str) -> TaskCreateRequest {
     TaskCreateRequest {
         goal: goal.to_string(),
         agent_id: "worker".to_string(),
@@ -134,14 +134,14 @@ pub fn request(goal: &str) -> TaskCreateRequest {
     }
 }
 
-pub fn task(goal: &str) -> NewTask {
+pub(crate) fn task(goal: &str) -> NewTask {
     NewTask {
         request: request(goal),
         origin: TaskOrigin::Chat,
     }
 }
 
-pub fn spec(session: &str, append: Option<&str>, working: Option<&str>) -> TaskSpec {
+pub(crate) fn spec(session: &str, append: Option<&str>, working: Option<&str>) -> TaskSpec {
     TaskSpec {
         task_id: String::new(),
         agent_id: "worker".to_string(),
@@ -163,7 +163,9 @@ pub fn spec(session: &str, append: Option<&str>, working: Option<&str>) -> TaskS
     }
 }
 
-pub async fn chat_stub(script: Script) -> (testkit::stub::Stub, mpsc::UnboundedReceiver<Recorded>) {
+pub(crate) async fn chat_stub(
+    script: Script,
+) -> (testkit::stub::Stub, mpsc::UnboundedReceiver<Recorded>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let app = Router::new()
         .route("/healthz", get(healthz))
@@ -173,7 +175,7 @@ pub async fn chat_stub(script: Script) -> (testkit::stub::Stub, mpsc::UnboundedR
     (stub, rx)
 }
 
-pub async fn redirect_stub(kind: RedirectKind) -> (testkit::stub::Stub, Arc<AtomicUsize>) {
+pub(crate) async fn redirect_stub(kind: RedirectKind) -> (testkit::stub::Stub, Arc<AtomicUsize>) {
     let hits = Arc::new(AtomicUsize::new(0));
     let app = Router::new()
         .route(
@@ -190,7 +192,7 @@ pub async fn redirect_stub(kind: RedirectKind) -> (testkit::stub::Stub, Arc<Atom
 }
 
 #[derive(Clone, Copy)]
-pub enum RedirectKind {
+pub(crate) enum RedirectKind {
     OneHop,
     TwoHop,
     SixHop,
@@ -353,33 +355,39 @@ struct DeadlineDoc {
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct PostedChat {
-    pub text: String,
+pub(crate) struct PostedChat {
+    pub(crate) text: String,
     #[serde(default)]
-    pub user_id: Option<String>,
+    pub(crate) user_id: Option<String>,
     #[serde(default)]
-    pub agent: Option<String>,
+    pub(crate) agent: Option<String>,
     #[serde(default)]
-    pub system_prompt: Option<String>,
+    pub(crate) system_prompt: Option<String>,
 }
 
-pub fn posted(body: &[u8]) -> PostedChat {
+pub(crate) fn posted(body: &[u8]) -> PostedChat {
     serde_json::from_slice(body).expect("posted chat")
 }
 
-pub fn next_body(rx: &mut mpsc::UnboundedReceiver<Recorded>) -> Recorded {
+pub(crate) fn next_body(rx: &mut mpsc::UnboundedReceiver<Recorded>) -> Recorded {
     rx.try_recv().expect("recorded request")
 }
 
-pub fn quiet(rx: &mut mpsc::UnboundedReceiver<Recorded>) {
+pub(crate) fn quiet(rx: &mut mpsc::UnboundedReceiver<Recorded>) {
     assert!(rx.try_recv().is_err());
 }
 
-pub fn deadline() -> Duration {
+pub(crate) fn deadline() -> Duration {
     Duration::from_secs(2)
 }
 
-pub fn node(id: &str, host: &str, port: u16, agents: &[&str], status: MeshNodeStatus) -> MeshNode {
+pub(crate) fn node(
+    id: &str,
+    host: &str,
+    port: u16,
+    agents: &[&str],
+    status: MeshNodeStatus,
+) -> MeshNode {
     let stamp = DateTime::<Utc>::from_timestamp_millis(1_760_000_001_000).expect("stamp");
     MeshNode {
         id: id.to_string(),

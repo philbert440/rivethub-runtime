@@ -5,6 +5,7 @@ pub mod memory;
 pub mod memory_core;
 pub mod model;
 pub mod queue;
+pub mod tasks;
 pub mod terminal;
 pub mod tool;
 pub mod transcript;

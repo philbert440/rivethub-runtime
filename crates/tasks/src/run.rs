@@ -15,6 +15,15 @@ use wire::task::TaskStatus;
 use wire::task::TaskUsage;
 use wire::task::TaskVerdict;
 
+use kernel::tasks::ClaimSelector;
+use kernel::tasks::ClaimedJob;
+use kernel::tasks::Finish;
+use kernel::tasks::TaskJobPayload;
+use kernel::tasks::TaskJobs;
+use kernel::tasks::TaskRecord;
+use kernel::tasks::TaskStore;
+use kernel::tasks::terminal;
+
 use crate::client::GatewayClient;
 use crate::client::check_segment;
 use crate::directory::ResolvedTarget;
@@ -22,16 +31,8 @@ use crate::directory::TargetInput;
 use crate::directory::apply_spec;
 use crate::engine::Engine;
 use crate::error::Error;
-use crate::jobs::ClaimSelector;
-use crate::jobs::ClaimedJob;
-use crate::jobs::TaskJobs;
 use crate::paths::contained;
-use crate::payload::TaskJobPayload;
 use crate::price::cost;
-use crate::record::Finish;
-use crate::record::TaskRecord;
-use crate::record::terminal;
-use crate::store::TaskStore;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunOutcome {
@@ -74,7 +75,7 @@ where
         };
         let task = match self.store.load(parsed.task_id).await {
             Ok(task) => task,
-            Err(error) => return Err(self.fail_job(claimed.id, error).await),
+            Err(error) => return Err(self.fail_job(claimed.id, error.into()).await),
         };
         if terminal(task.status) {
             self.jobs.complete(claimed.id).await?;
@@ -98,7 +99,7 @@ where
             .await
         {
             Ok(running) => running,
-            Err(error) => return Err(self.fail_job(claimed.id, error).await),
+            Err(error) => return Err(self.fail_job(claimed.id, error.into()).await),
         };
         let child = self.begin_run(running.id, parent);
         let driven = self.drive(&running, &child).await;
