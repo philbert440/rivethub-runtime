@@ -8,7 +8,7 @@ Design artifact (visual, authoritative): https://claude.ai/artifact/L7cAvh16cYEZ
 |---|---|---|
 | foundation | `wire` (serde types for every boundary payload), `config` (config.yaml + env → `Config`) | external crates only; `config` also uses `wire` for the shared closed sets (`HarnessId`, `ThinkingLevel`, effort) |
 | kernel | `kernel` (ports = traits, domain types; no I/O), `testkit` (dev-only: replayers, fakes, stubs) | wire, config |
-| adapters | `memory-postgres`, `memory-sqlite`, `providers`, `harness-acp`, `terminal`, `mcp`, `capture` | kernel, wire, config, externals — NEVER another adapter or a service |
+| adapters | `memory-postgres`, `memory-sqlite`, `providers`, `harness-acp`, `terminal`, `mcp`, `capture`, `pki` | kernel, wire, config, externals — NEVER another adapter or a service; `pki` uses kernel/wire and externals only |
 | services | `gateway` (with the session registry and mesh), `agent-loop`, `workers`, `tasks` (sessions over the gateway API) | kernel, wire, config — NEVER an adapter |
 | operations | `migrate` (every Postgres and SQLite schema change; the `rivethub-migrate` binary) | wire, config, externals (sqlx, rusqlite); depended on only by `cli` as a normal dependency and by tests as a dev-dependency — NEVER by a runtime crate (`rivethub` is checked transitively by the xtask MANIFEST rule) |
 | composition | `cli`, `rivethub` (binary; one composition root per service process) | everything |
@@ -26,6 +26,7 @@ The gate (`cargo xtask check`) fails any Cargo.toml that breaks this.
 | `TerminalMux` | spawn(session, argv, cwd, size) · attach(id) → byte stream · input(id, bytes) · resize · kill · list | terminal (herdr over a PTY; the only multiplexer) | gateway |
 | `Tool` | definition() → `rmcp::Tool` · call(args, ctx) → `rmcp::CallToolResult` (the MCP tool shape, no translation) | RivetHub's own capabilities (memory, wiki, delegation, skills) in mcp; remote MCP servers' tools via the mcp client | agent-loop, mcp server |
 | `TranscriptReader` | sessions(store) · read(session) → turns · tail(session, since) | capture's store readers (one per harness) | capture (incremental + backfill), gateway (transcript route) via the binary's wiring |
+| `CertificateAuthority` | issue_token(principal) · sign(CSR, token or verified renewal principal) · chain · crl · revoke(principal) | pki: holder-generated P-256 keys, SPIFFE SAN policy, short-lived certificates, one-time enrollment, standard X.509 CRLs, one-time legacy CA import | gateway `/ca/v1/`, cli `rh ca` and `rh cert renew` |
 
 A port exists only where several implementations exist or where it is the boundary to an external system. Dropped:
 `SessionRegistry` (one implementer, one in-process caller — the registry is a `gateway` module; the agent and task processes
@@ -61,9 +62,10 @@ portable-pty · rcgen + rustls-webpki · thiserror · tracing · tokio-util (Can
 
 wire 3,000 · config 2,000 · kernel 800 · testkit 1,200 · gateway 8,200 · agent-loop 2,600 · workers 4,000 ·
 memory-postgres 5,000 · memory-sqlite 4,000 · providers 900 · harness-acp 1,600 · terminal 2,000 · mcp 2,400 ·
-capture 4,500 · tasks 2,000 · cli 4,900 · rivethub 500 · migrate 1,000. Total ≈ 50,000 against ≈ 120,000 lines of
+capture 4,500 · pki 1,200 · tasks 2,000 · cli 4,900 · rivethub 500 · migrate 1,000. Total ≈ 50,000 against ≈ 120,000 lines of
 TypeScript. Not separate crates: hooks (agent-loop), agent presets (gateway), wiki builder (workers),
-certificate authority (cli), harness store readers (capture). No local-db: standalone runs on SQLite (sqlite-vec as schema v8
+harness store readers (capture). Certificate authority signing and policy are in the `pki` adapter behind
+`kernel::ca::CertificateAuthority`; CLI only hosts commands and holder renewal. No local-db: standalone runs on SQLite (sqlite-vec as schema v8
 after cutover). Workflows stays in the monorepo as a separate workspace package with its own binary (`rivethub-workflows`: depends on
 `wire` + an HTTP client only, drives sessions and tasks over the public API, never linked into `rivethub`). The RivetHub clients clients and
 sites stay under `apps/`. The chat-channel bots and CFO tooling live in their own private repos (rivethub-channels, rivet-cfo). No tools crate: the TypeScript's built-in shell/file/search/interaction/web tools are deleted (unused; every
@@ -78,7 +80,7 @@ mesh, memory-sqlite; B5 B13 B14) → Wave 5 operations (cli incl. CA, standalone
 B16) → cutover. Each wave's gate is a boundary working end to end against the recordings.
 
 Standalone: `rh local` composes every service into one process on the SQLite store (one composition root, same crates).
-Mesh (registry, heartbeat, agent channel) is a gateway module; ssh helpers are in cli; mesh.json types in wire. 18 crates.
+Mesh (registry, heartbeat, agent channel) is a gateway module; ssh helpers are in cli; mesh.json types in wire. 19 crates.
 Schema changes never run inside the runtime: `rivethub-migrate postgres|sqlite` applies them (Postgres from the
 `migrate` crate's `sqlx::migrate!` chain, SQLite through the v7 creation and the v1→v7 upgrade ladder with a
 `<file>.v<N>.bak` copy of the original file before any read-write connection), and the stores verify one schema version each
@@ -88,3 +90,24 @@ Schema changes never run inside the runtime: `rivethub-migrate postgres|sqlite` 
 upgrade 128, version 91, error 50, lib 25); 1,000 leaves headroom. Every file stays under the 600-line file cap.
 No runtime plugin loading: extension points are adapter crates behind ports, the public API, and MCP. `plugins:` and
 `channels.*` are accepted-and-ignored compatibility keys.
+
+
+## Certificate authority (approved 2026-10-14)
+
+The CA service keeps its intermediate key only in its private state directory, mode 0600. Holders generate their own
+ECDSA P-256 keys and submit CSRs. Identity is exactly one SPIFFE URI SAN: `spiffe://rivet.mesh/node/<node>`,
+`spiffe://rivet.mesh/agent/<node>/<agent>`, or `spiffe://rivet.mesh/device/<user>/<device>`. Node/agent certificates live
+seven days; device certificates live thirty. First issuance requires a CSPRNG enrollment token bound to one principal,
+valid fifteen minutes, stored hashed and consumed once. Renewal requires the caller's verified current principal and a
+matching CSR. Holders schedule renewal at two-thirds of lifetime with a new key/CSR.
+
+The gateway serves `POST /ca/v1/sign`, `GET /ca/v1/chain` and `GET /ca/v1/crl` through the port. Its verifier checks the
+chain, validity, SAN and revocation before producing a typed principal; authorization defaults to refusal. During migration,
+legacy device CN/OU certificates map through the users registry with a deprecation log. Gateway routes, verification and
+CLI commands are later slices, not implemented by the adapter. The offline root ceremony belongs to CLI init; import of an
+existing CA requires only root/intermediate certificates, the intermediate key and index/serial state, never the root key.
+
+The adapter reads the legacy layout once at import, then operates independently from its state directory. It persists serials,
+hashed tokens and revocations in component-owned SQLite state, performs blocking I/O and crypto on Tokio blocking tasks,
+and writes a standard CRL signed by the intermediate. The composition root configures the existing compatibility CRL path for atomic public-file publication; private keys never go to that path. Revocation by principal covers every certificate issued to it; imported serials
+can be revoked explicitly without inventing a principal from a legacy CN.

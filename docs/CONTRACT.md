@@ -27,7 +27,7 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 | B11 | On-disk state: `~/.rivethub/` layout, pid and lock files, `mesh.json`, agent presets, device/pairing files, uploads, layouts, wiki pages (markdown + frontmatter), skills `_meta.json`, `codex-threads.json` | other nodes, backups, humans, TypeScript during cutover | config-and-boot.md §3.9; core-domain.md §1.11; gateway-api.md §8 | fixtures under `golden/` and the inventories' documented formats | files written by Rust are read by TypeScript and vice versa |
 | B12 | Harness protocol: ACP (`session/*`) natively or through the codex-acp and claude-code-acp adapter binaries; herdr control; terminal WS framing | the harness binaries, herdr, RivetHub clients terminal | harness-control-plane.md §1–§2; standardize/SESSION-MODEL.md | `golden/term/` (PTY, WS, roster) ; ACP conformance via the `agent-client-protocol` crate's schema | real binaries: new/resume/prompt/cancel work on every installed harness; term replays pass |
 | B13 | Workers: graphile job names, payloads, keys, priorities, cron entries; worker role split | the shared Postgres queue, other nodes' workers | data-layer.md §2.3–§2.6 | `golden/capture/pg/` job rows | same jobs enqueued; same job handled with the same result rows |
-| B14 | Mesh: `mesh.json` registry format and re-registration rules, heartbeat, the agent channel (TLS HTTP on `agent_channel_port`), CA layout under `/rivet-shared/rivet-ca` | peer nodes (TypeScript and Rust during cutover), `rivet-ca.sh`, operators | core-domain.md §1.11; config-and-boot.md §1.8; gateway-api.md §7; cli.md §9 | `golden/` mesh.json fixtures | mixed-version mesh: both runtimes register, heartbeat and reach each other's agent channel |
+| B14 | Mesh registry, re-registration, heartbeat and agent channel; `/ca/v1/sign`, `/ca/v1/chain`, `/ca/v1/crl`; SPIFFE URI SAN identity, holder-generated P-256 keys, 7-day node/agent and 30-day device leaves, one-time 15-minute enrollment, verified-principal renewal, standard X.509 CRL at the existing compatibility path; legacy CA layout read once at import | peer nodes, holders, operators and legacy CRL readers during cutover | approved PKI design (2026-10-14), superseding the earlier CA layout contract; mesh inventory unchanged | generated CA import fixtures and typed design scenarios in `crates/pki/tests`; no historical PKI recordings | SAN refusals, token expiry/atomic use, principal-bound renewal, webpki chain validation, verified CRL revocations, key containment and import continuity; later gateway/CLI scenarios listed with reasons |
 | B15 | Hook events (names and context fields) seen by skills and the safety fence / audit log | skills, the audit log, operators | core-domain.md §1.6 | existing TypeScript test fixtures | the same hook sequence and fields for the same turn (the workflow journal belongs to the `rivethub-workflows` package, not the runtime) |
 | B16 | Logs operators read, health endpoint, `doctor` output | operators, monitoring | config-and-boot.md §3.10–§3.11; cli.md §2.5 | documented lines | same lines for the documented events |
 
@@ -64,7 +64,7 @@ quality; boundary acceptance is mechanical; (6) the first attempt's branches and
 Decided 2026-10-12 (crate review): (7) one harness adapter — every chat-capable harness speaks ACP, natively or through
 `codex-acp` / `claude-code-acp`; pi and cursor are terminal-only until they have ACP; no codex app-server, claude stream-json
 or headless drivers are built. (8) A crate exists only where a feature is replaced or deployed on its own: hooks live in
-agent-loop, skills in mcp, agent presets in gateway, the wiki builder in workers, the certificate authority in cli, the
+agent-loop, skills in mcp, agent presets in gateway, the wiki builder in workers, the certificate authority commands in cli (signing and policy move to the `pki` adapter under the approved 2026-10-14 design), the
 harness store readers in capture (behind the `TranscriptReader` port, wired to the gateway's transcript route by the binary).
 (9) Standalone runs on SQLite: no embedded Postgres and no local-db crate; existing PGlite installs migrate once at cutover
 through the SQLite store's Postgres-shaped import; `rh local` drops `--pg-port` and `--db` (B9 narrows accordingly);
@@ -112,3 +112,10 @@ Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / A
 
 Naming (Phil 2026-10-12): the single-node install with an embedded database is "standalone" (not "laptop mode") in every
 Rust identifier, log line and document. The CLI command `rh local` keeps its name because it is part of the B9 contract.
+
+
+B14 implementation policy: the PKI adapter limits token issuance and signing separately to sixty attempts per minute per
+CA, counts rejected signing attempts, permits only unambiguous unreserved SPIFFE path components, and refuses a certificate
+lifetime extending beyond either CA certificate. Principal revocation also invalidates pending enrollment and future renewal
+for that principal. Imported legacy CNs confer no authorization; the gateway's later migration verifier owns registry mapping.
+The adapter writes its signed CRL inside CA state and atomically publishes the same public output at the configured compatibility path.

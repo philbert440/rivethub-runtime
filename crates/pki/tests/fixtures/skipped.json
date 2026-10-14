@@ -1,0 +1,18 @@
+[
+  {
+    "name": "gateway_ca_v1_sign_chain_crl_routes",
+    "reason": "Gateway HTTP route wiring is a later slice; this slice implements the complete kernel port."
+  },
+  {
+    "name": "gateway_verified_principal_and_legacy_device_mapping",
+    "reason": "TLS Principal verification and users-registry migration belong to the later gateway slice."
+  },
+  {
+    "name": "rh_ca_commands_and_offline_root_ceremony",
+    "reason": "CLI init, import, token, revoke, status and offline root export are a later operations slice; this adapter imports an existing intermediate."
+  },
+  {
+    "name": "rh_cert_renew_holder_loop",
+    "reason": "Holder key generation and two-thirds-lifetime renewal scheduling belong to the later CLI and app slices."
+  }
+]

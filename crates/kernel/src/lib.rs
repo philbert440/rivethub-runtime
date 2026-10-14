@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod ca;
 pub mod harness;
 pub mod memory;
 pub mod memory_core;

@@ -32,11 +32,17 @@ impl Material {
         let mut server_params =
             CertificateParams::new(vec!["127.0.0.1".to_owned(), "localhost".to_owned()])?;
         server_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
-        let server = server_params.signed_by(&server_key, &root, &root_key)?;
+        let server = server_params.signed_by(
+            &server_key,
+            &rcgen::Issuer::from_params(&root_params, &root_key),
+        )?;
         let peer_key = KeyPair::generate()?;
         let mut peer_params = CertificateParams::new(vec!["peer.example.test".to_owned()])?;
         peer_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
-        let peer = peer_params.signed_by(&peer_key, &root, &root_key)?;
+        let peer = peer_params.signed_by(
+            &peer_key,
+            &rcgen::Issuer::from_params(&root_params, &root_key),
+        )?;
         let write = |name: &str, value: String| -> std::io::Result<PathBuf> {
             let path = directory.path().join(name);
             std::fs::write(&path, value)?;
