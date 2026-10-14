@@ -30,10 +30,11 @@ fn certificates(directory: &std::path::Path) -> TestResult<Certificates> {
         KeyUsagePurpose::CrlSign,
     ];
     let root = params.self_signed(&root_key)?;
+    let issuer = rcgen::Issuer::from_params(&params, &root_key);
     let node_key = KeyPair::generate()?;
     let mut params = CertificateParams::new(vec!["127.0.0.1".into(), "localhost".into()])?;
     params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
-    let node = params.signed_by(&node_key, &root, &root_key)?;
+    let node = params.signed_by(&node_key, &issuer)?;
     std::fs::write(directory.join("node.pem"), node.pem())?;
     std::fs::write(directory.join("node.key"), node_key.serialize_pem())?;
     std::fs::write(directory.join("ca.pem"), root.pem())?;
@@ -43,14 +44,14 @@ fn certificates(directory: &std::path::Path) -> TestResult<Certificates> {
     params.subject_alt_names.push(rcgen::SanType::URI(
         "spiffe://rivet.mesh/device/device-user/test".try_into()?,
     ));
-    let peer = params.signed_by(&peer_key, &root, &root_key)?;
+    let peer = params.signed_by(&peer_key, &issuer)?;
     let legacy_key = KeyPair::generate()?;
     let mut params = CertificateParams::default();
     params
         .distinguished_name
         .push(rcgen::DnType::CommonName, "device:test");
     params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
-    let legacy = params.signed_by(&legacy_key, &root, &root_key)?;
+    let legacy = params.signed_by(&legacy_key, &issuer)?;
     let legacy = reqwest::Identity::from_pem(
         format!("{}{}", legacy.pem(), legacy_key.serialize_pem()).as_bytes(),
     )?;
@@ -60,7 +61,7 @@ fn certificates(directory: &std::path::Path) -> TestResult<Certificates> {
     params.subject_alt_names.push(rcgen::SanType::URI(
         "spiffe://rivet.mesh/device/device-user/unknown".try_into()?,
     ));
-    let unknown = params.signed_by(&unknown_key, &root, &root_key)?;
+    let unknown = params.signed_by(&unknown_key, &issuer)?;
     let unknown = reqwest::Identity::from_pem(
         format!("{}{}", unknown.pem(), unknown_key.serialize_pem()).as_bytes(),
     )?;
@@ -68,7 +69,7 @@ fn certificates(directory: &std::path::Path) -> TestResult<Certificates> {
     let mut params = CertificateParams::new(vec!["revoked.example.test".into()])?;
     params.serial_number = Some(42.into());
     params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
-    let revoked = params.signed_by(&revoked_key, &root, &root_key)?;
+    let revoked = params.signed_by(&revoked_key, &issuer)?;
     let revoked = reqwest::Identity::from_pem(
         format!("{}{}", revoked.pem(), revoked_key.serialize_pem()).as_bytes(),
     )?;
@@ -85,7 +86,7 @@ fn certificates(directory: &std::path::Path) -> TestResult<Certificates> {
         }],
         key_identifier_method: rcgen::KeyIdMethod::Sha256,
     }
-    .signed_by(&root, &root_key)?;
+    .signed_by(&issuer)?;
     std::fs::write(directory.join("revoked.pem"), crl.pem()?)?;
     write_registry(directory)?;
     Ok(Certificates {

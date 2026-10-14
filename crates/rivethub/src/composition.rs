@@ -84,8 +84,12 @@ impl Composition {
         shutdown: &CancellationToken,
     ) -> Result<Self, ComposeError> {
         let hostname = crate::service::host_name();
-        let settings =
-            gateway::Settings::from_config(config, hostname.clone(), env.node_name(&hostname));
+        let settings = gateway::Settings::from_config_in(
+            config,
+            env,
+            hostname.clone(),
+            env.node_name(&hostname),
+        );
         let sessions = Arc::new(
             SessionRegistry::new(Duration::from_secs(300)).with_shutdown(shutdown.child_token()),
         );

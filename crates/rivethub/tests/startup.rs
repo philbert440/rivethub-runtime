@@ -86,11 +86,15 @@ async fn binary_replays_recorded_startup_refusals() -> TestResult {
         let actual = stderr
             .lines()
             .find_map(|line| {
-                line.split_once("[den-server]")
-                    .map(|(_, message)| format!("[den-server]{message}"))
+                line.split_once("[rivethub-gateway]")
+                    .map(|(_, message)| format!("[rivethub-gateway]{message}"))
             })
             .ok_or_else(|| format!("missing refusal for {name}: {stderr}"))?;
-        assert_eq!(actual, replace(&refusal.error), "{name}");
+        assert_eq!(
+            actual,
+            testkit::naming::translate_recorded_product_names(&replace(&refusal.error)),
+            "{name}"
+        );
     }
     Ok(())
 }
