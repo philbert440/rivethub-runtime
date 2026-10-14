@@ -45,6 +45,8 @@ fn database_wrappers_are_limited_to_authorized_crates() -> Result {
             expected.push("pgvector");
         } else if database == "pgvector" {
             expected = vec!["memory-postgres"];
+        } else if database == "rusqlite" {
+            expected.push("capture");
         }
         assert_eq!(wrappers, &expected);
     }
@@ -134,6 +136,9 @@ fn cargo_deny_refuses_direct_database_access_from_services() -> Result {
         "capture",
     ] {
         for database in ["sqlx", "rusqlite"] {
+            if service == "capture" && database == "rusqlite" {
+                continue;
+            }
             let output = check_dependency(service, database)?;
             let stderr = String::from_utf8(output.stderr)?;
             assert!(!output.status.success(), "{service} → {database}");
@@ -167,6 +172,12 @@ fn cargo_deny_accepts_database_access_from_adapters_and_composition() -> Result 
             );
         }
     }
+    let output = check_dependency("capture", "rusqlite")?;
+    assert!(
+        output.status.success(),
+        "capture → rusqlite: {}",
+        String::from_utf8(output.stderr)?
+    );
     Ok(())
 }
 

@@ -382,6 +382,7 @@ module-level and conditional expectations do not waive declarations. Existing po
 `xtask/baseline.toml` by `cargo xtask baseline --write`; new occurrences fail and stale entries must be removed.
 Services never touch databases directly: cargo-deny restricts `sqlx` and `rusqlite` to memory-postgres, memory-sqlite,
 pki (CA state), migrate, dev-only testkit, and composition crates rivethub and cli through `deny.toml` wrappers.
+`capture` is also a `rusqlite` wrapper for read-only access to external harness stores.
 The third-party SQLx vector codec pgvector is an additional sqlx wrapper, restricted in turn to memory-postgres;
 services cannot bypass the database ban through it.
 The PORTS metadata check rejects normal and build dependencies on testkit, including renamed and target-specific edges.

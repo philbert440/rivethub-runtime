@@ -1,0 +1,12 @@
+{"timestamp":"2026-10-14T11:59:59Z","type":"session_meta","payload":{"id":"33333333-3333-3333-3333-333333333333"}}
+{"timestamp":"2026-10-14T12:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"list the files"}}
+{"timestamp":"2026-10-14T12:00:00.500Z","type":"event_msg","payload":{"type":"agent_message","message":"Running ls."}}
+{"timestamp":"2026-10-14T12:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Running ls."}]}}
+{"timestamp":"2026-10-14T12:00:01.500Z","type":"response_item","payload":{"type":"function_call","name":"bash","arguments":"{\"cmd\":\"ls\"}","call_id":"call-1"}}
+{"timestamp":"2026-10-14T12:00:02Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"a.txt"}}
+{"timestamp":"2026-10-14T12:00:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"list the files"}]}}
+{"timestamp":"2026-10-14T12:00:02.500Z","type":"event_msg","payload":{"type":"token_count"}}
+{"timestamp":"2026-10-14T12:00:02.600Z","type":"turn_context","payload":{}}
+{"timestamp":"2026-10-14T12:00:02.700Z","type":"compacted","payload":{}}
+{"timestamp":"2026-10-14T12:00:03Z","type":"not_a_record","payload":{}}
+{not json

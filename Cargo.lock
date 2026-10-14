@@ -398,6 +398,7 @@ dependencies = [
  "parking_lot",
  "regress",
  "reqwest",
+ "rusqlite",
  "serde",
  "serde_json",
  "serde_with",

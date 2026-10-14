@@ -13,6 +13,14 @@ use wire::message::Role;
 use wire::session_id::SessionId;
 
 use crate::event_id::ToolInput;
+use crate::store_path::Child;
+use crate::store_path::DirState;
+use crate::store_path::Root;
+use crate::store_path::dir_state;
+use crate::store_path::jsonl;
+use crate::store_path::session_component;
+use crate::store_path::single_component;
+use crate::store_path::utf8_stem;
 
 pub const HARNESS_PREFIX: &str = "claude-code:";
 const TRANSCRIPT_MAX_BYTES: usize = 8 * 1024 * 1024;
@@ -276,6 +284,24 @@ impl ClaudeTranscriptReader {
     pub fn new(store_root: PathBuf) -> Self {
         Self { store_root }
     }
+
+    pub async fn capture_messages(
+        &self,
+        session: &SessionId,
+        offset: u64,
+    ) -> Result<crate::readers::TranscriptSlice, TranscriptReaderError> {
+        let Some(native) = native_id(session).map(str::to_owned) else {
+            return Ok(crate::readers::TranscriptSlice::empty(offset));
+        };
+        let root = self.store_root.clone();
+        let text = tokio::task::spawn_blocking(move || find_transcript(&root, &native))
+            .await
+            .map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))??;
+        let parsed = parse_lines(&text);
+        let slice = crate::readers::from_parsed(session, &parsed, offset)?;
+        crate::readers::report("claude-jsonl", &slice.skipped);
+        Ok(slice)
+    }
 }
 
 #[must_use]
@@ -283,6 +309,13 @@ pub fn turns_of(lines: &[Line]) -> Turns {
     let mut turns = Turns::default();
     for line in lines {
         if line.is_meta == Some(true) {
+            continue;
+        }
+        if line.r#type == LineKind::Other {
+            turns.skipped.push(SkippedLine {
+                number: line.number,
+                reason: "unknown record type".to_owned(),
+            });
             continue;
         }
         let Some(text) = line.timestamp.as_deref() else {
@@ -320,8 +353,8 @@ fn turn_content(line: &Line) -> Option<(Role, String)> {
 #[async_trait]
 impl TranscriptReader for ClaudeTranscriptReader {
     async fn sessions(&self, store: &Path) -> Result<Vec<SessionId>, TranscriptReaderError> {
-        let projects = store.join("projects");
-        tokio::task::spawn_blocking(move || sessions_blocking(&projects))
+        let store = store.to_path_buf();
+        tokio::task::spawn_blocking(move || sessions_blocking(&store))
             .await
             .map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))?
     }
@@ -354,52 +387,49 @@ impl TranscriptReader for ClaudeTranscriptReader {
     }
 }
 
-fn sessions_blocking(projects: &Path) -> Result<Vec<SessionId>, TranscriptReaderError> {
-    let entries = std::fs::read_dir(projects)
-        .map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))?;
+fn sessions_blocking(store: &Path) -> Result<Vec<SessionId>, TranscriptReaderError> {
+    let root = Root::open(store)?;
+    let projects = root.canonical().join("projects");
+    if dir_state(&root, &projects)? == DirState::Absent {
+        return Err(missing_projects(&projects));
+    }
     let mut sessions = Vec::new();
-    for entry in entries {
-        let directory =
-            entry.map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))?;
-        if !directory.path().is_dir() {
-            continue;
-        }
-        let files = std::fs::read_dir(directory.path())
-            .map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))?;
-        for file in files {
-            let path = file
-                .map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))?
-                .path();
-            let is_transcript = path
-                .extension()
-                .is_some_and(|extension| extension == "jsonl")
-                && path.is_file();
-            if !is_transcript {
+    for directory in root.directories(&projects)? {
+        for path in root.files(&directory)? {
+            if !jsonl(&path) {
                 continue;
             }
-            if let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) {
-                sessions.push(SessionId::new(HarnessId::ClaudeCode, stem));
+            let stem = utf8_stem(&path)?;
+            if !single_component(&stem) {
+                continue;
             }
+            sessions.push(SessionId::new(HarnessId::ClaudeCode, &stem));
         }
     }
     sessions.sort();
+    sessions.dedup();
     Ok(sessions)
 }
 
 fn find_transcript(root: &Path, native: &str) -> Result<String, TranscriptReaderError> {
-    let projects = root.join("projects");
-    let entries = std::fs::read_dir(&projects)
-        .map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))?;
-    for entry in entries {
-        let directory =
-            entry.map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))?;
-        if !directory.path().is_dir() {
-            continue;
-        }
-        let candidate = directory.path().join(format!("{native}.jsonl"));
-        if candidate.is_file() {
+    session_component(native)?;
+    let store = Root::open(root)?;
+    let projects = store.canonical().join("projects");
+    if dir_state(&store, &projects)? == DirState::Absent {
+        return Err(missing_projects(&projects));
+    }
+    for directory in store.directories(&projects)? {
+        let candidate = directory.join(format!("{native}.jsonl"));
+        if store.classify(&candidate)? == Child::File {
             return read_capped(&candidate);
         }
     }
     Ok(String::new())
+}
+
+fn missing_projects(path: &Path) -> TranscriptReaderError {
+    TranscriptReaderError::Unavailable(Box::new(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("projects directory {} is missing", path.display()),
+    )))
 }

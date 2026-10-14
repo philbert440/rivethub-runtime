@@ -1,0 +1,5 @@
+{"type":"user","text":"list the files","timestamp":"2026-10-14T12:00:00Z"}
+{"type":"assistant","text":"Running ls.","timestamp":"2026-10-14T12:00:01Z"}
+{"type":"tool_call","id":"call-1","name":"bash","arguments":{"cmd":"ls"},"timestamp":"2026-10-14T12:00:01.500Z"}
+{"type":"tool_result","id":"call-1","text":"a.txt","timestamp":"2026-10-14T12:00:02Z"}
+{"type":"status","detail":"idle"}
