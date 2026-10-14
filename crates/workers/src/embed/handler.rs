@@ -1,5 +1,10 @@
 use std::time::Duration;
 
+use kernel::memory::EmbedTable;
+use kernel::memory::EmbedTarget;
+use kernel::memory::EmbeddingStore;
+use kernel::memory::StoredChunk;
+use kernel::memory::StoredEmbedding;
 use kernel::model::Embedding;
 use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
@@ -12,19 +17,14 @@ use super::pool::shared_length;
 use super::settings::EmbedSettings;
 use super::split::TextChunk;
 use super::split::split_embed_text;
-use super::target::EmbedTable;
-use super::target::EmbedTarget;
-use super::target::EmbedTargets;
 use super::target::ParsedTarget;
-use super::target::StoredChunk;
-use super::target::StoredEmbedding;
 use super::target::read_target;
 use super::text::compose;
 use super::text::content_hash;
 use crate::error::WorkerError;
 
-pub async fn handle_embed<T: EmbedTargets + ?Sized>(
-    targets: &T,
+pub async fn handle_embed(
+    targets: &dyn EmbeddingStore,
     provider: &dyn ModelProvider,
     settings: EmbedSettings,
     payload: &JsonObject,
@@ -79,7 +79,8 @@ pub async fn handle_embed<T: EmbedTargets + ?Sized>(
         return null_vector(targets, &target, settings).await;
     };
     let stored = stored_embedding(&target, &text, vector, &pieces, &vectors, settings)?;
-    targets.write(stored).await
+    targets.write(stored).await?;
+    Ok(())
 }
 
 fn chunk_table_disabled(table: EmbedTable, settings: EmbedSettings) -> bool {
@@ -106,8 +107,8 @@ async fn embed_pieces(
     }
 }
 
-async fn null_vector<T: EmbedTargets + ?Sized>(
-    targets: &T,
+async fn null_vector(
+    targets: &dyn EmbeddingStore,
     target: &EmbedTarget,
     settings: EmbedSettings,
 ) -> Result<(), WorkerError> {

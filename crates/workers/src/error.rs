@@ -1,3 +1,4 @@
+use kernel::memory::EmbeddingStoreError;
 use kernel::queue::JobQueueError;
 use thiserror::Error;
 
@@ -26,7 +27,7 @@ pub enum WorkerError {
     #[error("the job queue failed: {0}")]
     Queue(#[source] JobQueueError),
     #[error("the embed target store failed: {0}")]
-    Target(String),
+    Target(#[source] EmbeddingStoreError),
     #[error("embedding the model failed: {0}")]
     Embed(String),
     #[error("embedding timed out")]
@@ -52,5 +53,11 @@ impl WorkerError {
 
     pub(crate) fn payload(source: serde_json::Error) -> Self {
         Self::Payload { source }
+    }
+}
+
+impl From<EmbeddingStoreError> for WorkerError {
+    fn from(source: EmbeddingStoreError) -> Self {
+        Self::Target(source)
     }
 }

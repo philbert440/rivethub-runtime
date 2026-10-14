@@ -1,51 +1,9 @@
-use async_trait::async_trait;
+use kernel::memory::EmbedTable;
+use kernel::memory::EmbedTarget;
 use serde::Deserialize;
-use strum::EnumString;
 use wire::JsonObject;
 
-use super::classify::Unembeddable;
 use crate::error::WorkerError;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, EnumString)]
-pub enum EmbedTable {
-    #[strum(serialize = "ros_messages")]
-    Messages,
-    #[strum(serialize = "ros_summaries")]
-    Summaries,
-    #[strum(serialize = "ros_wiki_topics")]
-    WikiTopics,
-    #[strum(serialize = "ros_message_chunks")]
-    MessageChunks,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EmbedTarget {
-    pub table: EmbedTable,
-    pub id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LoadedTarget {
-    pub content: String,
-    pub tool_result: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct StoredChunk {
-    pub index: u32,
-    pub char_start: u32,
-    pub char_end: u32,
-    pub content: String,
-    pub vector: Vec<f32>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct StoredEmbedding {
-    pub target: EmbedTarget,
-    pub vector: Vec<f32>,
-    pub content_hash: String,
-    pub chunks: Vec<StoredChunk>,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParsedTarget {
@@ -91,21 +49,4 @@ fn known_table(name: &str) -> Option<EmbedTable> {
         "ros_message_chunks" => Some(EmbedTable::MessageChunks),
         _ => None,
     }
-}
-
-#[async_trait]
-pub trait EmbedTargets: Send + Sync {
-    async fn load(&self, target: &EmbedTarget) -> Result<Option<LoadedTarget>, WorkerError>;
-
-    async fn write(&self, stored: StoredEmbedding) -> Result<(), WorkerError>;
-
-    async fn mark_unembeddable(
-        &self,
-        target: &EmbedTarget,
-        reason: Unembeddable,
-    ) -> Result<(), WorkerError>;
-
-    async fn record_null(&self, target: &EmbedTarget, error: &str) -> Result<u32, WorkerError>;
-
-    async fn mark_permanent(&self, target: &EmbedTarget, error: &str) -> Result<(), WorkerError>;
 }

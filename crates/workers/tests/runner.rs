@@ -187,7 +187,7 @@ async fn concurrency_stays_at_the_configured_limit() {
     let store = Arc::new(Store::holding());
     let runner = Arc::new(Runner::new(
         Arc::clone(&queue),
-        Arc::clone(&store),
+        Arc::clone(&store) as Arc<dyn kernel::memory::EmbeddingStore>,
         fnv_provider(),
         RunnerConfig::new(ProcessRole::Embedder, 2).expect("concurrency"),
         settings(),
@@ -240,7 +240,7 @@ async fn shutdown_fails_every_in_flight_embed() {
     }
     let runner = Arc::new(Runner::new(
         Arc::clone(&queue),
-        Arc::clone(&store),
+        Arc::clone(&store) as Arc<dyn kernel::memory::EmbeddingStore>,
         Arc::clone(&provider) as Arc<dyn ModelProvider>,
         RunnerConfig::new(ProcessRole::Embedder, 2).expect("concurrency"),
         settings(),
@@ -390,7 +390,7 @@ async fn a_parked_runner_waits_out_the_poll_interval() {
 struct Rig {
     queue: Arc<Queue>,
     store: Arc<Store>,
-    runner: Arc<Runner<Queue, Store>>,
+    runner: Arc<Runner<Queue>>,
 }
 
 fn rig(role: ProcessRole, concurrency: u32, provider: Arc<dyn ModelProvider>) -> Rig {
@@ -398,7 +398,7 @@ fn rig(role: ProcessRole, concurrency: u32, provider: Arc<dyn ModelProvider>) ->
     let store = Arc::new(Store::new());
     let runner = Arc::new(Runner::new(
         Arc::clone(&queue),
-        Arc::clone(&store),
+        Arc::clone(&store) as Arc<dyn kernel::memory::EmbeddingStore>,
         provider,
         RunnerConfig::new(role, concurrency).expect("concurrency"),
         settings(),

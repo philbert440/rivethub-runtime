@@ -28,6 +28,17 @@ use wire::message::Role;
 
 use crate::BoxError;
 
+mod embed;
+
+pub use embed::EmbedTable;
+pub use embed::EmbedTarget;
+pub use embed::EmbeddingStore;
+pub use embed::EmbeddingStoreError;
+pub use embed::LoadedTarget;
+pub use embed::StoredChunk;
+pub use embed::StoredEmbedding;
+pub use embed::Unembeddable;
+
 #[derive(Debug, Error)]
 pub enum MemoryStoreError {
     #[error("memory store is unavailable")]

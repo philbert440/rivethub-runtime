@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use kernel::memory::EmbeddingStore;
 use kernel::model::ModelProvider;
 use kernel::queue::ClaimedJob;
 use kernel::queue::JobId;
@@ -17,7 +18,6 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
 use crate::embed::EmbedSettings;
-use crate::embed::EmbedTargets;
 use crate::embed::handle_embed;
 use crate::error::WorkerError;
 use crate::role::ProcessRole;
@@ -59,9 +59,9 @@ impl RunnerConfig {
     missing_debug_implementations,
     reason = "the model provider port is a trait object without Debug"
 )]
-pub struct Runner<Q, T> {
+pub struct Runner<Q> {
     queue: Arc<Q>,
-    targets: Arc<T>,
+    targets: Arc<dyn EmbeddingStore>,
     provider: Arc<dyn ModelProvider>,
     config: RunnerConfig,
     embed: EmbedSettings,
@@ -71,15 +71,14 @@ pub struct Runner<Q, T> {
     open: Arc<Mutex<Vec<JobId>>>,
 }
 
-impl<Q, T> Runner<Q, T>
+impl<Q> Runner<Q>
 where
     Q: JobQueue + 'static,
-    T: EmbedTargets + 'static,
 {
     #[must_use]
     pub fn new(
         queue: Arc<Q>,
-        targets: Arc<T>,
+        targets: Arc<dyn EmbeddingStore>,
         provider: Arc<dyn ModelProvider>,
         config: RunnerConfig,
         embed: EmbedSettings,
@@ -288,9 +287,9 @@ where
     }
 }
 
-async fn settle<Q, T>(
+async fn settle<Q>(
     queue: &Q,
-    targets: &T,
+    targets: &dyn EmbeddingStore,
     provider: &dyn ModelProvider,
     embed: EmbedSettings,
     job: ClaimedJob,
@@ -298,7 +297,6 @@ async fn settle<Q, T>(
 ) -> Result<(), WorkerError>
 where
     Q: JobQueue,
-    T: EmbedTargets,
 {
     let id = job.id;
     let handled = dispatch(targets, provider, embed, &job, cancel).await;
@@ -320,8 +318,8 @@ async fn fail_job<Q: JobQueue>(
         .map_err(WorkerError::queue)
 }
 
-async fn dispatch<T: EmbedTargets>(
-    targets: &T,
+async fn dispatch(
+    targets: &dyn EmbeddingStore,
     provider: &dyn ModelProvider,
     embed: EmbedSettings,
     job: &ClaimedJob,

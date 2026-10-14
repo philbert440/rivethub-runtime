@@ -20,6 +20,7 @@ The gate (`cargo xtask check`) fails any Cargo.toml that breaks this.
 | Port | Methods (shape) | Adapters | Callers |
 |---|---|---|---|
 | `MemoryStore` | append(batch) · search(query) · browse(filter) · stats · get_full(id) · tags(action) · context(session) | memory-postgres, memory-sqlite | gateway, agent-loop, workers, mcp |
+| `EmbeddingStore` | load(target) · write(embedding) · mark_unembeddable(target, reason) · record_null(target) · mark_permanent(target) | memory-postgres (`rh_messages`, `rh_summaries`, `rh_message_chunks`, `rh_wiki_topics`); memory-sqlite is a later slice | workers |
 | `JobQueue` | enqueue(job: name, payload, key, key_mode, priority, run_at) · claim(role) · complete/fail | memory-postgres (graphile tables), memory-sqlite | memory adapters, workers, tasks |
 | `ModelProvider` | chat(request) → response · stream(request) → chunk stream (text, reasoning, tool-call deltas, usage) · embed(texts) · list_models | providers: ONE OpenAI-compatible client (vLLM, SGLang, hosted OpenAI-compatible APIs; no sampling fields on the wire) + cli-backed over a headless ACP session; no native Anthropic/Gemini/xAI clients | agent-loop, workers, memory search (query embedding) |
 | `HarnessAdapter` | new_session(spec) · resume(id) · prompt(id, input) · cancel(id) · answer_permission(id, decision) · set_option(id, model/effort) · events(id) → SessionEvent stream | harness-acp (one ACP client + a per-harness launch table: native ACP, or codex-acp / claude-code-acp) | gateway's session registry |

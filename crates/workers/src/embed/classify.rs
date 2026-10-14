@@ -1,20 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display)]
-#[strum(serialize_all = "kebab-case")]
-pub enum Unembeddable {
-    MediaMarker,
-    MediaPrefix,
-    Base64DataUrl,
-    Base64Png,
-    Base64Jpeg,
-    Base64Blob,
-}
-
-impl Unembeddable {
-    #[must_use]
-    pub fn error_text(self) -> String {
-        format!("unembeddable: {self}")
-    }
-}
+use kernel::memory::Unembeddable;
 
 const PNG_MARKER: &str = "iVBORw0KGgo";
 const JPEG_MARKER: &str = "/9j/";

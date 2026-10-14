@@ -6,7 +6,7 @@ mod runner;
 pub use embed::EmbedSettings;
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;
-pub use embed::EmbedTargets;
+pub use embed::EmbeddingStore;
 pub use embed::LoadedTarget;
 pub use embed::ParsedTarget;
 pub use embed::StoredChunk;

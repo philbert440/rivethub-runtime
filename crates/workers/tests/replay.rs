@@ -16,6 +16,7 @@ use common::Store;
 use common::embed_target;
 use common::settings;
 use common::width;
+use kernel::memory::EmbeddingStore;
 use kernel::queue::FixedJob;
 use kernel::queue::JobName;
 use serde::Deserialize;
@@ -27,7 +28,6 @@ use testkit::capture_pg::StepRecord;
 use tokio_util::sync::CancellationToken;
 use workers::EmbedTable;
 use workers::EmbedTarget;
-use workers::EmbedTargets;
 use workers::LoadedTarget;
 use workers::StoredEmbedding;
 use workers::classify_unembeddable;
@@ -277,7 +277,7 @@ async fn load_target(
     store: &Store,
     target: &EmbedTarget,
 ) -> Result<LoadedTarget, String> {
-    EmbedTargets::load(store, target)
+    EmbeddingStore::load(store, target)
         .await
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("{scenario} {} is missing", target.id))

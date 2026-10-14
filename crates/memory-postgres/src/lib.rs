@@ -1,6 +1,7 @@
 pub mod capture;
 mod conversation;
 pub mod embed;
+mod embedding_store;
 pub mod error;
 mod graphile;
 pub mod project;
