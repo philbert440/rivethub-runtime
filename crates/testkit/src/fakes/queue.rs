@@ -51,4 +51,12 @@ impl JobQueue for FakeJobQueue {
     async fn fail(&self, _id: JobId, _error: &str) -> Result<(), JobQueueError> {
         Ok(())
     }
+
+    async fn revive_dead(
+        &self,
+        _name: &kernel::queue::JobName,
+        _dead_before: chrono::DateTime<chrono::Utc>,
+    ) -> Result<u64, JobQueueError> {
+        Ok(0)
+    }
 }

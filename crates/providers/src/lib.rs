@@ -3,6 +3,10 @@ pub mod embed;
 pub mod error;
 pub mod sse;
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicU8;
+use std::sync::atomic::Ordering;
+
 use async_trait::async_trait;
 use config::provider::OpenaiProvider;
 use config::provider::ProviderType;
@@ -100,6 +104,7 @@ impl OpenAiCompatible {
     async fn send_chat(
         &self,
         request: &ModelRequest,
+        finish: Option<Arc<AtomicU8>>,
     ) -> Result<Receiver<ModelStreamItem>, ModelProviderError> {
         let body = body::chat_body(self.variant, request, self.max_tokens)?;
         let builder = self
@@ -113,7 +118,7 @@ impl OpenAiCompatible {
             .map_err(request_error)?;
         let response = check_status(response).await?;
         let (tx, rx) = tokio::sync::mpsc::channel(STREAM_CAPACITY);
-        tokio::spawn(sse::pump(response, tx));
+        tokio::spawn(sse::pump(response, tx, finish));
         Ok(rx)
     }
 }
@@ -141,7 +146,8 @@ pub(crate) async fn check_status(
 #[async_trait]
 impl ModelProvider for OpenAiCompatible {
     async fn chat(&self, request: ModelRequest) -> Result<LlmResponse, ModelProviderError> {
-        let mut rx = self.send_chat(&request).await?;
+        let finish = Arc::new(AtomicU8::new(0));
+        let mut rx = self.send_chat(&request, Some(Arc::clone(&finish))).await?;
         let mut content = String::new();
         let mut calls: Vec<PartialToolCall> = Vec::new();
         let mut usage: Option<LlmUsage> = None;
@@ -192,6 +198,7 @@ impl ModelProvider for OpenAiCompatible {
             },
             tool_calls,
             usage,
+            finish_reason: sse::decode_finish(finish.load(Ordering::Relaxed)),
         })
     }
 
@@ -199,7 +206,7 @@ impl ModelProvider for OpenAiCompatible {
         &self,
         request: ModelRequest,
     ) -> Result<Receiver<ModelStreamItem>, ModelProviderError> {
-        self.send_chat(&request).await
+        self.send_chat(&request, None).await
     }
 
     async fn embed(&self, _texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {

@@ -1,6 +1,8 @@
 use crate::error::Error;
 use crate::graphile::GraphileQueue;
 use async_trait::async_trait;
+use chrono::DateTime;
+use chrono::Utc;
 use kernel::queue::ClaimedJob;
 use kernel::queue::FixedJob;
 use kernel::queue::Job;
@@ -215,6 +217,20 @@ impl JobQueue for PostgresQueue {
                 .fail(id, error)
                 .await
                 .map_err(|source| JobQueueError::Unavailable(Box::new(source))),
+            Self::Absent => Err(absent()),
+        }
+    }
+
+    async fn revive_dead(
+        &self,
+        name: &JobName,
+        dead_before: DateTime<Utc>,
+    ) -> Result<u64, JobQueueError> {
+        match self {
+            Self::Graphile(queue) => queue
+                .revive_before(name, dead_before)
+                .await
+                .map_err(JobQueueError::from),
             Self::Absent => Err(absent()),
         }
     }

@@ -37,6 +37,8 @@ use workers::POLL_INTERVAL;
 use workers::ProcessRole;
 use workers::Runner;
 use workers::RunnerConfig;
+use workers::SummarySettings;
+use workers::WorkerDeps;
 use workers::WorkerError;
 use workers::jobs_for;
 
@@ -110,11 +112,11 @@ fn unknown_roles_list_the_enum_and_zero_concurrency_is_rejected() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn roles_without_a_handler_refuse_to_start() {
-    for role in [
-        ProcessRole::Summarizer,
-        ProcessRole::Categorizer,
-        ProcessRole::WikiBuilder,
-    ] {
+    let summarizer = ProcessRole::Summarizer
+        .claim_roles()
+        .expect("the summarizer has a handler");
+    assert_eq!(summarizer, vec![WorkerRole::Summarizer]);
+    for role in [ProcessRole::Categorizer, ProcessRole::WikiBuilder] {
         let rig = rig(role, 1, fnv_provider());
         let error = rig
             .runner
@@ -127,7 +129,7 @@ async fn roles_without_a_handler_refuse_to_start() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn all_claims_only_the_embedder() {
+async fn all_claims_every_role_that_has_a_handler() {
     let rig = rig(ProcessRole::All, 1, fnv_provider());
     rig.store
         .insert(EmbedTable::Messages, "m", "hello", None)
@@ -141,7 +143,7 @@ async fn all_claims_only_the_embedder() {
             5,
         )
         .await;
-    let other = rig
+    let compact = rig
         .queue
         .push(
             fixed(FixedJob::CompactConversation),
@@ -149,13 +151,20 @@ async fn all_claims_only_the_embedder() {
             5,
         )
         .await;
+    let tags = rig
+        .queue
+        .push(fixed(FixedJob::SuggestTags), JsonObject::default(), 2)
+        .await;
     let (cancel, run) = spawn(&rig);
     rig.queue.wait_phase(embed, Phase::Done).await;
-    for _ in 0..8 {
-        tokio::task::yield_now().await;
-    }
-    assert_eq!(rig.queue.claims(), 1);
-    assert_eq!(rig.queue.view(other).await.phase, Phase::Ready);
+    rig.queue.wait_phase(compact, Phase::Backoff).await;
+    let failed = rig.queue.view(compact).await;
+    assert_eq!(
+        failed.error.as_deref(),
+        Some("job payload is not a summarizer job: missing field `conversationId`")
+    );
+    assert_eq!(rig.queue.claims(), 2);
+    assert_eq!(rig.queue.view(tags).await.phase, Phase::Ready);
     finish(cancel, run).await;
 }
 
@@ -164,18 +173,14 @@ async fn an_unhandled_claim_is_failed() {
     let rig = rig(ProcessRole::Embedder, 1, fnv_provider());
     let id = rig
         .queue
-        .push_any(
-            fixed(FixedJob::CompactConversation),
-            JsonObject::default(),
-            1,
-        )
+        .push_any(fixed(FixedJob::SuggestTags), JsonObject::default(), 1)
         .await;
     let (cancel, run) = spawn(&rig);
     rig.queue.wait_phase(id, Phase::Dead).await;
     let job = rig.queue.view(id).await;
     assert_eq!(
         job.error.as_deref(),
-        Some("no handler for job compact-conversation")
+        Some("no handler for job suggest-tags")
     );
     assert_ne!(job.phase, Phase::Done);
     finish(cancel, run).await;
@@ -187,10 +192,11 @@ async fn concurrency_stays_at_the_configured_limit() {
     let store = Arc::new(Store::holding());
     let runner = Arc::new(Runner::new(
         Arc::clone(&queue),
-        Arc::clone(&store) as Arc<dyn kernel::memory::EmbeddingStore>,
-        fnv_provider(),
         RunnerConfig::new(ProcessRole::Embedder, 2).expect("concurrency"),
-        settings(),
+        deps(
+            Arc::clone(&store) as Arc<dyn kernel::memory::EmbeddingStore>,
+            fnv_provider(),
+        ),
     ));
     let mut ids = Vec::new();
     for name in ["a", "b", "c"] {
@@ -240,10 +246,11 @@ async fn shutdown_fails_every_in_flight_embed() {
     }
     let runner = Arc::new(Runner::new(
         Arc::clone(&queue),
-        Arc::clone(&store) as Arc<dyn kernel::memory::EmbeddingStore>,
-        Arc::clone(&provider) as Arc<dyn ModelProvider>,
         RunnerConfig::new(ProcessRole::Embedder, 2).expect("concurrency"),
-        settings(),
+        deps(
+            Arc::clone(&store) as Arc<dyn kernel::memory::EmbeddingStore>,
+            Arc::clone(&provider) as Arc<dyn ModelProvider>,
+        ),
     ));
     let mut ids = Vec::new();
     for name in ["m", "n"] {
@@ -398,15 +405,54 @@ fn rig(role: ProcessRole, concurrency: u32, provider: Arc<dyn ModelProvider>) ->
     let store = Arc::new(Store::new());
     let runner = Arc::new(Runner::new(
         Arc::clone(&queue),
-        Arc::clone(&store) as Arc<dyn kernel::memory::EmbeddingStore>,
-        provider,
         RunnerConfig::new(role, concurrency).expect("concurrency"),
-        settings(),
+        deps(
+            Arc::clone(&store) as Arc<dyn kernel::memory::EmbeddingStore>,
+            provider,
+        ),
     ));
     Rig {
         queue,
         store,
         runner,
+    }
+}
+
+fn deps(
+    targets: Arc<dyn kernel::memory::EmbeddingStore>,
+    provider: Arc<dyn ModelProvider>,
+) -> WorkerDeps {
+    WorkerDeps {
+        targets,
+        summaries: Arc::new(IdleSummaries),
+        provider,
+        embed: settings(),
+        summary: SummarySettings::standard("fake-chat").expect("summary settings"),
+    }
+}
+
+struct IdleSummaries;
+
+#[async_trait::async_trait]
+impl kernel::memory::SummaryStore for IdleSummaries {
+    async fn conversation(
+        &self,
+        _id: uuid::Uuid,
+    ) -> Result<Option<kernel::memory::ConversationWindow>, kernel::memory::SummaryStoreError> {
+        Err(kernel::memory::SummaryStoreError::Closed)
+    }
+
+    async fn pending(
+        &self,
+    ) -> Result<Vec<kernel::memory::ConversationWindow>, kernel::memory::SummaryStoreError> {
+        Err(kernel::memory::SummaryStoreError::Closed)
+    }
+
+    async fn write_summary(
+        &self,
+        _summary: kernel::memory::NewSummary,
+    ) -> Result<(), kernel::memory::SummaryStoreError> {
+        Err(kernel::memory::SummaryStoreError::Closed)
     }
 }
 

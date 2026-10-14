@@ -12,6 +12,7 @@ mod search_complete;
 mod search_sql;
 pub use search_complete::SearchSynthesis;
 mod store_impl;
+mod summary_store;
 mod tags;
 mod wiki;
 

@@ -1,3 +1,7 @@
+use std::sync::Arc;
+use std::sync::atomic::AtomicU8;
+use std::sync::atomic::Ordering;
+
 use eventsource_stream::EventStreamError;
 use eventsource_stream::Eventsource;
 use futures::StreamExt;
@@ -5,13 +9,23 @@ use kernel::model::ModelChunk;
 use kernel::model::ModelProviderError;
 use kernel::model::ModelStreamItem;
 use wire::stream::openai::ChatCompletionChunk;
+use wire::stream::openai::FinishReason;
 use wire::stream::openai::StreamedToolCall;
 
 use crate::error::StreamFault;
 
 pub const STREAM_CAPACITY: usize = 64;
 
-pub async fn pump(response: reqwest::Response, tx: tokio::sync::mpsc::Sender<ModelStreamItem>) {
+const FINISH_STOP: u8 = 1;
+const FINISH_LENGTH: u8 = 2;
+const FINISH_TOOL_CALLS: u8 = 3;
+const FINISH_CONTENT_FILTER: u8 = 4;
+
+pub async fn pump(
+    response: reqwest::Response,
+    tx: tokio::sync::mpsc::Sender<ModelStreamItem>,
+    finish: Option<Arc<AtomicU8>>,
+) {
     let mut events = response.bytes_stream().eventsource();
     let mut complete = false;
     loop {
@@ -26,7 +40,7 @@ pub async fn pump(response: reqwest::Response, tx: tokio::sync::mpsc::Sender<Mod
                             complete = true;
                             break;
                         }
-                        if !forward(&tx, &event.data).await {
+                        if !forward(&tx, &event.data, finish.as_deref()).await {
                             return;
                         }
                     }
@@ -51,7 +65,11 @@ pub async fn pump(response: reqwest::Response, tx: tokio::sync::mpsc::Sender<Mod
     }
 }
 
-async fn forward(tx: &tokio::sync::mpsc::Sender<ModelStreamItem>, data: &str) -> bool {
+async fn forward(
+    tx: &tokio::sync::mpsc::Sender<ModelStreamItem>,
+    data: &str,
+    finish: Option<&AtomicU8>,
+) -> bool {
     let chunk: ChatCompletionChunk = match serde_json::from_str(data) {
         Ok(chunk) => chunk,
         Err(source) => {
@@ -67,7 +85,7 @@ async fn forward(tx: &tokio::sync::mpsc::Sender<ModelStreamItem>, data: &str) ->
         }
     };
     let mut translated = Vec::new();
-    if let Err(fault) = translate(&chunk, &mut translated) {
+    if let Err(fault) = translate(&chunk, &mut translated, finish) {
         send_failure(tx, fault.into()).await;
         return false;
     }
@@ -104,8 +122,15 @@ fn stream_event_error(source: EventStreamError<reqwest::Error>) -> ModelProvider
     stream_error(message, source)
 }
 
-fn translate(chunk: &ChatCompletionChunk, out: &mut Vec<ModelChunk>) -> Result<(), StreamFault> {
+fn translate(
+    chunk: &ChatCompletionChunk,
+    out: &mut Vec<ModelChunk>,
+    finish: Option<&AtomicU8>,
+) -> Result<(), StreamFault> {
     for choice in &chunk.choices {
+        if let Some(reason) = choice.finish_reason {
+            note_finish(finish, reason);
+        }
         if let Some(text) = non_empty(choice.delta.content.as_deref()) {
             out.push(ModelChunk::Text {
                 delta: text.to_owned(),
@@ -165,6 +190,32 @@ fn translate(chunk: &ChatCompletionChunk, out: &mut Vec<ModelChunk>) -> Result<(
     Ok(())
 }
 
+fn note_finish(slot: Option<&AtomicU8>, reason: FinishReason) {
+    let Some(slot) = slot else {
+        return;
+    };
+    slot.store(encode_finish(reason), Ordering::Relaxed);
+}
+
+fn encode_finish(reason: FinishReason) -> u8 {
+    match reason {
+        FinishReason::Stop => FINISH_STOP,
+        FinishReason::Length => FINISH_LENGTH,
+        FinishReason::ToolCalls => FINISH_TOOL_CALLS,
+        FinishReason::ContentFilter => FINISH_CONTENT_FILTER,
+    }
+}
+
+pub(crate) fn decode_finish(code: u8) -> Option<FinishReason> {
+    match code {
+        FINISH_STOP => Some(FinishReason::Stop),
+        FINISH_LENGTH => Some(FinishReason::Length),
+        FINISH_TOOL_CALLS => Some(FinishReason::ToolCalls),
+        FINISH_CONTENT_FILTER => Some(FinishReason::ContentFilter),
+        _ => None,
+    }
+}
+
 fn non_empty(value: Option<&str>) -> Option<&str> {
     let value = value?;
     if value.is_empty() {
@@ -180,5 +231,40 @@ pub(crate) fn stream_error(
     ModelProviderError::Stream {
         message: message.into(),
         source: source.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::AtomicU8;
+    use std::sync::atomic::Ordering;
+
+    use super::decode_finish;
+    use super::translate;
+    use kernel::model::ModelChunk;
+    use wire::stream::openai::ChatCompletionChunk;
+    use wire::stream::openai::FinishReason;
+
+    #[test]
+    fn a_length_finish_is_recorded_for_chat() {
+        let raw = r#"{"id":"c","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"delta":{"content":"hi"},"finish_reason":"length"}]}"#;
+        let chunk: ChatCompletionChunk = serde_json::from_str(raw).expect("chunk");
+        let slot = AtomicU8::new(0);
+        let mut out = Vec::new();
+        translate(&chunk, &mut out, Some(&slot)).expect("translate");
+        assert_eq!(
+            decode_finish(slot.load(Ordering::Relaxed)),
+            Some(FinishReason::Length)
+        );
+        assert!(matches!(out.as_slice(), [ModelChunk::Text { delta }] if delta == "hi"));
+    }
+
+    #[test]
+    fn a_stream_without_a_slot_drops_the_finish_reason() {
+        let raw = r#"{"id":"c","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"delta":{},"finish_reason":"stop"}]}"#;
+        let chunk: ChatCompletionChunk = serde_json::from_str(raw).expect("chunk");
+        let mut out = Vec::new();
+        translate(&chunk, &mut out, None).expect("translate");
+        assert_eq!(out, Vec::<ModelChunk>::new());
     }
 }

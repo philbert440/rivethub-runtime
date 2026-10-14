@@ -98,6 +98,8 @@ pub struct LlmResponse {
     pub content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
     pub usage: Option<LlmUsage>,
+    #[serde(default)]
+    pub finish_reason: Option<openai::FinishReason>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

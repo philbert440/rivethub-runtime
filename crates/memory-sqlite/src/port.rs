@@ -90,6 +90,37 @@ impl JobQueue for SqliteStore {
             FailOutcome::Retry | FailOutcome::Dead => Ok(()),
         }
     }
+
+    async fn revive_dead(
+        &self,
+        name: &JobName,
+        dead_before: chrono::DateTime<Utc>,
+    ) -> Result<u64, JobQueueError> {
+        let task = name.to_string();
+        let run_at = crate::time::stamp(Utc::now());
+        let cutoff = crate::time::stamp(dead_before);
+        self.with_conn(move |conn| revive_dead_jobs(conn, &task, &run_at, &cutoff))
+            .await
+            .map_err(unavailable)
+    }
+}
+
+fn revive_dead_jobs(
+    conn: &rusqlite::Connection,
+    task: &str,
+    run_at: &str,
+    cutoff: &str,
+) -> Result<u64, SqliteError> {
+    let changed = conn
+        .execute(
+            "UPDATE ros_jobs
+                SET state = 'queued', attempts = 0, run_at = ?2,
+                    locked_at = NULL, last_error = NULL, updated_at = ?2
+              WHERE task = ?1 AND state = 'dead' AND updated_at < ?3",
+            rusqlite::params![task, run_at, cutoff],
+        )
+        .map_err(SqliteError::query("revive dead jobs"))?;
+    u64::try_from(changed).map_err(SqliteError::Count)
 }
 
 fn unavailable(error: SqliteError) -> JobQueueError {

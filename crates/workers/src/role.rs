@@ -88,7 +88,16 @@ fn role_has_handler(role: WorkerRole) -> bool {
 }
 
 pub(crate) fn handler_ready(name: &JobName) -> bool {
-    matches!(name, JobName::Fixed(FixedJob::EmbedTarget))
+    matches!(
+        name,
+        JobName::Fixed(
+            FixedJob::EmbedTarget
+                | FixedJob::CompactConversation
+                | FixedJob::EnqueueIdle
+                | FixedJob::EnqueueStaleCompaction
+                | FixedJob::ReapDeadJobs
+        )
+    )
 }
 
 fn allowed_roles() -> String {

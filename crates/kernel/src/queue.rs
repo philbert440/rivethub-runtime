@@ -189,4 +189,10 @@ pub trait JobQueue: Send + Sync {
     async fn complete(&self, id: JobId) -> Result<(), JobQueueError>;
 
     async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError>;
+
+    async fn revive_dead(
+        &self,
+        name: &JobName,
+        dead_before: DateTime<Utc>,
+    ) -> Result<u64, JobQueueError>;
 }

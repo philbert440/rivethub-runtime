@@ -224,6 +224,39 @@ impl GraphileQueue {
         count(rescheduled.rescheduled)
     }
 
+    pub(crate) async fn revive_before(
+        &self,
+        task: &JobName,
+        dead_before: DateTime<Utc>,
+    ) -> Result<u64, Error> {
+        let rows: Vec<DeadJob> = sqlx::query_as(
+            "select j.id from graphile_worker._private_jobs j
+             join graphile_worker._private_tasks t on t.id = j.task_id
+             where t.identifier = $1 and j.attempts >= j.max_attempts
+               and j.key is not null
+               and j.updated_at < $2
+               and (j.locked_at is null or j.locked_at < now() - interval '4 hours')
+             order by j.run_at asc limit 200",
+        )
+        .bind(task.to_string())
+        .bind(dead_before)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|source| Error::operation("revive dead jobs", source))?;
+        if rows.is_empty() {
+            return Ok(0);
+        }
+        let raw: Vec<i64> = rows.iter().map(|job| job.id).collect();
+        let rescheduled: RescheduledJobs = sqlx::query_as(
+            "select graphile_worker.reschedule_jobs($1::bigint[], now(), 0, 0)::bigint as rescheduled",
+        )
+        .bind(&raw)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|source| Error::operation("revive dead jobs", source))?;
+        count(rescheduled.rescheduled)
+    }
+
     pub(crate) async fn reap_dead_corpses(
         &self,
         allowlist: &[JobName],

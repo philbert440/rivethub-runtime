@@ -30,6 +30,7 @@ use crate::BoxError;
 mod embed;
 mod search;
 pub use search::SearchOutcome;
+mod summary;
 
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;
@@ -39,6 +40,16 @@ pub use embed::LoadedTarget;
 pub use embed::StoredChunk;
 pub use embed::StoredEmbedding;
 pub use embed::Unembeddable;
+pub use summary::ConversationHead;
+pub use summary::ConversationWindow;
+pub use summary::HEARTBEAT_SESSION_PREFIX;
+pub use summary::NewSummary;
+pub use summary::SummaryKind;
+pub use summary::SummaryNode;
+pub use summary::SummarySource;
+pub use summary::SummaryStore;
+pub use summary::SummaryStoreError;
+pub use summary::WindowMessage;
 
 #[derive(Debug, Error)]
 pub enum MemoryStoreError {

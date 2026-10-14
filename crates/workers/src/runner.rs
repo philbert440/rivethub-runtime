@@ -3,10 +3,14 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use chrono::Utc;
 use kernel::memory::EmbeddingStore;
+use kernel::memory::SummaryStore;
 use kernel::model::ModelProvider;
 use kernel::queue::ClaimedJob;
+use kernel::queue::FixedJob;
 use kernel::queue::JobId;
+use kernel::queue::JobName;
 use kernel::queue::JobQueue;
 use kernel::queue::WorkerRole;
 use tokio::sync::Mutex;
@@ -21,7 +25,12 @@ use crate::embed::EmbedSettings;
 use crate::embed::handle_embed;
 use crate::error::WorkerError;
 use crate::role::ProcessRole;
-use crate::role::handler_ready;
+use crate::summarize::SummarizeEnv;
+use crate::summarize::SummarySettings;
+use crate::summarize::handle_compact;
+use crate::summarize::handle_enqueue_idle;
+use crate::summarize::handle_enqueue_stale;
+use crate::summarize::handle_reap;
 
 pub const EMBED_CONCURRENCY: u32 = 4;
 pub const POLL_INTERVAL: Duration = Duration::from_secs(60);
@@ -57,14 +66,28 @@ impl RunnerConfig {
 
 #[expect(
     missing_debug_implementations,
-    reason = "the model provider port is a trait object without Debug"
+    reason = "the model provider and the summary and embedding stores are trait objects"
+)]
+pub struct WorkerDeps {
+    pub targets: Arc<dyn EmbeddingStore>,
+    pub summaries: Arc<dyn SummaryStore>,
+    pub provider: Arc<dyn ModelProvider>,
+    pub embed: EmbedSettings,
+    pub summary: SummarySettings,
+}
+
+#[expect(
+    missing_debug_implementations,
+    reason = "the model provider and the summary and embedding stores are trait objects"
 )]
 pub struct Runner<Q> {
     queue: Arc<Q>,
     targets: Arc<dyn EmbeddingStore>,
+    summaries: Arc<dyn SummaryStore>,
     provider: Arc<dyn ModelProvider>,
     config: RunnerConfig,
     embed: EmbedSettings,
+    summary: SummarySettings,
     wake: Arc<Notify>,
     idle: watch::Sender<bool>,
     cursor: Arc<AtomicUsize>,
@@ -76,20 +99,16 @@ where
     Q: JobQueue + 'static,
 {
     #[must_use]
-    pub fn new(
-        queue: Arc<Q>,
-        targets: Arc<dyn EmbeddingStore>,
-        provider: Arc<dyn ModelProvider>,
-        config: RunnerConfig,
-        embed: EmbedSettings,
-    ) -> Self {
+    pub fn new(queue: Arc<Q>, config: RunnerConfig, deps: WorkerDeps) -> Self {
         let (idle, _) = watch::channel(false);
         Self {
             queue,
-            targets,
-            provider,
+            targets: deps.targets,
+            summaries: deps.summaries,
+            provider: deps.provider,
             config,
-            embed,
+            embed: deps.embed,
+            summary: deps.summary,
             wake: Arc::new(Notify::new()),
             idle,
             cursor: Arc::new(AtomicUsize::new(0)),
@@ -186,22 +205,18 @@ where
     ) {
         self.publish_idle(false);
         let queue = Arc::clone(&self.queue);
-        let targets = Arc::clone(&self.targets);
-        let provider = Arc::clone(&self.provider);
-        let embed = self.embed;
+        let env = JobEnv {
+            targets: Arc::clone(&self.targets),
+            summaries: Arc::clone(&self.summaries),
+            provider: Arc::clone(&self.provider),
+            embed: self.embed,
+            summary: self.summary.clone(),
+        };
         let wake = Arc::clone(&self.wake);
         let open = Arc::clone(&self.open);
         let id = job.id;
         tasks.spawn(async move {
-            let result = settle(
-                queue.as_ref(),
-                targets.as_ref(),
-                provider.as_ref(),
-                embed,
-                job,
-                &cancel,
-            )
-            .await;
+            let result = settle(queue.as_ref(), &env, job, &cancel).await;
             {
                 let mut running = open.lock().await;
                 running.retain(|seen| *seen != id);
@@ -287,11 +302,17 @@ where
     }
 }
 
+struct JobEnv {
+    targets: Arc<dyn EmbeddingStore>,
+    summaries: Arc<dyn SummaryStore>,
+    provider: Arc<dyn ModelProvider>,
+    embed: EmbedSettings,
+    summary: SummarySettings,
+}
+
 async fn settle<Q>(
     queue: &Q,
-    targets: &dyn EmbeddingStore,
-    provider: &dyn ModelProvider,
-    embed: EmbedSettings,
+    env: &JobEnv,
     job: ClaimedJob,
     cancel: &CancellationToken,
 ) -> Result<(), WorkerError>
@@ -299,7 +320,7 @@ where
     Q: JobQueue,
 {
     let id = job.id;
-    let handled = dispatch(targets, provider, embed, &job, cancel).await;
+    let handled = dispatch(queue, env, &job, cancel).await;
     match handled {
         Ok(()) => queue.complete(id).await.map_err(WorkerError::queue),
         Err(error) => fail_job(queue, id, &error).await,
@@ -318,17 +339,54 @@ async fn fail_job<Q: JobQueue>(
         .map_err(WorkerError::queue)
 }
 
-async fn dispatch(
-    targets: &dyn EmbeddingStore,
-    provider: &dyn ModelProvider,
-    embed: EmbedSettings,
+async fn dispatch<Q: JobQueue>(
+    queue: &Q,
+    env: &JobEnv,
     job: &ClaimedJob,
     cancel: &CancellationToken,
 ) -> Result<(), WorkerError> {
-    if !handler_ready(&job.name) {
-        return Err(WorkerError::Unhandled {
+    let summarize = SummarizeEnv {
+        store: env.summaries.as_ref(),
+        provider: env.provider.as_ref(),
+        queue,
+        settings: &env.summary,
+        now: Utc::now(),
+        cancel,
+    };
+    match &job.name {
+        JobName::Fixed(FixedJob::EmbedTarget) => {
+            handle_embed(
+                env.targets.as_ref(),
+                env.provider.as_ref(),
+                env.embed,
+                &job.payload,
+                cancel,
+            )
+            .await
+        }
+        JobName::Fixed(FixedJob::CompactConversation) => {
+            handle_compact(&summarize, &job.payload).await.map(|_| ())
+        }
+        JobName::Fixed(FixedJob::EnqueueIdle) => handle_enqueue_idle(&summarize).await.map(|_| ()),
+        JobName::Fixed(FixedJob::EnqueueStaleCompaction) => {
+            handle_enqueue_stale(&summarize).await.map(|_| ())
+        }
+        JobName::Fixed(FixedJob::ReapDeadJobs) => handle_reap(&summarize).await.map(|_| ()),
+        JobName::Fixed(
+            FixedJob::EnqueueUnembedded
+            | FixedJob::EnqueueUnchunked
+            | FixedJob::SynthesizeToolCall
+            | FixedJob::SuggestTags
+            | FixedJob::ExtractWiki
+            | FixedJob::EnqueueWikiBackfill
+            | FixedJob::ConsolidateWiki
+            | FixedJob::RecompileWiki
+            | FixedJob::EnqueueStaleWiki
+            | FixedJob::RunTask,
+        )
+        | JobName::Heartbeat { .. }
+        | JobName::RunTaskOn { .. } => Err(WorkerError::Unhandled {
             name: job.name.to_string(),
-        });
+        }),
     }
-    handle_embed(targets, provider, embed, &job.payload, cancel).await
 }

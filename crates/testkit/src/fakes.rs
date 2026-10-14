@@ -196,6 +196,7 @@ fn default_response() -> LlmResponse {
         content: Some("ok".to_string()),
         tool_calls: None,
         usage: None,
+        finish_reason: None,
     }
 }
 

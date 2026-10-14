@@ -1,6 +1,8 @@
 use kernel::memory::EmbeddingStoreError;
+use kernel::memory::SummaryStoreError;
 use kernel::queue::JobQueueError;
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::role::ProcessRole;
 
@@ -44,6 +46,29 @@ pub enum WorkerError {
     TaskEnded(String),
     #[error("the worker semaphore is closed")]
     Closed,
+    #[error("job payload is not a summarizer job: {source}")]
+    SummaryPayload {
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("the summary store failed: {0}")]
+    Summary(#[source] SummaryStoreError),
+    #[error("{message}")]
+    Llm { message: String },
+    #[error("conversation {id} is not in the summary store")]
+    ConversationMissing { id: Uuid },
+    #[error("a truncated leaf batch cannot shrink further")]
+    LeafShrink,
+    #[error("the model returned an empty summary")]
+    EmptySummary,
+    #[error("the model truncated the summary")]
+    Truncated,
+    #[error("summary settings are invalid: {message}")]
+    SummarySettings { message: String },
+    #[error("a summary count does not fit")]
+    Count,
+    #[error("the summary clock overflowed")]
+    Clock,
 }
 
 impl WorkerError {
@@ -54,10 +79,20 @@ impl WorkerError {
     pub(crate) fn payload(source: serde_json::Error) -> Self {
         Self::Payload { source }
     }
+
+    pub(crate) fn summary_payload(source: serde_json::Error) -> Self {
+        Self::SummaryPayload { source }
+    }
 }
 
 impl From<EmbeddingStoreError> for WorkerError {
     fn from(source: EmbeddingStoreError) -> Self {
         Self::Target(source)
+    }
+}
+
+impl From<SummaryStoreError> for WorkerError {
+    fn from(source: SummaryStoreError) -> Self {
+        Self::Summary(source)
     }
 }
