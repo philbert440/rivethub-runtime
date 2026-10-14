@@ -121,6 +121,10 @@ impl Paths {
         self.hub_home()
     }
 
+    pub fn ca_dir(&self) -> PathBuf {
+        self.state_dir().join("ca")
+    }
+
     pub fn logs_dir(&self) -> PathBuf {
         self.state_dir().join("logs")
     }

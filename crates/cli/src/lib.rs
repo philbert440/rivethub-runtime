@@ -50,8 +50,17 @@ impl Report {
 
 #[derive(Debug)]
 pub enum Dispatch {
-    Gateway { check: bool },
+    Gateway {
+        check: bool,
+    },
     Start,
+    Worker {
+        role: workers::ProcessRole,
+        check: bool,
+    },
+    Mcp {
+        check: bool,
+    },
     Complete(Report),
 }
 
@@ -67,6 +76,8 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
         match command {
             Command::Start => return Ok(Dispatch::Start),
             Command::Gateway { check } => return Ok(Dispatch::Gateway { check }),
+            Command::Worker { role, check } => return Ok(Dispatch::Worker { role, check }),
+            Command::Mcp { check } => return Ok(Dispatch::Mcp { check }),
             Command::Version => Ok(Report::success(version())),
             Command::Config { command } => configuration::run(command, env).await,
             Command::Doctor { json } => doctor::run(env, json).await,

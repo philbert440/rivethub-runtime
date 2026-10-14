@@ -361,6 +361,22 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
         home.path().display()
     );
     std::fs::write(hub_home.join("config.yaml"), config_text)?;
+    let offline = home.path().join("offline");
+    std::fs::create_dir_all(&offline)?;
+    let initialized = tokio::time::timeout(
+        Duration::from_secs(30),
+        Command::new(env!("CARGO_BIN_EXE_rh"))
+            .args(["ca", "init", "--root-key-out"])
+            .arg(offline.join("root.key.pem"))
+            .env("HOME", home.path())
+            .output(),
+    )
+    .await??;
+    assert!(
+        initialized.status.success(),
+        "ca init: {}",
+        String::from_utf8_lossy(&initialized.stderr)
+    );
     let mut child = Command::new(env!("CARGO_BIN_EXE_rh"))
         .arg("start")
         .env("HOME", home.path())

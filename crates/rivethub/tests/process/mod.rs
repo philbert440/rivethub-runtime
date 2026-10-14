@@ -14,8 +14,33 @@ pub struct Running {
     pub address: SocketAddr,
 }
 
+pub async fn init_authority(home: &std::path::Path) -> TestResult {
+    let offline = home.join("offline");
+    std::fs::create_dir_all(&offline)?;
+    let output = tokio::time::timeout(
+        Duration::from_secs(30),
+        Command::new(env!("CARGO_BIN_EXE_rh"))
+            .args(["ca", "init", "--root-key-out"])
+            .arg(offline.join("root.key.pem"))
+            .env_clear()
+            .env("HOME", home)
+            .output(),
+    )
+    .await??;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "ca init failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into())
+    }
+}
+
 impl Running {
     pub async fn start(home: &std::path::Path) -> TestResult<Self> {
+        init_authority(home).await?;
         let mut child = Command::new(env!("CARGO_BIN_EXE_rh"))
             .arg("gateway")
             .env_clear()

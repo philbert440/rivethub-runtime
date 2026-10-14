@@ -15,7 +15,6 @@ use kernel::memory::MemoryStore;
 use memory_postgres::PostgresMemory;
 use thiserror::Error;
 use tokio::net::TcpListener;
-use tokio::signal::unix::SignalKind;
 use tokio_util::sync::CancellationToken;
 
 use crate::Exit;
@@ -50,10 +49,7 @@ pub enum StartupError {
     Voice(#[from] gateway::VoiceConfigError),
 }
 
-pub async fn connect(
-    config: &Config,
-    env: &Environment,
-) -> Result<Arc<dyn MemoryStore>, StartupError> {
+pub(crate) fn postgres_url(config: &Config, env: &Environment) -> Result<String, StartupError> {
     if config.memory.as_ref().is_some_and(|memory| {
         memory.backend == Some(config::MemoryBackend::Sqlite)
             || (memory.backend.is_none() && memory.sqlite.is_some() && memory.postgres.is_none())
@@ -61,9 +57,22 @@ pub async fn connect(
     {
         return Err(StartupError::SqliteUnavailable);
     }
-    let url = config.memory_postgres_url(env).ok_or(StartupError::Url)?;
-    let memory = PostgresMemory::connect(&url).await?;
-    Ok(Arc::new(memory))
+    config.memory_postgres_url(env).ok_or(StartupError::Url)
+}
+
+pub(crate) async fn postgres(
+    config: &Config,
+    env: &Environment,
+) -> Result<PostgresMemory, StartupError> {
+    let url = postgres_url(config, env)?;
+    Ok(PostgresMemory::connect(&url).await?)
+}
+
+pub async fn connect(
+    config: &Config,
+    env: &Environment,
+) -> Result<Arc<dyn MemoryStore>, StartupError> {
+    Ok(Arc::new(postgres(config, env).await?))
 }
 
 pub fn compose(
@@ -237,39 +246,13 @@ pub async fn start_with_check(env: &Environment, check: bool) -> Exit {
             }
         };
     }
-    let shutdown = CancellationToken::new();
-    let mut sigterm = match tokio::signal::unix::signal(SignalKind::terminate()) {
-        Ok(signal) => signal,
-        Err(error) => {
-            tracing::error!("installing the SIGTERM handler failed: {error}");
-            return Exit::Runtime;
-        }
+    let signals = match crate::signals::install() {
+        Ok(signals) => signals,
+        Err(exit) => return exit,
     };
-    let token = shutdown.clone();
-    let signals = tokio::spawn(async move {
-        let signal = tokio::select! {
-            result = tokio::signal::ctrl_c() => result.map(|()| "SIGINT"),
-            signal = sigterm.recv() => signal.map(|()| "SIGTERM").ok_or_else(|| io::Error::other("SIGTERM handler closed")),
-        };
-        token.cancel();
-        let signal = signal?;
-        tracing::info!("{signal} received — shutting down");
-        Ok::<(), io::Error>(())
-    });
-    let result = run(env, shutdown.clone()).await;
-    shutdown.cancel();
-    signals.abort();
-    match signals.await {
-        Ok(Ok(())) => {}
-        Ok(Err(error)) => {
-            tracing::error!("signal handler failed: {error}");
-            return Exit::Runtime;
-        }
-        Err(error) if error.is_cancelled() => {}
-        Err(error) => {
-            tracing::error!("signal task failed: {error}");
-            return Exit::Runtime;
-        }
+    let result = run(env, signals.token()).await;
+    if let Err(exit) = signals.finish().await {
+        return exit;
     }
     match result {
         Ok(()) => Exit::Ok,
@@ -304,7 +287,7 @@ async fn move_legacy_state(env: &Environment) -> Result<Option<String>, StartupE
     Ok(moved?)
 }
 
-fn report(error: &StartupError) {
+pub(crate) fn report(error: &StartupError) {
     if let StartupError::Config(config::ConfigError::Validation { result }) = error {
         for finding in &result.errors {
             tracing::error!("{}", finding_line(finding));

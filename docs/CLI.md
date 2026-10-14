@@ -1,12 +1,13 @@
 # Operator CLI: B9, B10, B16
 
 `rh` dispatches through the `cli` composition crate. Bare invocation and help print the derived clap command list.
-The implemented commands are `version`, `config path`, `config show`, `config validate [path]`, `doctor [--json]`,
-`status`, and `stop`. One typed `cli::Exit` owns exit codes, including the existing service startup codes.
+The implemented commands include `version`, `config path`, `config show`, `config validate [path]`, `doctor [--json]`,
+`status`, `stop`, `gateway`, `worker`, and `mcp`. One typed `cli::Exit` owns exit codes, including the existing service startup codes.
 
-`rh start` retains the existing gateway launcher. It is hidden from this slice's help; process supervision and the
-remaining service commands are deferred. Deployments previously invoking bare `rh` to launch the gateway must use
-`rh start`. The one-release compatibility binary dispatches through the same entry point.
+`rh gateway` serves the gateway. `rh worker --role <role>` runs one worker role. `rh mcp` runs the MCP sidecar.
+`rh start` remains the gateway launcher and stays hidden from help. Process supervision of those separate roots is a
+later slice. Deployments previously invoking bare `rh` to launch the gateway must use `rh start`. The one-release
+compatibility binary dispatches through the same entry point.
 
 Doctor calls `migrate`'s read-only schema status library APIs in-process. Postgres uses the async status API;
 SQLite runs on a blocking task. The typed status stays in `migrate`. Doctor never runs migrations or opens a store

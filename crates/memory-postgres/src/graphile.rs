@@ -17,11 +17,6 @@ struct QueuedJob {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-struct RemovedJobs {
-    removed: i64,
-}
-
-#[derive(Debug, sqlx::FromRow)]
 struct DeadJob {
     id: i64,
 }
@@ -73,7 +68,7 @@ impl GraphileQueue {
     pub(crate) async fn schema_present(pool: &PgPool) -> Result<bool, Error> {
         let record = sqlx::query!(
             "select to_regclass('graphile_worker._private_jobs') is not null
-              and to_regprocedure('graphile_worker.add_job(text,json,text,timestamptz,int,text,int,text)')
+              and to_regprocedure('graphile_worker.add_job(text,json,text,timestamptz,int,text,int,text[],text)')
                 is not null as \"present!\""
         )
         .fetch_one(pool)
@@ -85,7 +80,7 @@ impl GraphileQueue {
         let payload = serde_json::to_string(&job.payload)
             .map_err(|source| Error::protocol(source.to_string()))?;
         let queued: QueuedJob = sqlx::query_as(
-            "select graphile_worker.add_job($1, $2::json, null, $3, $4, $5, $6, $7) as id",
+            "select (graphile_worker.add_job($1, $2::json, null, $3, $4, $5, $6, null::text[], $7)).id",
         )
         .bind(job.name.to_string())
         .bind(payload)
@@ -149,14 +144,12 @@ impl GraphileQueue {
     }
 
     pub(crate) async fn complete(&self, id: JobId) -> Result<u64, Error> {
-        let removed: RemovedJobs = sqlx::query_as(
-            "select graphile_worker.complete_jobs(array[$1::bigint])::bigint as removed",
-        )
-        .bind(i64::from(id))
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|source| Error::operation("complete", source))?;
-        count(removed.removed)
+        let removed = sqlx::query("delete from graphile_worker._private_jobs where id = $1")
+            .bind(i64::from(id))
+            .execute(&self.pool)
+            .await
+            .map_err(|source| Error::operation("complete", source))?;
+        Ok(removed.rows_affected())
     }
 
     pub(crate) async fn fail(&self, id: JobId, error: &str) -> Result<(), Error> {
@@ -214,7 +207,7 @@ impl GraphileQueue {
         }
         let raw: Vec<i64> = ids.iter().map(|id| i64::from(*id)).collect();
         let rescheduled: RescheduledJobs = sqlx::query_as(
-            "select graphile_worker.reschedule_jobs($1::bigint[], now(), $2, 0)::bigint as rescheduled",
+            "select count(*)::bigint as rescheduled from graphile_worker.reschedule_jobs($1::bigint[], now(), $2, 0)",
         )
         .bind(&raw)
         .bind(i32::from(priority))
@@ -248,7 +241,7 @@ impl GraphileQueue {
         }
         let raw: Vec<i64> = rows.iter().map(|job| job.id).collect();
         let rescheduled: RescheduledJobs = sqlx::query_as(
-            "select graphile_worker.reschedule_jobs($1::bigint[], now(), 0, 0)::bigint as rescheduled",
+            "select count(*)::bigint as rescheduled from graphile_worker.reschedule_jobs($1::bigint[], now(), 0, 0)",
         )
         .bind(&raw)
         .fetch_one(&self.pool)

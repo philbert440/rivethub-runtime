@@ -48,9 +48,22 @@ pub(crate) async fn state_path(
     if paths.home().is_none() {
         return Err(Error::PkiInput("HOME is required for PKI state"));
     }
-    let base = paths.state_dir();
-    let base = tokio::task::spawn_blocking(move || pki::files::directory(&base, true)).await??;
-    Ok(base.join(name))
+    let leaf = if name == "ca" {
+        paths.ca_dir()
+    } else {
+        paths.state_dir().join(name)
+    };
+    let file_name = leaf
+        .file_name()
+        .map(std::ffi::OsStr::to_os_string)
+        .ok_or(Error::PkiInput("PKI state has no directory name"))?;
+    let parent = leaf
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .ok_or(Error::PkiInput("PKI state has no parent directory"))?;
+    let parent =
+        tokio::task::spawn_blocking(move || pki::files::directory(&parent, true)).await??;
+    Ok(parent.join(file_name))
 }
 
 pub(crate) async fn run(

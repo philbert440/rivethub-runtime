@@ -1,16 +1,21 @@
-# Gateway composition
+# Service composition
 
-`rh gateway` starts the gateway on one multithreaded Tokio runtime.
-`rh gateway --check` loads and validates configuration and TLS material without
-connecting the memory database, binding listeners, or moving legacy state.
-Configuration uses `~/.rivethub/config.yaml` and the config crate's `RIVETHUB_*`
-environment resolution and deprecated aliases. Invoking `rh` without arguments
-retains the existing gateway startup behavior.
+`rh gateway`, `rh worker`, and `rh mcp` are the composition roots. Each one
+runs on the multithreaded Tokio runtime built in `rh`'s `main`, with one
+cancellation tree and a task tracker, and stops on SIGTERM or SIGINT.
+`rh start` remains the gateway launcher. Supervising the roots as separate
+processes is a later slice. Invoking `rh` without arguments prints help.
 
-The composition supplies Postgres memory, the shared session registry, local
-owner identity, verified device names, the Claude transcript reader,
-configured OpenAI-compatible providers and agent loops, and optional terminal
-and mesh services. HTTP routes use the gateway router, including capture,
+`rh gateway --check`, `rh worker --role <role> --check`, and `rh mcp --check`
+validate configuration without connecting the memory database, binding
+listeners, or moving legacy state. Configuration uses `~/.rivethub/config.yaml`
+and the config crate's `RIVETHUB_*` environment resolution and deprecated aliases.
+
+The gateway composition supplies Postgres memory, the shared session registry,
+local owner identity, verified device names, the Claude transcript reader,
+configured OpenAI-compatible providers and agent loops, the file-backed agent
+presets, the device runtime with the node's certificate authority, and optional
+terminal and mesh services. HTTP routes use the gateway router, including capture,
 memory/tags, sessions, terminal/harness sessions, wiki and v1. Every request to
 the composed router requires a resolved identity. A verified device leaf is
 looked up before loopback ownership, so an unknown device cannot inherit the
@@ -52,14 +57,32 @@ retain the locks through rename. `--check` never performs the move.
 
 The SQLite crate does not implement the complete kernel `MemoryStore` port.
 Explicit SQLite/PGlite selections therefore fail with a typed startup error;
-they are never redirected to Postgres. Core/static, agents, devices and files
-route modules are absent from this checkout and are not fabricated here. The
-users file is a composition configuration boundary, not a devices management
-API. CLI-backed providers are also refused until their complete provider port is
-available. These are outstanding upstream dependencies for the full requested
-composition, not successful standalone-node coverage.
+they are never redirected to Postgres.
 
-The shared recording README is at
+`rh gateway` opens the certificate authority at the state directory's `ca`
+path, the same directory `rh ca` uses, after the memory database connects.
+The authority must already be initialized. Devices use that authority. A phone
+issuer is enabled only when `den.devices.gateway_url` is set. Enrollment stays
+off: the configuration has no embed URL, WireGuard address, or device Postgres
+URL. CRL publication stays on `rh ca --crl-out`. Agent presets use the file
+store the gateway already opens. The users file remains a composition
+configuration boundary.
+
+`rh worker --role` runs the workers runner for roles that have handlers
+(embedder, summarizer, and `all`, which keeps those two). Categorizer and
+wiki-builder fail closed. The runner uses the Postgres job queue, embedding
+store, and summary store, plus the default agent's OpenAI-compatible provider.
+An absent queue fails closed.
+
+`rh mcp` serves the memory and wiki tools on stdio, or on streamable HTTP and
+a Unix socket when `transports.mcp` selects them. It does not serve
+delegation, agent listing, web, echo, or skills.
+
+No kernel tasks port exists in this checkout, so neither root invents one.
+CLI-backed providers are refused until their complete provider port is
+available.
+
+Recording notes are at `../testkit/tests/fixtures/roots/README.md` and
 `../testkit/tests/fixtures/gateway/README.md`. Binary integration tests cover TLS,
 revocation, identity refusal, websocket snapshots, memory, v1 turns, mesh turns,
 configuration checking and signal shutdown. Existing route recordings remain

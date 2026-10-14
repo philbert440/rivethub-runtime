@@ -23,6 +23,18 @@ pub enum Command {
         #[arg(long)]
         check: bool,
     },
+    #[command(about = "Run a memory worker for one role")]
+    Worker {
+        #[arg(long)]
+        role: workers::ProcessRole,
+        #[arg(long)]
+        check: bool,
+    },
+    #[command(about = "Run the MCP sidecar")]
+    Mcp {
+        #[arg(long)]
+        check: bool,
+    },
     #[command(about = "Manage the systemd service")]
     Service {
         #[command(subcommand)]

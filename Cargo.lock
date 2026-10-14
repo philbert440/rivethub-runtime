@@ -626,6 +626,7 @@ dependencies = [
  "tokio-util",
  "url",
  "wire",
+ "workers",
  "x509-parser",
 ]
 
@@ -2864,12 +2865,15 @@ dependencies = [
  "gateway",
  "harness-acp",
  "kernel",
+ "mcp",
  "memory-postgres",
  "migrate",
  "nix 0.30.1",
+ "pki",
  "providers",
  "rcgen",
  "reqwest",
+ "rmcp",
  "rusqlite",
  "rustls",
  "serde",
@@ -2886,6 +2890,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wire",
+ "workers",
 ]
 
 [[package]]

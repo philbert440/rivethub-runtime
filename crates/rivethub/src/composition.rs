@@ -1,3 +1,4 @@
+mod devices;
 mod identities;
 mod mesh;
 mod models;
@@ -46,6 +47,10 @@ pub enum ComposeError {
     Channel(#[from] gateway::mesh::ChannelError),
     #[error(transparent)]
     Bind(#[from] gateway::server::BindError),
+    #[error(transparent)]
+    Devices(#[from] gateway::routes::devices::SetupError),
+    #[error(transparent)]
+    Pki(#[from] pki::Error),
 }
 
 #[expect(
@@ -97,10 +102,10 @@ impl Composition {
         let sessions = Arc::new(
             SessionRegistry::new(Duration::from_secs(300)).with_shutdown(shutdown.child_token()),
         );
-        let tenancy = identities::load(config, env).await?;
+        let identity = identities::load(config, env).await?;
         let mut gateway = Gateway::new(store, settings)
             .with_uploads(crate::service::uploads(env))
-            .with_tenancy(tenancy.clone())
+            .with_tenancy(identity.tenancy.clone())
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
         let home = env
@@ -111,6 +116,7 @@ impl Composition {
                 std::path::Path::new(home).join(".claude"),
             ),
         ));
+        gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let background = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {
             let owner = tenancy.local_user().cloned().ok_or_else(|| {
@@ -131,7 +137,7 @@ impl Composition {
         } else {
             None
         };
-        let tasks = mesh::start(config, env, agents, tenancy, shutdown).await?;
+        let tasks = mesh::start(config, env, agents, identity.tenancy, shutdown).await?;
         Ok(Self {
             gateway: Arc::new(gateway),
             v1,

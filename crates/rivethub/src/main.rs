@@ -61,6 +61,14 @@ async fn dispatch(command: cli::Cli, env: &Environment) -> Exit {
             rivethub::logging::init(env);
             rivethub::service::start(env).await
         }
+        cli::Dispatch::Worker { role, check } => {
+            rivethub::logging::init(env);
+            rivethub::worker::start(env, role, check).await
+        }
+        cli::Dispatch::Mcp { check } => {
+            rivethub::logging::init(env);
+            rivethub::sidecar::start(env, check).await
+        }
         cli::Dispatch::Complete(report) => write(report),
     }
 }
