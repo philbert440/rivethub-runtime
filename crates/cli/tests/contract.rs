@@ -4,7 +4,7 @@ use cli::{ConfigCommand, Exit};
 use std::collections::BTreeSet;
 use support::{config, environment, home, run};
 
-const DEFERRED: [(&str, &str); 17] = [
+const DEFERRED: [(&str, &str); 15] = [
     (
         "start",
         "Existing service launch only; supervision is a later slice.",
@@ -13,8 +13,6 @@ const DEFERRED: [(&str, &str); 17] = [
     ("update --mesh", "Fleet updates are a later slice."),
     ("local", "Standalone composition is a later slice."),
     ("init", "Interactive setup is a later slice."),
-    ("ca", "Certificate authority CLI is a later slice."),
-    ("cert", "Certificate CLI is a later slice."),
     ("mesh", "Mesh administration is a later slice."),
     ("pair", "Device pairing CLI is a later slice."),
     ("user", "User administration is a later slice."),

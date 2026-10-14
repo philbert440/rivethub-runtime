@@ -1,3 +1,4 @@
+pub mod ca;
 pub mod capture;
 pub mod events;
 pub mod gateway;

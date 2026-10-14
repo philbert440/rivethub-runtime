@@ -2,6 +2,18 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error(transparent)]
+    Ca(#[from] kernel::ca::CaError),
+    #[error(transparent)]
+    Pki(#[from] pki::Error),
+    #[error("PKI: {0}")]
+    PkiInput(&'static str),
+    #[error("holder cryptography failed: {0}")]
+    Crypto(#[from] rcgen::Error),
+    #[error("CA request failed")]
+    CaHttp(#[source] reqwest::Error),
+    #[error("CA returned HTTP {0}")]
+    CaStatus(reqwest::StatusCode),
     #[error("No config found. Run: rh config init")]
     NoConfig,
     #[error("Failed to parse config: {0}")]

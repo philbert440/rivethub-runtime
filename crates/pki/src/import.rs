@@ -40,7 +40,7 @@ fn import_error(error: &str) -> Error {
     Error::Import(error.to_string())
 }
 
-pub(crate) fn certificate(pem: &str) -> Result<Vec<u8>, Error> {
+pub fn certificate(pem: &str) -> Result<Vec<u8>, Error> {
     let mut reader = pem.as_bytes();
     let Some((rustls_pki_types::pem::SectionKind::Certificate, der)) =
         rustls_pki_types::pem::from_buf(&mut reader)?

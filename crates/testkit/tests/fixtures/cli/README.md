@@ -21,5 +21,7 @@ alias), state in `~/.rivethub`, environment `RIVETHUB_*` (the `RIVETOS_*` aliase
 | `rh status` | reads the gateway's `/healthz` on the configured host and port (3 s timeout) and prints running or not running with the version and uptime when available; falls back to the pid file under the state directory | always 0 |
 | `rh stop` | sends SIGTERM to the pid in the pid file under the state directory and prints `Sent SIGTERM to PID <pid>`. With no pid file: `No running instance found (no PID file).` If the process is gone: `PID file exists but process is not running.` | 0 for those three; 1 on any other error |
 
-Out of this slice (later slices): `start`, `service`, `update --mesh`, `local`, `init`, `ca`, `cert`, `mesh`, `pair`,
+The CA and holder commands are now implemented; their approved new B14 contract and acceptance coverage are documented in `crates/cli/README.md`. They have no historical recordings.
+
+Out of this slice (later slices): `start`, `service`, `update --mesh`, `local`, `init`, `mesh`, `pair`,
 `user`, `memory`, `logs`, `test`, `agent`, `model`, `keys`, `gateway token`.

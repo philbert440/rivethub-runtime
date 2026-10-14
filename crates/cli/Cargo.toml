@@ -8,6 +8,13 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+kernel.workspace = true
+pki.workspace = true
+rcgen.workspace = true
+rustls-pki-types.workspace = true
+webpki.workspace = true
+x509-parser.workspace = true
+time.workspace = true
 chrono = { workspace = true }
 clap = { workspace = true }
 config = { workspace = true }
@@ -26,6 +33,10 @@ url = { workspace = true }
 wire = { workspace = true }
 
 [dev-dependencies]
+hyper = { workspace = true, features = ["server", "http1"] }
+hyper-util.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
 axum = { workspace = true }
 testkit = { workspace = true }
 tokio = { workspace = true, features = ["process", "rt-multi-thread", "test-util"] }

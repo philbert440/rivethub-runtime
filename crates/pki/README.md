@@ -1,6 +1,6 @@
 # RivetHub PKI adapter
 
-`Pki` implements every method of `kernel::ca::CertificateAuthority`. The composition root injects it into the future gateway and CLI. Its only runtime workspace dependency is `kernel`; cryptography uses rcgen, AWS-LC, rustls-webpki, rustls-pki-types and x509-parser.
+`Pki` implements every method of `kernel::ca::CertificateAuthority`. The composition root injects it into the gateway and CLI. Its only runtime workspace dependency is `kernel`; cryptography uses rcgen, AWS-LC, rustls-webpki, rustls-pki-types and x509-parser.
 
 Holders generate ECDSA P-256 keys and send a signed CSR. The adapter verifies the CSR signature and permits exactly one SPIFFE URI SAN matching the enrollment principal or the caller's already verified renewal principal. DNS names, extra identities, foreign trust domains, CA privileges and unrelated key usages are refused. Principal components are 1–128 ASCII unreserved URI bytes, excluding `.` and `..`. Nodes and agents receive seven days; devices receive thirty. A leaf never outlives either issuer. CNs confer no identity. Certificates contain the holder's public key and an empty subject.
 
@@ -10,7 +10,7 @@ The signing material is immutable behind `Arc`. Each database operation owns its
 
 ## Import and state
 
-`Pki::import(source, state, layout, cancellation)` reads an existing CA exactly once. `Pki::open(state, cancellation)` subsequently needs only state. The root private key is never read, generated or stored. `ImportLayout` supplies relative file locations, so installations can name their existing files explicitly. The generated fixture uses this conventional OpenSSL/rivet-ca layout:
+`Pki::import(source, state, layout, cancellation)` reads an existing CA exactly once. `Pki::open(state, cancellation)` subsequently needs only state. Import never reads, generates or stores the root private key. `Pki::initialize(state, root_key_output, cancellation)` generates a fresh root and intermediate, exports the root key exclusively with mode 0600 outside state, and retains only the intermediate key. The CLI requires an explicit export path; the operator moves that export offline. `ImportLayout` supplies relative file locations, so installations can name their existing files explicitly. The generated fixture uses this conventional OpenSSL/rivet-ca layout:
 
 ```text
 root/certs/ca.cert.pem
@@ -35,3 +35,5 @@ There are **no historical PKI recordings**: this is the approved new B14 design.
 Run `cargo test -p pki`, then the workspace gate and nextest suite with the lane database URLs.
 
 The approved design named rustls-pemfile. Its maintained underlying parser is now in rustls-pki-types; this adapter uses that successor directly because RUSTSEC-2025-0134 makes the deprecated wrapper fail the workspace dependency gate. No dependency rule was relaxed.
+
+SPIFFE formatting and parsing now live on `kernel::ca::Principal`; the issuer and CLI share this policy. The strict single-certificate PEM decoder and contained-file helpers are also shared with the CLI composition crate.

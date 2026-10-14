@@ -4,11 +4,7 @@ use async_trait::async_trait;
 #[derive(Debug)]
 pub struct CsrPem(pub String);
 
-#[derive(Debug)]
-pub struct CertChainPem {
-    pub leaf: String,
-    pub chain: Vec<String>,
-}
+pub use wire::ca::SignResponse as CertChainPem;
 
 #[derive(Debug)]
 pub struct CrlPem(pub String);
@@ -59,4 +55,63 @@ pub trait CertificateAuthority: Send + Sync {
     async fn chain(&self) -> Result<Vec<String>, CaError>;
     async fn crl(&self) -> Result<CrlPem, CaError>;
     async fn revoke(&self, principal: Principal) -> Result<(), CaError>;
+}
+
+impl Principal {
+    pub fn spiffe_uri(&self) -> Result<String, CaError> {
+        let (kind, components) = match self {
+            Self::Node { node } => ("node", vec![node]),
+            Self::Agent { node, agent } => ("agent", vec![node, agent]),
+            Self::Device { user, device } => ("device", vec![user, device]),
+        };
+        for component in &components {
+            if component.is_empty()
+                || component.len() > 128
+                || component == &"."
+                || component == &".."
+                || !component.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~')
+                })
+            {
+                return Err(CaError::Refused(
+                    "principal components must be nonempty unreserved URI segments".to_owned(),
+                ));
+            }
+        }
+        Ok(format!(
+            "spiffe://rivet.mesh/{kind}/{}",
+            components
+                .into_iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join("/")
+        ))
+    }
+}
+
+impl std::str::FromStr for Principal {
+    type Err = CaError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let path = value
+            .strip_prefix("spiffe://rivet.mesh/")
+            .ok_or_else(|| CaError::Refused("expected a RivetHub SPIFFE principal".to_owned()))?;
+        let parts = path.split('/').collect::<Vec<_>>();
+        let principal = match parts.as_slice() {
+            ["node", node] => Self::Node {
+                node: (*node).to_owned(),
+            },
+            ["agent", node, agent] => Self::Agent {
+                node: (*node).to_owned(),
+                agent: (*agent).to_owned(),
+            },
+            ["device", user, device] => Self::Device {
+                user: (*user).to_owned(),
+                device: (*device).to_owned(),
+            },
+            _ => return Err(CaError::Refused("invalid SPIFFE principal path".to_owned())),
+        };
+        principal.spiffe_uri()?;
+        Ok(principal)
+    }
 }

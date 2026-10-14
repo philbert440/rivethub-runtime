@@ -1,3 +1,5 @@
+pub mod ca;
+pub mod cert;
 mod configuration;
 pub mod doctor;
 mod error;
@@ -55,6 +57,7 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
     let Some(command) = cli.command else {
         return Dispatch::Complete(Report::success(Cli::help()));
     };
+    let structured_shutdown = matches!(command, Command::Ca(_) | Command::Cert { .. });
     let operation = async {
         match command {
             Command::Start => return Ok(Dispatch::Start),
@@ -63,13 +66,19 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
             Command::Doctor { json } => doctor::run(env, json).await,
             Command::Status => Ok(status::run(env).await),
             Command::Stop => process::stop(env).await,
+            Command::Ca(args) => ca::run(args, env, shutdown).await,
+            Command::Cert { command } => cert::run(command, env, shutdown).await,
         }
         .map(Dispatch::Complete)
     };
-    let result = tokio::select! {
-        biased;
-        () = shutdown.cancelled() => Err(Error::Cancelled),
-        result = operation => result,
+    let result = if structured_shutdown {
+        operation.await
+    } else {
+        tokio::select! {
+            biased;
+            () = shutdown.cancelled() => Err(Error::Cancelled),
+            result = operation => result,
+        }
     };
     match result {
         Ok(dispatch) => dispatch,

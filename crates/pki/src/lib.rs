@@ -1,12 +1,13 @@
 mod error;
-mod files;
+pub mod files;
 mod import;
+mod initialize;
 mod policy;
 mod storage;
 
 pub use crate::error::Error;
 use crate::error::refused;
-pub use crate::import::ImportLayout;
+pub use crate::import::{ImportLayout, certificate};
 use async_trait::async_trait;
 use kernel::ca::{
     CaError, CertChainPem, CertificateAuthority, CrlPem, CsrPem, EnrollmentToken, Principal,
@@ -190,7 +191,7 @@ impl CertificateAuthority for Pki {
     async fn issue_token(&self, principal: Principal) -> Result<EnrollmentToken, CaError> {
         self.run(move |state, now| {
             let encoded = serde_json::to_string(&principal)?;
-            let principal = policy::uri(&principal)?;
+            let principal = principal.spiffe_uri()?;
             let mut connection = storage::connect(&state.directory)?;
             storage::rate(&mut connection, "token", now.unix_timestamp())?;
             let transaction =
@@ -231,7 +232,7 @@ impl CertificateAuthority for Pki {
                 SignAuthority::Renewal(principal) => principal.clone(),
             };
             let lifetime = policy::lifetime(&principal);
-            let principal = policy::uri(&principal)?;
+            let principal = principal.spiffe_uri()?;
             storage::permitted(&transaction, &principal)?;
             let mut request = policy::request(&csr.0, &principal)?;
             request.params.not_before = now;
@@ -278,7 +279,7 @@ impl CertificateAuthority for Pki {
     async fn revoke(&self, principal: Principal) -> Result<(), CaError> {
         self.run(move |state, now| {
             let encoded = serde_json::to_string(&principal)?;
-            let principal = policy::uri(&principal)?;
+            let principal = principal.spiffe_uri()?;
             let mut connection = storage::connect(&state.directory)?;
             let transaction =
                 connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;

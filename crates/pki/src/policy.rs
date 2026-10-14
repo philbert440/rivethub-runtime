@@ -6,36 +6,6 @@ use rcgen::{
 };
 use x509_parser::prelude::{FromDer, X509CertificationRequest};
 
-pub(crate) fn uri(principal: &Principal) -> Result<String, Error> {
-    let (kind, components) = match principal {
-        Principal::Node { node } => ("node", vec![node]),
-        Principal::Agent { node, agent } => ("agent", vec![node, agent]),
-        Principal::Device { user, device } => ("device", vec![user, device]),
-    };
-    for component in &components {
-        if component.is_empty()
-            || component.len() > 128
-            || component == &"."
-            || component == &".."
-            || !component.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~')
-            })
-        {
-            return Err(refused(
-                "principal components must be nonempty unreserved URI segments",
-            ));
-        }
-    }
-    Ok(format!(
-        "spiffe://rivet.mesh/{kind}/{}",
-        components
-            .into_iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>()
-            .join("/")
-    ))
-}
-
 pub(crate) fn lifetime(principal: &Principal) -> time::Duration {
     match principal {
         Principal::Node { .. } | Principal::Agent { .. } => time::Duration::days(7),

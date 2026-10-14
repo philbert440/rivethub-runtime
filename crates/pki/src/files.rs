@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
 
-pub(crate) fn directory(path: &Path, create: bool) -> Result<PathBuf, Error> {
+pub fn directory(path: &Path, create: bool) -> Result<PathBuf, Error> {
     if !path.is_absolute()
         || path
             .components()
@@ -26,7 +26,7 @@ pub(crate) fn directory(path: &Path, create: bool) -> Result<PathBuf, Error> {
     Ok(fs::canonicalize(path)?)
 }
 
-pub(crate) fn contained(base: &Path, relative: &Path) -> Result<PathBuf, Error> {
+pub fn contained(base: &Path, relative: &Path) -> Result<PathBuf, Error> {
     if relative.is_absolute()
         || relative
             .components()
@@ -49,7 +49,7 @@ pub(crate) fn contained(base: &Path, relative: &Path) -> Result<PathBuf, Error> 
     Ok(resolved)
 }
 
-pub(crate) fn read(base: &Path, relative: &Path) -> Result<String, Error> {
+pub fn read(base: &Path, relative: &Path) -> Result<String, Error> {
     let path = contained(base, relative)?;
     let file = OpenOptions::new()
         .read(true)
@@ -67,7 +67,9 @@ pub(crate) fn read(base: &Path, relative: &Path) -> Result<String, Error> {
     Ok(text)
 }
 
-pub(crate) fn create(base: &Path, name: &str, bytes: &[u8]) -> Result<(), Error> {
+pub fn create(base: &Path, name: &str, bytes: &[u8]) -> Result<(), Error> {
+    filename(name)?;
+    directory(base, false)?;
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -78,7 +80,7 @@ pub(crate) fn create(base: &Path, name: &str, bytes: &[u8]) -> Result<(), Error>
     Ok(())
 }
 
-pub(crate) fn lock(base: &Path) -> Result<File, Error> {
+pub fn lock(base: &Path) -> Result<File, Error> {
     let metadata = fs::metadata(base)?;
     if metadata.permissions().mode() & 0o077 != 0
         || metadata.uid() != nix::unistd::geteuid().as_raw()
@@ -111,7 +113,8 @@ pub(crate) fn private_key(base: &Path) -> Result<String, Error> {
     read(base, Path::new("intermediate.key.pem"))
 }
 
-pub(crate) fn replace_public(base: &Path, name: &str, bytes: &[u8]) -> Result<(), Error> {
+pub fn replace_public(base: &Path, name: &str, bytes: &[u8]) -> Result<(), Error> {
+    filename(name)?;
     directory(base, false)?;
     let destination = base.join(name);
     if destination.is_symlink() {
@@ -130,5 +133,15 @@ pub(crate) fn replace_public(base: &Path, name: &str, bytes: &[u8]) -> Result<()
         .persist(destination)
         .map_err(|error| Error::Io(error.error))?;
     File::open(base)?.sync_all()?;
+    Ok(())
+}
+
+fn filename(name: &str) -> Result<(), Error> {
+    let mut components = Path::new(name).components();
+    if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
+        return Err(refused(
+            "PKI output requires a single filename without traversal",
+        ));
+    }
     Ok(())
 }
