@@ -24,12 +24,17 @@ use wire::harness::{
 const READ_LIMIT: usize = 4 * 1024 * 1024;
 
 fn settings() -> Settings {
+    let scratch = PathBuf::from("/tmp/rr-gateway-unused-agents");
     Settings {
         hostname: "gold-host".to_owned(),
         node: "golden-node".to_owned(),
         allowed_origins: Vec::new(),
         allowed_hosts: Vec::new(),
         files_root: None,
+        state_dir: scratch.join("state"),
+        directory_root: scratch.join("agents"),
+        shared_dir: scratch.join("shared"),
+        allowed_harnesses: None,
     }
 }
 

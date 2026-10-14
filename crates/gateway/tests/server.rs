@@ -170,8 +170,14 @@ fn settings_come_from_the_config_gateway_section() {
     let bind = BindSource::from_config(&config);
     assert_eq!(bind.host, "0.0.0.0");
     assert_eq!(bind.port, 6001);
-    let settings =
-        gateway::Settings::from_config(&config, "gold-host".to_string(), "golden-node".to_string());
+    let home = tempdir().expect("home");
+    let env = config::Environment::from_vars([("HOME", home.path().to_str().expect("utf-8 home"))]);
+    let settings = gateway::Settings::from_config_in(
+        &config,
+        &env,
+        "gold-host".to_string(),
+        "golden-node".to_string(),
+    );
     assert_eq!(settings.allowed_origins, vec!["https://hub.example.test"]);
     assert_eq!(settings.allowed_hosts, vec!["gateway.example.test"]);
 

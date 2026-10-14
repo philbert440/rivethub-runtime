@@ -302,6 +302,12 @@ impl Fixture {
                     allowed_hosts: vec![],
                     allowed_origins: vec![],
                     files_root: None,
+                    state_dir: std::path::PathBuf::from("/tmp/rr-gateway-unused-agents/state"),
+                    directory_root: std::path::PathBuf::from(
+                        "/tmp/rr-gateway-unused-agents/agents",
+                    ),
+                    shared_dir: std::path::PathBuf::from("/tmp/rr-gateway-unused-agents/shared"),
+                    allowed_harnesses: None,
                 },
             )
             .with_tenancy(tenancy)

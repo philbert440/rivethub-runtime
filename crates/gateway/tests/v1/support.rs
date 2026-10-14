@@ -59,6 +59,12 @@ impl Harness {
                     allowed_origins: Vec::new(),
                     allowed_hosts: Vec::new(),
                     files_root: None,
+                    state_dir: std::path::PathBuf::from("/tmp/rr-gateway-unused-agents/state"),
+                    directory_root: std::path::PathBuf::from(
+                        "/tmp/rr-gateway-unused-agents/agents",
+                    ),
+                    shared_dir: std::path::PathBuf::from("/tmp/rr-gateway-unused-agents/shared"),
+                    allowed_harnesses: None,
                 },
             )
             .with_turn_runner(runner.clone()),

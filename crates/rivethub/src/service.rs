@@ -57,7 +57,8 @@ pub fn compose(
     store: Arc<dyn MemoryStore>,
 ) -> Result<Arc<Gateway>, StartupError> {
     let hostname = host_name();
-    let settings = Settings::from_config(config, hostname.clone(), env.node_name(&hostname));
+    let settings =
+        Settings::from_config_in(config, env, hostname.clone(), env.node_name(&hostname));
     let uploads = env.upload_settings();
     for ignored in &uploads.ignored {
         tracing::warn!("ignored upload limit {ignored}");

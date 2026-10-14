@@ -18,6 +18,7 @@ use axum::middleware;
 use axum::routing;
 use kernel::agent::TurnRunner;
 use kernel::memory::MemoryStore;
+use wire::harness::HarnessId;
 
 use crate::auth::DenialLog;
 
@@ -28,6 +29,10 @@ pub struct Settings {
     pub allowed_origins: Vec<String>,
     pub allowed_hosts: Vec<String>,
     pub files_root: Option<PathBuf>,
+    pub state_dir: PathBuf,
+    pub directory_root: PathBuf,
+    pub shared_dir: PathBuf,
+    pub allowed_harnesses: Option<Vec<HarnessId>>,
 }
 
 #[derive(Clone)]
@@ -38,14 +43,65 @@ pub(crate) struct GuardState {
 
 impl Settings {
     #[must_use]
-    pub fn from_config(config: &config::Config, hostname: String, node: String) -> Self {
+    pub fn from_config_in(
+        config: &config::Config,
+        env: &config::Environment,
+        hostname: String,
+        node: String,
+    ) -> Self {
         let section = config.gateway.clone().unwrap_or_default();
+        let state_dir = canonical_dir(config::Paths::new(env).state_dir());
         Self {
             hostname,
             node,
             allowed_origins: section.allowed_origins,
             allowed_hosts: section.allowed_hosts,
             files_root: configured_files_root(section.files_root),
+            directory_root: state_dir.join("agents"),
+            state_dir,
+            shared_dir: canonical_dir(config::shared_dir(env)),
+            allowed_harnesses: section
+                .allowed_harnesses
+                .map(|entries| entries.iter().filter_map(known_harness).collect()),
+        }
+    }
+}
+
+fn known_harness(slot: &config::HarnessSlot) -> Option<HarnessId> {
+    match slot {
+        config::HarnessSlot::Known(id) => Some(*id),
+        config::HarnessSlot::Unknown(_) => None,
+    }
+}
+
+fn canonical_dir(path: PathBuf) -> PathBuf {
+    let mut missing = Vec::new();
+    let mut cursor = path.clone();
+    loop {
+        match std::fs::canonicalize(&cursor) {
+            Ok(mut found) => {
+                for name in missing.into_iter().rev() {
+                    found.push(name);
+                }
+                return found;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let Some(name) = cursor.file_name().map(std::ffi::OsStr::to_os_string) else {
+                    return path;
+                };
+                missing.push(name);
+                if !cursor.pop() {
+                    return path;
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    path = %path.display(),
+                    "agent path could not be canonicalized"
+                );
+                return path;
+            }
         }
     }
 }
@@ -73,6 +129,7 @@ pub struct Gateway {
     terminal: Option<Arc<term::TerminalService>>,
     transcript: Option<Arc<dyn kernel::transcript::TranscriptReader>>,
     uploads: Option<uploads::UploadService>,
+    presets: routes::agents::AgentRegistry,
 }
 
 impl Gateway {
@@ -82,6 +139,7 @@ impl Gateway {
             settings.allowed_origins.clone(),
             settings.allowed_hosts.clone(),
         );
+        let presets = routes::agents::open(&settings);
         Self {
             store,
             turn_runner: None,
@@ -96,6 +154,7 @@ impl Gateway {
             terminal: None,
             transcript: None,
             uploads: None,
+            presets,
         }
     }
 
@@ -183,6 +242,10 @@ impl Gateway {
 
     pub(crate) fn denials(&self) -> &DenialLog {
         &self.denials
+    }
+
+    pub(crate) fn presets(&self) -> &routes::agents::AgentRegistry {
+        &self.presets
     }
 
     pub fn router(self: &Arc<Self>, secure: bool) -> Router {

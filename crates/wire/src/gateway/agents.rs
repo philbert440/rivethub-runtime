@@ -1,8 +1,12 @@
+use std::str::FromStr;
+
 use crate::harness::HarnessId;
+use crate::json::Extra;
 use crate::session_id::SessionId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use thiserror::Error;
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
@@ -12,34 +16,79 @@ pub struct AgentPreset {
     pub id: String,
     pub name: String,
     pub color: String,
+    #[serde(default)]
     pub harness_id: Option<HarnessId>,
     pub model: String,
     pub effort: String,
     pub system_prompt: String,
+    #[serde(default)]
     pub node: Option<String>,
+    #[serde(default)]
     pub directory: Option<String>,
+    #[serde(default)]
     pub shared_link: Option<bool>,
+    #[serde(default)]
     pub node_base_url: Option<String>,
+    #[serde(default)]
     pub sort_order: Option<u32>,
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
     pub created_at: DateTime<Utc>,
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
     pub updated_at: DateTime<Utc>,
+    #[serde(flatten, default)]
+    pub extra: Extra,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct KnownHarness(HarnessId);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[error("harnessId must be a known harness")]
+pub struct KnownHarnessError;
+
+impl TryFrom<String> for KnownHarness {
+    type Error = KnownHarnessError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match HarnessId::from_str(&value) {
+            Ok(id) => Ok(Self(id)),
+            Err(_) => Err(KnownHarnessError),
+        }
+    }
+}
+
+impl From<KnownHarness> for String {
+    fn from(value: KnownHarness) -> Self {
+        value.0.to_string()
+    }
+}
+
+impl From<KnownHarness> for HarnessId {
+    fn from(value: KnownHarness) -> Self {
+        value.0
+    }
+}
+
+impl From<HarnessId> for KnownHarness {
+    fn from(value: HarnessId) -> Self {
+        Self(value)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 pub struct AgentsFile {
     pub agents: Vec<AgentPreset>,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct AgentPresetCreateRequest {
     pub name: String,
     pub color: Option<String>,
-    pub harness_id: Option<HarnessId>,
+    pub harness_id: Option<KnownHarness>,
     pub model: Option<String>,
     pub effort: Option<String>,
     pub system_prompt: Option<String>,
@@ -51,13 +100,13 @@ pub struct AgentPresetCreateRequest {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct AgentPresetUpdate {
     pub name: Option<String>,
     pub color: Option<String>,
     #[serde(default, with = "::serde_with::rust::double_option")]
-    pub harness_id: Option<Option<HarnessId>>,
+    pub harness_id: Option<Option<KnownHarness>>,
     pub model: Option<String>,
     pub effort: Option<String>,
     pub system_prompt: Option<String>,

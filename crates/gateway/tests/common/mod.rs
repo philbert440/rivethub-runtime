@@ -33,12 +33,17 @@ const HOSTNAME: &str = "gold-host";
 const NODE: &str = "golden-node";
 
 pub(crate) fn settings() -> Settings {
+    let scratch = std::path::PathBuf::from("/tmp/rr-gateway-unused-agents");
     Settings {
         hostname: HOSTNAME.to_string(),
         node: NODE.to_string(),
         allowed_origins: vec!["https://hub.example.test".to_string()],
         allowed_hosts: vec!["den.example.test".to_string()],
         files_root: None,
+        state_dir: scratch.join("state"),
+        directory_root: scratch.join("agents"),
+        shared_dir: scratch.join("shared"),
+        allowed_harnesses: None,
     }
 }
 
