@@ -25,3 +25,20 @@ The CA and holder commands are now implemented; their approved new B14 contract 
 
 Out of this slice (later slices): `start`, `service`, `update --mesh`, `local`, `init`, `mesh`, `pair`,
 `user`, `memory`, `logs`, `test`, `agent`, `model`, `keys`, `gateway token`.
+
+## `rh service` (second slice)
+Manages the systemd unit that runs the node. Run as root, it manages `/etc/systemd/system/rivethub.service`; otherwise the
+user unit `~/.config/systemd/user/rivethub.service`.
+
+| Command | Behaviour | Exit |
+|---|---|---|
+| `rh service init` | writes the unit: `Type=simple`, `ExecStart=<absolute path of this rh binary> start`, `EnvironmentFile=-<state dir>/.env`, `Environment=RIVETHUB_LOG_LEVEL=info`, `Restart=on-failure`, `RestartSec=5`. It refuses to overwrite an existing unit (`Service file already exists: <path>` and `Delete it first if you want to regenerate.`, exit 1). In user mode it reports whether lingering is enabled for the user (`loginctl show-user`), and prints `sudo loginctl enable-linger <user>` when it is not | 0 written; 1 exists or write error |
+| `rh service start` / `restart` | `systemctl [--user] daemon-reload`, then the verb, then prints `systemctl [--user] status rivethub --no-pager` | the `systemctl` verb's failure is exit 1 with its stderr; it is never swallowed |
+| `rh service stop` | `systemctl [--user] stop rivethub` | 0 / 1 as above |
+| `rh service status` | `systemctl [--user] status rivethub --no-pager`, passed through | `systemctl`'s own exit code |
+| `rh service logs` | `journalctl [--user] -u rivethub -f --no-pager`, passed through until interrupted | 0 on interrupt |
+| `rh service <other>` | `Unknown action: <name>` and the usage | 1 |
+
+The unit body is generated from one typed struct and serialised in systemd's format. Tests check the generated unit,
+the root/user path choice and the refusal to overwrite, and use a fake `systemctl`/`journalctl` on PATH for the verbs.
+They never touch the real systemd.
