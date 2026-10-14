@@ -135,7 +135,7 @@ fn removed_provider_ids(input: &serde_yaml_ng::Value) -> Vec<(String, RemovedPro
 
 const DECISION_15_WARNING: &str = "memory.capture.redaction is validated but not yet injected into harness hook processes; set RIVETOS_CAPTURE_REDACTION or pass CaptureWriterOptions.redaction to enable at runtime";
 
-const REMOVED_BY_DECISION_ROWS: usize = 17_846;
+const REMOVED_BY_DECISION_ROWS: usize = 17_842;
 const REMOVED_BY_DECISION_CASES: usize = 5_478;
 
 fn decision_replacements(input: &serde_yaml_ng::Value) -> Vec<(String, bool, String, String)> {
@@ -179,9 +179,6 @@ fn covered(path: &str, section: &str) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "snake_case")]
 enum RemovedProviderKey {
-    TokenCommand,
-    TokenTtlMs,
-    TokenCommandTimeoutMs,
     Temperature,
     TopP,
     TopK,

@@ -291,7 +291,6 @@ fn removed_provider_keys_warn_and_the_provider_still_boots()
         "providers.acme.top_p",
         "providers.acme.models",
         "providers.acme.models_ttl_ms",
-        "providers.acme.token_command",
         "providers.acme.keep_alive",
     ] {
         assert!(
@@ -304,7 +303,7 @@ fn removed_provider_keys_warn_and_the_provider_still_boots()
             !finding.message.contains("token_command wins")
                 && !finding.message.contains("typical range")
         }),
-        "the token_command and temperature validations are gone: {warnings:?}"
+        "this fixture sets token_command without api_key, so it must not warn that token_command wins: {warnings:?}"
     );
     for finding in &loaded.warnings {
         if finding.path.starts_with("providers.acme.") {
@@ -319,6 +318,75 @@ fn removed_provider_keys_warn_and_the_provider_still_boots()
             );
         }
     }
+    Ok(())
+}
+
+#[test]
+fn token_command_is_kept_and_wins_over_a_static_key() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = Config::from_str(
+        &Environment::default(),
+        &config_yaml(
+            "  main-provider:\n    model: acme-model\n  acme:\n    type: vllm\n    model: acme-model\n    base_url: http://example.com/v1\n    api_key: static-key\n    token_command:\n      - /home/user/bin/token\n      - --mint\n    token_ttl_ms: 1000\n    token_command_timeout_ms: 250\n",
+            "",
+        ),
+    )?;
+    let wins = loaded
+        .warnings
+        .iter()
+        .find(|finding| finding.path == "providers.acme.token_command")
+        .ok_or("missing token_command wins warning")?;
+    assert_eq!(
+        wins.message,
+        "Provider \"acme\" has both api_key and token_command — token_command wins"
+    );
+    let slot = loaded
+        .config
+        .providers
+        .as_ref()
+        .and_then(|map| map.get("acme"))
+        .ok_or("acme is missing")?;
+    let config::provider::ProviderBody::Openai(provider) = &slot.body else {
+        return Err("acme is not an openai-family provider".into());
+    };
+    assert_eq!(
+        provider.token_command.as_deref(),
+        Some(["/home/user/bin/token".to_owned(), "--mint".to_owned()].as_slice())
+    );
+    assert_eq!(provider.token_ttl_ms, Some(1_000));
+    assert_eq!(provider.token_command_timeout_ms, Some(250));
+
+    let alone = Config::from_str(
+        &Environment::default(),
+        &config_yaml(
+            "  main-provider:\n    model: acme-model\n  acme:\n    type: vllm\n    model: acme-model\n    base_url: http://example.com/v1\n    token_command:\n      - /home/user/bin/token\n",
+            "",
+        ),
+    )?;
+    assert!(
+        alone
+            .warnings
+            .iter()
+            .all(|finding| finding.path != "providers.acme.token_command"),
+        "token_command without api_key is not a warning: {:?}",
+        alone.warnings
+    );
+
+    let rejected = expect_validation_error(&config_yaml(
+        "  main-provider:\n    model: acme-model\n  acme:\n    type: vllm\n    model: acme-model\n    base_url: http://example.com/v1\n    token_command: []\n    token_ttl_ms: 0\n    token_command_timeout_ms: 0\n",
+        "",
+    ))?;
+    assert!(
+        rejected.contains("token_command must be a non-empty argv array of strings"),
+        "{rejected}"
+    );
+    assert!(
+        rejected.contains("token_ttl_ms must be a positive number"),
+        "{rejected}"
+    );
+    assert!(
+        rejected.contains("token_command_timeout_ms must be a positive number"),
+        "{rejected}"
+    );
     Ok(())
 }
 

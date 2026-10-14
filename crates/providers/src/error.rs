@@ -31,6 +31,89 @@ pub enum BuildError {
         #[source]
         source: std::num::TryFromIntError,
     },
+    #[error("token_command must be a non-empty argv array")]
+    TokenCommand,
+    #[error("token_command argv entries must be non-empty strings")]
+    TokenArg,
+    #[error("token_ttl_ms must be a positive number")]
+    TokenTtl,
+    #[error("token_command_timeout_ms must be a positive number")]
+    TokenTimeout,
+}
+
+#[derive(Debug, Error)]
+pub enum TokenError {
+    #[error("token_command failed to start: {source}")]
+    Spawn {
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("token_command stdout was unreadable: {source}")]
+    Read {
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("token_command could not be stopped: {source}")]
+    Stop {
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("token_command produced no stdout")]
+    EmptyStdout,
+    #[error("token_command stdout must be a single line")]
+    NotOneLine,
+    #[error("token_command exited {code}")]
+    Exit { code: i32 },
+    #[error("token_command failed")]
+    Failed,
+    #[error("token_command timed out")]
+    TimedOut {
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("token_command stdout exceeded 64KiB")]
+    TooLarge,
+    #[error("token_command stdout is not UTF-8: {source}")]
+    NotUtf8 {
+        #[source]
+        source: std::str::Utf8Error,
+    },
+}
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        manualderive,
+        reason = "io::Error is not Clone; waiters on one mint share the error kind and its message"
+    )
+)]
+impl Clone for TokenError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Spawn { source } => Self::Spawn {
+                source: clone_io(source),
+            },
+            Self::Read { source } => Self::Read {
+                source: clone_io(source),
+            },
+            Self::Stop { source } => Self::Stop {
+                source: clone_io(source),
+            },
+            Self::EmptyStdout => Self::EmptyStdout,
+            Self::NotOneLine => Self::NotOneLine,
+            Self::Exit { code } => Self::Exit { code: *code },
+            Self::Failed => Self::Failed,
+            Self::TimedOut { source } => Self::TimedOut {
+                source: clone_io(source),
+            },
+            Self::TooLarge => Self::TooLarge,
+            Self::NotUtf8 { source } => Self::NotUtf8 { source: *source },
+        }
+    }
+}
+
+fn clone_io(error: &std::io::Error) -> std::io::Error {
+    std::io::Error::new(error.kind(), error.to_string())
 }
 
 #[derive(Debug, Error)]
@@ -43,6 +126,14 @@ pub enum StatusError {
         #[source]
         source: reqwest::Error,
     },
+}
+
+impl StatusError {
+    pub(crate) fn code(&self) -> u16 {
+        match self {
+            Self::Body { status, .. } | Self::Unreadable { status, .. } => status.as_u16(),
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -66,11 +157,6 @@ pub enum Unsupported {
          scope and no recording pins an image shape"
     )]
     ContentParts,
-    #[error(
-        "the provider config has no embeddings endpoint; embeddings are configured under memory \
-         (embed_endpoint)"
-    )]
-    Embeddings,
 }
 
 impl From<StatusError> for ModelProviderError {

@@ -2503,6 +2503,7 @@ dependencies = [
  "rmcp",
  "serde",
  "serde_json",
+ "tempfile",
  "testkit",
  "thiserror 2.0.21",
  "tokio",

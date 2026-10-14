@@ -147,13 +147,15 @@ silent. Examples:
 ## The config prune — removed provider keys warn
 
 - Decision (Phil 2026-10-13): model-server tuning belongs on the model server,
-  so the provider keys `token_command`, `token_ttl_ms`,
-  `token_command_timeout_ms`, `temperature`, `top_p`, `top_k`, `min_p`,
+  so the provider keys `temperature`, `top_p`, `top_k`, `min_p`,
   `presence_penalty`, `frequency_penalty`, `seed`, `stop`,
   `repetition_penalty`, `min_tokens`, `default_tool_choice`,
   `mm_processor_kwargs`, `chat_template_kwargs`, `extra_body`, `models`,
   `models_ttl_ms`, `models_url`, `verify_model_on_init`, `num_ctx` and
-  `keep_alive` are gone from `providers.<openai-family id>`, and the embed keys
+  `keep_alive` are gone from `providers.<openai-family id>`. `token_command`,
+  `token_ttl_ms` and `token_command_timeout_ms` are restored on those
+  providers: the argv mints the bearer (one trailing newline removed), the
+  command wins over `api_key`, and a zero ttl or timeout is an error. The embed keys
   `embed_token_command`, `embed_token_ttl_ms`,
   `embed_token_command_timeout_ms` and `embed_wire_shape` are gone from
   `memory.postgres` (and `memory.postgres.embedded`) and `memory.sqlite`. A

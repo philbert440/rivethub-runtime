@@ -13,7 +13,6 @@ use common::demand;
 use common::fixed_status_server;
 use kernel::model::Embedding;
 use kernel::model::ModelProvider;
-use kernel::model::ModelProviderError;
 use providers::BuildError;
 use providers::embed::EmbedConfig;
 use providers::embed::EmbedError;
@@ -294,7 +293,41 @@ async fn the_embedder_refuses_an_incomplete_config() {
 }
 
 #[tokio::test]
-async fn the_chat_provider_is_not_an_embedder() {
+async fn the_chat_provider_embeds_with_its_prefix_and_bearer() {
+    let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
+    let provider = config::provider::OpenaiProvider {
+        model: Some("test-model".to_owned()),
+        base_url: Some(format!("http://{}", server.addr)),
+        api_prefix: Some("openai/v1".to_owned()),
+        api_key: Some("chat-key".to_owned()),
+        ..config::provider::OpenaiProvider::default()
+    };
+    let built = providers::OpenAiCompatible::build(config::provider::ProviderType::Vllm, &provider)
+        .expect("the provider builds");
+    let out = within(built.embed(vec!["hello".to_owned()]))
+        .await
+        .expect("the chat provider embeds");
+    assert_eq!(out.len(), 1);
+    assert_eq!(
+        out.first().map(|embedding| embedding.vector.as_slice()),
+        Some(RECORDED_VECTOR.as_slice())
+    );
+    let call = server
+        .recorder
+        .lock()
+        .first()
+        .cloned()
+        .expect("the embed call is captured");
+    assert_eq!(call.method, "POST");
+    assert_eq!(call.target, "/openai/v1/embeddings");
+    assert_eq!(call.authorization.as_deref(), Some("Bearer chat-key"));
+    let body: EmbeddingRequest = demand(serde_json::from_str(&call.body), "the embed body parses");
+    assert_eq!(body.model, "test-model");
+    assert_eq!(body.input, vec!["hello".to_owned()]);
+}
+
+#[tokio::test]
+async fn the_chat_provider_embeds_without_auth_when_no_key_is_set() {
     let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
     let provider = config::provider::OpenaiProvider {
         model: Some("test-model".to_owned()),
@@ -303,9 +336,15 @@ async fn the_chat_provider_is_not_an_embedder() {
     };
     let built = providers::OpenAiCompatible::build(config::provider::ProviderType::Vllm, &provider)
         .expect("the provider builds");
-    let error = built
-        .embed(vec!["hello".to_owned()])
+    within(built.embed(vec!["hello".to_owned()]))
         .await
-        .expect_err("the chat provider refuses embed");
-    assert!(matches!(error, ModelProviderError::Request { .. }));
+        .expect("the embed succeeds");
+    let call = server
+        .recorder
+        .lock()
+        .first()
+        .cloned()
+        .expect("the embed call is captured");
+    assert_eq!(call.authorization, None);
+    assert_eq!(call.target, "/v1/embeddings");
 }

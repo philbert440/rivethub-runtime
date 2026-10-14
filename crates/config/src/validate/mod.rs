@@ -157,9 +157,6 @@ impl RemovedKey {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "snake_case")]
 enum RemovedProviderKey {
-    TokenCommand,
-    TokenTtlMs,
-    TokenCommandTimeoutMs,
     Temperature,
     TopP,
     TopK,

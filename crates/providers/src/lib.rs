@@ -2,8 +2,10 @@ pub mod body;
 pub mod embed;
 pub mod error;
 pub mod sse;
+mod token;
 
 use std::sync::Arc;
+
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 
@@ -25,7 +27,6 @@ use wire::stream::LlmUsage;
 pub use crate::error::BuildError;
 use crate::error::StatusError;
 use crate::error::StreamFault;
-use crate::error::Unsupported;
 use crate::sse::STREAM_CAPACITY;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,12 +55,13 @@ impl Variant {
 pub struct OpenAiCompatible {
     variant: Variant,
     model: String,
-    api_key: Option<String>,
+    auth: Arc<token::Auth>,
     base_url: String,
     api_prefix: String,
     max_tokens: Option<u32>,
     probe_models: bool,
     client: reqwest::Client,
+    embedder: embed::Embedder,
 }
 
 impl OpenAiCompatible {
@@ -77,15 +79,26 @@ impl OpenAiCompatible {
         let client = reqwest::Client::builder()
             .build()
             .map_err(|source| BuildError::HttpClient { source })?;
+        let base_url = raw.trim().trim_end_matches('/').to_owned();
+        let api_prefix = body::normalize_api_prefix(provider.api_prefix.as_deref());
+        let auth = Arc::new(token::Auth::from_provider(provider)?);
+        let embedder = embed::Embedder::sharing(
+            &base_url,
+            &api_prefix,
+            model.clone(),
+            Arc::clone(&auth),
+            client.clone(),
+        );
         Ok(Self {
             variant,
             model,
-            api_key: provider.api_key.clone().filter(|key| !key.is_empty()),
-            base_url: raw.trim().trim_end_matches('/').to_owned(),
-            api_prefix: body::normalize_api_prefix(provider.api_prefix.as_deref()),
+            auth,
+            base_url,
+            api_prefix,
             max_tokens: provider.max_tokens,
             probe_models: probe_unless_disabled(provider.probe_models),
             client,
+            embedder,
         })
     }
 
@@ -94,29 +107,15 @@ impl OpenAiCompatible {
         &self.model
     }
 
-    fn authorize(&self, mut builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        if let Some(key) = &self.api_key {
-            builder = builder.bearer_auth(key);
-        }
-        builder
-    }
-
     async fn send_chat(
         &self,
         request: &ModelRequest,
         finish: Option<Arc<AtomicU8>>,
     ) -> Result<Receiver<ModelStreamItem>, ModelProviderError> {
         let body = body::chat_body(self.variant, request, self.max_tokens)?;
-        let builder = self
-            .client
-            .post(body::chat_url(&self.base_url, &self.api_prefix))
-            .json(&body);
-        let response = self
-            .authorize(builder)
-            .send()
-            .await
-            .map_err(request_error)?;
-        let response = check_status(response).await?;
+        let url = body::chat_url(&self.base_url, &self.api_prefix);
+        let response =
+            token::dispatch(&self.auth, || self.client.post(url.clone()).json(&body)).await?;
         let (tx, rx) = tokio::sync::mpsc::channel(STREAM_CAPACITY);
         tokio::spawn(sse::pump(response, tx, finish));
         Ok(rx)
@@ -209,23 +208,16 @@ impl ModelProvider for OpenAiCompatible {
         self.send_chat(&request, None).await
     }
 
-    async fn embed(&self, _texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
-        Err(Unsupported::Embeddings.into())
+    async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
+        self.embedder.embed(texts).await.map_err(Into::into)
     }
 
     async fn list_models(&self) -> Result<Vec<String>, ModelProviderError> {
         if !self.probe_models {
             return Ok(Vec::new());
         }
-        let builder = self
-            .client
-            .get(body::models_url(&self.base_url, &self.api_prefix));
-        let response = self
-            .authorize(builder)
-            .send()
-            .await
-            .map_err(request_error)?;
-        let response = check_status(response).await?;
+        let url = body::models_url(&self.base_url, &self.api_prefix);
+        let response = token::dispatch(&self.auth, || self.client.get(url.clone())).await?;
         let list: wire::stream::openai::ModelList = response.json().await.map_err(request_error)?;
         Ok(list.data.into_iter().map(|model| model.id).collect())
     }

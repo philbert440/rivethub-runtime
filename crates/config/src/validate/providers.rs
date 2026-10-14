@@ -63,6 +63,37 @@ fn openai(out: &mut ValidationResult, name: &str, provider: &OpenaiProvider) {
     if let Some(key) = &provider.api_key {
         hardcoded_key_warning(out, &format!("{path}.api_key"), name, key);
     }
+    token_command(out, name, provider);
+}
+
+fn token_command(out: &mut ValidationResult, name: &str, provider: &OpenaiProvider) {
+    let path = format!("providers.{name}");
+    positive(
+        out,
+        &format!("{path}.token_ttl_ms"),
+        provider.token_ttl_ms,
+        &format!("Provider \"{name}\" token_ttl_ms must be a positive number"),
+    );
+    positive(
+        out,
+        &format!("{path}.token_command_timeout_ms"),
+        provider.token_command_timeout_ms,
+        &format!("Provider \"{name}\" token_command_timeout_ms must be a positive number"),
+    );
+    if let Some(argv) = &provider.token_command
+        && (argv.is_empty() || argv.iter().any(String::is_empty))
+    {
+        out.error(
+            format!("{path}.token_command"),
+            format!("Provider \"{name}\" token_command must be a non-empty argv array of strings"),
+        );
+    }
+    if provider.api_key.is_some() && provider.token_command.is_some() {
+        out.warning(
+            format!("{path}.token_command"),
+            format!("Provider \"{name}\" has both api_key and token_command — token_command wins"),
+        );
+    }
 }
 
 fn cli(out: &mut ValidationResult, name: &str, kind: Option<ProviderType>, provider: &CliProvider) {

@@ -81,10 +81,14 @@ types are `openai-compatible`, `vllm`, `claude-cli`, `codex-cli`, `grok-cli`,
 `llama-server`, `openai-compat`, `cli`, `pi-cli`, `qwen-code`, `anthropic`,
 `google`, `gemini` and `xai` are a config error at `providers.<id>.type` naming
 the alternative (a harness, or `openai-compatible` with the server's base URL;
-`qwen-code` remains a harness id). Auth is the static `api_key` /
-`embed_api_key`: `token_command`, `token_ttl_ms`, `token_command_timeout_ms`,
-`embed_token_command`, `embed_token_ttl_ms` and `embed_token_command_timeout_ms`
-are removed. Sampling and model-server tuning are configured on the model
+`qwen-code` remains a harness id). Provider auth is the static `api_key` or,
+when `token_command` is set, a bearer minted by that argv: stdout has one
+trailing newline removed and is cached until `token_ttl_ms` (default 300000)
+elapses, the command is killed when `token_command_timeout_ms` (default 5000)
+elapses, and `token_command` wins over `api_key`. Chat-client embeddings use
+that same key or token command. `embed_api_key` remains the memory embedder's
+static key, and `embed_token_command`, `embed_token_ttl_ms` and
+`embed_token_command_timeout_ms` are removed. Sampling and model-server tuning are configured on the model
 server, not in RivetHub: the tuning keys `temperature`, `top_p`, `top_k`,
 `min_p`, `presence_penalty`, `frequency_penalty`, `seed`, `stop`,
 `repetition_penalty`, `min_tokens`, `default_tool_choice`, `mm_processor_kwargs`,

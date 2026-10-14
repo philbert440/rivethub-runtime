@@ -1,6 +1,8 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use kernel::model::Embedding;
+use kernel::model::ModelProviderError;
 use thiserror::Error;
 use wire::stream::openai::EmbeddingRequest;
 use wire::stream::openai::EmbeddingResponse;
@@ -8,6 +10,8 @@ use wire::stream::openai::EmbeddingRow;
 
 use crate::error::BuildError;
 use crate::error::StatusError;
+use crate::error::TokenError;
+use crate::token::Auth;
 
 #[derive(Debug)]
 pub struct EmbedConfig {
@@ -29,6 +33,8 @@ pub enum EmbedError {
     },
     #[error(transparent)]
     Status(#[from] StatusError),
+    #[error(transparent)]
+    Token(#[from] TokenError),
     #[error("the embeddings response is malformed: {source}")]
     Malformed {
         #[source]
@@ -54,7 +60,7 @@ pub enum EmbedError {
 pub struct Embedder {
     url: String,
     model: String,
-    api_key: Option<String>,
+    auth: Arc<Auth>,
     dimensions: Option<usize>,
     query_instruction: Option<String>,
     client: reqwest::Client,
@@ -92,11 +98,28 @@ impl Embedder {
         Ok(Self {
             url,
             model: config.model,
-            api_key: config.api_key,
+            auth: Arc::new(Auth::static_key(config.api_key)),
             dimensions,
             query_instruction: config.query_instruction,
             client,
         })
+    }
+
+    pub(crate) fn sharing(
+        endpoint: &str,
+        api_prefix: &str,
+        model: String,
+        auth: Arc<Auth>,
+        client: reqwest::Client,
+    ) -> Self {
+        Self {
+            url: crate::body::embeddings_url(endpoint, api_prefix),
+            model,
+            auth,
+            dimensions: None,
+            query_instruction: None,
+            client,
+        }
     }
 
     #[must_use]
@@ -106,25 +129,57 @@ impl Embedder {
 
     pub async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, EmbedError> {
         let count = texts.len();
-        let mut request = self.client.post(&self.url).json(&EmbeddingRequest {
-            model: self.model.clone(),
-            input: texts,
-        });
-        if let Some(key) = &self.api_key {
-            request = request.bearer_auth(key);
-        }
-        let response = request
-            .send()
-            .await
-            .map_err(|source| EmbedError::Transport { source })?;
-        let body = crate::check_status(response)
-            .await?
+        let response = crate::token::dispatch(&self.auth, || {
+            self.client.post(&self.url).json(&EmbeddingRequest {
+                model: self.model.clone(),
+                input: texts.clone(),
+            })
+        })
+        .await?;
+        let body = response
             .bytes()
             .await
             .map_err(|source| EmbedError::Transport { source })?;
         let response: EmbeddingResponse =
             serde_json::from_slice(&body).map_err(|source| EmbedError::Malformed { source })?;
         place(response.data, count, self.dimensions)
+    }
+}
+
+impl From<crate::token::CallError> for EmbedError {
+    fn from(error: crate::token::CallError) -> Self {
+        match error {
+            crate::token::CallError::Token(error) => Self::Token(error),
+            crate::token::CallError::Status(error) => Self::Status(error),
+            crate::token::CallError::Transport { source } => Self::Transport { source },
+        }
+    }
+}
+
+impl From<EmbedError> for ModelProviderError {
+    fn from(error: EmbedError) -> Self {
+        match error {
+            EmbedError::Status(status) => {
+                let message = format!("http {}", status.code());
+                Self::Request {
+                    message,
+                    source: Box::new(status),
+                }
+            }
+            EmbedError::Transport { source } => crate::request_error(source),
+            other @ (EmbedError::Token(_)
+            | EmbedError::Malformed { .. }
+            | EmbedError::IndexOutOfRange { .. }
+            | EmbedError::DuplicateIndex { .. }
+            | EmbedError::Missing { .. }
+            | EmbedError::Dimensions { .. }) => {
+                let message = other.to_string();
+                Self::Request {
+                    message,
+                    source: Box::new(other),
+                }
+            }
+        }
     }
 }
 
@@ -160,4 +215,27 @@ fn place(
                 .ok_or(EmbedError::Missing { index })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kernel::model::ModelProviderError;
+    use reqwest::StatusCode;
+
+    #[test]
+    fn a_status_on_the_embed_port_is_http_status() {
+        let error = EmbedError::Status(StatusError::Body {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            body: "model not loaded".to_owned(),
+        });
+        let ModelProviderError::Request { message, source } = ModelProviderError::from(error)
+        else {
+            panic!("a status becomes a request error");
+        };
+        assert_eq!(message, "http 503");
+        let rendered = source.to_string();
+        assert!(rendered.contains("model not loaded"), "{rendered}");
+        assert!(rendered.contains("model server returned"), "{rendered}");
+    }
 }
