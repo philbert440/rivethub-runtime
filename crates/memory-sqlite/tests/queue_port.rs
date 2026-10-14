@@ -204,3 +204,29 @@ fn row_with<'a>(rows: &'a [Json], key: &str, value: &str) -> TestResult<&'a Json
         .find(|row| cell(row, key) == &Json::from(value))
         .ok_or_else(|| format!("missing {key} {value}").into())
 }
+
+#[tokio::test]
+async fn a_job_with_no_key_stores_null() -> TestResult {
+    let opened = open()?;
+    let store = &opened.store;
+    let first = Job {
+        name: JobName::Fixed(FixedJob::EmbedTarget),
+        payload: payload("one")?,
+        key: None,
+        key_mode: JobKeyMode::Replace,
+        priority: 0,
+        run_at: None,
+    };
+    store.enqueue(first.clone()).await?;
+    let second = Job {
+        payload: payload("two")?,
+        ..first
+    };
+    store.enqueue(second).await?;
+    let rows = jobs(store).await?;
+    assert_eq!(rows.len(), 2);
+    for row in &rows {
+        assert!(cell(row, "job_key").is_null());
+    }
+    Ok(())
+}

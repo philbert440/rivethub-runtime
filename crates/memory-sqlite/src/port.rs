@@ -115,14 +115,9 @@ fn claim_message(error: &SqliteError) -> Option<String> {
         | SqliteError::Count(_)
         | SqliteError::MissingJob { .. }
         | SqliteError::Clock
-        | SqliteError::NoHandler { .. }
         | SqliteError::StoredState { .. }
-        | SqliteError::StoredDims { .. }
         | SqliteError::EmbedAlreadyQueued { .. }
-        | SqliteError::InsertRejected
-        | SqliteError::Embed { .. }
-        | SqliteError::MissingEmbedTarget { .. }
-        | SqliteError::StoredRole { .. } => None,
+        | SqliteError::InsertRejected => None,
     }
 }
 

@@ -1,7 +1,6 @@
 mod append;
 pub mod capture;
 mod conversation;
-mod embed;
 pub mod error;
 mod health;
 mod insert;
@@ -9,7 +8,6 @@ mod message;
 mod port;
 mod queue;
 mod read;
-mod runner;
 mod stats;
 mod time;
 
@@ -25,7 +23,6 @@ use parking_lot::Mutex;
 use rusqlite::Connection;
 
 pub use capture::MAX_CONTENT_CHARS;
-pub use embed::EmbedRunner;
 pub use error::SqliteError;
 pub use error::TimestampField;
 pub use health::SqliteHealth;
@@ -36,10 +33,6 @@ pub use queue::JobInsert;
 pub use queue::JobPayload;
 pub use queue::JobState;
 pub use queue::retry_delay_ms;
-pub use runner::JobFailure;
-pub use runner::JobHandler;
-pub use runner::JobRunner;
-pub use runner::JobSweep;
 
 pub const SCHEMA_VERSION: i64 = 7;
 

@@ -1,14 +1,8 @@
-#![expect(
-    clippy::redundant_pub_crate,
-    reason = "a private module: rustc's unreachable_pub rejects plain pub, so crate visibility is the widest reachable form"
-)]
-
 use std::collections::BTreeMap;
 
 use chrono::DateTime;
 use chrono::Utc;
 use rusqlite::Connection;
-use rusqlite::OptionalExtension as _;
 use serde::Serialize;
 use wire::gateway::memory::EmbedStatus;
 use wire::gateway::memory::MemoryHealthStatus;
@@ -273,10 +267,78 @@ fn pending_minutes(
         .map_err(|_| SqliteError::Clock)
 }
 
-pub(crate) fn meta_value(conn: &Connection, key: &str) -> Result<Option<String>, SqliteError> {
-    conn.query_row("SELECT value FROM ros_meta WHERE key = ?1", [key], |row| {
-        row.get(0)
-    })
-    .optional()
-    .map_err(SqliteError::query("meta read"))
+#[cfg(test)]
+mod tests {
+    use chrono::Duration;
+    use chrono::TimeZone as _;
+    use chrono::Utc;
+    use wire::gateway::memory::EmbedStatus;
+    use wire::gateway::memory::MemoryHealthStatus;
+
+    use crate::SqliteStore;
+    use crate::queue::JobInsert;
+
+    fn at() -> chrono::DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 10, 10, 12, 0, 0).unwrap()
+    }
+
+    #[tokio::test]
+    async fn queue_health_counts_each_bucket() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = at();
+        store
+            .enqueue_job(
+                JobInsert::new("t", "null".to_owned(), now)
+                    .key("later")
+                    .run_at(now + Duration::hours(1)),
+            )
+            .await
+            .unwrap();
+        store
+            .enqueue_job(
+                JobInsert::new("t", "null".to_owned(), now)
+                    .key("dead-one")
+                    .max_attempts(1),
+            )
+            .await
+            .unwrap();
+        store
+            .enqueue_job(JobInsert::new("t", "null".to_owned(), now).key("running"))
+            .await
+            .unwrap();
+        store
+            .enqueue_job(JobInsert::new("t", "null".to_owned(), now).key("pending"))
+            .await
+            .unwrap();
+
+        let first = store
+            .claim_tasks(vec!["t".to_owned()], now)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.key.as_deref(), Some("dead-one"));
+        store
+            .fail_job(first.id, "boom".to_owned(), now)
+            .await
+            .unwrap();
+        let second = store
+            .claim_tasks(vec!["t".to_owned()], now)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(second.key.as_deref(), Some("running"));
+
+        let report = store.health(now).await.unwrap();
+        assert_eq!(report.status, MemoryHealthStatus::Degraded);
+        assert_eq!(report.embeddings.status, EmbedStatus::Unavailable);
+        assert_eq!(report.embed_queue_depth, 0);
+        let queue = report.queues.first().unwrap();
+        assert_eq!(report.queues.len(), 1);
+        assert_eq!(queue.task, "t");
+        assert_eq!(queue.pending, 1);
+        assert_eq!(queue.running, 1);
+        assert_eq!(queue.scheduled, 1);
+        assert_eq!(queue.dead, 1);
+        assert_eq!(queue.oldest_pending_minutes, Some(0));
+    }
 }

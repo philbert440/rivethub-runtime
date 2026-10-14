@@ -4,9 +4,6 @@
 )]
 mod common;
 
-use std::sync::Arc;
-
-use async_trait::async_trait;
 use chrono::Duration;
 use chrono::Utc;
 use common::Ids;
@@ -20,26 +17,27 @@ use common::recording;
 use common::table;
 use memory_sqlite::ClaimedSqliteJob;
 use memory_sqlite::FailOutcome;
-use memory_sqlite::JobFailure;
-use memory_sqlite::JobHandler;
 use memory_sqlite::JobInsert;
-use memory_sqlite::JobPayload;
-use memory_sqlite::JobRunner;
-use memory_sqlite::JobSweep;
 use memory_sqlite::SqliteError;
 use memory_sqlite::SqliteStore;
 use memory_sqlite::retry_delay_ms;
-use parking_lot::Mutex;
 use serde::Serialize;
 use testkit::Json;
 
 const QUEUE: &str = "queue: enqueue/claim/fail/dead/revive/requeue/recover";
-const RUNNER: &str = "runner: tick, handlers, sweeps, failures";
-const HTTP: &str =
-    "embed-target failures: HTTP 400 → dead, sweep revives once the endpoint recovers";
-const OUTCOMES: &str = "embed outcomes: unembeddable, zero vector, model change, width change";
+const WORKERS: &str = "the workers crate runs the job runner and the embedder handler; memory-sqlite implements JobQueue only";
 
-const SKIPPED: &[(&str, &str)] = &[];
+const SKIPPED: &[(&str, &str)] = &[
+    ("runner: tick, handlers, sweeps, failures", WORKERS),
+    (
+        "embed-target failures: HTTP 400 → dead, sweep revives once the endpoint recovers",
+        WORKERS,
+    ),
+    (
+        "embed outcomes: unembeddable, zero vector, model change, width change",
+        WORKERS,
+    ),
+];
 
 #[derive(Serialize)]
 struct Pair {
@@ -50,67 +48,6 @@ struct Pair {
 #[derive(Serialize)]
 struct Revived {
     n: u32,
-}
-
-#[derive(Serialize)]
-struct OkBody {
-    i: u32,
-}
-
-#[derive(Serialize)]
-struct BoomBody {
-    x: u32,
-}
-
-#[derive(Serialize)]
-struct EmptyPayload {}
-
-#[derive(Serialize)]
-struct Ran {
-    task: String,
-    payload: JobPayload,
-    attempts: u32,
-}
-
-struct Remember(Arc<Mutex<Vec<Ran>>>);
-
-struct Explode;
-
-struct SweepOk;
-
-struct SweepBoom;
-
-#[async_trait]
-impl JobHandler for Remember {
-    async fn run(&self, job: &ClaimedSqliteJob) -> Result<(), JobFailure> {
-        self.0.lock().push(Ran {
-            task: job.task.clone(),
-            payload: job.payload.clone(),
-            attempts: job.attempts,
-        });
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl JobHandler for Explode {
-    async fn run(&self, _job: &ClaimedSqliteJob) -> Result<(), JobFailure> {
-        Err(JobFailure::new("handler exploded"))
-    }
-}
-
-#[async_trait]
-impl JobSweep for SweepOk {
-    async fn run(&self, _now: chrono::DateTime<Utc>) -> Result<(), JobFailure> {
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl JobSweep for SweepBoom {
-    async fn run(&self, _now: chrono::DateTime<Utc>) -> Result<(), JobFailure> {
-        Err(JobFailure::new("sweep exploded"))
-    }
 }
 
 #[tokio::test]
@@ -124,15 +61,9 @@ async fn queue_replay_matches_the_recording() -> TestResult {
 }
 
 #[tokio::test]
-async fn runner_replay_matches_the_recording() -> TestResult {
-    let file: ScenarioFile = recording("jobs.json")?;
-    replay_runner(find(&file, RUNNER)?).await
-}
-
-#[tokio::test]
 async fn every_jobs_scenario_is_replayed_or_skipped() -> TestResult {
     let file: ScenarioFile = recording("jobs.json")?;
-    let replayed = [QUEUE, RUNNER, HTTP, OUTCOMES];
+    let replayed = [QUEUE];
     for scenario in &file.scenarios {
         let played = replayed.contains(&scenario.name.as_str());
         let skipped = SKIPPED.iter().any(|(name, _)| *name == scenario.name);
@@ -347,71 +278,5 @@ async fn lower_max(store: &SqliteStore, id: &str) -> TestResult {
             Ok(())
         })
         .await?;
-    Ok(())
-}
-
-async fn replay_runner(scenario: &Scenario) -> TestResult {
-    let fresh = common::fresh_store(None)?;
-    let store = fresh.store.clone();
-    let start = instant(&scenario.steps.first().ok_or("runner has no steps")?.at)?;
-    seed_runner(&store, start).await?;
-    let ran = Arc::new(Mutex::new(Vec::new()));
-    let mut runner = JobRunner::new(store.clone());
-    runner.on_task("ok", Arc::new(Remember(Arc::clone(&ran))));
-    runner.on_task("boom", Arc::new(Explode));
-    runner.on_sweep("broken", Duration::minutes(10), Arc::new(SweepBoom));
-    runner.on_sweep("healthy", Duration::minutes(10), Arc::new(SweepOk));
-    let mut ids = Ids::default();
-    for step in &scenario.steps {
-        let now = instant(&step.at)?;
-        let actual = match step.label.as_str() {
-            "tick 1 (recovers running once, batch 3)"
-            | "tick 2"
-            | "tick 3 (boom retried → dead)"
-            | "tick 4 (nothing due; sweeps not due)"
-            | "tick 5 (sweeps due)" => Json::from(runner.tick(now, 3).await?),
-            "isRunning" => Json::Bool(runner.is_running()),
-            "tick after halt" => {
-                runner.halt();
-                Json::from(runner.tick(now, 3).await?)
-            }
-            "rows" => Json::Array(table(&store, "ros_jobs").await?),
-            "ran" => serde_json::to_value(&*ran.lock())?,
-            "sweeps" => Json::from(runner.sweeps_completed()),
-            label => return Err(format!("unhandled runner step {label}").into()),
-        };
-        expect_json(recorded(step), &actual, &step.label, &mut ids)?;
-    }
-    expect_logs(&scenario.logs, &store.logs(), RUNNER, &mut ids)?;
-    Ok(())
-}
-
-async fn seed_runner(store: &SqliteStore, now: chrono::DateTime<Utc>) -> TestResult {
-    for index in 0..4 {
-        store
-            .enqueue_job(JobInsert::new(
-                "ok",
-                serde_json::to_string(&OkBody { i: index })?,
-                now,
-            ))
-            .await?;
-    }
-    store
-        .enqueue_job(
-            JobInsert::new("boom", serde_json::to_string(&BoomBody { x: 1 })?, now)
-                .key("boom-1")
-                .max_attempts(2),
-        )
-        .await?;
-    store
-        .enqueue_job(
-            JobInsert::new("nohandler", serde_json::to_string(&EmptyPayload {})?, now).key("nh"),
-        )
-        .await?;
-    common::execute(
-        store,
-        "UPDATE ros_jobs SET state = 'running', locked_at = created_at WHERE job_key = 'nh'",
-    )
-    .await?;
     Ok(())
 }

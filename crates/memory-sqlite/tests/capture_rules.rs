@@ -4,15 +4,12 @@
 )]
 mod common;
 
-use std::sync::Arc;
-
 use common::TestResult;
 use common::batch;
 use common::fresh_store;
 use common::instant;
 use common::table;
-use memory_sqlite::EmbedRunner;
-use testkit::FakeProvider;
+use testkit::Json;
 use wire::capture::CaptureBatchRequest;
 use wire::message::Role;
 
@@ -73,11 +70,27 @@ async fn job_count(store: &memory_sqlite::SqliteStore) -> TestResult<usize> {
     Ok(table(store, "ros_jobs").await?.len())
 }
 
+fn cell_str<'a>(row: &'a Json, key: &str) -> TestResult<&'a str> {
+    row.get(key)
+        .and_then(Json::as_str)
+        .ok_or_else(|| format!("{key} text").into())
+}
+
+async fn only_job(store: &memory_sqlite::SqliteStore) -> TestResult<Json> {
+    let mut rows = table(store, "ros_jobs").await?;
+    let Some(row) = rows.pop() else {
+        return Err("missing job".into());
+    };
+    if !rows.is_empty() {
+        return Err(format!("expected one job, found {}", rows.len().saturating_add(1)).into());
+    }
+    Ok(row)
+}
+
 #[tokio::test]
 async fn a_filled_tool_result_is_queued_again() -> TestResult {
     let fresh = fresh_store(None)?;
-    let fake = Arc::new(FakeProvider::fnv_embeddings(8));
-    let embedder = EmbedRunner::attach(&fresh.store, fake, "fake-embed-8", None)?;
+    fresh.store.arm_embed();
     let now = instant(common::RECORDED_START)?;
     fresh
         .store
@@ -86,8 +99,11 @@ async fn a_filled_tool_result_is_queued_again() -> TestResult {
             now,
         )
         .await?;
-    assert_eq!(job_count(&fresh.store).await?, 1);
-    assert_eq!(embedder.run_jobs(now).await?, 1);
+    let first = only_job(&fresh.store).await?;
+    fresh
+        .store
+        .complete_job(cell_str(&first, "id")?.to_owned())
+        .await?;
     assert_eq!(job_count(&fresh.store).await?, 0);
     fresh
         .store
@@ -99,26 +115,26 @@ async fn a_filled_tool_result_is_queued_again() -> TestResult {
             now,
         )
         .await?;
-    assert_eq!(job_count(&fresh.store).await?, 1);
-    assert_eq!(embedder.run_jobs(now).await?, 1);
+    let again = only_job(&fresh.store).await?;
+    assert_eq!(cell_str(&again, "state")?, "queued");
+    assert_eq!(again.get("attempts").and_then(Json::as_i64), Some(0));
+    assert!(cell_str(&again, "job_key")?.starts_with("embed-ros_messages-"));
     let row = table(&fresh.store, "ros_messages")
         .await?
         .into_iter()
         .next()
         .ok_or("message")?;
     assert_eq!(
-        row.get("tool_result").and_then(testkit::Json::as_str),
+        row.get("tool_result").and_then(Json::as_str),
         Some("deployed build 42")
     );
-    assert!(row.get("embedding").is_some_and(|value| !value.is_null()));
     Ok(())
 }
 
 #[tokio::test]
 async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
     let fresh = fresh_store(None)?;
-    let fake = Arc::new(FakeProvider::fnv_embeddings(8));
-    EmbedRunner::attach(&fresh.store, fake, "fake-embed-8", None)?;
+    fresh.store.arm_embed();
     let now = instant(common::RECORDED_START)?;
     fresh
         .store
