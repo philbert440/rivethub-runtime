@@ -22,13 +22,13 @@ impl ShellDanger {
         Self::with_patterns(
             tools,
             [
-                r"(?i)(^|[\s;/])rm\s+[^\n]*(--recursive|-[a-z]*r)",
-                r"(?i)(^|[\s;/])(dd|mkfs(?:\.[a-z0-9]+)?|shred|wipefs|fdisk|parted)(\s|$)",
+                r"(?i)(^|[\s;/|&(`])rm\s+[^\n]*(--recursive|-[a-z]*r)",
+                r"(?i)(^|[\s;/|&(`])(dd|mkfs(?:\.[a-z0-9]+)?|shred|wipefs|fdisk|parted)(\s|$)",
                 r":\s*\(\s*\)\s*\{",
                 r"(?i)\|\s*(?:/\S*/)?(?:ba|da|z|k)?sh(\s|$)",
-                r"(?i)(^|[\s;])(?:sudo|su|eval|exec)(\s|$)",
-                r"[`\\]|\$\(|\$\{|[<>]\s*/dev/",
-                r"(?i)(^|[\s;/])(?:ba|da|z|k)?sh\s+[^\n]*-c",
+                r"(?i)(^|[\s;|&(`])(?:sudo|su|eval|exec)(\s|$)",
+                r"(?i)>\s*/dev/(?:sd|hd|vd|xvd|nvme|mmcblk|disk|mapper/)",
+                r"(?i)(^|[\s;/|&(`])(?:ba|da|z|k)?sh\s+[^\n]*-c",
             ],
         )
     }

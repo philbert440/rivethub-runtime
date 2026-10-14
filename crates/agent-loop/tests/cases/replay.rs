@@ -87,7 +87,7 @@ fn skip_list_names_existing_scenarios_and_explains_each() {
         assert!(unique.insert(&entry.name), "duplicate skip");
         assert!(!entry.reason.trim().is_empty(), "skip requires reason");
     }
-    assert_eq!(names.len() - skipped.len(), 19);
+    assert_eq!(names.len() - skipped.len(), 22);
 }
 
 #[test]
