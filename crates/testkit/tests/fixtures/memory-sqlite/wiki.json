@@ -1,0 +1,1539 @@
+{
+  "runtime": {
+    "node": "v22.22.2",
+    "sqlite_version": "3.51.2",
+    "git": "git version 2.43.0",
+    "repo_head": "c72e851fcce336be1bac4d7357323c4f751f7f06"
+  },
+  "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock); git author/committer date pinned to 2026-10-10T12:00:00Z, GIT_CONFIG_GLOBAL=/dev/null",
+  "scenarios": [
+    {
+      "name": "index: get, list, search, resolve, gate, redirects, gaps, marks",
+      "steps": [
+        {
+          "label": "upsert acmekit-deploys",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "upsert staging-database",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "getTopic by title",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "slug": "acmekit-deploys",
+            "title": "AcmeKit deploys",
+            "aliases": [
+              "acmekit-rollout"
+            ],
+            "tags": [
+              "deploy"
+            ],
+            "entities": [
+              "project:acmekit",
+              "tool:deploy_script"
+            ],
+            "currentState": "AcmeKit is deployed blue-green from the release branch.",
+            "article": "",
+            "related": [],
+            "historyCount": 0,
+            "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+            "createdAt": "2026-10-10T12:00:00.000Z",
+            "updatedAt": "2026-10-10T12:00:00.000Z"
+          }
+        },
+        {
+          "label": "getTopic missing",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "listTopics",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "topics": [
+              {
+                "slug": "acmekit-deploys",
+                "title": "AcmeKit deploys",
+                "aliases": [
+                  "acmekit-rollout"
+                ],
+                "tags": [
+                  "deploy"
+                ],
+                "entities": [
+                  "project:acmekit",
+                  "tool:deploy_script"
+                ],
+                "currentState": "AcmeKit is deployed blue-green from the release branch.",
+                "article": "",
+                "related": [],
+                "historyCount": 0,
+                "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+                "createdAt": "2026-10-10T12:00:00.000Z",
+                "updatedAt": "2026-10-10T12:00:00.000Z"
+              },
+              {
+                "slug": "staging-database",
+                "title": "Staging database",
+                "aliases": [],
+                "tags": [
+                  "infra"
+                ],
+                "entities": [
+                  "project:acmekit"
+                ],
+                "currentState": "The staging database is restored from a nightly snapshot.",
+                "article": "",
+                "related": [],
+                "historyCount": 0,
+                "gitSha": null,
+                "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+                "createdAt": "2026-10-10T12:00:00.000Z",
+                "updatedAt": "2026-10-10T12:00:00.000Z"
+              }
+            ],
+            "total": 2
+          }
+        },
+        {
+          "label": "listTopics tag",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "topics": [
+              {
+                "slug": "staging-database",
+                "title": "Staging database",
+                "aliases": [],
+                "tags": [
+                  "infra"
+                ],
+                "entities": [
+                  "project:acmekit"
+                ],
+                "currentState": "The staging database is restored from a nightly snapshot.",
+                "article": "",
+                "related": [],
+                "historyCount": 0,
+                "gitSha": null,
+                "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+                "createdAt": "2026-10-10T12:00:00.000Z",
+                "updatedAt": "2026-10-10T12:00:00.000Z"
+              }
+            ],
+            "total": 1
+          }
+        },
+        {
+          "label": "listTopics entity",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "topics": [
+              {
+                "slug": "acmekit-deploys",
+                "title": "AcmeKit deploys",
+                "aliases": [
+                  "acmekit-rollout"
+                ],
+                "tags": [
+                  "deploy"
+                ],
+                "entities": [
+                  "project:acmekit",
+                  "tool:deploy_script"
+                ],
+                "currentState": "AcmeKit is deployed blue-green from the release branch.",
+                "article": "",
+                "related": [],
+                "historyCount": 0,
+                "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+                "createdAt": "2026-10-10T12:00:00.000Z",
+                "updatedAt": "2026-10-10T12:00:00.000Z"
+              },
+              {
+                "slug": "staging-database",
+                "title": "Staging database",
+                "aliases": [],
+                "tags": [
+                  "infra"
+                ],
+                "entities": [
+                  "project:acmekit"
+                ],
+                "currentState": "The staging database is restored from a nightly snapshot.",
+                "article": "",
+                "related": [],
+                "historyCount": 0,
+                "gitSha": null,
+                "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+                "createdAt": "2026-10-10T12:00:00.000Z",
+                "updatedAt": "2026-10-10T12:00:00.000Z"
+              }
+            ],
+            "total": 2
+          }
+        },
+        {
+          "label": "listTopics page",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "topics": [
+              {
+                "slug": "staging-database",
+                "title": "Staging database",
+                "aliases": [],
+                "tags": [
+                  "infra"
+                ],
+                "entities": [
+                  "project:acmekit"
+                ],
+                "currentState": "The staging database is restored from a nightly snapshot.",
+                "article": "",
+                "related": [],
+                "historyCount": 0,
+                "gitSha": null,
+                "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+                "createdAt": "2026-10-10T12:00:00.000Z",
+                "updatedAt": "2026-10-10T12:00:00.000Z"
+              }
+            ],
+            "total": 2
+          }
+        },
+        {
+          "label": "searchTopics \"nightly snapshot restore\"",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": [
+            {
+              "slug": "staging-database",
+              "title": "Staging database",
+              "aliases": [],
+              "tags": [
+                "infra"
+              ],
+              "entities": [
+                "project:acmekit"
+              ],
+              "currentState": "The staging database is restored from a nightly snapshot.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": null,
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z",
+              "score": 0.047619047619047616
+            }
+          ]
+        },
+        {
+          "label": "searchTopics \"AcmeKit deploys\"",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": [
+            {
+              "slug": "acmekit-deploys",
+              "title": "AcmeKit deploys",
+              "aliases": [
+                "acmekit-rollout"
+              ],
+              "tags": [
+                "deploy"
+              ],
+              "entities": [
+                "project:acmekit",
+                "tool:deploy_script"
+              ],
+              "currentState": "AcmeKit is deployed blue-green from the release branch.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z",
+              "score": 0.09523809523809523
+            }
+          ]
+        },
+        {
+          "label": "searchTopics \"acmekit-rollout\"",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": [
+            {
+              "slug": "acmekit-deploys",
+              "title": "AcmeKit deploys",
+              "aliases": [
+                "acmekit-rollout"
+              ],
+              "tags": [
+                "deploy"
+              ],
+              "entities": [
+                "project:acmekit",
+                "tool:deploy_script"
+              ],
+              "currentState": "AcmeKit is deployed blue-green from the release branch.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z",
+              "score": 0.09523809523809523
+            }
+          ]
+        },
+        {
+          "label": "searchTopics \"zzzz qqqq\"",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": []
+        },
+        {
+          "label": "searchTopics \"   \"",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": []
+        },
+        {
+          "label": "searchTopics \"\\\"unbalanced AND (\"",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": []
+        },
+        {
+          "label": "searchTopics \"日本語のメモ\"",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": []
+        },
+        {
+          "label": "searchTopics \"---\"",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": []
+        },
+        {
+          "label": "searchTopics non-ASCII title",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": [
+            {
+              "slug": "nihongo-notes",
+              "title": "日本語のメモ",
+              "aliases": [],
+              "tags": [],
+              "entities": [],
+              "currentState": "Notes kept in Japanese.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": null,
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z",
+              "score": 0.09523809523809523
+            }
+          ]
+        },
+        {
+          "label": "setRedirect",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "resolveTopicIdentity acmekit-deploys",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "match": {
+              "slug": "acmekit-deploys",
+              "title": "AcmeKit deploys",
+              "aliases": [
+                "acmekit-rollout"
+              ],
+              "tags": [
+                "deploy"
+              ],
+              "entities": [
+                "project:acmekit",
+                "tool:deploy_script"
+              ],
+              "currentState": "AcmeKit is deployed blue-green from the release branch.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z"
+            },
+            "reason": "exact",
+            "candidates": []
+          }
+        },
+        {
+          "label": "resolveTopicIdentity acme-releases",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "match": {
+              "slug": "acmekit-deploys",
+              "title": "AcmeKit deploys",
+              "aliases": [
+                "acmekit-rollout"
+              ],
+              "tags": [
+                "deploy"
+              ],
+              "entities": [
+                "project:acmekit",
+                "tool:deploy_script"
+              ],
+              "currentState": "AcmeKit is deployed blue-green from the release branch.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z"
+            },
+            "reason": "redirect",
+            "candidates": []
+          }
+        },
+        {
+          "label": "resolveTopicIdentity acmekit-rollout",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "match": {
+              "slug": "acmekit-deploys",
+              "title": "AcmeKit deploys",
+              "aliases": [
+                "acmekit-rollout"
+              ],
+              "tags": [
+                "deploy"
+              ],
+              "entities": [
+                "project:acmekit",
+                "tool:deploy_script"
+              ],
+              "currentState": "AcmeKit is deployed blue-green from the release branch.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z"
+            },
+            "reason": "alias",
+            "candidates": []
+          }
+        },
+        {
+          "label": "resolveTopicIdentity brand-new",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "match": {
+              "slug": "acmekit-deploys",
+              "title": "AcmeKit deploys",
+              "aliases": [
+                "acmekit-rollout"
+              ],
+              "tags": [
+                "deploy"
+              ],
+              "entities": [
+                "project:acmekit",
+                "tool:deploy_script"
+              ],
+              "currentState": "AcmeKit is deployed blue-green from the release branch.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z"
+            },
+            "reason": "entity",
+            "candidates": []
+          }
+        },
+        {
+          "label": "resolveTopicIdentity staging-database-restore",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "match": {
+              "slug": "staging-database",
+              "title": "Staging database",
+              "aliases": [],
+              "tags": [
+                "infra"
+              ],
+              "entities": [
+                "project:acmekit"
+              ],
+              "currentState": "The staging database is restored from a nightly snapshot.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": null,
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z"
+            },
+            "reason": "stem",
+            "candidates": []
+          }
+        },
+        {
+          "label": "resolveTopicIdentity totally-unrelated-thing",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "reason": "none",
+            "candidates": []
+          }
+        },
+        {
+          "label": "resolveTopicIdentity AcmeKit deploys!",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "match": {
+              "slug": "acmekit-deploys",
+              "title": "AcmeKit deploys",
+              "aliases": [
+                "acmekit-rollout"
+              ],
+              "tags": [
+                "deploy"
+              ],
+              "entities": [
+                "project:acmekit",
+                "tool:deploy_script"
+              ],
+              "currentState": "AcmeKit is deployed blue-green from the release branch.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z"
+            },
+            "reason": "exact",
+            "candidates": []
+          }
+        },
+        {
+          "label": "resolveTopic acmekit-rollout",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "exact": {
+              "slug": "acmekit-deploys",
+              "title": "AcmeKit deploys",
+              "aliases": [
+                "acmekit-rollout"
+              ],
+              "tags": [
+                "deploy"
+              ],
+              "entities": [
+                "project:acmekit",
+                "tool:deploy_script"
+              ],
+              "currentState": "AcmeKit is deployed blue-green from the release branch.",
+              "article": "",
+              "related": [],
+              "historyCount": 0,
+              "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+              "createdAt": "2026-10-10T12:00:00.000Z",
+              "updatedAt": "2026-10-10T12:00:00.000Z"
+            },
+            "candidates": []
+          }
+        },
+        {
+          "label": "followRedirect",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": "acmekit-deploys"
+        },
+        {
+          "label": "gateTopicWrite alias",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "slug": "acmekit-deploys",
+            "action": "update",
+            "reason": "alias"
+          }
+        },
+        {
+          "label": "gateTopicWrite fresh",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "slug": "fresh-topic",
+            "action": "create",
+            "reason": "none"
+          }
+        },
+        {
+          "label": "gaps",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "redLinks": [
+              {
+                "entity": "tool:deploy_script",
+                "referencedBy": [
+                  "acmekit-deploys"
+                ]
+              }
+            ],
+            "stalest": [
+              {
+                "slug": "acmekit-deploys",
+                "title": "AcmeKit deploys",
+                "aliases": [
+                  "acmekit-rollout"
+                ],
+                "tags": [
+                  "deploy"
+                ],
+                "entities": [
+                  "project:acmekit",
+                  "tool:deploy_script"
+                ],
+                "currentState": "AcmeKit is deployed blue-green from the release branch.",
+                "article": "",
+                "related": [],
+                "historyCount": 0,
+                "gitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+                "createdAt": "2026-10-10T12:00:00.000Z",
+                "updatedAt": "2026-10-10T12:00:00.000Z"
+              }
+            ]
+          }
+        },
+        {
+          "label": "extractionDone (none)",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": false
+        },
+        {
+          "label": "markExtraction failed",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "extractionDone (failed)",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": false
+        },
+        {
+          "label": "markExtraction done old version",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "extractionDone (old)",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": false
+        },
+        {
+          "label": "markExtraction done",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "extractionDone",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": true
+        },
+        {
+          "label": "recordProvenance",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "recordCitations",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "recordCitations again",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "deleteTopic",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": null
+        },
+        {
+          "label": "listAllSlugs",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": [
+            "nihongo-notes",
+            "staging-database"
+          ]
+        }
+      ],
+      "tables_before_delete": {
+        "ros_wiki_topics": [
+          {
+            "slug": "acmekit-deploys",
+            "title": "AcmeKit deploys",
+            "aliases": "[\"acmekit-rollout\"]",
+            "tags": "[\"deploy\"]",
+            "entities": "[\"project:acmekit\",\"tool:deploy_script\"]",
+            "related": "[]",
+            "current_state": "AcmeKit is deployed blue-green from the release branch.",
+            "article": "",
+            "search_text": "AcmeKit deploys acmekit-rollout AcmeKit is deployed blue-green from the release branch.  ",
+            "history_count": 0,
+            "git_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "last_verified_at": "2026-10-01T00:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "slug": "staging-database",
+            "title": "Staging database",
+            "aliases": "[]",
+            "tags": "[\"infra\"]",
+            "entities": "[\"project:acmekit\"]",
+            "related": "[]",
+            "current_state": "The staging database is restored from a nightly snapshot.",
+            "article": "",
+            "search_text": "Staging database  The staging database is restored from a nightly snapshot.  ",
+            "history_count": 0,
+            "git_sha": null,
+            "last_verified_at": "2026-10-01T00:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "slug": "nihongo-notes",
+            "title": "日本語のメモ",
+            "aliases": "[]",
+            "tags": "[]",
+            "entities": "[]",
+            "related": "[]",
+            "current_state": "Notes kept in Japanese.",
+            "article": "",
+            "search_text": "日本語のメモ  Notes kept in Japanese.  ",
+            "history_count": 0,
+            "git_sha": null,
+            "last_verified_at": "2026-10-01T00:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_wiki_provenance": [
+          {
+            "topic_slug": "acmekit-deploys",
+            "source_kind": "summary",
+            "source_id": "00000000-0000-4000-8000-500000000002",
+            "conversation_id": "00000000-0000-4000-8000-500000000001",
+            "git_sha": null,
+            "created_at": "2026-10-10T12:00:00.000Z"
+          }
+        ],
+        "ros_wiki_extractions": [
+          {
+            "summary_id": "00000000-0000-4000-8000-500000000002",
+            "status": "done",
+            "pipeline_version": 4,
+            "topics_touched": "[\"acmekit-deploys\"]",
+            "git_sha": "cccccccccccccccccccccccccccccccccccccccc",
+            "error": null,
+            "extracted_at": "2026-10-10T12:00:00.000Z"
+          }
+        ],
+        "ros_wiki_citations": [
+          {
+            "topic_slug": "acmekit-deploys",
+            "summary_id": "00000000-0000-4000-8000-500000000002",
+            "kind": "leaf",
+            "note": "n",
+            "cited_at": "2026-10-10T12:00:00.000Z"
+          }
+        ],
+        "ros_wiki_redirects": [
+          {
+            "from_slug": "acme-releases",
+            "to_slug": "acmekit-deploys",
+            "created_at": "2026-10-10T12:00:00.000Z"
+          }
+        ]
+      },
+      "tables": {
+        "ros_wiki_topics": [
+          {
+            "slug": "staging-database",
+            "title": "Staging database",
+            "aliases": "[]",
+            "tags": "[\"infra\"]",
+            "entities": "[\"project:acmekit\"]",
+            "related": "[]",
+            "current_state": "The staging database is restored from a nightly snapshot.",
+            "article": "",
+            "search_text": "Staging database  The staging database is restored from a nightly snapshot.  ",
+            "history_count": 0,
+            "git_sha": null,
+            "last_verified_at": "2026-10-01T00:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "slug": "nihongo-notes",
+            "title": "日本語のメモ",
+            "aliases": "[]",
+            "tags": "[]",
+            "entities": "[]",
+            "related": "[]",
+            "current_state": "Notes kept in Japanese.",
+            "article": "",
+            "search_text": "日本語のメモ  Notes kept in Japanese.  ",
+            "history_count": 0,
+            "git_sha": null,
+            "last_verified_at": "2026-10-01T00:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_wiki_extractions": [
+          {
+            "summary_id": "00000000-0000-4000-8000-500000000002",
+            "status": "done",
+            "pipeline_version": 4,
+            "topics_touched": "[\"acmekit-deploys\"]",
+            "git_sha": "cccccccccccccccccccccccccccccccccccccccc",
+            "error": null,
+            "extracted_at": "2026-10-10T12:00:00.000Z"
+          }
+        ]
+      },
+      "fts": [
+        {
+          "rowid": 2,
+          "slug": "staging-database",
+          "search_text": "Staging database  The staging database is restored from a nightly snapshot.  "
+        },
+        {
+          "rowid": 3,
+          "slug": "nihongo-notes",
+          "search_text": "日本語のメモ  Notes kept in Japanese.  "
+        }
+      ],
+      "logs": []
+    },
+    {
+      "name": "extraction on the job loop, then context",
+      "steps": [
+        {
+          "label": "drain",
+          "at": "2026-10-10T12:10:00.000Z",
+          "result": 14
+        },
+        {
+          "label": "getTopic",
+          "at": "2026-10-10T12:10:00.000Z",
+          "result": {
+            "slug": "acmekit-deploys",
+            "title": "AcmeKit deploys",
+            "aliases": [
+              "acmekit-rollout"
+            ],
+            "tags": [
+              "deploy"
+            ],
+            "entities": [
+              "project:acmekit",
+              "tool:deploy_script"
+            ],
+            "currentState": "AcmeKit is deployed blue-green from the release branch; a health check gates the switch.",
+            "article": "### Process\nCut the release branch on Monday, run the deploy script, watch the health check.",
+            "related": [],
+            "historyCount": 1,
+            "gitSha": "6440e12b68060b36e453423a045ce4abf747f8ee",
+            "lastVerifiedAt": "2026-10-10T12:09:00.000Z",
+            "createdAt": "2026-10-10T12:10:00.000Z",
+            "updatedAt": "2026-10-10T12:10:00.000Z"
+          }
+        },
+        {
+          "label": "searchTopics by meaning",
+          "at": "2026-10-10T12:10:00.000Z",
+          "result": [
+            {
+              "slug": "acmekit-deploys",
+              "title": "AcmeKit deploys",
+              "aliases": [
+                "acmekit-rollout"
+              ],
+              "tags": [
+                "deploy"
+              ],
+              "entities": [
+                "project:acmekit",
+                "tool:deploy_script"
+              ],
+              "currentState": "AcmeKit is deployed blue-green from the release branch; a health check gates the switch.",
+              "article": "### Process\nCut the release branch on Monday, run the deploy script, watch the health check.",
+              "related": [],
+              "historyCount": 1,
+              "gitSha": "6440e12b68060b36e453423a045ce4abf747f8ee",
+              "lastVerifiedAt": "2026-10-10T12:09:00.000Z",
+              "createdAt": "2026-10-10T12:10:00.000Z",
+              "updatedAt": "2026-10-10T12:10:00.000Z",
+              "score": 0.09523809523809523
+            }
+          ]
+        },
+        {
+          "label": "enqueueBackfill (nothing new)",
+          "at": "2026-10-10T12:10:00.000Z",
+          "result": 0
+        },
+        {
+          "label": "drain",
+          "at": "2026-10-10T12:10:00.000Z",
+          "result": 0
+        },
+        {
+          "label": "chat calls added",
+          "at": "2026-10-10T12:10:00.000Z",
+          "result": 0
+        },
+        {
+          "label": "context",
+          "at": "2026-10-10T12:10:00.000Z",
+          "result": "\n## Recent\n[assistant] message number 5 about deploying the AcmeKit service\n[user] message number 6 about deploying the AcmeKit service\n[assistant] message number 7 about deploying the AcmeKit service\n[user] message number 8 about deploying the AcmeKit service\n[assistant] message number 9 about deploying the AcmeKit service\n\n## Wiki (curated state)\n**AcmeKit deploys** (wiki:acmekit-deploys)\nAcmeKit is deployed blue-green from the release branch; a health check gates the switch.\n### Process\nCut the release branch on Monday, run the deploy script, watch the health check.\n\n## Relevant Context\n[summary/leaf] The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.\n[rivet/user] message number 0 about deploying the AcmeKit service\n[rivet/user] message number 4 about deploying the AcmeKit service\n[rivet/assistant] message number 1 about deploying the AcmeKit service\n[rivet/user] message number 2 about deploying the AcmeKit service\n[rivet/assistant] message number 3 about deploying the AcmeKit service"
+        }
+      ],
+      "chat_calls": [
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "WIKI_EXTRACT_SYSTEM_PROMPT",
+          "user": "## Conversation leaf summary (2026-10-10, agent: rivet)\nThe team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.\n\n## Reviewed tags (added or accepted by the user — identity hints)\nproject:acmekit\n\n## Existing durable topic candidates (UPDATE these slugs when the subject matches — do not invent child slugs)\n(none — the wiki has no matching durable topics yet; create only for long-lived subjects)\n\nUpdate the encyclopedia entry: fold new standing facts into summary_delta / article_patches. Do not replace a rich lead with a narrow session note.",
+          "max_tokens": 32000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        }
+      ],
+      "files": {
+        "pages": {
+          "acmekit-deploys.md": "---\ntitle: AcmeKit deploys\nslug: acmekit-deploys\naliases:\n  - acmekit-rollout\ntags:\n  - deploy\nentities:\n  - project:acmekit\n  - tool:deploy_script\nrelated: []\nlast_verified: 2026-10-10T12:09:00.000Z\nsources:\n  - kind: summary\n    ids:\n      - 00000000-0000-4000-8000-000000000001\n    conversationId: 00000000-0000-4000-8000-000000000002\n---\n\n## Summary\n\nAcmeKit is deployed blue-green from the release branch; a health check gates the switch.\n\n## Article\n\n### Process\nCut the release branch on Monday, run the deploy script, watch the health check.\n\n\n\n## History\n\n### 2026-10-10 — Blue-green adopted\n\nDecided to deploy blue-green.\n\n## Citations\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|\n| 2026-10-10 | leaf | `00000000-0000-4000-8000-000000000001` | Blue-green adopted |\n\n"
+        },
+        "git_log": "6440e12b68060b36e453423a045ce4abf747f8ee RivetOS Wiki <wiki@rivetos.dev> 2026-10-10T12:00:00+00:00\nwiki(acmekit-deploys): create from summary 00000000\n\nProvenance: summary 00000000-0000-4000-8000-000000000001\nPipeline: wiki-v7\n\n--\n"
+      },
+      "tables": {
+        "ros_wiki_topics": [
+          {
+            "slug": "acmekit-deploys",
+            "title": "AcmeKit deploys",
+            "aliases": "[\"acmekit-rollout\"]",
+            "tags": "[\"deploy\"]",
+            "entities": "[\"project:acmekit\",\"tool:deploy_script\"]",
+            "related": "[]",
+            "current_state": "AcmeKit is deployed blue-green from the release branch; a health check gates the switch.",
+            "article": "### Process\nCut the release branch on Monday, run the deploy script, watch the health check.",
+            "search_text": "AcmeKit deploys acmekit-rollout AcmeKit is deployed blue-green from the release branch; a health check gates the switch. ### Process\nCut the release branch on Monday, run the deploy script, watch the health check. ",
+            "history_count": 1,
+            "git_sha": "6440e12b68060b36e453423a045ce4abf747f8ee",
+            "last_verified_at": "2026-10-10T12:09:00.000Z",
+            "created_at": "2026-10-10T12:10:00.000Z",
+            "updated_at": "2026-10-10T12:10:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "b3011e3e1f82c53eb3019e3eb3011e3e7c410a3f1f82c53e8c026d3e8c02ed3e"
+            },
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_wiki_provenance": [
+          {
+            "topic_slug": "acmekit-deploys",
+            "source_kind": "summary",
+            "source_id": "00000000-0000-4000-8000-000000000001",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "git_sha": "6440e12b68060b36e453423a045ce4abf747f8ee",
+            "created_at": "2026-10-10T12:10:00.000Z"
+          }
+        ],
+        "ros_wiki_extractions": [
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "status": "done",
+            "pipeline_version": 4,
+            "topics_touched": "[\"acmekit-deploys\"]",
+            "git_sha": "6440e12b68060b36e453423a045ce4abf747f8ee",
+            "error": null,
+            "extracted_at": "2026-10-10T12:10:00.000Z"
+          }
+        ],
+        "ros_wiki_citations": [
+          {
+            "topic_slug": "acmekit-deploys",
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "kind": "leaf",
+            "note": "Blue-green adopted",
+            "cited_at": "2026-10-10T12:10:00.000Z"
+          }
+        ]
+      },
+      "topic_vectors": [
+        {
+          "slug": "acmekit-deploys",
+          "embed_status": "done",
+          "embedding_hex": "B3011E3E1F82C53EB3019E3EB3011E3E7C410A3F1F82C53E8C026D3E8C02ED3E"
+        }
+      ],
+      "logs": [
+        "[memory.sqlite] compacted 00000000: 1 summaries",
+        "[memory.sqlite] wiki: 00000000 → acmekit-deploys"
+      ]
+    },
+    {
+      "name": "second summary about the same thing updates its page",
+      "steps": [
+        {
+          "label": "drain 1",
+          "at": "2026-10-10T12:10:00.000Z",
+          "result": 2
+        },
+        {
+          "label": "drain 2",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": 2
+        },
+        {
+          "label": "slugs",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": [
+            "acmekit-deploys"
+          ]
+        },
+        {
+          "label": "topic",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": {
+            "slug": "acmekit-deploys",
+            "title": "AcmeKit rollout",
+            "aliases": [
+              "acmekit-rollout"
+            ],
+            "tags": [
+              "deploy"
+            ],
+            "entities": [
+              "project:acmekit",
+              "tool:deploy_script"
+            ],
+            "currentState": "AcmeKit is deployed blue-green from the release branch; a health check gates the switch.\n\nRollback is a switch back to the previous colour.",
+            "article": "### Process\nCut the release branch on Monday, run the deploy script, watch the health check.",
+            "related": [],
+            "historyCount": 2,
+            "gitSha": "be4e365aa113061346f5736e014aa5873e0b5aaa",
+            "lastVerifiedAt": "2026-10-10T12:19:00.000Z",
+            "createdAt": "2026-10-10T12:10:00.000Z",
+            "updatedAt": "2026-10-10T12:20:00.000Z"
+          }
+        }
+      ],
+      "files": {
+        "pages": {
+          "acmekit-deploys.md": "---\ntitle: AcmeKit rollout\nslug: acmekit-deploys\naliases:\n  - acmekit-rollout\ntags:\n  - deploy\nentities:\n  - project:acmekit\n  - tool:deploy_script\nrelated: []\nlast_verified: 2026-10-10T12:19:00.000Z\nsources:\n  - kind: summary\n    ids:\n      - 00000000-0000-4000-8000-000000000003\n    conversationId: 00000000-0000-4000-8000-000000000002\n  - kind: summary\n    ids:\n      - 00000000-0000-4000-8000-000000000004\n    conversationId: 00000000-0000-4000-8000-000000000005\n---\n\n## Summary\n\nAcmeKit is deployed blue-green from the release branch; a health check gates the switch.\n\nRollback is a switch back to the previous colour.\n\n## Article\n\n### Process\nCut the release branch on Monday, run the deploy script, watch the health check.\n\n\n\n## History\n\n### 2026-10-11 — Rollback noted\n\nRollback documented.\n\n### 2026-10-10 — Blue-green adopted\n\nDecided to deploy blue-green.\n\n## Citations\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|\n| 2026-10-10 | leaf | `00000000-0000-4000-8000-000000000004` | Rollback noted |\n| 2026-10-10 | leaf | `00000000-0000-4000-8000-000000000003` | Blue-green adopted |\n\n"
+        },
+        "git_log": "be4e365aa113061346f5736e014aa5873e0b5aaa RivetOS Wiki <wiki@rivetos.dev> 2026-10-10T12:00:00+00:00\nwiki(acmekit-deploys): update from summary 00000000\n\nProvenance: summary 00000000-0000-4000-8000-000000000004\nPipeline: wiki-v7\n\n--\na59cb9939f390347affeac0b31cffe065b84e4b5 RivetOS Wiki <wiki@rivetos.dev> 2026-10-10T12:00:00+00:00\nwiki(acmekit-deploys): create from summary 00000000\n\nProvenance: summary 00000000-0000-4000-8000-000000000003\nPipeline: wiki-v7\n\n--\n"
+      },
+      "tables": {
+        "ros_wiki_topics": [
+          {
+            "slug": "acmekit-deploys",
+            "title": "AcmeKit rollout",
+            "aliases": "[\"acmekit-rollout\"]",
+            "tags": "[\"deploy\"]",
+            "entities": "[\"project:acmekit\",\"tool:deploy_script\"]",
+            "related": "[]",
+            "current_state": "AcmeKit is deployed blue-green from the release branch; a health check gates the switch.\n\nRollback is a switch back to the previous colour.",
+            "article": "### Process\nCut the release branch on Monday, run the deploy script, watch the health check.",
+            "search_text": "AcmeKit rollout acmekit-rollout AcmeKit is deployed blue-green from the release branch; a health check gates the switch.\n\nRollback is a switch back to the previous colour. ### Process\nCut the release branch on Monday, run the deploy script, watch the health check. ",
+            "history_count": 2,
+            "git_sha": "be4e365aa113061346f5736e014aa5873e0b5aaa",
+            "last_verified_at": "2026-10-10T12:19:00.000Z",
+            "created_at": "2026-10-10T12:10:00.000Z",
+            "updated_at": "2026-10-10T12:20:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_wiki_provenance": [
+          {
+            "topic_slug": "acmekit-deploys",
+            "source_kind": "summary",
+            "source_id": "00000000-0000-4000-8000-000000000003",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "git_sha": "a59cb9939f390347affeac0b31cffe065b84e4b5",
+            "created_at": "2026-10-10T12:10:00.000Z"
+          },
+          {
+            "topic_slug": "acmekit-deploys",
+            "source_kind": "summary",
+            "source_id": "00000000-0000-4000-8000-000000000004",
+            "conversation_id": "00000000-0000-4000-8000-000000000005",
+            "git_sha": "be4e365aa113061346f5736e014aa5873e0b5aaa",
+            "created_at": "2026-10-10T12:20:00.000Z"
+          }
+        ],
+        "ros_wiki_extractions": [
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000003",
+            "status": "done",
+            "pipeline_version": 4,
+            "topics_touched": "[\"acmekit-deploys\"]",
+            "git_sha": "a59cb9939f390347affeac0b31cffe065b84e4b5",
+            "error": null,
+            "extracted_at": "2026-10-10T12:10:00.000Z"
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000004",
+            "status": "done",
+            "pipeline_version": 4,
+            "topics_touched": "[\"acmekit-deploys\"]",
+            "git_sha": "be4e365aa113061346f5736e014aa5873e0b5aaa",
+            "error": null,
+            "extracted_at": "2026-10-10T12:20:00.000Z"
+          }
+        ],
+        "ros_wiki_citations": [
+          {
+            "topic_slug": "acmekit-deploys",
+            "summary_id": "00000000-0000-4000-8000-000000000003",
+            "kind": "leaf",
+            "note": "Blue-green adopted",
+            "cited_at": "2026-10-10T12:10:00.000Z"
+          },
+          {
+            "topic_slug": "acmekit-deploys",
+            "summary_id": "00000000-0000-4000-8000-000000000004",
+            "kind": "leaf",
+            "note": "Rollback noted",
+            "cited_at": "2026-10-10T12:20:00.000Z"
+          }
+        ]
+      },
+      "logs": [
+        "[memory.sqlite] compacted 00000000: 1 summaries",
+        "[memory.sqlite] wiki: 00000000 → acmekit-deploys",
+        "[memory.sqlite] compacted 00000000: 1 summaries",
+        "[memory.sqlite] wiki: 00000000 → acmekit-deploys"
+      ]
+    },
+    {
+      "name": "non-JSON answer fails; backfill retries after a day; empty array is done",
+      "steps": [
+        {
+          "label": "runJobs 1",
+          "at": "2026-10-04T12:10:00.000Z",
+          "result": 2
+        },
+        {
+          "label": "runJobs 2",
+          "at": "2026-10-04T12:21:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "runJobs 3",
+          "at": "2026-10-04T12:32:00.000Z",
+          "result": 0
+        },
+        {
+          "label": "runJobs 4",
+          "at": "2026-10-04T12:43:00.000Z",
+          "result": 0
+        },
+        {
+          "label": "extractions",
+          "at": "2026-10-04T12:54:00.000Z",
+          "result": [
+            "failed"
+          ]
+        },
+        {
+          "label": "drain within the day",
+          "at": "2026-10-04T13:54:00.000Z",
+          "result": 0
+        },
+        {
+          "label": "extractions",
+          "at": "2026-10-04T13:54:00.000Z",
+          "result": [
+            "failed"
+          ]
+        },
+        {
+          "label": "drain after a day",
+          "at": "2026-10-05T14:54:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "extractions",
+          "at": "2026-10-05T14:54:00.000Z",
+          "result": [
+            "done"
+          ]
+        },
+        {
+          "label": "empty array: drain",
+          "at": "2026-10-05T15:04:00.000Z",
+          "result": 2
+        },
+        {
+          "label": "empty array: extractions",
+          "at": "2026-10-05T15:04:00.000Z",
+          "result": [
+            "done"
+          ]
+        },
+        {
+          "label": "empty array: topics dir exists",
+          "at": "2026-10-05T15:04:00.000Z",
+          "result": false
+        }
+      ],
+      "files": {
+        "pages": {
+          "acmekit-deploys.md": "---\ntitle: AcmeKit deploys\nslug: acmekit-deploys\naliases:\n  - acmekit-rollout\ntags:\n  - deploy\nentities:\n  - project:acmekit\n  - tool:deploy_script\nrelated: []\nlast_verified: 2026-10-04T12:09:00.000Z\nsources:\n  - kind: summary\n    ids:\n      - 00000000-0000-4000-8000-000000000003\n    conversationId: 00000000-0000-4000-8000-000000000002\n---\n\n## Summary\n\nAcmeKit is deployed blue-green from the release branch; a health check gates the switch.\n\n## Article\n\n### Process\nCut the release branch on Monday, run the deploy script, watch the health check.\n\n\n\n## History\n\n### 2026-10-10 — Blue-green adopted\n\nDecided to deploy blue-green.\n\n## Citations\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|\n| 2026-10-04 | leaf | `00000000-0000-4000-8000-000000000003` | Blue-green adopted |\n\n"
+        },
+        "git_log": "942c7f86b21ad6a8fb6531d4063d37c41be3d887 RivetOS Wiki <wiki@rivetos.dev> 2026-10-10T12:00:00+00:00\nwiki(acmekit-deploys): create from summary 00000000\n\nProvenance: summary 00000000-0000-4000-8000-000000000003\nPipeline: wiki-v7\n\n--\n"
+      },
+      "tables": {
+        "ros_wiki_topics": [
+          {
+            "slug": "acmekit-deploys",
+            "title": "AcmeKit deploys",
+            "aliases": "[\"acmekit-rollout\"]",
+            "tags": "[\"deploy\"]",
+            "entities": "[\"project:acmekit\",\"tool:deploy_script\"]",
+            "related": "[]",
+            "current_state": "AcmeKit is deployed blue-green from the release branch; a health check gates the switch.",
+            "article": "### Process\nCut the release branch on Monday, run the deploy script, watch the health check.",
+            "search_text": "AcmeKit deploys acmekit-rollout AcmeKit is deployed blue-green from the release branch; a health check gates the switch. ### Process\nCut the release branch on Monday, run the deploy script, watch the health check. ",
+            "history_count": 1,
+            "git_sha": "942c7f86b21ad6a8fb6531d4063d37c41be3d887",
+            "last_verified_at": "2026-10-04T12:09:00.000Z",
+            "created_at": "2026-10-05T14:54:00.000Z",
+            "updated_at": "2026-10-05T14:54:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_wiki_provenance": [
+          {
+            "topic_slug": "acmekit-deploys",
+            "source_kind": "summary",
+            "source_id": "00000000-0000-4000-8000-000000000003",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "git_sha": "942c7f86b21ad6a8fb6531d4063d37c41be3d887",
+            "created_at": "2026-10-05T14:54:00.000Z"
+          }
+        ],
+        "ros_wiki_extractions": [
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000003",
+            "status": "done",
+            "pipeline_version": 4,
+            "topics_touched": "[\"acmekit-deploys\"]",
+            "git_sha": "942c7f86b21ad6a8fb6531d4063d37c41be3d887",
+            "error": null,
+            "extracted_at": "2026-10-05T14:54:00.000Z"
+          }
+        ],
+        "ros_wiki_citations": [
+          {
+            "topic_slug": "acmekit-deploys",
+            "summary_id": "00000000-0000-4000-8000-000000000003",
+            "kind": "leaf",
+            "note": "Blue-green adopted",
+            "cited_at": "2026-10-05T14:54:00.000Z"
+          }
+        ]
+      },
+      "logs": [
+        "[memory.sqlite] compacted 00000000: 1 summaries",
+        "[memory.sqlite] wiki: rejected patch — unparseable JSON: I could not find any topics, sorry.",
+        "[sqlite-jobs] extract-wiki wiki-ext-00000000-0000-4000-8000-000000000003 failed (attempt 1/2, retry): wiki extraction answer was not JSON",
+        "[memory.sqlite] wiki: rejected patch — unparseable JSON: I could not find any topics, sorry.",
+        "[sqlite-jobs] extract-wiki wiki-ext-00000000-0000-4000-8000-000000000003 failed (attempt 2/2, dead): wiki extraction answer was not JSON",
+        "[memory.sqlite] wiki: 00000000 → acmekit-deploys",
+        "[memory.sqlite] compacted 00000000: 1 summaries"
+      ]
+    },
+    {
+      "name": "maintenance: consolidate and recompile",
+      "steps": [
+        {
+          "label": "consolidate dry run",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "merged": 1,
+            "pagesRemoved": 1
+          }
+        },
+        {
+          "label": "consolidate",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "merged": 1,
+            "pagesRemoved": 1
+          }
+        },
+        {
+          "label": "consolidate again",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "merged": 0,
+            "pagesRemoved": 0
+          }
+        },
+        {
+          "label": "getTopic old slug",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "slug": "acmekit-deploys",
+            "title": "AcmeKit deploys",
+            "aliases": [
+              "acmekit-deploys-rollback",
+              "AcmeKit deploys rollback"
+            ],
+            "tags": [],
+            "entities": [],
+            "currentState": "Deployed blue-green from the release branch.\n\nRollback is a traffic switch back.",
+            "article": "",
+            "related": [],
+            "historyCount": 3,
+            "gitSha": null,
+            "lastVerifiedAt": "2026-10-01T00:00:00.000Z",
+            "createdAt": "2026-10-10T12:00:00.000Z",
+            "updatedAt": "2026-10-10T12:00:00.000Z"
+          }
+        },
+        {
+          "label": "recompile dry run",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": 2,
+            "failed": 0
+          }
+        },
+        {
+          "label": "recompile slug",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": 1,
+            "failed": 0
+          }
+        },
+        {
+          "label": "topic after recompile",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "slug": "acmekit-deploys",
+            "title": "AcmeKit deploys",
+            "aliases": [
+              "acmekit-deploys-rollback",
+              "AcmeKit deploys rollback"
+            ],
+            "tags": [],
+            "entities": [],
+            "currentState": "AcmeKit deploys are blue-green; rollback is a traffic switch.",
+            "article": "### Process\nCut the branch, deploy, watch the health check.",
+            "related": [],
+            "historyCount": 5,
+            "gitSha": "158a3a9a7ebe5a288ac43bbf9ce34f0f25f9d68d",
+            "lastVerifiedAt": "2026-10-10T12:00:00.000Z",
+            "createdAt": "2026-10-10T12:00:00.000Z",
+            "updatedAt": "2026-10-10T12:00:00.000Z"
+          }
+        },
+        {
+          "label": "recompile bad answer + missing page",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": 0,
+            "failed": 2
+          }
+        },
+        {
+          "label": "recompile unsafe slug",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": 0,
+            "failed": 1
+          }
+        },
+        {
+          "label": "recompile-wiki job",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "counts",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": []
+        },
+        {
+          "label": "recompile without endpoint",
+          "at": "2026-10-10T12:00:00.000Z",
+          "error": {
+            "class": "Error",
+            "message": "wiki recompile needs a summarization endpoint (compactor)"
+          }
+        }
+      ],
+      "chat_calls": [
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "WIKI_RECOMPILE_SYSTEM_PROMPT",
+          "user": "## Topic\nslug: acmekit-deploys\ntitle: AcmeKit deploys\naliases: acmekit-deploys-rollback, AcmeKit deploys rollback\nentities: (none)\n\n## Current Summary (may be thin/stale)\nDeployed blue-green from the release branch.\n\nRollback is a traffic switch back.\n\n## Current Article\n(empty)\n\n## History / superseded material (source of buried facts)\n### 2026-10-01 — Merged from acmekit-deploys-rollback\n\nRollback is a traffic switch back.\n\n### 2026-10-01 — Created\n\nCreated acmekit-deploys-rollback.\n\n### 2026-10-01 — Created\n\nCreated acmekit-deploys.\n\n\n## Known peer slugs for [[links]]\n- staging-database\n\nhistory_entry.date must be 2026-10-10.\nReturn ONE JSON object with summary + article as specified.",
+          "max_tokens": 32000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "WIKI_RECOMPILE_SYSTEM_PROMPT",
+          "user": "## Topic\nslug: staging-database\ntitle: Staging database\naliases: (none)\nentities: (none)\n\n## Current Summary (may be thin/stale)\nRestored nightly.\n\n## Current Article\n(empty)\n\n## History / superseded material (source of buried facts)\n### 2026-10-01 — Created\n\nCreated staging-database.\n\n\n## Known peer slugs for [[links]]\n- acmekit-deploys\n\nhistory_entry.date must be 2026-10-10.\nReturn ONE JSON object with summary + article as specified.",
+          "max_tokens": 32000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "WIKI_RECOMPILE_SYSTEM_PROMPT",
+          "user": "## Topic\nslug: acmekit-deploys\ntitle: AcmeKit deploys\naliases: acmekit-deploys-rollback, AcmeKit deploys rollback\nentities: (none)\n\n## Current Summary (may be thin/stale)\nDeployed blue-green from the release branch.\n\nRollback is a traffic switch back.\n\n## Current Article\n(empty)\n\n## History / superseded material (source of buried facts)\n### 2026-10-01 — Merged from acmekit-deploys-rollback\n\nRollback is a traffic switch back.\n\n### 2026-10-01 — Created\n\nCreated acmekit-deploys-rollback.\n\n### 2026-10-01 — Created\n\nCreated acmekit-deploys.\n\n\n## Known peer slugs for [[links]]\n- staging-database\n\nhistory_entry.date must be 2026-10-10.\nReturn ONE JSON object with summary + article as specified.",
+          "max_tokens": 32000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "WIKI_RECOMPILE_SYSTEM_PROMPT",
+          "user": "## Topic\nslug: acmekit-deploys\ntitle: AcmeKit deploys\naliases: acmekit-deploys-rollback, AcmeKit deploys rollback\nentities: (none)\n\n## Current Summary (may be thin/stale)\nAcmeKit deploys are blue-green; rollback is a traffic switch.\n\n## Current Article\n### Process\nCut the branch, deploy, watch the health check.\n\n## History / superseded material (source of buried facts)\n### 2026-10-10 — Superseded current state\n\nDeployed blue-green from the release branch.\n\nRollback is a traffic switch back.\n\n### 2026-10-01 — Merged from acmekit-deploys-rollback\n\nRollback is a traffic switch back.\n\n### 2026-10-01 — Created\n\nCreated acmekit-deploys-rollback.\n\n### 2026-10-01 — Created\n\nCreated acmekit-deploys.\n\n### 2026-10-10 — Recompiled\n\nRewritten from history.\n\n\n## Known peer slugs for [[links]]\n- staging-database\n\nhistory_entry.date must be 2026-10-10.\nReturn ONE JSON object with summary + article as specified.",
+          "max_tokens": 32000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "WIKI_RECOMPILE_SYSTEM_PROMPT",
+          "user": "## Topic\nslug: acmekit-deploys\ntitle: AcmeKit deploys\naliases: acmekit-deploys-rollback, AcmeKit deploys rollback\nentities: (none)\n\n## Current Summary (may be thin/stale)\nAcmeKit deploys are blue-green; rollback is a traffic switch.\n\n## Current Article\n### Process\nCut the branch, deploy, watch the health check.\n\n## History / superseded material (source of buried facts)\n### 2026-10-10 — Superseded current state\n\nDeployed blue-green from the release branch.\n\nRollback is a traffic switch back.\n\n### 2026-10-01 — Merged from acmekit-deploys-rollback\n\nRollback is a traffic switch back.\n\n### 2026-10-01 — Created\n\nCreated acmekit-deploys-rollback.\n\n### 2026-10-01 — Created\n\nCreated acmekit-deploys.\n\n### 2026-10-10 — Recompiled\n\nRewritten from history.\n\n\n## Known peer slugs for [[links]]\n- staging-database\n\nhistory_entry.date must be 2026-10-10.\nReturn ONE JSON object with summary + article as specified.",
+          "max_tokens": 32000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        }
+      ],
+      "files": {
+        "pages": {
+          "acmekit-deploys.md": "---\ntitle: AcmeKit deploys\nslug: acmekit-deploys\naliases:\n  - acmekit-deploys-rollback\n  - AcmeKit deploys rollback\ntags: []\nentities: []\nrelated: []\nlast_verified: 2026-10-10T12:00:00.000Z\nsources: []\n---\n\n## Summary\n\nAcmeKit deploys are blue-green; rollback is a traffic switch.\n\n## Article\n\n### Process\nCut the branch, deploy, watch the health check.\n\n\n\n## History\n\n### 2026-10-10 — Recompiled\n\nRewritten from history.\n\n### 2026-10-10 — Superseded current state\n\nDeployed blue-green from the release branch.\n\nRollback is a traffic switch back.\n\n### 2026-10-01 — Merged from acmekit-deploys-rollback\n\nRollback is a traffic switch back.\n\n### 2026-10-01 — Created\n\nCreated acmekit-deploys.\n\n### 2026-10-01 — Created\n\nCreated acmekit-deploys-rollback.\n\n",
+          "staging-database.md": "---\ntitle: Staging database\nslug: staging-database\naliases: []\ntags: []\nentities: []\nrelated: []\nlast_verified: 2026-10-01T00:00:00.000Z\nsources: []\n---\n\n## Summary\n\nRestored nightly.\n\n\n\n## History\n\n### 2026-10-01 — Created\n\nCreated staging-database.\n\n"
+        },
+        "git_log": "158a3a9a7ebe5a288ac43bbf9ce34f0f25f9d68d RivetOS Wiki <wiki@rivetos.dev> 2026-10-10T12:00:00+00:00\nwiki(acmekit-deploys): update from summary 00000000\n\nProvenance: summary 00000000-0000-0000-0000-000000000007\nPipeline: wiki-v7\n\n--\nc400063c450c76327a7c5c98f2cb5e4f5acb08e3 RivetOS Wiki <wiki@rivetos.dev> 2026-10-10T12:00:00+00:00\nwiki(acmekit-deploys): consolidate 1 near-duplicate topics\n\nMerged: acmekit-deploys-rollback\nPipeline: wiki-v6-consolidate\n\n--\n65567fb55b905dcb6dba87024df06aec9216b3e7 RivetOS Wiki <wiki@rivetos.dev> 2026-10-10T12:00:00+00:00\nwiki(staging-database): create from summary seed\n\nProvenance: summary seed\nPipeline: wiki-v7\n\n--\n50202f6328e6ac8d16f7d4ec04ae177cc3e5f8cd RivetOS Wiki <wiki@rivetos.dev> 2026-10-10T12:00:00+00:00\nwiki(acmekit-deploys-rollback): create from summary seed\n\nProvenance: summary seed\nPipeline: wiki-v7\n\n--\n40649c09ea29e4f8d428f329f654297f257f81c2 RivetOS Wiki <wiki@rivetos.dev> 2026-10-10T12:00:00+00:00\nwiki(acmekit-deploys): create from summary seed\n\nProvenance: summary seed\nPipeline: wiki-v7\n\n--\n"
+      },
+      "tables": {
+        "ros_wiki_topics": [
+          {
+            "slug": "acmekit-deploys",
+            "title": "AcmeKit deploys",
+            "aliases": "[\"acmekit-deploys-rollback\",\"AcmeKit deploys rollback\"]",
+            "tags": "[]",
+            "entities": "[]",
+            "related": "[]",
+            "current_state": "AcmeKit deploys are blue-green; rollback is a traffic switch.",
+            "article": "### Process\nCut the branch, deploy, watch the health check.",
+            "search_text": "AcmeKit deploys acmekit-deploys-rollback AcmeKit deploys rollback AcmeKit deploys are blue-green; rollback is a traffic switch. ### Process\nCut the branch, deploy, watch the health check. ",
+            "history_count": 5,
+            "git_sha": "158a3a9a7ebe5a288ac43bbf9ce34f0f25f9d68d",
+            "last_verified_at": "2026-10-10T12:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "slug": "staging-database",
+            "title": "Staging database",
+            "aliases": "[]",
+            "tags": "[]",
+            "entities": "[]",
+            "related": "[]",
+            "current_state": "Restored nightly.",
+            "article": "",
+            "search_text": "Staging database  Restored nightly.  ",
+            "history_count": 1,
+            "git_sha": "65567fb55b905dcb6dba87024df06aec9216b3e7",
+            "last_verified_at": "2026-10-01T00:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_wiki_redirects": [
+          {
+            "from_slug": "acmekit-deploys-rollback",
+            "to_slug": "acmekit-deploys",
+            "created_at": "2026-10-10T12:00:00.000Z"
+          }
+        ]
+      },
+      "logs": [
+        "[memory.sqlite] wiki consolidate: acmekit-deploys → acmekit-deploys (+1) (dry run)",
+        "[memory.sqlite] wiki consolidate: acmekit-deploys → acmekit-deploys (+1)",
+        "[memory.sqlite] wiki recompile: acmekit-deploys rejected — unparseable JSON: not json at all",
+        "[memory.sqlite] wiki recompile: no file for no-such-page"
+      ]
+    }
+  ]
+}
