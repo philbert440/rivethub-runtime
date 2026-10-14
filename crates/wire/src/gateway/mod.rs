@@ -5,6 +5,7 @@ pub mod memory;
 pub mod sessions;
 pub mod term;
 pub mod users;
+pub mod v1;
 pub mod wiki;
 
 use crate::harness::HarnessId;

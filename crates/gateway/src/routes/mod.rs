@@ -6,6 +6,7 @@ pub mod sessions;
 pub mod tags;
 pub mod terminal;
 pub mod wiki;
+pub mod v1;
 
 use std::sync::Arc;
 
@@ -31,8 +32,13 @@ pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> Json<Healthz
     })
 }
 
-pub(crate) async fn not_found() -> ApiError {
-    ApiError::NotFound("not found")
+pub(crate) async fn not_found(request: axum::extract::Request) -> axum::response::Response {
+    use tower::ServiceExt as _;
+
+    match v1::router().oneshot(request).await {
+        Ok(response) => response,
+        Err(never) => match never {},
+    }
 }
 
 pub(crate) async fn method_not_allowed() -> ApiError {

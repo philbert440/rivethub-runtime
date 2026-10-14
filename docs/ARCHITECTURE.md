@@ -15,6 +15,11 @@ Design artifact (visual, authoritative): https://claude.ai/artifact/L7cAvh16cYEZ
 
 The gate (`cargo xtask check`) fails any Cargo.toml that breaks this.
 
+The gateway `/v1` slice is an explicit service dependency exception: it calls
+`agent-loop::AgentLoop::run` for one headless turn using the injected kernel
+provider port. `deny.toml` permits only this additional service edge. Provider
+adapters and the hook pipeline are still supplied by the composition root.
+
 ## Ports (kernel traits) and who implements them
 
 | Port | Methods (shape) | Adapters | Callers |

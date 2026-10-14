@@ -15,6 +15,7 @@ rust-version = "1.99"
 libraries = [{ path = "lints" }]
 
 [workspace.dependencies]
+agent-loop = { path = "crates/agent-loop", version = "0.1.0" }
 agent-client-protocol = "0.3"
 async-trait = "0.1"
 axum = { version = "0.8", features = ["ws", "macros"] }

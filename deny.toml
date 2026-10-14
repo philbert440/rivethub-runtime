@@ -36,7 +36,7 @@ deny = [
   { crate = "mcp", wrappers = ["cli", "rivethub"], reason = "adapters are wired only in the composition root (never another adapter or a service)" },
   { crate = "capture", wrappers = ["cli", "rivethub"], reason = "adapters are wired only in the composition root (never another adapter or a service)" },
   { crate = "gateway", wrappers = ["cli", "rivethub"], reason = "services are wired only in the composition root (never a service on a service)" },
-  { crate = "agent-loop", wrappers = ["cli", "rivethub"], reason = "services are wired only in the composition root (never a service on a service)" },
+  { crate = "agent-loop", wrappers = ["gateway", "cli", "rivethub"], reason = "gateway v1 runs one headless AgentLoop turn through the provider port; other service wiring stays in the composition root" },
   { crate = "workers", wrappers = ["cli", "rivethub"], reason = "services are wired only in the composition root (never a service on a service)" },
   { crate = "tasks", wrappers = ["cli", "rivethub"], reason = "services are wired only in the composition root (never a service on a service)" },
   { crate = "cli", wrappers = ["rivethub"], reason = "the CLI is composition; only the binary links it" },
