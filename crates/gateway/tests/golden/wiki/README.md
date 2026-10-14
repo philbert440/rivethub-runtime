@@ -1,9 +1,6 @@
 # Wiki gateway coverage
 
 The vendored gateway HTTP and WebSocket traffic has no wiki request exchanges.
-`skips.jsonl` names each out-of-slice exchange with a reason. The
-`wiki_recordings` test checks that the list is complete, unique, and current,
-and refuses to skip HTTP wiki requests if recordings are added later.
 
 The files `users-tenancy.json` and `users-invalid.json` are auth configuration
 fixtures, not traffic recordings; the latter intentionally contains invalid JSON.
