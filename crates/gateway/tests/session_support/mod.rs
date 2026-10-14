@@ -301,6 +301,7 @@ impl Fixture {
                     node: "golden-node".into(),
                     allowed_hosts: vec![],
                     allowed_origins: vec![],
+                    files_root: None,
                 },
             )
             .with_tenancy(tenancy)

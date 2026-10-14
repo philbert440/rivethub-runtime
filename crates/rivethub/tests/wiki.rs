@@ -63,6 +63,7 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
             node: "wiki-test".to_owned(),
             allowed_origins: Vec::new(),
             allowed_hosts: Vec::new(),
+            files_root: None,
         },
     ));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

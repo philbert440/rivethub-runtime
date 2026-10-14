@@ -9,6 +9,7 @@ pub mod tenancy;
 pub mod term;
 pub mod tls;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::Router;
@@ -25,6 +26,7 @@ pub struct Settings {
     pub node: String,
     pub allowed_origins: Vec<String>,
     pub allowed_hosts: Vec<String>,
+    pub files_root: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -42,7 +44,15 @@ impl Settings {
             node,
             allowed_origins: section.allowed_origins,
             allowed_hosts: section.allowed_hosts,
+            files_root: configured_files_root(section.files_root),
         }
+    }
+}
+
+fn configured_files_root(root: Option<PathBuf>) -> Option<PathBuf> {
+    match root {
+        Some(path) if !path.as_os_str().is_empty() => Some(path),
+        Some(_) | None => None,
     }
 }
 

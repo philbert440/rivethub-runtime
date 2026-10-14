@@ -1,6 +1,7 @@
 pub mod capture;
 pub mod capture_schema;
 pub mod chat;
+pub mod files;
 pub mod memory;
 pub mod sessions;
 pub mod tags;
@@ -20,7 +21,7 @@ use crate::error::ApiError;
 pub(crate) const BODY_LIMIT: usize = 256 * 1024;
 
 pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
-    wiki::router()
+    files::mount(wiki::router())
 }
 
 pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> Json<HealthzResponse> {

@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod catalog;
 pub mod devices;
+pub mod files;
 pub mod memory;
 pub mod sessions;
 pub mod term;

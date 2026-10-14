@@ -58,6 +58,7 @@ impl Harness {
                     node: "test-node".to_owned(),
                     allowed_origins: Vec::new(),
                     allowed_hosts: Vec::new(),
+                    files_root: None,
                 },
             )
             .with_turn_runner(runner.clone()),

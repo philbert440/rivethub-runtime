@@ -38,7 +38,16 @@ pub(crate) fn settings() -> Settings {
         node: NODE.to_string(),
         allowed_origins: vec!["https://hub.example.test".to_string()],
         allowed_hosts: vec!["den.example.test".to_string()],
+        files_root: None,
     }
+}
+
+pub(crate) fn gateway_with_files(root: std::path::PathBuf) -> Arc<Gateway> {
+    let mut settings = settings();
+    settings.files_root = Some(root);
+    let store = Arc::new(FakeMemoryStore::default());
+    let handle: Arc<dyn MemoryStore> = store;
+    Arc::new(Gateway::new(handle, settings))
 }
 
 pub(crate) fn gateway() -> (Arc<Gateway>, Arc<FakeMemoryStore>) {

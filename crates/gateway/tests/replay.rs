@@ -37,6 +37,12 @@ const CLAIMS: &[&str] = &[
     "plain-main/not-found-file",
     "plain-main/not-found-post",
     "plain-main/not-found-api",
+    "plain-main/static-files-nested",
+    "plain-main/alias-api-files-prefix",
+    "plain-main/files-disabled",
+    "plain-main/files-bare-path",
+    "plain-nostatic/files-root-missing",
+    "plain-nostatic/files-alias-root-missing",
 ];
 
 const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
@@ -100,7 +106,6 @@ const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("plain-main", "static-post", "2"),
     ("plain-main", "static-api-prefix", "2"),
     ("plain-main", "static-term-nested", "2"),
-    ("plain-main", "static-files-nested", "4"),
     ("plain-main", "static-audio-nested", "3"),
     ("plain-main", "event-invalid-json", "2"),
     ("plain-main", "event-empty-body", "2"),
@@ -150,7 +155,6 @@ const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("plain-main", "alias-api-audio-status", "3"),
     ("plain-main", "alias-api-audio-health", "3"),
     ("plain-main", "alias-api-audio-mic-http", "3"),
-    ("plain-main", "alias-api-files-prefix", "4"),
     ("plain-main", "alias-api-events-trailing-slash", "2"),
     ("plain-main", "alias-api-events-unknown-child", "2"),
     ("plain-main", "alias-uppercase", "2"),
@@ -183,8 +187,6 @@ const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("plain-main", "phone-pairing-bad-name", "4"),
     ("plain-main", "pair-redeem-bogus", "4"),
     ("plain-main", "pair-redeem-get", "4"),
-    ("plain-main", "files-disabled", "4"),
-    ("plain-main", "files-bare-path", "4"),
     ("plain-main", "audio-disabled", "3"),
     ("plain-main", "term-post-disabled", "2"),
     ("plain-main", "capabilities", "2"),
@@ -213,8 +215,6 @@ const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("plain-nostatic", "nostatic-root-html", "2"),
     ("plain-nostatic", "nostatic-spa", "2"),
     ("plain-nostatic", "nostatic-ws-get", "2"),
-    ("plain-nostatic", "files-root-missing", "4"),
-    ("plain-nostatic", "files-alias-root-missing", "4"),
     ("plain-nostatic", "capabilities-no-mesh", "2"),
     ("plain-tenancy", "tenancy-ingest-owner-session", "2"),
     ("plain-tenancy", "tenancy-ingest-alice-session", "2"),
@@ -244,6 +244,40 @@ const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
 
 fn golden(name: &str) -> PathBuf {
     testkit::recording(name)
+}
+
+fn replay_env(
+    id: &str,
+) -> Result<
+    (
+        std::sync::Arc<gateway::Gateway>,
+        testkit::Masks,
+        Option<tempfile::TempDir>,
+    ),
+    Failed,
+> {
+    match id {
+        "plain-nostatic/files-root-missing" | "plain-nostatic/files-alias-root-missing" => {
+            let keep = tempfile::tempdir()
+                .map_err(|error| Failed::from(format!("private files root: {error}")))?;
+            let tmp = match keep.path().to_str() {
+                Some(text) => text.to_owned(),
+                None => return Err(Failed::from("private files root is not utf-8")),
+            };
+            let missing =
+                std::path::PathBuf::from(&tmp).join("runs/plain-nostatic/missing-files-root");
+            Ok((
+                common::gateway_with_files(missing),
+                testkit::Masks {
+                    port: "5174".to_string(),
+                    hostname: Some("gold-host".to_string()),
+                    tmp: Some(tmp),
+                },
+                Some(keep),
+            ))
+        }
+        _ => Ok((common::gateway().0, masks(), None)),
+    }
 }
 
 fn masks() -> testkit::Masks {
@@ -291,11 +325,10 @@ fn start(args: &Arguments, runtime: &tokio::runtime::Runtime) -> libtest_mimic::
                 }
                 let case = case.clone();
                 let id = case.id.clone();
-                let masks = masks();
-                let (gateway, _) = common::gateway();
-                let app = gateway.router(false);
                 let handle = handle.clone();
                 trials.push(Trial::test(format!("gateway {id}"), move || {
+                    let (gateway, masks, _keep) = replay_env(&case.id)?;
+                    let app = gateway.router(false);
                     must_pass(testkit::http::replay(&case, &masks, |request| match handle
                         .block_on(common::answer(app.clone(), request.clone()))
                     {

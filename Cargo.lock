@@ -1013,6 +1013,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "kernel",
+ "libc",
  "libtest-mimic",
  "parking_lot",
  "rcgen",
