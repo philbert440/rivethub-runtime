@@ -1,0 +1,1084 @@
+{
+  "runtime": {
+    "node": "v22.22.2",
+    "sqlite_version": "3.51.2",
+    "git": "git version 2.43.0",
+    "repo_head": "c72e851fcce336be1bac4d7357323c4f751f7f06"
+  },
+  "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock); compactor: fake chat (README) at https://llm.example.com/v1, model fake-chat",
+  "prompts_sha256": {
+    "LEAF_SYSTEM_PROMPT": "3d07be6ffde4cf7be503917dd7d93ec881ea6fda62232bab3257bf15be26601d",
+    "BRANCH_SYSTEM_PROMPT": "b8f51e462dcedc09d97cbc767e30f29a25f70089430e46a1be305294816a29b5",
+    "ROOT_SYSTEM_PROMPT": "c1f794a6c4ed32e080b505c108db2e5fb4db00a996174d11b32c928b5fec56cb",
+    "WIKI_EXTRACT_SYSTEM_PROMPT": "3f3710328c79f84336375fa893515c9512c641feef3392b183db78d2d2defcaa",
+    "WIKI_RECOMPILE_SYSTEM_PROMPT": "452505e360a1f41c7bbb8824060baad42f5a4b99ca80b62637d3ea1dabd1c76e",
+    "TAG_SYSTEM_PROMPT": "ee0ea5d8228a517cb43b079b9c2da4d31512c5ef0bb33316ed3fa89af5dea9ff"
+  },
+  "constants": {
+    "PIPELINE_VERSION": 5,
+    "WIKI_PIPELINE_VERSION": 4,
+    "DEFAULT_COMPACTION_SETTINGS": {
+      "leafBatch": 10,
+      "branchBatch": 8,
+      "rootBatch": 5,
+      "minLeavesForBranch": 5,
+      "minBranchesForRoot": 3,
+      "idleMinutes": 15,
+      "staleMinutes": 5760,
+      "staleMinBatch": 2
+    },
+    "MAX_LEAF_ROUNDS": 10
+  },
+  "scenarios": [
+    {
+      "name": "leaf once a full window exists",
+      "steps": [
+        {
+          "label": "runJobs",
+          "at": "2026-10-10T12:12:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "runJobs again (no LLM work)",
+          "at": "2026-10-10T12:12:00.000Z",
+          "result": 0
+        },
+        {
+          "label": "summariesForConversation",
+          "at": "2026-10-10T12:12:00.000Z",
+          "result": [
+            {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "kind": "leaf",
+              "depth": 0,
+              "parentId": null,
+              "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+              "messageCount": 10,
+              "model": "fake-chat"
+            }
+          ]
+        }
+      ],
+      "chat_calls": [
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "LEAF_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  span:      2026-10-10T12:00Z → 2026-10-10T12:09Z\n  messages:  10 in this batch\n\n---\n\n[#01 2026-10-10T12:00Z rivet/user]\nmessage number 0 about deploying the AcmeKit service\n\n---\n\n[#02 2026-10-10T12:01Z rivet/assistant]\nmessage number 1 about deploying the AcmeKit service\n\n---\n\n[#03 2026-10-10T12:02Z rivet/user]\nmessage number 2 about deploying the AcmeKit service\n\n---\n\n[#04 2026-10-10T12:03Z rivet/assistant]\nmessage number 3 about deploying the AcmeKit service\n\n---\n\n[#05 2026-10-10T12:04Z rivet/user]\nmessage number 4 about deploying the AcmeKit service\n\n---\n\n[#06 2026-10-10T12:05Z rivet/assistant]\nmessage number 5 about deploying the AcmeKit service\n\n---\n\n[#07 2026-10-10T12:06Z rivet/user]\nmessage number 6 about deploying the AcmeKit service\n\n---\n\n[#08 2026-10-10T12:07Z rivet/assistant]\nmessage number 7 about deploying the AcmeKit service\n\n---\n\n[#09 2026-10-10T12:08Z rivet/user]\nmessage number 8 about deploying the AcmeKit service\n\n---\n\n[#10 2026-10-10T12:09Z rivet/assistant]\nmessage number 9 about deploying the AcmeKit service",
+          "max_tokens": 7000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        }
+      ],
+      "tables": {
+        "ros_summaries": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": null,
+            "depth": 0,
+            "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+            "kind": "leaf",
+            "message_count": 10,
+            "earliest_at": "2026-10-10T12:00:00.000Z",
+            "latest_at": "2026-10-10T12:09:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:12:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_summary_sources": [
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "message_id": "00000000-0000-4000-8000-000000000003",
+            "ordinal": 0
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "message_id": "00000000-0000-4000-8000-000000000004",
+            "ordinal": 1
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "message_id": "00000000-0000-4000-8000-000000000005",
+            "ordinal": 2
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "message_id": "00000000-0000-4000-8000-000000000006",
+            "ordinal": 3
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "message_id": "00000000-0000-4000-8000-000000000007",
+            "ordinal": 4
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "message_id": "00000000-0000-4000-8000-000000000008",
+            "ordinal": 5
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "message_id": "00000000-0000-4000-8000-000000000009",
+            "ordinal": 6
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "message_id": "00000000-0000-4000-8000-000000000010",
+            "ordinal": 7
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "message_id": "00000000-0000-4000-8000-000000000011",
+            "ordinal": 8
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000001",
+            "message_id": "00000000-0000-4000-8000-000000000012",
+            "ordinal": 9
+          }
+        ]
+      },
+      "logs": [
+        "[memory.sqlite] compacted 00000000: 1 summaries"
+      ]
+    },
+    {
+      "name": "leaves → branches → root with small batches",
+      "steps": [
+        {
+          "label": "pass 1",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": 10
+        },
+        {
+          "label": "pass 2",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": 10
+        },
+        {
+          "label": "pass 3",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": 6
+        },
+        {
+          "label": "pass 4",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": 3
+        },
+        {
+          "label": "pass 5",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "pass 6",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "drain embeds",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "summariesForConversation",
+          "at": "2026-10-10T12:20:00.000Z",
+          "result": [
+            {
+              "id": "00000000-0000-4000-8000-000000000013",
+              "kind": "leaf",
+              "depth": 0,
+              "parentId": "00000000-0000-4000-8000-000000000014",
+              "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+              "messageCount": 5,
+              "model": "fake-chat"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000015",
+              "kind": "leaf",
+              "depth": 0,
+              "parentId": "00000000-0000-4000-8000-000000000014",
+              "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+              "messageCount": 5,
+              "model": "fake-chat"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000016",
+              "kind": "leaf",
+              "depth": 0,
+              "parentId": "00000000-0000-4000-8000-000000000017",
+              "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+              "messageCount": 5,
+              "model": "fake-chat"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000018",
+              "kind": "leaf",
+              "depth": 0,
+              "parentId": "00000000-0000-4000-8000-000000000017",
+              "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+              "messageCount": 5,
+              "model": "fake-chat"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000014",
+              "kind": "branch",
+              "depth": 1,
+              "parentId": "00000000-0000-4000-8000-000000000019",
+              "content": "Branch summary: several deploy sessions for AcmeKit settled on blue-green releases with a health-check gate.",
+              "messageCount": 10,
+              "model": "fake-chat"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000017",
+              "kind": "branch",
+              "depth": 1,
+              "parentId": "00000000-0000-4000-8000-000000000019",
+              "content": "Branch summary: several deploy sessions for AcmeKit settled on blue-green releases with a health-check gate.",
+              "messageCount": 10,
+              "model": "fake-chat"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000019",
+              "kind": "root",
+              "depth": 2,
+              "parentId": null,
+              "content": "Root summary: the whole AcmeKit deploy conversation, from the first release plan to the documented rollback.",
+              "messageCount": 20,
+              "model": "fake-chat"
+            }
+          ]
+        }
+      ],
+      "chat_calls": [
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "LEAF_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  span:      2026-10-10T12:00Z → 2026-10-10T12:04Z\n  messages:  5 in this batch\n\n---\n\n[#01 2026-10-10T12:00Z rivet/user]\nmessage number 0 about deploying the AcmeKit service\n\n---\n\n[#02 2026-10-10T12:01Z rivet/assistant]\nmessage number 1 about deploying the AcmeKit service\n\n---\n\n[#03 2026-10-10T12:02Z rivet/user]\nmessage number 2 about deploying the AcmeKit service\n\n---\n\n[#04 2026-10-10T12:03Z rivet/assistant]\nmessage number 3 about deploying the AcmeKit service\n\n---\n\n[#05 2026-10-10T12:04Z rivet/user]\nmessage number 4 about deploying the AcmeKit service",
+          "max_tokens": 7000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "LEAF_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  span:      2026-10-10T12:05Z → 2026-10-10T12:09Z\n  messages:  5 in this batch\n\n---\n\n[#01 2026-10-10T12:05Z rivet/assistant]\nmessage number 5 about deploying the AcmeKit service\n\n---\n\n[#02 2026-10-10T12:06Z rivet/user]\nmessage number 6 about deploying the AcmeKit service\n\n---\n\n[#03 2026-10-10T12:07Z rivet/assistant]\nmessage number 7 about deploying the AcmeKit service\n\n---\n\n[#04 2026-10-10T12:08Z rivet/user]\nmessage number 8 about deploying the AcmeKit service\n\n---\n\n[#05 2026-10-10T12:09Z rivet/assistant]\nmessage number 9 about deploying the AcmeKit service",
+          "max_tokens": 7000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "LEAF_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  span:      2026-10-10T12:10Z → 2026-10-10T12:14Z\n  messages:  5 in this batch\n\n---\n\n[#01 2026-10-10T12:10Z rivet/user]\nmessage number 10 about deploying the AcmeKit service\n\n---\n\n[#02 2026-10-10T12:11Z rivet/assistant]\nmessage number 11 about deploying the AcmeKit service\n\n---\n\n[#03 2026-10-10T12:12Z rivet/user]\nmessage number 12 about deploying the AcmeKit service\n\n---\n\n[#04 2026-10-10T12:13Z rivet/assistant]\nmessage number 13 about deploying the AcmeKit service\n\n---\n\n[#05 2026-10-10T12:14Z rivet/user]\nmessage number 14 about deploying the AcmeKit service",
+          "max_tokens": 7000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "LEAF_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  span:      2026-10-10T12:15Z → 2026-10-10T12:19Z\n  messages:  5 in this batch\n\n---\n\n[#01 2026-10-10T12:15Z rivet/assistant]\nmessage number 15 about deploying the AcmeKit service\n\n---\n\n[#02 2026-10-10T12:16Z rivet/user]\nmessage number 16 about deploying the AcmeKit service\n\n---\n\n[#03 2026-10-10T12:17Z rivet/assistant]\nmessage number 17 about deploying the AcmeKit service\n\n---\n\n[#04 2026-10-10T12:18Z rivet/user]\nmessage number 18 about deploying the AcmeKit service\n\n---\n\n[#05 2026-10-10T12:19Z rivet/assistant]\nmessage number 19 about deploying the AcmeKit service",
+          "max_tokens": 7000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "BRANCH_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  leaves:    2 in this branch\n  span:      2026-10-10T12:00Z → 2026-10-10T12:09Z\n\n---\n\n[Leaf #01 2026-10-10T12:00Z → 2026-10-10T12:04Z | 5 msgs]\nThe team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.\n\n---\n\n[Leaf #02 2026-10-10T12:05Z → 2026-10-10T12:09Z | 5 msgs]\nThe team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+          "max_tokens": 14000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "BRANCH_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  leaves:    2 in this branch\n  span:      2026-10-10T12:10Z → 2026-10-10T12:19Z\n\n---\n\n[Leaf #01 2026-10-10T12:10Z → 2026-10-10T12:14Z | 5 msgs]\nThe team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.\n\n---\n\n[Leaf #02 2026-10-10T12:15Z → 2026-10-10T12:19Z | 5 msgs]\nThe team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+          "max_tokens": 14000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "ROOT_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  branches:  2 in this root\n  span:      2026-10-10T12:00Z → 2026-10-10T12:19Z\n\n---\n\n[Branch #01 2026-10-10T12:00Z → 2026-10-10T12:09Z | 10 msgs]\nBranch summary: several deploy sessions for AcmeKit settled on blue-green releases with a health-check gate.\n\n---\n\n[Branch #02 2026-10-10T12:10Z → 2026-10-10T12:19Z | 10 msgs]\nBranch summary: several deploy sessions for AcmeKit settled on blue-green releases with a health-check gate.",
+          "max_tokens": 20000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null
+        }
+      ],
+      "tables": {
+        "ros_summaries": [
+          {
+            "id": "00000000-0000-4000-8000-000000000013",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": "00000000-0000-4000-8000-000000000014",
+            "depth": 0,
+            "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+            "kind": "leaf",
+            "message_count": 5,
+            "earliest_at": "2026-10-10T12:00:00.000Z",
+            "latest_at": "2026-10-10T12:04:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:20:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "c3d0103eef5b713ec3d0103ec3d0103ef304353f5916c13eef5bf13ec3d0103e"
+            },
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000015",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": "00000000-0000-4000-8000-000000000014",
+            "depth": 0,
+            "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+            "kind": "leaf",
+            "message_count": 5,
+            "earliest_at": "2026-10-10T12:05:00.000Z",
+            "latest_at": "2026-10-10T12:09:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:20:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "c3d0103eef5b713ec3d0103ec3d0103ef304353f5916c13eef5bf13ec3d0103e"
+            },
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000016",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": "00000000-0000-4000-8000-000000000017",
+            "depth": 0,
+            "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+            "kind": "leaf",
+            "message_count": 5,
+            "earliest_at": "2026-10-10T12:10:00.000Z",
+            "latest_at": "2026-10-10T12:14:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:20:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "c3d0103eef5b713ec3d0103ec3d0103ef304353f5916c13eef5bf13ec3d0103e"
+            },
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000018",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": "00000000-0000-4000-8000-000000000017",
+            "depth": 0,
+            "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+            "kind": "leaf",
+            "message_count": 5,
+            "earliest_at": "2026-10-10T12:15:00.000Z",
+            "latest_at": "2026-10-10T12:19:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:20:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "c3d0103eef5b713ec3d0103ec3d0103ef304353f5916c13eef5bf13ec3d0103e"
+            },
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000014",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": "00000000-0000-4000-8000-000000000019",
+            "depth": 1,
+            "content": "Branch summary: several deploy sessions for AcmeKit settled on blue-green releases with a health-check gate.",
+            "kind": "branch",
+            "message_count": 10,
+            "earliest_at": "2026-10-10T12:00:00.000Z",
+            "latest_at": "2026-10-10T12:09:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:20:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "96289c3e96289c3e96289c3e96281c3ee13cea3e96289c3e96281c3e96281c3f"
+            },
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000017",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": "00000000-0000-4000-8000-000000000019",
+            "depth": 1,
+            "content": "Branch summary: several deploy sessions for AcmeKit settled on blue-green releases with a health-check gate.",
+            "kind": "branch",
+            "message_count": 10,
+            "earliest_at": "2026-10-10T12:10:00.000Z",
+            "latest_at": "2026-10-10T12:19:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:20:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "96289c3e96289c3e96289c3e96281c3ee13cea3e96289c3e96281c3e96281c3f"
+            },
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000019",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": null,
+            "depth": 2,
+            "content": "Root summary: the whole AcmeKit deploy conversation, from the first release plan to the documented rollback.",
+            "kind": "root",
+            "message_count": 20,
+            "earliest_at": "2026-10-10T12:00:00.000Z",
+            "latest_at": "2026-10-10T12:19:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:20:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "0000000077d6883e77d6083e77d6083e150c2b3f77d6083fb341cd3e00000000"
+            },
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_summary_sources": [
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000013",
+            "message_id": "00000000-0000-4000-8000-000000000003",
+            "ordinal": 0
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000013",
+            "message_id": "00000000-0000-4000-8000-000000000020",
+            "ordinal": 1
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000013",
+            "message_id": "00000000-0000-4000-8000-000000000006",
+            "ordinal": 2
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000013",
+            "message_id": "00000000-0000-4000-8000-000000000021",
+            "ordinal": 3
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000013",
+            "message_id": "00000000-0000-4000-8000-000000000009",
+            "ordinal": 4
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000015",
+            "message_id": "00000000-0000-4000-8000-000000000022",
+            "ordinal": 0
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000015",
+            "message_id": "00000000-0000-4000-8000-000000000012",
+            "ordinal": 1
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000015",
+            "message_id": "00000000-0000-4000-8000-000000000023",
+            "ordinal": 2
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000015",
+            "message_id": "00000000-0000-4000-8000-000000000001",
+            "ordinal": 3
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000015",
+            "message_id": "00000000-0000-4000-8000-000000000024",
+            "ordinal": 4
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000016",
+            "message_id": "00000000-0000-4000-8000-000000000025",
+            "ordinal": 0
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000016",
+            "message_id": "00000000-0000-4000-8000-000000000026",
+            "ordinal": 1
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000016",
+            "message_id": "00000000-0000-4000-8000-000000000027",
+            "ordinal": 2
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000016",
+            "message_id": "00000000-0000-4000-8000-000000000028",
+            "ordinal": 3
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000016",
+            "message_id": "00000000-0000-4000-8000-000000000029",
+            "ordinal": 4
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000018",
+            "message_id": "00000000-0000-4000-8000-000000000030",
+            "ordinal": 0
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000018",
+            "message_id": "00000000-0000-4000-8000-000000000031",
+            "ordinal": 1
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000018",
+            "message_id": "00000000-0000-4000-8000-000000000032",
+            "ordinal": 2
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000018",
+            "message_id": "00000000-0000-4000-8000-000000000033",
+            "ordinal": 3
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000018",
+            "message_id": "00000000-0000-4000-8000-000000000034",
+            "ordinal": 4
+          }
+        ]
+      },
+      "summary_vectors": [
+        {
+          "id": "00000000-0000-4000-8000-000000000013",
+          "embed_status": "done",
+          "embedding_hex": "C3D0103EEF5B713EC3D0103EC3D0103EF304353F5916C13EEF5BF13EC3D0103E"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000015",
+          "embed_status": "done",
+          "embedding_hex": "C3D0103EEF5B713EC3D0103EC3D0103EF304353F5916C13EEF5BF13EC3D0103E"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000016",
+          "embed_status": "done",
+          "embedding_hex": "C3D0103EEF5B713EC3D0103EC3D0103EF304353F5916C13EEF5BF13EC3D0103E"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000018",
+          "embed_status": "done",
+          "embedding_hex": "C3D0103EEF5B713EC3D0103EC3D0103EF304353F5916C13EEF5BF13EC3D0103E"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000014",
+          "embed_status": "done",
+          "embedding_hex": "96289C3E96289C3E96289C3E96281C3EE13CEA3E96289C3E96281C3E96281C3F"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000017",
+          "embed_status": "done",
+          "embedding_hex": "96289C3E96289C3E96289C3E96281C3EE13CEA3E96289C3E96281C3E96281C3F"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000019",
+          "embed_status": "done",
+          "embedding_hex": "0000000077D6883E77D6083E77D6083E150C2B3F77D6083FB341CD3E00000000"
+        }
+      ],
+      "logs": [
+        "[memory.sqlite] compacted 00000000: 5 summaries",
+        "[memory.sqlite] compacted 00000000: 2 summaries"
+      ]
+    },
+    {
+      "name": "truncated answer shrinks the leaf batch",
+      "steps": [
+        {
+          "label": "runJobs",
+          "at": "2026-10-10T12:10:00.000Z",
+          "result": 1
+        }
+      ],
+      "chat_calls": [
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "LEAF_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  span:      2026-10-10T12:00Z → 2026-10-10T12:09Z\n  messages:  10 in this batch\n\n---\n\n[#01 2026-10-10T12:00Z rivet/user]\nmessage number 0 about deploying the AcmeKit service\n\n---\n\n[#02 2026-10-10T12:01Z rivet/assistant]\nmessage number 1 about deploying the AcmeKit service\n\n---\n\n[#03 2026-10-10T12:02Z rivet/user]\nmessage number 2 about deploying the AcmeKit service\n\n---\n\n[#04 2026-10-10T12:03Z rivet/assistant]\nmessage number 3 about deploying the AcmeKit service\n\n---\n\n[#05 2026-10-10T12:04Z rivet/user]\nmessage number 4 about deploying the AcmeKit service\n\n---\n\n[#06 2026-10-10T12:05Z rivet/assistant]\nmessage number 5 about deploying the AcmeKit service\n\n---\n\n[#07 2026-10-10T12:06Z rivet/user]\nmessage number 6 about deploying the AcmeKit service\n\n---\n\n[#08 2026-10-10T12:07Z rivet/assistant]\nmessage number 7 about deploying the AcmeKit service\n\n---\n\n[#09 2026-10-10T12:08Z rivet/user]\nmessage number 8 about deploying the AcmeKit service\n\n---\n\n[#10 2026-10-10T12:09Z rivet/assistant]\nmessage number 9 about deploying the AcmeKit service",
+          "max_tokens": 7000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null,
+          "user_length": 1174
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "LEAF_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  span:      2026-10-10T12:00Z → 2026-10-10T12:04Z\n  messages:  5 in this batch\n\n---\n\n[#01 2026-10-10T12:00Z rivet/user]\nmessage number 0 about deploying the AcmeKit service\n\n---\n\n[#02 2026-10-10T12:01Z rivet/assistant]\nmessage number 1 about deploying the AcmeKit service\n\n---\n\n[#03 2026-10-10T12:02Z rivet/user]\nmessage number 2 about deploying the AcmeKit service\n\n---\n\n[#04 2026-10-10T12:03Z rivet/assistant]\nmessage number 3 about deploying the AcmeKit service\n\n---\n\n[#05 2026-10-10T12:04Z rivet/user]\nmessage number 4 about deploying the AcmeKit service",
+          "max_tokens": 7000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null,
+          "user_length": 688
+        },
+        {
+          "url": "https://llm.example.com/v1/chat/completions",
+          "prompt": "LEAF_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:s1\n  span:      2026-10-10T12:05Z → 2026-10-10T12:09Z\n  messages:  5 in this batch\n\n---\n\n[#01 2026-10-10T12:05Z rivet/assistant]\nmessage number 5 about deploying the AcmeKit service\n\n---\n\n[#02 2026-10-10T12:06Z rivet/user]\nmessage number 6 about deploying the AcmeKit service\n\n---\n\n[#03 2026-10-10T12:07Z rivet/assistant]\nmessage number 7 about deploying the AcmeKit service\n\n---\n\n[#04 2026-10-10T12:08Z rivet/user]\nmessage number 8 about deploying the AcmeKit service\n\n---\n\n[#05 2026-10-10T12:09Z rivet/assistant]\nmessage number 9 about deploying the AcmeKit service",
+          "max_tokens": 7000,
+          "temperature": 0.3,
+          "model": "fake-chat",
+          "auth": null,
+          "user_length": 693
+        }
+      ],
+      "tables": {
+        "ros_summaries": [
+          {
+            "id": "00000000-0000-4000-8000-000000000035",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": null,
+            "depth": 0,
+            "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+            "kind": "leaf",
+            "message_count": 5,
+            "earliest_at": "2026-10-10T12:00:00.000Z",
+            "latest_at": "2026-10-10T12:04:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:10:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000023",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": null,
+            "depth": 0,
+            "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+            "kind": "leaf",
+            "message_count": 5,
+            "earliest_at": "2026-10-10T12:05:00.000Z",
+            "latest_at": "2026-10-10T12:09:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:10:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_summary_sources": [
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000035",
+            "message_id": "00000000-0000-4000-8000-000000000003",
+            "ordinal": 0
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000035",
+            "message_id": "00000000-0000-4000-8000-000000000004",
+            "ordinal": 1
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000035",
+            "message_id": "00000000-0000-4000-8000-000000000005",
+            "ordinal": 2
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000035",
+            "message_id": "00000000-0000-4000-8000-000000000006",
+            "ordinal": 3
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000035",
+            "message_id": "00000000-0000-4000-8000-000000000007",
+            "ordinal": 4
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000008",
+            "ordinal": 0
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000009",
+            "ordinal": 1
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000010",
+            "ordinal": 2
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000011",
+            "ordinal": 3
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000012",
+            "ordinal": 4
+          }
+        ]
+      },
+      "logs": [
+        "[memory.sqlite] compacted 00000000: 2 summaries"
+      ]
+    },
+    {
+      "name": "failing LLM fails the job; heartbeat never summarized",
+      "steps": [
+        {
+          "label": "runJobs",
+          "at": "2026-10-04T12:22:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "counts",
+          "at": "2026-10-04T12:22:00.000Z",
+          "result": [
+            {
+              "task": "compact-conversation",
+              "state": "queued",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "chat_calls": 3,
+      "tables": {
+        "ros_jobs": [
+          {
+            "id": "00000000-0000-4000-8000-000000000036",
+            "task": "compact-conversation",
+            "job_key": "compact-00000000-0000-4000-8000-000000000002",
+            "payload": "{\"conversationId\":\"00000000-0000-4000-8000-000000000002\",\"triggerType\":\"session_idle\"}",
+            "run_at": "2026-10-04T12:22:30.000Z",
+            "attempts": 1,
+            "max_attempts": 3,
+            "state": "queued",
+            "last_error": "LLM HTTP 503",
+            "locked_at": null,
+            "created_at": "2026-10-04T12:22:00.000Z",
+            "updated_at": "2026-10-04T12:22:00.000Z"
+          }
+        ]
+      },
+      "logs": [
+        "[sqlite-jobs] compact-conversation compact-00000000-0000-4000-8000-000000000002 failed (attempt 1/3, retry): LLM HTTP 503"
+      ]
+    },
+    {
+      "name": "permanent failure → dead → rests an hour → revived",
+      "steps": [
+        {
+          "label": "runJobs 1",
+          "at": "2026-10-04T12:10:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "runJobs 2",
+          "at": "2026-10-04T12:20:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "runJobs 3",
+          "at": "2026-10-04T12:30:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "counts (dead)",
+          "at": "2026-10-04T12:40:00.000Z",
+          "result": [
+            {
+              "task": "compact-conversation",
+              "state": "dead",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "label": "runJobs within rest",
+          "at": "2026-10-04T12:50:00.000Z",
+          "result": 0
+        },
+        {
+          "label": "runJobs after rest",
+          "at": "2026-10-04T13:51:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "counts",
+          "at": "2026-10-04T13:51:00.000Z",
+          "result": []
+        }
+      ],
+      "tables": {
+        "ros_summaries": [
+          {
+            "id": "00000000-0000-4000-8000-000000000023",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": null,
+            "depth": 0,
+            "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+            "kind": "leaf",
+            "message_count": 10,
+            "earliest_at": "2026-10-04T12:00:00.000Z",
+            "latest_at": "2026-10-04T12:09:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T13:51:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_summary_sources": [
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000003",
+            "ordinal": 0
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000004",
+            "ordinal": 1
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000005",
+            "ordinal": 2
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000006",
+            "ordinal": 3
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000007",
+            "ordinal": 4
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000008",
+            "ordinal": 5
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000009",
+            "ordinal": 6
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000010",
+            "ordinal": 7
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000011",
+            "ordinal": 8
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000023",
+            "message_id": "00000000-0000-4000-8000-000000000012",
+            "ordinal": 9
+          }
+        ]
+      },
+      "logs": [
+        "[sqlite-jobs] compact-conversation compact-00000000-0000-4000-8000-000000000002 failed (attempt 1/3, retry): LLM HTTP 400 (not retrying)",
+        "[sqlite-jobs] compact-conversation compact-00000000-0000-4000-8000-000000000002 failed (attempt 2/3, retry): LLM HTTP 400 (not retrying)",
+        "[sqlite-jobs] compact-conversation compact-00000000-0000-4000-8000-000000000002 failed (attempt 3/3, dead): LLM HTTP 400 (not retrying)",
+        "[memory.sqlite] compacted 00000000: 1 summaries"
+      ]
+    },
+    {
+      "name": "below the floor until idle/stale",
+      "steps": [
+        {
+          "label": "runJobs now",
+          "at": "2026-10-04T12:09:00.000Z",
+          "result": 0
+        },
+        {
+          "label": "health compaction",
+          "at": "2026-10-04T12:09:00.000Z",
+          "result": {
+            "eligible": 0,
+            "activeTail": 6,
+            "belowFloor": 3
+          }
+        },
+        {
+          "label": "runJobs after idle",
+          "at": "2026-10-04T12:25:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "runJobs after stale",
+          "at": "2026-10-08T12:25:00.000Z",
+          "result": 1
+        },
+        {
+          "label": "health compaction",
+          "at": "2026-10-08T12:25:00.000Z",
+          "result": {
+            "eligible": 0,
+            "activeTail": 0,
+            "belowFloor": 0
+          }
+        }
+      ],
+      "chat_calls": [
+        {
+          "prompt": "LEAF_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000037\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:floor\n  span:      2026-10-04T12:03Z → 2026-10-04T12:08Z\n  messages:  6 in this batch\n\n---\n\n[#01 2026-10-04T12:03Z rivet/user]\nmessage number 0 about deploying the AcmeKit service\n\n---\n\n[#02 2026-10-04T12:04Z rivet/assistant]\nmessage number 1 about deploying the AcmeKit service\n\n---\n\n[#03 2026-10-04T12:05Z rivet/user]\nmessage number 2 about deploying the AcmeKit service\n\n---\n\n[#04 2026-10-04T12:06Z rivet/assistant]\nmessage number 3 about deploying the AcmeKit service\n\n---\n\n[#05 2026-10-04T12:07Z rivet/user]\nmessage number 4 about deploying the AcmeKit service\n\n---\n\n[#06 2026-10-04T12:08Z rivet/assistant]\nmessage number 5 about deploying the AcmeKit service"
+        },
+        {
+          "prompt": "LEAF_SYSTEM_PROMPT",
+          "user": "[conversation]\n  id:        00000000-0000-4000-8000-000000000002\n  agent:     rivet\n  channel:   cli\n  title:     Session cli:few\n  span:      2026-10-04T12:00Z → 2026-10-04T12:02Z\n  messages:  3 in this batch\n\n---\n\n[#01 2026-10-04T12:00Z rivet/user]\nmessage number 0 about deploying the AcmeKit service\n\n---\n\n[#02 2026-10-04T12:01Z rivet/assistant]\nmessage number 1 about deploying the AcmeKit service\n\n---\n\n[#03 2026-10-04T12:02Z rivet/user]\nmessage number 2 about deploying the AcmeKit service"
+        }
+      ],
+      "tables": {
+        "ros_summaries": [
+          {
+            "id": "00000000-0000-4000-8000-000000000012",
+            "conversation_id": "00000000-0000-4000-8000-000000000037",
+            "parent_id": null,
+            "depth": 0,
+            "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+            "kind": "leaf",
+            "message_count": 6,
+            "earliest_at": "2026-10-04T12:03:00.000Z",
+            "latest_at": "2026-10-04T12:08:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T12:25:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000035",
+            "conversation_id": "00000000-0000-4000-8000-000000000002",
+            "parent_id": null,
+            "depth": 0,
+            "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
+            "kind": "leaf",
+            "message_count": 3,
+            "earliest_at": "2026-10-04T12:00:00.000Z",
+            "latest_at": "2026-10-04T12:02:00.000Z",
+            "model": "fake-chat",
+            "pipeline_version": 5,
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-08T12:25:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0
+          }
+        ],
+        "ros_summary_sources": [
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000012",
+            "message_id": "00000000-0000-4000-8000-000000000006",
+            "ordinal": 0
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000012",
+            "message_id": "00000000-0000-4000-8000-000000000007",
+            "ordinal": 1
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000012",
+            "message_id": "00000000-0000-4000-8000-000000000008",
+            "ordinal": 2
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000012",
+            "message_id": "00000000-0000-4000-8000-000000000009",
+            "ordinal": 3
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000012",
+            "message_id": "00000000-0000-4000-8000-000000000010",
+            "ordinal": 4
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000012",
+            "message_id": "00000000-0000-4000-8000-000000000011",
+            "ordinal": 5
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000035",
+            "message_id": "00000000-0000-4000-8000-000000000003",
+            "ordinal": 0
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000035",
+            "message_id": "00000000-0000-4000-8000-000000000004",
+            "ordinal": 1
+          },
+          {
+            "summary_id": "00000000-0000-4000-8000-000000000035",
+            "message_id": "00000000-0000-4000-8000-000000000005",
+            "ordinal": 2
+          }
+        ]
+      },
+      "logs": [
+        "[memory.sqlite] compacted 00000000: 1 summaries",
+        "[memory.sqlite] compacted 00000000: 1 summaries"
+      ]
+    }
+  ]
+}

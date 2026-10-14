@@ -138,3 +138,5 @@ by the repo privacy scanner in these contexts, so it is not used.
 | `stats-health.json` | `stats(agent?)` and `health()` JSON across states. |
 | `export.ndjson` | Gunzipped export stream of a seeded store (header + rows). |
 | `portability.json` | `--since` exports, round-trip import, merge, a Postgres-shaped dump import, refusals. |
+
+`summarizer.json` is the recording the TypeScript recorder named `compaction.json` (the memory summarizer; renamed per the naming rule).
