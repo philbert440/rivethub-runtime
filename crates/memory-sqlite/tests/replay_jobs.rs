@@ -2,6 +2,10 @@
     clippy::redundant_pub_crate,
     reason = "private shared test module: unreachable_pub requires pub(crate) here, the nursery lint disagrees"
 )]
+#[expect(
+    dead_code,
+    reason = "this test binary uses only the queue helpers of the shared harness"
+)]
 mod common;
 
 use chrono::Duration;

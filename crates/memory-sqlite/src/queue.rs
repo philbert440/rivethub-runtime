@@ -1,8 +1,3 @@
-#![expect(
-    clippy::redundant_pub_crate,
-    reason = "a private module: rustc's unreachable_pub rejects plain pub, so crate visibility is the widest reachable form"
-)]
-
 use std::str::FromStr as _;
 
 use chrono::DateTime;
@@ -148,13 +143,11 @@ struct DueRow {
 
 #[must_use]
 pub fn retry_delay_ms(attempt: u32) -> u64 {
-    let Ok(index) = usize::try_from(attempt) else {
-        return DELAY_CAP_MS;
-    };
-    match DELAYS_MS.get(index) {
-        Some(delay) => *delay,
-        None => DELAY_CAP_MS,
-    }
+    DELAYS_MS
+        .iter()
+        .zip(0_u32..)
+        .find_map(|(delay, index)| (index == attempt).then_some(*delay))
+        .unwrap_or(DELAY_CAP_MS)
 }
 
 impl SqliteStore {
