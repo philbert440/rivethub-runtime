@@ -4,6 +4,8 @@ use serde_json::value::RawValue;
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 
+use crate::event_id::ToolInput;
+
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
 )]
@@ -35,7 +37,7 @@ pub struct HookPayload {
     pub hook_event_name: Option<HookEvent>,
     pub prompt: Option<String>,
     pub tool_name: Option<String>,
-    pub tool_input: Option<Box<RawValue>>,
+    pub tool_input: Option<ToolInput>,
     pub tool_response: Option<Box<RawValue>>,
     pub tool_result: Option<String>,
     pub tool_use_id: Option<String>,
@@ -50,7 +52,7 @@ struct HookPayloadWire {
     hook_event_name: Option<HookEvent>,
     prompt: Option<String>,
     tool_name: Option<String>,
-    tool_input: Option<Box<RawValue>>,
+    tool_input: Option<ToolInput>,
     tool_response: Option<Box<RawValue>>,
     tool_result: Option<String>,
     tool_use_id: Option<String>,

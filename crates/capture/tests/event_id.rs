@@ -1,15 +1,15 @@
 use capture::event_id::OccurrenceKind;
-use capture::json;
+use capture::event_id::ToolInput;
 
 const TOOL_DIGEST: &str = "146febb19d952f1e7867c264405749f516bbd1a018c358ce43f86fa330080495";
 const ASSISTANT_DIGEST: &str = "82c65e8f44c13f18ad14a0fb2031efafe4512258601b707cdb65d2d6c594fa54";
 
-fn arguments(text: &str) -> Result<json::JsJson, capture::json::JsonError> {
-    json::parse(text)
+fn arguments(text: &str) -> Result<ToolInput, serde_json::Error> {
+    ToolInput::parse(text)
 }
 
 #[test]
-fn tool_occurrence_digest_matches_the_recorded_id() -> Result<(), capture::json::JsonError> {
+fn tool_occurrence_digest_matches_the_recorded_id() -> Result<(), serde_json::Error> {
     let input = arguments(r#"{"file_path":"/work/demo/a.txt"}"#)?;
     assert_eq!(
         capture::event_id::occurrence_digest(
@@ -32,7 +32,7 @@ fn assistant_occurrence_digest_matches_the_recorded_id() {
 }
 
 #[test]
-fn occurrence_ids_carry_the_occurrence_index() -> Result<(), capture::json::JsonError> {
+fn occurrence_ids_carry_the_occurrence_index() -> Result<(), serde_json::Error> {
     let input = arguments(r#"{"file_path":"/work/demo/a.txt"}"#)?;
     let digest = capture::event_id::occurrence_digest(
         OccurrenceKind::Tool,
@@ -48,7 +48,7 @@ fn occurrence_ids_carry_the_occurrence_index() -> Result<(), capture::json::Json
 }
 
 #[test]
-fn number_spelling_follows_the_recorded_hashes() -> Result<(), capture::json::JsonError> {
+fn number_spelling_follows_the_recorded_hashes() -> Result<(), serde_json::Error> {
     let cases = [
         (r#"{"a":1.0}"#, r#"{"a":1}"#),
         (r#"{"a":0.1}"#, r#"{"a":0.1}"#),
@@ -73,11 +73,7 @@ fn number_spelling_follows_the_recorded_hashes() -> Result<(), capture::json::Js
     ];
     for (input, expected) in cases {
         let parsed = arguments(input)?;
-        assert_eq!(
-            capture::event_id::arguments_spelling(&parsed),
-            expected,
-            "spelling of {input}"
-        );
+        assert_eq!(parsed.spelling(), expected, "spelling of {input}");
     }
     Ok(())
 }

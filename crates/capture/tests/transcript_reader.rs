@@ -165,3 +165,33 @@ async fn lines_without_parseable_timestamps_are_not_turns() -> Result<(), Box<dy
     );
     Ok(())
 }
+
+#[test]
+fn unparseable_timestamps_are_reported_like_skipped_lines() {
+    let text = concat!(
+        r#"{"type":"user","timestamp":"2026-10-10T12:00:00.000Z","message":{"role":"user","content":"hello"}}"#,
+        "\n\n",
+        r#"{"type":"assistant","timestamp":"not-a-timestamp","message":{"role":"assistant","content":"hi"}}"#,
+        "\n",
+        r#"{"type":"assistant","message":{"role":"assistant","content":"untimed"}}"#,
+        "\n",
+    );
+    let parsed = capture::transcript::parse_lines(text);
+    assert_eq!(parsed.skipped, []);
+    let turns = capture::transcript::turns_of(&parsed.lines);
+    assert_eq!(turns.turns.len(), 1);
+    assert_eq!(
+        turns
+            .skipped
+            .iter()
+            .map(|line| line.number)
+            .collect::<Vec<_>>(),
+        [3]
+    );
+    assert!(
+        turns
+            .skipped
+            .first()
+            .is_some_and(|line| line.reason.contains("not-a-timestamp"))
+    );
+}

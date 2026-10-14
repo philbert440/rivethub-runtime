@@ -1,4 +1,4 @@
-use std::fs;
+use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
+use tokio::fs;
 use wire::capture::CaptureResult;
 
 use crate::writer::PostError;
@@ -44,9 +45,9 @@ impl CaptureSpool {
         &self.dir
     }
 
-    pub fn spool(&self, body: &str, now: DateTime<Utc>) -> Result<PathBuf, SpoolError> {
-        fs::create_dir_all(&self.dir)?;
-        set_mode(&self.dir, DIR_MODE)?;
+    pub async fn spool(&self, body: &str, now: DateTime<Utc>) -> Result<PathBuf, SpoolError> {
+        fs::create_dir_all(&self.dir).await?;
+        set_mode(&self.dir, DIR_MODE).await?;
         let name = format!(
             "{}-{}.json",
             now.timestamp_millis(),
@@ -54,9 +55,9 @@ impl CaptureSpool {
         );
         let target = self.dir.join(&name);
         let temporary = self.dir.join(format!("{name}.tmp"));
-        fs::write(&temporary, body)?;
-        set_mode(&temporary, FILE_MODE)?;
-        fs::rename(&temporary, &target)?;
+        fs::write(&temporary, body).await?;
+        set_mode(&temporary, FILE_MODE).await?;
+        fs::rename(&temporary, &target).await?;
         Ok(target)
     }
 
@@ -65,56 +66,57 @@ impl CaptureSpool {
         F: Fn(String) -> Future_,
         Future_: std::future::Future<Output = Result<CaptureResult, PostError>>,
     {
-        let mut queued = queued_files(&self.dir)?;
+        let mut queued = queued_files(&self.dir).await?;
         queued.sort_by_key(|(prefix, _)| *prefix);
         for (_, path) in queued.into_iter().take(max) {
-            let body = match fs::read_to_string(&path) {
+            let body = match fs::read_to_string(&path).await {
                 Ok(body) => body,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) if error.kind() == ErrorKind::NotFound => continue,
                 Err(error) => return Err(ReplayError::Io(error)),
             };
             match post(body).await {
-                Ok(_) => match fs::remove_file(&path) {
+                Ok(_) => match fs::remove_file(&path).await {
                     Ok(()) => {}
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) if error.kind() == ErrorKind::NotFound => {}
                     Err(error) => return Err(ReplayError::Io(error)),
                 },
-                Err(PostError::Client { .. }) => {
-                    self.dead_letter(&path)?;
-                }
+                Err(PostError::Client { .. }) => self.dead_letter(&path).await?,
                 Err(error) => return Err(error.into()),
             }
         }
         Ok(())
     }
 
-    fn dead_letter(&self, path: &Path) -> Result<(), SpoolError> {
+    async fn dead_letter(&self, path: &Path) -> Result<(), SpoolError> {
         let name = path.file_name().ok_or_else(|| {
             SpoolError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
+                ErrorKind::InvalidData,
                 "spool file has no name",
             ))
         })?;
         let dead = self.dir.join(DEAD_DIR);
-        fs::create_dir_all(&dead)?;
-        fs::rename(path, dead.join(name.to_string_lossy().to_string()))?;
+        fs::create_dir_all(&dead).await?;
+        fs::rename(path, dead.join(name)).await?;
         Ok(())
     }
 }
 
-fn queued_files(dir: &Path) -> Result<Vec<(u64, PathBuf)>, std::io::Error> {
+async fn queued_files(dir: &Path) -> Result<Vec<(u64, PathBuf)>, std::io::Error> {
     let mut queued = Vec::new();
-    let entries = match fs::read_dir(dir) {
+    let mut entries = match fs::read_dir(dir).await {
         Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(queued),
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(queued),
         Err(error) => return Err(error),
     };
-    for entry in entries {
-        let path = entry?.path();
-        if !path.is_file() {
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let Some(prefix) = spool_prefix(&path) else {
             continue;
-        }
-        if let Some(prefix) = spool_prefix(&path) {
+        };
+        if fs::metadata(&path)
+            .await
+            .is_ok_and(|metadata| metadata.is_file())
+        {
             queued.push((prefix, path));
         }
     }
@@ -122,17 +124,15 @@ fn queued_files(dir: &Path) -> Result<Vec<(u64, PathBuf)>, std::io::Error> {
 }
 
 fn spool_prefix(path: &Path) -> Option<u64> {
-    let name = path.file_name()?.to_string_lossy();
+    let name = path.file_name()?.to_str()?;
     let (digits, rest) = name.split_once('-')?;
-    let is_spooled = std::path::Path::new(rest).extension() == Some(std::ffi::OsStr::new("json"));
+    let is_spooled = Path::new(rest).extension().is_some_and(|ext| ext == "json");
     if !is_spooled || rest.contains('/') {
         return None;
     }
     digits.parse::<u64>().ok()
 }
 
-fn set_mode(path: &Path, mode: u32) -> Result<(), std::io::Error> {
-    let mut permissions = fs::metadata(path)?.permissions();
-    permissions.set_mode(mode);
-    fs::set_permissions(path, permissions)
+async fn set_mode(path: &Path, mode: u32) -> Result<(), std::io::Error> {
+    fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).await
 }

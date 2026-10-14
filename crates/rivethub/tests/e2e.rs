@@ -149,11 +149,27 @@ async fn post_recorded_batches(
         let input = std::fs::read_to_string(recording(name).with_extension("input.json"))?;
         let batch: CaptureBatchRequest = parse_batch(&input)?;
         let posts = recorded_posts(name)?;
-        expected.extend(expected_rows(&posts)?);
+        let mut rows = expected_rows(&posts)?;
+        if name == "surrogate_cap" {
+            let original: Json = serde_json::from_str(&input)?;
+            let text = original
+                .pointer("/messages/0/content")
+                .and_then(Json::as_str)
+                .ok_or("surrogate_cap input has no content")?;
+            for row in &mut rows {
+                row.content = text.chars().take(16_000).collect();
+            }
+        }
+        expected.extend(rows);
         let transport = HttpCaptureTransport::new(base.to_owned(), client.clone());
         let spool_dir = tempdir()?;
         let spool = CaptureSpool::new(spool_dir.path().to_path_buf());
-        let writer = CaptureWriter::new(transport, spool, chunk_bytes, redaction_for(name, env));
+        let writer = CaptureWriter::new(
+            transport,
+            spool,
+            std::num::NonZeroUsize::new(chunk_bytes),
+            redaction_for(name, env),
+        );
         let totals = writer.write(&batch, now).await?;
         let want = recorded_totals()?
             .remove(name)

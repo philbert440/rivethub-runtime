@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
@@ -8,11 +10,7 @@ use wire::capture::CaptureBatchRequest;
 use wire::capture::CaptureMessage;
 use wire::capture::CaptureResult;
 
-use crate::json;
-use crate::json::JsJson;
-use crate::json::JsonError;
 use crate::redaction::Redaction;
-use crate::redaction::RedactionError;
 use crate::spool::CaptureSpool;
 
 const CONTENT_LIMIT: usize = 16_000;
@@ -55,10 +53,8 @@ pub enum WriteError {
     Post(#[from] PostError),
     #[error(transparent)]
     Replay(#[from] crate::spool::ReplayError),
-    #[error(transparent)]
-    Redaction(#[from] RedactionError),
-    #[error(transparent)]
-    Json(#[from] JsonError),
+    #[error("capture JSON encoding failed: {0}")]
+    Json(#[from] serde_json::Error),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -139,17 +135,13 @@ impl<T: CaptureTransport> CaptureWriter<T> {
     pub fn new(
         transport: T,
         spool: CaptureSpool,
-        max_chunk_bytes: usize,
+        max_chunk_bytes: Option<NonZeroUsize>,
         redaction: Option<Redaction>,
     ) -> Self {
         Self {
             transport,
             spool,
-            max_chunk_bytes: if max_chunk_bytes == 0 {
-                DEFAULT_CHUNK_BYTES
-            } else {
-                max_chunk_bytes
-            },
+            max_chunk_bytes: max_chunk_bytes.map_or(DEFAULT_CHUNK_BYTES, NonZeroUsize::get),
             redaction,
         }
     }
@@ -166,7 +158,7 @@ impl<T: CaptureTransport> CaptureWriter<T> {
         if let Some(redaction) = &self.redaction {
             let mut spans = 0;
             for message in &mut prepared.messages {
-                spans += redaction.redact_message(message)?;
+                spans += redaction.redact_message(message);
             }
             if spans > 0 {
                 tracing::info!("redacted {spans} spans");
@@ -181,7 +173,7 @@ impl<T: CaptureTransport> CaptureWriter<T> {
                 Ok(result) => totals.add(&result),
                 Err(error @ PostError::Client { .. }) => return Err(error.into()),
                 Err(error) => {
-                    self.spool.spool(&body, now)?;
+                    self.spool.spool(&body, now).await?;
                     return Err(error.into());
                 }
             }
@@ -191,9 +183,7 @@ impl<T: CaptureTransport> CaptureWriter<T> {
 }
 
 fn body_text(batch: &CaptureBatchRequest) -> Result<String, WriteError> {
-    serde_json::to_string(batch)
-        .map_err(JsonError::Encode)
-        .map_err(WriteError::from)
+    Ok(serde_json::to_string(batch)?)
 }
 
 fn cap_batch(batch: &mut CaptureBatchRequest) -> Result<(), WriteError> {
@@ -203,39 +193,25 @@ fn cap_batch(batch: &mut CaptureBatchRequest) -> Result<(), WriteError> {
     Ok(())
 }
 
-fn cap_message(message: &mut CaptureMessage) -> Result<(), WriteError> {
-    if utf16_len(&message.content) > CONTENT_LIMIT {
-        let full = utf16_len(&message.content);
-        message.content = utf16_cut(&message.content, CONTENT_LIMIT);
-        with_metadata(&mut message.metadata, |members| {
-            json::set_member(members, "truncated", JsJson::Bool(true));
-            json::set_member(members, "full_content_length", json::number(full));
-        })?;
+fn cap_message(message: &mut CaptureMessage) -> Result<(), serde_json::Error> {
+    if let Some(full) = cap_text(&mut message.content) {
+        let metadata = message.metadata.get_or_insert_with(JsonObject::default);
+        metadata.insert("truncated", true)?;
+        metadata.insert("full_content_length", full)?;
     }
-    if let Some(result) = &message.tool_result
-        && utf16_len(result) > CONTENT_LIMIT
-    {
-        let full = utf16_len(result);
-        message.tool_result = Some(utf16_cut(result, CONTENT_LIMIT));
-        with_metadata(&mut message.metadata, |members| {
-            json::set_member(members, "truncated", JsJson::Bool(true));
-            json::set_member(members, "full_tool_result_length", json::number(full));
-        })?;
+    if let Some(full) = message.tool_result.as_mut().and_then(cap_text) {
+        let metadata = message.metadata.get_or_insert_with(JsonObject::default);
+        metadata.insert("truncated", true)?;
+        metadata.insert("full_tool_result_length", full)?;
     }
     Ok(())
 }
 
-fn with_metadata(
-    metadata: &mut Option<JsonObject>,
-    edit: impl FnOnce(&mut Vec<(String, JsJson)>),
-) -> Result<(), JsonError> {
-    let mut members = match metadata {
-        Some(existing) => json::members_of(existing)?,
-        None => Vec::new(),
-    };
-    edit(&mut members);
-    *metadata = Some(json::object_of(members)?);
-    Ok(())
+fn cap_text(text: &mut String) -> Option<usize> {
+    let (end, _) = text.char_indices().nth(CONTENT_LIMIT)?;
+    let full = text.chars().count();
+    text.truncate(end);
+    Some(full)
 }
 
 #[derive(Serialize)]
@@ -245,47 +221,30 @@ struct ElidedBlob {
     bytes: usize,
 }
 
-fn elided_blob(bytes: usize) -> Result<JsonObject, JsonError> {
-    json::encode(&ElidedBlob {
+fn elided_blob(bytes: usize) -> Result<JsonObject, serde_json::Error> {
+    JsonObject::from_serialize(&ElidedBlob {
         elided: true,
         bytes,
     })
 }
 
-#[must_use]
-pub fn utf16_cut(text: &str, limit: usize) -> String {
-    let mut units = 0;
-    let mut cut = text.len();
-    for (index, character) in text.char_indices() {
-        if units + character.len_utf16() > limit {
-            cut = index;
-            break;
-        }
-        units += character.len_utf16();
-        cut = index + character.len_utf8();
-    }
-    text[..cut].to_owned()
-}
-
-#[must_use]
-pub fn utf16_len(text: &str) -> usize {
-    text.chars().map(char::len_utf16).sum()
+fn encoded(object: &JsonObject) -> Result<String, serde_json::Error> {
+    serde_json::to_string(object)
 }
 
 fn is_full_length_key(key: &str) -> bool {
     key.starts_with("full_") && key.ends_with("_length")
 }
 
-fn filter_metadata(metadata: &JsonObject, original_bytes: usize) -> Result<JsonObject, JsonError> {
-    let mut members = json::members_of(metadata)?;
-    members.retain(|(key, _)| metadata_keep().contains(&key.as_str()) || is_full_length_key(key));
-    json::set_member(&mut members, "metadata_elided", JsJson::Bool(true));
-    json::set_member(
-        &mut members,
-        "full_metadata_bytes",
-        json::number(original_bytes),
-    );
-    json::object_of(members)
+fn filter_metadata(
+    metadata: &JsonObject,
+    original_bytes: usize,
+) -> Result<JsonObject, serde_json::Error> {
+    let mut kept = metadata.clone();
+    kept.retain(|key| metadata_keep().contains(&key) || is_full_length_key(key));
+    kept.insert("metadata_elided", true)?;
+    kept.insert("full_metadata_bytes", original_bytes)?;
+    Ok(kept)
 }
 
 fn split_chunks(
@@ -296,7 +255,7 @@ fn split_chunks(
     base.messages = Vec::new();
     base.finalize = None;
     if let Some(settings) = &base.settings {
-        let bytes = json::object_bytes(settings)?;
+        let bytes = encoded(settings)?.len();
         if bytes > max_chunk_bytes {
             base.settings = Some(elided_blob(bytes)?);
         }
@@ -332,18 +291,18 @@ fn elided_chunk(
         return Ok(alone);
     }
     if let Some(arguments) = &original.tool_args {
-        let bytes = json::object_bytes(arguments)?;
-        let length = json::object_chars(arguments)?;
-        reduced.tool_args = Some(elided_blob(bytes)?);
-        with_metadata(&mut reduced.metadata, |members| {
-            json::set_member(members, "full_tool_args_length", json::number(length));
-        })?;
+        let text = encoded(arguments)?;
+        reduced.tool_args = Some(elided_blob(text.len())?);
+        reduced
+            .metadata
+            .get_or_insert_with(JsonObject::default)
+            .insert("full_tool_args_length", text.chars().count())?;
         if let Some(alone) = chunk_with(base, &reduced, max_chunk_bytes)? {
             return Ok(alone);
         }
     }
     if let Some(existing) = &original.metadata {
-        let bytes = json::object_bytes(existing)?;
+        let bytes = encoded(existing)?.len();
         reduced.metadata = Some(filter_metadata(existing, bytes)?);
         if let Some(alone) = chunk_with(base, &reduced, max_chunk_bytes)? {
             return Ok(alone);

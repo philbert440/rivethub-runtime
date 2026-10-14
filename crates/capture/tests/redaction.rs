@@ -65,7 +65,7 @@ fn unsafe_and_uncompilable_patterns_are_skipped() -> Result<(), Box<dyn std::err
     let redaction =
         redaction(true, false, &["(a+)+b", "[unclosed", "SECRET[0-9]+"]).expect("resolves");
     let mut message = message("x=SECRET42", "{}")?;
-    let spans = redaction.redact_message(&mut message)?;
+    let spans = redaction.redact_message(&mut message);
     assert_eq!(spans, 1);
     assert_eq!(message.content, "x=[REDACTED:pattern:0]");
     Ok(())
@@ -86,7 +86,7 @@ fn builtins_replace_secret_spans() -> Result<(), Box<dyn std::error::Error>> {
             r#""nested":{"password":"p","ok":"fine"}}"#
         ),
     )?;
-    let spans = redaction.redact_message(&mut message)?;
+    let spans = redaction.redact_message(&mut message);
     assert!(spans >= 3);
     assert!(message.content.contains("[REDACTED:bearer]"));
     assert!(message.content.contains("[REDACTED:aws_access_key]"));
@@ -116,12 +116,12 @@ fn scan_covers_only_the_head_of_long_text() -> Result<(), Box<dyn std::error::Er
     let tail_secret = "Bearer abcdefghijklmnop1234";
     let content = "x".repeat(17000) + tail_secret;
     let mut tail_case = message(&content, "{}")?;
-    let spans = redaction.redact_message(&mut tail_case)?;
+    let spans = redaction.redact_message(&mut tail_case);
     assert_eq!(spans, 0);
     assert!(tail_case.content.ends_with(tail_secret));
     let head_secret = format!("{tail_secret}{}", "y".repeat(17000));
     let mut head_case = message(&head_secret, "{}")?;
-    let spans = redaction.redact_message(&mut head_case)?;
+    let spans = redaction.redact_message(&mut head_case);
     assert_eq!(spans, 1);
     assert!(head_case.content.starts_with("[REDACTED:bearer]"));
     Ok(())

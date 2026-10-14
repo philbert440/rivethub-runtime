@@ -2,24 +2,12 @@ use std::sync::LazyLock;
 
 use config::Environment;
 use regress::Regex;
-use thiserror::Error;
-use wire::JsonObject;
 use wire::capture::CaptureMessage;
-
-use crate::json;
-use crate::json::JsJson;
-use crate::json::JsonError;
 
 pub const ENV_VARIABLE: &str = "RIVETHUB_CAPTURE_REDACTION";
 const SCAN_LIMIT: usize = 16_000;
 const SECRET_KEY_SOURCE: &str = "^(password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|credential)$";
 const SECRET_KEY_PLACEHOLDER: &str = "[REDACTED:secret_key]";
-
-#[derive(Debug, Error)]
-pub enum RedactionError {
-    #[error(transparent)]
-    Json(#[from] JsonError),
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Replacement {
@@ -155,7 +143,7 @@ fn env_opt_in(env: &Environment) -> bool {
 }
 
 impl Redaction {
-    pub fn redact_message(&self, message: &mut CaptureMessage) -> Result<u64, RedactionError> {
+    pub fn redact_message(&self, message: &mut CaptureMessage) -> u64 {
         let mut spans = 0;
         if let Some((redacted, count)) = scan_text(&message.content, self) {
             message.content = redacted;
@@ -167,60 +155,18 @@ impl Redaction {
             message.tool_result = Some(redacted);
             spans += count;
         }
-        if let Some(arguments) = &message.tool_args {
-            let (redacted, count) = self.redact_arguments(arguments)?;
-            message.tool_args = Some(redacted);
-            spans += count;
-        }
-        Ok(spans)
-    }
-
-    fn redact_arguments(
-        &self,
-        arguments: &JsonObject,
-    ) -> Result<(JsonObject, u64), RedactionError> {
-        let mut members = json::members_of(arguments)?;
-        let mut counted = 0;
-        for (key, value) in &mut members {
-            let mut local = 0;
-            walk_strings(value, key, &mut |name, text| {
-                let spanned = apply_spans(text, self);
+        if let Some(arguments) = &mut message.tool_args {
+            arguments.visit_strings_mut(&mut |name, text| {
+                let (redacted, count) = apply_spans(text, self);
+                spans += count;
                 if secret_key(name) {
-                    local += spanned.1;
-                    return Some(SECRET_KEY_PLACEHOLDER.to_owned());
+                    SECRET_KEY_PLACEHOLDER.clone_into(text);
+                } else {
+                    *text = redacted;
                 }
-                let (redacted, spans) = spanned;
-                local += spans;
-                (redacted != text).then_some(redacted)
             });
-            counted += local;
         }
-        Ok((json::object_of(members)?, counted))
-    }
-}
-
-fn walk_strings(
-    value: &mut JsJson,
-    key: &str,
-    visit: &mut impl FnMut(&str, &str) -> Option<String>,
-) {
-    match value {
-        JsJson::String(text) => {
-            if let Some(replacement) = visit(key, text) {
-                *text = replacement;
-            }
-        }
-        JsJson::Array(items) => {
-            for item in items {
-                walk_strings(item, key, visit);
-            }
-        }
-        JsJson::Object(members) => {
-            for (name, member) in members {
-                walk_strings(member, name, visit);
-            }
-        }
-        JsJson::Nil | JsJson::Bool(_) | JsJson::Number(_) => {}
+        spans
     }
 }
 
@@ -243,12 +189,14 @@ fn apply_spans(text: &str, redaction: &Redaction) -> (String, u64) {
 }
 
 fn scan_text(text: &str, redaction: &Redaction) -> Option<(String, u64)> {
-    let head = utf16_head(text);
+    let (head, tail) = text
+        .char_indices()
+        .nth(SCAN_LIMIT)
+        .map_or((text, ""), |(end, _)| text.split_at(end));
     let (redacted_head, count) = apply_spans(head, redaction);
-    if redacted_head == head && head.len() == text.len() {
+    if redacted_head == head && tail.is_empty() {
         return None;
     }
-    let tail = &text[head.len()..];
     Some((format!("{redacted_head}{tail}"), count))
 }
 
@@ -256,17 +204,6 @@ fn secret_key(key: &str) -> bool {
     SECRET_KEYS
         .find(key)
         .is_some_and(|found| !found.range().is_empty())
-}
-
-fn utf16_head(text: &str) -> &str {
-    let mut units = 0;
-    for (index, character) in text.char_indices() {
-        if units + character.len_utf16() > SCAN_LIMIT {
-            return &text[..index];
-        }
-        units += character.len_utf16();
-    }
-    text
 }
 
 fn replace_matches(

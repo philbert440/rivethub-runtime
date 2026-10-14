@@ -8,11 +8,10 @@ use testkit::Json;
 use wire::capture::CaptureResult;
 
 use capture::event_id::OccurrenceKind;
-use capture::event_id::arguments_spelling;
+use capture::event_id::ToolInput;
 use capture::event_id::occurrence_digest;
 use capture::event_id::occurrence_event_id;
 use capture::hook::ClaudeHook;
-use capture::json;
 use capture::spool::CaptureSpool;
 use capture::transcript::parse_lines;
 use capture::writer::CaptureTransport;
@@ -59,7 +58,7 @@ fn transcript_tool_input_keeps_source_order() {
         .expect("assistant line parses")
         .tool_uses()
         .iter()
-        .map(|use_| arguments_spelling(use_.input))
+        .map(|use_| use_.input.spelling().to_owned())
         .collect();
     assert_eq!(
         spellings,
@@ -71,14 +70,20 @@ fn transcript_tool_input_keeps_source_order() {
 async fn occurrence_count_spans_hook_and_transcript_spellings()
 -> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
-    let state_dir = inner.path().to_path_buf();
     let transcript_path = inner.path().join("transcript.jsonl");
     std::fs::write(&transcript_path, format!("{TRANSCRIPT_LINE}\n"))?;
 
     let transport = FakeTransport::new();
-    let spool = CaptureSpool::new(state_dir.join("spool"));
-    let writer = CaptureWriter::new(transport.clone(), spool, 768 * 1024, None);
-    let hook = ClaudeHook::new(writer, state_dir);
+    let spool = CaptureSpool::new(inner.path().join("spool"));
+    let writer = CaptureWriter::new(
+        transport.clone(),
+        spool,
+        std::num::NonZeroUsize::new(768 * 1024),
+        None,
+    );
+    let env =
+        config::Environment::from_vars([("HOME".to_owned(), inner.path().display().to_string())]);
+    let hook = ClaudeHook::new(writer, &config::Paths::new(&env));
     let stdin = format!(
         r#"{{"session_id":"{SESSION}","transcript_path":"{}","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{{"z":1,"a":2}}}}"#,
         transcript_path.display()
@@ -98,7 +103,7 @@ async fn occurrence_count_spans_hook_and_transcript_spellings()
         .and_then(|messages| messages.first())
         .ok_or("expected one message")?;
 
-    let value = json::parse(r#"{"z":1,"a":2}"#)?;
+    let value = ToolInput::parse(r#"{"z":1,"a":2}"#)?;
     let transcript_spelling = {
         let parsed = parse_lines(TRANSCRIPT_LINE);
         let first_use = parsed
@@ -109,9 +114,9 @@ async fn occurrence_count_spans_hook_and_transcript_spellings()
             .into_iter()
             .next()
             .expect("assistant line carries a tool call");
-        arguments_spelling(first_use.input)
+        first_use.input.spelling().to_owned()
     };
-    let hook_spelling = arguments_spelling(&value);
+    let hook_spelling = value.spelling();
     assert_eq!(transcript_spelling, hook_spelling);
     assert_eq!(transcript_spelling, r#"{"z":1,"a":2}"#);
 

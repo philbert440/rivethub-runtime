@@ -153,8 +153,10 @@ async fn spool_round_trip_and_dead_letters() -> Result<(), Box<dyn std::error::E
     let dir = tempfile::tempdir()?;
     let spool = capture::spool::CaptureSpool::new(dir.path().to_path_buf());
     let now = now_at("2026-10-10T12:00:00Z")?;
-    let first = spool.spool(r#"{"session_key":"a"}"#, now)?;
-    spool.spool(r#"{"session_key":"b"}"#, now + Duration::from_millis(5))?;
+    let first = spool.spool(r#"{"session_key":"a"}"#, now).await?;
+    spool
+        .spool(r#"{"session_key":"b"}"#, now + Duration::from_millis(5))
+        .await?;
     let extension = first
         .extension()
         .ok_or("the spool file has no extension")?
@@ -177,7 +179,7 @@ async fn spool_round_trip_and_dead_letters() -> Result<(), Box<dyn std::error::E
     assert_eq!(posted.lock().len(), 2);
     assert_eq!(std::fs::read_dir(dir.path())?.count(), 0);
 
-    spool.spool(r#"{"session_key":"c"}"#, now)?;
+    spool.spool(r#"{"session_key":"c"}"#, now).await?;
     spool
         .replay(50, |_body| async { Err(spool_error(400)) })
         .await?;
@@ -185,7 +187,7 @@ async fn spool_round_trip_and_dead_letters() -> Result<(), Box<dyn std::error::E
     assert!(dead.is_dir());
     assert_eq!(std::fs::read_dir(&dead)?.count(), 1);
 
-    spool.spool(r#"{"session_key":"d"}"#, now)?;
+    spool.spool(r#"{"session_key":"d"}"#, now).await?;
     let stopped = spool
         .replay(50, |_body| async { Err(spool_error(503)) })
         .await;
@@ -198,7 +200,12 @@ async fn write_spools_when_the_server_fails() -> Result<(), Box<dyn std::error::
     let dir = tempfile::tempdir()?;
     let spool = capture::spool::CaptureSpool::new(dir.path().join("spool"));
     let transport = ChoiceTransport::failing(spool_error(503));
-    let writer = capture::writer::CaptureWriter::new(transport, spool, 768 * 1024, None);
+    let writer = capture::writer::CaptureWriter::new(
+        transport,
+        spool,
+        std::num::NonZeroUsize::new(768 * 1024),
+        None,
+    );
     let batch = capture::batch::parse_batch(
         r#"{"session_key":"s","agent":"a","messages":[{"event_id":"e1","role":"user","content":"hi"}]}"#,
     )?;
@@ -216,9 +223,14 @@ async fn write_replays_the_spool_first() -> Result<(), Box<dyn std::error::Error
     let dir = tempfile::tempdir()?;
     let spool = capture::spool::CaptureSpool::new(dir.path().join("spool"));
     let now = now_at("2026-10-10T12:00:00Z")?;
-    spool.spool(r#"{"session_key":"old"}"#, now)?;
+    spool.spool(r#"{"session_key":"old"}"#, now).await?;
     let transport = ChoiceTransport::default();
-    let writer = capture::writer::CaptureWriter::new(transport, spool, 768 * 1024, None);
+    let writer = capture::writer::CaptureWriter::new(
+        transport,
+        spool,
+        std::num::NonZeroUsize::new(768 * 1024),
+        None,
+    );
     let batch = capture::batch::parse_batch(
         r#"{"session_key":"s","agent":"a","messages":[{"event_id":"e1","role":"user","content":"hi"}]}"#,
     )?;

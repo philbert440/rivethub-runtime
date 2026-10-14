@@ -12,7 +12,7 @@ use wire::harness::HarnessId;
 use wire::message::Role;
 use wire::session_id::SessionId;
 
-use crate::json::JsJson;
+use crate::event_id::ToolInput;
 
 pub const HARNESS_PREFIX: &str = "claude-code:";
 const TRANSCRIPT_MAX_BYTES: usize = 8 * 1024 * 1024;
@@ -49,7 +49,7 @@ pub enum Block {
     ToolUse {
         id: String,
         name: String,
-        input: JsJson,
+        input: ToolInput,
     },
     ToolResult {
         tool_use_id: Option<String>,
@@ -62,6 +62,8 @@ pub enum Block {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Line {
+    #[serde(skip)]
+    pub number: usize,
     pub r#type: LineKind,
     pub uuid: Option<String>,
     pub timestamp: Option<String>,
@@ -74,7 +76,7 @@ pub struct Line {
 pub struct ToolUse<'a> {
     pub id: &'a str,
     pub name: &'a str,
-    pub input: &'a JsJson,
+    pub input: &'a ToolInput,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,15 +97,13 @@ pub struct Parsed {
     pub skipped: Vec<SkippedLine>,
 }
 
-impl Line {
-    #[must_use]
-    pub fn timestamp_or_none(&self) -> Option<DateTime<Utc>> {
-        let text = self.timestamp.as_deref()?;
-        DateTime::parse_from_rfc3339(text)
-            .ok()
-            .map(|at| at.with_timezone(&Utc))
-    }
+#[derive(Debug, Default, Clone)]
+pub struct Turns {
+    pub turns: Vec<Turn>,
+    pub skipped: Vec<SkippedLine>,
+}
 
+impl Line {
     #[must_use]
     pub fn text(&self) -> Option<String> {
         let message = self.message.as_ref()?;
@@ -201,7 +201,10 @@ pub fn parse_lines(text: &str) -> Parsed {
             continue;
         }
         match serde_json::from_str::<Line>(line) {
-            Ok(line) => parsed.lines.push(line),
+            Ok(line) => parsed.lines.push(Line {
+                number: offset + 1,
+                ..line
+            }),
             Err(error) => parsed.skipped.push(SkippedLine {
                 number: offset + 1,
                 reason: error.to_string(),
@@ -224,18 +227,29 @@ pub fn report_skipped(skipped: &[SkippedLine]) {
 }
 
 pub fn read_capped(path: &Path) -> Result<String, TranscriptReaderError> {
-    let bytes = std::fs::read(path).map_err(|error| TranscriptReaderError::Read {
+    let bytes = std::fs::read(path).map_err(|error| read_error(path, error))?;
+    Ok(capped_text(&bytes))
+}
+
+pub async fn read_capped_async(path: &Path) -> Result<String, TranscriptReaderError> {
+    let bytes = tokio::fs::read(path)
+        .await
+        .map_err(|error| read_error(path, error))?;
+    Ok(capped_text(&bytes))
+}
+
+fn read_error(path: &Path, error: std::io::Error) -> TranscriptReaderError {
+    TranscriptReaderError::Read {
         message: format!("transcript {}: {error}", path.display()),
         source: Box::new(error),
-    })?;
-    Ok(truncate_to_lines(&bytes))
+    }
 }
 
 #[expect(
     clippy::indexing_slicing,
     reason = "the over-cap branch slices at TRANSCRIPT_MAX_BYTES, proven below the length, and the cut at a line end is at most the length"
 )]
-fn truncate_to_lines(bytes: &[u8]) -> String {
+fn capped_text(bytes: &[u8]) -> String {
     if bytes.len() <= TRANSCRIPT_MAX_BYTES {
         return String::from_utf8_lossy(bytes).into_owned();
     }
@@ -264,33 +278,43 @@ impl ClaudeTranscriptReader {
     }
 }
 
-fn turns_from_lines(lines: &[Line]) -> Vec<Turn> {
-    lines
-        .iter()
-        .filter(|line| line.is_meta != Some(true))
-        .filter_map(|line| {
-            let at = line.timestamp_or_none()?;
-            let role = match line.r#type {
-                LineKind::User => {
-                    if line.tool_result_text().is_some() {
-                        Role::Tool
-                    } else {
-                        Role::User
-                    }
-                }
-                LineKind::Assistant => Role::Assistant,
-                LineKind::Other => return None,
-            };
-            let content = match role {
-                Role::Tool => line.tool_result_text()?,
-                Role::System | Role::User | Role::Assistant => line.text()?,
-            };
-            if content.is_empty() {
-                return None;
+#[must_use]
+pub fn turns_of(lines: &[Line]) -> Turns {
+    let mut turns = Turns::default();
+    for line in lines {
+        if line.is_meta == Some(true) {
+            continue;
+        }
+        let Some(text) = line.timestamp.as_deref() else {
+            continue;
+        };
+        let at = match DateTime::parse_from_rfc3339(text) {
+            Ok(at) => at.with_timezone(&Utc),
+            Err(error) => {
+                turns.skipped.push(SkippedLine {
+                    number: line.number,
+                    reason: format!("timestamp {text:?} is not an RFC 3339 datetime: {error}"),
+                });
+                continue;
             }
-            Some(Turn { role, content, at })
-        })
-        .collect()
+        };
+        if let Some((role, content)) = turn_content(line) {
+            turns.turns.push(Turn { role, content, at });
+        }
+    }
+    turns
+}
+
+fn turn_content(line: &Line) -> Option<(Role, String)> {
+    let (role, content) = match line.r#type {
+        LineKind::User => match line.tool_result_text() {
+            Some(result) => (Role::Tool, result),
+            None => (Role::User, line.text()?),
+        },
+        LineKind::Assistant => (Role::Assistant, line.text()?),
+        LineKind::Other => return None,
+    };
+    (!content.is_empty()).then_some((role, content))
 }
 
 #[async_trait]
@@ -311,8 +335,9 @@ impl TranscriptReader for ClaudeTranscriptReader {
             .await
             .map_err(|error| TranscriptReaderError::Unavailable(Box::new(error)))??;
         let parsed = parse_lines(&text);
-        report_skipped(&parsed.skipped);
-        Ok(turns_from_lines(&parsed.lines))
+        let turns = turns_of(&parsed.lines);
+        report_skipped(&[parsed.skipped, turns.skipped].concat());
+        Ok(turns.turns)
     }
 
     async fn tail(

@@ -51,6 +51,67 @@ impl capture::writer::CaptureTransport for FakeTransport {
 
 const NOW_TEXT: &str = "2026-10-10T18:17:23.937Z";
 
+fn hook_in(home: &Path, transport: &FakeTransport) -> capture::hook::ClaudeHook<FakeTransport> {
+    let env = config::Environment::from_vars([("HOME".to_owned(), home.display().to_string())]);
+    let spool = capture::spool::CaptureSpool::new(home.join("spool"));
+    let writer = capture::writer::CaptureWriter::new(
+        transport.clone(),
+        spool,
+        std::num::NonZeroUsize::new(768 * 1024),
+        None,
+    );
+    capture::hook::ClaudeHook::new(writer, &config::Paths::new(&env))
+}
+
+fn transcript_char_lengths() -> Result<Vec<(String, usize)>, Box<dyn std::error::Error>> {
+    let text = std::fs::read_to_string(testkit::recording("capture/claude-hook/transcript.jsonl"))?;
+    Ok(capture::transcript::parse_lines(&text)
+        .lines
+        .iter()
+        .filter_map(|line| Some((line.uuid.clone()?, line.text()?.chars().count())))
+        .collect())
+}
+
+fn as_rust_behaviour(
+    entry: &testkit::capture::EntryRecord,
+    char_lengths: &[(String, usize)],
+) -> Result<testkit::capture::EntryRecord, Box<dyn std::error::Error>> {
+    let mut entry = entry.clone();
+    for file in &mut entry.files {
+        if let Some(rest) = file.path.strip_prefix(".rivetos/") {
+            file.path = format!(".rivethub/{rest}");
+        }
+    }
+    for post in &mut entry.posts {
+        let mut body: testkit::Json = serde_json::from_str(&post.body)?;
+        let messages = body
+            .get_mut("messages")
+            .and_then(testkit::Json::as_array_mut)
+            .into_iter()
+            .flatten();
+        for message in messages {
+            let Some(metadata) = message.get_mut("metadata") else {
+                continue;
+            };
+            let uuid = metadata
+                .get("uuid")
+                .and_then(testkit::Json::as_str)
+                .map(str::to_owned);
+            let Some(recorded_length) = metadata.get_mut("full_content_length") else {
+                continue;
+            };
+            let uuid = uuid.ok_or("capped message has no uuid")?;
+            let (_, chars) = char_lengths
+                .iter()
+                .find(|(line, _)| *line == uuid)
+                .ok_or("capped message has no transcript line")?;
+            *recorded_length = testkit::Json::from(*chars);
+        }
+        post.body = serde_json::to_string(&body)?;
+    }
+    Ok(entry)
+}
+
 fn prepare_store(root: &Path) -> std::io::Result<PathBuf> {
     let store = root.join("store").join("projects").join("-work-demo");
     std::fs::create_dir_all(&store)?;
@@ -95,11 +156,8 @@ async fn run_entry(
     now: DateTime<Utc>,
 ) -> Result<EntryRun, Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
-    let state_dir = inner.path().to_path_buf();
     let transport = FakeTransport::new();
-    let spool = capture::spool::CaptureSpool::new(state_dir.join("spool"));
-    let writer = capture::writer::CaptureWriter::new(transport.clone(), spool, 768 * 1024, None);
-    let hook = capture::hook::ClaudeHook::new(writer, state_dir.clone());
+    let hook = hook_in(inner.path(), &transport);
     let stdin = entry.stdin.replace("__TRANSCRIPT__", transcript_text);
     let run = hook.run(&stdin, now, "1791656243919-30e4c5d70").await;
     let posts = transport
@@ -112,10 +170,13 @@ async fn run_entry(
             body: body.replace(transcript_text, "__TRANSCRIPT__"),
         })
         .collect();
-    let log_path = state_dir.join(".rivetos/claude-capture.log");
-    let log_content = std::fs::read_to_string(&log_path)?;
+    let log_content = std::fs::read_to_string(hook.log_file())?;
     let files = vec![HookFile {
-        path: ".rivetos/claude-capture.log".to_owned(),
+        path: hook
+            .log_file()
+            .strip_prefix(inner.path())?
+            .display()
+            .to_string(),
         mode: "644".to_owned(),
         content: log_content.replace(transcript_text, "__TRANSCRIPT__"),
     }];
@@ -141,7 +202,9 @@ async fn claude_hook_replays_recorded_batches() -> Result<(), Box<dyn std::error
     let transcript_text = transcript.to_string_lossy().to_string();
     let now: DateTime<Utc> = NOW_TEXT.parse()?;
     let failures = Mutex::new(Vec::new());
-    for entry in &session_entries {
+    let char_lengths = transcript_char_lengths()?;
+    for recorded in &session_entries {
+        let entry = &as_rust_behaviour(recorded, &char_lengths)?;
         let run = run_entry(entry, &transcript_text, now).await?;
         let outcome = run.outcome.clone();
         let outcome = testkit::capture::replay(entry, |_, _| outcome.clone());
@@ -187,11 +250,8 @@ async fn claude_hook_replays_recorded_batches() -> Result<(), Box<dyn std::error
 #[tokio::test]
 async fn malformed_payloads_exit_cleanly() -> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
-    let state_dir = inner.path().to_path_buf();
     let transport = FakeTransport::new();
-    let spool = capture::spool::CaptureSpool::new(state_dir.join("spool"));
-    let writer = capture::writer::CaptureWriter::new(transport.clone(), spool, 768 * 1024, None);
-    let hook = capture::hook::ClaudeHook::new(writer, state_dir);
+    let hook = hook_in(inner.path(), &transport);
     let now: DateTime<Utc> = NOW_TEXT.parse()?;
     for stdin in ["{", "{}", "", "{\"hook_event_name\":\"UserPromptSubmit\"}"] {
         let run = hook.run(stdin, now, "1791656243919-30e4c5d70").await;
@@ -205,11 +265,8 @@ async fn malformed_payloads_exit_cleanly() -> Result<(), Box<dyn std::error::Err
 #[tokio::test]
 async fn missing_prompt_records_the_fallback_title() -> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
-    let state_dir = inner.path().to_path_buf();
     let transport = FakeTransport::new();
-    let spool = capture::spool::CaptureSpool::new(state_dir.join("spool"));
-    let writer = capture::writer::CaptureWriter::new(transport.clone(), spool, 768 * 1024, None);
-    let hook = capture::hook::ClaudeHook::new(writer, state_dir);
+    let hook = hook_in(inner.path(), &transport);
     let now: DateTime<Utc> = NOW_TEXT.parse()?;
     let stdin = r#"{"session_id":"33333333-3333-3333-3333-333333333333","hook_event_name":"UserPromptSubmit"}"#;
     let run = hook.run(stdin, now, "1791656243919-30e4c5d70").await;
@@ -234,12 +291,9 @@ async fn missing_prompt_records_the_fallback_title() -> Result<(), Box<dyn std::
 #[tokio::test]
 async fn a_failed_log_write_does_not_fail_the_run() -> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
-    let state_dir = inner.path().to_path_buf();
-    std::fs::write(state_dir.join(".rivetos"), b"not a directory")?;
+    std::fs::write(inner.path().join(".rivethub"), b"not a directory")?;
     let transport = FakeTransport::new();
-    let spool = capture::spool::CaptureSpool::new(state_dir.join("spool"));
-    let writer = capture::writer::CaptureWriter::new(transport.clone(), spool, 768 * 1024, None);
-    let hook = capture::hook::ClaudeHook::new(writer, state_dir);
+    let hook = hook_in(inner.path(), &transport);
     let now: DateTime<Utc> = NOW_TEXT.parse()?;
     let stdin = r#"{"session_id":"33333333-3333-3333-3333-333333333333","hook_event_name":"UserPromptSubmit","prompt":"list the files"}"#;
     let run = hook.run(stdin, now, "1791656243919-30e4c5d70").await;
