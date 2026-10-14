@@ -62,7 +62,7 @@ portable-pty · rcgen + rustls-webpki · thiserror · tracing · tokio-util (Can
 wire 3,000 · config 2,000 · kernel 800 · testkit 1,200 · gateway 8,200 · agent-loop 2,600 · workers 4,000 ·
 memory-postgres 5,000 · memory-sqlite 4,000 · providers 900 · harness-acp 1,600 · terminal 2,000 · mcp 2,400 ·
 capture 4,500 · tasks 2,000 · cli 4,900 · rivethub 500 · migrate 1,000. Total ≈ 50,000 against ≈ 120,000 lines of
-TypeScript. Not separate crates: hooks (agent-loop), skills (mcp), agent presets (gateway), wiki builder (workers),
+TypeScript. Not separate crates: hooks (agent-loop), agent presets (gateway), wiki builder (workers),
 certificate authority (cli), harness store readers (capture). No local-db: standalone runs on SQLite (sqlite-vec as schema v8
 after cutover). Workflows stays in the monorepo as a separate workspace package with its own binary (`rivethub-workflows`: depends on
 `wire` + an HTTP client only, drives sessions and tasks over the public API, never linked into `rivethub`). The RivetHub clients clients and
