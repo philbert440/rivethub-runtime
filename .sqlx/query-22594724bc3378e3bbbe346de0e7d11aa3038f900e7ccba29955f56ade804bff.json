@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT source_kind, source_id, conversation_id FROM rh_wiki_provenance\n             WHERE topic_slug = $1 ORDER BY source_kind, source_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "source_kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_wiki_provenance",
+            "name": "source_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "source_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rh_wiki_provenance",
+            "name": "source_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "conversation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rh_wiki_provenance",
+            "name": "conversation_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "22594724bc3378e3bbbe346de0e7d11aa3038f900e7ccba29955f56ade804bff"
+}

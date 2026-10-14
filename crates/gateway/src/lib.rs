@@ -167,6 +167,7 @@ impl Gateway {
             .nest("/api/memory", routes::memory::router())
             .merge(routes::sessions::router())
             .merge(routes::terminal::router())
+            .merge(routes::router())
             .fallback(routes::not_found)
             .layer(middleware::from_fn_with_state(guard_state, auth::guard))
             .with_state(Arc::clone(self))

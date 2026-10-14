@@ -206,6 +206,27 @@ fn merge_event_id(metadata: &JsonObject, event_id: &str) -> Result<JsonObject, E
 
 #[async_trait]
 impl MemoryStore for crate::PostgresMemory {
+    async fn wiki_topics(
+        &self,
+        filter: kernel::wiki::WikiFilter,
+    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError> {
+        self.read_wiki_topics(filter).await.map_err(Into::into)
+    }
+
+    async fn wiki_page(
+        &self,
+        slug: &wire::gateway::wiki::WikiSlug,
+    ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
+        self.read_wiki_page(slug).await.map_err(Into::into)
+    }
+
+    async fn wiki_gaps(
+        &self,
+        limit: u32,
+    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
+        self.read_wiki_gaps(limit).await.map_err(Into::into)
+    }
+
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
         let mut inserted = 0u64;
         for group in group_entries(batch) {

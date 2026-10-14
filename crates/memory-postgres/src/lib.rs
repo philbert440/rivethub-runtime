@@ -10,6 +10,7 @@ pub mod search;
 mod search_sql;
 mod store_impl;
 mod tags;
+mod wiki;
 
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;

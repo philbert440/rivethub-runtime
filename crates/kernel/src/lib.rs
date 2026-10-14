@@ -6,6 +6,7 @@ pub mod queue;
 pub mod terminal;
 pub mod tool;
 pub mod transcript;
+pub mod wiki;
 
 use std::path::PathBuf;
 use wire::session_id::SessionId;

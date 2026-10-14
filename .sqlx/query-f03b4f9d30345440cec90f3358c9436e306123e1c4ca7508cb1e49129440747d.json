@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.to_slug FROM rh_wiki_redirects r\n             JOIN rh_wiki_topics t ON t.slug = r.to_slug WHERE r.from_slug = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "to_slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_wiki_redirects",
+            "name": "to_slug"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f03b4f9d30345440cec90f3358c9436e306123e1c4ca7508cb1e49129440747d"
+}

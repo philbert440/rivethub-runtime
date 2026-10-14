@@ -70,6 +70,27 @@ fn unavailable<T>() -> Result<T, MemoryStoreError> {
 
 #[async_trait::async_trait]
 impl MemoryStore for FailingStore {
+    async fn wiki_topics(
+        &self,
+        _filter: kernel::wiki::WikiFilter,
+    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError> {
+        unavailable()
+    }
+
+    async fn wiki_page(
+        &self,
+        _slug: &wire::gateway::wiki::WikiSlug,
+    ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
+        unavailable()
+    }
+
+    async fn wiki_gaps(
+        &self,
+        _limit: u32,
+    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
+        unavailable()
+    }
+
     async fn append(
         &self,
         _batch: Vec<wire::memory::MemoryEntry>,
@@ -213,6 +234,27 @@ impl Default for GatedStore {
 
 #[async_trait::async_trait]
 impl MemoryStore for GatedStore {
+    async fn wiki_topics(
+        &self,
+        filter: kernel::wiki::WikiFilter,
+    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError> {
+        self.inner.wiki_topics(filter).await
+    }
+
+    async fn wiki_page(
+        &self,
+        slug: &wire::gateway::wiki::WikiSlug,
+    ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
+        self.inner.wiki_page(slug).await
+    }
+
+    async fn wiki_gaps(
+        &self,
+        limit: u32,
+    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
+        self.inner.wiki_gaps(limit).await
+    }
+
     async fn append(&self, batch: Vec<wire::memory::MemoryEntry>) -> Result<u64, MemoryStoreError> {
         self.inner.append(batch).await
     }

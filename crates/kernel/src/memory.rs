@@ -266,6 +266,21 @@ pub struct TagTaxonomyDecision {
 
 #[async_trait]
 pub trait MemoryStore: Send + Sync {
+    async fn wiki_topics(
+        &self,
+        filter: crate::wiki::WikiFilter,
+    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError>;
+
+    async fn wiki_page(
+        &self,
+        slug: &wire::gateway::wiki::WikiSlug,
+    ) -> Result<crate::wiki::WikiLookup, MemoryStoreError>;
+
+    async fn wiki_gaps(
+        &self,
+        limit: u32,
+    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError>;
+
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError>;
 
     async fn search(&self, query: SearchQuery)

@@ -5,6 +5,7 @@ pub mod memory;
 pub mod sessions;
 pub mod tags;
 pub mod terminal;
+pub mod wiki;
 
 use std::sync::Arc;
 
@@ -16,6 +17,10 @@ use crate::Gateway;
 use crate::error::ApiError;
 
 pub(crate) const BODY_LIMIT: usize = 256 * 1024;
+
+pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
+    wiki::router()
+}
 
 pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> Json<HealthzResponse> {
     Json(HealthzResponse {

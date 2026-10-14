@@ -61,15 +61,28 @@ pub enum MemoryRequest {
     UpsertTagTaxonomy(TagTaxonomyUpsert),
     DecideTagTaxonomy(TagTaxonomyDecision),
     MergeTagTaxonomy(TagTaxonomyMerge),
+    WikiTopics(kernel::wiki::WikiFilter),
+    WikiPage(String),
+    WikiGaps(u32),
 }
 
 #[derive(Debug, Default)]
 pub struct FakeMemoryStore {
     entries: Mutex<Vec<MemoryEntry>>,
     requests: Mutex<Vec<MemoryRequest>>,
+    wiki_pages: Mutex<BTreeMap<String, wire::gateway::wiki::WikiPageResponse>>,
+    wiki_redirects: Mutex<BTreeMap<String, String>>,
 }
 
 impl FakeMemoryStore {
+    pub async fn insert_wiki_page(&self, page: wire::gateway::wiki::WikiPageResponse) {
+        self.wiki_pages.lock().await.insert(page.slug.clone(), page);
+    }
+
+    pub async fn insert_wiki_redirect(&self, from: String, to: String) {
+        self.wiki_redirects.lock().await.insert(from, to);
+    }
+
     pub async fn requests(&self) -> Vec<MemoryRequest> {
         self.requests.lock().await.clone()
     }
@@ -81,6 +94,132 @@ impl FakeMemoryStore {
 
 #[async_trait]
 impl MemoryStore for FakeMemoryStore {
+    async fn wiki_topics(
+        &self,
+        filter: kernel::wiki::WikiFilter,
+    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError> {
+        self.record(MemoryRequest::WikiTopics(filter.clone())).await;
+        let mut topics: Vec<_> = self
+            .wiki_pages
+            .lock()
+            .await
+            .values()
+            .filter(|page| {
+                filter
+                    .tag
+                    .as_ref()
+                    .is_none_or(|tag| page.tags.contains(tag))
+            })
+            .filter(|page| {
+                filter.query.as_ref().is_none_or(|query| {
+                    let query = query.to_lowercase();
+                    page.title.to_lowercase().contains(&query)
+                        || page.slug.to_lowercase().contains(&query)
+                        || page.markdown.to_lowercase().contains(&query)
+                })
+            })
+            .map(|page| wire::gateway::wiki::WikiTopic {
+                slug: page.slug.clone(),
+                title: page.title.clone(),
+                tags: page.tags.clone(),
+                entities: page.entities.clone(),
+                updated_at: page.updated_at.clone(),
+                excerpt: page.current_state.chars().take(240).collect(),
+            })
+            .collect();
+        topics.sort_by(|a, b| {
+            b.updated_at
+                .cmp(&a.updated_at)
+                .then_with(|| a.slug.cmp(&b.slug))
+        });
+        let total = topics.len() as u64;
+        Ok(wire::gateway::wiki::WikiTopicList {
+            total,
+            topics: topics
+                .into_iter()
+                .skip(filter.offset as usize)
+                .take(filter.limit as usize)
+                .collect(),
+        })
+    }
+
+    async fn wiki_page(
+        &self,
+        slug: &wire::gateway::wiki::WikiSlug,
+    ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
+        self.record(MemoryRequest::WikiPage(slug.as_ref().to_owned()))
+            .await;
+        let page = self.wiki_pages.lock().await.get(slug.as_ref()).cloned();
+        if let Some(page) = page {
+            return Ok(kernel::wiki::WikiLookup::Page(Box::new(page)));
+        }
+        Ok(match self.wiki_redirects.lock().await.get(slug.as_ref()) {
+            Some(target) => kernel::wiki::WikiLookup::Redirect(target.clone()),
+            None => kernel::wiki::WikiLookup::Missing,
+        })
+    }
+
+    async fn wiki_gaps(
+        &self,
+        limit: u32,
+    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
+        self.record(MemoryRequest::WikiGaps(limit)).await;
+        let limit = limit.clamp(1, 200);
+        let redirects: Vec<_> = self.wiki_redirects.lock().await.keys().cloned().collect();
+        let pages = self.wiki_pages.lock().await;
+        let mut missing: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for page in pages.values() {
+            for entity in &page.entities {
+                let known = pages.values().any(|known| {
+                    known.slug.eq_ignore_ascii_case(entity)
+                        || known.title.eq_ignore_ascii_case(entity)
+                        || known
+                            .aliases
+                            .iter()
+                            .any(|alias| alias.eq_ignore_ascii_case(entity))
+                }) || redirects
+                    .iter()
+                    .any(|alias| alias.eq_ignore_ascii_case(entity));
+                if !known {
+                    let references = missing.entry(entity.clone()).or_default();
+                    if !references.contains(&page.slug) {
+                        references.push(page.slug.clone());
+                    }
+                }
+            }
+        }
+        let mut red_links: Vec<_> = missing
+            .into_iter()
+            .map(|(entity, referenced_by)| wire::gateway::wiki::WikiRedLink {
+                entity,
+                referenced_by,
+            })
+            .collect();
+        red_links.sort_by(|a, b| {
+            b.referenced_by
+                .len()
+                .cmp(&a.referenced_by.len())
+                .then_with(|| a.entity.cmp(&b.entity))
+        });
+        red_links.truncate(limit as usize);
+        let mut stalest: Vec<_> = pages.values().collect();
+        stalest.sort_by_key(|page| {
+            (
+                page.last_verified
+                    .as_ref()
+                    .map_or(&page.updated_at, |time| time),
+                &page.slug,
+            )
+        });
+        let stalest = stalest
+            .into_iter()
+            .take(limit as usize)
+            .map(|page| page.slug.clone())
+            .collect();
+        drop(pages);
+        Ok(wire::gateway::wiki::WikiGapsResponse { red_links, stalest })
+    }
+
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
         let count = batch.len() as u64;
         self.record(MemoryRequest::Append(batch.clone())).await;
