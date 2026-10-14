@@ -1,22 +1,45 @@
 mod append;
 pub mod capture;
 mod conversation;
+mod embed;
 pub mod error;
+mod health;
 mod insert;
 mod message;
+mod port;
+mod queue;
 mod read;
+mod runner;
 mod stats;
 mod time;
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicI64;
+use std::sync::atomic::Ordering;
 
+use kernel::queue::JobId;
 use parking_lot::Mutex;
 use rusqlite::Connection;
 
 pub use capture::MAX_CONTENT_CHARS;
+pub use embed::EmbedRunner;
 pub use error::SqliteError;
 pub use error::TimestampField;
+pub use health::SqliteHealth;
+pub use queue::ClaimedSqliteJob;
+pub use queue::FailOutcome;
+pub use queue::JobCount;
+pub use queue::JobInsert;
+pub use queue::JobPayload;
+pub use queue::JobState;
+pub use queue::retry_delay_ms;
+pub use runner::JobFailure;
+pub use runner::JobHandler;
+pub use runner::JobRunner;
+pub use runner::JobSweep;
 
 pub const SCHEMA_VERSION: i64 = 7;
 
@@ -25,10 +48,19 @@ const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON
 #[cfg(test)]
 const MEMORY_PRAGMAS: &str = "PRAGMA foreign_keys = ON;";
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
+struct ClaimIds {
+    next: AtomicI64,
+    text: Mutex<BTreeMap<i64, String>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SqliteStore {
     conn: Arc<Mutex<Connection>>,
     owner: Option<String>,
+    logs: Arc<Mutex<Vec<String>>>,
+    embed: Arc<AtomicBool>,
+    claims: Arc<ClaimIds>,
 }
 
 impl SqliteStore {
@@ -47,10 +79,7 @@ impl SqliteStore {
         })?;
         conn.execute_batch(FILE_PRAGMAS)
             .map_err(SqliteError::Pragma)?;
-        Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
-            owner: None,
-        })
+        Ok(from_conn(conn))
     }
 
     #[must_use]
@@ -75,6 +104,75 @@ impl SqliteStore {
             Ok(result) => result,
             Err(source) => Err(SqliteError::Join(source)),
         }
+    }
+
+    pub fn record_log(&self, line: impl AsRef<str>) {
+        let line = line.as_ref().to_owned();
+        tracing::info!("{line}");
+        self.logs.lock().push(line);
+    }
+
+    #[must_use]
+    pub fn logs(&self) -> Vec<String> {
+        self.logs.lock().clone()
+    }
+
+    pub fn arm_embed(&self) {
+        self.embed.store(true, Ordering::Release);
+    }
+
+    #[must_use]
+    pub fn embed_armed(&self) -> bool {
+        self.embed.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn remember_claim(&self, text_id: &str) -> Result<JobId, SqliteError> {
+        self.claims.issue(text_id)
+    }
+
+    pub(crate) fn text_for_claim(&self, id: JobId) -> Result<String, SqliteError> {
+        self.claims.text(id)
+    }
+}
+
+impl ClaimIds {
+    fn issue(&self, text_id: &str) -> Result<JobId, SqliteError> {
+        let issued = loop {
+            let current = self.next.load(Ordering::Acquire);
+            let Some(next) = current.checked_add(1) else {
+                return Err(SqliteError::Clock);
+            };
+            if self
+                .next
+                .compare_exchange(current, next, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                break current;
+            }
+        };
+        self.text.lock().insert(issued, text_id.to_owned());
+        Ok(JobId::new(issued))
+    }
+
+    fn text(&self, id: JobId) -> Result<String, SqliteError> {
+        let key = i64::from(id);
+        self.text
+            .lock()
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| SqliteError::MissingJob {
+                id: key.to_string(),
+            })
+    }
+}
+
+fn from_conn(conn: Connection) -> SqliteStore {
+    SqliteStore {
+        conn: Arc::new(Mutex::new(conn)),
+        owner: None,
+        logs: Arc::new(Mutex::new(Vec::new())),
+        embed: Arc::new(AtomicBool::new(false)),
+        claims: Arc::new(ClaimIds::default()),
     }
 }
 
@@ -119,10 +217,7 @@ impl SqliteStore {
         conn.execute_batch(MEMORY_PRAGMAS)
             .map_err(migrate::Error::SqlitePragma)?;
         migrate::sqlite_connection(&mut conn, chrono::Utc::now())?;
-        Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
-            owner: None,
-        })
+        Ok(from_conn(conn))
     }
 }
 

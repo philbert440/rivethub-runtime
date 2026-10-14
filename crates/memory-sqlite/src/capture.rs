@@ -16,6 +16,7 @@ use crate::conversation::NewConversation;
 use crate::error::SqliteError;
 use crate::error::TimestampField;
 use crate::message::NewMessage;
+use crate::queue::enqueue_embed;
 use crate::time;
 use crate::time::Stamp;
 
@@ -54,9 +55,10 @@ struct Target<'a> {
     owner: Option<&'a str>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Outcome {
-    Inserted,
+    Inserted(String),
+    Filled(String),
     Skipped,
 }
 
@@ -68,11 +70,12 @@ impl SqliteStore {
     ) -> Result<CaptureResult, SqliteError> {
         let prepared = PreparedBatch::new(batch)?;
         let owner = self.owner.clone();
+        let embed = self.embed_armed();
         self.with_conn(move |conn| {
             let tx = conn
                 .transaction()
                 .map_err(SqliteError::query("capture begin"))?;
-            let result = prepared.write(&tx, owner.as_deref(), now)?;
+            let result = prepared.write(&tx, owner.as_deref(), now, embed)?;
             tx.commit().map_err(SqliteError::query("capture commit"))?;
             Ok(result)
         })
@@ -115,6 +118,7 @@ impl PreparedBatch {
         tx: &Transaction<'_>,
         owner: Option<&str>,
         now: DateTime<Utc>,
+        embed: bool,
     ) -> Result<CaptureResult, SqliteError> {
         let conversation = match self.key.find(tx)? {
             Some(found) => {
@@ -147,7 +151,14 @@ impl PreparedBatch {
         let mut skipped: u64 = 0;
         for message in &self.messages {
             match message.write(tx, &target, now)? {
-                Outcome::Inserted => inserted += 1,
+                Outcome::Inserted(id) => {
+                    inserted += 1;
+                    queue_inserted(tx, &id, embed, now)?;
+                }
+                Outcome::Filled(id) => {
+                    skipped += 1;
+                    queue_if_absent(tx, message, &id, embed, now)?;
+                }
                 Outcome::Skipped => skipped += 1,
             }
         }
@@ -239,7 +250,9 @@ impl PreparedMessage {
     ) -> Result<Outcome, SqliteError> {
         let conversation_id = target.conversation_id;
         if let Some(stored) = self.stored_by_event(tx, conversation_id)? {
-            self.fill_pending(tx, &stored)?;
+            if self.fill_pending(tx, &stored)? {
+                return Ok(Outcome::Filled(stored));
+            }
             return Ok(Outcome::Skipped);
         }
         if let Some(hook_row) = self.unclaimed_hook_row(tx, conversation_id)? {
@@ -250,7 +263,7 @@ impl PreparedMessage {
             .map_err(SqliteError::query("cowork claim"))?;
             return Ok(Outcome::Skipped);
         }
-        NewMessage {
+        let id = NewMessage {
             conversation_id,
             agent: target.agent,
             channel: target.channel,
@@ -264,7 +277,7 @@ impl PreparedMessage {
             owner: target.owner,
         }
         .insert(tx)?;
-        Ok(Outcome::Inserted)
+        Ok(Outcome::Inserted(id))
     }
 
     fn stored_by_event(
@@ -283,17 +296,18 @@ impl PreparedMessage {
         .map_err(SqliteError::query("event id lookup"))
     }
 
-    fn fill_pending(&self, tx: &Transaction<'_>, id: &str) -> Result<(), SqliteError> {
-        tx.execute(
-            "UPDATE ros_messages SET tool_result = ?2, metadata = ?3
-              WHERE id = ?1
-                AND ?2 IS NOT NULL
-                AND json_extract(metadata, '$.pending_result') = 1
-                AND json_extract(?3, '$.pending_result') IS NOT 1",
-            params![id, self.tool_result, self.metadata],
-        )
-        .map_err(SqliteError::query("pending tool result fill"))?;
-        Ok(())
+    fn fill_pending(&self, tx: &Transaction<'_>, id: &str) -> Result<bool, SqliteError> {
+        let changed = tx
+            .execute(
+                "UPDATE ros_messages SET tool_result = ?2, metadata = ?3
+                  WHERE id = ?1
+                    AND ?2 IS NOT NULL
+                    AND json_extract(metadata, '$.pending_result') = 1
+                    AND json_extract(?3, '$.pending_result') IS NOT 1",
+                params![id, self.tool_result, self.metadata],
+            )
+            .map_err(SqliteError::query("pending tool result fill"))?;
+        Ok(changed > 0)
     }
 
     fn unclaimed_hook_row(
@@ -318,6 +332,38 @@ impl PreparedMessage {
         )
         .optional()
         .map_err(SqliteError::query("cowork hook lookup"))
+    }
+}
+
+fn queue_if_absent(
+    tx: &Transaction<'_>,
+    message: &PreparedMessage,
+    id: &str,
+    embed: bool,
+    now: DateTime<Utc>,
+) -> Result<(), SqliteError> {
+    if !embed || message.role != Role::Tool {
+        return Ok(());
+    }
+    if enqueue_embed(tx, "ros_messages", id, now)? {
+        return Ok(());
+    }
+    Ok(())
+}
+
+fn queue_inserted(
+    tx: &Transaction<'_>,
+    id: &str,
+    embed: bool,
+    now: DateTime<Utc>,
+) -> Result<(), SqliteError> {
+    if !embed {
+        return Ok(());
+    }
+    if enqueue_embed(tx, "ros_messages", id, now)? {
+        Ok(())
+    } else {
+        Err(SqliteError::EmbedAlreadyQueued { id: id.to_owned() })
     }
 }
 

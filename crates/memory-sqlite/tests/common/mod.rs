@@ -184,11 +184,6 @@ impl Ids {
     }
 
     fn same_text(&mut self, rec: &str, act: &str, at: &str) -> Result<(), String> {
-        if generated(rec) {
-            return self
-                .bind(rec, act)
-                .map_err(|error| format!("{at}: {error}"));
-        }
         if rec == act {
             return Ok(());
         }
@@ -200,7 +195,68 @@ impl Ids {
         {
             return Ok(());
         }
-        Err(format!("{at}: recorded {rec:?} vs actual {act:?}"))
+        self.same_slots(rec, act, at)
+    }
+
+    fn same_slots(&mut self, rec: &str, act: &str, at: &str) -> Result<(), String> {
+        let recorded = split_ids(rec);
+        let actual = split_ids(act);
+        if recorded.len() != actual.len() {
+            return Err(format!("{at}: recorded {rec:?} vs actual {act:?}"));
+        }
+        for (left, right) in recorded.into_iter().zip(actual) {
+            match (left, right) {
+                (Slot::Literal(recorded_text), Slot::Literal(actual_text))
+                    if recorded_text == actual_text => {}
+                (Slot::Uuid(recorded_id), Slot::Uuid(actual_id)) if generated(&recorded_id) => {
+                    self.bind(&recorded_id, &actual_id)
+                        .map_err(|error| format!("{at}: {error}"))?;
+                }
+                (Slot::Uuid(recorded_id), Slot::Uuid(actual_id)) if recorded_id == actual_id => {}
+                (Slot::Literal(_) | Slot::Uuid(_), Slot::Literal(_) | Slot::Uuid(_)) => {
+                    return Err(format!("{at}: recorded {rec:?} vs actual {act:?}"));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+enum Slot {
+    Literal(String),
+    Uuid(String),
+}
+
+fn split_ids(text: &str) -> Vec<Slot> {
+    let mut slots = Vec::new();
+    let mut rest = text;
+    let mut literal = String::new();
+    while !rest.is_empty() {
+        if let Some(id) = take_uuid(rest) {
+            push_literal(&mut slots, &mut literal);
+            slots.push(Slot::Uuid(id.to_owned()));
+            match rest.get(id.len()..) {
+                Some(tail) => rest = tail,
+                None => break,
+            }
+        } else {
+            let Some(ch) = rest.chars().next() else {
+                break;
+            };
+            literal.push(ch);
+            match rest.get(ch.len_utf8()..) {
+                Some(tail) => rest = tail,
+                None => break,
+            }
+        }
+    }
+    push_literal(&mut slots, &mut literal);
+    slots
+}
+
+fn push_literal(slots: &mut Vec<Slot>, literal: &mut String) {
+    if !literal.is_empty() {
+        slots.push(Slot::Literal(std::mem::take(literal)));
     }
 }
 
@@ -308,4 +364,43 @@ pub(crate) async fn compare_tables(
         .map_err(|error| format!("{error}\nactual rows: {}", Json::Array(actual)))?;
     }
     Ok(())
+}
+
+pub(crate) fn step_result(step: &Step) -> TestResult<&Json> {
+    step.result
+        .as_ref()
+        .ok_or_else(|| format!("step {} has no result", step.label).into())
+}
+
+pub(crate) fn expect_json(recorded: &Json, actual: &Json, at: &str, ids: &mut Ids) -> TestResult {
+    ids.same(recorded, actual, at)
+        .map_err(|error| format!("{error}\nactual: {actual}"))?;
+    Ok(())
+}
+
+pub(crate) fn expect_logs(
+    recorded: &[String],
+    actual: &[String],
+    at: &str,
+    ids: &mut Ids,
+) -> TestResult {
+    let recorded = Json::Array(recorded.iter().cloned().map(Json::String).collect());
+    let actual_json = Json::Array(actual.iter().cloned().map(Json::String).collect());
+    expect_json(&recorded, &actual_json, at, ids)
+}
+
+fn take_uuid(text: &str) -> Option<&str> {
+    let head = text.as_bytes().get(..36)?;
+    if uuid_bytes(head) {
+        text.get(..36)
+    } else {
+        None
+    }
+}
+
+fn uuid_bytes(bytes: &[u8]) -> bool {
+    bytes.iter().enumerate().all(|(index, byte)| match index {
+        8 | 13 | 18 | 23 => *byte == b'-',
+        _ => byte.is_ascii_hexdigit(),
+    })
 }

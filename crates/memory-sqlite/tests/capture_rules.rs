@@ -4,11 +4,17 @@
 )]
 mod common;
 
+use std::sync::Arc;
+
 use common::TestResult;
 use common::batch;
 use common::fresh_store;
 use common::instant;
 use common::table;
+use memory_sqlite::EmbedRunner;
+use testkit::FakeProvider;
+use wire::capture::CaptureBatchRequest;
+use wire::message::Role;
 
 async fn stored_updated_at(store: &memory_sqlite::SqliteStore) -> TestResult<String> {
     let rows = table(store, "ros_conversations").await?;
@@ -49,5 +55,107 @@ async fn updated_at_only_moves_forward() -> TestResult {
         stored_updated_at(&fresh.store).await?,
         common::RECORDED_START
     );
+    Ok(())
+}
+
+fn tool_call(result: Option<&str>, metadata: &str) -> TestResult<CaptureBatchRequest> {
+    let mut capture = batch("cli:tool", "rivet", "cli");
+    let mut call = common::message("cowork:s:tool:tu1", Role::Tool, "[tool call] Bash");
+    call.tool_name = Some("Bash".to_owned());
+    call.tool_args = Some(common::object(r#"{"command":"ls"}"#)?);
+    call.tool_result = result.map(str::to_owned);
+    call.metadata = Some(common::object(metadata)?);
+    capture.messages.push(call);
+    Ok(capture)
+}
+
+async fn job_count(store: &memory_sqlite::SqliteStore) -> TestResult<usize> {
+    Ok(table(store, "ros_jobs").await?.len())
+}
+
+#[tokio::test]
+async fn a_filled_tool_result_is_queued_again() -> TestResult {
+    let fresh = fresh_store(None)?;
+    let fake = Arc::new(FakeProvider::fnv_embeddings(8));
+    let embedder = EmbedRunner::attach(&fresh.store, fake, "fake-embed-8", None)?;
+    let now = instant(common::RECORDED_START)?;
+    fresh
+        .store
+        .capture(
+            tool_call(None, r#"{"tool_use_id":"tu1","pending_result":true}"#)?,
+            now,
+        )
+        .await?;
+    assert_eq!(job_count(&fresh.store).await?, 1);
+    assert_eq!(embedder.run_jobs(now).await?, 1);
+    assert_eq!(job_count(&fresh.store).await?, 0);
+    fresh
+        .store
+        .capture(
+            tool_call(
+                Some("deployed build 42"),
+                r#"{"tool_use_id":"tu1","pending_result":false}"#,
+            )?,
+            now,
+        )
+        .await?;
+    assert_eq!(job_count(&fresh.store).await?, 1);
+    assert_eq!(embedder.run_jobs(now).await?, 1);
+    let row = table(&fresh.store, "ros_messages")
+        .await?
+        .into_iter()
+        .next()
+        .ok_or("message")?;
+    assert_eq!(
+        row.get("tool_result").and_then(testkit::Json::as_str),
+        Some("deployed build 42")
+    );
+    assert!(row.get("embedding").is_some_and(|value| !value.is_null()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
+    let fresh = fresh_store(None)?;
+    let fake = Arc::new(FakeProvider::fnv_embeddings(8));
+    EmbedRunner::attach(&fresh.store, fake, "fake-embed-8", None)?;
+    let now = instant(common::RECORDED_START)?;
+    fresh
+        .store
+        .capture(
+            tool_call(None, r#"{"tool_use_id":"tu1","pending_result":true}"#)?,
+            now,
+        )
+        .await?;
+    fresh
+        .store
+        .capture(
+            tool_call(
+                Some("deployed build 42"),
+                r#"{"tool_use_id":"tu1","pending_result":false}"#,
+            )?,
+            now,
+        )
+        .await?;
+    assert_eq!(job_count(&fresh.store).await?, 1);
+    let row = table(&fresh.store, "ros_messages")
+        .await?
+        .into_iter()
+        .next()
+        .ok_or("message")?;
+    assert_eq!(
+        row.get("tool_result").and_then(testkit::Json::as_str),
+        Some("deployed build 42")
+    );
+    let job = table(&fresh.store, "ros_jobs")
+        .await?
+        .into_iter()
+        .next()
+        .ok_or("job")?;
+    assert_eq!(
+        job.get("state").and_then(testkit::Json::as_str),
+        Some("queued")
+    );
+    assert_eq!(job.get("attempts").and_then(testkit::Json::as_i64), Some(0));
     Ok(())
 }

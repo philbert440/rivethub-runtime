@@ -100,6 +100,7 @@ pub struct FakeProvider {
     script: Mutex<Vec<Script>>,
     fnv_dims: Mutex<Option<usize>>,
     embed_requests: Mutex<Vec<Vec<String>>>,
+    http_status: Mutex<Option<u16>>,
 }
 
 impl FakeProvider {
@@ -116,6 +117,19 @@ impl FakeProvider {
             fnv_dims: Mutex::new(Some(width)),
             ..Self::default()
         }
+    }
+
+    #[must_use]
+    pub fn http_errors(status: u16) -> Self {
+        Self {
+            http_status: Mutex::new(Some(status)),
+            ..Self::default()
+        }
+    }
+
+    pub async fn use_fnv(&self, width: usize) {
+        *self.http_status.lock().await = None;
+        *self.fnv_dims.lock().await = Some(width);
     }
 
     pub async fn embed_requests(&self) -> Vec<Vec<String>> {
@@ -159,6 +173,63 @@ fn fnv_token_vector(text: &str, dims: usize) -> Embedding {
         }
     }
     Embedding { vector }
+}
+
+fn embed_http(status: u16) -> ModelProviderError {
+    ModelProviderError::Request {
+        message: format!("http {status}"),
+        source: Box::new(std::io::Error::other(format!(
+            "embed endpoint answered http {status}"
+        ))),
+    }
+}
+
+fn take_embed(script: &Script) -> Option<Vec<Embedding>> {
+    match script {
+        Script::Embed(vectors) => Some(vectors.clone()),
+        Script::Chat(_)
+        | Script::Stream(_)
+        | Script::EmbedHttpStatus(_)
+        | Script::EmbedNetwork
+        | Script::EmbedHang
+        | Script::Models(_) => None,
+    }
+}
+
+fn take_http_status(script: &Script) -> Option<u16> {
+    match script {
+        Script::EmbedHttpStatus(status) => Some(*status),
+        Script::Chat(_)
+        | Script::Stream(_)
+        | Script::Embed(_)
+        | Script::EmbedNetwork
+        | Script::EmbedHang
+        | Script::Models(_) => None,
+    }
+}
+
+fn take_network(script: &Script) -> Option<()> {
+    match script {
+        Script::EmbedNetwork => Some(()),
+        Script::Chat(_)
+        | Script::Stream(_)
+        | Script::Embed(_)
+        | Script::EmbedHttpStatus(_)
+        | Script::EmbedHang
+        | Script::Models(_) => None,
+    }
+}
+
+fn take_hang(script: &Script) -> Option<()> {
+    match script {
+        Script::EmbedHang => Some(()),
+        Script::Chat(_)
+        | Script::Stream(_)
+        | Script::Embed(_)
+        | Script::EmbedHttpStatus(_)
+        | Script::EmbedNetwork
+        | Script::Models(_) => None,
+    }
 }
 
 fn default_response() -> LlmResponse {
@@ -226,70 +297,23 @@ impl ModelProvider for FakeProvider {
 
     async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
         self.embed_requests.lock().await.push(texts.clone());
-        if let Some(chosen) = self
-            .scripted(|s| match s {
-                Script::Embed(vectors) => Some(vectors.clone()),
-                Script::Chat(_)
-                | Script::Stream(_)
-                | Script::EmbedHttpStatus(_)
-                | Script::EmbedNetwork
-                | Script::EmbedHang
-                | Script::Models(_) => None,
-            })
-            .await
-        {
+        let sticky = *self.http_status.lock().await;
+        if let Some(status) = sticky {
+            return Err(embed_http(status));
+        }
+        if let Some(chosen) = self.scripted(take_embed).await {
             return Ok(chosen);
         }
-        if let Some(status) = self
-            .scripted(|s| match s {
-                Script::EmbedHttpStatus(status) => Some(*status),
-                Script::Chat(_)
-                | Script::Stream(_)
-                | Script::Embed(_)
-                | Script::EmbedNetwork
-                | Script::EmbedHang
-                | Script::Models(_) => None,
-            })
-            .await
-        {
-            return Err(ModelProviderError::Request {
-                message: format!("http {status}"),
-                source: Box::new(std::io::Error::other(format!(
-                    "embed endpoint answered http {status}"
-                ))),
-            });
+        if let Some(status) = self.scripted(take_http_status).await {
+            return Err(embed_http(status));
         }
-        if self
-            .scripted(|s| match s {
-                Script::EmbedNetwork => Some(()),
-                Script::Chat(_)
-                | Script::Stream(_)
-                | Script::Embed(_)
-                | Script::EmbedHttpStatus(_)
-                | Script::EmbedHang
-                | Script::Models(_) => None,
-            })
-            .await
-            .is_some()
-        {
+        if self.scripted(take_network).await.is_some() {
             return Err(ModelProviderError::Request {
                 message: "connection refused".to_owned(),
                 source: Box::new(std::io::Error::other("connection refused")),
             });
         }
-        if self
-            .scripted(|s| match s {
-                Script::EmbedHang => Some(()),
-                Script::Chat(_)
-                | Script::Stream(_)
-                | Script::Embed(_)
-                | Script::EmbedHttpStatus(_)
-                | Script::EmbedNetwork
-                | Script::Models(_) => None,
-            })
-            .await
-            .is_some()
-        {
+        if self.scripted(take_hang).await.is_some() {
             std::future::pending::<()>().await;
         }
         let dims = *self.fnv_dims.lock().await;

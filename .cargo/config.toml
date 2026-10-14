@@ -1,2 +1,6 @@
 [alias]
 xtask = "run -q -p xtask --"
+
+[term]
+quiet = true
+progress.when = "never"
