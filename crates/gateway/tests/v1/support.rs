@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -59,12 +60,17 @@ impl Harness {
                     allowed_origins: Vec::new(),
                     allowed_hosts: Vec::new(),
                     files_root: None,
-                    state_dir: std::path::PathBuf::from("/tmp/rr-gateway-unused-agents/state"),
-                    directory_root: std::path::PathBuf::from(
-                        "/tmp/rr-gateway-unused-agents/agents",
-                    ),
-                    shared_dir: std::path::PathBuf::from("/tmp/rr-gateway-unused-agents/shared"),
+                    static_dir: None,
+                    root_redirect: None,
+                    state_dir: PathBuf::from("/tmp/rr-gateway-unused-agents/state"),
+                    directory_root: PathBuf::from("/tmp/rr-gateway-unused-agents/agents"),
+                    mesh_file: Some(PathBuf::from("/no-such-gateway-mesh/mesh.json")),
+                    shared_dir: PathBuf::from("/tmp/rr-gateway-unused-agents/shared"),
+                    legacy_mesh_dir: PathBuf::from("/no-such-gateway-legacy"),
                     allowed_harnesses: None,
+                    devices_enabled: false,
+                    probe_timeout: Duration::from_millis(200),
+                    mesh_cache_ttl: Duration::ZERO,
                 },
             )
             .with_turn_runner(runner.clone()),

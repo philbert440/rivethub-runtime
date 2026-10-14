@@ -1,5 +1,7 @@
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::http::HeaderName;
 use axum::http::HeaderValue;
@@ -29,6 +31,8 @@ use tokio::sync::Semaphore;
 use tokio::sync::watch;
 use tower::ServiceExt;
 
+pub(crate) mod roster;
+
 const HOSTNAME: &str = "gold-host";
 const NODE: &str = "golden-node";
 
@@ -40,10 +44,17 @@ pub(crate) fn settings() -> Settings {
         allowed_origins: vec!["https://hub.example.test".to_string()],
         allowed_hosts: vec!["den.example.test".to_string()],
         files_root: None,
+        static_dir: None,
+        root_redirect: None,
         state_dir: scratch.join("state"),
         directory_root: scratch.join("agents"),
+        mesh_file: Some(PathBuf::from("/no-such-gateway-mesh/mesh.json")),
         shared_dir: scratch.join("shared"),
+        legacy_mesh_dir: PathBuf::from("/no-such-gateway-legacy"),
         allowed_harnesses: None,
+        devices_enabled: false,
+        probe_timeout: Duration::from_millis(200),
+        mesh_cache_ttl: Duration::ZERO,
     }
 }
 
@@ -60,6 +71,55 @@ pub(crate) fn gateway() -> (Arc<Gateway>, Arc<FakeMemoryStore>) {
     let handle: Arc<dyn MemoryStore> = Arc::clone(&store) as Arc<dyn MemoryStore>;
     let gateway = Arc::new(Gateway::new(handle, settings()));
     (gateway, store)
+}
+
+pub(crate) fn spawn_healthz() -> Result<u16, FailedHealthz> {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))
+        .map_err(|error| FailedHealthz(format!("healthz bind: {error}")))?;
+    let port = listener
+        .local_addr()
+        .map_err(|error| FailedHealthz(format!("healthz addr: {error}")))?
+        .port();
+    std::thread::spawn(move || answer_healthz(&listener));
+    Ok(port)
+}
+
+fn answer_healthz(listener: &std::net::TcpListener) {
+    for _ in 0..16 {
+        let Ok((mut stream, _)) = listener.accept() else {
+            break;
+        };
+        let mut buf = [0_u8; 2048];
+        if std::io::Read::read(&mut stream, &mut buf).is_err() {
+            continue;
+        }
+        let body = br#"{"ok":true,"sessions":0,"name":"gold-host","node":"golden-node"}"#;
+        let head = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        if std::io::Write::write_all(&mut stream, head.as_bytes()).is_err() {
+            continue;
+        }
+        if std::io::Write::write_all(&mut stream, body).is_err() {
+            break;
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct FailedHealthz(String);
+
+impl std::fmt::Display for FailedHealthz {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+pub(crate) fn gateway_with(settings: Settings) -> Arc<Gateway> {
+    let store = Arc::new(FakeMemoryStore::default());
+    let handle: Arc<dyn MemoryStore> = Arc::clone(&store) as Arc<dyn MemoryStore>;
+    Arc::new(Gateway::new(handle, settings))
 }
 
 pub(crate) fn failing_gateway() -> Arc<Gateway> {

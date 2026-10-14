@@ -8,6 +8,7 @@ impl StartupError {
             Self::Config(_)
             | Self::Composition(_)
             | Self::SqliteUnavailable
+            | Self::Settings(_)
             | Self::Url
             | Self::State(_)
             | Self::StateTask(_) => Exit::Failure,

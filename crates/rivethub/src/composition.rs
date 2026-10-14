@@ -16,6 +16,8 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Error)]
 pub enum ComposeError {
+    #[error(transparent)]
+    Settings(#[from] gateway::SettingsError),
     #[error("gateway composition I/O failed: {0}")]
     Io(#[from] std::io::Error),
     #[error("gateway composition worker failed: {0}")]
@@ -89,7 +91,7 @@ impl Composition {
             env,
             hostname.clone(),
             env.node_name(&hostname),
-        );
+        )?;
         let sessions = Arc::new(
             SessionRegistry::new(Duration::from_secs(300)).with_shutdown(shutdown.child_token()),
         );

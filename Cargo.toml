@@ -49,6 +49,7 @@ memory-sqlite = { path = "crates/memory-sqlite", version = "0.1.0" }
 num-bigint = "0.4"
 nix = { version = "0.30", features = ["process", "signal", "fs", "user"] }
 parking_lot = "0.12"
+percent-encoding = "2"
 pki = { path = "crates/pki", version = "0.1.0" }
 pgvector = { version = "0.4", features = ["sqlx"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
@@ -87,6 +88,7 @@ tokio-tungstenite = "0.29"
 tokio-util = { version = "0.7", features = ["rt"] }
 toml = "1"
 tower = "0.5"
+tower-http = { version = "0.6", features = ["fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2"

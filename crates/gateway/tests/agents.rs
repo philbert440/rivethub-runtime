@@ -61,10 +61,17 @@ fn gateway_at(root: &Path, allowed: Option<Vec<HarnessId>>) -> Arc<Gateway> {
             allowed_origins: vec!["https://hub.example.test".to_owned()],
             allowed_hosts: vec!["den.example.test".to_owned()],
             files_root: None,
+            static_dir: None,
+            root_redirect: None,
             state_dir: root.join("state"),
             directory_root: root.join("agents"),
+            mesh_file: Some(root.join("absent-mesh.json")),
             shared_dir: root.join("shared"),
+            legacy_mesh_dir: root.join("legacy"),
             allowed_harnesses: allowed,
+            devices_enabled: false,
+            probe_timeout: Duration::from_millis(200),
+            mesh_cache_ttl: Duration::ZERO,
         },
     ))
 }
@@ -1013,7 +1020,8 @@ fn settings_use_the_hub_layout_and_known_harnesses() {
         "den:\n  allowed_harnesses:\n    - claude-code\n    - not-a-real-harness\n",
     )
     .expect("config");
-    let settings = Settings::from_config_in(&config, &env, "gold-host".to_owned(), NODE.to_owned());
+    let settings = Settings::from_config_in(&config, &env, "gold-host".to_owned(), NODE.to_owned())
+        .expect("settings");
     let state = root.path().join(".rivethub");
     assert_eq!(settings.state_dir, state);
     assert_eq!(settings.directory_root, state.join("agents"));
@@ -1038,7 +1046,8 @@ fn settings_resolve_a_symlinked_home() {
         ),
     ]);
     let config: config::Config = serde_yaml_ng::from_str("").expect("config");
-    let settings = Settings::from_config_in(&config, &env, "gold-host".to_owned(), NODE.to_owned());
+    let settings = Settings::from_config_in(&config, &env, "gold-host".to_owned(), NODE.to_owned())
+        .expect("settings");
     let real = std::fs::canonicalize(root.path()).expect("real home");
     assert_eq!(settings.state_dir, real.join(".rivethub"));
     assert_eq!(

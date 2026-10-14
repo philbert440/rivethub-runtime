@@ -12,9 +12,12 @@ pub mod terminal;
 pub mod v1;
 pub mod wiki;
 
+mod surface;
+
 use std::sync::Arc;
 
 use axum::Json;
+use axum::Router;
 use axum::extract::State;
 use wire::gateway::HealthzResponse;
 
@@ -23,10 +26,27 @@ use crate::error::ApiError;
 
 pub(crate) const BODY_LIMIT: usize = 256 * 1024;
 
+pub(crate) use surface::MeshCache;
+pub(crate) use surface::rewrite_request;
+
 pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
     harnesses::mount(files::mount(wiki::router()))
         .nest("/api/agents", agents::router())
         .merge(devices::router())
+}
+
+pub(crate) fn mount(router: Router<Arc<Gateway>>) -> Router<Arc<Gateway>> {
+    surface::mount(router)
+}
+
+pub(crate) fn join_task<T>(joined: Result<T, tokio::task::JoinError>) -> Result<T, ApiError> {
+    match joined {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            tracing::error!("blocking task failed: {error}");
+            Err(ApiError::Task(error))
+        }
+    }
 }
 
 pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> Json<HealthzResponse> {

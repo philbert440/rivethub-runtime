@@ -4,6 +4,7 @@ use axum::response::IntoResponse;
 use axum::response::Response;
 use kernel::memory::MemoryStoreError;
 use wire::gateway::GatewayError;
+use wire::mesh::MeshParseCode;
 
 const INVALID_JSON: &str = "invalid JSON";
 const BODY_MUST_BE_OBJECT: &str = "body must be a JSON object";
@@ -51,6 +52,10 @@ pub enum ApiError {
     ForbiddenOrigin,
     #[error("serialization failed: {0}")]
     Serialize(#[source] serde_json::Error),
+    #[error("internal error")]
+    Internal,
+    #[error("mesh.json parse failed")]
+    MeshParse(MeshParseCode),
     #[error(transparent)]
     Store(#[from] MemoryStoreError),
 }
@@ -86,7 +91,7 @@ impl ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 GatewayError::new(error.to_string()),
             ),
-            Self::Io(_) | Self::Task(_) | Self::Serialize(_) => (
+            Self::Io(_) | Self::Task(_) | Self::Serialize(_) | Self::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 GatewayError::new(INTERNAL_ERROR),
             ),
@@ -115,6 +120,10 @@ impl ApiError {
             ),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, GatewayError::new("unauthorized")),
             Self::ForbiddenOrigin => (StatusCode::FORBIDDEN, GatewayError::new("forbidden origin")),
+            Self::MeshParse(code) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                GatewayError::new("mesh.json parse failed").code(code.to_string()),
+            ),
             Self::Store(MemoryStoreError::InvalidRequest { message }) => {
                 (StatusCode::BAD_REQUEST, GatewayError::new(message))
             }

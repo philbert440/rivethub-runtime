@@ -31,10 +31,17 @@ fn settings() -> Settings {
         allowed_origins: Vec::new(),
         allowed_hosts: Vec::new(),
         files_root: None,
+        static_dir: None,
+        root_redirect: None,
         state_dir: scratch.join("state"),
         directory_root: scratch.join("agents"),
+        mesh_file: Some(PathBuf::from("/no-such-gateway-mesh/mesh.json")),
         shared_dir: scratch.join("shared"),
+        legacy_mesh_dir: PathBuf::from("/no-such-gateway-legacy"),
         allowed_harnesses: None,
+        devices_enabled: false,
+        probe_timeout: Duration::from_millis(200),
+        mesh_cache_ttl: Duration::ZERO,
     }
 }
 

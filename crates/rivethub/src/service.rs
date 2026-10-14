@@ -28,6 +28,8 @@ pub enum StartupError {
     Composition(#[from] crate::composition::ComposeError),
     #[error(transparent)]
     Config(#[from] config::ConfigError),
+    #[error(transparent)]
+    Settings(#[from] gateway::SettingsError),
     #[error(
         "no Postgres URL for the memory database — set \"memory.postgres.connection_string\" or \"{POSTGRES_URL_VARIABLE}\""
     )]
@@ -69,7 +71,7 @@ pub fn compose(
 ) -> Result<Arc<Gateway>, StartupError> {
     let hostname = host_name();
     let settings =
-        Settings::from_config_in(config, env, hostname.clone(), env.node_name(&hostname));
+        Settings::from_config_in(config, env, hostname.clone(), env.node_name(&hostname))?;
     let gateway = Gateway::new(store, settings).with_uploads(uploads(env));
     Ok(Arc::new(gateway))
 }

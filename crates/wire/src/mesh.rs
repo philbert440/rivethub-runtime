@@ -93,3 +93,13 @@ pub enum MeshParseCode {
     #[serde(rename = "MESH_JSON_INVALID")]
     JsonInvalid,
 }
+
+impl std::fmt::Display for MeshParseCode {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidShape => "MESH_INVALID_SHAPE",
+            Self::FlatArray => "MESH_FLAT_ARRAY",
+            Self::JsonInvalid => "MESH_JSON_INVALID",
+        })
+    }
+}
