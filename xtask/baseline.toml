@@ -1,17 +1,5 @@
 [[entry]]
 check = "FALLBACK"
-file = "crates/agent-loop/src/fence.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/agent-loop/src/turn.rs"
-text = "Err(..) => value"
-count = 4
-
-[[entry]]
-check = "FALLBACK"
 file = "crates/capture/src/event_id.rs"
 text = "let Ok(..) = .. else"
 count = 1
@@ -24,27 +12,9 @@ count = 1
 
 [[entry]]
 check = "FALLBACK"
-file = "crates/capture/src/hook.rs"
-text = "Err(..) => value"
-count = 5
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/capture/src/redaction.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
 file = "crates/capture/src/redaction.rs"
 text = "unwrap_or"
 count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/capture/src/spool.rs"
-text = "Err(..) => value"
-count = 4
 
 [[entry]]
 check = "FALLBACK"
@@ -54,21 +24,15 @@ count = 1
 
 [[entry]]
 check = "FALLBACK"
-file = "crates/capture/src/transcript.rs"
-text = "Err(..) => value"
-count = 2
-
-[[entry]]
-check = "FALLBACK"
 file = "crates/config/src/environment.rs"
 text = "Err(..) => value"
-count = 7
+count = 1
 
 [[entry]]
 check = "FALLBACK"
 file = "crates/config/src/load.rs"
 text = "Err(..) => value"
-count = 2
+count = 1
 
 [[entry]]
 check = "FALLBACK"
@@ -108,6 +72,12 @@ count = 1
 
 [[entry]]
 check = "FALLBACK"
+file = "crates/gateway/src/mesh/channel.rs"
+text = "Err(..) => value"
+count = 1
+
+[[entry]]
+check = "FALLBACK"
 file = "crates/gateway/src/routes/capture_schema.rs"
 text = "ok"
 count = 1
@@ -126,43 +96,7 @@ count = 1
 
 [[entry]]
 check = "FALLBACK"
-file = "crates/gateway/src/routes/sessions.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/gateway/src/routes/tags.rs"
-text = "Err(..) => value"
-count = 5
-
-[[entry]]
-check = "FALLBACK"
 file = "crates/gateway/src/server.rs"
-text = "Err(..) => value"
-count = 2
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/gateway/src/sessions/control.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/gateway/src/term/actor.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/harness-acp/src/client.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/harness-acp/src/connection.rs"
 text = "Err(..) => value"
 count = 1
 
@@ -174,21 +108,9 @@ count = 2
 
 [[entry]]
 check = "FALLBACK"
-file = "crates/mcp/src/lib.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/mcp/src/transport.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
 file = "crates/memory-postgres/src/embed.rs"
 text = "Err(..) => value"
-count = 2
+count = 1
 
 [[entry]]
 check = "FALLBACK"
@@ -217,12 +139,6 @@ count = 3
 [[entry]]
 check = "FALLBACK"
 file = "crates/memory-postgres/src/read.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/read.rs"
 text = "let Ok(..) = .. else"
 count = 1
 
@@ -247,50 +163,14 @@ count = 3
 [[entry]]
 check = "FALLBACK"
 file = "crates/memory-postgres/src/tags/mod.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/tags/mod.rs"
 text = "ok"
 count = 2
 
 [[entry]]
 check = "FALLBACK"
-file = "crates/migrate/src/bin/rivethub-migrate.rs"
-text = "Err(..) => value"
-count = 2
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/migrate/src/postgres.rs"
-text = "Err(..) => value"
-count = 2
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/providers/src/sse.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/rivethub/src/main.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/rivethub/src/service.rs"
-text = "Err(..) => value"
-count = 3
-
-[[entry]]
-check = "FALLBACK"
 file = "crates/terminal/src/herdr/client.rs"
 text = "Err(..) => value"
-count = 2
+count = 1
 
 [[entry]]
 check = "FALLBACK"
@@ -309,18 +189,6 @@ check = "FALLBACK"
 file = "crates/terminal/src/manager/mod.rs"
 text = "Err(..) => value"
 count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/terminal/src/mux.rs"
-text = "Err(..) => value"
-count = 4
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/terminal/src/pty.rs"
-text = "Err(..) => value"
-count = 2
 
 [[entry]]
 check = "FALLBACK"
@@ -372,20 +240,8 @@ count = 2
 
 [[entry]]
 check = "FALLBACK"
-file = "crates/testkit/src/provider.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
 file = "crates/testkit/src/sqlite.rs"
 text = "map_or_else"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/stub.rs"
-text = "Err(..) => value"
 count = 1
 
 [[entry]]

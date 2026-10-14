@@ -60,3 +60,25 @@ fn borrowed_option(value: &Option<u32>) -> u32 {
 }
 
 fn main() {}
+
+pub fn kind_specific(path: &std::path::Path) -> Result<Option<std::fs::Metadata>, std::io::Error> {
+    match std::fs::metadata(path) {
+        Ok(metadata) => Ok(Some(metadata)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+pub fn handled(input: &str) -> u8 {
+    match input.parse::<u8>() {
+        Ok(value) => value,
+        Err(error) => {
+            report(&error);
+            1
+        }
+    }
+}
+
+fn report(error: &std::num::ParseIntError) {
+    let _report = error.to_string();
+}

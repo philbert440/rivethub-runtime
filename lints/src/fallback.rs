@@ -60,6 +60,16 @@ fn variant(cx: &LateContext<'_>, pattern: &Pat<'_>, name: &str) -> bool {
     }
 }
 
+fn discards_error(pattern: &Pat<'_>) -> bool {
+    match pattern.kind {
+        PatKind::TupleStruct(_, fields, _) => fields
+            .iter()
+            .all(|field| matches!(field.kind, PatKind::Wild)),
+        PatKind::Or(patterns) => patterns.iter().any(discards_error),
+        _ => false,
+    }
+}
+
 fn error_value(cx: &LateContext<'_>, expression: &Expr<'_>) -> bool {
     if let ExprKind::Call(callee, _) = expression.kind
         && let ExprKind::Path(ref path) = callee.kind
@@ -154,7 +164,11 @@ impl<'tcx> LateLintPass<'tcx> for Fallback {
             }
             ExprKind::Match(scrutinee, arms, MatchSource::Normal) if result(cx, scrutinee) => {
                 for arm in arms {
-                    if variant(cx, arm.pat, "Err") && produces_default(cx, arm.body) {
+                    if arm.guard.is_none()
+                        && variant(cx, arm.pat, "Err")
+                        && discards_error(arm.pat)
+                        && produces_default(cx, arm.body)
+                    {
                         emit(cx, arm.body, "Err(..) => value");
                     }
                 }
