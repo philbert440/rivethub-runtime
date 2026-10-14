@@ -97,8 +97,103 @@ pub struct MeshDevice {
 #[serde(rename_all = "camelCase")]
 pub struct DeviceListResponse {
     pub devices: Vec<MeshDevice>,
-    pub pending: Vec<MeshDevice>,
+    pub pending: Vec<PendingEnrollment>,
     pub relay_configured: bool,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingEnrollment {
+    pub id: String,
+    pub name: String,
+    pub address: String,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub created_at: DateTime<Utc>,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub expires_at: DateTime<Utc>,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredPending {
+    pub id: String,
+    pub name: String,
+    pub token: String,
+    pub address: String,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub created_at: DateTime<Utc>,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceRosterFile {
+    pub v: u32,
+    pub devices: Vec<MeshDevice>,
+    pub pending: Vec<StoredPending>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceCreateRequest {
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename = "rivet-mesh-enroll", rename_all = "camelCase")]
+pub struct EnrollmentQr {
+    pub v: u32,
+    pub gateway: String,
+    pub token: String,
+    pub config: DeviceEnrollConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceCreateResponse {
+    pub pending: PendingEnrollment,
+    pub qr: EnrollmentQr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnrolledDevice {
+    pub id: String,
+    pub name: String,
+    pub address: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceEnrollResponse {
+    pub ok: bool,
+    pub device: EnrolledDevice,
+    pub config: DeviceEnrollConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairRedeemResponse {
+    pub device_id: String,
+    pub p12: String,
+    pub passphrase: String,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingRecord {
+    pub v: u32,
+    pub device_id: String,
+    pub name: String,
+    pub passphrase: String,
+    pub p12: String,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,8 +214,11 @@ pub struct DeviceEnrollConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceEnrollRequest {
-    pub token: String,
-    pub public_key: String,
+    #[serde(default)]
+    pub token: Option<String>,
+    #[serde(default)]
+    pub public_key: Option<String>,
+    #[serde(default)]
     pub name: Option<String>,
 }
 
@@ -165,6 +263,7 @@ pub struct PhonePairingAvailability {
 #[serde(rename_all = "camelCase")]
 pub struct PhonePairingRequest {
     pub name: String,
+    #[serde(default)]
     pub host: Option<String>,
 }
 

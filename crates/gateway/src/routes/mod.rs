@@ -2,6 +2,7 @@ pub mod agents;
 pub mod capture;
 pub mod capture_schema;
 pub mod chat;
+pub mod devices;
 pub mod files;
 pub mod harnesses;
 pub mod memory;
@@ -23,7 +24,9 @@ use crate::error::ApiError;
 pub(crate) const BODY_LIMIT: usize = 256 * 1024;
 
 pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
-    harnesses::mount(files::mount(wiki::router())).nest("/api/agents", agents::router())
+    harnesses::mount(files::mount(wiki::router()))
+        .nest("/api/agents", agents::router())
+        .merge(devices::router())
 }
 
 pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> Json<HealthzResponse> {

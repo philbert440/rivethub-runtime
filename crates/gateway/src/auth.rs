@@ -239,7 +239,14 @@ pub(crate) async fn guard(
         append_cors(&mut response, echo.as_deref());
         return response;
     }
-    if path != "/healthz" && !(state.secure || caller_loopback) {
+    if path != "/healthz"
+        && !(state.secure || caller_loopback)
+        && !crate::routes::devices::admits_remote_without_client_auth(
+            request.method(),
+            &path,
+            state.gateway.devices().enrollment_on(),
+        )
+    {
         let mut unauthorized = unauthorized(&request, &path);
         if header_text(unauthorized.headers(), &header::CONTENT_TYPE) == Some("application/json") {
             append_cors(&mut unauthorized, echo.as_deref());

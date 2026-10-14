@@ -130,6 +130,7 @@ pub struct Gateway {
     transcript: Option<Arc<dyn kernel::transcript::TranscriptReader>>,
     uploads: Option<uploads::UploadService>,
     presets: routes::agents::AgentRegistry,
+    devices: routes::devices::DeviceRuntime,
 }
 
 impl Gateway {
@@ -155,12 +156,19 @@ impl Gateway {
             transcript: None,
             uploads: None,
             presets,
+            devices: routes::devices::DeviceRuntime::unconfigured(),
         }
     }
 
     #[must_use]
     pub fn with_turn_runner(mut self, runner: Arc<dyn TurnRunner>) -> Self {
         self.turn_runner = Some(runner);
+        self
+    }
+
+    #[must_use]
+    pub fn with_devices(mut self, devices: routes::devices::DeviceRuntime) -> Self {
+        self.devices = devices;
         self
     }
 
@@ -246,6 +254,10 @@ impl Gateway {
 
     pub(crate) fn presets(&self) -> &routes::agents::AgentRegistry {
         &self.presets
+    }
+
+    pub(crate) fn devices(&self) -> &routes::devices::DeviceRuntime {
+        &self.devices
     }
 
     pub fn router(self: &Arc<Self>, secure: bool) -> Router {

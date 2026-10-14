@@ -44,6 +44,7 @@ memory-postgres = { path = "crates/memory-postgres", version = "0.1.0" }
 memory-sqlite = { path = "crates/memory-sqlite", version = "0.1.0" }
 num-bigint = "0.4"
 nix = { version = "0.30", features = ["process", "signal", "fs", "user"] }
+p12 = "0.6.3"
 parking_lot = "0.12"
 pki = { path = "crates/pki", version = "0.1.0" }
 pgvector = { version = "0.4", features = ["sqlx"] }
