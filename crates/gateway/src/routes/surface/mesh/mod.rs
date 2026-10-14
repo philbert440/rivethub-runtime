@@ -115,8 +115,8 @@ async fn load_overview(settings: &Settings) -> Result<MeshOverview, ApiError> {
     for path in candidates(settings) {
         match read_registry(&path).await? {
             Read::File(file) => {
-                let overview = project::project(&file)?;
-                return activate(settings, overview).await;
+                let projected = project::project(&file);
+                return activate(settings, projected.overview).await;
             }
             Read::Absent | Read::Unreadable => {}
             Read::Shape(code) => {
@@ -377,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    fn node_order_is_local_then_id_descending() -> Result<(), Box<dyn std::error::Error>> {
+    fn node_order_is_local_then_id_descending() {
         let mut document = MeshFile::empty(DateTime::UNIX_EPOCH);
         for (id, name, host) in [
             ("golden-node", "Golden Node", "127.0.0.1"),
@@ -392,7 +392,7 @@ mod tests {
             node.host = host.to_owned();
             document.nodes.insert(id.to_owned(), node);
         }
-        let mut overview = project(&document)?;
+        let mut overview = project(&document).overview;
         order_nodes(&mut overview.nodes, "golden-node");
         let ids: Vec<&str> = overview.nodes.iter().map(|node| node.id.as_str()).collect();
         assert_eq!(
@@ -406,7 +406,6 @@ mod tests {
                 "bad-port"
             ]
         );
-        Ok(())
     }
 
     #[test]

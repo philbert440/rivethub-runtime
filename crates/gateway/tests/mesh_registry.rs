@@ -5,8 +5,8 @@ use chrono::{DateTime, TimeDelta, Utc};
 use gateway::mesh::{Heartbeat, HeartbeatReport, Registry, RegistryError};
 use tempfile::TempDir;
 use tokio_util::sync::CancellationToken;
-use wire::mesh::{MeshFile, MeshNode, MeshNodeStatus, MeshRole};
-use wire::{Extra, JsonObject};
+use wire::Extra;
+use wire::mesh::{MeshFile, MeshMetadata, MeshNode, MeshNodeStatus, MeshRole};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -52,7 +52,7 @@ async fn registration_and_external_operator_edits_survive_restart() -> TestResul
     edited.ssh_user = Some("operator".to_owned());
     edited.install_root = Some("/srv/RivetHub install".to_owned());
     edited.platform = Some("linux".to_owned());
-    edited.metadata = Some(serde_json::from_str::<JsonObject>(r#"{"rack":"west"}"#)?);
+    edited.metadata = Some(serde_json::from_str::<MeshMetadata>(r#"{"rack":"west"}"#)?);
     edited.extra = serde_json::from_str(r#"{"gatewayPort":5174,"futureField":{"a":1}}"#)?;
     external.nodes.insert("peer".to_owned(), node("peer"));
     std::fs::write(

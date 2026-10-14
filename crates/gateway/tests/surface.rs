@@ -24,7 +24,6 @@ fn member(
         host: "127.0.0.1",
         url: Some(url.to_owned()),
         port: None,
-        text_port: None,
         capabilities,
     }
 }

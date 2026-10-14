@@ -3914,6 +3914,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]
@@ -4355,6 +4356,7 @@ dependencies = [
  "strum",
  "testkit",
  "thiserror 2.0.21",
+ "url",
 ]
 
 [[package]]

@@ -1,199 +1,173 @@
-use serde::Deserialize;
+use thiserror::Error;
 use url::Url;
-use wire::JsonObject;
 use wire::gateway::devices::MeshOverview;
 use wire::gateway::devices::MeshOverviewNode;
 use wire::mesh::MeshFile;
 use wire::mesh::MeshNode;
 
-use crate::error::ApiError;
-
 const DEFAULT_GATEWAY_PORT: u16 = 5174;
-const GATEWAY_CAPABILITY: &str = "den";
+const RECORDED_GATEWAY_CAPABILITY: &str = "den";
 
-#[derive(Debug, Deserialize)]
-struct GatewayUrl {
-    #[serde(rename = "denUrl")]
-    url: String,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub(super) enum Rule {
+    #[error("mesh node id is empty")]
+    EmptyId,
+    #[error("mesh node name is blank")]
+    BlankName,
+    #[error("mesh gateway url scheme is not http")]
+    NonHttpScheme,
+    #[error("mesh gateway host is missing")]
+    MissingHost,
+    #[error("mesh gateway host is not an origin")]
+    UnusableHost,
+    #[error("mesh gateway port is zero")]
+    ZeroPort,
+    #[error("mesh node does not advertise a gateway")]
+    NotAGateway,
 }
 
-#[derive(Debug, Deserialize)]
-struct GatewayPort {
-    #[serde(rename = "denPort")]
-    port: PortValue,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Withheld {
+    pub(super) id: String,
+    pub(super) rule: Rule,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum PortValue {
-    Number(u16),
-    Wide(i64),
-    Float(f64),
-    Text(String),
-    Bool(bool),
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub(super) struct Projection {
+    pub(super) overview: MeshOverview,
+    pub(super) withheld: Vec<Withheld>,
 }
 
-pub(super) fn project(file: &MeshFile) -> Result<MeshOverview, ApiError> {
+pub(super) fn project(file: &MeshFile) -> Projection {
+    let projection = classify_all(file);
+    for item in &projection.withheld {
+        tracing::warn!(
+            node_id = %item.id,
+            rule = %item.rule,
+            "mesh node withheld from the overview"
+        );
+    }
+    projection
+}
+
+fn classify_all(file: &MeshFile) -> Projection {
     let mut nodes = Vec::new();
+    let mut withheld = Vec::new();
     for node in file.nodes.values() {
-        let Some(name) = usable(&node.name) else {
-            continue;
-        };
-        let Some(url) = node_url(node)? else {
-            continue;
-        };
-        if node.id.is_empty() {
-            continue;
+        match classify(node) {
+            Ok(url) => nodes.push(overview_node(node, url)),
+            Err(rule) => withheld.push(Withheld {
+                id: node.id.clone(),
+                rule,
+            }),
         }
-        nodes.push(MeshOverviewNode {
-            id: node.id.clone(),
-            name: name.to_owned(),
-            url,
-            online: false,
-            sessions: None,
-            latest: None,
-        });
     }
-    Ok(MeshOverview {
-        updated_at: file.updated_at,
-        nodes,
-    })
+    Projection {
+        overview: MeshOverview {
+            updated_at: file.updated_at,
+            nodes,
+        },
+        withheld,
+    }
 }
 
-fn node_url(node: &MeshNode) -> Result<Option<String>, ApiError> {
-    if let Some(metadata) = &node.metadata {
-        if let Some(raw) = optional_field::<GatewayUrl>(metadata)?
-            && let Some(url) = http_url(&raw.url)
-        {
-            return Ok(Some(url));
-        }
-        if let Some(value) = optional_field::<GatewayPort>(metadata)?
-            && let Some(port) = gateway_port(&value.port)
-            && let Some(host) = usable(&node.host)
-        {
-            return Ok(Some(format!("http://{host}:{port}")));
-        }
+fn overview_node(node: &MeshNode, url: String) -> MeshOverviewNode {
+    MeshOverviewNode {
+        id: node.id.clone(),
+        name: node.name.clone(),
+        url,
+        online: false,
+        sessions: None,
+        latest: None,
     }
-    if node
-        .capabilities
+}
+
+fn classify(node: &MeshNode) -> Result<String, Rule> {
+    if node.id.is_empty() {
+        return Err(Rule::EmptyId);
+    }
+    if node.name.trim().is_empty() {
+        return Err(Rule::BlankName);
+    }
+    Ok(advertised(&address(node)?))
+}
+
+fn address(node: &MeshNode) -> Result<Url, Rule> {
+    if let Some(url) = gateway_url(node) {
+        return require_http(url);
+    }
+    if let Some(port) = gateway_port(node) {
+        if port == 0 {
+            return Err(Rule::ZeroPort);
+        }
+        return origin(&node.host, port);
+    }
+    if advertises_gateway(node) {
+        return origin(&node.host, DEFAULT_GATEWAY_PORT);
+    }
+    Err(Rule::NotAGateway)
+}
+
+fn gateway_url(node: &MeshNode) -> Option<Url> {
+    node.metadata.as_ref()?.gateway_url.clone()
+}
+
+fn gateway_port(node: &MeshNode) -> Option<u16> {
+    node.metadata.as_ref()?.gateway_port
+}
+
+fn advertises_gateway(node: &MeshNode) -> bool {
+    node.capabilities
         .iter()
-        .any(|cap| cap == GATEWAY_CAPABILITY)
-        && let Some(host) = usable(&node.host)
-    {
-        return Ok(Some(format!("http://{host}:{DEFAULT_GATEWAY_PORT}")));
-    }
-    Ok(None)
+        .any(|capability| capability == RECORDED_GATEWAY_CAPABILITY)
 }
 
-fn optional_field<T: serde::de::DeserializeOwned>(
-    metadata: &JsonObject,
-) -> Result<Option<T>, ApiError> {
-    let bytes = serde_json::to_vec(metadata).map_err(serialize_error)?;
-    match serde_json::from_slice::<T>(&bytes) {
-        Ok(value) => Ok(Some(value)),
-        Err(error) if error.is_data() => Ok(None),
-        Err(error) => Err(serialize_error(error)),
+fn require_http(url: Url) -> Result<Url, Rule> {
+    match url.scheme() {
+        "http" | "https" => Ok(url),
+        _ => Err(Rule::NonHttpScheme),
     }
 }
 
-fn serialize_error(error: serde_json::Error) -> ApiError {
-    tracing::error!("mesh metadata: {error}");
-    ApiError::Serialize(error)
-}
-
-fn http_url(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return None;
+fn origin(host: &str, port: u16) -> Result<Url, Rule> {
+    if host.is_empty() {
+        return Err(Rule::MissingHost);
     }
-    match Url::parse(trimmed) {
-        Ok(parsed) if parsed.scheme() == "http" || parsed.scheme() == "https" => {
-            Some(trimmed.to_owned())
-        }
-        Ok(parsed) => {
-            tracing::warn!(
-                scheme = parsed.scheme(),
-                "ignoring gateway url with a non-http scheme"
-            );
-            None
-        }
+    match Url::parse(&format!("http://{host}:{port}")) {
+        Ok(url) => Ok(url),
         Err(error) => {
-            tracing::warn!("ignoring unparseable gateway url: {error}");
-            None
+            tracing::debug!(host, port, "mesh host is not a gateway origin: {error}");
+            Err(Rule::UnusableHost)
         }
     }
 }
 
-fn gateway_port(value: &PortValue) -> Option<u16> {
-    match value {
-        PortValue::Number(port) => nonzero(*port),
-        PortValue::Wide(port) => match u16::try_from(*port) {
-            Ok(port) => nonzero(port),
-            Err(error) => {
-                tracing::debug!("gateway port out of range: {error}");
-                None
-            }
-        },
-        PortValue::Float(value) => {
-            tracing::debug!(port = value, "ignoring a fractional gateway port");
-            None
+fn advertised(url: &Url) -> String {
+    let text = url.as_str();
+    if url.path() == "/" && url.query().is_none() && url.fragment().is_none() {
+        match text.strip_suffix('/') {
+            Some(origin) => origin.to_owned(),
+            None => text.to_owned(),
         }
-        PortValue::Bool(value) => {
-            tracing::debug!(port = value, "ignoring a boolean gateway port");
-            None
-        }
-        PortValue::Text(text) => match text.trim().parse::<u16>() {
-            Ok(port) => nonzero(port),
-            Err(error) => {
-                tracing::debug!("gateway port text: {error}");
-                None
-            }
-        },
-    }
-}
-
-fn nonzero(port: u16) -> Option<u16> {
-    if port == 0 { None } else { Some(port) }
-}
-
-fn usable(value: &str) -> Option<&str> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        None
     } else {
-        Some(trimmed)
+        text.to_owned()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::Rule;
+    use super::Withheld;
     use super::project;
     use chrono::DateTime;
     use chrono::Utc;
-    use serde::Serialize;
+    use url::Url;
     use wire::Extra;
-    use wire::JsonObject;
     use wire::mesh::MeshFile;
+    use wire::mesh::MeshMetadata;
     use wire::mesh::MeshNode;
     use wire::mesh::MeshNodeStatus;
-
-    #[derive(Serialize)]
-    struct Meta {
-        #[serde(rename = "denUrl", skip_serializing_if = "Option::is_none")]
-        url: Option<&'static str>,
-        #[serde(rename = "denPort", skip_serializing_if = "Option::is_none")]
-        port: Option<PortLit>,
-    }
-
-    #[derive(Clone, Copy, Serialize)]
-    #[serde(untagged)]
-    enum PortLit {
-        Number(u16),
-        Wide(i64),
-        Float(f64),
-        Text(&'static str),
-        Bool(bool),
-    }
 
     struct Case {
         id: &'static str,
@@ -201,31 +175,35 @@ mod tests {
         host: &'static str,
         caps: &'static [&'static str],
         url: Option<&'static str>,
-        port: Option<PortLit>,
-        expect: Option<&'static str>,
+        port: Option<u16>,
+        included: Option<&'static str>,
+        rule: Option<Rule>,
     }
 
     fn stamp() -> DateTime<Utc> {
         DateTime::UNIX_EPOCH
     }
 
-    fn node(
-        id: &str,
-        name: &str,
-        host: &str,
-        capabilities: &[&str],
-        metadata: Option<JsonObject>,
-    ) -> MeshNode {
-        MeshNode {
-            id: id.to_owned(),
-            name: name.to_owned(),
+    fn node(case: &Case) -> Result<MeshNode, url::ParseError> {
+        let gateway_url = match case.url {
+            Some(text) => Some(Url::parse(text)?),
+            None => None,
+        };
+        let metadata = (gateway_url.is_some() || case.port.is_some()).then(|| MeshMetadata {
+            gateway_url,
+            gateway_port: case.port,
+            extra: Extra::default(),
+        });
+        Ok(MeshNode {
+            id: case.id.to_owned(),
+            name: case.name.to_owned(),
             role: None,
             agents: Vec::new(),
-            host: host.to_owned(),
+            host: case.host.to_owned(),
             port: 5700,
             providers: Vec::new(),
             models: Vec::new(),
-            capabilities: capabilities.iter().copied().map(str::to_owned).collect(),
+            capabilities: case.caps.iter().copied().map(str::to_owned).collect(),
             status: MeshNodeStatus::Offline,
             last_seen: stamp(),
             registered_at: stamp(),
@@ -235,28 +213,19 @@ mod tests {
             install_root: None,
             platform: None,
             extra: Extra::default(),
-        }
+        })
     }
 
-    fn metadata(
-        url: Option<&'static str>,
-        port: Option<PortLit>,
-    ) -> Result<Option<JsonObject>, serde_json::Error> {
-        if url.is_none() && port.is_none() {
-            return Ok(None);
-        }
-        JsonObject::from_serialize(&Meta { url, port }).map(Some)
-    }
-
-    fn file(nodes: Vec<MeshNode>) -> MeshFile {
+    fn file(cases: &[Case]) -> Result<MeshFile, url::ParseError> {
         let mut document = MeshFile::empty(stamp());
-        for node in nodes {
-            document.nodes.insert(node.id.clone(), node);
+        for case in cases {
+            let item = node(case)?;
+            document.nodes.insert(case.id.to_owned(), item);
         }
-        document
+        Ok(document)
     }
 
-    const SAMPLES: [Case; 13] = [
+    const SAMPLES: &[Case] = &[
         Case {
             id: "golden-node",
             name: "Golden Node",
@@ -264,7 +233,8 @@ mod tests {
             caps: &[],
             url: Some("http://127.0.0.1:5174"),
             port: None,
-            expect: Some("http://127.0.0.1:5174"),
+            included: Some("http://127.0.0.1:5174"),
+            rule: None,
         },
         Case {
             id: "peer-https",
@@ -273,7 +243,8 @@ mod tests {
             caps: &[],
             url: Some("https://peer-https.invalid:5174"),
             port: None,
-            expect: Some("https://peer-https.invalid:5174"),
+            included: Some("https://peer-https.invalid:5174"),
+            rule: None,
         },
         Case {
             id: "peer-cap",
@@ -282,7 +253,8 @@ mod tests {
             caps: &["den"],
             url: None,
             port: None,
-            expect: Some("http://peer-cap.invalid:5174"),
+            included: Some("http://peer-cap.invalid:5174"),
+            rule: None,
         },
         Case {
             id: "ported",
@@ -290,44 +262,19 @@ mod tests {
             host: "ported.example",
             caps: &[],
             url: None,
-            port: Some(PortLit::Number(6001)),
-            expect: Some("http://ported.example:6001"),
+            port: Some(6001),
+            included: Some("http://ported.example:6001"),
+            rule: None,
         },
         Case {
-            id: "text-port",
-            name: "text",
-            host: "text.example",
-            caps: &[],
-            url: None,
-            port: Some(PortLit::Text(" 6002 ")),
-            expect: Some("http://text.example:6002"),
-        },
-        Case {
-            id: "bad-port",
-            name: "bad",
-            host: "bad.example",
-            caps: &["den"],
-            url: Some("ftp://bad.example"),
-            port: Some(PortLit::Text("nope")),
-            expect: Some("http://bad.example:5174"),
-        },
-        Case {
-            id: "zero-port",
-            name: "zero",
-            host: "zero.example",
-            caps: &["den"],
-            url: None,
-            port: Some(PortLit::Number(0)),
-            expect: Some("http://zero.example:5174"),
-        },
-        Case {
-            id: "peer-ftp",
+            id: "ftp",
             name: "ftp",
             host: "files.example",
-            caps: &[],
+            caps: &["den"],
             url: Some("ftp://files.example/mesh"),
-            port: None,
-            expect: None,
+            port: Some(6001),
+            included: None,
+            rule: Some(Rule::NonHttpScheme),
         },
         Case {
             id: "agent-only",
@@ -336,71 +283,122 @@ mod tests {
             caps: &["agent"],
             url: None,
             port: None,
-            expect: None,
+            included: None,
+            rule: Some(Rule::NotAGateway),
         },
         Case {
             id: "invalid",
             name: "",
             host: "invalid.example",
+            caps: &["den"],
+            url: Some("http://invalid.example:5174"),
+            port: None,
+            included: None,
+            rule: Some(Rule::BlankName),
+        },
+        Case {
+            id: "spaces",
+            name: "   ",
+            host: "spaces.example",
             caps: &[],
             url: None,
             port: None,
-            expect: None,
+            included: None,
+            rule: Some(Rule::BlankName),
         },
         Case {
-            id: "wide-port",
-            name: "wide",
-            host: "wide.example",
-            caps: &[],
-            url: None,
-            port: Some(PortLit::Wide(70_000)),
-            expect: None,
+            id: "",
+            name: "nameless-id",
+            host: "empty.example",
+            caps: &["den"],
+            url: Some("http://empty.example:5174"),
+            port: None,
+            included: None,
+            rule: Some(Rule::EmptyId),
         },
         Case {
-            id: "float-port",
-            name: "float",
-            host: "float.example",
-            caps: &[],
+            id: "zero",
+            name: "zero",
+            host: "zero.example",
+            caps: &["den"],
             url: None,
-            port: Some(PortLit::Float(1.5)),
-            expect: None,
+            port: Some(0),
+            included: None,
+            rule: Some(Rule::ZeroPort),
         },
         Case {
-            id: "bool-port",
-            name: "bool",
-            host: "bool.example",
+            id: "no-host",
+            name: "no-host",
+            host: "",
             caps: &[],
             url: None,
-            port: Some(PortLit::Bool(true)),
-            expect: None,
+            port: Some(6001),
+            included: None,
+            rule: Some(Rule::MissingHost),
+        },
+        Case {
+            id: "bad-host",
+            name: "bad-host",
+            host: "bad host",
+            caps: &[],
+            url: None,
+            port: Some(6001),
+            included: None,
+            rule: Some(Rule::UnusableHost),
         },
     ];
 
     #[test]
-    fn roster_keeps_http_urls_ports_and_the_capability_fallback()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let cases = SAMPLES;
-        let mut nodes = Vec::new();
-        for case in &cases {
-            nodes.push(node(
-                case.id,
-                case.name,
-                case.host,
-                case.caps,
-                metadata(case.url, case.port)?,
-            ));
-        }
-        let overview = project(&file(nodes))?;
-        for case in &cases {
-            let found = overview
+    fn gateways_are_projected_and_the_rest_are_withheld_with_a_rule() -> Result<(), url::ParseError>
+    {
+        let projected = project(&file(SAMPLES)?);
+        for case in SAMPLES {
+            let found = projected
+                .overview
                 .nodes
                 .iter()
                 .find(|node| node.id == case.id)
                 .map(|node| node.url.as_str());
-            assert_eq!(found, case.expect, "{}", case.id);
+            assert_eq!(found, case.included, "{}", case.id);
+            let withheld = projected.withheld.iter().find(|item| item.id == case.id);
+            assert_eq!(withheld.map(|item| item.rule), case.rule, "{}", case.id);
         }
-        assert!(overview.nodes.iter().all(|node| !node.online));
-        assert!(overview.nodes.iter().all(|node| node.sessions.is_none()));
+        assert!(projected.overview.nodes.iter().all(|node| !node.online));
+        assert!(
+            projected
+                .overview
+                .nodes
+                .iter()
+                .all(|node| node.sessions.is_none())
+        );
+        let ftp = projected
+            .withheld
+            .iter()
+            .find(|item| item.id == "ftp")
+            .expect("ftp");
+        assert_eq!(
+            ftp,
+            &Withheld {
+                id: "ftp".to_owned(),
+                rule: Rule::NonHttpScheme,
+            }
+        );
         Ok(())
+    }
+
+    #[test]
+    fn a_cutover_string_port_projects_to_that_origin() {
+        let text = r#"{"version":1,"updatedAt":0,"nodes":{"ported":{"id":"ported","name":"ported","agents":[],"host":"ported.example","port":5700,"providers":[],"models":[],"capabilities":[],"status":"offline","lastSeen":0,"registeredAt":0,"version":"0.1.0","metadata":{"denPort":"6002"}}}}"#;
+        let file: MeshFile = serde_json::from_str(text).expect("mesh file");
+        let projected = project(&file);
+        assert_eq!(projected.withheld, Vec::<Withheld>::new());
+        assert_eq!(
+            projected
+                .overview
+                .nodes
+                .first()
+                .map(|node| node.url.as_str()),
+            Some("http://ported.example:6002")
+        );
     }
 }

@@ -1,9 +1,10 @@
 use chrono::DateTime;
 use chrono::Utc;
 use serde::Serialize;
+use url::Url;
 use wire::Extra;
-use wire::JsonObject;
 use wire::mesh::MeshFile;
+use wire::mesh::MeshMetadata;
 use wire::mesh::MeshNode;
 use wire::mesh::MeshNodeStatus;
 
@@ -13,7 +14,6 @@ pub(crate) struct Member {
     pub(crate) host: &'static str,
     pub(crate) url: Option<String>,
     pub(crate) port: Option<u16>,
-    pub(crate) text_port: Option<&'static str>,
     pub(crate) capabilities: &'static [&'static str],
 }
 
@@ -27,7 +27,6 @@ pub(crate) fn recorded(port: u16) -> Result<Vec<u8>, String> {
                 host: "127.0.0.1",
                 url: Some(local),
                 port: None,
-                text_port: None,
                 capabilities: &[],
             },
             Member {
@@ -36,7 +35,6 @@ pub(crate) fn recorded(port: u16) -> Result<Vec<u8>, String> {
                 host: "127.0.0.1",
                 url: Some("http://127.0.0.1:1".to_owned()),
                 port: None,
-                text_port: None,
                 capabilities: &[],
             },
             Member {
@@ -45,7 +43,6 @@ pub(crate) fn recorded(port: u16) -> Result<Vec<u8>, String> {
                 host: "peer-https.invalid",
                 url: Some("https://peer-https.invalid:5174".to_owned()),
                 port: None,
-                text_port: None,
                 capabilities: &[],
             },
             Member {
@@ -54,7 +51,6 @@ pub(crate) fn recorded(port: u16) -> Result<Vec<u8>, String> {
                 host: "peer-cap.invalid",
                 url: None,
                 port: None,
-                text_port: None,
                 capabilities: &["den"],
             },
             Member {
@@ -63,7 +59,6 @@ pub(crate) fn recorded(port: u16) -> Result<Vec<u8>, String> {
                 host: "files.example",
                 url: Some("ftp://files.example/mesh".to_owned()),
                 port: None,
-                text_port: None,
                 capabilities: &[],
             },
             Member {
@@ -72,7 +67,6 @@ pub(crate) fn recorded(port: u16) -> Result<Vec<u8>, String> {
                 host: "agent.invalid",
                 url: None,
                 port: None,
-                text_port: None,
                 capabilities: &["agent"],
             },
             Member {
@@ -81,7 +75,6 @@ pub(crate) fn recorded(port: u16) -> Result<Vec<u8>, String> {
                 host: "invalid.example",
                 url: None,
                 port: None,
-                text_port: None,
                 capabilities: &[],
             },
         ],
@@ -107,7 +100,6 @@ pub(crate) fn flat() -> Result<Vec<u8>, String> {
         host: "127.0.0.1",
         url: None,
         port: None,
-        text_port: None,
         capabilities: &[],
     })?;
     serde_json::to_vec(&Flat { nodes: vec![node] }).map_err(|error| error.to_string())
@@ -141,39 +133,22 @@ fn mesh_node(member: &Member) -> Result<MeshNode, String> {
     })
 }
 
-fn metadata(member: &Member) -> Result<Option<JsonObject>, String> {
-    if member.url.is_none() && member.port.is_none() && member.text_port.is_none() {
+fn metadata(member: &Member) -> Result<Option<MeshMetadata>, String> {
+    if member.url.is_none() && member.port.is_none() {
         return Ok(None);
     }
-    let port = match (member.port, member.text_port) {
-        (Some(port), _) => Some(PortSer::Number(port)),
-        (None, Some(text)) => Some(PortSer::Text(text)),
-        (None, None) => None,
+    let gateway_url = match &member.url {
+        Some(text) => Some(Url::parse(text).map_err(|error| error.to_string())?),
+        None => None,
     };
-    JsonObject::from_serialize(&Meta {
-        url: member.url.clone(),
-        port,
-    })
-    .map(Some)
-    .map_err(|error| error.to_string())
+    Ok(Some(MeshMetadata {
+        gateway_url,
+        gateway_port: member.port,
+        extra: Extra::default(),
+    }))
 }
 
 #[derive(Serialize)]
 struct Flat {
     nodes: Vec<MeshNode>,
-}
-
-#[derive(Serialize)]
-struct Meta {
-    #[serde(rename = "denUrl", skip_serializing_if = "Option::is_none")]
-    url: Option<String>,
-    #[serde(rename = "denPort", skip_serializing_if = "Option::is_none")]
-    port: Option<PortSer>,
-}
-
-#[derive(Serialize)]
-#[serde(untagged)]
-enum PortSer {
-    Number(u16),
-    Text(&'static str),
 }
