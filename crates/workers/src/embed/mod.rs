@@ -1,0 +1,26 @@
+mod classify;
+mod handler;
+mod pool;
+mod settings;
+mod split;
+mod target;
+mod text;
+
+pub use classify::Unembeddable;
+pub use classify::classify_unembeddable;
+pub use handler::handle_embed;
+pub use pool::mean_pool;
+pub use settings::EmbedSettings;
+pub use split::TextChunk;
+pub use split::split_embed_text;
+pub use target::EmbedTable;
+pub use target::EmbedTarget;
+pub use target::EmbedTargets;
+pub use target::LoadedTarget;
+pub use target::ParsedTarget;
+pub use target::StoredChunk;
+pub use target::StoredEmbedding;
+pub use target::embed_key;
+pub use target::read_target;
+pub use text::compose_message;
+pub use text::content_hash;

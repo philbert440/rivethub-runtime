@@ -4300,6 +4300,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
+name = "workers"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "config",
+ "hex",
+ "kernel",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "strum",
+ "testkit",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "wire",
+]
+
+[[package]]
 name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
