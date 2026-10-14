@@ -3,18 +3,20 @@ use std::path::PathBuf;
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::ca::CertificateAuthority;
 use wire::gateway::devices::PairRedeemResponse;
 use wire::gateway::devices::PairingRecord;
 use wire::gateway::devices::PhonePairingAvailability;
 use wire::gateway::devices::PhonePairingCode;
 use wire::gateway::devices::PhonePairingState;
 use wire::gateway::devices::PhonePairingStatus;
+use wire::gateway::devices::SignedCertificate;
 
 use super::CA_UNUSABLE;
 use super::CODE_TTL;
 use super::DeviceError;
 use super::PAIR_CODE;
-use super::cert;
+use super::authority;
 use super::pathutil;
 use super::pathutil::OpenFile;
 use super::random;
@@ -24,70 +26,81 @@ const RECORD_VERSION: u32 = 1;
 #[derive(Debug, Clone)]
 pub struct PhoneIssuer {
     pairing_dir: PathBuf,
-    ca_dir: PathBuf,
     gateway_url: String,
+    owner: String,
 }
 
 impl PhoneIssuer {
     pub fn try_new(
         pairing_dir: PathBuf,
-        ca_dir: PathBuf,
         gateway_url: String,
+        owner: String,
     ) -> Result<Self, super::SetupError> {
         pathutil::absolute_without_parents(&pairing_dir)?;
-        pathutil::absolute_without_parents(&ca_dir)?;
         if gateway_url.is_empty() {
             return Err(super::SetupError::GatewayUrl);
         }
+        if owner.is_empty() {
+            return Err(super::SetupError::Owner);
+        }
         Ok(Self {
             pairing_dir,
-            ca_dir,
             gateway_url,
+            owner,
         })
+    }
+
+    pub(super) fn owner(&self) -> &str {
+        &self.owner
     }
 }
 
-pub(super) fn availability(issuer: &PhoneIssuer) -> PhonePairingAvailability {
-    if cert::authority_usable(&issuer.ca_dir) {
-        PhonePairingAvailability {
+pub(super) async fn availability(
+    issuer: &PhoneIssuer,
+    authority: Option<&dyn CertificateAuthority>,
+) -> PhonePairingAvailability {
+    let Some(authority) = authority else {
+        return ca_unavailable();
+    };
+    match authority::chain_ready(authority).await {
+        Ok(()) => PhonePairingAvailability {
             available: true,
             reason: None,
             gateway: Some(issuer.gateway_url.clone()),
-        }
-    } else {
-        PhonePairingAvailability {
-            available: false,
-            reason: Some(CA_UNUSABLE.to_owned()),
-            gateway: None,
+        },
+        Err(error) => {
+            tracing::warn!(%error, "phone pairing certificate authority is not usable");
+            ca_unavailable()
         }
     }
 }
 
-pub(super) fn start(issuer: &PhoneIssuer, name: &str) -> Result<PhonePairingCode, DeviceError> {
-    if !cert::authority_usable(&issuer.ca_dir) {
+pub(super) async fn start(
+    issuer: &PhoneIssuer,
+    authority: &dyn CertificateAuthority,
+    name: &str,
+) -> Result<PhonePairingCode, DeviceError> {
+    authority::chain_ready(authority).await?;
+    let device_id = random::device_id()?;
+    let token = authority::issue_device_token(authority, issuer.owner(), &device_id).await?;
+    if !pathutil::component_ok(&token) {
+        tracing::warn!("enrollment token is not a single path component");
+        revoke_issued(authority, issuer, &device_id).await?;
         return Err(DeviceError::unavailable(CA_UNUSABLE));
     }
-    let device_id = random::device_id()?;
-    let client = cert::issue_client(&issuer.ca_dir, &device_id)?;
-    let token = random::token()?;
-    let now = Utc::now();
-    let expires_at = now
+    let expires_at = Utc::now()
         .checked_add_signed(CODE_TTL)
         .ok_or(DeviceError::Internal)?;
     let record = PairingRecord {
         v: RECORD_VERSION,
         device_id: device_id.clone(),
         name: name.to_owned(),
-        passphrase: client.passphrase.clone(),
-        p12: cert::encode_p12(&client.p12_der),
         expires_at,
     };
-    let pending = issuer.pairing_dir.join("pending");
-    let certs = issuer.pairing_dir.join("certs");
-    pathutil::ensure_dir(&pending)?;
-    pathutil::ensure_dir(&certs)?;
-    write_record(&pending, &token, &record)?;
-    write_cert(&certs, &device_id, &client.p12_der)?;
+    if let Err(error) = write_record(&issuer.pairing_dir.join("pending"), &token, &record) {
+        revoke_issued(authority, issuer, &device_id).await?;
+        return Err(error);
+    }
     Ok(PhonePairingCode {
         device_id,
         gateway: issuer.gateway_url.clone(),
@@ -107,10 +120,26 @@ pub(super) fn state(issuer: &PhoneIssuer, name: &str) -> Result<PhonePairingStat
     })
 }
 
-pub(super) fn redeem(issuer: &PhoneIssuer, token: &str) -> Result<PairRedeemResponse, DeviceError> {
+pub(super) struct PreparedRedeem {
+    pub(super) device_id: String,
+}
+
+pub(super) fn prepare_redeem(
+    issuer: &PhoneIssuer,
+    token: &str,
+) -> Result<PreparedRedeem, DeviceError> {
+    let record = read_pending(issuer, token)?;
+    if record.expires_at <= Utc::now() {
+        return Err(DeviceError::Forbidden(PAIR_CODE));
+    }
+    Ok(PreparedRedeem {
+        device_id: record.device_id,
+    })
+}
+
+pub(super) fn claim(issuer: &PhoneIssuer, token: &str) -> Result<(), DeviceError> {
     let pending = issuer.pairing_dir.join("pending");
-    let names = list_stems(&pending)?;
-    let Some(stem) = select_token(token, &names) else {
+    let Some(stem) = pending_stem(token, &pending)? else {
         return Err(DeviceError::Forbidden(PAIR_CODE));
     };
     let path = match pathutil::open_pairing_file(&pending, &stem, "json")? {
@@ -129,31 +158,50 @@ pub(super) fn redeem(issuer: &PhoneIssuer, token: &str) -> Result<PairRedeemResp
     let Some(dest_name) = pathutil::pairing_file(&stem, "json") else {
         return Err(DeviceError::Forbidden(PAIR_CODE));
     };
-    let dest = claimed.join(dest_name);
-    std::fs::rename(&path, &dest).map_err(|error| pathutil::io_registry(&error))?;
-    read_cert(issuer, &record)
+    std::fs::rename(&path, claimed.join(dest_name)).map_err(|error| pathutil::io_registry(&error))
 }
 
-fn read_cert(
+pub(super) fn response(device_id: String, certificate: SignedCertificate) -> PairRedeemResponse {
+    PairRedeemResponse {
+        device_id,
+        certificate,
+    }
+}
+
+fn ca_unavailable() -> PhonePairingAvailability {
+    PhonePairingAvailability {
+        available: false,
+        reason: Some(CA_UNUSABLE.to_owned()),
+        gateway: None,
+    }
+}
+
+async fn revoke_issued(
+    authority: &dyn CertificateAuthority,
     issuer: &PhoneIssuer,
-    record: &PairingRecord,
-) -> Result<PairRedeemResponse, DeviceError> {
-    let certs = issuer.pairing_dir.join("certs");
-    match pathutil::open_pairing_file(&certs, &record.device_id, "p12")? {
-        OpenFile::Missing => Err(DeviceError::CertGone),
+    device_id: &str,
+) -> Result<(), DeviceError> {
+    authority::revoke_device(authority, issuer.owner(), device_id).await
+}
+
+fn read_pending(issuer: &PhoneIssuer, token: &str) -> Result<PairingRecord, DeviceError> {
+    let pending = issuer.pairing_dir.join("pending");
+    let Some(stem) = pending_stem(token, &pending)? else {
+        return Err(DeviceError::Forbidden(PAIR_CODE));
+    };
+    match pathutil::open_pairing_file(&pending, &stem, "json")? {
+        OpenFile::Ready(path) => read_record(&path),
+        OpenFile::Missing => Err(DeviceError::Forbidden(PAIR_CODE)),
         OpenFile::Escape => {
-            tracing::warn!("device certificate path leaves its directory");
+            tracing::warn!("pairing code path leaves its directory");
             Err(DeviceError::Forbidden(PAIR_CODE))
         }
-        OpenFile::Ready(path) => {
-            let bytes = std::fs::read(&path).map_err(|error| pathutil::io_registry(&error))?;
-            Ok(PairRedeemResponse {
-                device_id: record.device_id.clone(),
-                p12: cert::encode_p12(&bytes),
-                passphrase: record.passphrase.clone(),
-            })
-        }
     }
+}
+
+fn pending_stem(token: &str, pending: &Path) -> Result<Option<String>, DeviceError> {
+    let names = list_stems(pending)?;
+    Ok(select_token(token, &names))
 }
 
 fn state_of(
@@ -238,14 +286,6 @@ fn write_record(dir: &Path, stem: &str, record: &PairingRecord) -> Result<(), De
         DeviceError::Internal
     })?;
     pathutil::write_atomic(&root.join(name), &bytes)
-}
-
-fn write_cert(dir: &Path, device_id: &str, bytes: &[u8]) -> Result<(), DeviceError> {
-    let root = pathutil::ensure_dir(dir)?;
-    let Some(name) = pathutil::pairing_file(device_id, "p12") else {
-        return Err(DeviceError::Internal);
-    };
-    pathutil::write_atomic(&root.join(name), bytes)
 }
 
 fn read_record(path: &Path) -> Result<PairingRecord, DeviceError> {

@@ -169,18 +169,25 @@ pub struct EnrolledDevice {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SignedCertificate {
+    pub leaf: String,
+    pub chain: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceEnrollResponse {
     pub ok: bool,
     pub device: EnrolledDevice,
     pub config: DeviceEnrollConfig,
+    pub certificate: SignedCertificate,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PairRedeemResponse {
     pub device_id: String,
-    pub p12: String,
-    pub passphrase: String,
+    pub certificate: SignedCertificate,
 }
 
 #[serde_as]
@@ -190,8 +197,6 @@ pub struct PairingRecord {
     pub v: u32,
     pub device_id: String,
     pub name: String,
-    pub passphrase: String,
-    pub p12: String,
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
     pub expires_at: DateTime<Utc>,
 }
@@ -220,6 +225,8 @@ pub struct DeviceEnrollRequest {
     pub public_key: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub csr: Option<String>,
 }
 
 #[serde_as]

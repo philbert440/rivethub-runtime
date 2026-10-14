@@ -173,6 +173,15 @@ impl Gateway {
     }
 
     #[must_use]
+    pub fn with_certificate_authority(
+        mut self,
+        authority: Arc<dyn kernel::ca::CertificateAuthority>,
+    ) -> Self {
+        self.devices = self.devices.with_authority(authority);
+        self
+    }
+
+    #[must_use]
     pub fn with_embed_provider(mut self) -> Self {
         self.embed_provider = true;
         self

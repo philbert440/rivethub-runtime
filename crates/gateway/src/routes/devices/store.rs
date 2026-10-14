@@ -14,10 +14,12 @@ use wire::gateway::devices::EnrolledDevice;
 use wire::gateway::devices::EnrollmentQr;
 use wire::gateway::devices::MeshDevice;
 use wire::gateway::devices::PendingEnrollment;
+use wire::gateway::devices::SignedCertificate;
 use wire::gateway::devices::StoredPending;
 
 use super::ALREADY_ENROLLED;
 use super::CODE_TTL;
+use super::CSR_REQUIRED;
 use super::DeviceError;
 use super::ENROLL_FIELDS;
 use super::ENROLL_TOKEN;
@@ -59,11 +61,18 @@ impl AddressPool {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceAccount {
+    pub pg_role: String,
+    pub owner: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct Enrollment {
     roster_path: PathBuf,
     pool: Option<AddressPool>,
     gateway_url: String,
+    owner: String,
     config: DeviceEnrollConfig,
     relay_ssh: Option<String>,
     pg_role: String,
@@ -76,14 +85,17 @@ impl Enrollment {
         gateway_url: String,
         config: DeviceEnrollConfig,
         relay_ssh: Option<String>,
-        pg_role: String,
+        account: DeviceAccount,
     ) -> Result<Self, SetupError> {
         pathutil::absolute_without_parents(&roster_path)?;
         if gateway_url.is_empty() {
             return Err(SetupError::GatewayUrl);
         }
-        if pg_role.is_empty() {
+        if account.pg_role.is_empty() {
             return Err(SetupError::Role);
+        }
+        if account.owner.is_empty() {
+            return Err(SetupError::Owner);
         }
         if !config_complete(&config) {
             return Err(SetupError::Config);
@@ -99,15 +111,33 @@ impl Enrollment {
             roster_path,
             pool,
             gateway_url,
+            owner: account.owner,
             config,
             relay_ssh,
-            pg_role,
+            pg_role: account.pg_role,
         })
+    }
+
+    pub(super) fn owner(&self) -> &str {
+        &self.owner
     }
 
     fn relay_configured(&self) -> bool {
         self.relay_ssh.is_some()
     }
+}
+
+pub(super) struct PendingDraft {
+    pub(super) id: String,
+    name: String,
+    address: String,
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+}
+
+pub(super) struct EnrollReady {
+    pub(super) device_id: String,
+    pub(super) csr: String,
 }
 
 pub(super) fn list(enrollment: &Enrollment) -> Result<DeviceListResponse, DeviceError> {
@@ -119,43 +149,80 @@ pub(super) fn list(enrollment: &Enrollment) -> Result<DeviceListResponse, Device
     })
 }
 
-pub(super) fn create(
+pub(super) fn prepare_create(
     enrollment: &Enrollment,
     requested_name: Option<&str>,
-) -> Result<DeviceCreateResponse, DeviceError> {
-    let mut roster = load(enrollment)?;
+) -> Result<PendingDraft, DeviceError> {
+    let roster = load(enrollment)?;
     let now = Utc::now();
-    let expires_at = expiry(now)?;
-    let address = allocate(enrollment, &roster)?;
-    let pending = StoredPending {
+    Ok(PendingDraft {
         id: random::device_id()?,
         name: device_name(requested_name),
-        token: random::token()?,
-        address: address.clone(),
+        address: allocate(enrollment, &roster)?,
         created_at: now,
-        expires_at,
+        expires_at: expiry(now)?,
+    })
+}
+
+pub(super) fn commit_create(
+    enrollment: &Enrollment,
+    draft: PendingDraft,
+    token: &str,
+) -> Result<DeviceCreateResponse, DeviceError> {
+    if token.is_empty() {
+        tracing::warn!("device enrollment token is empty");
+        return Err(DeviceError::unavailable(super::CA_UNUSABLE));
+    }
+    let mut roster = load(enrollment)?;
+    if address_taken(&roster, &draft.address) {
+        return Err(DeviceError::Conflict(POOL_EXHAUSTED.to_owned()));
+    }
+    let pending = StoredPending {
+        id: draft.id,
+        name: draft.name,
+        token: token.to_owned(),
+        address: draft.address.clone(),
+        created_at: draft.created_at,
+        expires_at: draft.expires_at,
     };
     let view = pending_view(pending.clone());
     let qr = EnrollmentQr {
         v: QR_VERSION,
         gateway: enrollment.gateway_url.clone(),
         token: pending.token.clone(),
-        config: issued_config(enrollment, &address),
+        config: issued_config(enrollment, &draft.address),
     };
     roster.pending.push(pending);
     save(enrollment, &roster)?;
     Ok(DeviceCreateResponse { pending: view, qr })
 }
 
-pub(super) fn enroll(
+pub(super) fn prepare_enroll(
+    enrollment: &Enrollment,
+    token: &str,
+    public_key: &str,
+    csr: Option<&str>,
+) -> Result<EnrollReady, DeviceError> {
+    let pending = live_pending(enrollment, token, public_key)?;
+    if enrollment.relay_configured() {
+        return Err(DeviceError::BadGateway(RELAY_FAILED.to_owned()));
+    }
+    let Some(csr) = csr.filter(|text| !text.is_empty()) else {
+        return Err(DeviceError::BadRequest(CSR_REQUIRED));
+    };
+    Ok(EnrollReady {
+        device_id: pending.id,
+        csr: csr.to_owned(),
+    })
+}
+
+pub(super) fn commit_enroll(
     enrollment: &Enrollment,
     token: &str,
     public_key: &str,
     requested_name: Option<&str>,
+    certificate: &SignedCertificate,
 ) -> Result<DeviceEnrollResponse, DeviceError> {
-    if !valid_wg_key(public_key) || token.is_empty() {
-        return Err(DeviceError::BadRequest(ENROLL_FIELDS));
-    }
     let mut roster = load(enrollment)?;
     let Some(index) = pending_index(&roster.pending, token) else {
         return Err(DeviceError::Forbidden(ENROLL_TOKEN));
@@ -202,6 +269,7 @@ pub(super) fn enroll(
         ok: true,
         device: enrolled,
         config,
+        certificate: certificate.clone(),
     })
 }
 
@@ -259,6 +327,43 @@ fn save(enrollment: &Enrollment, roster: &DeviceRosterFile) -> Result<(), Device
         DeviceError::Internal
     })?;
     pathutil::write_atomic(&enrollment.roster_path, &bytes)
+}
+
+fn live_pending(
+    enrollment: &Enrollment,
+    token: &str,
+    public_key: &str,
+) -> Result<StoredPending, DeviceError> {
+    if !valid_wg_key(public_key) || token.is_empty() {
+        return Err(DeviceError::BadRequest(ENROLL_FIELDS));
+    }
+    let roster = load(enrollment)?;
+    let Some(index) = pending_index(&roster.pending, token) else {
+        return Err(DeviceError::Forbidden(ENROLL_TOKEN));
+    };
+    let pending = roster
+        .pending
+        .get(index)
+        .ok_or(DeviceError::Internal)?
+        .clone();
+    if pending.expires_at <= Utc::now() {
+        return Err(DeviceError::Forbidden(ENROLL_TOKEN));
+    }
+    if public_key_enrolled(&roster.devices, public_key) {
+        return Err(DeviceError::Conflict(ALREADY_ENROLLED.to_owned()));
+    }
+    Ok(pending)
+}
+
+fn address_taken(roster: &DeviceRosterFile, address: &str) -> bool {
+    roster
+        .devices
+        .iter()
+        .any(|device| device.address == address)
+        || roster
+            .pending
+            .iter()
+            .any(|pending| pending.address == address)
 }
 
 fn pending_view(pending: StoredPending) -> PendingEnrollment {

@@ -40,7 +40,7 @@ pub(super) enum OpenFile {
 }
 
 pub(super) fn pairing_file(stem: &str, suffix: &str) -> Option<String> {
-    if component_ok(stem) && matches!(suffix, "json" | "p12") {
+    if component_ok(stem) && suffix == "json" {
         Some(format!("{stem}.{suffix}"))
     } else {
         None

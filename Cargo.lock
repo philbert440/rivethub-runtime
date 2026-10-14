@@ -1108,6 +1108,7 @@ dependencies = [
  "chrono",
  "config",
  "futures",
+ "getrandom 0.4.3",
  "hex",
  "http-body",
  "hyper",

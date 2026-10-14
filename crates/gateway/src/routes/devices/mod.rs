@@ -1,5 +1,6 @@
 mod actor;
-mod cert;
+mod authority;
+mod names;
 mod pairing;
 mod pathutil;
 mod random;
@@ -7,6 +8,8 @@ mod store;
 
 use std::sync::Arc;
 use std::sync::OnceLock;
+
+use kernel::ca::CertificateAuthority;
 
 use axum::Json;
 use axum::Router;
@@ -36,7 +39,10 @@ use crate::error::ApiError;
 use crate::extract::Body;
 
 pub use pairing::PhoneIssuer;
+pub use store::DeviceAccount;
 pub use store::Enrollment;
+
+use authority::SharedAuthority;
 
 const CLI_MISSING: &str = "the rivetos CLI is not found on this node";
 pub(super) const CA_UNUSABLE: &str = "device certificate authority is not usable";
@@ -46,6 +52,9 @@ pub(super) const ENROLL_TOKEN: &str = "invalid or expired enrollment token";
 pub(super) const ENROLL_FIELDS: &str = "token and a valid WireGuard publicKey are required";
 pub(super) const ALREADY_ENROLLED: &str = "this device is already enrolled";
 pub(super) const PAIR_CODE: &str = "invalid or expired pairing code";
+pub(super) const CSR_REQUIRED: &str = "a certificate signing request is required";
+pub(super) const CSR_REJECTED: &str = "certificate signing request was rejected";
+pub(super) const CA_REFUSED: &str = "certificate authority refused the request";
 const PHONE_NAME: &str = "name may only use letters, digits, \".\", \"_\" and \"-\"";
 const PHONE_HOST: &str = "host must be an IP address or a host name";
 pub(super) const RELAY_FAILED: &str = "relay registration failed: ssh relay is not implemented";
@@ -64,6 +73,8 @@ pub enum SetupError {
     Path,
     #[error("postgres role is empty")]
     Role,
+    #[error("device owner is empty")]
+    Owner,
     #[error("ssh relay target is empty")]
     Relay,
 }
@@ -98,8 +109,6 @@ pub(super) enum DeviceError {
     Forbidden(&'static str),
     #[error("{0}")]
     Conflict(String),
-    #[error("device certificate is gone — pair again")]
-    CertGone,
     #[error("{0}")]
     BadGateway(String),
     #[error("device registry unavailable")]
@@ -128,7 +137,6 @@ impl IntoResponse for DeviceError {
             Self::NotFound | Self::UnknownDevice => StatusCode::NOT_FOUND,
             Self::PostOnly | Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             Self::Conflict(_) => StatusCode::CONFLICT,
-            Self::CertGone => StatusCode::GONE,
             Self::BadGateway(_) => StatusCode::BAD_GATEWAY,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         };
@@ -161,6 +169,7 @@ pub struct DeviceRuntime {
     enrollment: Option<Enrollment>,
     owner: OwnerGate,
     phone: PhoneService,
+    authority: Option<SharedAuthority>,
     cancel: CancellationToken,
     slot: OnceLock<actor::ActorHandle>,
 }
@@ -172,9 +181,16 @@ impl DeviceRuntime {
             enrollment: None,
             owner: OwnerGate::Admitted,
             phone: PhoneService::CliMissing,
+            authority: None,
             cancel: CancellationToken::new(),
             slot: OnceLock::new(),
         }
+    }
+
+    #[must_use]
+    pub(crate) fn with_authority(mut self, authority: Arc<dyn CertificateAuthority>) -> Self {
+        self.authority = Some(SharedAuthority::new(authority));
+        self
     }
 
     #[must_use]
@@ -243,6 +259,7 @@ impl DeviceRuntime {
         Ok(actor::ActorConfig {
             enrollment: self.enrollment.clone(),
             phone,
+            authority: self.authority.clone(),
         })
     }
 }
@@ -356,6 +373,7 @@ async fn enroll(State(gateway): State<Arc<Gateway>>, request: Request) -> Respon
         token,
         public_key,
         name: body.name,
+        csr: present(body.csr),
         reply,
     })
     .await
@@ -396,6 +414,7 @@ async fn pair(State(gateway): State<Arc<Gateway>>, request: Request) -> Response
     }
     match ask_result(&gateway, |reply| actor::Command::Redeem {
         token: body.token,
+        csr: present(body.csr),
         reply,
     })
     .await
@@ -428,10 +447,14 @@ async fn phone_start(State(gateway): State<Arc<Gateway>>, request: Request) -> R
         Ok(body) => body,
         Err(error) => return error.into_response(),
     };
-    if !phone_name_ok(&body.name) {
+    if !names::phone_name_ok(&body.name) {
         return DeviceError::BadRequest(PHONE_NAME).into_response();
     }
-    if body.host.as_ref().is_some_and(|host| !phone_host_ok(host)) {
+    if body
+        .host
+        .as_ref()
+        .is_some_and(|host| !names::phone_host_ok(host))
+    {
         return DeviceError::BadRequest(PHONE_HOST).into_response();
     }
     match ask_result(&gateway, |reply| actor::Command::Start {
@@ -454,11 +477,11 @@ async fn phone_status(State(gateway): State<Arc<Gateway>>, request: Request) -> 
     let Some(raw) = phone_segment(request.uri().path()) else {
         return DeviceError::NotFound.into_response();
     };
-    let name = match strict_percent_decode(raw) {
+    let name = match names::strict_percent_decode(raw) {
         Ok(name) => name,
-        Err(PercentDecode::BadEscape) => return DeviceError::MalformedName.into_response(),
+        Err(names::PercentDecode::BadEscape) => return DeviceError::MalformedName.into_response(),
     };
-    if !phone_name_ok(&name) {
+    if !names::phone_name_ok(&name) {
         return DeviceError::NotFound.into_response();
     }
     if matches!(gateway.devices().phone, PhoneService::CliMissing) {
@@ -501,59 +524,6 @@ fn single_segment(rest: &str) -> Option<&str> {
     } else {
         Some(rest)
     }
-}
-
-enum PercentDecode {
-    BadEscape,
-}
-
-fn strict_percent_decode(input: &str) -> Result<String, PercentDecode> {
-    let bytes = input.as_bytes();
-    let mut out = Vec::new();
-    let mut index = 0;
-    while index < bytes.len() {
-        let byte = bytes.get(index).copied().ok_or(PercentDecode::BadEscape)?;
-        if byte == b'%' {
-            let hi_at = index.checked_add(1).ok_or(PercentDecode::BadEscape)?;
-            let lo_at = index.checked_add(2).ok_or(PercentDecode::BadEscape)?;
-            let hi = hex_value(bytes.get(hi_at).copied().ok_or(PercentDecode::BadEscape)?)?;
-            let lo = hex_value(bytes.get(lo_at).copied().ok_or(PercentDecode::BadEscape)?)?;
-            out.push((hi << 4) | lo);
-            index = lo_at.saturating_add(1);
-        } else {
-            out.push(byte);
-            index = index.saturating_add(1);
-        }
-    }
-    String::from_utf8(out).map_err(|_| PercentDecode::BadEscape)
-}
-
-fn hex_value(byte: u8) -> Result<u8, PercentDecode> {
-    match byte {
-        b'0'..=b'9' => Ok(byte - b'0'),
-        b'a'..=b'f' => Ok(byte - b'a' + 10),
-        b'A'..=b'F' => Ok(byte - b'A' + 10),
-        _ => Err(PercentDecode::BadEscape),
-    }
-}
-
-fn phone_name_ok(name: &str) -> bool {
-    let count = name.chars().count();
-    (1..=64).contains(&count)
-        && name
-            .chars()
-            .all(|ch| matches!(ch, 'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | '_' | '-'))
-}
-
-fn phone_host_ok(host: &str) -> bool {
-    let count = host.chars().count();
-    (1..=253).contains(&count)
-        && host.chars().all(|ch| {
-            matches!(
-                ch,
-                'A'..='Z' | 'a'..='z' | '0'..='9' | '.' | ':' | '[' | ']' | '-'
-            )
-        })
 }
 
 async fn ask_result<T, F>(gateway: &Gateway, command: F) -> Result<T, DeviceError>
