@@ -19,7 +19,7 @@ agent-loop = { path = "crates/agent-loop", version = "0.1.0" }
 harness-acp = { path = "crates/harness-acp", version = "0.1.0" }
 providers = { path = "crates/providers", version = "0.1.0" }
 terminal = { path = "crates/terminal", version = "0.1.0" }
-agent-client-protocol = "0.3"
+agent-client-protocol = "3.3"
 async-trait = "0.1"
 axum = { version = "0.8", features = ["ws", "macros"] }
 base64 = "0.22"

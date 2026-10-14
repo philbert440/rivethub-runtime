@@ -468,19 +468,38 @@ fn set_option_round_trips_model_and_effort() {
             .expect("effort option");
         let mut collected = Vec::new();
         for _ in 0..2 {
-            collected.push(events.recv().await.expect("mode event"));
+            collected.push(events.recv().await.expect("config event"));
         }
         assert_eq!(
             collected,
             vec![
-                SessionEvent::CurrentMode {
-                    mode: "grok-5".to_owned(),
+                SessionEvent::AgentMessageChunk {
+                    text: "model=grok-5".to_owned(),
                 },
-                SessionEvent::CurrentMode {
-                    mode: "high".to_owned(),
+                SessionEvent::AgentMessageChunk {
+                    text: "thought_level=high".to_owned(),
                 },
             ]
         );
+    });
+}
+
+#[test]
+fn a_rejected_config_value_fails_closed() {
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &[]));
+    runtime().expect("test runtime").block_on(async {
+        let cwd = tempdir().expect("cwd");
+        let session = adapter
+            .new_session(spec(cwd.path()))
+            .await
+            .expect("new session");
+        let error = adapter
+            .set_option(&session, SessionOption::Model("missing".to_owned()))
+            .await
+            .expect_err("value not offered");
+        let message = error.to_string();
+        assert!(message.contains("model"), "{message}");
+        assert!(message.contains("missing"), "{message}");
     });
 }
 
@@ -500,16 +519,16 @@ fn the_spec_model_and_effort_are_applied_at_new_session() {
         let mut events = adapter.events(&session).await.expect("events");
         let mut collected = Vec::new();
         for _ in 0..2 {
-            collected.push(events.recv().await.expect("mode event"));
+            collected.push(events.recv().await.expect("config event"));
         }
         assert_eq!(
             collected,
             vec![
-                SessionEvent::CurrentMode {
-                    mode: "grok-5".to_owned(),
+                SessionEvent::AgentMessageChunk {
+                    text: "model=grok-5".to_owned(),
                 },
-                SessionEvent::CurrentMode {
-                    mode: "low".to_owned(),
+                SessionEvent::AgentMessageChunk {
+                    text: "thought_level=low".to_owned(),
                 },
             ]
         );

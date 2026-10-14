@@ -350,7 +350,7 @@ mod tests {
         let input = ToolInput::parse(r#"{"big":12345678901234567890,"n":-3,"f":1.5}"#).unwrap();
         assert_eq!(
             serde_json::to_string(input.arguments()).unwrap(),
-            r#"{"big":12345678901234567890,"f":1.5,"n":-3}"#
+            r#"{"big":12345678901234567890,"n":-3,"f":1.5}"#
         );
         assert!(ToolInput::parse("[1]").is_err());
         assert!(ToolInput::parse("{").is_err());

@@ -134,7 +134,9 @@ async fn session(
     let mut tools = service
         .list_all_tools()
         .await
-        .map_err(|source| Error::ListTools { source })?;
+        .map_err(|source| Error::ListTools {
+            source: Box::new(source),
+        })?;
     tools.sort_by(|left, right| left.name.cmp(&right.name));
     let mut calls = Vec::with_capacity(script.calls.len());
     for call in &script.calls {
@@ -162,7 +164,7 @@ async fn perform(
         Err(source) => {
             return Err(Error::CallTool {
                 name: call.name.clone(),
-                source,
+                source: Box::new(source),
             });
         }
     };

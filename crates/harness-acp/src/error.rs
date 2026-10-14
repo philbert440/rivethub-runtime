@@ -11,6 +11,11 @@ pub enum ChatUnsupportedReason {
     CaptureOnly,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnverifiedReason {
+    NotInstalled,
+}
+
 impl fmt::Display for ChatUnsupportedReason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -18,6 +23,14 @@ impl fmt::Display for ChatUnsupportedReason {
                 "it is terminal-only and has no ACP endpoint; chat runs through the terminal view",
             ),
             Self::CaptureOnly => f.write_str("it is capture-only and cannot run chat turns"),
+        }
+    }
+}
+
+impl fmt::Display for UnverifiedReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotInstalled => f.write_str("not installed"),
         }
     }
 }
@@ -49,10 +62,21 @@ pub enum AcpError {
     },
     #[error("no ACP launch is configured for {harness}")]
     Unconfigured { harness: HarnessId },
-    #[error(
-        "the ACP invocation of {program} for {harness} is not verified — no recorded source names how to start it"
-    )]
-    UnverifiedLaunch { harness: HarnessId, program: String },
+    #[error("the ACP invocation of {program} for {harness} is not verified: {reason}")]
+    UnverifiedLaunch {
+        harness: HarnessId,
+        program: String,
+        reason: UnverifiedReason,
+    },
+    #[error("the agent does not offer a {category} config option")]
+    ConfigOptionUnavailable { category: &'static str },
+    #[error("the agent rejected {category} value {value}")]
+    ConfigValueRejected {
+        category: &'static str,
+        value: String,
+    },
+    #[error("the session update has no kernel event")]
+    UnmappedUpdate,
     #[error(transparent)]
     Identity(#[from] IdentityError),
     #[error("no permission request {request_id} is waiting for an answer")]

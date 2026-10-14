@@ -6,6 +6,7 @@ use harness_acp::AcpError;
 use harness_acp::AcpLaunch;
 use harness_acp::ChatUnsupportedReason;
 use harness_acp::LaunchTable;
+use harness_acp::UnverifiedReason;
 use wire::harness::HarnessId;
 
 #[test]
@@ -42,60 +43,45 @@ fn terminal_only_harnesses_refuse_chat_with_the_recorded_reason() {
 }
 
 #[test]
-fn opencode_launches_the_subcommand_verified_against_its_own_help() {
+fn grok_launches_the_argv_verified_by_initialize() {
     let table = LaunchTable::from_config(&Config::default());
-    let launch = table.launch(HarnessId::Opencode).expect("launch");
+    let launch = table.launch(HarnessId::GrokBuild).expect("launch");
     let AcpLaunch::Native(command) = launch else {
-        panic!("opencode launches natively");
+        panic!("grok launches natively");
     };
-    assert_eq!(command.program, Path::new("opencode"));
-    assert_eq!(command.args, vec!["acp".to_owned()]);
+    assert_eq!(command.program, Path::new("grok"));
+    assert_eq!(command.args, vec!["agent".to_owned(), "stdio".to_owned()]);
     let verified = table
-        .verified_command(HarnessId::Opencode)
+        .verified_command(HarnessId::GrokBuild)
         .expect("verified");
-    assert_eq!(verified.args, vec!["acp".to_owned()]);
+    assert_eq!(verified.args, vec!["agent".to_owned(), "stdio".to_owned()]);
 }
 
 #[test]
-fn the_adapter_binaries_are_verified_endpoints_from_the_architecture() {
-    let table = LaunchTable::from_config(&Config::default());
-    let AcpLaunch::Adapter(claude) = table
-        .launch(HarnessId::ClaudeCode)
-        .expect("claude-code-acp")
-    else {
-        panic!("claude-code launches the claude-code-acp adapter");
-    };
-    assert_eq!(claude.program, Path::new("claude-code-acp"));
-    assert_eq!(claude.args, Vec::<String>::new());
-    let AcpLaunch::Adapter(codex) = table.launch(HarnessId::Codex).expect("codex-acp") else {
-        panic!("codex launches the codex-acp adapter");
-    };
-    assert_eq!(codex.program, Path::new("codex-acp"));
-    assert_eq!(codex.args, Vec::<String>::new());
-}
-
-#[test]
-fn native_harnesses_without_a_recorded_invocation_are_unverified_entries() {
+fn harnesses_that_are_not_installed_stay_unverified() {
     let table = LaunchTable::from_config(&Config::default());
     let defaults = [
-        (HarnessId::GrokBuild, "grok"),
-        (HarnessId::Hermes, "hermes"),
-        (HarnessId::KimiCode, "kimi"),
-        (HarnessId::QwenCode, "qwen"),
+        (HarnessId::Opencode, "opencode", vec!["acp".to_owned()]),
+        (HarnessId::ClaudeCode, "claude-code-acp", Vec::new()),
+        (HarnessId::Codex, "codex-acp", Vec::new()),
+        (HarnessId::Hermes, "hermes", Vec::new()),
+        (HarnessId::KimiCode, "kimi", Vec::new()),
+        (HarnessId::QwenCode, "qwen", Vec::new()),
     ];
-    for (harness, default) in defaults {
-        let AcpLaunch::Unverified(command) = table.launch(harness).expect("entry") else {
+    for (harness, program, args) in defaults {
+        let AcpLaunch::Unverified { command, reason } = table.launch(harness).expect("entry")
+        else {
             panic!("{harness} is an unverified entry");
         };
-        assert_eq!(command.program, Path::new(default));
-        assert_eq!(command.args, Vec::<String>::new());
+        assert_eq!(reason, UnverifiedReason::NotInstalled);
+        assert_eq!(command.program, Path::new(program));
+        assert_eq!(command.args, args);
         let error = table
             .verified_command(harness)
             .expect_err("unverified invocations are refused");
-        assert!(
-            error.to_string().contains("not verified"),
-            "typed refusal: {error}"
-        );
+        let message = error.to_string();
+        assert!(message.contains("not verified"), "{message}");
+        assert!(message.contains("not installed"), "{message}");
     }
 }
 
@@ -127,16 +113,22 @@ fn a_configured_binary_does_not_verify_an_unverified_invocation() {
     let document = "
 tasks:
   harnesses:
-    grok-build:
-      binary: /home/user/bin/grok
+    hermes:
+      binary: /home/user/bin/hermes
 ";
     let config: Config = serde_yaml_ng::from_str(document).expect("config parses");
     let table = LaunchTable::from_config(&config);
-    let AcpLaunch::Unverified(command) = table.launch(HarnessId::GrokBuild).expect("entry") else {
-        panic!("a configured path is not a recorded invocation");
+    let AcpLaunch::Unverified { command, reason } = table.launch(HarnessId::Hermes).expect("entry")
+    else {
+        panic!("a configured path does not verify an invocation that is not installed");
     };
-    assert_eq!(command.program, Path::new("/home/user/bin/grok"));
+    assert_eq!(reason, UnverifiedReason::NotInstalled);
+    assert_eq!(command.program, Path::new("/home/user/bin/hermes"));
     assert_eq!(command.args, Vec::<String>::new());
+    let error = table
+        .verified_command(HarnessId::Hermes)
+        .expect_err("configuration does not verify the invocation");
+    assert!(error.to_string().contains("not installed"));
 }
 
 #[test]

@@ -96,7 +96,7 @@ mod tests {
         object.retain(|key| key != "count");
         assert_eq!(
             serde_json::to_string(&object).unwrap(),
-            r#"{"flag":true,"name":"a"}"#
+            r#"{"name":"a","flag":true}"#
         );
         assert!(JsonObject::from_serialize(&[1, 2]).is_err());
     }

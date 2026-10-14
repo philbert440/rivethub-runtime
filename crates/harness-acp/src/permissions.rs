@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
-use agent_client_protocol as acp;
+use agent_client_protocol::schema::v1 as acp;
 use parking_lot::Mutex;
 use tokio::sync::oneshot;
 use wire::harness::ApprovalDecision;
@@ -58,8 +58,10 @@ impl PermissionRegistry {
                     .options
                     .iter()
                     .find(|option| option.kind == wanted)
-                    .map(|option| acp::RequestPermissionOutcome::Selected {
-                        option_id: option.id.clone(),
+                    .map(|option| {
+                        acp::RequestPermissionOutcome::Selected(
+                            acp::SelectedPermissionOutcome::new(option.option_id.clone()),
+                        )
                     })
             })
         };

@@ -1,4 +1,4 @@
-use agent_client_protocol as acp;
+use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::Command;
 use kernel::harness::PlanEntry;
 use kernel::harness::PlanPriority;
@@ -12,66 +12,42 @@ use crate::error::AcpError;
 
 pub(crate) fn session_event(update: acp::SessionUpdate) -> Result<SessionEvent, AcpError> {
     match update {
-        acp::SessionUpdate::UserMessageChunk { content } => Ok(SessionEvent::UserMessageChunk {
-            text: chunk_text(&content),
+        acp::SessionUpdate::UserMessageChunk(chunk) => Ok(SessionEvent::UserMessageChunk {
+            text: chunk_text(&chunk.content),
         }),
-        acp::SessionUpdate::AgentMessageChunk { content } => Ok(SessionEvent::AgentMessageChunk {
-            text: chunk_text(&content),
+        acp::SessionUpdate::AgentMessageChunk(chunk) => Ok(SessionEvent::AgentMessageChunk {
+            text: chunk_text(&chunk.content),
         }),
-        acp::SessionUpdate::AgentThoughtChunk { content } => Ok(SessionEvent::AgentThoughtChunk {
-            text: chunk_text(&content),
+        acp::SessionUpdate::AgentThoughtChunk(chunk) => Ok(SessionEvent::AgentThoughtChunk {
+            text: chunk_text(&chunk.content),
         }),
-        acp::SessionUpdate::ToolCall(call) => {
-            let input = match call.raw_input {
-                Some(raw) if raw.is_null() => JsonObject::default(),
-                Some(raw) => {
-                    serde_json::from_value(raw).map_err(|source| AcpError::ToolInput { source })?
-                }
-                None => JsonObject::default(),
-            };
-            Ok(SessionEvent::ToolCall(ToolCallInfo {
-                tool_call_id: call.id.0.to_string(),
-                name: call.title,
-                input,
-            }))
-        }
-        acp::SessionUpdate::ToolCallUpdate(update) => {
-            let output = content_text(update.fields.content.as_deref());
-            Ok(SessionEvent::ToolCallUpdate(ToolCallUpdate {
-                tool_call_id: update.id.0.to_string(),
-                status: tool_status(update.fields.status),
-                output: if output.is_empty() {
-                    None
-                } else {
-                    Some(output)
-                },
-            }))
-        }
-        acp::SessionUpdate::Plan(plan) => Ok(SessionEvent::Plan(
-            plan.entries
+        acp::SessionUpdate::ToolCall(call) => Ok(SessionEvent::ToolCall(ToolCallInfo {
+            tool_call_id: call.tool_call_id.0.to_string(),
+            name: call.title,
+            input: object_input(call.raw_input)?,
+        })),
+        acp::SessionUpdate::ToolCallUpdate(update) => tool_update(&update),
+        acp::SessionUpdate::Plan(plan) => plan_event(plan),
+        acp::SessionUpdate::AvailableCommandsUpdate(update) => Ok(SessionEvent::AvailableCommands(
+            update
+                .available_commands
                 .into_iter()
-                .map(|entry| PlanEntry {
-                    content: entry.content,
-                    priority: plan_priority(&entry.priority),
+                .map(|command| Command {
+                    name: command.name,
+                    description: command.description,
                 })
                 .collect(),
         )),
-        acp::SessionUpdate::AvailableCommandsUpdate { available_commands } => {
-            Ok(SessionEvent::AvailableCommands(
-                available_commands
-                    .into_iter()
-                    .map(|command| Command {
-                        name: command.name,
-                        description: command.description,
-                    })
-                    .collect(),
-            ))
-        }
-        acp::SessionUpdate::CurrentModeUpdate { current_mode_id } => {
-            Ok(SessionEvent::CurrentMode {
-                mode: current_mode_id.to_string(),
-            })
-        }
+        acp::SessionUpdate::CurrentModeUpdate(update) => Ok(SessionEvent::CurrentMode {
+            mode: update.current_mode_id.to_string(),
+        }),
+        acp::SessionUpdate::ConfigOptionUpdate(_)
+        | acp::SessionUpdate::SessionInfoUpdate(_)
+        | acp::SessionUpdate::UsageUpdate(_)
+        | acp::SessionUpdate::Notice(_)
+        | acp::SessionUpdate::CompactionUpdate(_)
+        | acp::SessionUpdate::CompactionSummaryChunk(_)
+        | _ => Err(AcpError::UnmappedUpdate),
     }
 }
 
@@ -79,23 +55,55 @@ pub(crate) fn permission_request(
     request_id: &str,
     request: &acp::RequestPermissionRequest,
 ) -> Result<kernel::harness::PermissionRequest, AcpError> {
-    let input = match &request.tool_call.fields.raw_input {
-        Some(raw) if raw.is_null() => JsonObject::default(),
-        Some(raw) => {
-            serde_json::from_value(raw.clone()).map_err(|source| AcpError::ToolInput { source })?
-        }
-        None => JsonObject::default(),
-    };
     Ok(kernel::harness::PermissionRequest {
         request_id: request_id.to_owned(),
-        tool_call_id: Some(request.tool_call.id.0.to_string()),
+        tool_call_id: Some(request.tool_call.tool_call_id.0.to_string()),
         name: match &request.tool_call.fields.title {
             Some(title) => title.clone(),
             None => String::new(),
         },
-        input,
+        input: object_input(request.tool_call.fields.raw_input.clone())?,
         reason: None,
     })
+}
+
+fn tool_update(update: &acp::ToolCallUpdate) -> Result<SessionEvent, AcpError> {
+    let status = match update.fields.status {
+        Some(status) => tool_status(status)?,
+        None => ToolCallStatus::Running,
+    };
+    let output = content_text(update.fields.content.as_deref());
+    Ok(SessionEvent::ToolCallUpdate(ToolCallUpdate {
+        tool_call_id: update.tool_call_id.0.to_string(),
+        status,
+        output: if output.is_empty() {
+            None
+        } else {
+            Some(output)
+        },
+    }))
+}
+
+fn plan_event(plan: acp::Plan) -> Result<SessionEvent, AcpError> {
+    let mut entries = Vec::with_capacity(plan.entries.len());
+    for entry in plan.entries {
+        entries.push(PlanEntry {
+            content: entry.content,
+            priority: plan_priority(&entry.priority)?,
+        });
+    }
+    Ok(SessionEvent::Plan(entries))
+}
+
+fn object_input(raw: Option<impl serde::Serialize>) -> Result<JsonObject, AcpError> {
+    let Some(raw) = raw else {
+        return Ok(JsonObject::default());
+    };
+    let value = serde_json::to_value(raw).map_err(|source| AcpError::ToolInput { source })?;
+    if value.is_null() {
+        return Ok(JsonObject::default());
+    }
+    serde_json::from_value(value).map_err(|source| AcpError::ToolInput { source })
 }
 
 fn chunk_text(content: &acp::ContentBlock) -> String {
@@ -105,8 +113,9 @@ fn chunk_text(content: &acp::ContentBlock) -> String {
         acp::ContentBlock::Resource(resource) => match &resource.resource {
             acp::EmbeddedResourceResource::TextResourceContents(text) => text.text.clone(),
             acp::EmbeddedResourceResource::BlobResourceContents(blob) => blob.uri.clone(),
+            _ => String::new(),
         },
-        acp::ContentBlock::Image(_) | acp::ContentBlock::Audio(_) => String::new(),
+        acp::ContentBlock::Image(_) | acp::ContentBlock::Audio(_) | _ => String::new(),
     }
 }
 
@@ -117,40 +126,30 @@ fn content_text(contents: Option<&[acp::ToolCallContent]>) -> String {
     let texts: Vec<String> = contents
         .iter()
         .filter_map(|content| match content {
-            acp::ToolCallContent::Content { content } => match content {
-                acp::ContentBlock::Text(text) => Some(text.text.clone()),
-                acp::ContentBlock::ResourceLink(link) => Some(link.uri.clone()),
-                acp::ContentBlock::Resource(resource) => match &resource.resource {
-                    acp::EmbeddedResourceResource::TextResourceContents(text) => {
-                        Some(text.text.clone())
-                    }
-                    acp::EmbeddedResourceResource::BlobResourceContents(blob) => {
-                        Some(blob.uri.clone())
-                    }
-                },
-                acp::ContentBlock::Image(_) | acp::ContentBlock::Audio(_) => None,
-            },
-            acp::ToolCallContent::Diff { diff } => Some(diff.new_text.clone()),
-            acp::ToolCallContent::Terminal { .. } => None,
+            acp::ToolCallContent::Content(content) => Some(chunk_text(&content.content)),
+            acp::ToolCallContent::Diff(diff) => Some(diff.new_text.clone()),
+            acp::ToolCallContent::Terminal(_) | _ => None,
         })
         .collect();
     texts.join("\n")
 }
 
-fn tool_status(status: Option<acp::ToolCallStatus>) -> ToolCallStatus {
+fn tool_status(status: acp::ToolCallStatus) -> Result<ToolCallStatus, AcpError> {
     match status {
-        Some(acp::ToolCallStatus::Completed) => ToolCallStatus::Completed,
-        Some(acp::ToolCallStatus::Failed) => ToolCallStatus::Failed,
-        Some(acp::ToolCallStatus::Pending | acp::ToolCallStatus::InProgress) | None => {
-            ToolCallStatus::Running
+        acp::ToolCallStatus::Completed => Ok(ToolCallStatus::Completed),
+        acp::ToolCallStatus::Failed => Ok(ToolCallStatus::Failed),
+        acp::ToolCallStatus::Pending | acp::ToolCallStatus::InProgress => {
+            Ok(ToolCallStatus::Running)
         }
+        _ => Err(AcpError::UnmappedUpdate),
     }
 }
 
-fn plan_priority(priority: &acp::PlanEntryPriority) -> PlanPriority {
+fn plan_priority(priority: &acp::PlanEntryPriority) -> Result<PlanPriority, AcpError> {
     match priority {
-        acp::PlanEntryPriority::High => PlanPriority::High,
-        acp::PlanEntryPriority::Medium => PlanPriority::Medium,
-        acp::PlanEntryPriority::Low => PlanPriority::Low,
+        acp::PlanEntryPriority::High => Ok(PlanPriority::High),
+        acp::PlanEntryPriority::Medium => Ok(PlanPriority::Medium),
+        acp::PlanEntryPriority::Low => Ok(PlanPriority::Low),
+        _ => Err(AcpError::UnmappedUpdate),
     }
 }

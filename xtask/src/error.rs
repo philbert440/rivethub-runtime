@@ -31,13 +31,13 @@ pub enum Error {
     #[error("tools/list failed")]
     ListTools {
         #[source]
-        source: rmcp::service::ServiceError,
+        source: Box<rmcp::service::ServiceError>,
     },
     #[error("tools/call {name} failed")]
     CallTool {
         name: String,
         #[source]
-        source: rmcp::service::ServiceError,
+        source: Box<rmcp::service::ServiceError>,
     },
     #[error("the server did not report an initialize result")]
     ServerInfo,

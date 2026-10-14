@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
-use agent_client_protocol as acp;
+use agent_client_protocol::schema::v1 as acp;
 use async_trait::async_trait;
 use config::Config;
 use kernel::harness::HarnessAdapter;
@@ -26,7 +26,6 @@ use wire::session_id::SessionId;
 
 use crate::connection::AgentConnection;
 use crate::connection::SessionCommand;
-use crate::connection::StreamBarrier;
 use crate::connection::port_failure;
 use crate::connection::request;
 use crate::error::AcpError;
@@ -35,6 +34,7 @@ use crate::identity;
 use crate::launch::AcpCommand;
 use crate::launch::LaunchFact;
 use crate::launch::LaunchTable;
+use crate::options::SessionOptions;
 use crate::permissions::PermissionRegistry;
 use crate::sheets::SheetInput;
 
@@ -44,7 +44,7 @@ struct SessionEntry {
     commands: mpsc::Sender<SessionCommand>,
     acp_session: acp::SessionId,
     permissions: Arc<PermissionRegistry>,
-    barrier: Arc<StreamBarrier>,
+    options: Arc<SessionOptions>,
     turn_end: mpsc::UnboundedSender<()>,
     events: Option<Receiver<SessionEvent>>,
     exited: Arc<AtomicBool>,
@@ -62,7 +62,7 @@ struct SessionSnapshot {
     commands: mpsc::Sender<SessionCommand>,
     acp_session: acp::SessionId,
     permissions: Arc<PermissionRegistry>,
-    barrier: Arc<StreamBarrier>,
+    options: Arc<SessionOptions>,
     turn_end: mpsc::UnboundedSender<()>,
     exited: Arc<AtomicBool>,
 }
@@ -114,7 +114,7 @@ impl AcpHarnessAdapter {
             commands: entry.commands.clone(),
             acp_session: entry.acp_session.clone(),
             permissions: entry.permissions.clone(),
-            barrier: entry.barrier.clone(),
+            options: Arc::clone(&entry.options),
             turn_end: entry.turn_end.clone(),
             exited: entry.exited.clone(),
         });
@@ -131,7 +131,7 @@ impl AcpHarnessAdapter {
                 commands: agent.commands,
                 acp_session: agent.acp_session,
                 permissions: agent.permissions,
-                barrier: agent.barrier,
+                options: agent.options,
                 turn_end: agent.turn_end,
                 events: Some(agent.events_rx),
                 exited: agent.exited,
@@ -211,13 +211,14 @@ impl HarnessAdapter for AcpHarnessAdapter {
         let agent = crate::connection::start_new(&command, &working_dir)
             .await
             .map_err(port)?;
-        let native = match identity::NativeSession::parse(spec.harness, &agent.acp_session.0) {
-            Ok(native) => native,
-            Err(error) => {
-                agent.shutdown.cancel();
-                return Err(port(error));
-            }
-        };
+        let native =
+            match identity::NativeSession::parse(spec.harness, agent.acp_session.0.as_ref()) {
+                Ok(native) => native,
+                Err(error) => {
+                    agent.shutdown.cancel();
+                    return Err(port(error));
+                }
+            };
         let canonical = native.canonical();
         {
             let sessions = self.sessions.lock();
@@ -258,7 +259,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
             }
         }
         let working_dir = self.resume_dir(&command)?;
-        let protocol_session = acp::SessionId(native.native().into());
+        let protocol_session = acp::SessionId::new(native.native());
         let agent = crate::connection::start_loaded(&command, &working_dir, &protocol_session)
             .await
             .map_err(port)?;
@@ -299,7 +300,6 @@ impl HarnessAdapter for AcpHarnessAdapter {
                 return Err(port(error));
             }
         }
-        snapshot.barrier.wait().await;
         if snapshot.turn_end.send(()).is_err() {
             tracing::debug!("turn end had no listener");
         }
@@ -341,17 +341,16 @@ impl HarnessAdapter for AcpHarnessAdapter {
         option: SessionOption,
     ) -> Result<(), HarnessAdapterError> {
         let snapshot = self.snapshot(session)?;
-        let mode = match option {
-            SessionOption::Model(model) => model,
-            SessionOption::Effort(level) => level.to_string(),
-        };
-        request(&snapshot.commands, |reply| SessionCommand::SetMode {
+        let selected = snapshot.options.select(&option).map_err(port)?;
+        let response = request(&snapshot.commands, |reply| SessionCommand::SetConfig {
             acp_session: snapshot.acp_session.clone(),
-            mode,
+            config_id: selected.config_id,
+            value: selected.value,
             reply,
         })
         .await
-        .map_err(|failure| port(port_failure(failure, "session/set_mode")))?;
+        .map_err(|failure| port(port_failure(failure, "session/set_config_option")))?;
+        snapshot.options.replace(response.config_options);
         Ok(())
     }
 

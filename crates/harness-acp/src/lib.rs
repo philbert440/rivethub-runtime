@@ -5,13 +5,16 @@ pub mod error;
 pub mod events;
 pub mod identity;
 pub mod launch;
+mod options;
 pub mod permissions;
 pub mod process;
 mod sheets;
 
 pub use adapter::AcpHarnessAdapter;
+pub use connection::initialize_handshake;
 pub use error::AcpError;
 pub use error::ChatUnsupportedReason;
+pub use error::UnverifiedReason;
 pub use identity::IdentityError;
 pub use identity::NativeSession;
 pub use launch::AcpCommand;

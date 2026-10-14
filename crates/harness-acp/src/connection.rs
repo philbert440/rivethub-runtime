@@ -4,10 +4,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use agent_client_protocol as acp;
-use agent_client_protocol::Agent as _;
+use agent_client_protocol::Agent;
+use agent_client_protocol::ByteStreams;
+use agent_client_protocol::Client;
+use agent_client_protocol::ConnectionTo;
+use agent_client_protocol::schema::ProtocolVersion;
+use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::SessionEvent;
-use parking_lot::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio_util::compat::TokioAsyncReadCompatExt as _;
@@ -15,9 +18,10 @@ use tokio_util::compat::TokioAsyncWriteCompatExt as _;
 use tokio_util::sync::CancellationToken;
 use tokio_util::sync::DropGuard;
 
-use crate::client::ClientBridge;
 use crate::error::AcpError;
 use crate::launch::AcpCommand;
+use crate::options::SessionOptions;
+use crate::options::stored_options;
 use crate::permissions::PermissionRegistry;
 use crate::process;
 use crate::process::ChildPipes;
@@ -25,81 +29,16 @@ use crate::process::ChildPipes;
 const EVENT_CAPACITY: usize = 128;
 const COMMAND_CAPACITY: usize = 32;
 
-#[derive(Debug, Default)]
-pub(crate) struct StreamBarrier {
-    inflight: Mutex<usize>,
-    drained: tokio::sync::Notify,
-}
-
-impl StreamBarrier {
-    pub(crate) fn enter(&self) {
-        *self.inflight.lock() += 1;
-    }
-
-    pub(crate) fn leave(&self) {
-        let mut waiting = self.inflight.lock();
-        *waiting -= 1;
-        if *waiting == 0 {
-            self.drained.notify_waiters();
-        }
-    }
-
-    pub(crate) async fn wait(&self) {
-        let notified = self.drained.notified();
-        tokio::pin!(notified);
-        notified.as_mut().enable();
-        if *self.inflight.lock() == 0 {
-            return;
-        }
-        notified.await;
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct BarrierSpawner {
-    barrier: Arc<StreamBarrier>,
-    dispatch_spawned: Mutex<bool>,
-}
-
-impl BarrierSpawner {
-    pub(crate) fn new(barrier: Arc<StreamBarrier>) -> Self {
-        Self {
-            barrier,
-            dispatch_spawned: Mutex::new(false),
-        }
-    }
-
-    pub(crate) fn spawn<F>(&self, future: F)
-    where
-        F: Future<Output = ()> + 'static,
-    {
-        let mut dispatch = self.dispatch_spawned.lock();
-        if !*dispatch {
-            *dispatch = true;
-            drop(dispatch);
-            tokio::task::spawn_local(future);
-            return;
-        }
-        drop(dispatch);
-        self.barrier.enter();
-        let barrier = self.barrier.clone();
-        tokio::task::spawn_local(async move {
-            future.await;
-            barrier.leave();
-        });
-    }
-}
-
 #[derive(Debug)]
 pub(crate) enum SessionCommand {
     NewSession {
         cwd: PathBuf,
-        reply: oneshot::Sender<Result<acp::SessionId, acp::Error>>,
+        reply: oneshot::Sender<Result<acp::NewSessionResponse, acp::Error>>,
     },
     LoadSession {
         native: acp::SessionId,
         cwd: PathBuf,
-        reply: oneshot::Sender<Result<(), acp::Error>>,
+        reply: oneshot::Sender<Result<acp::LoadSessionResponse, acp::Error>>,
     },
     Prompt {
         acp_session: acp::SessionId,
@@ -109,10 +48,11 @@ pub(crate) enum SessionCommand {
     Cancel {
         acp_session: acp::SessionId,
     },
-    SetMode {
+    SetConfig {
         acp_session: acp::SessionId,
-        mode: String,
-        reply: oneshot::Sender<Result<(), acp::Error>>,
+        config_id: acp::SessionConfigId,
+        value: acp::SessionConfigOptionValue,
+        reply: oneshot::Sender<Result<acp::SetSessionConfigOptionResponse, acp::Error>>,
     },
 }
 
@@ -134,7 +74,7 @@ pub(crate) struct AgentConnection {
     pub(crate) commands: mpsc::Sender<SessionCommand>,
     pub(crate) acp_session: acp::SessionId,
     pub(crate) permissions: Arc<PermissionRegistry>,
-    pub(crate) barrier: Arc<StreamBarrier>,
+    pub(crate) options: Arc<SessionOptions>,
     pub(crate) turn_end: mpsc::UnboundedSender<()>,
     pub(crate) events_rx: mpsc::Receiver<SessionEvent>,
     pub(crate) exited: Arc<AtomicBool>,
@@ -145,7 +85,7 @@ struct Connecting {
     reaped: tokio::sync::oneshot::Receiver<Result<(), std::io::Error>>,
     commands: mpsc::Sender<SessionCommand>,
     permissions: Arc<PermissionRegistry>,
-    barrier: Arc<StreamBarrier>,
+    options: Arc<SessionOptions>,
     turn_end: mpsc::UnboundedSender<()>,
     events_rx: mpsc::Receiver<SessionEvent>,
     exited: Arc<AtomicBool>,
@@ -154,12 +94,17 @@ struct Connecting {
 }
 
 impl Connecting {
-    fn finish(self, acp_session: acp::SessionId) -> AgentConnection {
+    fn finish(
+        self,
+        acp_session: acp::SessionId,
+        config_options: Vec<acp::SessionConfigOption>,
+    ) -> AgentConnection {
+        self.options.replace(config_options);
         let Self {
             reaped,
             commands,
             permissions,
-            barrier,
+            options,
             turn_end,
             events_rx,
             exited,
@@ -172,7 +117,7 @@ impl Connecting {
             commands,
             acp_session,
             permissions,
-            barrier,
+            options,
             turn_end,
             events_rx,
             exited,
@@ -199,13 +144,15 @@ pub(crate) async fn start_new(
     working_dir: &Path,
 ) -> Result<AgentConnection, AcpError> {
     let connected = connect(command, working_dir).await?;
-    let acp_session = request(&connected.commands, |reply| SessionCommand::NewSession {
+    let response = request(&connected.commands, |reply| SessionCommand::NewSession {
         cwd: working_dir.to_path_buf(),
         reply,
     })
     .await
     .map_err(|failure| port_failure(failure, "session/new"))?;
-    Ok(connected.finish(acp_session))
+    let session_id = response.session_id.clone();
+    let options = stored_options(response.config_options);
+    Ok(connected.finish(session_id, options))
 }
 
 pub(crate) async fn start_loaded(
@@ -214,14 +161,39 @@ pub(crate) async fn start_loaded(
     native: &acp::SessionId,
 ) -> Result<AgentConnection, AcpError> {
     let connected = connect(command, working_dir).await?;
-    request(&connected.commands, |reply| SessionCommand::LoadSession {
+    let response = request(&connected.commands, |reply| SessionCommand::LoadSession {
         native: native.clone(),
         cwd: working_dir.to_path_buf(),
         reply,
     })
     .await
     .map_err(|failure| port_failure(failure, "session/load"))?;
-    Ok(connected.finish(native.clone()))
+    Ok(connected.finish(native.clone(), stored_options(response.config_options)))
+}
+
+pub async fn initialize_handshake(
+    command: &AcpCommand,
+    working_dir: &Path,
+) -> Result<(), AcpError> {
+    let connected = connect(command, working_dir).await?;
+    let Connecting {
+        reaped,
+        shutdown,
+        guard,
+        ..
+    } = connected;
+    shutdown.cancel();
+    drop(guard.disarm());
+    match reaped.await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(source)) => Err(AcpError::Launch {
+            program: command.program.display().to_string(),
+            source,
+        }),
+        Err(_) => Err(AcpError::Closed {
+            method: "initialize",
+        }),
+    }
 }
 
 async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting, AcpError> {
@@ -230,39 +202,45 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
     let (turn_end, turn_end_rx) = mpsc::unbounded_channel();
     let (commands, commands_rx) = mpsc::channel(COMMAND_CAPACITY);
     let permissions = Arc::new(PermissionRegistry::default());
-    let barrier = Arc::new(StreamBarrier::default());
+    let options = Arc::new(SessionOptions::default());
     let exited = Arc::new(AtomicBool::new(false));
     let shutdown = CancellationToken::new();
     let guard = shutdown.clone().drop_guard();
-
     let ChildPipes {
         child,
         stdin,
         stdout,
         stderr,
     } = pipes;
-    tokio::spawn(process::pump_stderr(stderr));
-    let reaped = process::watch_child(child, exited.clone(), events_tx.clone(), shutdown.clone());
-
-    let bridge = ClientBridge {
-        events: events_tx.clone(),
-        permissions: permissions.clone(),
-    };
-    let spawner = Arc::new(BarrierSpawner::new(barrier.clone()));
-    let (ready_tx, ready_rx) = oneshot::channel();
-    let wiring = ConnectionWiring {
-        stdin,
-        stdout,
-        bridge,
-        events_tx,
+    spawn_detached(process::pump_stderr(stderr));
+    let reaped = process::watch_child(
+        child,
+        Arc::clone(&exited),
+        events_tx.clone(),
+        shutdown.clone(),
+    );
+    let (connection_ended_tx, connection_ended_rx) = oneshot::channel();
+    spawn_detached(forward_turn_ends(
+        events_tx.clone(),
         turn_end_rx,
-        commands_rx,
-        ready_tx,
-    };
-    let runtime = tokio::runtime::Handle::current();
-    tokio::task::spawn_blocking(move || {
-        let local = tokio::task::LocalSet::new();
-        runtime.block_on(local.run_until(serve_connection(wiring, spawner)));
+        connection_ended_rx,
+    ));
+    let (ready_tx, ready_rx) = oneshot::channel();
+    let session_permissions = Arc::clone(&permissions);
+    spawn_detached(async move {
+        let outcome = serve(
+            stdin,
+            stdout,
+            events_tx,
+            session_permissions,
+            commands_rx,
+            ready_tx,
+        )
+        .await;
+        drop(connection_ended_tx);
+        if let Err(error) = outcome {
+            tracing::debug!(%error, "agent protocol stream failed");
+        }
     });
     let initialized = ready_rx.await.map_err(|_| AcpError::Closed {
         method: "initialize",
@@ -275,7 +253,7 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
         reaped,
         commands,
         permissions,
-        barrier,
+        options,
         turn_end,
         events_rx,
         exited,
@@ -284,263 +262,215 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
     })
 }
 
-struct ConnectionWiring {
-    stdin: tokio::process::ChildStdin,
-    stdout: tokio::process::ChildStdout,
-    bridge: ClientBridge,
-    events_tx: mpsc::Sender<SessionEvent>,
-    turn_end_rx: mpsc::UnboundedReceiver<()>,
-    commands_rx: mpsc::Receiver<SessionCommand>,
-    ready_tx: oneshot::Sender<Result<(), acp::Error>>,
+fn spawn_detached(task: impl Future<Output = ()> + Send + 'static) {
+    drop(tokio::spawn(task));
 }
 
-async fn serve_connection(wiring: ConnectionWiring, spawner: Arc<BarrierSpawner>) {
-    let ConnectionWiring {
-        stdin,
-        stdout,
-        bridge,
-        events_tx,
-        turn_end_rx,
-        commands_rx,
-        ready_tx,
-    } = wiring;
-    let (conn, io) = acp::ClientSideConnection::new(
-        bridge,
-        stdin.compat_write(),
-        stdout.compat(),
-        move |future| spawner.spawn(future),
-    );
-    let conn = Arc::new(conn);
-    let mut io = tokio::task::spawn_local(io);
-    tokio::task::spawn_local(forward_turn_ends(events_tx, turn_end_rx));
-    let initialized = conn
-        .initialize(acp::InitializeRequest {
-            protocol_version: acp::V1,
-            client_capabilities: acp::ClientCapabilities::default(),
-            meta: None,
-        })
+async fn serve(
+    stdin: tokio::process::ChildStdin,
+    stdout: tokio::process::ChildStdout,
+    events: mpsc::Sender<SessionEvent>,
+    permissions: Arc<PermissionRegistry>,
+    commands_rx: mpsc::Receiver<SessionCommand>,
+    ready_tx: oneshot::Sender<Result<(), acp::Error>>,
+) -> Result<(), acp::Error> {
+    let session_events = events.clone();
+    let permission_events = events;
+    Client
+        .builder()
+        .name("rivethub")
+        .on_receive_notification(
+            async move |notification: acp::SessionNotification, _cx| {
+                crate::client::on_session_update(notification, &session_events).await
+            },
+            agent_client_protocol::on_receive_notification!(),
+        )
+        .on_receive_request(
+            async move |request: acp::RequestPermissionRequest, responder, _cx| {
+                crate::client::on_permission(request, responder, &permissions, &permission_events)
+                    .await
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .connect_with(
+            ByteStreams::new(stdin.compat_write(), stdout.compat()),
+            async move |connection| drive(connection, commands_rx, ready_tx).await,
+        )
         .await
-        .map(|response| response.agent_capabilities.load_session);
+}
+
+fn initialize_request() -> acp::InitializeRequest {
+    acp::InitializeRequest::new(ProtocolVersion::V1)
+        .client_capabilities(
+            acp::ClientCapabilities::new()
+                .session(Some(acp::ClientSessionCapabilities::new().config_options(
+                    Some(acp::SessionConfigOptionsCapabilities::new()),
+                ))),
+        )
+        .client_info(acp::Implementation::new(
+            "rivethub",
+            env!("CARGO_PKG_VERSION"),
+        ))
+}
+
+async fn drive(
+    connection: ConnectionTo<Agent>,
+    commands_rx: mpsc::Receiver<SessionCommand>,
+    ready_tx: oneshot::Sender<Result<(), acp::Error>>,
+) -> Result<(), acp::Error> {
+    let initialized = connection
+        .send_request(initialize_request())
+        .block_task()
+        .await;
     match initialized {
-        Ok(load_session) => {
-            tracing::debug!(load_session, "agent initialized");
+        Ok(response) => {
+            tracing::debug!(
+                load_session = response.agent_capabilities.load_session,
+                "agent initialized"
+            );
             if ready_tx.send(Ok(())).is_err() {
-                return;
+                return Ok(());
             }
         }
         Err(error) => {
             if ready_tx.send(Err(error)).is_err() {
                 tracing::debug!("the agent failed initialize after its requester left");
             }
-            return;
+            return Ok(());
         }
     }
-    tokio::select! {
-        result = &mut io => match result {
-            Ok(Ok(())) => tracing::debug!("agent closed the protocol stream"),
-            Ok(Err(error)) => tracing::debug!(%error, "agent protocol stream failed"),
-            Err(error) => tracing::debug!(%error, "agent protocol task failed"),
-        },
-        () = actor_loop(conn, commands_rx) => {
-            tracing::debug!("the session was retired by its owner");
-        }
-    }
+    command_loop(connection, commands_rx).await;
+    Ok(())
 }
 
-async fn actor_loop(
-    conn: Arc<acp::ClientSideConnection>,
+async fn command_loop(
+    connection: ConnectionTo<Agent>,
     mut commands: mpsc::Receiver<SessionCommand>,
 ) {
-    while let Some(command) = commands.recv().await {
-        match command {
-            SessionCommand::Cancel { acp_session } => {
-                let sent = conn
-                    .cancel(acp::CancelNotification {
-                        session_id: acp_session,
-                        meta: None,
-                    })
-                    .await;
-                if let Err(error) = sent {
-                    tracing::debug!(%error, "cancel notification did not reach the agent");
+    loop {
+        tokio::select! {
+            biased;
+            () = connection.incoming_closed() => break,
+            command = commands.recv() => {
+                let Some(command) = command else {
+                    break;
+                };
+                match command {
+                    SessionCommand::Cancel { acp_session } => send_cancel(&connection, acp_session),
+                    SessionCommand::NewSession { cwd, reply } => {
+                        deliver(reply, new_session(&connection, cwd).await);
+                    }
+                    SessionCommand::LoadSession { native, cwd, reply } => {
+                        deliver(reply, load_session(&connection, native, cwd).await);
+                    }
+                    SessionCommand::Prompt {
+                        acp_session,
+                        text,
+                        reply,
+                    } => spawn_prompt(connection.clone(), acp_session, text, reply),
+                    SessionCommand::SetConfig {
+                        acp_session,
+                        config_id,
+                        value,
+                        reply,
+                    } => deliver(
+                        reply,
+                        set_config(&connection, acp_session, config_id, value).await,
+                    ),
                 }
-            }
-            SessionCommand::NewSession { cwd, reply } => {
-                tokio::task::spawn_local(new_session_task(conn.clone(), cwd, reply));
-            }
-            SessionCommand::LoadSession { native, cwd, reply } => {
-                tokio::task::spawn_local(load_session_task(conn.clone(), native, cwd, reply));
-            }
-            SessionCommand::Prompt {
-                acp_session,
-                text,
-                reply,
-            } => {
-                tokio::task::spawn_local(prompt_task(conn.clone(), acp_session, text, reply));
-            }
-            SessionCommand::SetMode {
-                acp_session,
-                mode,
-                reply,
-            } => {
-                tokio::task::spawn_local(set_mode_task(conn.clone(), acp_session, mode, reply));
             }
         }
     }
 }
 
-async fn new_session_task(
-    conn: Arc<acp::ClientSideConnection>,
-    cwd: PathBuf,
-    reply: oneshot::Sender<Result<acp::SessionId, acp::Error>>,
-) {
-    let response = conn
-        .new_session(acp::NewSessionRequest {
-            cwd,
-            mcp_servers: Vec::new(),
-            meta: None,
-        })
-        .await
-        .map(|response| response.session_id);
-    if reply.send(response).is_err() {
+fn deliver<T>(reply: oneshot::Sender<T>, value: T) {
+    if reply.send(value).is_err() {
         tracing::debug!("the session command outlived its requester");
     }
 }
 
-async fn load_session_task(
-    conn: Arc<acp::ClientSideConnection>,
+fn send_cancel(connection: &ConnectionTo<Agent>, acp_session: acp::SessionId) {
+    if let Err(error) = connection.send_notification(acp::CancelNotification::new(acp_session)) {
+        tracing::debug!(%error, "cancel notification did not reach the agent");
+    }
+}
+
+async fn new_session(
+    connection: &ConnectionTo<Agent>,
+    cwd: PathBuf,
+) -> Result<acp::NewSessionResponse, acp::Error> {
+    connection
+        .send_request(acp::NewSessionRequest::new(cwd))
+        .block_task()
+        .await
+}
+
+async fn load_session(
+    connection: &ConnectionTo<Agent>,
     native: acp::SessionId,
     cwd: PathBuf,
-    reply: oneshot::Sender<Result<(), acp::Error>>,
-) {
-    let response = conn
-        .load_session(acp::LoadSessionRequest {
-            cwd,
-            mcp_servers: Vec::new(),
-            session_id: native,
-            meta: None,
-        })
+) -> Result<acp::LoadSessionResponse, acp::Error> {
+    connection
+        .send_request(acp::LoadSessionRequest::new(native, cwd))
+        .block_task()
         .await
-        .map(|_| ());
-    if reply.send(response).is_err() {
-        tracing::debug!("the session command outlived its requester");
-    }
 }
 
-async fn prompt_task(
-    conn: Arc<acp::ClientSideConnection>,
+async fn set_config(
+    connection: &ConnectionTo<Agent>,
+    acp_session: acp::SessionId,
+    config_id: acp::SessionConfigId,
+    value: acp::SessionConfigOptionValue,
+) -> Result<acp::SetSessionConfigOptionResponse, acp::Error> {
+    connection
+        .send_request(acp::SetSessionConfigOptionRequest::new(
+            acp_session,
+            config_id,
+            value,
+        ))
+        .block_task()
+        .await
+}
+
+fn spawn_prompt(
+    connection: ConnectionTo<Agent>,
     acp_session: acp::SessionId,
     text: String,
     reply: oneshot::Sender<Result<acp::PromptResponse, acp::Error>>,
 ) {
-    let response = conn
-        .prompt(acp::PromptRequest {
-            session_id: acp_session,
-            prompt: vec![acp::ContentBlock::from(text)],
-            meta: None,
-        })
-        .await;
-    if reply.send(response).is_err() {
-        tracing::debug!("the session command outlived its requester");
-    }
-}
-
-async fn set_mode_task(
-    conn: Arc<acp::ClientSideConnection>,
-    acp_session: acp::SessionId,
-    mode: String,
-    reply: oneshot::Sender<Result<(), acp::Error>>,
-) {
-    let response = conn
-        .set_session_mode(acp::SetSessionModeRequest {
-            session_id: acp_session,
-            mode_id: acp::SessionModeId(mode.into()),
-            meta: None,
-        })
-        .await
-        .map(|_| ());
-    if reply.send(response).is_err() {
-        tracing::debug!("the session command outlived its requester");
-    }
+    spawn_detached(async move {
+        let response = connection
+            .send_request(acp::PromptRequest::new(
+                acp_session,
+                vec![acp::ContentBlock::from(text)],
+            ))
+            .block_task()
+            .await;
+        deliver(reply, response);
+    });
 }
 
 async fn forward_turn_ends(
     events: mpsc::Sender<SessionEvent>,
     mut turn_ends: mpsc::UnboundedReceiver<()>,
+    mut connection_ended: oneshot::Receiver<()>,
 ) {
-    while turn_ends.recv().await.is_some() {
-        if events.send(SessionEvent::TurnEnded).await.is_err() {
-            tracing::debug!("turn end had no listener");
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::future::ready;
-    use std::sync::Arc;
-
-    use tokio::sync::oneshot;
-
-    use super::BarrierSpawner;
-    use super::StreamBarrier;
-
-    fn single_thread_runtime() -> tokio::runtime::Runtime {
-        tokio::runtime::Builder::new_current_thread()
-            .build()
-            .expect("test runtime")
-    }
-
-    #[test]
-    fn a_turn_end_waits_for_handlers_armed_before_it() {
-        let runtime = single_thread_runtime();
-        let local = tokio::task::LocalSet::new();
-        local.block_on(&runtime, async {
-            let barrier = Arc::new(StreamBarrier::default());
-            let spawner = Arc::new(BarrierSpawner::new(barrier.clone()));
-            spawner.spawn(ready(()));
-            let (release, hold) = oneshot::channel::<()>();
-            spawner.spawn(async move {
-                drop(hold.await);
-            });
-            let (drained, mut drained_rx) = oneshot::channel::<()>();
-            tokio::spawn({
-                let barrier = barrier.clone();
-                async move {
-                    barrier.wait().await;
-                    assert_eq!(drained.send(()), Ok(()));
+    loop {
+        tokio::select! {
+            biased;
+            turn = turn_ends.recv() => {
+                let Some(()) = turn else {
+                    break;
+                };
+                if events.send(SessionEvent::TurnEnded).await.is_err() {
+                    tracing::debug!("turn end had no listener");
+                    break;
                 }
-            });
-            tokio::task::yield_now().await;
-            assert!(
-                drained_rx.try_recv().is_err(),
-                "the wait must hold while a handler is armed"
-            );
-            drop(release);
-            tokio::task::yield_now().await;
-            assert_eq!(
-                drained_rx.try_recv(),
-                Ok(()),
-                "the wait must release once the armed handler completes"
-            );
-        });
-    }
-
-    #[test]
-    fn a_turn_end_without_armed_handlers_does_not_wait() {
-        let runtime = single_thread_runtime();
-        runtime.block_on(async {
-            let barrier = Arc::new(StreamBarrier::default());
-            let (drained, mut drained_rx) = oneshot::channel::<()>();
-            tokio::spawn(async move {
-                barrier.wait().await;
-                assert_eq!(drained.send(()), Ok(()));
-            });
-            tokio::task::yield_now().await;
-            assert_eq!(
-                drained_rx.try_recv(),
-                Ok(()),
-                "the wait must release at once with nothing armed"
-            );
-        });
+            }
+            result = &mut connection_ended => {
+                drop(result);
+                break;
+            }
+        }
     }
 }

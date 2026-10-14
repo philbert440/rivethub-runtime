@@ -50,7 +50,7 @@ pub(crate) struct Draft {
 
 #[derive(Debug)]
 pub(crate) enum Mapped {
-    Draft(Draft),
+    Draft(Box<Draft>),
     Skip(SkippedRecord),
     None,
 }
@@ -214,10 +214,10 @@ pub(crate) fn text_turn(turn: &TextTurn<'_>) -> Result<Mapped, TranscriptReaderE
             }));
         }
     }
-    Ok(Mapped::Draft(Draft {
+    Ok(Mapped::Draft(Box::new(Draft {
         position: turn.position,
         message: capture(turn, ToolFields::none())?,
-    }))
+    })))
 }
 
 pub(crate) fn tool_turn(
@@ -237,10 +237,10 @@ pub(crate) fn tool_turn(
             }));
         }
     }
-    Ok(Mapped::Draft(Draft {
+    Ok(Mapped::Draft(Box::new(Draft {
         position: turn.position,
         message: capture(turn, tool)?,
-    }))
+    })))
 }
 
 pub(crate) fn push_mapped(
@@ -249,7 +249,7 @@ pub(crate) fn push_mapped(
     skipped: &mut Vec<SkippedRecord>,
 ) {
     match mapped {
-        Mapped::Draft(draft) => drafts.push(draft),
+        Mapped::Draft(draft) => drafts.push(*draft),
         Mapped::Skip(record) => skipped.push(record),
         Mapped::None => {}
     }

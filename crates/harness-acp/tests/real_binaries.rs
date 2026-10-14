@@ -8,6 +8,7 @@ use config::Paths;
 use harness_acp::AcpHarnessAdapter;
 use harness_acp::AcpLaunch;
 use harness_acp::LaunchTable;
+use harness_acp::initialize_handshake;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::SessionEvent;
 use kernel::harness::SessionSpec;
@@ -48,17 +49,25 @@ fn probe_programs() -> Vec<HarnessId> {
 
 fn start(args: &Arguments, runtime: &tokio::runtime::Runtime) -> libtest_mimic::Conclusion {
     let handle = runtime.handle().clone();
-    let trials: Vec<Trial> = probe_programs()
-        .into_iter()
-        .map(|harness| {
-            let handle = handle.clone();
+    let mut trials = Vec::new();
+    for harness in probe_programs() {
+        let session_handle = handle.clone();
+        trials.push(
             Trial::ignorable_test(format!("real {harness}"), move || {
-                handle.block_on(run_harness(harness))
+                session_handle.block_on(run_harness(harness))
             })
             .with_ignored_flag(true)
-            .with_kind("installed harnesses")
-        })
-        .collect();
+            .with_kind("installed harnesses"),
+        );
+        let handshake_handle = handle.clone();
+        trials.push(
+            Trial::ignorable_test(format!("initialize {harness}"), move || {
+                handshake_handle.block_on(run_initialize(harness))
+            })
+            .with_ignored_flag(true)
+            .with_kind("needs the real binary"),
+        );
+    }
     libtest_mimic::run(args, trials)
 }
 
@@ -81,9 +90,17 @@ fn user_local_binary(program: &Path) -> Option<PathBuf> {
     std::fs::metadata(&candidate).is_ok().then_some(candidate)
 }
 
-fn table_with_binary(harness: HarnessId, binary: &Path) -> Result<LaunchTable, Failed> {
+fn table_with_binary(
+    harness: HarnessId,
+    binary: &Path,
+    cwd: Option<&Path>,
+) -> Result<LaunchTable, Failed> {
+    let cwd_line = match cwd {
+        Some(cwd) => format!("      cwd: '{}'\n", cwd.display()),
+        None => String::new(),
+    };
     let document = format!(
-        "tasks:\n  harnesses:\n    {harness}:\n      binary: '{}'\n",
+        "tasks:\n  harnesses:\n    {harness}:\n      binary: '{}'\n{cwd_line}",
         binary.display()
     );
     let config: Config =
@@ -113,7 +130,7 @@ async fn resolve_installed(
     let Some(user_local) = user_local_binary(configured) else {
         return Ok(Err(not_installed(harness, &[configured.to_owned()])));
     };
-    let resolved = table_with_binary(harness, &user_local)?;
+    let resolved = table_with_binary(harness, &user_local, None)?;
     if probe(&user_local).await {
         return Ok(Ok(resolved));
     }
@@ -139,13 +156,15 @@ async fn run_harness(harness: HarnessId) -> Result<Completion, Failed> {
     let launch = table
         .launch(harness)
         .map_err(|error| Failed::from(format!("launch table: {error}")))?;
-    if let AcpLaunch::Unverified(command) = launch {
+    if let AcpLaunch::Unverified { reason, command } = launch {
         return Ok(Completion::ignored_with(format!(
-            "{harness} is installed on this node ({}), but its ACP invocation is not verified from the binary's own --help or from a recording; the launch entry refuses to guess",
+            "{harness} is not verified: {reason} ({})",
             command.program.display()
         )));
     }
     let cwd = tempdir().map_err(|error| Failed::from(format!("temp dir: {error}")))?;
+    let program = launch.command().program.clone();
+    let table = table_with_binary(harness, &program, Some(cwd.path()))?;
     let adapter = Arc::new(AcpHarnessAdapter::with_launch_table(table.clone()));
     let spec = SessionSpec {
         session: SessionId::new(harness, "probe"),
@@ -182,6 +201,36 @@ async fn run_harness(harness: HarnessId) -> Result<Completion, Failed> {
         .resume(&created)
         .await
         .map_err(|error| Failed::from(format!("{harness} resume: {error}")))?;
+    Ok(Completion::Completed)
+}
+
+async fn run_initialize(harness: HarnessId) -> Result<Completion, Failed> {
+    let table = LaunchTable::from_config(&Config::default());
+    let launch = table
+        .launch(harness)
+        .map_err(|error| Failed::from(format!("launch table: {error}")))?;
+    let configured = match launch {
+        AcpLaunch::Native(command) | AcpLaunch::Adapter(command) => command,
+        AcpLaunch::Unverified { reason, .. } => {
+            return Ok(Completion::ignored_with(format!(
+                "{harness} is not verified: {reason}"
+            )));
+        }
+    };
+    let table = match resolve_installed(harness, table, &configured.program).await {
+        Ok(Ok(table)) => table,
+        Ok(Err(reason)) => return Ok(Completion::ignored_with(reason)),
+        Err(failure) => return Err(failure),
+    };
+    let command = table
+        .launch(harness)
+        .map_err(|error| Failed::from(format!("launch table: {error}")))?
+        .command()
+        .clone();
+    let cwd = tempdir().map_err(|error| Failed::from(format!("temp dir: {error}")))?;
+    initialize_handshake(&command, cwd.path())
+        .await
+        .map_err(|error| Failed::from(format!("{harness} initialize: {error}")))?;
     Ok(Completion::Completed)
 }
 

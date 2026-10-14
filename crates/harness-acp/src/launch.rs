@@ -8,6 +8,7 @@ use wire::harness::HarnessId;
 
 use crate::error::AcpError;
 use crate::error::ChatUnsupportedReason;
+use crate::error::UnverifiedReason;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AcpCommand {
@@ -20,20 +21,25 @@ pub struct AcpCommand {
 pub enum AcpLaunch {
     Native(AcpCommand),
     Adapter(AcpCommand),
-    Unverified(AcpCommand),
+    Unverified {
+        command: AcpCommand,
+        reason: UnverifiedReason,
+    },
 }
 
 impl AcpLaunch {
     #[must_use]
     pub fn command(&self) -> &AcpCommand {
         match self {
-            Self::Native(command) | Self::Adapter(command) | Self::Unverified(command) => command,
+            Self::Native(command) | Self::Adapter(command) | Self::Unverified { command, .. } => {
+                command
+            }
         }
     }
 
     #[must_use]
     pub fn is_verified(&self) -> bool {
-        !matches!(self, Self::Unverified(_))
+        !matches!(self, Self::Unverified { .. })
     }
 }
 
@@ -79,14 +85,14 @@ impl LaunchTable {
     }
 
     pub fn verified_command(&self, harness: HarnessId) -> Result<AcpCommand, AcpError> {
-        let launch = self.launch(harness)?;
-        if launch.is_verified() {
-            return Ok(launch.command().clone());
+        match self.launch(harness)? {
+            AcpLaunch::Native(command) | AcpLaunch::Adapter(command) => Ok(command),
+            AcpLaunch::Unverified { command, reason } => Err(AcpError::UnverifiedLaunch {
+                harness,
+                program: command.program.display().to_string(),
+                reason,
+            }),
         }
-        Err(AcpError::UnverifiedLaunch {
-            harness,
-            program: launch.command().program.display().to_string(),
-        })
     }
 
     #[must_use]
@@ -111,7 +117,7 @@ impl LaunchFact {
             LaunchEntry::Launch(launch) => Self {
                 harness,
                 program: Some(launch.command().program.clone()),
-                verified_chat: launch.is_verified(),
+                verified_chat: sheet_chat(harness),
             },
             LaunchEntry::Unsupported(_) => Self {
                 harness,
@@ -122,48 +128,57 @@ impl LaunchFact {
     }
 }
 
+fn sheet_chat(harness: HarnessId) -> bool {
+    matches!(
+        harness,
+        HarnessId::ClaudeCode | HarnessId::Codex | HarnessId::Opencode
+    )
+}
+
 fn entry_for(config: &Config, harness: HarnessId) -> LaunchEntry {
     match harness {
         HarnessId::Pi | HarnessId::Cursor => {
             LaunchEntry::Unsupported(ChatUnsupportedReason::TerminalOnly)
         }
         HarnessId::Cowork => LaunchEntry::Unsupported(ChatUnsupportedReason::CaptureOnly),
-        HarnessId::ClaudeCode => LaunchEntry::Launch(AcpLaunch::Adapter(AcpCommand {
-            program: configured(config, harness, "claude-code-acp"),
-            args: Vec::new(),
-            working_dir: configured_dir(config, harness),
-        })),
-        HarnessId::Codex => LaunchEntry::Launch(AcpLaunch::Adapter(AcpCommand {
-            program: configured(config, harness, "codex-acp"),
-            args: Vec::new(),
-            working_dir: configured_dir(config, harness),
-        })),
-        HarnessId::Opencode => LaunchEntry::Launch(AcpLaunch::Native(AcpCommand {
-            program: configured(config, harness, "opencode"),
-            args: vec!["acp".to_owned()],
-            working_dir: configured_dir(config, harness),
-        })),
-        HarnessId::GrokBuild => LaunchEntry::Launch(AcpLaunch::Unverified(AcpCommand {
-            program: configured(config, harness, "grok"),
-            args: Vec::new(),
-            working_dir: configured_dir(config, harness),
-        })),
-        HarnessId::Hermes => LaunchEntry::Launch(AcpLaunch::Unverified(AcpCommand {
-            program: configured(config, harness, "hermes"),
-            args: Vec::new(),
-            working_dir: configured_dir(config, harness),
-        })),
-        HarnessId::KimiCode => LaunchEntry::Launch(AcpLaunch::Unverified(AcpCommand {
-            program: configured(config, harness, "kimi"),
-            args: Vec::new(),
-            working_dir: configured_dir(config, harness),
-        })),
-        HarnessId::QwenCode => LaunchEntry::Launch(AcpLaunch::Unverified(AcpCommand {
-            program: configured(config, harness, "qwen"),
-            args: Vec::new(),
-            working_dir: configured_dir(config, harness),
-        })),
+        HarnessId::GrokBuild => LaunchEntry::Launch(AcpLaunch::Native(acp_command(
+            config,
+            harness,
+            "grok",
+            vec!["agent".to_owned(), "stdio".to_owned()],
+        ))),
+        HarnessId::ClaudeCode => unverified(config, harness, "claude-code-acp", Vec::new()),
+        HarnessId::Codex => unverified(config, harness, "codex-acp", Vec::new()),
+        HarnessId::Opencode => unverified(config, harness, "opencode", vec!["acp".to_owned()]),
+        HarnessId::Hermes => unverified(config, harness, "hermes", Vec::new()),
+        HarnessId::KimiCode => unverified(config, harness, "kimi", Vec::new()),
+        HarnessId::QwenCode => unverified(config, harness, "qwen", Vec::new()),
     }
+}
+
+fn acp_command(
+    config: &Config,
+    harness: HarnessId,
+    program: &str,
+    args: Vec<String>,
+) -> AcpCommand {
+    AcpCommand {
+        program: configured(config, harness, program),
+        args,
+        working_dir: configured_dir(config, harness),
+    }
+}
+
+fn unverified(
+    config: &Config,
+    harness: HarnessId,
+    program: &str,
+    args: Vec<String>,
+) -> LaunchEntry {
+    LaunchEntry::Launch(AcpLaunch::Unverified {
+        command: acp_command(config, harness, program, args),
+        reason: UnverifiedReason::NotInstalled,
+    })
 }
 
 fn configured(config: &Config, harness: HarnessId, default: &str) -> PathBuf {
