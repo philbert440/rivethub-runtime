@@ -35,3 +35,30 @@ Without `--once`, the process renews at two thirds of the certificate's actual l
 `ca` tests cover initialization and root export, one-time import and chain continuity, token output and consumption, principal/serial revocation, CRL publication, status, and unsafe paths. `cert` tests use real TLS to prove enrollment, mTLS renewal, key locality, same-origin redirects, malicious response refusal, cancellation and restart scheduling. Paused-clock tests exercise the renewal timer without wall-clock sleeps. `pki_scope` verifies the contract reference and empty skip list in `tests/fixtures/pki/skipped.json`: every scenario in this CLI slice is exercised, and other slices' cases are not listed as skipped recordings.
 
 The production gateway routes and TLS-to-principal policy, legacy device registry mapping, and desktop/Android enrollment remain separate slices. The test server is only an acceptance fixture. No CLI scenarios are skipped.
+
+# RivetHub systemd commands
+
+`rh service init|start|stop|restart|status|logs` implements B9's service contract in
+`crates/testkit/tests/fixtures/cli/README.md`. Effective UID selects system mode
+(`/etc/systemd/system/rivethub.service`) or user mode
+(`~/.config/systemd/user/rivethub.service`). Init generates the unit from `service::Unit`
+using this executable's absolute path and the configured state directory's `.env`.
+It publishes the file exclusively, reports user lingering, and refuses existing
+files, traversal and directory links escaping the home directory. Systemd quoting
+preserves spaces, quotes, Unicode, dollar signs and percent signs literally.
+
+Start and restart reload the manager, execute the action and show status. A failed
+reload or action stops the sequence and returns failure with stderr. Status retains
+the child exit code. Logs inherits the terminal streams and follows the journal until
+interrupted; cancellation kills and reaps the child before returning success. All
+commands use `tokio::process`; blocking account lookup and unit publication run on
+`spawn_blocking`.
+
+The fixture directory currently contains the written contract only, with no captured
+CLI transcripts. The `service` acceptance tests exercise every service row using
+fake `systemctl`, `journalctl` and `loginctl` executables in a temporary PATH. They
+check both scopes, unit serialization, overwrite refusal, path containment, quoting,
+status codes, subprocess errors and event-driven cancellation. No service scenario is
+skipped; the existing checked deferred list covers the remaining CLI commands in
+that same fixture README. Process supervision (`rh start`) remains the existing
+implementation and is outside this service-management slice.

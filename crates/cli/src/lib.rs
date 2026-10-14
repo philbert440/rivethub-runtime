@@ -5,6 +5,7 @@ pub mod doctor;
 mod error;
 mod exit;
 mod process;
+pub mod service;
 mod status;
 pub mod tree;
 
@@ -57,7 +58,10 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
     let Some(command) = cli.command else {
         return Dispatch::Complete(Report::success(Cli::help()));
     };
-    let structured_shutdown = matches!(command, Command::Ca(_) | Command::Cert { .. });
+    let structured_shutdown = matches!(
+        command,
+        Command::Ca(_) | Command::Cert { .. } | Command::Service { .. }
+    );
     let operation = async {
         match command {
             Command::Start => return Ok(Dispatch::Start),
@@ -66,6 +70,12 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
             Command::Doctor { json } => doctor::run(env, json).await,
             Command::Status => Ok(status::run(env).await),
             Command::Stop => process::stop(env).await,
+            Command::Service { command } => {
+                service::Scope::for_uid(nix::unistd::geteuid().as_raw())
+                    .run(command, env, shutdown)
+                    .await
+                    .map_err(Error::from)
+            }
             Command::Ca(args) => ca::run(args, env, shutdown).await,
             Command::Cert { command } => cert::run(command, env, shutdown).await,
         }

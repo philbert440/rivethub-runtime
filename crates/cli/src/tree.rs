@@ -18,6 +18,11 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    #[command(about = "Manage the systemd service")]
+    Service {
+        #[command(subcommand)]
+        command: crate::service::ServiceCommand,
+    },
     #[command(about = "Manage the certificate authority")]
     Ca(crate::ca::CaArgs),
     #[command(about = "Manage holder certificates")]
@@ -57,11 +62,23 @@ pub enum ConfigCommand {
 
 impl Cli {
     pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Self, Report> {
+        let args: Vec<_> = args.into_iter().collect();
+        let service = args.get(1).is_some_and(|arg| arg == "service");
         match Self::try_parse_from(args) {
             Ok(cli) => Ok(cli),
             Err(error) if error.use_stderr() => {
                 let text = if error.kind() == clap::error::ErrorKind::InvalidSubcommand {
                     match error.get(clap::error::ContextKind::InvalidSubcommand) {
+                        Some(name) if service => {
+                            let mut tree = Self::command();
+                            let help = tree
+                                .find_subcommand_mut("service")
+                                .map(clap::Command::render_help);
+                            match help {
+                                Some(help) => format!("Unknown action: {name}\n{help}\n"),
+                                None => error.to_string(),
+                            }
+                        }
                         Some(name) => format!("Unknown command: {name}\n{}", Self::help()),
                         None => error.to_string(),
                     }

@@ -23,7 +23,7 @@ alias), state in `~/.rivethub`, environment `RIVETHUB_*` (the `RIVETOS_*` aliase
 
 The CA and holder commands are now implemented; their approved new B14 contract and acceptance coverage are documented in `crates/cli/README.md`. They have no historical recordings.
 
-Out of this slice (later slices): `start`, `service`, `update --mesh`, `local`, `init`, `mesh`, `pair`,
+Out of this slice (later slices): `start`, `update --mesh`, `local`, `init`, `mesh`, `pair`,
 `user`, `memory`, `logs`, `test`, `agent`, `model`, `keys`, `gateway token`.
 
 ## `rh service` (second slice)

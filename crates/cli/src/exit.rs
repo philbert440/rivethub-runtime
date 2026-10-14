@@ -8,6 +8,7 @@ pub enum Exit {
     Bind,
     Serve,
     Runtime,
+    Child(u8),
 }
 
 impl Exit {
@@ -19,6 +20,7 @@ impl Exit {
             Self::Bind => ExitCode::from(3),
             Self::Serve => ExitCode::from(4),
             Self::Runtime => ExitCode::from(5),
+            Self::Child(code) => ExitCode::from(code),
         }
     }
 }

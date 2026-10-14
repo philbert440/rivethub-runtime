@@ -4,12 +4,11 @@ use cli::{ConfigCommand, Exit};
 use std::collections::BTreeSet;
 use support::{config, environment, home, run};
 
-const DEFERRED: [(&str, &str); 15] = [
+const DEFERRED: [(&str, &str); 14] = [
     (
         "start",
         "Existing service launch only; supervision is a later slice.",
     ),
-    ("service", "Service unit management is a later slice."),
     ("update --mesh", "Fleet updates are a later slice."),
     ("local", "Standalone composition is a later slice."),
     ("init", "Interactive setup is a later slice."),
@@ -32,7 +31,10 @@ fn every_readme_deferred_scenario_has_a_named_reason() {
     let deferred = readme
         .split("Out of this slice (later slices):")
         .nth(1)
-        .expect("deferred scenarios");
+        .expect("deferred scenarios")
+        .split("## `rh service`")
+        .next()
+        .expect("deferred paragraph");
     let names: BTreeSet<_> = deferred
         .split('`')
         .enumerate()

@@ -3,6 +3,8 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
+    Service(#[from] crate::service::ServiceError),
+    #[error(transparent)]
     Ca(#[from] kernel::ca::CaError),
     #[error(transparent)]
     Pki(#[from] pki::Error),

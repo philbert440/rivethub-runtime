@@ -27,7 +27,7 @@ serde_json = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs", "macros", "time"] }
+tokio = { workspace = true, features = ["fs", "macros", "time", "process", "io-util"] }
 tokio-util = { workspace = true }
 url = { workspace = true }
 wire = { workspace = true }
