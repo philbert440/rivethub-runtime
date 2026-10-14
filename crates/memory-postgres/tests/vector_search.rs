@@ -428,3 +428,56 @@ async fn the_chunk_arm_surfaces_and_merges_parents(pool: PgPool) -> TestResult {
     );
     Ok(())
 }
+
+async fn deploy_score(memory: &PostgresMemory) -> Result<f64, Box<dyn std::error::Error>> {
+    let outcome = memory
+        .search_outcome_for(&query("deploy", SearchMode::Fts))
+        .await?;
+    Ok(outcome
+        .hits
+        .iter()
+        .find(|hit| hit.content == DEPLOY)
+        .ok_or("the deploy hit is missing")?
+        .score)
+}
+
+async fn set_recency(pool: &PgPool, age_days: f64, access_count: i32) -> TestResult {
+    sqlx::query(
+        "UPDATE rh_messages SET created_at = now() - make_interval(secs => $1 * 86400.0), \
+         access_count = $2 WHERE metadata->>'event_id' = 'deploy'",
+    )
+    .bind(age_days)
+    .bind(access_count)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn reads_reinforce_and_age_decays_the_recency_boost(pool: PgPool) -> TestResult {
+    capture(&pool, "deploy", DEPLOY).await?;
+    let memory = unwired(&pool);
+
+    set_recency(&pool, 0.0, 0).await?;
+    let fresh = deploy_score(&memory).await?;
+    set_recency(&pool, 0.0, 25).await?;
+    let reinforced = deploy_score(&memory).await?;
+    set_recency(&pool, 0.0, 400).await?;
+    let capped = deploy_score(&memory).await?;
+    set_recency(&pool, 2.0_f64.ln() / 0.05, 0).await?;
+    let half_life = deploy_score(&memory).await?;
+
+    assert!(
+        (reinforced - fresh - 0.075).abs() < 1e-6,
+        "{reinforced} vs {fresh}"
+    );
+    assert!(
+        (capped - reinforced).abs() < 1e-6,
+        "{capped} vs {reinforced}"
+    );
+    assert!(
+        (fresh - half_life - 0.15).abs() < 1e-6,
+        "{fresh} vs {half_life}"
+    );
+    Ok(())
+}

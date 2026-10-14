@@ -497,14 +497,6 @@ mod tests {
     }
 
     #[test]
-    fn normalize_query_text_trims_and_collapses_whitespace() {
-        assert_eq!(
-            kernel::memory_core::normalize_query_text("  deploy   the\trelease\nnow  "),
-            "deploy the release now"
-        );
-    }
-
-    #[test]
     fn query_input_carries_the_instruction_under_the_input_cap() {
         assert_eq!(
             compose_query_input("prefix ", "  spaced   out "),
@@ -512,6 +504,6 @@ mod tests {
         );
         assert_eq!(compose_query_input("", "raw text"), "raw text");
         let long = compose_query_input(DEFAULT_EMBED_QUERY_INSTRUCTION, &"word ".repeat(4_000));
-        assert_eq!(long.chars().count(), kernel::memory_core::EMBED_INPUT_MAX);
+        assert_eq!(long.chars().count(), 8_000);
     }
 }

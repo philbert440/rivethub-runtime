@@ -4,13 +4,9 @@ use crate::search::ArmRow;
 use crate::search::SearchOptions;
 use crate::search::TagFilter;
 use chrono::Utc;
-use kernel::memory_core::DECAY_LAMBDA;
 use kernel::memory_core::HYBRID_MIN_CONTENT_LEN;
-use kernel::memory_core::REINFORCEMENT_ALPHA;
-use kernel::memory_core::REINFORCEMENT_CAP;
-use kernel::memory_core::W_IMPORTANCE;
-use kernel::memory_core::W_TEMPORAL;
 use kernel::memory_core::hybrid_pool;
+use kernel::memory_core::recency_boost;
 use pgvector::HalfVector;
 use sqlx::QueryBuilder;
 use std::collections::BTreeMap;
@@ -30,7 +26,7 @@ fn semantic_floor(alias: &str) -> String {
     format!("least(length(btrim({alias}.content)) / 1000.0, 1.0)")
 }
 
-fn boost_expr(alias: &str, is_message: bool) -> String {
+fn recency_columns(alias: &str, is_message: bool) -> String {
     let importance = if is_message {
         format!(
             "(CASE WHEN {alias}.role = 'system' THEN 0.5 \
@@ -42,9 +38,9 @@ fn boost_expr(alias: &str, is_message: bool) -> String {
         "0.6".to_string()
     };
     format!(
-        "(EXP(-{DECAY_LAMBDA} * EXTRACT(EPOCH FROM (now() - {alias}.created_at)) / 86400.0)
-            * (1.0 + {REINFORCEMENT_ALPHA} * LEAST(COALESCE({alias}.access_count, 0), {REINFORCEMENT_CAP}))) * {W_TEMPORAL}
-         + {importance} * {W_IMPORTANCE}"
+        "(EXTRACT(EPOCH FROM (now() - {alias}.created_at)) / 86400.0)::float8 AS age_days, \
+         COALESCE({alias}.access_count, 0) AS access_count, \
+         ({importance})::float8 AS importance"
     )
 }
 
@@ -100,7 +96,10 @@ struct ArmSqlRow {
     created_at: chrono::DateTime<Utc>,
     score: f64,
     semantic: f64,
-    boost: f64,
+    age_days: f64,
+    #[sqlx(try_from = "i32")]
+    access_count: u32,
+    importance: f64,
 }
 
 impl ArmSqlRow {
@@ -126,7 +125,7 @@ impl ArmSqlRow {
             created_at: self.created_at,
             arm_score: self.score,
             semantic: self.semantic,
-            boost: self.boost,
+            boost: recency_boost(self.age_days, self.access_count, self.importance),
         }
     }
 }
@@ -240,10 +239,7 @@ impl crate::PostgresMemory {
             query.push(semantic_floor(alias));
             query.push("::float8 AS semantic, ");
         }
-        query.push(format!(
-            "({})::float8 AS boost FROM ",
-            boost_expr(alias, is_message)
-        ));
+        query.push(format!("{} FROM ", recency_columns(alias, is_message)));
         query.push(if is_message {
             "rh_messages m"
         } else {
@@ -385,8 +381,8 @@ impl crate::PostgresMemory {
         query.push("), 0.0)::float8 AS score, ");
         push_embedded_semantic(&mut query, &distance, alias, vector);
         query.push(format!(
-            "({})::float8 AS boost FROM {table} WHERE {alias}.embedding IS NOT NULL",
-            boost_expr(alias, is_message)
+            "{} FROM {table} WHERE {alias}.embedding IS NOT NULL",
+            recency_columns(alias, is_message)
         ));
         if let Some(filter) = tag_filter {
             query.push(" AND ");
@@ -424,9 +420,9 @@ impl crate::PostgresMemory {
         query.push("), 0.0)::float8 AS score, ");
         push_embedded_semantic(&mut query, "c.embedding", "m", vector);
         query.push(format!(
-            "({})::float8 AS boost FROM rh_message_chunks c \
+            "{} FROM rh_message_chunks c \
              JOIN rh_messages m ON m.id = c.message_id WHERE c.embedding IS NOT NULL",
-            boost_expr("m", true)
+            recency_columns("m", true)
         ));
         if let Some(filter) = context.tag_filter {
             query.push(" AND ");
@@ -468,14 +464,5 @@ fn merge_chunk_arm_or_parent_only(
             merged.into_values().collect()
         }
         Err(_) => parents,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn boost_expr_interpolates_the_scoring_constants() {
-        let expected = "(EXP(-0.05 * EXTRACT(EPOCH FROM (now() - s.created_at)) / 86400.0)\n            * (1.0 + 0.01 * LEAST(COALESCE(s.access_count, 0), 25))) * 0.3\n         + 0.6 * 0.1";
-        assert_eq!(super::boost_expr("s", false), expected);
     }
 }

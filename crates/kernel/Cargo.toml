@@ -20,8 +20,8 @@ uuid = { workspace = true }
 wire.workspace = true
 
 [dev-dependencies]
+chrono-tz = { workspace = true }
 serde_json = { workspace = true }
-testkit = { workspace = true }
 uuid = { workspace = true }
 
 [lints]
