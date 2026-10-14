@@ -1,19 +1,13 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
 use kernel::model::Embedding;
-use kernel::model::ModelProvider;
-use kernel::model::ModelProviderError;
-use kernel::model::ModelRequest;
-use tokio::sync::mpsc::Receiver;
-use wire::stream::LlmResponse;
+use thiserror::Error;
+use wire::stream::openai::EmbeddingRequest;
+use wire::stream::openai::EmbeddingResponse;
+use wire::stream::openai::EmbeddingRow;
 
-use crate::check_status;
-use crate::embed_wire::EmbedPayload;
-use crate::embed_wire::NormalizeRejection;
-use crate::embed_wire::parse_embed_response;
 use crate::error::BuildError;
-use crate::request_error;
+use crate::error::StatusError;
 
 #[derive(Debug)]
 pub struct EmbedConfig {
@@ -26,10 +20,43 @@ pub struct EmbedConfig {
     pub query_instruction: Option<String>,
 }
 
+#[derive(Debug, Error)]
+pub enum EmbedError {
+    #[error("the embeddings request failed: {source}")]
+    Transport {
+        #[source]
+        source: reqwest::Error,
+    },
+    #[error(transparent)]
+    Status(#[from] StatusError),
+    #[error("the embeddings response is malformed: {source}")]
+    Malformed {
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("embedding index {index} is outside the {count} inputs")]
+    IndexOutOfRange { index: usize, count: usize },
+    #[error("embedding index {index} appears more than once")]
+    DuplicateIndex { index: usize },
+    #[error("embedding {index} is missing from the model server response")]
+    Missing { index: usize },
+    #[error(
+        "embedding {index} carries {got} dimensions, the configured embed_expected_dims is {expected}"
+    )]
+    Dimensions {
+        index: usize,
+        got: usize,
+        expected: usize,
+    },
+}
+
 #[derive(Debug)]
 pub struct Embedder {
-    config: EmbedConfig,
     url: String,
+    model: String,
+    api_key: Option<String>,
+    dimensions: Option<usize>,
+    query_instruction: Option<String>,
     client: reqwest::Client,
 }
 
@@ -46,6 +73,11 @@ impl Embedder {
         if !matches!(parsed.scheme(), "http" | "https") {
             return Err(BuildError::BaseUrlScheme);
         }
+        let dimensions = config
+            .expected_dims
+            .map(usize::try_from)
+            .transpose()
+            .map_err(|source| BuildError::EmbedDimensions { source })?;
         let mut builder = reqwest::Client::builder();
         if let Some(timeout_ms) = config.timeout_ms {
             builder = builder.timeout(Duration::from_millis(timeout_ms));
@@ -58,110 +90,74 @@ impl Embedder {
             &crate::body::normalize_api_prefix(config.api_prefix.as_deref()),
         );
         Ok(Self {
-            config,
             url,
+            model: config.model,
+            api_key: config.api_key,
+            dimensions,
+            query_instruction: config.query_instruction,
             client,
         })
     }
 
     #[must_use]
     pub fn query_instruction(&self) -> Option<&str> {
-        self.config.query_instruction.as_deref()
+        self.query_instruction.as_deref()
     }
 
-    pub async fn send(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
+    pub async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, EmbedError> {
         let count = texts.len();
-        let body = EmbedRequestBody {
-            model: self.config.model.clone(),
+        let mut request = self.client.post(&self.url).json(&EmbeddingRequest {
+            model: self.model.clone(),
             input: texts,
-        };
-        let mut builder = self.client.post(&self.url).json(&body);
-        if let Some(key) = &self.config.api_key {
-            builder = builder.bearer_auth(key);
+        });
+        if let Some(key) = &self.api_key {
+            request = request.bearer_auth(key);
         }
-        let response = builder.send().await.map_err(request_error)?;
-        let text = match check_status(response).await {
-            Ok(response) => response.text().await.map_err(request_error)?,
-            Err(error) => return Err(error),
-        };
-        let payload: Option<EmbedPayload> =
-            serde_json::from_str(&text).map_err(|source| ModelProviderError::Request {
-                message: format!("the embeddings response is not valid JSON: {source}\n{text}"),
-                source: Box::new(source),
-            })?;
-        let vectors = parse_embed_response(payload.as_ref(), count);
-        let mut out = Vec::with_capacity(count);
-        for (slot, vector) in vectors.into_iter().enumerate() {
-            let vector = vector.ok_or_else(|| missing_slot(slot))?;
-            crate::embed_wire::check_dims(vector.len(), self.config.expected_dims)
-                .map_err(|rejection| embed_rejection(slot, rejection))?;
-            out.push(Embedding {
-                vector: to_f32(&vector),
+        let response = request
+            .send()
+            .await
+            .map_err(|source| EmbedError::Transport { source })?;
+        let body = crate::check_status(response)
+            .await?
+            .bytes()
+            .await
+            .map_err(|source| EmbedError::Transport { source })?;
+        let response: EmbeddingResponse =
+            serde_json::from_slice(&body).map_err(|source| EmbedError::Malformed { source })?;
+        place(response.data, count, self.dimensions)
+    }
+}
+
+fn place(
+    rows: Vec<EmbeddingRow>,
+    count: usize,
+    dimensions: Option<usize>,
+) -> Result<Vec<Embedding>, EmbedError> {
+    let mut slots: Vec<Option<Vec<f32>>> = vec![None; count];
+    for row in rows {
+        let index = row.index;
+        if let Some(expected) = dimensions
+            && row.embedding.len() != expected
+        {
+            return Err(EmbedError::Dimensions {
+                index,
+                got: row.embedding.len(),
+                expected,
             });
         }
-        Ok(out)
-    }
-}
-
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "embedding storage is f32 (pgvector halfvec); the measured f64 value is narrowed on purpose"
-)]
-fn to_f32(values: &[f64]) -> Vec<f32> {
-    values.iter().map(|value| *value as f32).collect()
-}
-
-fn missing_slot(slot: usize) -> ModelProviderError {
-    ModelProviderError::Request {
-        message: format!("embedding {slot} is missing from the model server response"),
-        source: format!("embedding {slot}").into(),
-    }
-}
-
-fn embed_rejection(slot: usize, rejection: NormalizeRejection) -> ModelProviderError {
-    let reason = match rejection {
-        NormalizeRejection::NotNumbers => "is not a number vector".to_owned(),
-        NormalizeRejection::DimsMismatch { got, expected } => {
-            format!("carries {got} dimensions, the configured embed_expected_dims is {expected}")
+        let slot = slots
+            .get_mut(index)
+            .ok_or(EmbedError::IndexOutOfRange { index, count })?;
+        if slot.replace(row.embedding).is_some() {
+            return Err(EmbedError::DuplicateIndex { index });
         }
-    };
-    ModelProviderError::Request {
-        message: format!("embedding {slot} {reason}"),
-        source: format!("embedding {slot}").into(),
     }
-}
-
-#[derive(Debug, serde::Serialize, PartialEq, Eq)]
-pub struct EmbedRequestBody {
-    pub model: String,
-    pub input: Vec<String>,
-}
-
-fn not_a_chat() -> ModelProviderError {
-    ModelProviderError::Request {
-        message: "the embeddings endpoint is not a chat provider".to_owned(),
-        source: "chat on the embedder".into(),
-    }
-}
-
-#[async_trait]
-impl ModelProvider for Embedder {
-    async fn chat(&self, _request: ModelRequest) -> Result<LlmResponse, ModelProviderError> {
-        Err(not_a_chat())
-    }
-
-    async fn stream(
-        &self,
-        _request: ModelRequest,
-    ) -> Result<Receiver<kernel::model::ModelStreamItem>, ModelProviderError> {
-        Err(not_a_chat())
-    }
-
-    async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
-        self.send(texts).await
-    }
-
-    async fn list_models(&self) -> Result<Vec<String>, ModelProviderError> {
-        Err(not_a_chat())
-    }
+    slots
+        .into_iter()
+        .enumerate()
+        .map(|(index, slot)| {
+            slot.map(|vector| Embedding { vector })
+                .ok_or(EmbedError::Missing { index })
+        })
+        .collect()
 }

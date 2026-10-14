@@ -1,6 +1,5 @@
 pub mod body;
 pub mod embed;
-pub mod embed_wire;
 pub mod error;
 pub mod sse;
 
@@ -20,6 +19,9 @@ use wire::stream::LlmResponseKind;
 use wire::stream::LlmUsage;
 
 pub use crate::error::BuildError;
+use crate::error::StatusError;
+use crate::error::StreamFault;
+use crate::error::Unsupported;
 use crate::sse::STREAM_CAPACITY;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,22 +127,14 @@ pub(crate) fn request_error(source: reqwest::Error) -> ModelProviderError {
 
 pub(crate) async fn check_status(
     response: reqwest::Response,
-) -> Result<reqwest::Response, ModelProviderError> {
+) -> Result<reqwest::Response, StatusError> {
     let status = response.status();
     if status.is_success() {
         return Ok(response);
     }
-    let text = response.text().await;
-    let source: kernel::BoxError = format!("model server returned {status}").into();
-    match text {
-        Ok(text) => Err(ModelProviderError::Request {
-            message: format!("model server returned {status}: {text}"),
-            source,
-        }),
-        Err(error) => Err(ModelProviderError::Request {
-            message: format!("model server returned {status}, and the body was unreadable"),
-            source: Box::new(error),
-        }),
+    match response.text().await {
+        Ok(body) => Err(StatusError::Body { status, body }),
+        Err(source) => Err(StatusError::Unreadable { status, source }),
     }
 }
 
@@ -158,10 +152,7 @@ impl ModelProvider for OpenAiCompatible {
                 ModelChunk::Reasoning { delta: _ } => {}
                 ModelChunk::ToolCallStart { index, id, name } => {
                     if calls.iter().any(|call| call.index == index) {
-                        return Err(sse::stream_error(
-                            format!("the model server restarted tool call index {index}"),
-                            format!("tool call {index}"),
-                        ));
+                        return Err(StreamFault::RestartedToolCall { index }.into());
                     }
                     calls.push(PartialToolCall {
                         index,
@@ -175,12 +166,7 @@ impl ModelProvider for OpenAiCompatible {
                     arguments_delta,
                 } => {
                     let Some(call) = calls.iter_mut().find(|call| call.index == index) else {
-                        return Err(sse::stream_error(
-                            format!(
-                                "the model server streamed arguments for unknown tool call {index}"
-                            ),
-                            format!("tool call {index}"),
-                        ));
+                        return Err(StreamFault::UnknownToolCall { index }.into());
                     };
                     call.arguments.push_str(&arguments_delta);
                 }
@@ -189,10 +175,7 @@ impl ModelProvider for OpenAiCompatible {
             }
         }
         if !done {
-            return Err(sse::stream_error(
-                "the model stream ended before Done",
-                "stream end",
-            ));
+            return Err(StreamFault::EndedBeforeDone.into());
         }
         let tool_calls = assemble_tool_calls(&calls)?;
         let r#type = if tool_calls.is_some() {
@@ -220,12 +203,7 @@ impl ModelProvider for OpenAiCompatible {
     }
 
     async fn embed(&self, _texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
-        Err(ModelProviderError::Request {
-            message: "the provider config has no embeddings endpoint; embeddings are configured \
-                      under memory (embed_endpoint)"
-                .to_owned(),
-            source: "embeddings".into(),
-        })
+        Err(Unsupported::Embeddings.into())
     }
 
     async fn list_models(&self) -> Result<Vec<String>, ModelProviderError> {

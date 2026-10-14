@@ -7,6 +7,8 @@ use kernel::model::ModelStreamItem;
 use wire::stream::openai::ChatCompletionChunk;
 use wire::stream::openai::StreamedToolCall;
 
+use crate::error::StreamFault;
+
 pub const STREAM_CAPACITY: usize = 64;
 
 pub async fn pump(response: reqwest::Response, tx: tokio::sync::mpsc::Sender<ModelStreamItem>) {
@@ -65,8 +67,8 @@ async fn forward(tx: &tokio::sync::mpsc::Sender<ModelStreamItem>, data: &str) ->
         }
     };
     let mut translated = Vec::new();
-    if let Err(message) = translate(&chunk, &mut translated) {
-        send_failure(tx, stream_error(message.clone(), message)).await;
+    if let Err(fault) = translate(&chunk, &mut translated) {
+        send_failure(tx, fault.into()).await;
         return false;
     }
     for chunk in translated {
@@ -102,7 +104,7 @@ fn stream_event_error(source: EventStreamError<reqwest::Error>) -> ModelProvider
     stream_error(message, source)
 }
 
-fn translate(chunk: &ChatCompletionChunk, out: &mut Vec<ModelChunk>) -> Result<(), String> {
+fn translate(chunk: &ChatCompletionChunk, out: &mut Vec<ModelChunk>) -> Result<(), StreamFault> {
     for choice in &chunk.choices {
         if let Some(text) = non_empty(choice.delta.content.as_deref()) {
             out.push(ModelChunk::Text {
@@ -121,17 +123,13 @@ fn translate(chunk: &ChatCompletionChunk, out: &mut Vec<ModelChunk>) -> Result<(
                 },
                 StreamedToolCall::Plain(plain) => plain,
             };
-            let index = call.index.ok_or_else(|| {
-                "the model server sent a tool call chunk without an index".to_owned()
-            })?;
+            let index = call.index.ok_or(StreamFault::ToolCallWithoutIndex)?;
             if let Some(name) = non_empty(call.function.name.as_deref()) {
                 let id = call
                     .id
                     .as_deref()
                     .filter(|id| !id.is_empty())
-                    .ok_or_else(|| {
-                        "the model server started a tool call without an id".to_owned()
-                    })?;
+                    .ok_or(StreamFault::ToolCallWithoutId)?;
                 out.push(ModelChunk::ToolCallStart {
                     index,
                     id: id.to_owned(),

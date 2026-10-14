@@ -11,6 +11,7 @@ use wire::stream::openai::StreamOptions;
 use wire::stream::openai::Tool;
 
 use crate::Variant;
+use crate::error::Unsupported;
 
 #[must_use]
 pub fn normalize_api_prefix(prefix: Option<&str>) -> String {
@@ -46,34 +47,52 @@ pub fn embeddings_url(base_url: &str, prefix: &str) -> String {
     endpoint_url(base_url, prefix, "embeddings")
 }
 
-pub fn split_and_fold_system<M>(
-    messages: Vec<M>,
-    role: impl Fn(&M) -> Role,
-    text: impl Fn(&M) -> String,
-    notice: impl Fn(String) -> M,
-) -> (String, Vec<M>) {
+fn message_text(message: &Message) -> String {
+    match &message.content {
+        MessageContent::Text(text) => text.clone(),
+        MessageContent::Parts(parts) => parts
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::Text { text } => Some(text.as_str()),
+                ContentPart::Image(_) | ContentPart::Video(_) => None,
+            })
+            .collect(),
+    }
+}
+
+fn system_notice(text: String) -> Message {
+    Message {
+        role: Role::User,
+        content: MessageContent::Text(text),
+        reasoning: None,
+        tool_calls: None,
+        tool_call_id: None,
+    }
+}
+
+fn split_and_fold_system(messages: &[Message]) -> (String, Vec<Message>) {
     let mut system = String::new();
-    let mut rest: Vec<M> = Vec::with_capacity(messages.len());
+    let mut rest = Vec::with_capacity(messages.len());
     let mut leading = true;
     for message in messages {
-        if role(&message) == Role::System {
-            let body = text(&message);
+        if message.role == Role::System {
+            let body = message_text(message);
             if leading {
                 if !system.is_empty() {
                     system.push_str("\n\n");
                 }
                 system.push_str(&body);
-                continue;
-            }
-            if body.is_empty() {
-                rest.push(notice("[SYSTEM NOTICE]\n(empty system message)".to_owned()));
+            } else if body.is_empty() {
+                rest.push(system_notice(
+                    "[SYSTEM NOTICE]\n(empty system message)".to_owned(),
+                ));
             } else {
-                rest.push(notice(format!("[SYSTEM NOTICE]\n{body}")));
+                rest.push(system_notice(format!("[SYSTEM NOTICE]\n{body}")));
             }
             continue;
         }
         leading = false;
-        rest.push(message);
+        rest.push(message.clone());
     }
     (system, rest)
 }
@@ -83,27 +102,7 @@ pub fn chat_body(
     request: &kernel::model::ModelRequest,
     configured_max_tokens: Option<u32>,
 ) -> Result<ChatCompletionRequest, ModelProviderError> {
-    let (system, messages) = split_and_fold_system(
-        request.messages.clone(),
-        |message| message.role,
-        |message| match &message.content {
-            MessageContent::Text(text) => text.clone(),
-            MessageContent::Parts(parts) => parts
-                .iter()
-                .filter_map(|part| match part {
-                    ContentPart::Text { text } => Some(text.as_str()),
-                    ContentPart::Image(_) | ContentPart::Video(_) => None,
-                })
-                .collect(),
-        },
-        |text| Message {
-            role: Role::User,
-            content: MessageContent::Text(text),
-            reasoning: None,
-            tool_calls: None,
-            tool_call_id: None,
-        },
-    );
+    let (system, messages) = split_and_fold_system(&request.messages);
     let mut wire_messages = Vec::with_capacity(messages.len() + usize::from(!system.is_empty()));
     if !system.is_empty() {
         wire_messages.push(wire::stream::openai::Message {
@@ -143,12 +142,7 @@ fn wire_message(message: &Message) -> Result<wire::stream::openai::Message, Mode
         MessageContent::Text(text) if text.is_empty() => None,
         MessageContent::Text(text) => Some(text.clone()),
         MessageContent::Parts(_) => {
-            return Err(ModelProviderError::Request {
-                message: "message content parts are not spoken to the model server: video URL \
-                          splicing is out of scope and no recording pins an image shape"
-                    .to_owned(),
-                source: "content parts".into(),
-            });
+            return Err(Unsupported::ContentParts.into());
         }
     };
     let tool_calls = message

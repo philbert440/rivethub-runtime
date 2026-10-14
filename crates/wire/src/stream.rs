@@ -379,4 +379,21 @@ pub mod openai {
         pub meta: Option<JsonObject>,
         pub permission: Option<Vec<JsonObject>>,
     }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    pub struct EmbeddingRequest {
+        pub model: String,
+        pub input: Vec<String>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    pub struct EmbeddingResponse {
+        pub data: Vec<EmbeddingRow>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    pub struct EmbeddingRow {
+        pub embedding: Vec<f32>,
+        pub index: usize,
+    }
 }

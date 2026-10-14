@@ -1,190 +1,95 @@
 #[path = "common/mod.rs"]
 mod common;
 
+use std::future::Future;
+use std::time::Duration;
+
+use common::FixedStatusServer;
+use common::demand;
 use common::fixed_status_server;
+use kernel::model::Embedding;
 use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
+use providers::BuildError;
 use providers::embed::EmbedConfig;
-use providers::embed::EmbedRequestBody;
+use providers::embed::EmbedError;
 use providers::embed::Embedder;
-use providers::embed_wire::Cell;
-use providers::embed_wire::EmbedPayload;
-use providers::embed_wire::normalize_embed_vector;
-use providers::embed_wire::parse_embed_response;
-use serde::Deserialize;
-use serde::Serialize;
-use testkit::Json;
-use testkit::Thrown;
+use providers::error::StatusError;
+use reqwest::StatusCode;
+use wire::stream::openai::EmbeddingRequest;
+use wire::stream::openai::EmbeddingResponse;
+use wire::stream::openai::EmbeddingRow;
 
-#[expect(
-    clippy::expect_used,
-    reason = "test helper; the clippy.toml exemption only reaches #[test] functions"
-)]
-fn vectors(rel: &str) -> Vec<testkit::cases::DiffCase> {
-    let path = testkit::recording(rel);
-    testkit::cases::cases(&path).expect("the diff vectors load")
-}
+const EIGHT_DIMS: &str = "{\"object\":\"list\",\"data\":[{\"object\":\"embedding\",\"embedding\":[0.544317,-0.861921,-0.400774,0.1,-0.2,0.3,0.7,-0.9],\"index\":0}],\"model\":\"bge-m3\",\"usage\":{\"prompt_tokens\":4,\"total_tokens\":4}}";
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BuildIn {
-    endpoint: String,
-    model: String,
-    input: Vec<String>,
-}
+const RECORDED_VECTOR: [f32; 8] = [0.544_317, -0.861_921, -0.400_774, 0.1, -0.2, 0.3, 0.7, -0.9];
 
-#[derive(Serialize)]
-struct BuildOut {
-    url: String,
-    body: EmbedRequestBody,
-}
-
-fn openai_row(case: &testkit::cases::DiffCase) -> bool {
-    case.input
-        .get("wireShape")
-        .and_then(Json::as_str)
-        .is_some_and(|shape| shape == "openai")
-}
-
-#[test]
-fn build_embed_request_matches_the_openai_rows() {
-    let cases = vectors("providers/diff/build_embed_request.jsonl");
-    assert_eq!(cases.len(), 80);
-    let openai = cases
-        .iter()
-        .filter(|case| openai_row(case))
-        .collect::<Vec<_>>();
-    assert_eq!(openai.len(), 33);
-    for case in &openai {
-        testkit::cases::replay(case, |function, input| {
-            if function != "build_embed_request" {
-                return Err(Thrown("unexpected function".to_owned()));
-            }
-            let case: BuildIn =
-                serde_json::from_value(input.clone()).map_err(|error| Thrown(error.to_string()))?;
-            let out = BuildOut {
-                url: providers::body::embeddings_url(
-                    &case.endpoint,
-                    &providers::body::normalize_api_prefix(None),
-                ),
-                body: EmbedRequestBody {
-                    model: case.model,
-                    input: case.input,
-                },
-            };
-            serde_json::to_value(&out).map_err(|error| Thrown(error.to_string()))
-        })
-        .expect("the embed request vector replays");
-    }
-}
-
-#[derive(Serialize)]
-struct ParseOut {
-    vectors: Vec<Option<Vec<f64>>>,
-}
-
-#[test]
-fn parse_embed_response_matches_the_recorded_vectors() {
-    let cases = vectors("providers/diff/parse_embed_response.jsonl");
-    assert_eq!(cases.len(), 200);
-    for case in &cases {
-        testkit::cases::replay(case, |function, input| {
-            if function != "parse_embed_response" {
-                return Err(Thrown("unexpected function".to_owned()));
-            }
-            let (payload, count): (Option<EmbedPayload>, usize) =
-                serde_json::from_value(input.clone()).map_err(|error| Thrown(error.to_string()))?;
-            let out = ParseOut {
-                vectors: parse_embed_response(payload.as_ref(), count),
-            };
-            serde_json::to_value(&out).map_err(|error| Thrown(error.to_string()))
-        })
-        .expect("the embed response vector replays");
-    }
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct NormalizeOpts {
-    expected_dims: Option<u32>,
-    truncate_dims: Option<u32>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum NormalizeIn {
-    WithOpts((Option<Vec<Option<Cell>>>, NormalizeOpts)),
-    VectorOnly((Option<Vec<Option<Cell>>>,)),
-}
-
-#[test]
-fn normalize_embed_vector_matches_the_recorded_vectors() {
-    let cases = vectors("providers/diff/normalize_embed_vector.jsonl");
-    assert_eq!(cases.len(), 120);
-    for case in &cases {
-        testkit::cases::replay(case, |function, input| {
-            if function != "normalize_embed_vector" {
-                return Err(Thrown("unexpected function".to_owned()));
-            }
-            let (vector, opts) = match serde_json::from_value::<NormalizeIn>(input.clone())
-                .map_err(|error| Thrown(error.to_string()))?
-            {
-                NormalizeIn::WithOpts((vector, opts)) => (vector, opts),
-                NormalizeIn::VectorOnly((vector,)) => (vector, NormalizeOpts::default()),
-            };
-            serde_json::to_value(normalize_embed_vector(
-                vector.as_deref(),
-                opts.expected_dims,
-                opts.truncate_dims,
-            ))
-            .map_err(|error| Thrown(error.to_string()))
-        })
-        .expect("the normalize vector replays");
-    }
-}
-
-const EIGHT_DIMS: &str = "{\"object\":\"list\",\"data\":[{\"object\":\"embedding\",\"embedding\":[0.544317,-0.861921,-0.400774,0.1,-0.2,0.3,0.7,-0.9],\"index\":0}]}";
-
-#[expect(
-    clippy::expect_used,
-    reason = "test helper; the clippy.toml exemption only reaches #[test] functions"
-)]
-fn embedder(addr: std::net::SocketAddr) -> Embedder {
-    Embedder::build(EmbedConfig {
-        endpoint: format!("http://{addr}"),
+fn base_config(server: &FixedStatusServer) -> EmbedConfig {
+    EmbedConfig {
+        endpoint: format!("http://{}", server.addr),
         api_prefix: None,
         model: "bge-m3".to_owned(),
-        api_key: Some("embed-key".to_owned()),
-        expected_dims: Some(8),
+        api_key: None,
+        expected_dims: None,
         timeout_ms: Some(5_000),
-        query_instruction: Some("Instruct: retrieve\nQuery: ".to_owned()),
-    })
-    .expect("the embedder builds")
+        query_instruction: None,
+    }
+}
+
+fn embedder(config: EmbedConfig) -> Embedder {
+    demand(Embedder::build(config), "the embedder builds")
+}
+
+async fn within<F: Future>(future: F) -> F::Output {
+    demand(
+        tokio::time::timeout(Duration::from_secs(10), future).await,
+        "the embed call finishes in time",
+    )
+}
+
+fn rows(rows: Vec<EmbeddingRow>) -> String {
+    demand(
+        serde_json::to_string(&EmbeddingResponse { data: rows }),
+        "the response serializes",
+    )
+}
+
+fn row(index: usize, embedding: Vec<f32>) -> EmbeddingRow {
+    EmbeddingRow { embedding, index }
+}
+
+async fn embed_against(
+    status: u16,
+    body: String,
+    texts: &[&str],
+) -> Result<Vec<Embedding>, EmbedError> {
+    let server = fixed_status_server(status, body).await;
+    let embedder = embedder(base_config(&server));
+    within(embedder.embed(texts.iter().map(|text| (*text).to_owned()).collect())).await
 }
 
 #[tokio::test]
-async fn embed_speaks_the_openai_embeddings_shape() {
+async fn a_well_formed_response_is_one_embedding_per_input() {
     let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
-    let embedder = embedder(server.addr);
-    let out = embedder
-        .embed(vec!["hello world".to_owned()])
+    let embedder = embedder(EmbedConfig {
+        api_key: Some("embed-key".to_owned()),
+        expected_dims: Some(8),
+        query_instruction: Some("Instruct: retrieve\nQuery: ".to_owned()),
+        ..base_config(&server)
+    });
+    let out = within(embedder.embed(vec!["hello world".to_owned()]))
         .await
         .expect("the embed succeeds");
-    let values = out
-        .iter()
-        .flat_map(|embedding| embedding.vector.iter().copied())
-        .collect::<Vec<_>>();
-    let recorded = [
-        0.544_317_f32,
-        -0.861_921,
-        -0.400_774,
-        0.1,
-        -0.2,
-        0.3,
-        0.7,
-        -0.9,
-    ];
-    assert_eq!(values, recorded);
+    assert_eq!(
+        out,
+        vec![Embedding {
+            vector: RECORDED_VECTOR.to_vec()
+        }]
+    );
+    assert_eq!(
+        embedder.query_instruction(),
+        Some("Instruct: retrieve\nQuery: ")
+    );
     let call = server
         .recorder
         .lock()
@@ -194,29 +99,164 @@ async fn embed_speaks_the_openai_embeddings_shape() {
     assert_eq!(call.method, "POST");
     assert_eq!(call.target, "/v1/embeddings");
     assert_eq!(call.authorization.as_deref(), Some("Bearer embed-key"));
-    let sent: Json = serde_json::from_str(&call.body).expect("sent body parses");
-    assert!(testkit::json_eq(
-        &sent,
-        &serde_json::from_str::<Json>("{\"model\":\"bge-m3\",\"input\":[\"hello world\"]}")
-            .expect("expected body parses")
-    ));
+    let sent: EmbeddingRequest = serde_json::from_str(&call.body).expect("the sent body parses");
+    assert_eq!(
+        sent,
+        EmbeddingRequest {
+            model: "bge-m3".to_owned(),
+            input: vec!["hello world".to_owned()],
+        }
+    );
 }
 
 #[tokio::test]
-async fn embed_honours_the_api_prefix() {
+async fn rows_are_placed_by_index_not_by_position() {
+    let body = rows(vec![
+        row(2, vec![2.0]),
+        row(0, vec![0.0]),
+        row(1, vec![1.0]),
+    ]);
+    let out = embed_against(200, body, &["a", "b", "c"])
+        .await
+        .expect("out-of-order rows embed");
+    let expected = [0.0_f32, 1.0, 2.0]
+        .into_iter()
+        .map(|value| Embedding {
+            vector: vec![value],
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(out, expected);
+}
+
+#[tokio::test]
+async fn a_row_without_an_index_is_malformed() {
+    let error = embed_against(200, "{\"data\":[{\"embedding\":[0.5]}]}".to_owned(), &["a"])
+        .await
+        .expect_err("a missing index fails");
+    assert!(
+        matches!(error, EmbedError::Malformed { .. }),
+        "a missing index is a malformed response: {error:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_index_that_is_not_a_whole_number_is_malformed() {
+    for index in ["\"0\"", "0.5", "-1", "null"] {
+        let body = format!("{{\"data\":[{{\"embedding\":[0.5],\"index\":{index}}}]}}");
+        let error = embed_against(200, body, &["a"])
+            .await
+            .expect_err("a non-integer index fails");
+        assert!(
+            matches!(error, EmbedError::Malformed { .. }),
+            "index {index} is malformed: {error:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_duplicate_index_is_an_error() {
+    let body = rows(vec![row(0, vec![0.0]), row(0, vec![1.0])]);
+    let error = embed_against(200, body, &["a", "b"])
+        .await
+        .expect_err("a duplicate index fails");
+    assert!(
+        matches!(error, EmbedError::DuplicateIndex { index: 0 }),
+        "{error:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_index_past_the_inputs_is_an_error() {
+    let body = rows(vec![row(0, vec![0.0]), row(2, vec![1.0])]);
+    let error = embed_against(200, body, &["a", "b"])
+        .await
+        .expect_err("an out-of-range index fails");
+    assert!(
+        matches!(error, EmbedError::IndexOutOfRange { index: 2, count: 2 }),
+        "{error:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_input_without_a_row_is_missing() {
+    let body = rows(vec![row(1, vec![1.0])]);
+    let error = embed_against(200, body, &["a", "b"])
+        .await
+        .expect_err("a missing row fails");
+    assert!(
+        matches!(error, EmbedError::Missing { index: 0 }),
+        "{error:?}"
+    );
+}
+
+#[tokio::test]
+async fn wrong_dimensions_are_an_error() {
     let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
-    let embedder = Embedder::build(EmbedConfig {
+    let embedder = embedder(EmbedConfig {
+        expected_dims: Some(1024),
+        ..base_config(&server)
+    });
+    let error = within(embedder.embed(vec!["hello".to_owned()]))
+        .await
+        .expect_err("the dimension mismatch fails");
+    assert!(
+        matches!(
+            error,
+            EmbedError::Dimensions {
+                index: 0,
+                got: 8,
+                expected: 1024
+            }
+        ),
+        "{error:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_non_2xx_status_carries_the_status_and_body() {
+    let body = "{\"error\":{\"message\":\"model not loaded\"}}";
+    let error = embed_against(503, body.to_owned(), &["a"])
+        .await
+        .expect_err("the status fails the embed");
+    let EmbedError::Status(StatusError::Body {
+        status,
+        body: received,
+    }) = error
+    else {
+        common::halt(&format!("a non-2xx status is a status error: {error:?}"));
+    };
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(received, body);
+}
+
+#[tokio::test]
+async fn a_malformed_body_is_an_error() {
+    for body in [
+        "not json",
+        "{\"embeddings\":[[0.5]]}",
+        "{\"data\":[{\"embedding\":\"0.5\",\"index\":0}]}",
+        "{\"data\":[{\"embedding\":[\"0.5\"],\"index\":0}]}",
+        "{\"data\":\"rows\"}",
+    ] {
+        let error = embed_against(200, body.to_owned(), &["a"])
+            .await
+            .expect_err("a malformed body fails");
+        assert!(
+            matches!(error, EmbedError::Malformed { .. }),
+            "{body} is malformed: {error:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn embed_honours_the_api_prefix_and_sends_no_auth_without_a_key() {
+    let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
+    let embedder = embedder(EmbedConfig {
         endpoint: format!("http://{}/", server.addr),
         api_prefix: Some("openai/v1".to_owned()),
-        model: "bge-m3".to_owned(),
-        api_key: None,
-        expected_dims: None,
-        timeout_ms: None,
-        query_instruction: None,
-    })
-    .expect("the embedder builds");
-    embedder
-        .embed(vec!["hello".to_owned()])
+        ..base_config(&server)
+    });
+    within(embedder.embed(vec!["hello".to_owned()]))
         .await
         .expect("the embed succeeds");
     let call = server
@@ -226,118 +266,27 @@ async fn embed_honours_the_api_prefix() {
         .cloned()
         .expect("the embed call is captured");
     assert_eq!(call.target, "/openai/v1/embeddings");
-}
-
-#[tokio::test]
-async fn embed_without_a_key_sends_no_auth_header() {
-    let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
-    let embedder = Embedder::build(EmbedConfig {
-        endpoint: format!("http://{}", server.addr),
-        api_prefix: None,
-        model: "bge-m3".to_owned(),
-        api_key: None,
-        expected_dims: None,
-        timeout_ms: None,
-        query_instruction: None,
-    })
-    .expect("the embedder builds");
-    embedder
-        .embed(vec!["hello".to_owned()])
-        .await
-        .expect("the embed succeeds");
-    let call = server
-        .recorder
-        .lock()
-        .first()
-        .cloned()
-        .expect("the embed call is captured");
     assert_eq!(call.authorization, None);
 }
 
 #[tokio::test]
-async fn a_dims_mismatch_is_an_error() {
+async fn the_embedder_refuses_an_incomplete_config() {
     let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
-    let embedder = Embedder::build(EmbedConfig {
-        endpoint: format!("http://{}", server.addr),
-        api_prefix: None,
-        model: "bge-m3".to_owned(),
-        api_key: None,
-        expected_dims: Some(1024),
-        timeout_ms: None,
-        query_instruction: None,
-    })
-    .expect("the embedder builds");
-    let error = embedder
-        .embed(vec!["hello".to_owned()])
-        .await
-        .expect_err("the dims mismatch fails");
-    assert!(
-        error
-            .to_string()
-            .contains("the configured embed_expected_dims is 1024"),
-        "the error names the configured dims: {error}"
-    );
-}
-
-#[tokio::test]
-async fn a_missing_embedding_slot_is_an_error() {
-    let server = fixed_status_server(
-        200,
-        "{\"data\":[{\"embedding\":null,\"index\":0}]}".to_owned(),
-    )
-    .await;
-    let embedder = Embedder::build(EmbedConfig {
-        endpoint: format!("http://{}", server.addr),
-        api_prefix: None,
-        model: "bge-m3".to_owned(),
-        api_key: None,
-        expected_dims: None,
-        timeout_ms: None,
-        query_instruction: None,
-    })
-    .expect("the embedder builds");
-    let error = embedder
-        .embed(vec!["hello".to_owned()])
-        .await
-        .expect_err("the missing vector fails");
-    assert!(
-        error
-            .to_string()
-            .contains("embedding 0 is missing from the model server response"),
-        "the error names the missing slot: {error}"
-    );
-}
-
-#[tokio::test]
-async fn the_embedder_is_not_a_chat_provider() {
-    let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
-    let embedder = embedder(server.addr);
-    let request = kernel::model::ModelRequest {
-        model: "bge-m3".to_owned(),
-        messages: Vec::new(),
-        tools: Vec::new(),
-        thinking: None,
-        max_tokens: None,
-    };
-    let error = embedder
-        .chat(request.clone())
-        .await
-        .expect_err("the embedder refuses chat");
-    assert!(matches!(error, ModelProviderError::Request { .. }));
-    let error = embedder
-        .stream(request)
-        .await
-        .expect_err("the embedder refuses stream");
-    assert!(matches!(error, ModelProviderError::Request { .. }));
-    let error = embedder
-        .list_models()
-        .await
-        .expect_err("the embedder refuses list_models");
-    assert!(matches!(error, ModelProviderError::Request { .. }));
-    assert_eq!(
-        embedder.query_instruction(),
-        Some("Instruct: retrieve\nQuery: ")
-    );
+    let no_endpoint = Embedder::build(EmbedConfig {
+        endpoint: String::new(),
+        ..base_config(&server)
+    });
+    assert!(matches!(no_endpoint, Err(BuildError::MissingEmbedEndpoint)));
+    let no_model = Embedder::build(EmbedConfig {
+        model: String::new(),
+        ..base_config(&server)
+    });
+    assert!(matches!(no_model, Err(BuildError::MissingEmbedModel)));
+    let wrong_scheme = Embedder::build(EmbedConfig {
+        endpoint: "ftp://example.com".to_owned(),
+        ..base_config(&server)
+    });
+    assert!(matches!(wrong_scheme, Err(BuildError::BaseUrlScheme)));
 }
 
 #[tokio::test]
