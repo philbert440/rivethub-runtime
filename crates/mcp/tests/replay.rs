@@ -43,8 +43,6 @@ enum Outcome {
 const SKIPPED: &[(&str, &str)] = &[
     ("delegate_task", "B7: no kernel delegation port"),
     ("list_agents", "B7: no kernel agent registry port"),
-    ("wiki_read", "B7: no kernel wiki port"),
-    ("wiki_search", "B7: no kernel wiki port"),
     (
         "internet_search",
         "B7: harness owns web tools; removed by design",
@@ -69,6 +67,14 @@ fn load<T: serde::de::DeserializeOwned>(name: &str) -> T {
     .expect("typed recording")
 }
 
+fn translate_schema_descriptions(schema: &mut schemars::Schema) {
+    if let Some(description) = schema.get("description").and_then(|value| value.as_str()) {
+        let translated = translate_recorded_product_names(description);
+        schema.insert("description".into(), translated.into());
+    }
+    schemars::transform::transform_subschemas(&mut translate_schema_descriptions, schema);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn recordings_over_stdio_framing() {
     tokio::time::timeout(Duration::from_secs(10), async {
@@ -86,6 +92,15 @@ async fn recordings_over_stdio_framing() {
                 tool.description = tool
                     .description
                     .map(|text| translate_recorded_product_names(&text).into());
+                let mut schema = serde_json::from_value(
+                    serde_json::to_value(&tool.input_schema).expect("schema value"),
+                )
+                .expect("schema");
+                translate_schema_descriptions(&mut schema);
+                tool.input_schema = std::sync::Arc::new(
+                    serde_json::from_value(serde_json::to_value(schema).expect("schema value"))
+                        .expect("schema object"),
+                );
                 tools.push(tool);
             }
         }

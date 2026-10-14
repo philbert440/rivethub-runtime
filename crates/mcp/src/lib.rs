@@ -4,6 +4,7 @@ pub mod error;
 pub mod memory;
 pub mod tags;
 pub mod transport;
+pub mod wiki;
 
 pub use error::Error;
 use kernel::memory::MemoryStore;
@@ -52,6 +53,10 @@ enum Operation {
     GetFull,
     #[strum(serialize = "memory_tags")]
     Tags,
+    #[strum(serialize = "wiki_search")]
+    WikiSearch,
+    #[strum(serialize = "wiki_read")]
+    WikiRead,
 }
 
 impl Server {
@@ -125,6 +130,8 @@ impl Server {
             Operation::Tags => {
                 tags::call(self.memory.as_ref(), self.memory_write, decode(arguments)?).await
             }
+            Operation::WikiSearch => wiki::search(self.memory.as_ref(), decode(arguments)?).await,
+            Operation::WikiRead => wiki::read(self.memory.as_ref(), decode(arguments)?).await,
         }
     }
 }

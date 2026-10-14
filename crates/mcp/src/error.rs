@@ -13,6 +13,12 @@ pub enum Error {
     #[error(transparent)]
     Memory(#[from] kernel::memory::MemoryStoreError),
     #[error(transparent)]
+    WikiSlug(#[from] wire::gateway::wiki::WikiSlugError),
+    #[error("wiki page not found: {0}")]
+    WikiMissing(String),
+    #[error("wiki redirect cycle or chain exceeds 16 lookups")]
+    WikiRedirect,
+    #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Unix socket is listening at {path}")]
     SocketListening { path: std::path::PathBuf },

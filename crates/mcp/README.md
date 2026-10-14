@@ -2,12 +2,12 @@
 
 `Server::new` accepts an `Arc<dyn MemoryStore>`, an explicit memory-write permission,
 and a `CancellationToken`. It serves `memory_search`, `memory_browse`, `memory_get_full`,
-`memory_stats`, and `memory_tags`. Memory responses are JSON text serialized directly from
-kernel result types. No concrete memory adapter is linked.
+`memory_stats`, `memory_tags`, `wiki_search`, and `wiki_read`. Memory responses are JSON text
+serialized directly from kernel result types. No concrete memory adapter is linked.
 
-The sidecar product scope is nine tools. `wiki_search` and `wiki_read` are waiting for a
-kernel wiki port; `delegate_task` is waiting for a delegation port; `list_agents` is waiting
-for an agent registry port. These four tools have no handlers or catalog entries yet.
+The sidecar product scope is nine tools. `delegate_task` is waiting for a delegation port;
+`list_agents` is waiting for an agent registry port. These two tools have no handlers or catalog
+entries yet.
 `echo`, `skill_list`, and `skill_manage` are excluded by the product decision. The skills
 implementation is removed. `internet_search` and `web_fetch` remain absent because harnesses
 own web tools.
@@ -49,7 +49,7 @@ Three named, tested schema transforms preserve other recorded presentation detai
 whose recorded null means clear; `search_mode_order` moves the derived vector variant last.
 These transforms do not change argument decoding or validation.
 
-`tests/replay.rs` compares derived `tools/list` against the recording filtered to the five served
+`tests/replay.rs` compares derived `tools/list` against the recording filtered to the seven served
 tools, as parsed rmcp values. Only the recording's product names are translated by
 `translate_recorded_product_names`: `RivetOS` to `RivetHub`, `rivetos` to `rh`, and `~/.rivetos`
 to `~/.rivethub`. Other recorded description prose stays intact. The checked `SKIPPED` list
@@ -67,3 +67,16 @@ There is no CLI/composition-root integration in this adapter slice.
 Validation covers derived schemas and replay, wrong-type errors, read/write tag routing,
 unsupported-option refusal, conflicting browse filters, authenticated TCP and Unix client bridges,
 permissions, stale socket recovery, live/non-socket refusal and cancellation.
+
+Wiki calls use `MemoryStore::wiki_topics` and `wiki_page`. Search defaults to five results and
+validates limits from 1 through 20. The response preserves the typed topic list, including its total.
+Read returns small pages verbatim; above 24,000 Unicode characters it returns a bounded view of
+the title, summary, article, crosslinks and recent history. Explicit sections use the typed page
+fields. Full reads of oversized pages are refused. Section truncation is marked and all cuts count
+Unicode characters. Missing articles and pages are explicit tool errors. Redirect targets pass
+the shared `WikiSlug` validation; cycles and chains exceeding 16 lookups are refused.
+
+The recording contains wiki schemas but no wiki call payloads. `tests/wiki.rs` checks typed port
+requests and responses, every section, Unicode size boundaries, valid redirects, invalid targets,
+cycles, missing pages, store failures, invalid arguments and cancellation. Schema description translation applies
+only to the expected recording, including the slug example; actual schemas are compared unchanged.

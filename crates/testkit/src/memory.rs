@@ -73,9 +73,14 @@ pub struct FakeMemoryStore {
     requests: Mutex<Vec<MemoryRequest>>,
     wiki_pages: Mutex<BTreeMap<String, wire::gateway::wiki::WikiPageResponse>>,
     wiki_redirects: Mutex<BTreeMap<String, String>>,
+    wiki_error: Mutex<Option<MemoryStoreError>>,
 }
 
 impl FakeMemoryStore {
+    pub async fn fail_next_wiki_request(&self, error: MemoryStoreError) {
+        *self.wiki_error.lock().await = Some(error);
+    }
+
     pub async fn set_search_outcome(&self, outcome: kernel::memory::SearchOutcome) {
         *self.search_outcome.lock().await = Some(outcome);
     }
@@ -104,6 +109,10 @@ impl MemoryStore for FakeMemoryStore {
         filter: kernel::wiki::WikiFilter,
     ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError> {
         self.record(MemoryRequest::WikiTopics(filter.clone())).await;
+        let error = self.wiki_error.lock().await.take();
+        if let Some(error) = error {
+            return Err(error);
+        }
         let mut topics: Vec<_> = self
             .wiki_pages
             .lock()
@@ -154,6 +163,10 @@ impl MemoryStore for FakeMemoryStore {
     ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
         self.record(MemoryRequest::WikiPage(slug.as_ref().to_owned()))
             .await;
+        let error = self.wiki_error.lock().await.take();
+        if let Some(error) = error {
+            return Err(error);
+        }
         let page = self.wiki_pages.lock().await.get(slug.as_ref()).cloned();
         if let Some(page) = page {
             return Ok(kernel::wiki::WikiLookup::Page(Box::new(page)));

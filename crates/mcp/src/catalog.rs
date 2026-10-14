@@ -1,4 +1,4 @@
-use crate::{memory, tags};
+use crate::{memory, tags, wiki};
 use rmcp::model::{Tool, ToolAnnotations};
 use schemars::{JsonSchema, Schema, generate::SchemaSettings};
 
@@ -30,6 +30,8 @@ pub fn definitions() -> Result<Vec<Tool>, serde_json::Error> {
         definition::<memory::Search>()?,
         definition::<memory::Stats>()?,
         definition::<tags::Args>()?,
+        definition::<wiki::Read>()?,
+        definition::<wiki::Search>()?,
     ])
 }
 
