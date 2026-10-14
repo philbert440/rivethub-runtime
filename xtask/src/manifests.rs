@@ -60,6 +60,7 @@ pub fn migrations_leave_the_runtime(
             .dependencies
             .iter()
             .filter(|dependency| dependency.kind == cargo_metadata::DependencyKind::Normal)
+            .filter(|dependency| package.name != "cli" || dependency.name != MIGRATIONS_CRATE)
             .filter(|dependency| members.contains(dependency.name.as_str()))
             .map(|dependency| dependency.name.as_str())
             .collect();
@@ -67,7 +68,7 @@ pub fn migrations_leave_the_runtime(
     }
     if reaches(&edges, BINARY_CRATE, MIGRATIONS_CRATE) {
         findings.push(format!(
-            "MANIFEST {BINARY_CRATE}: must not depend on the {MIGRATIONS_CRATE} crate — schema changes are applied only by rivethub-migrate, outside the runtime (dev-dependencies stay legal)"
+            "MANIFEST {BINARY_CRATE}: must not depend on the {MIGRATIONS_CRATE} crate except through cli's direct dependency for schema verification — schema changes are applied only by rivethub-migrate, outside the runtime (dev-dependencies stay legal)"
         ));
     }
     for package in &metadata.packages {

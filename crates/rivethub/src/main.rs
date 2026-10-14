@@ -6,17 +6,21 @@ use rivethub::Exit;
 
 fn main() -> ExitCode {
     let env = Environment::from_process();
-    rivethub::logging::init(&env);
+    let cli = match cli::Cli::parse_args(std::env::args_os()) {
+        Ok(cli) => cli,
+        Err(report) => return write(report).code(),
+    };
     let exit = match build_runtime() {
         Ok(runtime) => {
-            let exit = runtime.block_on(rivethub::service::start(&env));
+            let exit = runtime.block_on(dispatch(cli, &env));
             runtime.shutdown_timeout(Duration::from_secs(10));
             exit
         }
-        Err(error) => {
-            tracing::error!("the tokio runtime failed to start: {error}");
-            Exit::Runtime
-        }
+        Err(error) => write(cli::Report {
+            stdout: String::new(),
+            stderr: format!("Error: the tokio runtime failed to start: {error}\n"),
+            exit: Exit::Runtime,
+        }),
     };
     exit.code()
 }
@@ -25,4 +29,44 @@ fn build_runtime() -> std::io::Result<tokio::runtime::Runtime> {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
+}
+
+async fn dispatch(command: cli::Cli, env: &Environment) -> Exit {
+    let shutdown = tokio_util::sync::CancellationToken::new();
+    let mut sigterm = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+    {
+        Ok(signal) => signal,
+        Err(error) => return write(cli::Report::failure(&cli::Error::Io(error))),
+    };
+    let operation = cli::dispatch(command, env, &shutdown);
+    tokio::pin!(operation);
+    let dispatch = tokio::select! {
+        dispatch = &mut operation => dispatch,
+        signal = tokio::signal::ctrl_c() => {
+            if let Err(error) = signal { return write(cli::Report::failure(&cli::Error::Io(error))); }
+            shutdown.cancel();
+            operation.await
+        }
+        _ = sigterm.recv() => {
+            shutdown.cancel();
+            operation.await
+        }
+    };
+    match dispatch {
+        cli::Dispatch::Start => {
+            rivethub::logging::init(env);
+            rivethub::service::start(env).await
+        }
+        cli::Dispatch::Complete(report) => write(report),
+    }
+}
+
+fn write(report: cli::Report) -> Exit {
+    match report.write() {
+        Ok(exit) => exit,
+        Err(error) => {
+            tracing::error!("command output failed: {error}");
+            Exit::Failure
+        }
+    }
 }

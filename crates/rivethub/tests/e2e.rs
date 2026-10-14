@@ -18,6 +18,7 @@ use sqlx::ConnectOptions as _;
 use sqlx::PgPool;
 use tempfile::tempdir;
 use testkit::Json;
+use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 use wire::capture::CaptureBatchRequest;
@@ -360,45 +361,55 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
     );
     std::fs::write(hub_home.join("config.yaml"), config_text)?;
     let mut child = Command::new(env!("CARGO_BIN_EXE_rh"))
+        .arg("start")
         .env("HOME", home.path())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
         .spawn()?;
 
     let base = format!("http://127.0.0.1:{port}");
     let client = reqwest::Client::new();
-    let mut healthz = None;
-    for _ in 0..300 {
-        match client.get(format!("{base}/healthz")).send().await {
-            Ok(response) => {
-                healthz = Some(
-                    response
-                        .error_for_status()?
-                        .json::<HealthzResponse>()
-                        .await?,
-                );
-                break;
-            }
-            Err(_) => {
-                #[cfg_attr(
-                    dylint_lib = "rr_lints",
-                    expect(
-                        sleep,
-                        reason = "a spawned process publishes no awaitable readiness event; the 100 ms poll is bounded by the 30 s loop"
-                    )
-                )]
-                tokio::time::sleep(Duration::from_millis(100)).await;
+    let stderr = child.stderr.take().ok_or("child stderr is missing")?;
+    let mut lines = tokio::io::BufReader::new(stderr).lines();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while let Some(line) = lines.next_line().await? {
+            if line.contains("gateway listening on") {
+                return Ok::<_, Box<dyn Error>>(());
             }
         }
-    }
-    let health = healthz.ok_or("the binary did not answer /healthz within 30s")?;
+        Err("gateway exited before readiness".into())
+    })
+    .await??;
+    let health: HealthzResponse = client
+        .get(format!("{base}/healthz"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let status = Command::new(env!("CARGO_BIN_EXE_rh"))
+        .arg("status")
+        .env("HOME", home.path())
+        .output()
+        .await?;
+    assert!(status.status.success());
+    assert_eq!(String::from_utf8(status.stdout)?, "RivetHub is running\n");
     assert!(health.ok);
     assert_ne!(health.node, "");
     assert_ne!(health.name, "");
 
     let pid = child.id().ok_or("the child process is gone")?;
-    nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(i32::try_from(pid)?),
-        nix::sys::signal::Signal::SIGTERM,
-    )?;
+    std::fs::write(hub_home.join("rivethub.pid"), pid.to_string())?;
+    let stopped = Command::new(env!("CARGO_BIN_EXE_rh"))
+        .arg("stop")
+        .env("HOME", home.path())
+        .output()
+        .await?;
+    assert!(stopped.status.success());
+    assert_eq!(
+        String::from_utf8(stopped.stdout)?,
+        format!("Sent SIGTERM to PID {pid}\n")
+    );
     let status = tokio::time::timeout(Duration::from_secs(30), child.wait()).await??;
     assert_eq!(status.code(), Some(0), "SIGTERM must exit cleanly");
     Ok(())
@@ -419,6 +430,7 @@ async fn first_start_moves_legacy_state_and_the_alias_names_the_new_variable() -
     let output = tokio::time::timeout(
         Duration::from_secs(30),
         Command::new(env!("CARGO_BIN_EXE_rh"))
+            .arg("start")
             .env_clear()
             .env("HOME", home.path())
             .output(),
@@ -448,6 +460,7 @@ async fn first_start_moves_legacy_state_and_the_alias_names_the_new_variable() -
     let again = tokio::time::timeout(
         Duration::from_secs(30),
         Command::new(env!("CARGO_BIN_EXE_rivetos"))
+            .arg("start")
             .env_clear()
             .env("HOME", home.path())
             .env("RIVETOS_PG_URL", "postgres://127.0.0.1:1/none")

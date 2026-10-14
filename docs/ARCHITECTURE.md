@@ -10,7 +10,7 @@ Design artifact (visual, authoritative): https://claude.ai/artifact/L7cAvh16cYEZ
 | kernel | `kernel` (ports = traits, domain types; no I/O), `testkit` (dev-only: replayers, fakes, stubs) | wire, config |
 | adapters | `memory-postgres`, `memory-sqlite`, `providers`, `harness-acp`, `terminal`, `mcp`, `capture`, `pki` | kernel, wire, config, externals — NEVER another adapter or a service; `pki` uses kernel/wire and externals only |
 | services | `gateway` (with the session registry and mesh), `agent-loop`, `workers`, `tasks` (sessions over the gateway API) | kernel, wire, config — NEVER an adapter |
-| operations | `migrate` (every Postgres and SQLite schema change; the `rivethub-migrate` binary) | wire, config, externals (sqlx, rusqlite); depended on only by `cli` as a normal dependency and by tests as a dev-dependency — NEVER by a runtime crate (`rivethub` is checked transitively by the xtask MANIFEST rule) |
+| operations | `migrate` (every Postgres and SQLite schema change; the `rivethub-migrate` binary) | wire, config, externals (sqlx, rusqlite); depended on only by `cli` as a normal dependency and by tests as a dev-dependency — NEVER directly by a runtime crate (`rivethub` is checked transitively by the xtask MANIFEST rule, except for the direct `cli` → `migrate` edge used for schema verification) |
 | composition | `cli`, `rivethub` (binary; one composition root per service process) | everything |
 
 The gate (`cargo xtask check`) fails any Cargo.toml that breaks this.

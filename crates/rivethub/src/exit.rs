@@ -1,40 +1,14 @@
-use std::process::ExitCode;
-
+use crate::Exit;
 use crate::service::StartupError;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Exit {
-    Ok,
-    Config,
-    Memory,
-    Bind,
-    Serve,
-    Runtime,
-}
-
-impl Exit {
+impl StartupError {
     #[must_use]
-    pub fn code(self) -> ExitCode {
+    pub fn exit(&self) -> Exit {
         match self {
-            Self::Ok => ExitCode::SUCCESS,
-            Self::Config => ExitCode::from(1),
-            Self::Memory => ExitCode::from(2),
-            Self::Bind => ExitCode::from(3),
-            Self::Serve => ExitCode::from(4),
-            Self::Runtime => ExitCode::from(5),
-        }
-    }
-
-    #[must_use]
-    pub fn from_startup(error: &StartupError) -> Self {
-        match error {
-            StartupError::Config(_)
-            | StartupError::Url
-            | StartupError::State(_)
-            | StartupError::StateTask(_) => Self::Config,
-            StartupError::Memory(_) => Self::Memory,
-            StartupError::Bind(_) => Self::Bind,
-            StartupError::Serve(_) | StartupError::Io(_) => Self::Serve,
+            Self::Config(_) | Self::Url | Self::State(_) | Self::StateTask(_) => Exit::Failure,
+            Self::Memory(_) => Exit::Memory,
+            Self::Bind(_) => Exit::Bind,
+            Self::Serve(_) | Self::Io(_) => Exit::Serve,
         }
     }
 }

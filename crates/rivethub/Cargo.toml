@@ -21,6 +21,7 @@ name = "rivetos"
 path = "src/bin/rivetos.rs"
 
 [dependencies]
+cli = { workspace = true }
 config = { workspace = true }
 gateway = { workspace = true }
 kernel = { workspace = true }
@@ -33,6 +34,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
+rusqlite = { workspace = true }
 capture = { workspace = true }
 chrono = { workspace = true }
 migrate = { workspace = true }

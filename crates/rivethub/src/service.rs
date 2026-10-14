@@ -158,7 +158,7 @@ pub async fn start(env: &Environment) -> Exit {
         Ok(()) => Exit::Ok,
         Err(error) => {
             report(&error);
-            Exit::from_startup(&error)
+            error.exit()
         }
     }
 }

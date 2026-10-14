@@ -1,0 +1,77 @@
+use std::ffi::OsString;
+use std::path::PathBuf;
+
+use clap::{CommandFactory, Parser, Subcommand};
+
+use crate::{Exit, Report};
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "rh",
+    about = "RivetHub operator commands",
+    disable_help_subcommand = false
+)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Command>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Command {
+    #[command(about = "Print the RivetHub version")]
+    Version,
+    #[command(about = "Inspect and validate configuration")]
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+    #[command(about = "Check this node without applying migrations")]
+    Doctor {
+        #[arg(long)]
+        json: bool,
+    },
+    #[command(about = "Report gateway health")]
+    Status,
+    #[command(about = "Signal the running instance to stop")]
+    Stop,
+    #[command(hide = true, about = "Run the existing gateway service")]
+    Start,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ConfigCommand {
+    #[command(about = "Print the resolved configuration path")]
+    Path,
+    #[command(about = "Show a configuration summary without secrets")]
+    Show,
+    #[command(about = "Validate configuration and print findings")]
+    Validate { path: Option<PathBuf> },
+}
+
+impl Cli {
+    pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Self, Report> {
+        match Self::try_parse_from(args) {
+            Ok(cli) => Ok(cli),
+            Err(error) if error.use_stderr() => {
+                let text = if error.kind() == clap::error::ErrorKind::InvalidSubcommand {
+                    match error.get(clap::error::ContextKind::InvalidSubcommand) {
+                        Some(name) => format!("Unknown command: {name}\n{}", Self::help()),
+                        None => error.to_string(),
+                    }
+                } else {
+                    error.to_string()
+                };
+                Err(Report {
+                    stdout: String::new(),
+                    stderr: text,
+                    exit: Exit::Failure,
+                })
+            }
+            Err(error) => Err(Report::success(error.to_string())),
+        }
+    }
+
+    pub fn help() -> String {
+        format!("{}\n", Self::command().render_help())
+    }
+}
