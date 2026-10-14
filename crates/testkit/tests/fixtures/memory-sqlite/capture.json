@@ -1,0 +1,2336 @@
+{
+  "runtime": {
+    "node": "v22.22.2",
+    "sqlite_version": "3.51.2",
+    "git": "git version 2.43.0",
+    "repo_head": "c72e851fcce336be1bac4d7357323c4f751f7f06"
+  },
+  "scenarios": [
+    {
+      "name": "re-sent batch is skipped event by event",
+      "steps": [
+        {
+          "label": "capture batch",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 3,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "capture batch + e4",
+          "at": "2026-10-10T12:01:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 1,
+            "skipped": 3
+          }
+        },
+        {
+          "label": "getSessionHistory",
+          "at": "2026-10-10T12:01:00.000Z",
+          "result": [
+            {
+              "role": "assistant",
+              "content": "run the deploy script from the release branch, then watch the health check"
+            },
+            {
+              "role": "user",
+              "content": "how do we deploy the AcmeKit service to staging"
+            },
+            {
+              "role": "tool",
+              "content": ""
+            },
+            {
+              "role": "user",
+              "content": "and how do we roll it back afterwards"
+            }
+          ]
+        }
+      ],
+      "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock)",
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "cli:sess-1",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:01:00.000Z",
+            "owner_user_id": null
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "how do we deploy the AcmeKit service to staging",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e1\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "assistant",
+            "content": "run the deploy script from the release branch, then watch the health check",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e2\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T08:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "tool",
+            "content": "",
+            "tool_name": "Bash",
+            "tool_args": "{\"command\":\"make deploy\"}",
+            "tool_result": "deployed build 42 to staging.example.com",
+            "metadata": "{\"event_id\":\"e3\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "and how do we roll it back afterwards",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e4\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:01:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          }
+        ]
+      },
+      "logs": []
+    },
+    {
+      "name": "same event id under another session or agent is a different message",
+      "steps": [
+        {
+          "label": "capture",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 3,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "capture other session",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000006",
+            "inserted": 3,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "capture other agent",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000007",
+            "inserted": 3,
+            "skipped": 0
+          }
+        }
+      ],
+      "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock)",
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "cli:sess-1",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "session_key": "cli:sess-2",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "session_key": "cli:sess-1",
+            "agent": "helper",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "how do we deploy the AcmeKit service to staging",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e1\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "assistant",
+            "content": "run the deploy script from the release branch, then watch the health check",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e2\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T08:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "tool",
+            "content": "",
+            "tool_name": "Bash",
+            "tool_args": "{\"command\":\"make deploy\"}",
+            "tool_result": "deployed build 42 to staging.example.com",
+            "metadata": "{\"event_id\":\"e3\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "conversation_id": "00000000-0000-4000-8000-000000000006",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "how do we deploy the AcmeKit service to staging",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e1\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "conversation_id": "00000000-0000-4000-8000-000000000006",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "assistant",
+            "content": "run the deploy script from the release branch, then watch the health check",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e2\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T08:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "conversation_id": "00000000-0000-4000-8000-000000000006",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "tool",
+            "content": "",
+            "tool_name": "Bash",
+            "tool_args": "{\"command\":\"make deploy\"}",
+            "tool_result": "deployed build 42 to staging.example.com",
+            "metadata": "{\"event_id\":\"e3\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000010",
+            "conversation_id": "00000000-0000-4000-8000-000000000007",
+            "agent": "helper",
+            "channel": "cli",
+            "role": "user",
+            "content": "how do we deploy the AcmeKit service to staging",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e1\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000011",
+            "conversation_id": "00000000-0000-4000-8000-000000000007",
+            "agent": "helper",
+            "channel": "cli",
+            "role": "assistant",
+            "content": "run the deploy script from the release branch, then watch the health check",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e2\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T08:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000012",
+            "conversation_id": "00000000-0000-4000-8000-000000000007",
+            "agent": "helper",
+            "channel": "cli",
+            "role": "tool",
+            "content": "",
+            "tool_name": "Bash",
+            "tool_args": "{\"command\":\"make deploy\"}",
+            "tool_result": "deployed build 42 to staging.example.com",
+            "metadata": "{\"event_id\":\"e3\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          }
+        ]
+      },
+      "logs": []
+    },
+    {
+      "name": "title, settings and task id kept unless supplied",
+      "steps": [
+        {
+          "label": "capture with title/settings/task_id",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 3,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "capture no messages",
+          "at": "2026-10-10T12:01:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "loadSessionSettings",
+          "at": "2026-10-10T12:01:00.000Z",
+          "result": {
+            "cwd": "/home/user/work/acme-app",
+            "depth": 2.5
+          }
+        },
+        {
+          "label": "rename",
+          "at": "2026-10-10T12:02:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "clear title with null, settings {}",
+          "at": "2026-10-10T12:03:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 0,
+            "skipped": 0
+          }
+        }
+      ],
+      "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock)",
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "cli:sess-1",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 1,
+            "task_id": "T1",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:03:00.000Z",
+            "owner_user_id": null
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "how do we deploy the AcmeKit service to staging",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e1\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "assistant",
+            "content": "run the deploy script from the release branch, then watch the health check",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e2\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T08:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "tool",
+            "content": "",
+            "tool_name": "Bash",
+            "tool_args": "{\"command\":\"make deploy\"}",
+            "tool_result": "deployed build 42 to staging.example.com",
+            "metadata": "{\"event_id\":\"e3\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          }
+        ]
+      },
+      "logs": []
+    },
+    {
+      "name": "source timestamps kept; updated_at only moves forward; finalize",
+      "steps": [
+        {
+          "label": "old created/updated",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "older updated_at",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "later updated_at with offset",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "finalize",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "finalize again (already inactive)",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "bad created_at",
+          "at": "2026-10-10T12:00:00.000Z",
+          "error": {
+            "class": "MemoryRequestError",
+            "message": "created_at is not a timestamp"
+          }
+        },
+        {
+          "label": "bad updated_at",
+          "at": "2026-10-10T12:00:00.000Z",
+          "error": {
+            "class": "MemoryRequestError",
+            "message": "updated_at is not a timestamp"
+          }
+        },
+        {
+          "label": "bad message created_at",
+          "at": "2026-10-10T12:00:00.000Z",
+          "error": {
+            "class": "MemoryRequestError",
+            "message": "created_at is not a timestamp"
+          }
+        }
+      ],
+      "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock)",
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "old-task",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 0,
+            "task_id": null,
+            "created_at": "2020-01-01T00:00:00.000Z",
+            "updated_at": "2025-03-01T00:00:00.000Z",
+            "owner_user_id": null
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "then",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e1\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          }
+        ]
+      },
+      "logs": []
+    },
+    {
+      "name": "pending tool result filled in place",
+      "steps": [
+        {
+          "label": "pending tool row",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "result arrives",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 0,
+            "skipped": 1
+          }
+        },
+        {
+          "label": "result again (no change)",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 0,
+            "skipped": 1
+          }
+        }
+      ],
+      "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock)",
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "cli:sess-1",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "tool",
+            "content": "[tool call] Bash",
+            "tool_name": "Bash",
+            "tool_args": "{\"command\":\"ls\"}",
+            "tool_result": "ok",
+            "metadata": "{\"tool_use_id\":\"tu1\",\"event_id\":\"cowork:s:tool:tu1\",\"pending_result\":false}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          }
+        ]
+      },
+      "logs": []
+    },
+    {
+      "name": "cowork hook prompt rewritten onto the transcript id, once",
+      "steps": [
+        {
+          "label": "hook rows",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 2,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "transcript rows claim the hook rows",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 0,
+            "skipped": 2
+          }
+        },
+        {
+          "label": "transcript again",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 1,
+            "skipped": 1
+          }
+        }
+      ],
+      "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock)",
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "cowork:sess",
+            "agent": "rivet-cowork",
+            "channel": "cowork",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{\"source\":\"cowork-transcript\"}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet-cowork",
+            "channel": "cowork",
+            "role": "user",
+            "content": "ship it",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"source\":\"cowork-transcript\",\"event_id\":\"cowork:sess:uuid-prompt\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet-cowork",
+            "channel": "cowork",
+            "role": "assistant",
+            "content": "shipped",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"source\":\"cowork-transcript\",\"event_id\":\"cowork:sess:uuid-reply\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet-cowork",
+            "channel": "cowork",
+            "role": "user",
+            "content": "ship it",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"source\":\"cowork-transcript\",\"event_id\":\"cowork:sess:uuid-new\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          }
+        ]
+      },
+      "logs": []
+    },
+    {
+      "name": "UTC timestamps; oversized and surrogate-boundary text capped with metadata",
+      "steps": [
+        {
+          "label": "big + surrogate",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 3,
+            "skipped": 0
+          }
+        }
+      ],
+      "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock)",
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "cli:sess-1",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": {
+              "length": 16000,
+              "sha256": "f2c32edd8089280cd019e200d960185ddcb53876d1fcf3941edc728a53530572",
+              "head": "xxxxxxxx",
+              "tail": "xxxxxxxx"
+            },
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"big\",\"full_content_length\":20000,\"truncated\":true}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T08:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "tool",
+            "content": {
+              "length": 15999,
+              "sha256": "f2214092d39777ed1525f76046a78aad2facb3d0d303e383fc311d9d0d5bbd02",
+              "head": "xxxxxxxx",
+              "tail": "xxxxxxxx"
+            },
+            "tool_name": "Read",
+            "tool_args": null,
+            "tool_result": {
+              "length": 15999,
+              "sha256": "f2214092d39777ed1525f76046a78aad2facb3d0d303e383fc311d9d0d5bbd02",
+              "head": "xxxxxxxx",
+              "tail": "xxxxxxxx"
+            },
+            "metadata": "{\"event_id\":\"sur\",\"full_content_length\":16005,\"truncated\":true,\"full_tool_result_length\":16005}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T08:00:01.500Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "assistant",
+            "content": {
+              "length": 16000,
+              "sha256": "cefd55b50a26f28383e5442241c6df70dfd276dea45fdaafb84983b02bec62e0",
+              "head": "yyyyyyyy",
+              "tail": "yyyyyyyy"
+            },
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"exact\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          }
+        ]
+      },
+      "note": "long text columns are shown as { length (UTF-16 units), sha256 of the UTF-8, head, tail }",
+      "logs": []
+    },
+    {
+      "name": "owner stamp (userId alice)",
+      "steps": [
+        {
+          "label": "capture",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 3,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "append",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": "00000000-0000-4000-8000-000000000005"
+        }
+      ],
+      "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock), userId ' alice '",
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "cli:sess-1",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": "alice"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "session_key": "cli:sess-9",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": "Session cli:sess-9",
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": "alice"
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "how do we deploy the AcmeKit service to staging",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e1\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": "alice"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "assistant",
+            "content": "run the deploy script from the release branch, then watch the health check",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e2\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T08:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": "alice"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "tool",
+            "content": "",
+            "tool_name": "Bash",
+            "tool_args": "{\"command\":\"make deploy\"}",
+            "tool_result": "deployed build 42 to staging.example.com",
+            "metadata": "{\"event_id\":\"e3\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": "alice"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "conversation_id": "00000000-0000-4000-8000-000000000006",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "owned row",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": "alice"
+          }
+        ]
+      },
+      "logs": []
+    },
+    {
+      "name": "project rule tag at capture",
+      "steps": [
+        {
+          "label": "git-root resolver",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "other cwd later: no second rule tag",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "allowFilesystem false: basename rule only",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000005",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "cowork sandbox cwd ignored",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000007",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "cowork attached folder",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000011",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "vocabulary alias maps the value",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000013",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "rejected value is not written",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000014",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "resolver throws",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000015",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "relative cwd",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000016",
+            "inserted": 1,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "no cwd",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000017",
+            "inserted": 1,
+            "skipped": 0
+          }
+        }
+      ],
+      "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock), projectRule: fake resolver (AcmeKit → project:acmekit, secret → project:secret, broken → throws)",
+      "resolver_calls": [
+        "/home/user/work/AcmeKit",
+        "/home/user/work/other",
+        "/home/user/work/AcmeKit",
+        "/home/user/work/AcmeKit",
+        "/home/user/work/secret",
+        "/home/user/work/broken"
+      ],
+      "taxonomy": [
+        {
+          "key": "project",
+          "value": "acme",
+          "display": "",
+          "parent_value": null,
+          "aliases": "[\"acme-app-alias\",\"acmekit\"]",
+          "state": "accepted",
+          "source": "user",
+          "reason": "",
+          "decided_at": "2026-10-10T12:00:00.000Z",
+          "created_at": "2026-10-10T12:00:00.000Z",
+          "updated_at": "2026-10-10T12:00:00.000Z"
+        },
+        {
+          "key": "project",
+          "value": "secret",
+          "display": "",
+          "parent_value": null,
+          "aliases": "[]",
+          "state": "rejected",
+          "source": "user",
+          "reason": "",
+          "decided_at": "2026-10-10T12:00:00.000Z",
+          "created_at": "2026-10-10T12:00:00.000Z",
+          "updated_at": "2026-10-10T12:00:00.000Z"
+        }
+      ],
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "cli:sess-1",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{\"cwd\":\"/home/user/work/other\"}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "session_key": "cli:remote",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{\"cwd\":\"/srv/checkout/acme-app\"}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "session_key": "cowork:a",
+            "agent": "rivet",
+            "channel": "cowork",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{\"cwd\":\"/private/var/empty\",\"source\":\"cowork-hook\"}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000011",
+            "session_key": "cowork:b",
+            "agent": "rivet",
+            "channel": "cowork",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{\"cwd\":\"/private/var/empty\",\"source\":\"cowork-transcript\",\"folders\":[\"/private/var/empty\",\"/home/user/work/AcmeKit\"]}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000013",
+            "session_key": "cli:aliased",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{\"cwd\":\"/home/user/work/AcmeKit\"}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000014",
+            "session_key": "cli:rejected",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{\"cwd\":\"/home/user/work/secret\"}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000015",
+            "session_key": "cli:broken",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{\"cwd\":\"/home/user/work/broken\"}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000016",
+            "session_key": "cli:relative",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{\"cwd\":\"relative/path\"}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000017",
+            "session_key": "cli:none",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "working on the AcmeKit deploy scripts today",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e-0\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "working on the AcmeKit deploy scripts today",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e-3\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "conversation_id": "00000000-0000-4000-8000-000000000005",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "working on the AcmeKit deploy scripts today",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e-5\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000010",
+            "conversation_id": "00000000-0000-4000-8000-000000000007",
+            "agent": "rivet",
+            "channel": "cowork",
+            "role": "user",
+            "content": "working on the AcmeKit deploy scripts today",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e-8\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000018",
+            "conversation_id": "00000000-0000-4000-8000-000000000011",
+            "agent": "rivet",
+            "channel": "cowork",
+            "role": "user",
+            "content": "working on the AcmeKit deploy scripts today",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e-10\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000019",
+            "conversation_id": "00000000-0000-4000-8000-000000000013",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "working on the AcmeKit deploy scripts today",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e-13\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000020",
+            "conversation_id": "00000000-0000-4000-8000-000000000014",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "working on the AcmeKit deploy scripts today",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e-16\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000021",
+            "conversation_id": "00000000-0000-4000-8000-000000000015",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "working on the AcmeKit deploy scripts today",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e-18\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000022",
+            "conversation_id": "00000000-0000-4000-8000-000000000016",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "working on the AcmeKit deploy scripts today",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e-20\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000023",
+            "conversation_id": "00000000-0000-4000-8000-000000000017",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "working on the AcmeKit deploy scripts today",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e-22\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          }
+        ],
+        "ros_tags": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "entity_type": "conversation",
+            "entity_id": "00000000-0000-4000-8000-000000000001",
+            "key": "project",
+            "value": "acmekit",
+            "display": "AcmeKit",
+            "source": "rule",
+            "state": "accepted",
+            "confidence": null,
+            "proposed_by": "cwd-git-root",
+            "reason": "git root",
+            "decided_by": "cwd-git-root",
+            "decided_at": "2026-10-10T12:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "removal_state": null,
+            "removal_reason": ""
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "entity_type": "conversation",
+            "entity_id": "00000000-0000-4000-8000-000000000005",
+            "key": "project",
+            "value": "acme-app",
+            "display": "acme-app",
+            "source": "rule",
+            "state": "accepted",
+            "confidence": null,
+            "proposed_by": "cwd-git-root",
+            "reason": "cwd-basename: acme-app",
+            "decided_by": "cwd-git-root",
+            "decided_at": "2026-10-10T12:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "removal_state": null,
+            "removal_reason": ""
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000012",
+            "entity_type": "conversation",
+            "entity_id": "00000000-0000-4000-8000-000000000011",
+            "key": "project",
+            "value": "acmekit",
+            "display": "AcmeKit",
+            "source": "rule",
+            "state": "accepted",
+            "confidence": null,
+            "proposed_by": "cwd-git-root",
+            "reason": "git root",
+            "decided_by": "cwd-git-root",
+            "decided_at": "2026-10-10T12:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "removal_state": null,
+            "removal_reason": ""
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000024",
+            "entity_type": "conversation",
+            "entity_id": "00000000-0000-4000-8000-000000000013",
+            "key": "project",
+            "value": "acme",
+            "display": "",
+            "source": "rule",
+            "state": "accepted",
+            "confidence": null,
+            "proposed_by": "cwd-git-root",
+            "reason": "git root",
+            "decided_by": "cwd-git-root",
+            "decided_at": "2026-10-10T12:00:00.000Z",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "removal_state": null,
+            "removal_reason": ""
+          }
+        ]
+      },
+      "logs": [
+        "[memory] project rule resolve failed: disk gone"
+      ]
+    },
+    {
+      "name": "captured messages queued for embedding, then drained",
+      "steps": [
+        {
+          "label": "capture",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "ok": true,
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "inserted": 3,
+            "skipped": 0
+          }
+        },
+        {
+          "label": "stats before",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "conversations": 1,
+            "messages": 3,
+            "toolCalls": 1,
+            "summaries": 0,
+            "embedQueueDepth": 3,
+            "embeddedMessages": 0,
+            "failedEmbeddings": 0,
+            "topTools": [
+              {
+                "tool": "Bash",
+                "count": 1
+              }
+            ],
+            "recentSessions": [
+              {
+                "sessionId": "cli:sess-1",
+                "title": null,
+                "agent": "rivet",
+                "lastActive": "2026-10-10T12:00:00.000Z",
+                "messages": 3
+              }
+            ]
+          }
+        },
+        {
+          "label": "runJobs",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": 3
+        },
+        {
+          "label": "stats after",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "conversations": 1,
+            "messages": 3,
+            "toolCalls": 1,
+            "summaries": 0,
+            "embedQueueDepth": 0,
+            "embeddedMessages": 3,
+            "failedEmbeddings": 0,
+            "topTools": [
+              {
+                "tool": "Bash",
+                "count": 1
+              }
+            ],
+            "recentSessions": [
+              {
+                "sessionId": "cli:sess-1",
+                "title": null,
+                "agent": "rivet",
+                "lastActive": "2026-10-10T12:00:00.000Z",
+                "messages": 3
+              }
+            ]
+          }
+        },
+        {
+          "label": "health",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "status": "ok",
+            "observedAt": "2026-10-10T12:00:00.000Z",
+            "embeddings": {
+              "status": "ok",
+              "checkedAt": "2026-10-10T12:00:00.000Z"
+            },
+            "embedQueueDepth": 0,
+            "failedEmbeddings": 0,
+            "skippedEmbeddings": 0,
+            "queueStatus": "unavailable",
+            "queues": [],
+            "compaction": {
+              "eligible": 0,
+              "activeTail": 0,
+              "belowFloor": 3
+            },
+            "capture": {
+              "status": "unknown",
+              "impact": "Capture progress is not measured by this endpoint yet."
+            }
+          }
+        }
+      ],
+      "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock), embed fake",
+      "embed_requests": [
+        {
+          "url": "https://embed.example.com/v1/embeddings",
+          "body": {
+            "model": "fake-embed-8",
+            "input": [
+              "how do we deploy the AcmeKit service to staging"
+            ]
+          }
+        },
+        {
+          "url": "https://embed.example.com/v1/embeddings",
+          "body": {
+            "model": "fake-embed-8",
+            "input": [
+              "run the deploy script from the release branch, then watch the health check"
+            ]
+          }
+        },
+        {
+          "url": "https://embed.example.com/v1/embeddings",
+          "body": {
+            "model": "fake-embed-8",
+            "input": [
+              "deployed build 42 to staging.example.com"
+            ]
+          }
+        }
+      ],
+      "meta": [
+        {
+          "key": "embed_model",
+          "value": "fake-embed-8"
+        },
+        {
+          "key": "embed_dims",
+          "value": "8"
+        }
+      ],
+      "vectors": [
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "embed_status": "done",
+          "embed_error": null,
+          "embed_failures": 0,
+          "embedding_hex": "00000000CDCCCC3E0000000000000000CDCC4C3FCDCC4C3ECDCCCC3E00000000"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "embed_status": "done",
+          "embed_error": null,
+          "embed_failures": 0,
+          "embedding_hex": "74EA373E0000000074EAB73E00000000D7EF093F74EAB73ED7EF093F74EAB73E"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "embed_status": "done",
+          "embed_error": null,
+          "embed_failures": 0,
+          "embedding_hex": "00000000B25F9A3E00000000B25F1A3FB25F9A3E00000000B25F1A3FB25F9A3E"
+        }
+      ],
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "cli:sess-1",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": null,
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:00.000Z",
+            "owner_user_id": null
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "how do we deploy the AcmeKit service to staging",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e1\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "00000000cdcccc3e0000000000000000cdcc4c3fcdcc4c3ecdcccc3e00000000"
+            },
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "assistant",
+            "content": "run the deploy script from the release branch, then watch the health check",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"event_id\":\"e2\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-04T08:00:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "74ea373e0000000074eab73e00000000d7ef093f74eab73ed7ef093f74eab73e"
+            },
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "tool",
+            "content": "",
+            "tool_name": "Bash",
+            "tool_args": "{\"command\":\"make deploy\"}",
+            "tool_result": "deployed build 42 to staging.example.com",
+            "metadata": "{\"event_id\":\"e3\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": "done",
+            "embedding": {
+              "$blob_hex": "00000000b25f9a3e00000000b25f1a3fb25f9a3e00000000b25f1a3fb25f9a3e"
+            },
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          }
+        ]
+      },
+      "logs": []
+    },
+    {
+      "name": "append, histories, settings, task ids, heartbeat, other users",
+      "steps": [
+        {
+          "label": "append user",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": "00000000-0000-4000-8000-000000000002"
+        },
+        {
+          "label": "append with createdAt + tool data",
+          "at": "2026-10-10T12:00:01.000Z",
+          "result": "00000000-0000-4000-8000-000000000004"
+        },
+        {
+          "label": "append task session key",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": "00000000-0000-4000-8000-000000000005"
+        },
+        {
+          "label": "append metadata.taskId",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": "00000000-0000-4000-8000-000000000009"
+        },
+        {
+          "label": "append non-uuid task key",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": "00000000-0000-4000-8000-000000000010"
+        },
+        {
+          "label": "append heartbeat",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": "00000000-0000-4000-8000-000000000012"
+        },
+        {
+          "label": "append no channel",
+          "at": "2026-10-10T12:00:02.000Z",
+          "error": {
+            "class": "MemoryError",
+            "message": "Memory append failed: Provided value cannot be bound to SQLite parameter 4.",
+            "code": "MEMORY_QUERY_FAILED"
+          }
+        },
+        {
+          "label": "append other user (refused, logs once)",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": "00000000-0000-4000-8000-000000000024"
+        },
+        {
+          "label": "append other user again (no second log)",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": "00000000-0000-4000-8000-000000000019"
+        },
+        {
+          "label": "append bad role (CHECK)",
+          "at": "2026-10-10T12:00:02.000Z",
+          "error": {
+            "class": "MemoryError",
+            "message": "Memory append failed: CHECK constraint failed: role IN ('system','user','assistant','tool')",
+            "code": "MEMORY_QUERY_FAILED"
+          }
+        },
+        {
+          "label": "getSessionHistory",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": [
+            {
+              "role": "tool",
+              "content": "ran"
+            },
+            {
+              "role": "user",
+              "content": "first message"
+            }
+          ]
+        },
+        {
+          "label": "getSessionHistory limit 1",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": [
+            {
+              "role": "user",
+              "content": "first message"
+            }
+          ]
+        },
+        {
+          "label": "getSessionHistory other user",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": []
+        },
+        {
+          "label": "getTaskHistory uuid",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": [
+            {
+              "role": "user",
+              "content": "task work"
+            },
+            {
+              "role": "user",
+              "content": "tagged by metadata"
+            }
+          ]
+        },
+        {
+          "label": "getTaskHistory legacy",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": [
+            {
+              "role": "user",
+              "content": "legacy task"
+            }
+          ]
+        },
+        {
+          "label": "saveSessionSettings",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": null
+        },
+        {
+          "label": "loadSessionSettings",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": {
+            "cwd": "/home/user/work/AcmeKit",
+            "n": 1,
+            "f": 1.25,
+            "nested": {
+              "a": [
+                1,
+                "b"
+              ]
+            }
+          }
+        },
+        {
+          "label": "loadSessionSettings missing",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": null
+        },
+        {
+          "label": "loadSessionSettings other user",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": null
+        },
+        {
+          "label": "associateTask",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": null
+        },
+        {
+          "label": "search other user",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": []
+        },
+        {
+          "label": "getContextForTurn other user",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": ""
+        },
+        {
+          "label": "isHealthy",
+          "at": "2026-10-10T12:00:02.000Z",
+          "result": true
+        },
+        {
+          "label": "append after close",
+          "at": "2026-10-10T12:00:02.000Z",
+          "error": {
+            "class": "MemoryError",
+            "message": "SqliteMemory is closed",
+            "code": "MEMORY_CONNECTION_FAILED"
+          }
+        }
+      ],
+      "logs": [
+        "[memory.sqlite] user \"user-b\" has no memory on this node: the store is the owner's, so their sessions are not stored or read"
+      ],
+      "tables": {
+        "ros_conversations": [
+          {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "session_key": "cli:alice",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": "Session cli:alice",
+            "settings": "{\"cwd\":\"/home/user/work/AcmeKit\",\"n\":1,\"f\":1.25,\"nested\":{\"a\":[1,\"b\"]}}",
+            "active": 1,
+            "task_id": "00000000-0000-4000-8000-300000000004",
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "updated_at": "2026-10-10T12:00:02.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000006",
+            "session_key": "task:00000000-0000-4000-8000-300000000004",
+            "agent": "rivet",
+            "channel": "task",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": "Session task:00000000-0000-4000-8000-300000000004",
+            "settings": "{}",
+            "active": 1,
+            "task_id": "00000000-0000-4000-8000-300000000004",
+            "created_at": "2026-10-10T12:00:02.000Z",
+            "updated_at": "2026-10-10T12:00:02.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000008",
+            "session_key": "cli:meta-task",
+            "agent": "rivet",
+            "channel": "cli",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": "Session cli:meta-task",
+            "settings": "{}",
+            "active": 1,
+            "task_id": "00000000-0000-4000-8000-300000000004",
+            "created_at": "2026-10-10T12:00:02.000Z",
+            "updated_at": "2026-10-10T12:00:02.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000007",
+            "session_key": "task:not-a-uuid",
+            "agent": "rivet",
+            "channel": "task",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": "Session task:not-a-uuid",
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:02.000Z",
+            "updated_at": "2026-10-10T12:00:02.000Z",
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000011",
+            "session_key": "heartbeat:rivet",
+            "agent": "rivet",
+            "channel": "heartbeat",
+            "channel_id": null,
+            "bot_identity": null,
+            "title": "Heartbeat rivet",
+            "settings": "{}",
+            "active": 1,
+            "task_id": null,
+            "created_at": "2026-10-10T12:00:02.000Z",
+            "updated_at": "2026-10-10T12:00:02.000Z",
+            "owner_user_id": null
+          }
+        ],
+        "ros_messages": [
+          {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "first message",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000004",
+            "conversation_id": "00000000-0000-4000-8000-000000000001",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "tool",
+            "content": "ran",
+            "tool_name": "Bash",
+            "tool_args": "{\"command\":\"ls\",\"n\":1}",
+            "tool_result": "a\nb",
+            "metadata": "{\"k\":\"v\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T11:00:00.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "conversation_id": "00000000-0000-4000-8000-000000000006",
+            "agent": "rivet",
+            "channel": "task",
+            "role": "user",
+            "content": "task work",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:02.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000009",
+            "conversation_id": "00000000-0000-4000-8000-000000000008",
+            "agent": "rivet",
+            "channel": "cli",
+            "role": "user",
+            "content": "tagged by metadata",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{\"taskId\":\"00000000-0000-4000-8000-300000000004\"}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:02.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000010",
+            "conversation_id": "00000000-0000-4000-8000-000000000007",
+            "agent": "rivet",
+            "channel": "task",
+            "role": "user",
+            "content": "legacy task",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:02.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000012",
+            "conversation_id": "00000000-0000-4000-8000-000000000011",
+            "agent": "rivet",
+            "channel": "heartbeat",
+            "role": "system",
+            "content": "beat",
+            "tool_name": null,
+            "tool_args": null,
+            "tool_result": null,
+            "metadata": "{}",
+            "access_count": 0,
+            "last_accessed_at": null,
+            "created_at": "2026-10-10T12:00:02.000Z",
+            "embed_status": null,
+            "embedding": null,
+            "embed_error": null,
+            "embed_failures": 0,
+            "owner_user_id": null
+          }
+        ]
+      },
+      "tables_note": "tables: the same steps replayed (up to associateTask) on a fresh store, then dumped; id sequence restarts, so ids match the steps above"
+    }
+  ]
+}

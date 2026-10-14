@@ -1,0 +1,453 @@
+{
+  "runtime": {
+    "node": "v22.22.2",
+    "sqlite_version": "3.51.2",
+    "git": "git version 2.43.0",
+    "repo_head": "c72e851fcce336be1bac4d7357323c4f751f7f06"
+  },
+  "config": "path :memory:, workers false, projectRule null, log captured, no now (global clock)",
+  "scenarios": [
+    {
+      "name": "empty store",
+      "steps": [
+        {
+          "label": "stats",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "conversations": 0,
+            "messages": 0,
+            "toolCalls": 0,
+            "summaries": 0,
+            "embedQueueDepth": 0,
+            "embeddedMessages": 0,
+            "failedEmbeddings": 0,
+            "topTools": [],
+            "recentSessions": []
+          }
+        },
+        {
+          "label": "health",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "status": "degraded",
+            "observedAt": "2026-10-10T12:00:00.000Z",
+            "embeddings": {
+              "status": "unavailable",
+              "checkedAt": "2026-10-10T12:00:00.000Z",
+              "error": "embedding endpoint not configured",
+              "impact": "Keyword matching still works; meaning-based ranking is offline."
+            },
+            "embedQueueDepth": 0,
+            "failedEmbeddings": 0,
+            "skippedEmbeddings": 0,
+            "queueStatus": "unavailable",
+            "queues": [],
+            "compaction": {
+              "eligible": 0,
+              "activeTail": 0,
+              "belowFloor": 0
+            },
+            "capture": {
+              "status": "unknown",
+              "impact": "Capture progress is not measured by this endpoint yet."
+            }
+          }
+        }
+      ],
+      "logs": []
+    },
+    {
+      "name": "captured, no embedding endpoint",
+      "steps": [
+        {
+          "label": "stats",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "conversations": 2,
+            "messages": 6,
+            "toolCalls": 4,
+            "summaries": 0,
+            "embedQueueDepth": 0,
+            "embeddedMessages": 0,
+            "failedEmbeddings": 0,
+            "topTools": [
+              {
+                "tool": "Bash",
+                "count": 2
+              },
+              {
+                "tool": "Read",
+                "count": 2
+              }
+            ],
+            "recentSessions": [
+              {
+                "sessionId": "cli:sess-1",
+                "title": null,
+                "agent": "rivet",
+                "lastActive": "2026-10-10T12:00:00.000Z",
+                "messages": 3
+              },
+              {
+                "sessionId": "cli:sess-2",
+                "title": "Helper session",
+                "agent": "helper",
+                "lastActive": "2026-10-10T12:00:00.000Z",
+                "messages": 3
+              }
+            ]
+          }
+        },
+        {
+          "label": "stats agent helper",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "conversations": 1,
+            "messages": 3,
+            "toolCalls": 3,
+            "summaries": 0,
+            "embedQueueDepth": 0,
+            "embeddedMessages": 0,
+            "failedEmbeddings": 0,
+            "topTools": [
+              {
+                "tool": "Read",
+                "count": 2
+              },
+              {
+                "tool": "Bash",
+                "count": 1
+              }
+            ],
+            "recentSessions": [
+              {
+                "sessionId": "cli:sess-2",
+                "title": "Helper session",
+                "agent": "helper",
+                "lastActive": "2026-10-10T12:00:00.000Z",
+                "messages": 3
+              }
+            ]
+          }
+        },
+        {
+          "label": "stats agent nobody",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "conversations": 0,
+            "messages": 0,
+            "toolCalls": 0,
+            "summaries": 0,
+            "embedQueueDepth": 0,
+            "embeddedMessages": 0,
+            "failedEmbeddings": 0,
+            "topTools": [],
+            "recentSessions": []
+          }
+        },
+        {
+          "label": "health",
+          "at": "2026-10-10T12:00:00.000Z",
+          "result": {
+            "status": "degraded",
+            "observedAt": "2026-10-10T12:00:00.000Z",
+            "embeddings": {
+              "status": "unavailable",
+              "checkedAt": "2026-10-10T12:00:00.000Z",
+              "error": "embedding endpoint not configured",
+              "impact": "Keyword matching still works; meaning-based ranking is offline."
+            },
+            "embedQueueDepth": 0,
+            "failedEmbeddings": 0,
+            "skippedEmbeddings": 0,
+            "queueStatus": "unavailable",
+            "queues": [],
+            "compaction": {
+              "eligible": 0,
+              "activeTail": 0,
+              "belowFloor": 6
+            },
+            "capture": {
+              "status": "unknown",
+              "impact": "Capture progress is not measured by this endpoint yet."
+            }
+          }
+        }
+      ],
+      "logs": []
+    },
+    {
+      "name": "embedding endpoint: queued, then drained, queues and buckets",
+      "steps": [
+        {
+          "label": "stats queued",
+          "at": "2026-10-10T12:13:00.000Z",
+          "result": {
+            "conversations": 3,
+            "messages": 16,
+            "toolCalls": 1,
+            "summaries": 0,
+            "embedQueueDepth": 17,
+            "embeddedMessages": 0,
+            "failedEmbeddings": 0,
+            "topTools": [
+              {
+                "tool": "Bash",
+                "count": 1
+              }
+            ],
+            "recentSessions": [
+              {
+                "sessionId": "cli:old",
+                "title": "Session cli:old",
+                "agent": "rivet",
+                "lastActive": "2026-10-10T12:12:00.000Z",
+                "messages": 6
+              },
+              {
+                "sessionId": "cli:busy",
+                "title": "Session cli:busy",
+                "agent": "rivet",
+                "lastActive": "2026-10-10T12:06:00.000Z",
+                "messages": 7
+              },
+              {
+                "sessionId": "cli:sess-1",
+                "title": null,
+                "agent": "rivet",
+                "lastActive": "2026-10-10T12:00:00.000Z",
+                "messages": 3
+              }
+            ]
+          }
+        },
+        {
+          "label": "health queued",
+          "at": "2026-10-10T12:13:00.000Z",
+          "result": {
+            "status": "ok",
+            "observedAt": "2026-10-10T12:13:00.000Z",
+            "embeddings": {
+              "status": "ok",
+              "checkedAt": "2026-10-10T12:13:00.000Z"
+            },
+            "embedQueueDepth": 17,
+            "failedEmbeddings": 0,
+            "skippedEmbeddings": 0,
+            "queueStatus": "unavailable",
+            "queues": [
+              {
+                "task": "embed-target",
+                "pending": 16,
+                "running": 0,
+                "scheduled": 1,
+                "dead": 0,
+                "oldestPendingMinutes": 13
+              }
+            ],
+            "compaction": {
+              "eligible": 0,
+              "activeTail": 13,
+              "belowFloor": 3
+            },
+            "capture": {
+              "status": "unknown",
+              "impact": "Capture progress is not measured by this endpoint yet."
+            }
+          }
+        },
+        {
+          "label": "drain",
+          "at": "2026-10-10T12:23:00.000Z",
+          "result": 18
+        },
+        {
+          "label": "stats drained",
+          "at": "2026-10-10T12:23:00.000Z",
+          "result": {
+            "conversations": 3,
+            "messages": 16,
+            "toolCalls": 1,
+            "summaries": 1,
+            "embedQueueDepth": 1,
+            "embeddedMessages": 16,
+            "failedEmbeddings": 0,
+            "topTools": [
+              {
+                "tool": "Bash",
+                "count": 1
+              }
+            ],
+            "recentSessions": [
+              {
+                "sessionId": "cli:old",
+                "title": "Session cli:old",
+                "agent": "rivet",
+                "lastActive": "2026-10-10T12:12:00.000Z",
+                "messages": 6
+              },
+              {
+                "sessionId": "cli:busy",
+                "title": "Session cli:busy",
+                "agent": "rivet",
+                "lastActive": "2026-10-10T12:06:00.000Z",
+                "messages": 7
+              },
+              {
+                "sessionId": "cli:sess-1",
+                "title": null,
+                "agent": "rivet",
+                "lastActive": "2026-10-10T12:00:00.000Z",
+                "messages": 3
+              }
+            ]
+          }
+        },
+        {
+          "label": "health drained",
+          "at": "2026-10-10T12:23:00.000Z",
+          "result": {
+            "status": "ok",
+            "observedAt": "2026-10-10T12:23:00.000Z",
+            "embeddings": {
+              "status": "ok",
+              "checkedAt": "2026-10-10T12:23:00.000Z"
+            },
+            "embedQueueDepth": 1,
+            "failedEmbeddings": 0,
+            "skippedEmbeddings": 0,
+            "queueStatus": "unavailable",
+            "queues": [
+              {
+                "task": "embed-target",
+                "pending": 0,
+                "running": 0,
+                "scheduled": 1,
+                "dead": 0,
+                "oldestPendingMinutes": null
+              }
+            ],
+            "compaction": {
+              "eligible": 0,
+              "activeTail": 6,
+              "belowFloor": 3
+            },
+            "capture": {
+              "status": "unknown",
+              "impact": "Capture progress is not measured by this endpoint yet."
+            }
+          }
+        }
+      ],
+      "logs": [
+        "[memory.sqlite] compacted 00000000: 1 summaries"
+      ]
+    },
+    {
+      "name": "embedding keeps failing → degraded; old failures age out",
+      "steps": [
+        {
+          "label": "health degraded",
+          "at": "2026-10-01T18:00:00.000Z",
+          "result": {
+            "status": "degraded",
+            "observedAt": "2026-10-01T18:00:00.000Z",
+            "embeddings": {
+              "status": "ok",
+              "checkedAt": "2026-10-01T18:00:00.000Z"
+            },
+            "embedQueueDepth": 1,
+            "failedEmbeddings": 1,
+            "skippedEmbeddings": 0,
+            "queueStatus": "unavailable",
+            "queues": [
+              {
+                "task": "embed-target",
+                "pending": 1,
+                "running": 0,
+                "scheduled": 0,
+                "dead": 0,
+                "oldestPendingMinutes": 360
+              }
+            ],
+            "compaction": {
+              "eligible": 0,
+              "activeTail": 0,
+              "belowFloor": 1
+            },
+            "capture": {
+              "status": "unknown",
+              "impact": "Capture progress is not measured by this endpoint yet."
+            }
+          }
+        },
+        {
+          "label": "stats",
+          "at": "2026-10-01T18:00:00.000Z",
+          "result": {
+            "conversations": 1,
+            "messages": 1,
+            "toolCalls": 0,
+            "summaries": 0,
+            "embedQueueDepth": 1,
+            "embeddedMessages": 0,
+            "failedEmbeddings": 1,
+            "topTools": [],
+            "recentSessions": [
+              {
+                "sessionId": "cli:sess-1",
+                "title": null,
+                "agent": "rivet",
+                "lastActive": "2026-10-01T12:00:00.000Z",
+                "messages": 1
+              }
+            ]
+          }
+        },
+        {
+          "label": "health after 8 days",
+          "at": "2026-10-09T18:00:00.000Z",
+          "result": {
+            "status": "ok",
+            "observedAt": "2026-10-09T18:00:00.000Z",
+            "embeddings": {
+              "status": "ok",
+              "checkedAt": "2026-10-09T18:00:00.000Z"
+            },
+            "embedQueueDepth": 1,
+            "failedEmbeddings": 1,
+            "skippedEmbeddings": 0,
+            "queueStatus": "unavailable",
+            "queues": [
+              {
+                "task": "embed-target",
+                "pending": 1,
+                "running": 0,
+                "scheduled": 0,
+                "dead": 0,
+                "oldestPendingMinutes": 11880
+              }
+            ],
+            "compaction": {
+              "eligible": 0,
+              "activeTail": 0,
+              "belowFloor": 1
+            },
+            "capture": {
+              "status": "unknown",
+              "impact": "Capture progress is not measured by this endpoint yet."
+            }
+          }
+        }
+      ],
+      "logs": [
+        "[sqlite-jobs] embed-target embed-ros_messages-00000000-0000-4000-8000-000000000001 failed (attempt 1/5, retry): embed HTTP 400",
+        "[sqlite-jobs] embed-target embed-ros_messages-00000000-0000-4000-8000-000000000001 failed (attempt 2/5, retry): embed HTTP 400",
+        "[sqlite-jobs] embed-target embed-ros_messages-00000000-0000-4000-8000-000000000001 failed (attempt 3/5, retry): embed HTTP 400",
+        "[sqlite-jobs] embed-target embed-ros_messages-00000000-0000-4000-8000-000000000001 failed (attempt 4/5, retry): embed HTTP 400",
+        "[sqlite-jobs] embed-target embed-ros_messages-00000000-0000-4000-8000-000000000001 failed (attempt 5/5, dead): embed HTTP 400",
+        "[sqlite-jobs] embed-target embed-ros_messages-00000000-0000-4000-8000-000000000001 failed (attempt 1/5, retry): embed HTTP 400"
+      ]
+    }
+  ]
+}
