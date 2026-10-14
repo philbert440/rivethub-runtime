@@ -51,6 +51,7 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
 
     let mut conv_ids: BTreeMap<String, String> = BTreeMap::new();
     let mut uuid_to_label: BTreeMap<String, String> = BTreeMap::new();
+    let mut originals: BTreeMap<(String, String), wire::capture::CaptureMessage> = BTreeMap::new();
     let recorded_results = golden
         .get("results")
         .and_then(Value::as_array)
@@ -71,6 +72,9 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
         };
         let result = memory.capture_batch(&batch, &options).await?;
         let recorded_id = text(field(entry, "result")?, "conversation_id")?.to_string();
+        for message in batch.messages {
+            originals.insert((recorded_id.clone(), message.event_id.clone()), message);
+        }
         conv_ids
             .entry(recorded_id.clone())
             .or_insert_with(|| result.conversation_id.clone());
@@ -146,6 +150,13 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
         let actual = actual_messages
             .get(&key)
             .ok_or_else(|| format!("missing message {key:?}"))?;
+        if field(expected, "metadata")?.get("truncated") == Some(&Value::Bool(true)) {
+            let original = originals
+                .get(&key)
+                .ok_or_else(|| format!("no captured input for {key:?}"))?;
+            assert_truncated(actual, original)?;
+            continue;
+        }
         for key in [
             "agent",
             "channel",
@@ -241,6 +252,42 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
         "finalize must move updated_at forward: {updated} vs {created}"
     );
     Ok(())
+}
+
+const CONTENT_CAP: usize = 16_000;
+
+fn assert_truncated(
+    actual: &Value,
+    original: &wire::capture::CaptureMessage,
+) -> Result<(), String> {
+    let metadata = field(actual, "metadata")?;
+    assert_eq!(metadata.get("truncated"), Some(&Value::Bool(true)));
+    assert_capped(
+        text(actual, "content")?,
+        &original.content,
+        metadata.get("full_content_length"),
+    );
+    if let Some(result) = &original.tool_result {
+        assert_capped(
+            text(actual, "tool_result")?,
+            result,
+            metadata.get("full_tool_result_length"),
+        );
+    }
+    Ok(())
+}
+
+fn assert_capped(stored: &str, original: &str, recorded_length: Option<&Value>) {
+    assert!(
+        original.starts_with(stored) && stored.len() < original.len(),
+        "stored text is not a strict prefix of the captured text"
+    );
+    assert!(stored.chars().count() <= CONTENT_CAP);
+    assert_eq!(
+        recorded_length,
+        Some(&Value::from(original.chars().count())),
+        "original length is not recorded"
+    );
 }
 
 fn assert_field(actual: &Value, expected: &Value, label: &str) {

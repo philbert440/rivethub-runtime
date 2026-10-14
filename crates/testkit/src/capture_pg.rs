@@ -10,6 +10,7 @@ use crate::Error;
 use crate::Mismatch;
 use crate::capture::ISO_TIMESTAMP;
 use crate::json::Json;
+use crate::json::json_text;
 
 #[derive(Debug, Clone)]
 pub struct PgStep {
@@ -226,6 +227,25 @@ fn collect_input_uuids(value: &Json, out: &mut Vec<String>) {
     }
 }
 
+const CONTENT_CAP: usize = 16_000;
+const TITLE_CAP: usize = 120;
+const TRUNCATION_MARKER: &str = "\n\u{2026}[truncated]";
+
+fn same_cut(recorded: &str, actual: &str) -> bool {
+    let (recorded, actual, cap) = match (
+        recorded.strip_suffix(TRUNCATION_MARKER),
+        actual.strip_suffix(TRUNCATION_MARKER),
+    ) {
+        (Some(recorded), Some(actual)) => (recorded, actual, CONTENT_CAP),
+        (None, None) => match recorded.strip_suffix('\u{fffd}') {
+            Some(recorded) => (recorded, actual, TITLE_CAP),
+            None => return false,
+        },
+        _ => return false,
+    };
+    actual.chars().count() <= cap && actual.starts_with(recorded)
+}
+
 fn pg_value_eq(rec: &Json, act: &Json, map: &mut BTreeMap<(String, String), String>) -> bool {
     match (rec, act) {
         (Json::Object(r), Json::Object(a)) => {
@@ -250,7 +270,11 @@ fn pg_value_eq(rec: &Json, act: &Json, map: &mut BTreeMap<(String, String), Stri
                         true
                     }
                 }
-                (None, None) => r == a,
+                (None, None) => {
+                    r == a
+                        || same_cut(r, a)
+                        || matches!((json_text(r), json_text(a)), (Some(r), Some(a)) if pg_value_eq(&r, &a, map))
+                }
                 _ => false,
             }
         }

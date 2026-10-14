@@ -12,7 +12,7 @@ use wire::JsonObject;
 use wire::capture::CaptureMessage;
 use wire::message::Role;
 
-pub const MAX_CONTENT_UNITS: usize = 16_000;
+pub const MAX_CONTENT_CHARS: usize = 16_000;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CaptureOptions {
@@ -333,19 +333,18 @@ impl<'a> CaptureWriter<'a> {
     }
 }
 
-pub(crate) fn utf16_len(text: &str) -> u64 {
-    text.chars().map(char::len_utf16).sum::<usize>() as u64
+pub(crate) fn char_prefix(text: &str, max: usize) -> &str {
+    text.char_indices()
+        .nth(max)
+        .map_or(text, |(end, _)| &text[..end])
 }
 
-pub(crate) fn cap_units(text: &str, max: usize) -> (&str, bool) {
-    let mut units = 0usize;
-    for (idx, ch) in text.char_indices() {
-        if units + ch.len_utf16() > max {
-            return (&text[..idx], true);
-        }
-        units += ch.len_utf16();
-    }
-    (text, false)
+fn capped(text: &str) -> (&str, Option<u64>) {
+    let kept = char_prefix(text, MAX_CONTENT_CHARS);
+    (
+        kept,
+        (kept.len() < text.len()).then(|| text.chars().count() as u64),
+    )
 }
 
 pub(crate) struct PreparedMessage {
@@ -367,24 +366,22 @@ struct CaptureProvenance<'a> {
 }
 
 pub(crate) fn prepare_capture_message(message: &CaptureMessage) -> Result<PreparedMessage, Error> {
-    let (content, content_truncated) = cap_units(&message.content, MAX_CONTENT_UNITS);
-    let full_content = utf16_len(&message.content);
-    let full_tool_result = message.tool_result.as_deref().map_or(0, utf16_len);
-    let (tool_result, tool_truncated) = match message.tool_result.as_deref() {
+    let (content, full_content_length) = capped(&message.content);
+    let (tool_result, full_tool_result_length) = match message.tool_result.as_deref() {
         Some(text) => {
-            let (capped, truncated) = cap_units(text, MAX_CONTENT_UNITS);
-            (Some(capped.to_string()), truncated)
+            let (kept, full) = capped(text);
+            (Some(kept.to_owned()), full)
         }
-        None => (None, false),
+        None => (None, None),
     };
     let metadata: JsonObject = message.metadata.clone().unwrap_or_default();
     let mut metadata =
         serde_json::to_value(metadata).map_err(|source| Error::protocol(source.to_string()))?;
     let provenance = serde_json::to_value(CaptureProvenance {
         event_id: message.event_id.as_str(),
-        truncated: content_truncated,
-        full_content_length: content_truncated.then_some(full_content),
-        full_tool_result_length: tool_truncated.then_some(full_tool_result),
+        truncated: full_content_length.is_some(),
+        full_content_length,
+        full_tool_result_length,
     })
     .map_err(|source| Error::protocol(source.to_string()))?;
     let Some(object) = metadata.as_object_mut() else {

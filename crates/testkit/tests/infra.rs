@@ -117,3 +117,12 @@ fn copy_fixture_copies_into_a_private_directory() {
 fn sqlite_version_is_reported() {
     assert_ne!(sqlite_version(), "");
 }
+
+#[test]
+fn rows_eq_compares_json_text_cells_as_values() {
+    let stored = vec![serde_json::json!({"meta": "{\"b\": 2, \"a\": [1.0]}"})];
+    let expected = vec![serde_json::json!({"meta": "{\"a\":[1],\"b\":2}"})];
+    assert!(rows_eq(&stored, &expected));
+    let other = vec![serde_json::json!({"meta": "{\"a\":[1],\"b\":3}"})];
+    assert!(!rows_eq(&stored, &other));
+}

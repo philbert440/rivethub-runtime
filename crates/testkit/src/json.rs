@@ -244,7 +244,7 @@ fn num_eq(a: &Json, b: &Json) -> bool {
     }
 }
 
-fn value_eq(rec: &Json, act: &Json, strings: &dyn Fn(&str, &str) -> bool) -> bool {
+pub(crate) fn value_eq(rec: &Json, act: &Json, strings: &dyn Fn(&str, &str) -> bool) -> bool {
     match (rec, act) {
         (Json::Object(r), Json::Object(a)) => {
             r.iter().filter(|(_, v)| !v.is_null()).all(|(k, rv)| {
@@ -264,6 +264,12 @@ fn value_eq(rec: &Json, act: &Json, strings: &dyn Fn(&str, &str) -> bool) -> boo
         (Json::Null, Json::Null) => true,
         _ => false,
     }
+}
+
+pub(crate) fn json_text(text: &str) -> Option<Json> {
+    serde_json::from_str::<Json>(text)
+        .ok()
+        .filter(|value| value.is_object() || value.is_array())
 }
 
 #[must_use]

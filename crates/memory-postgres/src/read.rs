@@ -1,3 +1,4 @@
+use crate::capture::char_prefix;
 use crate::error::Error;
 use crate::search::SearchOptions;
 use chrono::DateTime;
@@ -79,21 +80,6 @@ fn stored_json(raw: Option<String>, column: &'static str) -> Result<Option<JsonO
     serde_json::from_str(&text)
         .map(Some)
         .map_err(|source| Error::protocol(format!("stored {column} is not JSON: {source}")))
-}
-
-fn utf16_prefix(text: &str, max: usize) -> String {
-    let mut units = 0usize;
-    for (idx, ch) in text.char_indices() {
-        if units + ch.len_utf16() > max {
-            return text[..idx].to_string();
-        }
-        units += ch.len_utf16();
-    }
-    text.to_string()
-}
-
-fn utf16_len(text: &str) -> usize {
-    text.chars().map(char::len_utf16).sum()
 }
 
 fn count(value: i64) -> Result<u64, Error> {
@@ -329,9 +315,9 @@ impl crate::PostgresMemory {
             let line = format!(
                 "[{}] {}",
                 row.role,
-                utf16_prefix(&row.content, CONTEXT_LINE_CAP)
+                char_prefix(&row.content, CONTEXT_LINE_CAP)
             );
-            let key = utf16_prefix(&row.content, CONTEXT_DEDUP_PREFIX);
+            let key = char_prefix(&row.content, CONTEXT_DEDUP_PREFIX).to_owned();
             if !dedup.insert(key) {
                 continue;
             }
@@ -391,7 +377,7 @@ impl crate::PostgresMemory {
             .await?;
         let mut relevant_lines: Vec<String> = Vec::new();
         for hit in hits {
-            let key = utf16_prefix(&hit.content, CONTEXT_DEDUP_PREFIX);
+            let key = char_prefix(&hit.content, CONTEXT_DEDUP_PREFIX).to_owned();
             if !dedup.insert(key) {
                 continue;
             }
@@ -405,7 +391,7 @@ impl crate::PostgresMemory {
                     format!(
                         "[{agent_name}/{role}, {when} · {}] {}",
                         hit.created_at.format("%Y-%m-%d %H:%M"),
-                        utf16_prefix(&hit.content, CONTEXT_LINE_CAP)
+                        char_prefix(&hit.content, CONTEXT_LINE_CAP)
                     )
                 }
                 MemoryHitSource::Summary => {
@@ -416,7 +402,7 @@ impl crate::PostgresMemory {
                     format!(
                         "[{label}, {when} · {}] {}",
                         hit.created_at.format("%Y-%m-%d %H:%M"),
-                        utf16_prefix(&hit.content, CONTEXT_LINE_CAP)
+                        char_prefix(&hit.content, CONTEXT_LINE_CAP)
                     )
                 }
             };
@@ -461,18 +447,18 @@ impl crate::PostgresMemory {
         }
         let mut lines: Vec<String> = Vec::new();
         for row in rows {
-            let key = utf16_prefix(&row.current_state, CONTEXT_DEDUP_PREFIX);
+            let key = char_prefix(&row.current_state, CONTEXT_DEDUP_PREFIX).to_owned();
             dedup.insert(key);
             let mut block = format!("**{}** (wiki:{})", row.title, row.slug);
-            let lead = utf16_prefix(&row.current_state, WIKI_LEAD_CAP);
+            let lead = char_prefix(&row.current_state, WIKI_LEAD_CAP);
             if !lead.trim().is_empty() {
                 block.push('\n');
-                block.push_str(&lead);
+                block.push_str(lead);
             }
-            let article = utf16_prefix(&row.article, WIKI_ARTICLE_CAP);
+            let article = char_prefix(&row.article, WIKI_ARTICLE_CAP);
             if !article.trim().is_empty() {
                 block.push('\n');
-                block.push_str(&article);
+                block.push_str(article);
             }
             lines.push(block);
         }
@@ -489,7 +475,7 @@ impl crate::PostgresMemory {
 }
 
 fn push_within_budget(budget: &mut usize, line: &str) -> bool {
-    let tokens = utf16_len(line).div_ceil(4);
+    let tokens = line.chars().count().div_ceil(4);
     if tokens > *budget {
         return false;
     }

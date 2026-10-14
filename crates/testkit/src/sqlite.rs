@@ -9,6 +9,8 @@ use tempfile::TempDir;
 use crate::Error;
 use crate::json::Json;
 use crate::json::json_eq;
+use crate::json::json_text;
+use crate::json::value_eq;
 
 #[derive(Debug)]
 pub struct FixtureCopy {
@@ -103,7 +105,11 @@ pub fn query_json(conn: &Connection, sql: &str, params: &[&dyn ToSql]) -> Result
 
 #[must_use]
 pub fn rows_eq(a: &[Json], b: &[Json]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| json_eq(x, y))
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| value_eq(x, y, &text_cell_eq))
+}
+
+fn text_cell_eq(a: &str, b: &str) -> bool {
+    a == b || matches!((json_text(a), json_text(b)), (Some(x), Some(y)) if json_eq(&x, &y))
 }
 
 #[must_use]

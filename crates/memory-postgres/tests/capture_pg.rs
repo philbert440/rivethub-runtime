@@ -5,7 +5,6 @@ use testkit::capture_pg;
 use testkit::capture_pg::PgOutcome;
 use testkit::pgdump::dump_rivetos;
 use testkit::pgdump::queue_present;
-use testkit::pgdump::tool_response_orders;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -42,9 +41,6 @@ async fn replay_public_arm(pool: PgPool) -> TestResult {
     let queue = queue_present(&pool).await?;
     for file in GOLDEN_FILES {
         let path = testkit::recording(&format!("capture/pg/{file}"));
-        let text = std::fs::read_to_string(&path)?;
-        let mut orders: std::collections::VecDeque<Vec<String>> =
-            tool_response_orders(&text).into();
         for scenario in capture_pg::scenarios(&path)? {
             if scenario.schema != "public" {
                 continue;
@@ -53,36 +49,20 @@ async fn replay_public_arm(pool: PgPool) -> TestResult {
             if !queue {
                 drop_graphile_rows(&mut scenario);
             }
-            let mut step_orders: Vec<Option<Vec<String>>> = Vec::new();
-            for step in &scenario.steps {
-                let wants = step.kind == "ingestHookEvent"
-                    && at(at(&step.input, "payload"), "tool_response").is_object();
-                step_orders.push(if wants {
-                    Some(
-                        orders
-                            .pop_front()
-                            .ok_or("a tool_response order for the recorded step")?,
-                    )
-                } else {
-                    None
-                });
-            }
             reset(&pool).await?;
             let started = chrono::Utc::now() - chrono::Duration::seconds(5);
             let mut outcomes: Vec<PgOutcome> = Vec::new();
             let mut namer = testkit::PgNamer::new();
-            for (index, step) in scenario.steps.iter().enumerate() {
+            for step in &scenario.steps {
                 let call = capture_pg::PgStep {
                     kind: step.kind.clone(),
                     label: step.label.clone(),
                     input: step.input.clone(),
                 };
-                let order = step_orders.get(index).cloned().flatten();
                 let mut context = StepContext {
                     pool: &pool,
                     started,
                     namer: &mut namer,
-                    order: order.as_deref(),
                 };
                 let mut outcome = run_step(&call, &mut context).await;
                 if let Some(object) = outcome.result.as_mut().and_then(Json::as_object_mut)
@@ -140,7 +120,6 @@ struct StepContext<'a> {
     pool: &'a PgPool,
     started: chrono::DateTime<chrono::Utc>,
     namer: &'a mut testkit::PgNamer,
-    order: Option<&'a [String]>,
 }
 
 async fn run_step(step: &capture_pg::PgStep, context: &mut StepContext<'_>) -> PgOutcome {
@@ -159,7 +138,7 @@ async fn run_step(step: &capture_pg::PgStep, context: &mut StepContext<'_>) -> P
         }
         "ingestHookEvent" => {
             let payload = at(&step.input, "payload");
-            match ingest_hook_event(context.pool, payload, &step.input, context.order).await {
+            match ingest_hook_event(context.pool, payload, &step.input).await {
                 Ok(result) => outcome.result = Some(result),
                 Err(_) => outcome.error = Some("error".to_string()),
             }
@@ -436,30 +415,36 @@ fn result_text(content: &Value) -> String {
     }
 }
 
-fn result_object(value: &Value) -> Result<Option<wire::JsonObject>, IngestError> {
-    match value {
-        Value::Object(_) => Ok(Some(serde_json::from_value(testkit::pgdump::js_number(
-            value,
-        ))?)),
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) | Value::Array(_) => {
-            Ok(None)
-        }
+const CONTENT_CAP: usize = 16_000;
+const TITLE_CAP: usize = 120;
+const TRUNCATION_MARKER: &str = "\n\u{2026}[truncated]";
+
+fn capped(text: &str) -> String {
+    match text.char_indices().nth(CONTENT_CAP) {
+        Some((end, _)) => format!("{}{TRUNCATION_MARKER}", &text[..end]),
+        None => text.to_owned(),
     }
 }
 
-fn tool_result_of(payload: &Value, order: Option<&[String]>) -> Option<String> {
-    let raw = if let Some(response) = payload.get("tool_response") {
-        match response {
-            Value::Null => str_at(payload, "tool_result")?,
-            Value::String(text) => text.clone(),
-            other @ (Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_)) => {
-                testkit::pgdump::js_stringify(other, order)
-            }
-        }
+fn title_of(text: &str) -> String {
+    text.chars().take(TITLE_CAP).collect()
+}
+
+fn result_object(value: &Value) -> Result<Option<wire::JsonObject>, IngestError> {
+    Ok(if value.is_object() {
+        Some(serde_json::from_value(value.clone())?)
     } else {
-        str_at(payload, "tool_result")?
+        None
+    })
+}
+
+fn tool_result_of(payload: &Value) -> Option<String> {
+    let raw = match payload.get("tool_response") {
+        None | Some(Value::Null) => str_at(payload, "tool_result")?,
+        Some(Value::String(text)) => text.clone(),
+        Some(other) => other.to_string(),
     };
-    Some(testkit::pgdump::cap_and_mark(&raw, 16_000))
+    Some(capped(&raw))
 }
 
 #[expect(
@@ -470,7 +455,6 @@ async fn ingest_hook_event(
     pool: &PgPool,
     payload: &Value,
     opts: &Value,
-    tool_response_order: Option<&[String]>,
 ) -> Result<Json, IngestError> {
     let event = str_at(payload, "hook_event_name").unwrap_or_default();
     let Some(session_id) = str_at(payload, "session_id") else {
@@ -509,10 +493,7 @@ async fn ingest_hook_event(
     }
 
     let title = match event.as_str() {
-        "UserPromptSubmit" => {
-            let raw = prompt.clone().unwrap_or_default();
-            testkit::pgdump::slice_units(&raw, 120)
-        }
+        "UserPromptSubmit" => title_of(prompt.as_deref().unwrap_or_default()),
         _ => "Claude Code session".to_string(),
     };
     let settings: wire::JsonObject = serde_json::from_value(encoded(HookSettings {
@@ -566,8 +547,7 @@ async fn ingest_hook_event(
         let args;
         let result;
         let row = if event.as_str() == "UserPromptSubmit" {
-            prompt_content =
-                testkit::pgdump::cap_and_mark(&prompt.clone().unwrap_or_default(), 16_000);
+            prompt_content = capped(prompt.as_deref().unwrap_or_default());
             memory_postgres::MessageRow {
                 conversation_id: record.id,
                 agent: AGENT,
@@ -585,7 +565,7 @@ async fn ingest_hook_event(
             tool_name = str_at(payload, "tool_name").unwrap_or_else(|| "unknown".into());
             tool_content = format!("[tool call] {tool_name}");
             args = result_object(payload.get("tool_input").unwrap_or(&Value::Null))?;
-            result = tool_result_of(payload, tool_response_order);
+            result = tool_result_of(payload);
             memory_postgres::MessageRow {
                 conversation_id: record.id,
                 agent: AGENT,
@@ -804,7 +784,7 @@ async fn ingest_transcript(
     let latest_ai_title = parsed.ai_titles.last().cloned();
     let title_for_create = latest_ai_title
         .clone()
-        .or_else(|| fallback_title.map(|t| testkit::pgdump::slice_units(&t, 120)));
+        .or_else(|| fallback_title.as_deref().map(title_of));
 
     let mut writer = memory_postgres::CaptureWriter::begin(pool, &session_key).await?;
     let owner = routed_user(opts);
@@ -851,7 +831,7 @@ async fn ingest_transcript(
                 agent: AGENT,
                 channel: CHANNEL,
                 role: wire::message::Role::Assistant,
-                content: &testkit::pgdump::cap_and_mark(text, 16_000),
+                content: &capped(text),
                 tool_name: None,
                 tool_args: None,
                 tool_result: None,
@@ -863,26 +843,22 @@ async fn ingest_transcript(
         inserted += 1;
     }
 
-    let stored_tools = writer.stored_tool_calls(record.id).await?;
-    let mut supply: std::collections::HashMap<(String, String), i64> =
-        std::collections::HashMap::new();
-    for (name, args) in &stored_tools {
-        let supply_args = match args {
-            Some(text) => serde_json::from_str::<Value>(text)
-                .map_or_else(|_| text.clone(), |value| testkit::pgdump::canonical(&value)),
-            None => String::new(),
-        };
-        let key = (name.clone().unwrap_or_default(), supply_args);
-        *supply.entry(key).or_insert(0) += 1;
-    }
+    let mut supply: Vec<(Option<String>, Option<Value>)> = writer
+        .stored_tool_calls(record.id)
+        .await?
+        .into_iter()
+        .map(|(name, args)| (name, args.and_then(|text| serde_json::from_str(&text).ok())))
+        .collect();
     for line in &parsed.assistants {
         for (call_id, name, input) in &line.calls {
             let result = parsed.results.get(call_id);
-            let key = (name.clone(), testkit::pgdump::canonical(input));
-            if supply.get(&key).copied().unwrap_or(0) > 0 {
-                if let Some(count) = supply.get_mut(&key) {
-                    *count -= 1;
-                }
+            if let Some(found) = supply.iter().position(|(stored, args)| {
+                stored.as_deref().unwrap_or_default() == name
+                    && args
+                        .as_ref()
+                        .is_some_and(|args| testkit::json_eq(args, input))
+            }) {
+                supply.swap_remove(found);
                 already_stored += 1;
                 continue;
             }
@@ -893,7 +869,7 @@ async fn ingest_transcript(
                 Some(true),
                 herdr.clone(),
             )?;
-            let args: wire::JsonObject = serde_json::from_value(testkit::pgdump::js_number(input))?;
+            let args: wire::JsonObject = serde_json::from_value(input.clone())?;
             writer
                 .insert_message(&memory_postgres::MessageRow {
                     conversation_id: record.id,
@@ -916,7 +892,7 @@ async fn ingest_transcript(
     let stored_users = writer.stored_user_contents(record.id).await?;
     let mut skipped_users = 0u64;
     for line in &parsed.users {
-        let content = testkit::pgdump::cap_and_mark(&line.content, 16_000);
+        let content = capped(&line.content);
         if stored_users.contains(&content) {
             skipped_users += 1;
             continue;
