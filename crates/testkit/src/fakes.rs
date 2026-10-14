@@ -1,7 +1,9 @@
+mod queue;
+pub use queue::FakeJobQueue;
+
 use std::collections::BTreeMap;
 use std::str::FromStr;
-use std::sync::atomic::AtomicI64;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 use async_trait::async_trait;
 use chrono::DateTime;
@@ -19,12 +21,6 @@ use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
 use kernel::model::ModelRequest;
 use kernel::model::ModelStreamItem;
-use kernel::queue::ClaimedJob;
-use kernel::queue::Job;
-use kernel::queue::JobId;
-use kernel::queue::JobQueue;
-use kernel::queue::JobQueueError;
-use kernel::queue::WorkerRole;
 use kernel::terminal::PtyInfo;
 use kernel::terminal::TermSize;
 use kernel::terminal::TerminalId;
@@ -40,49 +36,6 @@ use tokio::sync::mpsc::Receiver;
 use wire::harness::ApprovalDecision;
 use wire::session_id::SessionId;
 use wire::stream::LlmResponse;
-
-#[derive(Debug, Default)]
-pub struct FakeJobQueue {
-    jobs: Mutex<BTreeMap<JobId, Job>>,
-    next_id: AtomicI64,
-}
-
-#[async_trait]
-impl JobQueue for FakeJobQueue {
-    async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
-        let id = JobId::new(self.next_id.fetch_add(1, Ordering::Relaxed));
-        self.jobs.lock().await.insert(id, job);
-        Ok(())
-    }
-
-    async fn claim(&self, _role: WorkerRole) -> Result<Option<ClaimedJob>, JobQueueError> {
-        let claimed = {
-            let mut jobs = self.jobs.lock().await;
-            jobs.iter()
-                .next()
-                .map(|(id, job)| (*id, job.clone()))
-                .map(|(id, job)| {
-                    jobs.remove(&id);
-                    ClaimedJob {
-                        id,
-                        name: job.name,
-                        payload: job.payload,
-                        attempt: 1,
-                    }
-                })
-        };
-        Ok(claimed)
-    }
-
-    async fn complete(&self, id: JobId) -> Result<(), JobQueueError> {
-        self.jobs.lock().await.remove(&id);
-        Ok(())
-    }
-
-    async fn fail(&self, _id: JobId, _error: &str) -> Result<(), JobQueueError> {
-        Ok(())
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum Script {
@@ -100,6 +53,7 @@ pub struct FakeProvider {
     script: Mutex<Vec<Script>>,
     fnv_dims: Mutex<Option<usize>>,
     embed_requests: Mutex<Vec<Vec<String>>>,
+    chat_requests: Mutex<Vec<ModelRequest>>,
     http_status: Mutex<Option<u16>>,
 }
 
@@ -130,6 +84,10 @@ impl FakeProvider {
     pub async fn use_fnv(&self, width: usize) {
         *self.http_status.lock().await = None;
         *self.fnv_dims.lock().await = Some(width);
+    }
+
+    pub async fn chat_requests(&self) -> Vec<ModelRequest> {
+        self.chat_requests.lock().await.clone()
     }
 
     pub async fn embed_requests(&self) -> Vec<Vec<String>> {
@@ -243,7 +201,8 @@ fn default_response() -> LlmResponse {
 
 #[async_trait]
 impl ModelProvider for FakeProvider {
-    async fn chat(&self, _request: ModelRequest) -> Result<LlmResponse, ModelProviderError> {
+    async fn chat(&self, request: ModelRequest) -> Result<LlmResponse, ModelProviderError> {
+        self.chat_requests.lock().await.push(request);
         Ok(self
             .scripted(|s| match s {
                 Script::Chat(response) => Some(response.clone()),

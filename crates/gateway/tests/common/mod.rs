@@ -101,7 +101,7 @@ impl MemoryStore for FailingStore {
     async fn search(
         &self,
         _query: kernel::memory::SearchQuery,
-    ) -> Result<Vec<wire::memory::MemorySearchResult>, MemoryStoreError> {
+    ) -> Result<kernel::memory::SearchOutcome, MemoryStoreError> {
         unavailable()
     }
 
@@ -262,7 +262,7 @@ impl MemoryStore for GatedStore {
     async fn search(
         &self,
         query: SearchQuery,
-    ) -> Result<Vec<wire::memory::MemorySearchResult>, MemoryStoreError> {
+    ) -> Result<kernel::memory::SearchOutcome, MemoryStoreError> {
         self.entered.send_modify(|count| *count += 1);
         drop(self.release.acquire().await);
         self.inner.search(query).await

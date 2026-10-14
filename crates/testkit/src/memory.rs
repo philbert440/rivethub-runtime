@@ -69,12 +69,17 @@ pub enum MemoryRequest {
 #[derive(Debug, Default)]
 pub struct FakeMemoryStore {
     entries: Mutex<Vec<MemoryEntry>>,
+    search_outcome: Mutex<Option<kernel::memory::SearchOutcome>>,
     requests: Mutex<Vec<MemoryRequest>>,
     wiki_pages: Mutex<BTreeMap<String, wire::gateway::wiki::WikiPageResponse>>,
     wiki_redirects: Mutex<BTreeMap<String, String>>,
 }
 
 impl FakeMemoryStore {
+    pub async fn set_search_outcome(&self, outcome: kernel::memory::SearchOutcome) {
+        *self.search_outcome.lock().await = Some(outcome);
+    }
+
     pub async fn insert_wiki_page(&self, page: wire::gateway::wiki::WikiPageResponse) {
         self.wiki_pages.lock().await.insert(page.slug.clone(), page);
     }
@@ -230,11 +235,15 @@ impl MemoryStore for FakeMemoryStore {
     async fn search(
         &self,
         query: SearchQuery,
-    ) -> Result<Vec<MemorySearchResult>, MemoryStoreError> {
+    ) -> Result<kernel::memory::SearchOutcome, MemoryStoreError> {
         self.record(MemoryRequest::Search(query.clone())).await;
+        let outcome = self.search_outcome.lock().await.clone();
+        if let Some(outcome) = outcome {
+            return Ok(outcome);
+        }
         let needle = query.text.trim().to_owned();
         let entries = self.entries.lock().await;
-        Ok(entries
+        let results = entries
             .iter()
             .filter(|e| e.content.contains(&needle))
             .filter(|e| query.agent.as_deref().is_none_or(|a| e.agent == a))
@@ -248,7 +257,12 @@ impl MemoryStore for FakeMemoryStore {
                 relevance_score: 1.0,
                 created_at: e.created_at.unwrap_or_default(),
             })
-            .collect())
+            .collect();
+        drop(entries);
+        Ok(kernel::memory::SearchOutcome {
+            results,
+            ..Default::default()
+        })
     }
 
     async fn browse(&self, filter: BrowseFilter) -> Result<Vec<MemoryEntry>, MemoryStoreError> {

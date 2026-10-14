@@ -126,16 +126,6 @@ pub fn limit(raw: Option<u32>, default: u32, maximum: u32) -> Result<Limit, Erro
 }
 
 pub async fn search(store: &dyn MemoryStore, args: Search) -> Result<CallToolResult, Error> {
-    if args.since.is_some()
-        || args.before.is_some()
-        || args.window.is_some()
-        || args.expand == Some(true)
-        || args.synthesize == Some(true)
-    {
-        return Err(Error::Refused(
-            "MemoryStore search has no time filtering, summary expansion or synthesis port",
-        ));
-    }
     let scope = match args.scope {
         Some(scope) => scope,
         None => MemoryScope::Both,
@@ -143,6 +133,11 @@ pub async fn search(store: &dyn MemoryStore, args: Search) -> Result<CallToolRes
     json(
         &store
             .search(SearchQuery {
+                since: args.since,
+                before: args.before,
+                window: args.window,
+                expand: args.expand,
+                synthesize: args.synthesize,
                 text: args.query,
                 mode: args.mode,
                 scope,

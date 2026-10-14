@@ -48,6 +48,11 @@ async fn memory_requests_reach_kernel_unchanged() {
         store.requests().await,
         vec![
             MemoryRequest::Search(SearchQuery {
+                since: None,
+                before: None,
+                window: None,
+                expand: None,
+                synthesize: None,
                 text: "日本語".into(),
                 mode: SearchMode::Trigram,
                 scope: MemoryScope::Messages,
@@ -104,9 +109,6 @@ async fn invalid_and_unsupported_options_never_reach_store() {
         ("memory_search", r#"{"query":"x","limit":0}"#),
         ("memory_search", r#"{"query":"x","limit":2.5}"#),
         ("memory_search", r#"{"query":"x","mode":"bogus"}"#),
-        ("memory_search", r#"{"query":"x","window":"today"}"#),
-        ("memory_search", r#"{"query":"x","synthesize":true}"#),
-        ("memory_search", r#"{"query":"x","expand":true}"#),
         ("memory_browse", r#"{"since":"yesterday"}"#),
         ("memory_browse", r#"{"conversation_id":"bogus"}"#),
         ("memory_browse", r#"{"tag":"missing-colon"}"#),
@@ -243,4 +245,75 @@ async fn browse_explicit_time_bounds_reach_kernel_unchanged() {
             limit: Limit::clamped(None, 50, 1..=200),
         })]
     );
+}
+
+#[tokio::test]
+async fn search_forwards_every_argument_and_preserves_the_outcome() {
+    let (server, store) = setup(false);
+    let outcome = kernel::memory::SearchOutcome {
+        degraded: Some(wire::gateway::memory::MemoryDegraded {
+            reason: "http 503".into(),
+            effect: "Keyword / FTS ranking only — not meaning-based.".into(),
+        }),
+        synthesis: Some("The release is ready.".into()),
+        ..Default::default()
+    };
+    store.set_search_outcome(outcome.clone()).await;
+    let reply = support::call(&server, "memory_search", r#"{"query":"release","mode":"vector","scope":"summaries","agent":"acme","tag":"project:acme","limit":3,"since":"2026-10-12T00:00:00Z","before":"2026-10-13T00:00:00Z","window":"today","expand":true,"synthesize":true}"#).await;
+    assert_ne!(reply.is_error, Some(true));
+    let text = reply
+        .content
+        .first()
+        .and_then(|block| block.as_text())
+        .expect("text");
+    let actual: kernel::memory::SearchOutcome = serde_json::from_str(&text.text).expect("outcome");
+    assert_eq!(actual, outcome);
+    assert_eq!(
+        store.requests().await,
+        vec![MemoryRequest::Search(SearchQuery {
+            text: "release".into(),
+            mode: SearchMode::Vector,
+            scope: MemoryScope::Summaries,
+            agent: Some("acme".into()),
+            tag: Some("project:acme".parse().expect("tag")),
+            limit: Limit::clamped(Some(3), 10, 1..=50),
+            since: Some("2026-10-12T00:00:00Z".parse().expect("since")),
+            before: Some("2026-10-13T00:00:00Z".parse().expect("before")),
+            window: Some(BrowseWindow::Today),
+            expand: Some(true),
+            synthesize: Some(true),
+        })]
+    );
+}
+
+#[tokio::test]
+async fn search_accepts_windows_and_false_flags_but_rejects_wrong_types() {
+    let (server, store) = setup(false);
+    let reply = support::call(
+        &server,
+        "memory_search",
+        r#"{"query":"release","window":"last_7d","expand":false,"synthesize":false}"#,
+    )
+    .await;
+    assert_ne!(reply.is_error, Some(true));
+    let requests = store.requests().await;
+    let [MemoryRequest::Search(query)] = requests.as_slice() else {
+        panic!("search request")
+    };
+    assert_eq!(query.window, Some(BrowseWindow::Last7d));
+    assert_eq!(query.expand, Some(false));
+    assert_eq!(query.synthesize, Some(false));
+    for args in [
+        r#"{"query":"x","since":123}"#,
+        r#"{"query":"x","before":"yesterday"}"#,
+        r#"{"query":"x","window":true}"#,
+        r#"{"query":"x","expand":"true"}"#,
+        r#"{"query":"x","synthesize":1}"#,
+    ] {
+        assert_eq!(
+            support::call(&server, "memory_search", args).await.is_error,
+            Some(true)
+        );
+    }
+    assert_eq!(store.requests().await, requests);
 }

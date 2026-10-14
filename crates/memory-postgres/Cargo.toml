@@ -21,6 +21,7 @@ sqlx = { workspace = true, features = ["macros"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "time"] }
 tracing = { workspace = true }
+tokio-util = { workspace = true }
 uuid = { workspace = true }
 wire = { workspace = true }
 

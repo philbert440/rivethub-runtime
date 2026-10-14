@@ -130,6 +130,11 @@ fn contents(results: &[wire::memory::MemorySearchResult]) -> Vec<String> {
 
 fn query(text: &str, limit: u32) -> SearchQuery {
     SearchQuery {
+        since: None,
+        before: None,
+        window: None,
+        expand: None,
+        synthesize: None,
         text: text.to_string(),
         mode: SearchMode::Fts,
         scope: MemoryScope::Both,
@@ -214,11 +219,12 @@ async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
     let memory = store(&pool);
 
     let deploy = memory.search(query("deploy", 10)).await?;
-    let deploy_contents = contents(&deploy);
+    let deploy_contents = contents(&deploy.results);
     assert!(deploy_contents.contains(&MESSAGES[6].to_string()));
     assert!(deploy_contents.contains(&LEAF_ANSWERS[0].to_string()));
     assert!(deploy_contents.contains(&BRANCH_ANSWER.to_string()));
     let deploy_message = deploy
+        .results
         .iter()
         .find(|hit| hit.content == MESSAGES[6])
         .ok_or("the deploy message is missing from the hits")?;
@@ -232,6 +238,7 @@ async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
         "a message hit carries its role and agent"
     );
     let deploy_summary = deploy
+        .results
         .iter()
         .find(|hit| hit.content == BRANCH_ANSWER)
         .ok_or("the branch summary is missing from the hits")?;
@@ -247,18 +254,18 @@ async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
 
     let staging = memory.search(query("staging database", 5)).await?;
     assert!(
-        contents(&staging).contains(&LEAF_ANSWERS[1].to_string()),
+        contents(&staging.results).contains(&LEAF_ANSWERS[1].to_string()),
         "the checklist summary covers both staging and the database migration"
     );
 
     let rollback = memory.search(query("rollback drill", 5)).await?;
-    assert!(contents(&rollback).contains(&MESSAGES[2].to_string()));
+    assert!(contents(&rollback.results).contains(&MESSAGES[2].to_string()));
 
     let blue_green = memory.search(query("blue-green", 5)).await?;
-    assert!(contents(&blue_green).contains(&LEAF_ANSWERS[0].to_string()));
+    assert!(contents(&blue_green.results).contains(&LEAF_ANSWERS[0].to_string()));
 
     let unbalanced = memory.search(query("\"unbalanced AND (", 5)).await?;
-    assert!(unbalanced.is_empty(), "fts operators stay quoted");
+    assert!(unbalanced.results.is_empty(), "fts operators stay quoted");
 
     let bumped =
         sqlx::query("SELECT count(*)::bigint AS n FROM rh_messages WHERE access_count > 0")
@@ -284,7 +291,7 @@ async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResu
         })
         .await?;
     assert!(
-        !hybrid.is_empty(),
+        !hybrid.results.is_empty(),
         "hybrid mode still ranks the seeded data"
     );
 
@@ -302,7 +309,7 @@ async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResu
         })
         .await?;
     assert!(
-        contents(&trigram).contains(&"deploy checklist".to_string()),
+        contents(&trigram.results).contains(&"deploy checklist".to_string()),
         "the trigram arm tolerates typos"
     );
 
@@ -312,18 +319,18 @@ async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResu
             ..query("rollback drill", 20)
         })
         .await?;
-    assert!(contents(&regex).contains(&MESSAGES[2].to_string()));
+    assert!(contents(&regex.results).contains(&MESSAGES[2].to_string()));
 
     let mut summaries_only = query("deploy", 20);
     summaries_only.scope = MemoryScope::Summaries;
     let summaries = memory.search(summaries_only).await?;
     assert_ne!(
-        summaries.len(),
+        summaries.results.len(),
         0,
         "the summaries scope finds the seeded summaries"
     );
     assert!(
-        summaries
+        summaries.results
             .iter()
             .all(|hit| LEAF_ANSWERS.contains(&hit.content.as_str())
                 || hit.content == BRANCH_ANSWER),
@@ -333,14 +340,14 @@ async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResu
     let mut other_agent = query("deploy", 20);
     other_agent.agent = Some("someone-else".to_string());
     assert!(
-        memory.search(other_agent).await?.is_empty(),
+        memory.search(other_agent).await?.results.is_empty(),
         "the agent filter excludes other agents"
     );
 
     let mut limited = query("deploy", 2);
     limited.mode = SearchMode::Fts;
     let hits = memory.search(limited).await?;
-    assert!(hits.len() <= 2, "the limit bounds the result count");
+    assert!(hits.results.len() <= 2, "the limit bounds the result count");
 
     sqlx::query(
         "INSERT INTO rh_tags (entity_type, entity_id, key, value, display, source, state)
@@ -358,7 +365,7 @@ async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResu
     tagged.limit = Limit::clamped(Some(20), 20, 1..=50);
     let filtered = memory.search(tagged.clone()).await?;
     assert!(
-        contents(&filtered).contains(&MESSAGES[1].to_string()),
+        contents(&filtered.results).contains(&MESSAGES[1].to_string()),
         "the tag filter restricts the search to tagged conversations"
     );
     tagged.tag = Some(kernel::memory::TagLiteral {
@@ -366,7 +373,7 @@ async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResu
         value: "unrelated".to_string(),
     });
     assert!(
-        memory.search(tagged).await?.is_empty(),
+        memory.search(tagged).await?.results.is_empty(),
         "an unknown tag value returns no hits"
     );
     Ok(())

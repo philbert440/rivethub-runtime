@@ -367,6 +367,8 @@ impl crate::PostgresMemory {
 
         let hits = self
             .search_full(&SearchOptions {
+                since: None,
+                before: None,
                 text: query_text.clone(),
                 mode: SearchMode::Hybrid,
                 scope: MemoryScope::Both,

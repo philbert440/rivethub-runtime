@@ -71,6 +71,21 @@ impl TagFilter {
     }
 }
 
+fn push_time_conditions(
+    query: &mut QueryBuilder<sqlx::Postgres>,
+    options: &SearchOptions,
+    alias: &str,
+) {
+    if let Some(since) = options.since {
+        query.push(format!(" AND {alias}.created_at >= "));
+        query.push_bind(since);
+    }
+    if let Some(before) = options.before {
+        query.push(format!(" AND {alias}.created_at < "));
+        query.push_bind(before);
+    }
+}
+
 fn push_agent_condition(query: &mut QueryBuilder<sqlx::Postgres>, agent: &str, is_message: bool) {
     if is_message {
         query.push(" AND m.agent = ");
@@ -299,6 +314,7 @@ impl crate::PostgresMemory {
                 ));
             }
         }
+        push_time_conditions(&mut query, options, alias);
         if let Some(agent) = &options.agent {
             push_agent_condition(&mut query, agent, is_message);
         }
@@ -388,6 +404,7 @@ impl crate::PostgresMemory {
             query.push(" AND ");
             filter.push_condition(&mut query, is_message);
         }
+        push_time_conditions(&mut query, options, alias);
         if let Some(agent) = &options.agent {
             push_agent_condition(&mut query, agent, is_message);
         }
@@ -428,6 +445,7 @@ impl crate::PostgresMemory {
             query.push(" AND ");
             filter.push_condition(&mut query, true);
         }
+        push_time_conditions(&mut query, context.options, "m");
         if let Some(agent) = &context.options.agent {
             push_agent_condition(&mut query, agent, true);
         }

@@ -6,6 +6,34 @@ use std::collections::BTreeMap;
 use testkit::queue_present;
 use wire::capture::CaptureBatchRequest;
 
+const MEMORY_SKIPS: &[(&str, &str)] = &[];
+
+#[derive(serde::Deserialize)]
+struct RecordingNames {
+    results: Vec<ScenarioName>,
+}
+
+#[derive(serde::Deserialize)]
+struct ScenarioName {
+    label: String,
+}
+
+#[test]
+fn memory_skip_names_are_unique_known_scenarios_with_reasons() -> TestResult {
+    let body = std::fs::read_to_string(testkit::recording("memory/capture-batch.json"))?;
+    let recording: RecordingNames = serde_json::from_str(&body)?;
+    let mut names = std::collections::BTreeSet::new();
+    for (name, reason) in MEMORY_SKIPS {
+        assert!(names.insert(*name), "duplicate skip {name}");
+        assert!(!reason.trim().is_empty(), "missing reason for {name}");
+        assert!(
+            recording.results.iter().any(|case| case.label == *name),
+            "unknown scenario {name}"
+        );
+    }
+    Ok(())
+}
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 fn store(pool: &PgPool) -> PostgresMemory {
@@ -57,6 +85,10 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
         .and_then(Value::as_array)
         .ok_or("golden results are a list")?;
     for entry in recorded_results {
+        let name = text(entry, "label")?;
+        if MEMORY_SKIPS.iter().any(|(skipped, _)| *skipped == name) {
+            continue;
+        }
         let batch: CaptureBatchRequest = serde_json::from_value(field(entry, "batch")?.clone())?;
         let opts = field(entry, "opts")?;
         let owner_user_id = optional_text(opts, "ownerUserId")?;

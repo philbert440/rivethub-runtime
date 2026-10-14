@@ -44,6 +44,11 @@ fn wired(pool: &PgPool, provider: FakeProvider) -> (PostgresMemory, Arc<FakeProv
 
 fn query(text: &str, mode: SearchMode) -> SearchQuery {
     SearchQuery {
+        since: None,
+        before: None,
+        window: None,
+        expand: None,
+        synthesize: None,
         text: text.to_owned(),
         mode,
         scope: MemoryScope::Both,

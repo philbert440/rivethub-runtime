@@ -5,7 +5,6 @@ use crate::capture::MessageRow;
 use crate::capture::prepare_capture_message;
 use crate::error::Error;
 use crate::project;
-use crate::search::SearchHit;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
@@ -33,7 +32,6 @@ use wire::gateway::memory::TagTaxonomyMerge;
 use wire::gateway::memory::TagTaxonomyMergeResult;
 use wire::gateway::memory::TagWire;
 use wire::memory::MemoryEntry;
-use wire::memory::MemorySearchResult;
 
 impl crate::PostgresMemory {
     pub async fn capture_batch(
@@ -243,16 +241,8 @@ impl MemoryStore for crate::PostgresMemory {
     async fn search(
         &self,
         query: SearchQuery,
-    ) -> Result<Vec<MemorySearchResult>, MemoryStoreError> {
-        let hits = self
-            .search_outcome_for(&query)
-            .await
-            .map_err(MemoryStoreError::from)?;
-        Ok(hits
-            .hits
-            .into_iter()
-            .map(SearchHit::into_port_result)
-            .collect())
+    ) -> Result<kernel::memory::SearchOutcome, MemoryStoreError> {
+        self.complete_search(query).await
     }
 
     async fn browse(&self, filter: BrowseFilter) -> Result<Vec<MemoryEntry>, MemoryStoreError> {

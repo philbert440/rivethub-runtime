@@ -24,7 +24,6 @@ use wire::gateway::memory::MemoryBrowseMessage;
 use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryBrowseResponse;
 use wire::gateway::memory::MemoryBrowseToolArgs;
-use wire::gateway::memory::MemoryDegraded;
 use wire::gateway::memory::MemoryGetFullToolArgs;
 use wire::gateway::memory::MemoryIngestSessionToolArgs;
 use wire::gateway::memory::MemoryScope;
@@ -54,16 +53,6 @@ const SEARCH_LIMIT_MAX: u32 = 50;
 const SEARCH_TOOL_LIMIT_DEFAULT: u32 = 10;
 const BROWSE_LIMIT_DEFAULT: u32 = 50;
 const BROWSE_LIMIT_MAX: u32 = 200;
-const EMBED_ENDPOINT_REASON: &str = "embedding endpoint not configured";
-const DEGRADED_EFFECT: &str = "Keyword / FTS ranking only — not meaning-based.";
-
-fn degraded_of(gateway: &Gateway) -> Option<MemoryDegraded> {
-    (!gateway.embeds_wired()).then_some(MemoryDegraded {
-        reason: EMBED_ENDPOINT_REASON.to_owned(),
-        effect: DEGRADED_EFFECT.to_owned(),
-    })
-}
-
 pub(crate) fn router() -> Router<Arc<Gateway>> {
     Router::new()
         .route(
@@ -115,6 +104,12 @@ async fn unknown() -> ApiError {
 
 #[derive(Debug, Default, Deserialize)]
 struct SearchParams {
+    mode: Option<SearchMode>,
+    since: Option<SinceParam>,
+    before: Option<BeforeParam>,
+    window: Option<WindowParam>,
+    expand: Option<bool>,
+    synthesize: Option<bool>,
     q: Option<String>,
     scope: Option<ScopeParam>,
     agent: Option<String>,
@@ -144,8 +139,16 @@ async fn search(
         .ok_or_else(|| ApiError::BadRequest("q required".to_owned()))?;
     let scope = params.scope.map_or(MemoryScope::Both, ScopeParam::get);
     let query = SearchQuery {
+        since: params.since.map(SinceParam::get),
+        before: params.before.map(BeforeParam::get),
+        window: params.window.map(WindowParam::get),
+        expand: params.expand,
+        synthesize: params.synthesize,
         text: text.clone(),
-        mode: SearchMode::default(),
+        mode: match params.mode {
+            Some(mode) => mode,
+            None => SearchMode::Hybrid,
+        },
         scope,
         agent: params.agent,
         tag: params.tag.map(TagFilter::get),
@@ -159,9 +162,11 @@ async fn search(
     Ok(Json(MemorySearchResponse {
         query: text,
         scope,
-        degraded: degraded_of(&gateway),
-        fallback: None,
-        results: results.into_iter().map(search_hit).collect(),
+        degraded: results.degraded,
+        fallback: results.fallback,
+        expanded: results.expanded,
+        synthesis: results.synthesis,
+        results: results.results.into_iter().map(search_hit).collect(),
     }))
 }
 
@@ -298,6 +303,11 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
     };
     let scope = args.scope.unwrap_or(MemoryScope::Both);
     let query = SearchQuery {
+        since: args.since,
+        before: args.before,
+        window: args.window,
+        expand: args.expand,
+        synthesize: args.synthesize,
         text: args.query.clone(),
         mode,
         scope,
@@ -309,9 +319,11 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
     let response = MemorySearchResponse {
         query: args.query,
         scope,
-        degraded: degraded_of(gateway),
-        fallback: None,
-        results: results.into_iter().map(search_hit).collect(),
+        degraded: results.degraded,
+        fallback: results.fallback,
+        expanded: results.expanded,
+        synthesis: results.synthesis,
+        results: results.results.into_iter().map(search_hit).collect(),
     };
     serialize_tool(&response)
 }

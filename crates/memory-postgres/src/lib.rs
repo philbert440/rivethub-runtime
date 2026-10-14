@@ -8,7 +8,9 @@ pub mod project;
 pub mod queue;
 pub mod read;
 pub mod search;
+mod search_complete;
 mod search_sql;
+pub use search_complete::SearchSynthesis;
 mod store_impl;
 mod tags;
 mod wiki;
@@ -40,6 +42,7 @@ pub struct PostgresMemory {
     pool: PgPool,
     wiki_available: AtomicBool,
     embed: Option<embed::EmbedArm>,
+    synthesis: Option<SearchSynthesis>,
 }
 
 impl PostgresMemory {
@@ -49,12 +52,19 @@ impl PostgresMemory {
             pool,
             wiki_available: AtomicBool::new(true),
             embed: None,
+            synthesis: None,
         }
     }
 
     #[must_use]
     pub fn with_query_embed(mut self, embed: QueryEmbed) -> Self {
         self.embed = Some(embed::EmbedArm::new(embed));
+        self
+    }
+
+    #[must_use]
+    pub fn with_search_synthesis(mut self, synthesis: SearchSynthesis) -> Self {
+        self.synthesis = Some(synthesis);
         self
     }
 

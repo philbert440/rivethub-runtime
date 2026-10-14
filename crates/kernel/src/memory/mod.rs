@@ -23,12 +23,13 @@ use wire::gateway::memory::TagTaxonomyMerge;
 use wire::gateway::memory::TagTaxonomyMergeResult;
 use wire::gateway::memory::TagWire;
 use wire::memory::MemoryEntry;
-use wire::memory::MemorySearchResult;
 use wire::message::Role;
 
 use crate::BoxError;
 
 mod embed;
+mod search;
+pub use search::SearchOutcome;
 
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;
@@ -180,6 +181,28 @@ pub struct SearchQuery {
     pub agent: Option<String>,
     pub tag: Option<TagLiteral>,
     pub limit: Limit,
+    pub since: Option<DateTime<Utc>>,
+    pub before: Option<DateTime<Utc>>,
+    pub window: Option<BrowseWindow>,
+    pub expand: Option<bool>,
+    pub synthesize: Option<bool>,
+}
+
+impl SearchQuery {
+    #[must_use]
+    pub fn time_range<Tz: chrono::TimeZone>(
+        &self,
+        now: DateTime<Utc>,
+        zone: &Tz,
+    ) -> crate::memory_core::TimeRange {
+        match (self.since, self.before, self.window) {
+            (None, None, Some(window)) => crate::memory_core::resolve_window(window, now, zone),
+            _ => crate::memory_core::TimeRange {
+                since: self.since,
+                before: self.before,
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -294,8 +317,7 @@ pub trait MemoryStore: Send + Sync {
 
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError>;
 
-    async fn search(&self, query: SearchQuery)
-    -> Result<Vec<MemorySearchResult>, MemoryStoreError>;
+    async fn search(&self, query: SearchQuery) -> Result<SearchOutcome, MemoryStoreError>;
 
     async fn browse(&self, filter: BrowseFilter) -> Result<Vec<MemoryEntry>, MemoryStoreError>;
 

@@ -5,11 +5,8 @@ use mcp::{
     client::Client,
     transport::{Bearer, bind_unix, serve_tcp, serve_unix},
 };
-use rmcp::{
-    model::ContentBlock,
-    transport::{
-        StreamableHttpClientTransport, streamable_http_client::StreamableHttpClientTransportConfig,
-    },
+use rmcp::transport::{
+    StreamableHttpClientTransport, streamable_http_client::StreamableHttpClientTransportConfig,
 };
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
@@ -54,7 +51,13 @@ async fn search(tools: &[Arc<dyn Tool>]) {
         )
         .await
         .expect("remote call");
-    assert_eq!(result.content, vec![ContentBlock::text("[]")]);
+    let [block] = result.content.as_slice() else {
+        panic!("one result block")
+    };
+    let text = block.as_text().expect("text outcome");
+    let outcome: kernel::memory::SearchOutcome =
+        serde_json::from_str(&text.text).expect("search outcome");
+    assert_eq!(outcome, kernel::memory::SearchOutcome::default());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

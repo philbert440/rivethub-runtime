@@ -20,6 +20,8 @@ use wire::message::Role;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SearchOptions {
+    pub(crate) since: Option<DateTime<Utc>>,
+    pub(crate) before: Option<DateTime<Utc>>,
     pub(crate) text: String,
     pub(crate) mode: SearchMode,
     pub(crate) scope: MemoryScope,
@@ -200,7 +202,10 @@ impl crate::PostgresMemory {
         &self,
         query: &kernel::memory::SearchQuery,
     ) -> Result<SearchOutcome, Error> {
+        let range = query.time_range(Utc::now(), &chrono::Local);
         self.search_outcome(&SearchOptions {
+            since: range.since,
+            before: range.before,
             text: query.text.clone(),
             mode: query.mode,
             scope: query.scope,
@@ -430,7 +435,7 @@ impl crate::PostgresMemory {
     }
 }
 
-fn hit_uuids(hits: &[SearchHit], source: MemoryHitSource) -> Result<Vec<Uuid>, Error> {
+pub(crate) fn hit_uuids(hits: &[SearchHit], source: MemoryHitSource) -> Result<Vec<Uuid>, Error> {
     hits.iter()
         .filter(|hit| hit.source == source)
         .map(|hit| {

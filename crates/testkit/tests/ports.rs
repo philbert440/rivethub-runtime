@@ -87,6 +87,11 @@ fn memory_entry(session: &str, content: &str, at: DateTime<Utc>) -> MemoryEntry 
 
 fn search_query(text: &str) -> SearchQuery {
     SearchQuery {
+        since: None,
+        before: None,
+        window: None,
+        expand: None,
+        synthesize: None,
         text: text.to_string(),
         mode: SearchMode::Hybrid,
         scope: MemoryScope::Both,
@@ -123,7 +128,7 @@ fn memory_store_roundtrip() {
             .unwrap();
         assert_eq!(inserted, 1);
         let hits = store.search(search_query("hello")).await.unwrap();
-        assert_eq!(hits.len(), 1);
+        assert_eq!(hits.results.len(), 1);
         let stats = store.stats().await.unwrap();
         assert_eq!(stats.messages, 1);
         let browsed = store.browse(browse_filter()).await.unwrap();
@@ -149,6 +154,11 @@ fn fake_memory_store_records_typed_requests() {
     block_on(async {
         let store = FakeMemoryStore::default();
         let query = SearchQuery {
+            since: None,
+            before: None,
+            window: None,
+            expand: None,
+            synthesize: None,
             text: "hello".to_string(),
             mode: SearchMode::Fts,
             scope: MemoryScope::Messages,
