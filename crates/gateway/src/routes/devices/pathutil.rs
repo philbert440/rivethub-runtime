@@ -4,6 +4,8 @@ use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 
+use subtle::ConstantTimeEq;
+
 use super::DeviceError;
 use super::SetupError;
 
@@ -28,19 +30,7 @@ pub(super) fn absolute_without_parents(path: &Path) -> Result<(), SetupError> {
 }
 
 pub(super) fn tokens_equal(left: &[u8], right: &[u8]) -> bool {
-    let mut diff = left.len() ^ right.len();
-    let width = left.len().max(right.len());
-    for index in 0..width {
-        diff |= usize::from(token_byte(left, index) ^ token_byte(right, index));
-    }
-    diff == 0
-}
-
-fn token_byte(bytes: &[u8], index: usize) -> u8 {
-    match bytes.get(index) {
-        Some(byte) => *byte,
-        None => 0,
-    }
+    bool::from(left.ct_eq(right))
 }
 
 pub(super) enum OpenFile {

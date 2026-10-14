@@ -76,8 +76,12 @@ pub(super) enum DeviceError {
     PhoneOff,
     #[error("only the owner can pair a phone")]
     NotOwner,
-    #[error("{0}")]
-    Unavailable(&'static str),
+    #[error("{message}")]
+    Unavailable {
+        message: &'static str,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
     #[error("{0}")]
     BadRequest(&'static str),
     #[error("malformed device name")]
@@ -104,10 +108,19 @@ pub(super) enum DeviceError {
     Internal,
 }
 
+impl DeviceError {
+    fn unavailable(message: &'static str) -> Self {
+        Self::Unavailable {
+            message,
+            source: None,
+        }
+    }
+}
+
 impl IntoResponse for DeviceError {
     fn into_response(self) -> Response {
         let status = match &self {
-            Self::Disabled | Self::PhoneOff | Self::Unavailable(_) | Self::Registry => {
+            Self::Disabled | Self::PhoneOff | Self::Unavailable { .. } | Self::Registry => {
                 StatusCode::SERVICE_UNAVAILABLE
             }
             Self::NotOwner | Self::Forbidden(_) => StatusCode::FORBIDDEN,
@@ -408,7 +421,7 @@ async fn phone_start(State(gateway): State<Arc<Gateway>>, request: Request) -> R
     match gateway.devices().phone_gate() {
         PhoneGate::NotOwner => return DeviceError::NotOwner.into_response(),
         PhoneGate::Off => return DeviceError::PhoneOff.into_response(),
-        PhoneGate::CliMissing => return DeviceError::Unavailable(CLI_MISSING).into_response(),
+        PhoneGate::CliMissing => return DeviceError::unavailable(CLI_MISSING).into_response(),
         PhoneGate::Issuer => {}
     }
     let body = match read_json::<PhonePairingRequest>(request).await {

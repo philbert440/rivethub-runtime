@@ -65,7 +65,7 @@ pub(super) fn availability(issuer: &PhoneIssuer) -> PhonePairingAvailability {
 
 pub(super) fn start(issuer: &PhoneIssuer, name: &str) -> Result<PhonePairingCode, DeviceError> {
     if !cert::authority_usable(&issuer.ca_dir) {
-        return Err(DeviceError::Unavailable(CA_UNUSABLE));
+        return Err(DeviceError::unavailable(CA_UNUSABLE));
     }
     let device_id = random::device_id()?;
     let client = cert::issue_client(&issuer.ca_dir, &device_id)?;
