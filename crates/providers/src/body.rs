@@ -27,22 +27,23 @@ pub fn normalize_api_prefix(prefix: Option<&str>) -> String {
     format!("/{trimmed}")
 }
 
+fn endpoint_url(base_url: &str, prefix: &str, path: &str) -> String {
+    format!("{}{prefix}/{path}", base_url.trim_end_matches('/'))
+}
+
 #[must_use]
 pub fn chat_url(base_url: &str, prefix: &str) -> String {
-    format!(
-        "{}{prefix}/chat/completions",
-        base_url.trim_end_matches('/')
-    )
+    endpoint_url(base_url, prefix, "chat/completions")
 }
 
 #[must_use]
 pub fn models_url(base_url: &str, prefix: &str) -> String {
-    format!("{}{prefix}/models", base_url.trim_end_matches('/'))
+    endpoint_url(base_url, prefix, "models")
 }
 
 #[must_use]
-pub fn embeddings_url(endpoint: &str) -> String {
-    format!("{}/v1/embeddings", endpoint.trim_end_matches('/'))
+pub fn embeddings_url(base_url: &str, prefix: &str) -> String {
+    endpoint_url(base_url, prefix, "embeddings")
 }
 
 pub fn split_and_fold_system<M>(
@@ -188,12 +189,6 @@ fn tools(tools: &[rmcp::model::Tool]) -> Result<Option<Vec<Tool>>, ModelProvider
     }
     let mut converted = Vec::with_capacity(tools.len());
     for tool in tools {
-        let Some(description) = tool.description.as_ref() else {
-            return Err(ModelProviderError::Request {
-                message: format!("tool \"{}\" carries no description", tool.name),
-                source: "tool description".into(),
-            });
-        };
         let schema = serde_json::to_value(tool.input_schema.as_ref()).map_err(|source| {
             ModelProviderError::Request {
                 message: format!("tool \"{}\" has an unreadable input schema", tool.name),
@@ -208,7 +203,7 @@ fn tools(tools: &[rmcp::model::Tool]) -> Result<Option<Vec<Tool>>, ModelProvider
         converted.push(Tool::Function {
             function: FunctionDef {
                 name: tool.name.to_string(),
-                description: description.to_string(),
+                description: tool.description.as_deref().map(str::to_owned),
                 parameters,
             },
         });

@@ -252,7 +252,9 @@ async fn error_acks_become_typed_rpc_errors() -> Result<(), Failed> {
         vec![step(
             RpcMethod::PaneGet,
             pane_get_params(),
-            &["{\"id\":\"{ID}\",\"error\":{\"message\":\"pane not found\"}}\n"],
+            &[
+                "{\"id\":\"{ID}\",\"error\":{\"code\":\"pane_not_found\",\"message\":\"pane not found\"}}\n",
+            ],
         )],
     ));
     let client = HerdrClient::new(&socket);
@@ -264,6 +266,19 @@ async fn error_acks_become_typed_rpc_errors() -> Result<(), Failed> {
         .err()
         .ok_or("expected a typed error")?;
     let rendered = error.to_string();
+    assert!(
+        matches!(
+            &error,
+            terminal::Error::Ack {
+                method: RpcMethod::PaneGet,
+                error: codec::AckError {
+                    code: codec::AckErrorCode::Other(code),
+                    ..
+                },
+            } if code == "pane_not_found"
+        ),
+        "{rendered}"
+    );
     assert!(rendered.contains("pane.get"), "{rendered}");
     assert!(rendered.contains("pane not found"), "{rendered}");
     let joined = tokio::time::timeout(Duration::from_secs(5), server).await??;
@@ -306,7 +321,9 @@ async fn agent_start_retries_while_the_pane_is_busy() -> Result<(), Failed> {
             step(
                 RpcMethod::AgentStart,
                 agent_start_params(),
-                &["{\"id\":\"{ID}\",\"error\":{\"message\":\"agent_pane_busy\"}}\n"],
+                &[
+                    "{\"id\":\"{ID}\",\"error\":{\"code\":\"agent_pane_busy\",\"message\":\"pane w1:p1 is busy\"}}\n",
+                ],
             ),
             step(RpcMethod::AgentStart, agent_start_params(), ACK_PLAIN),
         ],

@@ -18,6 +18,7 @@ use crate::request_error;
 #[derive(Debug)]
 pub struct EmbedConfig {
     pub endpoint: String,
+    pub api_prefix: Option<String>,
     pub model: String,
     pub api_key: Option<String>,
     pub expected_dims: Option<u32>,
@@ -28,6 +29,7 @@ pub struct EmbedConfig {
 #[derive(Debug)]
 pub struct Embedder {
     config: EmbedConfig,
+    url: String,
     client: reqwest::Client,
 }
 
@@ -51,7 +53,15 @@ impl Embedder {
         let client = builder
             .build()
             .map_err(|source| BuildError::HttpClient { source })?;
-        Ok(Self { config, client })
+        let url = crate::body::embeddings_url(
+            &config.endpoint,
+            &crate::body::normalize_api_prefix(config.api_prefix.as_deref()),
+        );
+        Ok(Self {
+            config,
+            url,
+            client,
+        })
     }
 
     #[must_use]
@@ -65,10 +75,7 @@ impl Embedder {
             model: self.config.model.clone(),
             input: texts,
         };
-        let mut builder = self
-            .client
-            .post(crate::body::embeddings_url(&self.config.endpoint))
-            .json(&body);
+        let mut builder = self.client.post(&self.url).json(&body);
         if let Some(key) = &self.config.api_key {
             builder = builder.bearer_auth(key);
         }

@@ -206,10 +206,11 @@ pub mod openai {
         Function { function: FunctionDef },
     }
 
+    #[serde_with::skip_serializing_none]
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub struct FunctionDef {
         pub name: String,
-        pub description: String,
+        pub description: Option<String>,
         pub parameters: JsonObject,
     }
 

@@ -63,7 +63,10 @@ fn build_embed_request_matches_the_openai_rows() {
             let case: BuildIn =
                 serde_json::from_value(input.clone()).map_err(|error| Thrown(error.to_string()))?;
             let out = BuildOut {
-                url: providers::body::embeddings_url(&case.endpoint),
+                url: providers::body::embeddings_url(
+                    &case.endpoint,
+                    &providers::body::normalize_api_prefix(None),
+                ),
                 body: EmbedRequestBody {
                     model: case.model,
                     input: case.input,
@@ -149,6 +152,7 @@ const EIGHT_DIMS: &str = "{\"object\":\"list\",\"data\":[{\"object\":\"embedding
 fn embedder(addr: std::net::SocketAddr) -> Embedder {
     Embedder::build(EmbedConfig {
         endpoint: format!("http://{addr}"),
+        api_prefix: None,
         model: "bge-m3".to_owned(),
         api_key: Some("embed-key".to_owned()),
         expected_dims: Some(8),
@@ -199,10 +203,37 @@ async fn embed_speaks_the_openai_embeddings_shape() {
 }
 
 #[tokio::test]
+async fn embed_honours_the_api_prefix() {
+    let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
+    let embedder = Embedder::build(EmbedConfig {
+        endpoint: format!("http://{}/", server.addr),
+        api_prefix: Some("openai/v1".to_owned()),
+        model: "bge-m3".to_owned(),
+        api_key: None,
+        expected_dims: None,
+        timeout_ms: None,
+        query_instruction: None,
+    })
+    .expect("the embedder builds");
+    embedder
+        .embed(vec!["hello".to_owned()])
+        .await
+        .expect("the embed succeeds");
+    let call = server
+        .recorder
+        .lock()
+        .first()
+        .cloned()
+        .expect("the embed call is captured");
+    assert_eq!(call.target, "/openai/v1/embeddings");
+}
+
+#[tokio::test]
 async fn embed_without_a_key_sends_no_auth_header() {
     let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
     let embedder = Embedder::build(EmbedConfig {
         endpoint: format!("http://{}", server.addr),
+        api_prefix: None,
         model: "bge-m3".to_owned(),
         api_key: None,
         expected_dims: None,
@@ -228,6 +259,7 @@ async fn a_dims_mismatch_is_an_error() {
     let server = fixed_status_server(200, EIGHT_DIMS.to_owned()).await;
     let embedder = Embedder::build(EmbedConfig {
         endpoint: format!("http://{}", server.addr),
+        api_prefix: None,
         model: "bge-m3".to_owned(),
         api_key: None,
         expected_dims: Some(1024),
@@ -256,6 +288,7 @@ async fn a_missing_embedding_slot_is_an_error() {
     .await;
     let embedder = Embedder::build(EmbedConfig {
         endpoint: format!("http://{}", server.addr),
+        api_prefix: None,
         model: "bge-m3".to_owned(),
         api_key: None,
         expected_dims: None,

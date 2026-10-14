@@ -123,13 +123,31 @@ pub enum AckResult {
     Unrecorded,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Display)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum AckErrorCode {
+    AgentPaneBusy,
+    #[serde(untagged)]
+    #[strum(to_string = "{0}")]
+    Other(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, thiserror::Error)]
+#[error("{}", self.message.as_deref().map_or_else(|| self.code.to_string(), str::to_owned))]
+pub struct AckError {
+    pub code: AckErrorCode,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AckFrame {
     pub id: String,
     #[serde(default)]
     pub result: Option<AckResult>,
     #[serde(default)]
-    pub error: Option<wire::Extra>,
+    pub error: Option<AckError>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -183,6 +201,7 @@ pub fn shell_join(argv: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::AckErrorCode;
     use super::AckResult;
     use super::AgentStartParams;
     use super::EventFrame;
@@ -296,16 +315,27 @@ mod tests {
     }
 
     #[test]
-    fn error_acks_carry_the_recorded_error_object() {
-        let frame =
-            decode_line(b"{\"id\":\"9\",\"error\":{\"code\":\"agent_pane_busy\"}}").expect("ack");
-        match frame {
-            InboundFrame::Ack(ack) => {
-                let error = ack.error.expect("error object");
-                assert!(error.get("code").is_some());
-            }
-            InboundFrame::Event(_) => panic!("an ack must not decode as an event"),
-        }
+    fn error_acks_carry_a_typed_code_and_optional_message() {
+        let busy = decode_line(
+            b"{\"id\":\"9\",\"error\":{\"code\":\"agent_pane_busy\",\"message\":\"pane w1:p1 is busy\"}}",
+        )
+        .expect("ack");
+        let InboundFrame::Ack(ack) = busy else {
+            panic!("an ack must not decode as an event")
+        };
+        let error = ack.error.expect("error object");
+        assert_eq!(error.code, AckErrorCode::AgentPaneBusy);
+        assert_eq!(error.message.as_deref(), Some("pane w1:p1 is busy"));
+        assert_eq!(error.to_string(), "pane w1:p1 is busy");
+        let other =
+            decode_line(b"{\"id\":\"10\",\"error\":{\"code\":\"pane_not_found\"}}").expect("ack");
+        let InboundFrame::Ack(ack) = other else {
+            panic!("an ack must not decode as an event")
+        };
+        let error = ack.error.expect("error object");
+        assert_eq!(error.code, AckErrorCode::Other("pane_not_found".to_owned()));
+        assert_eq!(error.message, None);
+        assert_eq!(error.to_string(), "pane_not_found");
     }
 
     #[test]

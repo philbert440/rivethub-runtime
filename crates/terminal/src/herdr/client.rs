@@ -17,6 +17,8 @@ use crate::herdr::PANE_BUSY_RETRY;
 use crate::herdr::PANE_READY_TIMEOUT;
 use crate::herdr::SEND_TEXT_TIMEOUT;
 use crate::herdr::WORKSPACE_CREATE_TIMEOUT;
+use crate::herdr::codec::AckError;
+use crate::herdr::codec::AckErrorCode;
 use crate::herdr::codec::AckFrame;
 use crate::herdr::codec::AckResult;
 use crate::herdr::codec::AgentStartParams;
@@ -95,13 +97,14 @@ impl HerdrClient {
                 )
                 .await
             {
-                Err(Error::Rpc { message, .. }) if message.contains("agent_pane_busy") => {
-                    if tokio::time::Instant::now() >= deadline {
-                        return Err(Error::Rpc {
-                            method: std::borrow::Cow::Borrowed("agent.start"),
-                            message,
-                        });
-                    }
+                Err(Error::Ack {
+                    error:
+                        AckError {
+                            code: AckErrorCode::AgentPaneBusy,
+                            ..
+                        },
+                    ..
+                }) if tokio::time::Instant::now() < deadline => {
                     tokio::time::sleep(PANE_BUSY_RETRY).await;
                 }
                 other => return other,
@@ -144,7 +147,7 @@ impl HerdrClient {
         let ack = self
             .first_ack(RpcMethod::EventsSubscribe, &mut reader)
             .await?;
-        match ack_outcome(RpcMethod::EventsSubscribe, &ack)? {
+        match ack_outcome(RpcMethod::EventsSubscribe, ack)? {
             AckResult::SubscriptionStarted => {}
             AckResult::Unrecorded => {
                 return Err(Error::Rpc {
@@ -167,7 +170,7 @@ impl HerdrClient {
         write_frame(&mut writer, &encoded).await?;
         let mut reader = BufReader::new(reader);
         let ack = self.first_ack(method, &mut reader).await?;
-        ack_outcome(method, &ack)
+        ack_outcome(method, ack)
     }
 
     async fn first_ack(
@@ -250,21 +253,11 @@ fn closed(method: RpcMethod) -> Error {
     }
 }
 
-fn ack_outcome(method: RpcMethod, ack: &AckFrame) -> Result<AckResult, Error> {
-    if let Some(error) = &ack.error {
-        let message = error
-            .get("message")
-            .and_then(|found| found.as_str())
-            .map_or_else(
-                || error.as_map().keys().cloned().collect::<Vec<_>>().join(","),
-                str::to_owned,
-            );
-        return Err(Error::Rpc {
-            method: std::borrow::Cow::Owned(method.to_string()),
-            message,
-        });
+fn ack_outcome(method: RpcMethod, ack: AckFrame) -> Result<AckResult, Error> {
+    match ack.error {
+        Some(error) => Err(Error::Ack { method, error }),
+        None => Ok(ack.result.unwrap_or(AckResult::Unrecorded)),
     }
-    Ok(ack.result.unwrap_or(AckResult::Unrecorded))
 }
 
 fn trim_newline(line: &[u8]) -> &[u8] {

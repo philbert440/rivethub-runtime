@@ -38,6 +38,11 @@ pub enum Error {
         method: std::borrow::Cow<'static, str>,
         message: String,
     },
+    #[error("herdr rpc {method}: {error}")]
+    Ack {
+        method: crate::herdr::codec::RpcMethod,
+        error: crate::herdr::codec::AckError,
+    },
     #[error("pty limit reached ({max}); all active")]
     PtyLimit { max: usize },
     #[error("terminal {terminal} is unknown")]
@@ -74,6 +79,7 @@ impl From<Error> for kernel::terminal::TerminalMuxError {
             | Error::HerdrStop { .. }
             | Error::HerdrStopTimeout { .. }
             | Error::Rpc { .. }
+            | Error::Ack { .. }
             | Error::PtyLimit { .. }
             | Error::InvalidSessionKey(_)
             | Error::InvalidRosterKey(_)

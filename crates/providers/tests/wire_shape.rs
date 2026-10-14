@@ -237,8 +237,9 @@ async fn thinking_off_on_the_generic_variant_sends_no_vllm_flag() {
 }
 
 #[tokio::test]
-async fn a_tool_without_a_description_is_rejected() {
-    let server = scenario_server(Vec::new()).await;
+async fn a_tool_without_a_description_is_sent_without_one() {
+    let recorded = scenario_record("A-text");
+    let server = scenario_server(recorded.canned.clone()).await;
     let provider = config::provider::OpenaiProvider {
         model: Some("test-model".to_owned()),
         base_url: Some(format!("http://{}", server.addr)),
@@ -253,7 +254,6 @@ async fn a_tool_without_a_description_is_rejected() {
         "{\"name\":\"bare\",\"description\":\"has one\",\"inputSchema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}}",
     )
     .expect("described tool parses");
-    assert!(tool.description.is_some());
     let mut undescribed = tool.clone();
     undescribed.description = None;
     let request = kernel::model::ModelRequest {
@@ -263,21 +263,24 @@ async fn a_tool_without_a_description_is_rejected() {
         thinking: None,
         max_tokens: None,
     };
-    let error = built
+    let mut rx = built
         .stream(request)
         .await
-        .expect_err("the request names the undescribed tool");
-    match error {
-        kernel::model::ModelProviderError::Request { message, .. } => {
-            assert!(
-                message.contains("carries no description"),
-                "the rejection is named: {message}"
-            );
-        }
-        kernel::model::ModelProviderError::Stream { .. } => {
-            panic!("an input rejection is a request error")
-        }
-    }
+        .expect("the undescribed tool is sent");
+    while rx.recv().await.is_some() {}
+    let call = server
+        .recorder
+        .lock()
+        .first()
+        .cloned()
+        .expect("the chat request is captured");
+    let sent: Json = serde_json::from_str(&call.body).expect("sent body parses");
+    let expected: Json = serde_json::from_str(
+        "[{\"type\":\"function\",\"function\":{\"name\":\"bare\",\"parameters\":{\"type\":\"object\",\"properties\":{},\"required\":[]}}},\
+         {\"type\":\"function\",\"function\":{\"name\":\"bare\",\"description\":\"has one\",\"parameters\":{\"type\":\"object\",\"properties\":{},\"required\":[]}}}]",
+    )
+    .expect("expected tools parse");
+    assert_eq!(sent.get("tools"), Some(&expected));
 }
 
 #[tokio::test]
