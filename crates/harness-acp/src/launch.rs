@@ -88,6 +88,38 @@ impl LaunchTable {
             program: launch.command().program.display().to_string(),
         })
     }
+
+    #[must_use]
+    pub fn facts(&self) -> Vec<LaunchFact> {
+        self.entries
+            .iter()
+            .map(|(harness, entry)| LaunchFact::from_entry(*harness, entry))
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchFact {
+    pub harness: HarnessId,
+    pub program: Option<PathBuf>,
+    pub verified_chat: bool,
+}
+
+impl LaunchFact {
+    fn from_entry(harness: HarnessId, entry: &LaunchEntry) -> Self {
+        match entry {
+            LaunchEntry::Launch(launch) => Self {
+                harness,
+                program: Some(launch.command().program.clone()),
+                verified_chat: launch.is_verified(),
+            },
+            LaunchEntry::Unsupported(_) => Self {
+                harness,
+                program: None,
+                verified_chat: false,
+            },
+        }
+    }
 }
 
 fn entry_for(config: &Config, harness: HarnessId) -> LaunchEntry {

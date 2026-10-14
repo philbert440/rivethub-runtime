@@ -148,4 +148,6 @@ pub trait HarnessAdapter: Send + Sync {
         &self,
         session: &SessionId,
     ) -> Result<Receiver<SessionEvent>, HarnessAdapterError>;
+
+    async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError>;
 }

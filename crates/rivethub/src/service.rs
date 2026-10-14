@@ -58,7 +58,18 @@ pub fn compose(
 ) -> Result<Arc<Gateway>, StartupError> {
     let hostname = host_name();
     let settings = Settings::from_config(config, hostname.clone(), env.node_name(&hostname));
-    Ok(Arc::new(Gateway::new(store, settings)))
+    let uploads = env.upload_settings();
+    for ignored in &uploads.ignored {
+        tracing::warn!("ignored upload limit {ignored}");
+    }
+    let gateway = Gateway::new(store, settings).with_uploads(gateway::uploads::UploadService::new(
+        gateway::uploads::UploadOptions {
+            root: config::Paths::new(env).state_dir().join("uploads"),
+            max_bytes: uploads.max_bytes,
+            ttl: uploads.ttl,
+        },
+    ));
+    Ok(Arc::new(gateway))
 }
 
 pub async fn listen(config: &Config) -> Result<(TcpListener, Option<TlsPaths>), StartupError> {

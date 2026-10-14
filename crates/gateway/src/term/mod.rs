@@ -92,6 +92,10 @@ impl TerminalService {
         self
     }
 
+    pub(crate) fn adapter(&self) -> Option<Arc<dyn kernel::harness::HarnessAdapter>> {
+        self.harness.clone()
+    }
+
     pub(crate) fn launch(&self, request: TermSpawnRequest) -> Result<Launch, ApiError> {
         if request.agent_id.is_some() {
             return Err(ApiError::NotFound("agent not found"));

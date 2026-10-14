@@ -354,6 +354,7 @@ struct SessionStream {
 pub struct FakeHarness {
     queued: Mutex<Vec<SessionEvent>>,
     sessions: Mutex<BTreeMap<SessionId, SessionStream>>,
+    offerings: parking_lot::Mutex<Vec<wire::harness::HarnessOffering>>,
 }
 
 impl FakeHarness {
@@ -361,7 +362,12 @@ impl FakeHarness {
         Self {
             queued: Mutex::new(events),
             sessions: Mutex::new(BTreeMap::new()),
+            offerings: parking_lot::Mutex::new(Vec::new()),
         }
+    }
+
+    pub fn set_offerings(&self, offerings: Vec<wire::harness::HarnessOffering>) {
+        *self.offerings.lock() = offerings;
     }
 }
 
@@ -438,6 +444,10 @@ impl HarnessAdapter for FakeHarness {
         let taken = stream.rx.take();
         drop(sessions);
         taken.ok_or_else(|| HarnessAdapterError::EventStreamTaken(session.clone()))
+    }
+
+    async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError> {
+        Ok(self.offerings.lock().clone())
     }
 }
 

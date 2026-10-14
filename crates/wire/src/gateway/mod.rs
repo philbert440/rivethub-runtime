@@ -5,6 +5,7 @@ pub mod files;
 pub mod memory;
 pub mod sessions;
 pub mod term;
+pub mod uploads;
 pub mod users;
 pub mod v1;
 pub mod wiki;

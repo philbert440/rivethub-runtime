@@ -30,6 +30,8 @@ pub enum ApiError {
     #[error("session is owned by another user")]
     SessionForbidden,
     #[error("{0}")]
+    Forbidden(String),
+    #[error("{0}")]
     Conflict(String),
     #[error("{0}")]
     Unavailable(String),
@@ -92,6 +94,7 @@ impl ApiError {
                 StatusCode::FORBIDDEN,
                 GatewayError::new("session is owned by another user"),
             ),
+            Self::Forbidden(message) => (StatusCode::FORBIDDEN, GatewayError::new(message)),
             Self::Conflict(message) => (StatusCode::CONFLICT, GatewayError::new(message)),
             Self::Unavailable(message) => {
                 (StatusCode::SERVICE_UNAVAILABLE, GatewayError::new(message))

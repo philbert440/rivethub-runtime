@@ -153,4 +153,8 @@ impl HarnessAdapter for Harness {
             .take()
             .expect("one consumer"))
     }
+
+    async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError> {
+        Ok(Vec::new())
+    }
 }

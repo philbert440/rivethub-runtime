@@ -8,6 +8,7 @@ pub mod sessions;
 pub mod tenancy;
 pub mod term;
 pub mod tls;
+pub mod uploads;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -71,6 +72,7 @@ pub struct Gateway {
     sessions: Arc<sessions::SessionRegistry>,
     terminal: Option<Arc<term::TerminalService>>,
     transcript: Option<Arc<dyn kernel::transcript::TranscriptReader>>,
+    uploads: Option<uploads::UploadService>,
 }
 
 impl Gateway {
@@ -93,6 +95,7 @@ impl Gateway {
             )),
             terminal: None,
             transcript: None,
+            uploads: None,
         }
     }
 
@@ -132,6 +135,16 @@ impl Gateway {
     }
 
     #[must_use]
+    pub fn with_uploads(mut self, uploads: uploads::UploadService) -> Self {
+        self.uploads = Some(uploads);
+        self
+    }
+
+    pub(crate) fn uploads(&self) -> Option<&uploads::UploadService> {
+        self.uploads.as_ref()
+    }
+
+    #[must_use]
     pub fn with_transcript_reader(
         mut self,
         reader: Arc<dyn kernel::transcript::TranscriptReader>,
@@ -143,6 +156,9 @@ impl Gateway {
     pub async fn close(&self) {
         if let Some(terminal) = &self.terminal {
             terminal.close().await;
+        }
+        if let Some(uploads) = &self.uploads {
+            uploads.close().await;
         }
         self.sessions.close().await;
     }

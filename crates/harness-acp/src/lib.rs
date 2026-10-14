@@ -7,6 +7,7 @@ pub mod identity;
 pub mod launch;
 pub mod permissions;
 pub mod process;
+mod sheets;
 
 pub use adapter::AcpHarnessAdapter;
 pub use error::AcpError;
@@ -15,4 +16,5 @@ pub use identity::IdentityError;
 pub use identity::NativeSession;
 pub use launch::AcpCommand;
 pub use launch::AcpLaunch;
+pub use launch::LaunchFact;
 pub use launch::LaunchTable;

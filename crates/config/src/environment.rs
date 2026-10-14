@@ -57,6 +57,28 @@ pub const LOG_LEVEL_VARIABLE: &str = "RIVETHUB_LOG_LEVEL";
 pub const NODE_NAME_VARIABLE: &str = "RIVETHUB_NODE_NAME";
 pub const NODE_ID_VARIABLE: &str = "RIVETHUB_NODE_ID";
 pub const POSTGRES_URL_VARIABLE: &str = "RIVETHUB_PG_URL";
+pub const UPLOAD_MAX_BYTES_VARIABLE: &str = "RIVETHUB_UPLOAD_MAX_BYTES";
+pub const UPLOAD_TTL_MS_VARIABLE: &str = "RIVETHUB_UPLOAD_TTL_MS";
+pub const DEFAULT_UPLOAD_MAX_BYTES: u64 = 25 * 1024 * 1024;
+pub const DEFAULT_UPLOAD_TTL_MS: u64 = 86_400_000;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadSettings {
+    pub max_bytes: u64,
+    pub ttl: std::time::Duration,
+    pub ignored: Vec<String>,
+}
+
+impl UploadSettings {
+    #[must_use]
+    pub fn defaults() -> Self {
+        Self {
+            max_bytes: DEFAULT_UPLOAD_MAX_BYTES,
+            ttl: std::time::Duration::from_millis(DEFAULT_UPLOAD_TTL_MS),
+            ignored: Vec::new(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Alias {
@@ -73,10 +95,12 @@ enum Alias {
     TermIdleTtl,
     TermExitLinger,
     TermSessionGc,
+    UploadMax,
+    UploadTtl,
 }
 
 impl Alias {
-    const ALL: [Self; 13] = [
+    const ALL: [Self; 15] = [
         Self::LogLevel,
         Self::NodeName,
         Self::NodeId,
@@ -90,6 +114,8 @@ impl Alias {
         Self::TermIdleTtl,
         Self::TermExitLinger,
         Self::TermSessionGc,
+        Self::UploadMax,
+        Self::UploadTtl,
     ];
 
     const fn names(self) -> (&'static str, &'static str) {
@@ -116,6 +142,8 @@ impl Alias {
                 "RIVETHUB_TERM_SESSION_GC_MS",
                 "RIVETOS_DEN_TERM_SESSION_GC_MS",
             ),
+            Self::UploadMax => (UPLOAD_MAX_BYTES_VARIABLE, "RIVETOS_DEN_UPLOAD_MAX_BYTES"),
+            Self::UploadTtl => (UPLOAD_TTL_MS_VARIABLE, "RIVETOS_DEN_UPLOAD_TTL"),
         }
     }
 }
@@ -266,6 +294,30 @@ impl Environment {
         );
         settings.ignored = ignored;
         settings
+    }
+
+    #[must_use]
+    pub fn upload_settings(&self) -> UploadSettings {
+        let mut settings = UploadSettings::defaults();
+        let mut ignored = Vec::new();
+        self.apply_positive(Alias::UploadMax, &mut settings.max_bytes, &mut ignored);
+        let mut ttl_ms = DEFAULT_UPLOAD_TTL_MS;
+        self.apply_positive(Alias::UploadTtl, &mut ttl_ms, &mut ignored);
+        settings.ttl = std::time::Duration::from_millis(ttl_ms);
+        settings.ignored = ignored;
+        settings
+    }
+
+    fn apply_positive(&self, alias: Alias, slot: &mut u64, ignored: &mut Vec<String>) {
+        let (current, _) = alias.names();
+        let Some(text) = self.setting(alias) else {
+            return;
+        };
+        match text.parse::<u64>() {
+            Ok(value) if value > 0 => *slot = value,
+            Ok(_) => ignored.push(format!("{current}={text}")),
+            Err(_error) => ignored.push(format!("{current}={text}")),
+        }
     }
 
     fn apply_term<T>(&self, alias: Alias, slot: &mut T, ignored: &mut Vec<String>)

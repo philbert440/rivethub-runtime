@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::path::Component;
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr as _;
 use std::sync::Arc;
@@ -31,8 +33,10 @@ use crate::error::AcpError;
 use crate::error::port;
 use crate::identity;
 use crate::launch::AcpCommand;
+use crate::launch::LaunchFact;
 use crate::launch::LaunchTable;
 use crate::permissions::PermissionRegistry;
+use crate::sheets::SheetInput;
 
 #[derive(Debug)]
 struct SessionEntry {
@@ -68,6 +72,8 @@ pub struct AcpHarnessAdapter {
     launch: LaunchTable,
     default_working_dir: Option<PathBuf>,
     sessions: Mutex<BTreeMap<SessionId, SessionEntry>>,
+    sheets: BTreeMap<HarnessId, SheetInput>,
+    search_paths: Vec<PathBuf>,
 }
 
 impl AcpHarnessAdapter {
@@ -80,6 +86,8 @@ impl AcpHarnessAdapter {
                 .as_ref()
                 .and_then(|runtime| runtime.workspace.clone()),
             sessions: Mutex::new(BTreeMap::new()),
+            sheets: sheet_inputs(config),
+            search_paths: Vec::new(),
         }
     }
 
@@ -89,7 +97,15 @@ impl AcpHarnessAdapter {
             launch,
             default_working_dir: None,
             sessions: Mutex::new(BTreeMap::new()),
+            sheets: BTreeMap::new(),
+            search_paths: Vec::new(),
         }
+    }
+
+    #[must_use]
+    pub fn with_search_paths(mut self, search_paths: Vec<PathBuf>) -> Self {
+        self.search_paths = search_paths;
+        self
     }
 
     fn snapshot(&self, session: &SessionId) -> Result<SessionSnapshot, HarnessAdapterError> {
@@ -348,5 +364,103 @@ impl HarnessAdapter for AcpHarnessAdapter {
         drop(sessions);
         let receiver = taken.ok_or_else(|| HarnessAdapterError::UnknownSession(session.clone()))?;
         receiver.ok_or_else(|| HarnessAdapterError::EventStreamTaken(session.clone()))
+    }
+
+    async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError> {
+        let facts = self.launch.facts();
+        let search = self.search_paths.clone();
+        let installed = tokio::task::spawn_blocking(move || probe(&facts, &search))
+            .await
+            .map_err(|error| HarnessAdapterError::Failed {
+                message: "install probe failed".into(),
+                source: Box::new(error),
+            })?
+            .map_err(|error| HarnessAdapterError::Failed {
+                message: "install probe failed".into(),
+                source: Box::new(error),
+            })?;
+        let mut offerings = Vec::new();
+        for (fact, present) in installed {
+            if !present {
+                continue;
+            }
+            offerings.push(
+                crate::sheets::offering(
+                    fact.harness,
+                    fact.verified_chat,
+                    self.sheets.get(&fact.harness),
+                )
+                .map_err(|error| HarnessAdapterError::Failed {
+                    message: error.to_string(),
+                    source: Box::new(error),
+                })?,
+            );
+        }
+        Ok(offerings)
+    }
+}
+
+fn sheet_inputs(config: &Config) -> BTreeMap<HarnessId, SheetInput> {
+    let Some(tasks) = &config.tasks else {
+        return BTreeMap::new();
+    };
+    let Some(harnesses) = &tasks.harnesses else {
+        return BTreeMap::new();
+    };
+    harnesses
+        .iter()
+        .filter_map(|(slot, entry)| match slot {
+            config::HarnessSlot::Known(harness) => Some((
+                *harness,
+                SheetInput {
+                    models: entry.models.clone(),
+                    efforts: entry.efforts.clone(),
+                    mode: entry.models_mode,
+                },
+            )),
+            config::HarnessSlot::Unknown(_) => None,
+        })
+        .collect()
+}
+
+fn probe(
+    facts: &[LaunchFact],
+    search: &[PathBuf],
+) -> Result<Vec<(LaunchFact, bool)>, std::io::Error> {
+    let mut installed = Vec::with_capacity(facts.len());
+    for fact in facts {
+        let present = match &fact.program {
+            Some(program) => program_installed(program, search)?,
+            None => false,
+        };
+        installed.push((fact.clone(), present));
+    }
+    Ok(installed)
+}
+
+fn program_installed(program: &Path, search: &[PathBuf]) -> Result<bool, std::io::Error> {
+    if program.as_os_str().is_empty()
+        || program
+            .components()
+            .any(|component| component == Component::ParentDir)
+    {
+        return Ok(false);
+    }
+    if program.is_absolute() {
+        return is_file(program);
+    }
+    for directory in search {
+        if is_file(&directory.join(program))? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn is_file(path: &Path) -> Result<bool, std::io::Error> {
+    match std::fs::metadata(path) {
+        Ok(metadata) => Ok(metadata.is_file()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
     }
 }

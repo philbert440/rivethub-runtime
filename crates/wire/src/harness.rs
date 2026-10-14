@@ -369,3 +369,18 @@ pub enum Transport {
 pub struct HarnessSessionList {
     pub sessions: Vec<HarnessSessionSummary>,
 }
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HarnessOffering {
+    pub harness_id: HarnessId,
+    pub chat: bool,
+    pub capabilities: HarnessCapabilities,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HarnessOfferingList {
+    pub harnesses: Vec<HarnessOffering>,
+}
