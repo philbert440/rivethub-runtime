@@ -1,0 +1,246 @@
+#![cfg(test)]
+
+use kernel::memory::{
+    BrowseFilter, Limit, SearchMode, SearchQuery, TagCountsQuery, TagListQuery, TagLookup,
+    TagTaxonomyQuery,
+};
+use mcp::Server;
+use std::sync::Arc;
+use testkit::{FakeMemoryStore, MemoryRequest};
+use tokio_util::sync::CancellationToken;
+use wire::gateway::memory::{BrowseWindow, MemoryBrowseOrder, MemoryScope, TagState};
+
+pub mod support;
+
+fn setup(write: bool) -> (Server, Arc<FakeMemoryStore>) {
+    let store = Arc::new(FakeMemoryStore::default());
+    let server = Server::new(store.clone(), write, CancellationToken::new()).expect("server");
+    (server, store)
+}
+
+#[tokio::test]
+async fn memory_requests_reach_kernel_unchanged() {
+    let (server, store) = setup(false);
+    for (name, args) in [
+        (
+            "memory_search",
+            r#"{"query":"日本語","mode":"trigram","scope":"messages","tag":"project:acme","limit":7}"#,
+        ),
+        (
+            "memory_browse",
+            r#"{"window":"today","include_tools":true,"order":"asc"}"#,
+        ),
+        ("memory_stats", "{}"),
+        ("memory_get_full", r#"{"id":"row-1"}"#),
+        ("memory_tags", "{}"),
+        ("memory_tags", r#"{"action":"list","state":"accepted"}"#),
+        ("memory_tags", r#"{"action":"counts","key":"project"}"#),
+        ("memory_tags", r#"{"action":"lookup","session_keys":["s"]}"#),
+        ("memory_tags", r#"{"action":"taxonomy","key":"project"}"#),
+    ] {
+        assert_ne!(
+            support::call(&server, name, args).await.is_error,
+            Some(true),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        store.requests().await,
+        vec![
+            MemoryRequest::Search(SearchQuery {
+                text: "日本語".into(),
+                mode: SearchMode::Trigram,
+                scope: MemoryScope::Messages,
+                agent: None,
+                tag: Some("project:acme".parse().expect("tag")),
+                limit: Limit::clamped(Some(7), 10, 1..=50)
+            }),
+            MemoryRequest::Browse(BrowseFilter {
+                conversation_id: None,
+                agent: None,
+                role: None,
+                tool_name: None,
+                tag: None,
+                window: Some(BrowseWindow::Today),
+                since: None,
+                before: None,
+                include_tools: true,
+                order: MemoryBrowseOrder::Asc,
+                limit: Limit::clamped(None, 50, 1..=200)
+            }),
+            MemoryRequest::Stats,
+            MemoryRequest::GetFull("row-1".into()),
+            MemoryRequest::PendingTags(Limit::clamped(None, 100, 1..=1000)),
+            MemoryRequest::ListTags(TagListQuery {
+                entity_type: None,
+                entity_id: None,
+                key: None,
+                value: None,
+                states: vec![TagState::Accepted],
+                limit: Limit::clamped(None, 100, 1..=1000)
+            }),
+            MemoryRequest::TagCounts(TagCountsQuery {
+                key: Some("project".into()),
+                limit: Limit::clamped(None, 100, 1..=1000)
+            }),
+            MemoryRequest::LookupTags(TagLookup {
+                session_keys: vec!["s".into()],
+                states: vec![]
+            }),
+            MemoryRequest::TagTaxonomy(TagTaxonomyQuery {
+                key: Some("project".into()),
+                state: None,
+                limit: Limit::clamped(None, 100, 1..=1000)
+            }),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn invalid_and_unsupported_options_never_reach_store() {
+    let (server, store) = setup(false);
+    for (name, args) in [
+        ("memory_search", r#"{"query":"x","unknown":true}"#),
+        ("memory_search", r#"{"query":"x","limit":0}"#),
+        ("memory_search", r#"{"query":"x","limit":2.5}"#),
+        ("memory_search", r#"{"query":"x","mode":"bogus"}"#),
+        ("memory_search", r#"{"query":"x","window":"today"}"#),
+        ("memory_search", r#"{"query":"x","synthesize":true}"#),
+        ("memory_search", r#"{"query":"x","expand":true}"#),
+        ("memory_browse", r#"{"since":"yesterday"}"#),
+        ("memory_browse", r#"{"conversation_id":"bogus"}"#),
+        ("memory_browse", r#"{"tag":"missing-colon"}"#),
+        ("memory_stats", r#"{"agent":"acme"}"#),
+        ("memory_get_full", r#"{"id":""}"#),
+        ("memory_tags", r#"{"action":"lookup","session_keys":[]}"#),
+    ] {
+        assert_eq!(
+            support::call(&server, name, args).await.is_error,
+            Some(true),
+            "{name}: {args}"
+        );
+    }
+    for action in [
+        "decide",
+        "add",
+        "taxonomy_upsert",
+        "taxonomy_decide",
+        "taxonomy_merge",
+    ] {
+        assert_eq!(
+            support::call(
+                &server,
+                "memory_tags",
+                &format!(r#"{{"action":"{action}"}}"#)
+            )
+            .await
+            .is_error,
+            Some(true)
+        );
+    }
+    assert_eq!(store.requests().await, Vec::new());
+}
+
+#[tokio::test]
+async fn explicitly_authorized_tag_writes_reach_port() {
+    let (server, store) = setup(true);
+    for args in [
+        r#"{"action":"decide","ids":["00000000-0000-4000-8000-000000000001"],"state":"accepted"}"#,
+        r#"{"action":"add","entity_type":"conversation","session_key":"s","tag":"project:acme"}"#,
+        r#"{"action":"taxonomy_upsert","key":"project","value":"acme","aliases":[]}"#,
+        r#"{"action":"taxonomy_decide","entries":[{"key":"project","value":"acme"}],"state":"rejected"}"#,
+        r#"{"action":"taxonomy_merge","key":"project","from":"old","into":"acme"}"#,
+    ] {
+        assert_ne!(
+            support::call(&server, "memory_tags", args).await.is_error,
+            Some(true)
+        );
+    }
+    assert_eq!(store.requests().await.len(), 5);
+}
+
+#[tokio::test]
+async fn memory_results_preserve_content_and_enabled_write_annotations() {
+    use kernel::memory::MemoryStore;
+    use wire::memory::MemoryEntry;
+    use wire::message::Role;
+    let (server, store) = setup(true);
+    let entry = MemoryEntry {
+        id: Some("row-1".into()),
+        session_id: "s".into(),
+        agent: "acme".into(),
+        channel: "test".into(),
+        role: Role::Assistant,
+        content: "日本語 😀".into(),
+        tool_name: None,
+        tool_args: None,
+        tool_result: None,
+        metadata: None,
+        created_at: Some("2026-10-13T12:00:00Z".parse().expect("timestamp")),
+    };
+    store.append(vec![entry.clone()]).await.expect("seed");
+    let result = support::call(&server, "memory_get_full", r#"{"id":"row-1"}"#).await;
+    assert_eq!(result.content.len(), 1);
+    let content = result
+        .content
+        .first()
+        .and_then(|block| block.as_text())
+        .expect("text content");
+    let actual: Option<MemoryEntry> =
+        serde_json::from_str(&content.text).expect("typed memory result");
+    assert_eq!(actual, Some(entry));
+    let tags = server
+        .tools()
+        .iter()
+        .find(|tool| tool.name == "memory_tags")
+        .expect("tags");
+    let hints = tags.annotations.as_ref().expect("annotations");
+    assert_eq!(hints.read_only_hint, Some(false));
+    assert_eq!(hints.destructive_hint, Some(true));
+}
+
+#[tokio::test]
+async fn browse_refuses_window_with_explicit_time_bounds_by_name() {
+    let (server, store) = setup(false);
+    for args in [
+        r#"{"window":"today","since":"2026-10-12T00:00:00Z"}"#,
+        r#"{"window":"today","before":"2026-10-13T00:00:00Z"}"#,
+        r#"{"window":"today","since":"2026-10-12T00:00:00Z","before":"2026-10-13T00:00:00Z"}"#,
+    ] {
+        assert_eq!(
+            support::call(&server, "memory_browse", args).await,
+            rmcp::model::CallToolResult::error(vec![rmcp::model::ContentBlock::text(
+                "window cannot be combined with since or before"
+            )])
+        );
+    }
+    assert_eq!(store.requests().await, Vec::new());
+}
+
+#[tokio::test]
+async fn browse_explicit_time_bounds_reach_kernel_unchanged() {
+    let (server, store) = setup(false);
+    let result = support::call(
+        &server,
+        "memory_browse",
+        r#"{"since":"2026-10-12T00:00:00Z","before":"2026-10-13T00:00:00Z"}"#,
+    )
+    .await;
+    assert_ne!(result.is_error, Some(true));
+    assert_eq!(
+        store.requests().await,
+        vec![MemoryRequest::Browse(BrowseFilter {
+            conversation_id: None,
+            agent: None,
+            role: None,
+            tool_name: None,
+            tag: None,
+            window: None,
+            since: Some("2026-10-12T00:00:00Z".parse().expect("since")),
+            before: Some("2026-10-13T00:00:00Z".parse().expect("before")),
+            include_tools: false,
+            order: MemoryBrowseOrder::Desc,
+            limit: Limit::clamped(None, 50, 1..=200),
+        })]
+    );
+}

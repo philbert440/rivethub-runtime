@@ -136,7 +136,21 @@ impl Limit {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
+#[derive(
+    serde::Serialize,
+    schemars::JsonSchema,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    strum::Display,
+    strum::EnumString,
+    serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 pub enum SearchMode {
     #[default]

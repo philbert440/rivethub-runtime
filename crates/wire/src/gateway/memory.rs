@@ -29,7 +29,7 @@ pub struct MemorySearchToolArgs {
     pub tag: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MemoryScope {
     Messages,
@@ -37,7 +37,9 @@ pub enum MemoryScope {
     Both,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    schemars::JsonSchema, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum MemoryBrowseOrder {
     Asc,
@@ -46,6 +48,7 @@ pub enum MemoryBrowseOrder {
 }
 
 #[derive(
+    schemars::JsonSchema,
     Debug,
     Clone,
     Copy,
@@ -201,7 +204,7 @@ pub struct MemoryTagsToolArgs {
     pub limit: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TagEntryPair {
     pub key: String,
     pub value: String,
@@ -399,7 +402,16 @@ pub struct CaptureHealth {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
+    schemars::JsonSchema,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    strum::Display,
+    strum::EnumString,
 )]
 #[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "snake_case")]
@@ -409,7 +421,16 @@ pub enum TagEntityType {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
+    schemars::JsonSchema,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    strum::Display,
+    strum::EnumString,
 )]
 #[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "snake_case")]
