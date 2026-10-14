@@ -13,6 +13,7 @@ use std::sync::Arc;
 use axum::Router;
 use axum::middleware;
 use axum::routing;
+use kernel::agent::TurnRunner;
 use kernel::memory::MemoryStore;
 
 use crate::auth::DenialLog;
@@ -50,6 +51,7 @@ impl Settings {
 )]
 pub struct Gateway {
     store: Arc<dyn MemoryStore>,
+    turn_runner: Option<Arc<dyn TurnRunner>>,
     settings: Settings,
     embed_provider: bool,
     policy: auth::OriginPolicy,
@@ -69,6 +71,7 @@ impl Gateway {
         );
         Self {
             store,
+            turn_runner: None,
             settings,
             embed_provider: false,
             policy,
@@ -80,6 +83,12 @@ impl Gateway {
             terminal: None,
             transcript: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_turn_runner(mut self, runner: Arc<dyn TurnRunner>) -> Self {
+        self.turn_runner = Some(runner);
+        self
     }
 
     #[must_use]

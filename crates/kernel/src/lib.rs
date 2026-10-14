@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod harness;
 pub mod memory;
 pub mod memory_core;

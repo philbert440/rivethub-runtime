@@ -8,7 +8,6 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-agent-loop.workspace = true
 futures.workspace = true
 tempfile.workspace = true
 axum = { workspace = true }

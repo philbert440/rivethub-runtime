@@ -10,10 +10,9 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use agent_loop::hooks::HookPipeline;
-use agent_loop::{AgentLoop, TurnLimits};
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
+use kernel::agent::TurnLimits;
 use kernel::model::ModelProvider;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -27,7 +26,6 @@ use crate::error::ApiError;
     reason = "the provider port does not implement Debug"
 )]
 pub struct Service {
-    agent: AgentLoop,
     provider: Arc<dyn ModelProvider>,
     provider_id: String,
     conversations: storage::Store,
@@ -40,20 +38,12 @@ impl Service {
     pub async fn open(
         provider_id: String,
         provider: Arc<dyn ModelProvider>,
-        hooks: Arc<HookPipeline>,
         directory: &Path,
         cancel: CancellationToken,
     ) -> Result<Arc<Self>, Error> {
         let tasks = TaskTracker::new();
         let conversations = storage::Store::open(directory, &tasks, &cancel).await?;
-        let agent = AgentLoop::new(
-            provider_id.clone(),
-            Arc::clone(&provider),
-            Vec::new(),
-            hooks,
-        )?;
         Ok(Arc::new(Self {
-            agent,
             provider,
             provider_id,
             conversations,
@@ -79,7 +69,7 @@ impl Service {
     }
 }
 
-pub(super) fn router() -> Router {
+pub(super) fn router() -> Router<Arc<Gateway>> {
     Router::new()
         .route(
             "/v1/models",

@@ -1,16 +1,17 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use agent_loop::{StopReason, Turn, TurnResult};
+use axum::extract::State;
 use axum::extract::rejection::JsonRejection;
 use axum::http::{HeaderMap, HeaderValue};
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
 use chrono::Utc;
 use kernel::ToolContext;
+use kernel::agent::{StopReason, Turn, TurnLimits, TurnResult, TurnRunner};
 use kernel::model::{ModelChunk, ModelRequest};
 use tokio::sync::{mpsc, oneshot};
-use tokio_util::sync::{CancellationToken, DropGuard};
+use tokio_util::sync::DropGuard;
 use uuid::Uuid;
 use wire::JsonObject;
 use wire::gateway::v1::{ChatRequest, Completion, CompletionChoice};
@@ -31,11 +32,13 @@ pub(super) struct Running {
 }
 
 pub(super) async fn complete(
+    State(gateway): State<Arc<crate::Gateway>>,
     extension: Option<Extension<Arc<Service>>>,
     headers: HeaderMap,
     body: Result<Json<ChatRequest>, JsonRejection>,
 ) -> Result<Response, Error> {
     let service = service(extension)?;
+    let runner = Arc::clone(gateway.turn_runner.as_ref().ok_or(Error::Unavailable)?);
     let request = super::body(body)?;
     let messages = validate(&request)?;
     let streaming = request.stream == Some(true);
@@ -46,7 +49,7 @@ pub(super) async fn complete(
     let (conversation, lease) = conversation(&service, &headers, &messages).await?;
     let header =
         HeaderValue::from_str(&conversation).map_err(|error| Error::Invalid(error.to_string()))?;
-    let running = start(service, request, messages, conversation, lease);
+    let running = start(&service, runner, request, messages, conversation, lease);
     let mut response = if streaming {
         streaming::response(running, include_usage)
     } else {
@@ -152,7 +155,8 @@ async fn conversation(
 }
 
 fn start(
-    service: Arc<Service>,
+    service: &Service,
+    runner: Arc<dyn TurnRunner>,
     request: ChatRequest,
     messages: Vec<Message>,
     conversation: String,
@@ -167,11 +171,13 @@ fn start(
     let model = request.model.clone();
     let completion_id = id.clone();
     let tasks = service.tasks.clone();
+    let turn = turn(request, messages, conversation, service.limits);
+    let result_model = model.clone();
     tasks.spawn(async move {
-        let outcome = execute(&service, request, messages, conversation, sender, cancel).await;
+        let outcome = runner.run(turn, sender, cancel).await;
         let outcome = match outcome {
-            Ok(result) => finish(result, completion_id, created, lease).await,
-            Err(error) => Err(error),
+            Ok(result) => finish((result, result_model), completion_id, created, lease).await,
+            Err(error) => Err(error.into()),
         };
         if let Err(outcome) = reply.send(outcome)
             && let Err(error) = outcome
@@ -189,18 +195,15 @@ fn start(
     }
 }
 
-async fn execute(
-    service: &Service,
+fn turn(
     request: ChatRequest,
     messages: Vec<Message>,
     conversation: String,
-    events: mpsc::Sender<ModelChunk>,
-    cancel: CancellationToken,
-) -> Result<(TurnResult, String), Error> {
-    let model = request.model;
-    let turn = Turn {
+    limits: TurnLimits,
+) -> Turn {
+    Turn {
         request: ModelRequest {
-            model: model.clone(),
+            model: request.model,
             messages,
             tools: Vec::new(),
             thinking: None,
@@ -218,9 +221,8 @@ async fn execute(
             session: None,
         },
         authorized_tools: BTreeSet::new(),
-        limits: service.limits,
-    };
-    Ok((service.agent.run(turn, events, cancel).await?, model))
+        limits,
+    }
 }
 
 async fn finish(

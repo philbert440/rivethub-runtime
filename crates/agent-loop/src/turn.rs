@@ -1,8 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::Duration;
 
 use kernel::ToolContext;
+use kernel::agent::{StopReason, Turn, TurnResult};
 use kernel::model::{ModelChunk, ModelProvider, ModelRequest};
 use kernel::tool::Tool;
 use tokio::sync::mpsc;
@@ -16,39 +16,6 @@ use wire::stream::LlmUsage;
 use crate::Error;
 use crate::hooks::HookPipeline;
 use crate::stream::{Response, collect};
-
-#[derive(Debug, Clone, Copy)]
-pub struct TurnLimits {
-    pub steps: u32,
-    pub timeout: Duration,
-    pub cleanup_timeout: Duration,
-    pub response_bytes: usize,
-}
-
-#[derive(Debug)]
-pub struct Turn {
-    pub request: ModelRequest,
-    pub context: HookContextBase,
-    pub tool_context: ToolContext,
-    pub authorized_tools: BTreeSet<String>,
-    pub limits: TurnLimits,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StopReason {
-    Completed,
-    StepLimit,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct TurnResult {
-    pub messages: Vec<Message>,
-    pub response: String,
-    pub tools_used: Vec<String>,
-    pub iterations: u32,
-    pub usage: Option<HookUsage>,
-    pub stop: StopReason,
-}
 
 pub struct AgentLoop {
     provider_id: String,

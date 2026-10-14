@@ -20,7 +20,7 @@ pub enum Error {
     #[error("provider failed: {0}")]
     Provider(#[from] kernel::model::ModelProviderError),
     #[error("agent turn failed: {0}")]
-    Turn(#[from] agent_loop::Error),
+    Turn(#[from] kernel::agent::TurnError),
     #[error("conversation IO failed: {0}")]
     Io(#[from] std::io::Error),
     #[error("conversation JSON failed: {0}")]

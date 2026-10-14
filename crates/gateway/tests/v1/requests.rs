@@ -2,14 +2,36 @@ use axum::http::StatusCode;
 use wire::gateway::v1::{
     Completion, CompletionChunk, Conversation, Conversations, ErrorResponse, Models,
 };
-use wire::hooks::{HookContextKind, HookPipelineResult};
 use wire::message::Role;
 use wire::stream::openai::{FinishReason, Usage};
 
 use super::support::{Harness, REQUEST, bytes, chunks, json, request};
 
 #[tokio::test]
-async fn completion_runs_one_audited_turn_and_persists_it() {
+async fn missing_turn_runner_refuses_before_creating_a_conversation() {
+    let harness = Harness::new(chunks()).await;
+    let gateway = std::sync::Arc::new(gateway::Gateway::new(
+        std::sync::Arc::new(testkit::FakeMemoryStore::default()),
+        harness.gateway.settings().clone(),
+    ));
+    let response = request(
+        harness.service.router(&gateway, false),
+        "POST",
+        "/v1/chat/completions",
+        REQUEST,
+        &[],
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert!(harness.runner.turns.lock().is_empty());
+    let records: Conversations =
+        json(request(harness.app(), "GET", "/api/conversations", "", &[]).await).await;
+    assert_eq!(records.conversations, Vec::new());
+    harness.close().await;
+}
+
+#[tokio::test]
+async fn completion_runs_one_injected_turn_and_persists_it() {
     let harness = Harness::new(chunks()).await;
     let response = request(harness.app(), "POST", "/v1/chat/completions", REQUEST, &[]).await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -59,28 +81,28 @@ async fn completion_runs_one_audited_turn_and_persists_it() {
     assert_eq!(record.id, conversation);
     assert_eq!(record.messages.len(), 2);
     assert_eq!(record.messages.last(), Some(&choice.message));
-    let audit = tokio::fs::read_to_string(harness.dir.path().join("audit.jsonl"))
-        .await
-        .expect("audit");
-    let records: Vec<HookPipelineResult> = audit
-        .lines()
-        .map(|line| serde_json::from_str(line).expect("audit record"))
-        .collect();
-    assert_eq!(
-        records
-            .iter()
-            .filter(|record| matches!(record.context.kind, HookContextKind::ProviderBefore { .. }))
-            .count(),
-        1
-    );
-    assert!(records.iter().any(|record| matches!(
-        record.context.kind,
-        HookContextKind::TurnAfter {
-            iterations: 1,
-            aborted: false,
-            ..
-        }
-    )));
+    {
+        let turns = std::mem::take(&mut *harness.runner.turns.lock());
+        let [turn] = turns.as_slice() else {
+            panic!("one turn")
+        };
+        assert_eq!(turn.request.model, "test-model");
+        let [message] = turn.request.messages.as_slice() else {
+            panic!("one user message")
+        };
+        assert_eq!(message.role, Role::User);
+        assert_eq!(
+            message.content,
+            wire::message::MessageContent::Text("Hi".to_owned())
+        );
+        assert_eq!(
+            turn.context.session_id.as_deref(),
+            Some(conversation.as_str())
+        );
+        assert_eq!(turn.limits.steps, 1);
+        assert!(turn.authorized_tools.is_empty());
+        assert_eq!(turn.request.tools, Vec::new());
+    }
     harness.close().await;
 }
 

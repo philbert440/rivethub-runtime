@@ -17,6 +17,7 @@ serde = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
+tokio-util.workspace = true
 uuid = { workspace = true }
 wire.workspace = true
 

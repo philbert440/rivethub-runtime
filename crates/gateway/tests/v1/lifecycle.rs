@@ -189,7 +189,6 @@ async fn traversal_invalid_ids_and_symlink_records_are_refused() {
     let open = gateway::routes::v1::Service::open(
         "test".to_owned(),
         Arc::clone(&harness.provider),
-        Arc::clone(&harness.hooks),
         &directory,
         CancellationToken::new(),
     )
@@ -205,7 +204,6 @@ async fn traversal_invalid_ids_and_symlink_records_are_refused() {
     let open = gateway::routes::v1::Service::open(
         "test".to_owned(),
         Arc::clone(&harness.provider),
-        Arc::clone(&harness.hooks),
         &traversal,
         CancellationToken::new(),
     )

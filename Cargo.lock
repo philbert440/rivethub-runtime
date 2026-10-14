@@ -1003,7 +1003,6 @@ dependencies = [
 name = "gateway"
 version = "0.1.0"
 dependencies = [
- "agent-loop",
  "async-trait",
  "axum",
  "chrono",
@@ -1561,6 +1560,7 @@ dependencies = [
  "strum",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-util",
  "uuid",
  "wire",
 ]

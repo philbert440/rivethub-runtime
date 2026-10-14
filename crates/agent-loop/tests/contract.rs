@@ -10,6 +10,8 @@ mod lifecycle;
 mod limits;
 #[path = "cases/replay.rs"]
 mod replay;
+#[path = "cases/runner.rs"]
+mod runner;
 #[path = "cases/stream.rs"]
 mod stream;
 #[path = "cases/turns.rs"]

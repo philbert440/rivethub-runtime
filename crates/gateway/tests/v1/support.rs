@@ -1,12 +1,7 @@
-use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use agent_loop::audit::AuditLog;
-use agent_loop::fence::WorkspaceFence;
-use agent_loop::hooks::{HookError, HookPipeline};
-use agent_loop::shell::ShellDanger;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
@@ -18,7 +13,6 @@ use kernel::model::{ModelChunk, ModelProvider};
 use serde::de::DeserializeOwned;
 use tempfile::TempDir;
 use testkit::{FakeMemoryStore, FakeProvider, Script};
-use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt as _;
 use wire::stream::LlmUsage;
@@ -27,10 +21,8 @@ pub(super) struct Harness {
     pub(super) service: Arc<Service>,
     pub(super) gateway: Arc<Gateway>,
     pub(super) dir: TempDir,
-    pub(super) hooks: Arc<HookPipeline>,
+    pub(super) runner: Arc<super::runner::FakeRunner>,
     pub(super) provider: Arc<dyn ModelProvider>,
-    cancel: CancellationToken,
-    tasks: JoinSet<Result<(), HookError>>,
 }
 
 impl Harness {
@@ -49,42 +41,33 @@ impl Harness {
             .expect("repository root")
             .join("target");
         let dir = tempfile::tempdir_in(root).expect("scratch directory");
-        let cancel = CancellationToken::new();
-        let mut tasks = JoinSet::new();
-        let audit = AuditLog::open(&dir.path().join("audit.jsonl"), &mut tasks, cancel.clone())
-            .await
-            .expect("audit opens");
-        let shell = ShellDanger::new(BTreeSet::new()).expect("shell guard");
-        let fence = WorkspaceFence::new(vec![dir.path().to_path_buf()], BTreeSet::new(), None)
-            .await
-            .expect("workspace fence");
-        let hooks = Arc::new(HookPipeline::new(shell, fence, audit));
+        let runner = Arc::new(super::runner::FakeRunner::new(Arc::clone(&provider)));
         let service = Service::open(
             "test-provider".to_owned(),
             Arc::clone(&provider),
-            Arc::clone(&hooks),
             &dir.path().join("conversations"),
             CancellationToken::new(),
         )
         .await
         .expect("service opens");
-        let gateway = Arc::new(Gateway::new(
-            Arc::new(FakeMemoryStore::default()),
-            Settings {
-                hostname: "example.test".to_owned(),
-                node: "test-node".to_owned(),
-                allowed_origins: Vec::new(),
-                allowed_hosts: Vec::new(),
-            },
-        ));
+        let gateway = Arc::new(
+            Gateway::new(
+                Arc::new(FakeMemoryStore::default()),
+                Settings {
+                    hostname: "example.test".to_owned(),
+                    node: "test-node".to_owned(),
+                    allowed_origins: Vec::new(),
+                    allowed_hosts: Vec::new(),
+                },
+            )
+            .with_turn_runner(runner.clone()),
+        );
         Self {
             service,
             gateway,
             dir,
-            hooks,
+            runner,
             provider,
-            cancel,
-            tasks,
         }
     }
 
@@ -97,7 +80,6 @@ impl Harness {
         self.service = Service::open(
             "test-provider".to_owned(),
             Arc::clone(&self.provider),
-            Arc::clone(&self.hooks),
             &self.dir.path().join("conversations"),
             CancellationToken::new(),
         )
@@ -105,18 +87,10 @@ impl Harness {
         .expect("reopen");
     }
 
-    pub(super) async fn close(mut self) {
+    pub(super) async fn close(self) {
         tokio::time::timeout(Duration::from_secs(5), self.service.shutdown())
             .await
             .expect("service joins");
-        self.cancel.cancel();
-        while let Some(result) =
-            tokio::time::timeout(Duration::from_secs(5), self.tasks.join_next())
-                .await
-                .expect("audit joins")
-        {
-            result.expect("audit task").expect("audit persisted");
-        }
     }
 }
 

@@ -32,10 +32,13 @@ pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> Json<Healthz
     })
 }
 
-pub(crate) async fn not_found(request: axum::extract::Request) -> axum::response::Response {
+pub(crate) async fn not_found(
+    State(gateway): State<Arc<Gateway>>,
+    request: axum::extract::Request,
+) -> axum::response::Response {
     use tower::ServiceExt as _;
 
-    match v1::router().oneshot(request).await {
+    match v1::router().with_state(gateway).oneshot(request).await {
         Ok(response) => response,
         Err(never) => match never {},
     }
