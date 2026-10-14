@@ -8,6 +8,10 @@ use serde_json::Value;
 pub struct Extra(Map<String, Value>);
 
 impl Extra {
+    pub fn extend(&mut self, other: Self) {
+        self.0.extend(other.0);
+    }
+
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.0.get(key)

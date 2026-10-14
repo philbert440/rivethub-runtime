@@ -1017,6 +1017,7 @@ dependencies = [
  "parking_lot",
  "rcgen",
  "regex",
+ "reqwest",
  "rustls",
  "serde",
  "serde_json",

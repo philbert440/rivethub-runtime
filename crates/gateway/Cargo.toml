@@ -40,9 +40,10 @@ hex = { workspace = true }
 async-trait = { workspace = true }
 libtest-mimic = { workspace = true }
 rcgen = { workspace = true }
+reqwest = { workspace = true }
 similar-asserts = { workspace = true }
 testkit = { workspace = true }
-tokio = { workspace = true, features = ["io-util", "rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["io-util", "rt-multi-thread", "macros", "test-util"] }
 tokio-tungstenite = { workspace = true }
 serde_yaml_ng = { workspace = true }
 

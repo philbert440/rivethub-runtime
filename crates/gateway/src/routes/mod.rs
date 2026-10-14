@@ -5,8 +5,8 @@ pub mod memory;
 pub mod sessions;
 pub mod tags;
 pub mod terminal;
-pub mod wiki;
 pub mod v1;
+pub mod wiki;
 
 use std::sync::Arc;
 

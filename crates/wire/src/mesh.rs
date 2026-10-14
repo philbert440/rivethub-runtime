@@ -7,12 +7,27 @@ use serde_with::serde_as;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshFile {
-    pub version: i64,
+    pub version: u32,
     pub nodes: std::collections::BTreeMap<String, MeshNode>,
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
     pub updated_at: DateTime<Utc>,
     #[serde(flatten, default)]
     pub extra: Extra,
+}
+
+fn registry_version() -> u32 {
+    1
+}
+
+impl MeshFile {
+    pub fn empty(now: DateTime<Utc>) -> Self {
+        Self {
+            version: registry_version(),
+            nodes: std::collections::BTreeMap::new(),
+            updated_at: now,
+            extra: Extra::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,4 +82,14 @@ pub enum MeshNodeEventType {
     NodeStale,
     NodeUpdated,
     NodeDegraded,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MeshParseCode {
+    #[serde(rename = "MESH_INVALID_SHAPE")]
+    InvalidShape,
+    #[serde(rename = "MESH_FLAT_ARRAY")]
+    FlatArray,
+    #[serde(rename = "MESH_JSON_INVALID")]
+    JsonInvalid,
 }

@@ -97,6 +97,8 @@ pub enum ServeError {
     Tls(#[from] TlsError),
     #[error(transparent)]
     Io(#[from] io::Error),
+    #[error("TLS configuration worker failed")]
+    TlsWorker(#[from] tokio::task::JoinError),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,9 +177,22 @@ pub async fn serve_router_with(
     options: ServeOptions,
 ) -> Result<(), ServeError> {
     let acceptor = match tls {
-        Some(paths) => Some(TlsAcceptor::from(Arc::new(tls_config(&paths)?))),
+        Some(paths) => {
+            let config = tokio::task::spawn_blocking(move || tls_config(&paths)).await??;
+            Some(TlsAcceptor::from(Arc::new(config)))
+        }
         None => None,
     };
+    serve_router_with_acceptor(listener, router, acceptor, shutdown, options).await
+}
+
+pub(crate) async fn serve_router_with_acceptor(
+    listener: TcpListener,
+    router: Router,
+    acceptor: Option<TlsAcceptor>,
+    shutdown: CancellationToken,
+    options: ServeOptions,
+) -> Result<(), ServeError> {
     let serving = Serving {
         options,
         router,

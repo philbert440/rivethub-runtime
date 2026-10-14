@@ -250,6 +250,7 @@ pub struct MeshSection {
     #[serde(default = "mesh_tls_disabled")]
     pub tls: MeshTls,
     pub advertise_host: Option<String>,
+    pub agent_channel_port: Option<u16>,
     pub secret: Option<String>,
 }
 

@@ -6,6 +6,7 @@ pub mod hooks;
 pub mod json;
 pub mod memory;
 pub mod mesh;
+pub mod mesh_channel;
 pub mod message;
 pub mod session_id;
 pub mod stream;
