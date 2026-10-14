@@ -1,9 +1,3 @@
-#![expect(
-    dead_code,
-    unreachable_pub,
-    reason = "every test binary includes this module and uses a different subset, so a statement-level expect is unfulfilled in the binaries that call the item; every pub item of an integration-test crate is unreachable from outside it"
-)]
-
 use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -34,14 +28,14 @@ use wire::message::ToolCall;
 use wire::stream::LlmUsage;
 use wire::stream::ThinkingLevel;
 
-pub fn demand<T, E: std::fmt::Display>(value: Result<T, E>, what: &str) -> T {
+pub(crate) fn demand<T, E: std::fmt::Display>(value: Result<T, E>, what: &str) -> T {
     match value {
         Ok(value) => value,
         Err(error) => halt(&format!("{what}: {error}")),
     }
 }
 
-pub fn demand_some<T>(value: Option<T>, what: &str) -> T {
+pub(crate) fn demand_some<T>(value: Option<T>, what: &str) -> T {
     match value {
         Some(value) => value,
         None => halt(what),
@@ -52,27 +46,27 @@ pub fn demand_some<T>(value: Option<T>, what: &str) -> T {
     clippy::panic,
     reason = "the harness panics when a fixture or a local stub fails to set up"
 )]
-pub fn halt(what: &str) -> ! {
+pub(crate) fn halt(what: &str) -> ! {
     panic!("{what}");
 }
 
-pub type Recorder = Arc<Mutex<Vec<CapturedCall>>>;
+pub(crate) type Recorder = Arc<Mutex<Vec<CapturedCall>>>;
 
 #[derive(Debug, Clone)]
-pub struct CapturedCall {
-    pub method: String,
-    pub target: String,
-    pub authorization: Option<String>,
-    pub body: String,
+pub(crate) struct CapturedCall {
+    pub(crate) method: String,
+    pub(crate) target: String,
+    pub(crate) authorization: Option<String>,
+    pub(crate) body: String,
 }
 
-pub struct ScenarioServer {
-    pub addr: SocketAddr,
-    pub recorder: Recorder,
+pub(crate) struct ScenarioServer {
+    pub(crate) addr: SocketAddr,
+    pub(crate) recorder: Recorder,
     _stub: testkit::Stub,
 }
 
-pub async fn scenario_server(canned: Vec<Canned>) -> ScenarioServer {
+pub(crate) async fn scenario_server(canned: Vec<Canned>) -> ScenarioServer {
     let recorder: Recorder = Arc::default();
     let queue = Arc::new(Mutex::new(VecDeque::from(canned)));
     let routes = axum::Router::new()
@@ -106,13 +100,13 @@ async fn canned_handler(
     (status, canned.body).into_response()
 }
 
-pub struct RepeatingServer {
-    pub addr: SocketAddr,
-    pub recorder: Recorder,
+pub(crate) struct RepeatingServer {
+    pub(crate) addr: SocketAddr,
+    pub(crate) recorder: Recorder,
     _stub: testkit::Stub,
 }
 
-pub async fn repeating_server(body: String) -> RepeatingServer {
+pub(crate) async fn repeating_server(body: String) -> RepeatingServer {
     let recorder: Recorder = Arc::default();
     let routes = axum::Router::new()
         .fallback(streaming_handler)
@@ -125,14 +119,14 @@ pub async fn repeating_server(body: String) -> RepeatingServer {
     }
 }
 
-pub struct SlowServer {
-    pub addr: SocketAddr,
-    pub recorder: Recorder,
-    pub disconnect: Disconnect,
+pub(crate) struct SlowServer {
+    pub(crate) addr: SocketAddr,
+    pub(crate) recorder: Recorder,
+    pub(crate) disconnect: Disconnect,
     _stub: testkit::Stub,
 }
 
-pub async fn slow_server(first: String) -> SlowServer {
+pub(crate) async fn slow_server(first: String) -> SlowServer {
     let recorder: Recorder = Arc::default();
     let disconnect = Disconnect::default();
     let routes = axum::Router::new().fallback(slow_handler).with_state((
@@ -149,13 +143,13 @@ pub async fn slow_server(first: String) -> SlowServer {
     }
 }
 
-pub struct FixedStatusServer {
-    pub addr: SocketAddr,
-    pub recorder: Recorder,
+pub(crate) struct FixedStatusServer {
+    pub(crate) addr: SocketAddr,
+    pub(crate) recorder: Recorder,
     _stub: testkit::Stub,
 }
 
-pub async fn fixed_status_server(status: u16, body: String) -> FixedStatusServer {
+pub(crate) async fn fixed_status_server(status: u16, body: String) -> FixedStatusServer {
     let recorder: Recorder = Arc::default();
     let routes = axum::Router::new()
         .fallback(fixed_handler)
@@ -169,17 +163,17 @@ pub async fn fixed_status_server(status: u16, body: String) -> FixedStatusServer
 }
 
 #[derive(Clone, Default)]
-pub struct Disconnect {
+pub(crate) struct Disconnect {
     flag: Arc<Mutex<bool>>,
     done: Arc<Mutex<bool>>,
 }
 
 impl Disconnect {
-    pub fn is_disconnected(&self) -> bool {
+    pub(crate) fn is_disconnected(&self) -> bool {
         *self.flag.lock()
     }
 
-    pub fn wrote_done(&self) -> bool {
+    pub(crate) fn wrote_done(&self) -> bool {
         *self.done.lock()
     }
 }
@@ -214,6 +208,13 @@ async fn slow_handler(
                     (1, event, guard),
                 ));
             }
+            #[cfg_attr(
+                dylint_lib = "rr_lints",
+                expect(
+                    sleep,
+                    reason = "the fixture holds the stream open past the client's idle timeout; the wait is the fixture"
+                )
+            )]
             tokio::time::sleep(Duration::from_secs(30)).await;
             if phase == 1 {
                 *marker.done.lock() = true;
@@ -238,6 +239,13 @@ async fn streaming_handler(
     let stream = unfold((0usize, text), |state| async move {
         let (index, text) = state;
         if index > 0 {
+            #[cfg_attr(
+                dylint_lib = "rr_lints",
+                expect(
+                    sleep,
+                    reason = "chunks arrive one at a time; the 20 ms pacing makes the client read them separately"
+                )
+            )]
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
         Some((
@@ -292,7 +300,7 @@ async fn capture(request: axum::extract::Request) -> CapturedCall {
     }
 }
 
-pub async fn wait_for(condition: impl Fn() -> bool, timeout: Duration) -> bool {
+pub(crate) async fn wait_for(condition: impl Fn() -> bool, timeout: Duration) -> bool {
     let deadline = Instant::now() + timeout;
     loop {
         if condition() {
@@ -301,11 +309,18 @@ pub async fn wait_for(condition: impl Fn() -> bool, timeout: Duration) -> bool {
         if Instant::now() >= deadline {
             return condition();
         }
+        #[cfg_attr(
+            dylint_lib = "rr_lints",
+            expect(
+                sleep,
+                reason = "the stub's state change has no awaitable event; the 5 ms tick is the poll interval bounded by the timeout"
+            )
+        )]
         tokio::time::sleep(Duration::from_millis(5)).await;
     }
 }
 
-pub fn canonicalize_arguments(value: &mut Json) {
+pub(crate) fn canonicalize_arguments(value: &mut Json) {
     match value {
         Json::Object(map) => {
             for (key, member) in map.iter_mut() {
@@ -327,13 +342,13 @@ pub fn canonicalize_arguments(value: &mut Json) {
     }
 }
 
-pub fn canonical_body(body: &str) -> String {
+pub(crate) fn canonical_body(body: &str) -> String {
     let mut parsed: Json = demand(serde_json::from_str(body), "recorded body parses");
     canonicalize_arguments(&mut parsed);
     parsed.to_string()
 }
 
-pub fn chat_provider(addr: SocketAddr, max_tokens: Option<u32>) -> OpenAiCompatible {
+pub(crate) fn chat_provider(addr: SocketAddr, max_tokens: Option<u32>) -> OpenAiCompatible {
     let provider = config::provider::OpenaiProvider {
         model: Some("test-model".to_owned()),
         base_url: Some(format!("http://{addr}")),
@@ -347,7 +362,7 @@ pub fn chat_provider(addr: SocketAddr, max_tokens: Option<u32>) -> OpenAiCompati
     )
 }
 
-pub fn generic_provider(addr: SocketAddr) -> OpenAiCompatible {
+pub(crate) fn generic_provider(addr: SocketAddr) -> OpenAiCompatible {
     let provider = config::provider::OpenaiProvider {
         model: Some("test-model".to_owned()),
         base_url: Some(format!("http://{addr}")),
@@ -359,7 +374,7 @@ pub fn generic_provider(addr: SocketAddr) -> OpenAiCompatible {
     )
 }
 
-pub fn scenario_record(scenario: &str) -> ProviderScenario {
+pub(crate) fn scenario_record(scenario: &str) -> ProviderScenario {
     let dir = testkit::recording(&format!("providers/vllm/{scenario}"));
     let mut recorded = demand(
         testkit::provider::load_scenario(&dir),
@@ -381,7 +396,7 @@ pub fn scenario_record(scenario: &str) -> ProviderScenario {
     recorded
 }
 
-pub fn captured_requests(recorder: &Recorder) -> Vec<CapturedRequest> {
+pub(crate) fn captured_requests(recorder: &Recorder) -> Vec<CapturedRequest> {
     recorder
         .lock()
         .iter()

@@ -102,34 +102,32 @@ pub fn replay(
 mod tests {
     use super::*;
 
-    fn write_row(name: &str, row: &str) -> std::path::PathBuf {
-        let path =
-            std::env::temp_dir().join(format!("rr-case-{name}-{}.jsonl", std::process::id()));
+    fn write_row(name: &str, row: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().expect("a temp dir for the case row");
+        let path = dir.path().join(format!("{name}.jsonl"));
         std::fs::write(&path, row).expect("the temp row writes");
-        path
+        (dir, path)
     }
 
     #[test]
     fn a_row_without_in_is_a_load_error() {
-        let path = write_row(
+        let (_dir, path) = write_row(
             "missing-in",
             "{\"fn\":\"normalize_api_prefix\",\"out\":null}\n",
         );
         let error = cases(&path).expect_err("missing in fails the load");
         let text = error.to_string();
         assert!(text.contains("case has no \"in\""), "{text}");
-        std::fs::remove_file(&path).expect("the temp row removes");
     }
 
     #[test]
     fn an_explicit_null_in_still_loads() {
-        let path = write_row(
+        let (_dir, path) = write_row(
             "null-in",
             "{\"fn\":\"normalize_api_prefix\",\"in\":null,\"out\":null}\n",
         );
         let loaded = cases(&path).expect("an explicit null in loads");
         let case = loaded.first().expect("the row is present");
         assert_eq!(case.input, Json::Null);
-        std::fs::remove_file(&path).expect("the temp row removes");
     }
 }

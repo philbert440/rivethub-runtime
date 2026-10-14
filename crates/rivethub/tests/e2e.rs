@@ -377,7 +377,16 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
                 );
                 break;
             }
-            Err(_) => tokio::time::sleep(Duration::from_millis(100)).await,
+            Err(_) => {
+                #[cfg_attr(
+                    dylint_lib = "rr_lints",
+                    expect(
+                        sleep,
+                        reason = "a spawned process publishes no awaitable readiness event; the 100 ms poll is bounded by the 30 s loop"
+                    )
+                )]
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
         }
     }
     let health = healthz.ok_or("the binary did not answer /healthz within 30s")?;

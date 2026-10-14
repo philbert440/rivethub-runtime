@@ -7,10 +7,6 @@ use rusqlite::params;
 use crate::error::Error;
 use crate::version::SchemaVersion;
 
-#[expect(
-    clippy::redundant_pub_crate,
-    reason = "the upgrade module is private, so rustc's unreachable_pub rejects plain pub; crate visibility is the widest reachable form"
-)]
 pub(crate) fn ladder(
     conn: &mut Connection,
     from: SchemaVersion,

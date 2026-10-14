@@ -17,6 +17,9 @@ mod dispatch;
 mod dupnames;
 mod duptype;
 mod dynvalue;
+mod fallback;
+mod fallback_policy;
+mod fallback_waiver;
 mod jsmodel;
 mod manualderive;
 mod naming;
@@ -24,6 +27,7 @@ mod nullable;
 mod opaque;
 mod redundantrename;
 mod runtime;
+mod sleep;
 mod stringly;
 mod strset;
 mod tagfield;
@@ -45,6 +49,8 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         customserde::CUSTOMSERDE,
         dispatch::DISPATCH,
         dupnames::DUPNAMES,
+        fallback::FALLBACK,
+        fallback_waiver::FALLBACK_WAIVER,
         duptype::DUPTYPE,
         dynvalue::DYNVALUE,
         jsmodel::JSMODEL,
@@ -54,6 +60,7 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         opaque::OPAQUE,
         redundantrename::REDUNDANT_RENAME,
         runtime::RUNTIME,
+        sleep::SLEEP,
         stringly::STRINGLY,
         strset::STRSET,
         tagfield::TAGFIELD,
@@ -82,6 +89,11 @@ pub fn register_lints(sess: &Session, lint_store: &mut LintStore) {
         Box::new(redundantrename::RedundantRename::default())
     }));
     lint_store.register_late_lint_pass(Box::new(|_| Box::new(runtime::RuntimeLate::default())));
+    lint_store.register_late_lint_pass(Box::new(|_| Box::new(fallback::Fallback)));
+    lint_store.register_late_lint_pass(Box::new(|_| {
+        Box::new(fallback_waiver::FallbackWaiver::default())
+    }));
+    lint_store.register_late_lint_pass(Box::new(|_| Box::new(sleep::Sleep::default())));
     lint_store.register_late_lint_pass(Box::new(|_| Box::new(stringly::Stringly::default())));
     lint_store.register_late_lint_pass(Box::new(|_| Box::new(strset::Strset::default())));
     lint_store.register_late_lint_pass(Box::new(|_| Box::new(tagfield::Tagfield::default())));

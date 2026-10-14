@@ -292,6 +292,13 @@ async fn a_silent_server_times_out_with_the_recorded_ctl_window() -> Result<(), 
     let listener = UnixListener::bind(&socket)?;
     let server = tokio::spawn(async move {
         let (_stream, _) = listener.accept().await.ok()?;
+        #[cfg_attr(
+            dylint_lib = "rr_lints",
+            expect(
+                sleep,
+                reason = "the fixture stays silent past the client's 250 ms control window; the wait is the fixture"
+            )
+        )]
         tokio::time::sleep(Duration::from_secs(2)).await;
         Some(())
     });

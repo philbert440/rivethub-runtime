@@ -1,4 +1,4 @@
-pub const HTTP: &[(&str, &str)] = &[
+pub(crate) const HTTP: &[(&str, &str)] = &[
     ("term-main/post-empty-body", ADAPTER),
     ("term-main/post-whitespace-body", ADAPTER),
     ("term-main/post-json-array-bug", COERCION),

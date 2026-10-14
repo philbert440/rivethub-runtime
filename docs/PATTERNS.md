@@ -10,13 +10,42 @@ known lint or check.
 Anti-pattern: comments explaining code. Pattern: names and types carry the meaning; a non-obvious constraint becomes a type
 or a test. Check: xtask `COMMENT` (a real Rust lexer over `crates/**.rs`, comments in tests included).
 
+## UTF8
+Anti-pattern: a `.rs` file under `crates/` that is not valid UTF-8 — the Rust lexer cannot read it, so every other scan
+silently skips it. Pattern: valid UTF-8 source; byte payloads live in fixtures with an explicit encoding.
+Check: xtask `UTF8` (the COMMENT read turns the decode failure into a finding).
+
+## SLEEP
+Anti-pattern: wall-clock synchronization — `std::thread::sleep` anywhere, or `tokio::time::sleep` /
+`tokio::time::sleep_until` inside a test. Production timers (heartbeat, deadlines) legitimately sleep; a test that sleeps
+is racing the scheduler and breaks under a paused or loaded clock. Pattern: tests await the event with a timeout
+(`tokio::time::timeout`, channels, watch); a genuine timing test (the wait is the fixture — an idle window, an escalation
+grace) keeps the sleep with `#[expect(clippy::disallowed_methods, reason = "…")]` and, for the tokio timers,
+`#[cfg_attr(dylint_lib = "rr_lints", expect(sleep, reason = "…"))]` on the statement.
+Check: Clippy `disallowed-methods` (`std::thread::sleep`); dylint `sleep` (tokio sleep in test code only).
+
+## ENV
+Anti-pattern: reading the environment anywhere but configuration — `std::env::var`, `var_os`, `vars`, `vars_os`,
+`temp_dir`, `home_dir`, `current_dir`. Pattern: the binary builds `config::Environment` from `std::env::vars_os()` once
+and passes `Config` down; values arrive typed. `config` itself and the `rivethub` binary's `main.rs` are the only readers.
+Check: xtask `ENV` (over every tracked `.rs` file, tests included, exempting `crates/config/` and
+`crates/rivethub/src/main.rs`); Clippy `disallowed-methods` (`std::env::var`, `var_os`) as the global backstop.
+
+## PRIVILEGE
+Anti-pattern: a fail-open privilege default — `unwrap_or(…Viewer::System…)`, `unwrap_or(…::Admin…)`,
+`unwrap_or(…::Owner…)`, or `unwrap_or_default()` on a `*Viewer`/`*Role`/`*Permission` value. Absence is a refusal, not a
+privilege: an unread role is an error (or an explicit least-privilege constant written on the line), never the widest
+default. Pattern: propagate with `?`; a sanctioned default is spelled out at the call site with a named constant.
+Check: xtask `PRIVILEGE`.
+
 ## ALLOW
 Anti-pattern: `#[allow(...)]`, or `#[expect(...)]` without a reason, to silence a lint. Pattern: fix the code. Where a lint
 is genuinely wrong for one spot, `#[expect(lint, reason = "…")]` — the compiler re-checks it every build, so it cannot go
 stale. A Dylint lint wrong for one spot takes `#[cfg_attr(dylint_lib = "rr_lints", expect(<lint>, reason = "…"))]` — the
 `dylint_lib` cfg keeps the unknown lint name off the plain rustc/Clippy legs, and `[workspace.lints.rust]` declares the cfg
 once so `unexpected_cfgs` stays quiet (no per-crate `build.rs`). A lint wrong for the whole workspace is a reviewed change
-to `[workspace.lints]`. Check: Clippy `allow_attributes` and `allow_attributes_without_reason`.
+to `[workspace.lints]`. A file-wide waiver is not a spot: `#![expect(...)]` / `#![allow(...)]` are findings (see WAIVER).
+Check: Clippy `allow_attributes` and `allow_attributes_without_reason`; xtask `WAIVER`.
 
 ## UNWRAP
 Anti-pattern: `.unwrap()` / `.expect()` in production code. Pattern: return the crate's `thiserror` error with `?`; a value
@@ -32,9 +61,14 @@ or a recording says what happens (the hook never fails the harness, so the log w
 no header) — keep the behaviour, name it (`fn best_effort_log(..)`, `fn header_text(..) -> Option<&str>`) and pin it with a
 test. (3) A real absence: the domain has no value — keep the `Option` to the one place that uses it instead of defaulting
 early. A discard that is genuinely the last write (a final stderr report) takes `#[expect(clippy::let_underscore_must_use,
-reason = "…")]`, never a bare `let _ =`. Check: clippy `let_underscore_must_use`, `let_underscore_untyped` (a discarded
-`Result` or `#[must_use]` value cannot land); the three-way decision itself is review, with the inventory cite recorded in
-the lane notes.
+reason = "…")]`, never a bare `let _ =`. Check: Clippy `let_underscore_must_use`, `let_underscore_untyped` (a discarded
+`Result` or `#[must_use]` value cannot land); Dylint `fallback` (`FALLBACK`) uses the receiver type to flag `Result::ok`, `unwrap_or*` and `map_or*`,
+error match arms producing values or nothing, and `let Ok(..) = .. else` returning a default or skipping work.
+`Option::unwrap_or` with a meaningful value is legal; sentinel literals (`""`, `"unknown"`, `"default"`, `0`, `-1`)
+are findings. Only a statement-level `#[cfg_attr(dylint_lib = "rr_lints", expect(fallback, reason = "…"))]`
+citing a CONTRACT row or PATTERNS id can waive a finding. Function names do not waive findings. Dylint
+`fallback_waiver` rejects missing citations and item-wide expectations. Tests remain exempt from FALLBACK.
+Existing hits live in `xtask/baseline.toml` (see BASELINE) and shrink only.
 
 ## UNSAFE
 Anti-pattern: `unsafe`. Pattern: a safe crate API. Check: rustc `unsafe_code = "forbid"` in `[workspace.lints]`.
@@ -49,8 +83,11 @@ deviations, not reproduced. This includes JavaScript semantics, not only types: 
 expressions found in recordings (`JSON.stringify(...)`, `i%2?a:b`) — build such bodies in Rust in the test that needs them. A
 recording generated by fuzzing a JavaScript function (wrong types, falsy values) is matched exactly only where the input is
 well-typed; for type-confused input the Rust outcome is serde's typed error, and the replay asserts only that the input is
-rejected. Check: clippy `disallowed-types` (`serde_json::Number`); dylint `jsmodel` (Js* types, truthy/typeof/NumberOr
-names, `[object Object]` and `JSON.stringify` strings).
+rejected. The names follow the same rule: no function prefixed `js_` (`js_number`, `js_stringify`) and no type matching
+`Js[A-Z]` (`JsJson`); the one exception is the capture event-id hash module, whose order-keeping JSON model is the
+contract's named deviation. Check: clippy `disallowed-types` (`serde_json::Number`); dylint `jsmodel` (Js* types,
+truthy/typeof/NumberOr names, `[object Object]` and `JSON.stringify` strings); xtask `JSMODEL` (`js_`-prefixed functions
+and `Js[A-Z]` types, exempting the capture event-id hash module, with existing hits in `xtask/baseline.toml`).
 
 ## UNTYPED
 Anti-pattern: `serde_json::Value` / `Map<String, Value>` in structs, helpers or signatures — including private fields with
@@ -173,7 +210,9 @@ dotfiles, `.github/`, recorded data (JSON, JSONL, Markdown, text) only under `cr
 
 ## ENV
 Anti-pattern: reading the environment anywhere but configuration. Pattern: the binary builds `config::Environment` from
-`std::env::vars_os()` once and passes `Config` down. Check: clippy `disallowed-methods` (`std::env::var`, `var_os`).
+`std::env::vars_os()` once and passes `Config` down. Check: xtask `ENV` (every tracked `.rs` file, tests included;
+`crates/config/` and the `rivethub` binary's `main.rs` are the only exemptions); clippy `disallowed-methods`
+(`std::env::var`, `var_os`).
 
 ## EXIT
 Anti-pattern: `std::process::exit` outside `main`. Pattern: return an error; the binary maps it to the exit code.
@@ -298,6 +337,50 @@ production file under `crates/`).
 
 ## TESTPROTO
 Anti-pattern: a test target whose process does not speak the libtest list protocol — a `harness = false` helper with a hand-rolled `main` runs under `cargo test` but dies on `--list`, so CI's nextest list fails and only CI finds out — and, the same mistake one level up, a helper that exists to be spawned as a process living as a test target at all. Pattern: every test target speaks the libtest protocol (a custom `main` is a libtest-mimic harness); helpers that are processes are bins the tests name with `CARGO_BIN_EXE_*`, never a scan of `target/`. Check: xtask `TESTPROTO` (`cargo nextest list --workspace --all-features`, the same list CI runs; a target that rejects `--list` fails the local gate, and a missing cargo-nextest is a typed missing-tool error naming the install command).
+
+## PATHCONTAIN
+Anti-pattern: path containment by string — `str::starts_with` on the result of `to_string_lossy`, `to_str` or
+`display().to_string()`. String prefixes admit `..` siblings, case and separator surprises. Pattern: containment uses
+`Path::starts_with` on normalized paths (`config`'s `paths::normalize`); string prefix tests stay for plain labels that
+never come from a path. Check: xtask `PATHCONTAIN` (a `starts_with` call whose receiver chain ends in a path conversion).
+
+## WAIVER
+Anti-pattern: an inner attribute waiver — `#![expect(...)]` or `#![allow(...)]` under `crates/`, tests included. A
+file-wide expectation hides which spot actually needs it and keeps waiving after the code moves on. Pattern: the
+expectation sits on the one item that needs it (a shared test harness included whole by several binaries carries its
+expectations on the `mod common;` declaration of each includer, where the per-binary subset is known).
+Check: xtask `WAIVER` (every inner attribute naming `expect` or `allow`).
+
+## REASON
+Anti-pattern: an imitation reason — an `#[expect]` whose `reason` names mirroring the recording, TypeScript or JavaScript
+(`mirror`, `recorded`, `TypeScript`, `JavaScript`, `JS`, case-insensitive). Imitation is not a reason: it justifies code by
+what it copies instead of the rule it follows. Pattern: the reason states the rule — the contract row, the documented
+default, the invariant that makes the lint wrong at that spot. Check: xtask `REASON` (the `reason` string of every
+`#[expect]`, `#[cfg_attr(dylint_lib = "rr_lints", expect(...))]` included).
+
+## UTF16
+Anti-pattern: UTF-16 emulation — `char::len_utf16`, `str::encode_utf16`, identifiers containing `utf16` or ending
+`_units`, outside `wire` and the one capture event-id hash (whose `#[expect]` reason names that rule). Pattern: lengths and
+caps are chars or bytes; the contract defines what is observable (CONTRACT §2), and UTF-16 arithmetic reproduces the
+JavaScript runtime, not the boundary. Check: xtask `UTF16`; existing hits live in `xtask/baseline.toml` (see BASELINE).
+
+## JSONBYTES
+Anti-pattern: a hand-rolled JSON byte scanner — matching on `b'"'` together with `b'{'`/`b'}'`. JSON goes through serde;
+string awareness, escapes and nesting are the format crate's job. Pattern: serde types; the contract's one byte-level
+exception (the lone-surrogate escape handling at capture ingest) is the named function
+`wire::json::replace_lone_surrogates`, and the check exempts `crates/wire/` by path.
+Check: xtask `JSONBYTES`; existing hits live in `xtask/baseline.toml` (see BASELINE).
+
+## BASELINE
+Anti-pattern: a scan whose existing hits are waived wholesale (a free allow-list) or whose history is rewritten (line
+numbers that churn, entries re-added after a fix). Pattern: `xtask/baseline.toml` holds one entry per existing hit — check
+id, file, matched text and occurrence count, no line numbers. `cargo xtask baseline --write` regenerates the counts
+from the syn scans and typed Dylint diagnostics; a second occurrence consumes a second count. The check fails on a hit with no entry and on an entry that no longer matches
+code, so a fixed hit is removed in the same commit; an added entry or increased count must already exist at the merge-base with `origin/main`
+(the baseline can only shrink). The commit that introduces the file sets the floor: the shrink leg only ever reports when
+it actually compared — if `origin/main` is absent, the merge-base cannot be resolved (a shallow or partial fetch), the
+merge-base carries no `xtask/baseline.toml`, the leg passes without a finding. A malformed comparable baseline fails the gate.
+From the first comparable commit on, every entry must trace back to the merge-base. Check: xtask `BASELINE`.
 
 ## PATTERNS
 Anti-pattern: a rule with no written entry, or an entry whose enforcement drifted. Pattern: every lint and check name has

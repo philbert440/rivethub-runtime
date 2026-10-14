@@ -1,3 +1,7 @@
+#[expect(
+    dead_code,
+    reason = "the harness module is included whole by every test binary and this one uses a subset"
+)]
 mod common;
 
 use common::collect;
@@ -186,6 +190,13 @@ async fn the_polite_kill_escalates_to_sigkill_after_three_seconds()
             &["/bin/sh", "-c", "trap '' HUP; exec sleep 30"],
         )?)
         .await?;
+    #[cfg_attr(
+        dylint_lib = "rr_lints",
+        expect(
+            sleep,
+            reason = "the trapped child needs a real moment to install its disposition before the polite kill is measured"
+        )
+    )]
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     manager.kill(&id).await?;
     let started = std::time::Instant::now();

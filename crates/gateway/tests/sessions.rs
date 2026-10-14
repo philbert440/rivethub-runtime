@@ -1,4 +1,8 @@
 #![cfg(test)]
+#[expect(
+    dead_code,
+    reason = "integration binaries share fixtures and use different subsets"
+)]
 mod session_support;
 
 use std::sync::Arc;

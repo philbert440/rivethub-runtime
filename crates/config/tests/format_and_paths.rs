@@ -3,10 +3,6 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
-#[expect(
-    clippy::redundant_pub_crate,
-    reason = "private shared test module: unreachable_pub requires pub(crate) here, the nursery lint disagrees"
-)]
 mod common;
 
 #[expect(

@@ -84,6 +84,21 @@ fn runtime_tokio_test_not_flagged() {
 }
 
 #[test]
+fn sleep_fails_in_test_code() {
+    dylint_testing::ui_test_example(env!("CARGO_PKG_NAME"), "sleepfail");
+}
+
+#[test]
+fn sleep_production_timer_not_flagged() {
+    dylint_testing::ui_test(env!("CARGO_PKG_NAME"), "ui/sleep");
+}
+
+#[test]
+fn sleep_genuine_timing_test_expects() {
+    dylint_testing::ui_test_example(env!("CARGO_PKG_NAME"), "sleeptest");
+}
+
+#[test]
 fn strset() {
     dylint_testing::ui_test(env!("CARGO_PKG_NAME"), "ui/strset");
 }
@@ -111,4 +126,14 @@ fn wirepub_fail() {
 #[test]
 fn wirepub_pass() {
     dylint_testing::ui_test_example(env!("CARGO_PKG_NAME"), "wirepass");
+}
+
+#[test]
+fn fallback() {
+    dylint_testing::ui_test(env!("CARGO_PKG_NAME"), "ui/fallback");
+}
+
+#[test]
+fn fallback_waiver() {
+    dylint_testing::ui_test(env!("CARGO_PKG_NAME"), "ui/fallback_waiver");
 }

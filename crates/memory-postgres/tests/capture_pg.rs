@@ -447,10 +447,7 @@ fn tool_result_of(payload: &Value) -> Option<String> {
     Some(capped(&raw))
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "one recorded hook narrative per call"
-)]
+#[expect(clippy::too_many_lines, reason = "one hook narrative per call")]
 async fn ingest_hook_event(
     pool: &PgPool,
     payload: &Value,
@@ -627,10 +624,7 @@ struct UserLine {
     at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "one recorded transcript grammar per pass"
-)]
+#[expect(clippy::too_many_lines, reason = "one transcript grammar per pass")]
 fn parse_lines(lines: &[Value]) -> Transcript {
     let mut parsed = Transcript {
         assistants: Vec::new(),

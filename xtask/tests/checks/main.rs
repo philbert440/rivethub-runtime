@@ -2,15 +2,41 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
+use xtask::baseline;
 use xtask::check;
 use xtask::code;
 use xtask::dupfixture;
+use xtask::env_scan;
+use xtask::jsnames;
+use xtask::jsonbytes;
 use xtask::labpath;
 use xtask::lang;
 use xtask::manifests;
+use xtask::pathcontain;
 use xtask::patterns;
 use xtask::privacy;
+use xtask::privilege;
+use xtask::reasons;
 use xtask::toolconfig;
+use xtask::utf16;
+use xtask::waivers;
+
+type Scan = fn(&Path, &baseline::Baseline, &mut Vec<String>) -> xtask::error::Result<()>;
+
+fn scan_findings(
+    scan: Scan,
+    files: &[(&str, &str)],
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let repo = Repo::new()?;
+    for (rel, body) in files {
+        repo.write(rel, body)?;
+    }
+    repo.track()?;
+    let baseline = baseline::Baseline::load(repo.root())?;
+    let mut findings = Vec::new();
+    scan(repo.root(), &baseline, &mut findings)?;
+    Ok(findings)
+}
 
 struct Repo {
     root: PathBuf,
@@ -49,6 +75,13 @@ fn git(root: &Path, args: &[&str]) -> std::io::Result<String> {
     let output = std::process::Command::new("git")
         .current_dir(root)
         .args(args)
+        .env("GIT_CONFIG_COUNT", "3")
+        .env("GIT_CONFIG_KEY_0", "user.name")
+        .env("GIT_CONFIG_VALUE_0", "Test User")
+        .env("GIT_CONFIG_KEY_1", "user.email")
+        .env("GIT_CONFIG_VALUE_1", "test@example.com")
+        .env("GIT_CONFIG_KEY_2", "core.hooksPath")
+        .env("GIT_CONFIG_VALUE_2", "target/git-hooks")
         .output()?;
     if !output.status.success() {
         return Err(std::io::Error::other(format!(
@@ -136,13 +169,11 @@ fn installed_hooks_reject_and_accept_commits() -> Result<(), Box<dyn std::error:
         &format!("{{\"sha256\": [\"{digest}\"]}}"),
     )?;
     repo.track()?;
-    git(repo.root(), &["config", "user.name", "Test User"])?;
-    git(repo.root(), &["config", "user.email", "test@example.com"])?;
     let hook_binary = std::env::vars_os()
         .find(|(name, _)| name == std::ffi::OsStr::new("CARGO_BIN_EXE_xtask"))
         .map(|(_, value)| value)
         .ok_or("the xtask binary is missing (CARGO_BIN_EXE_xtask)")?;
-    check::install_hooks_from(repo.root(), Path::new(&hook_binary))?;
+    check::copy_hooks(repo.root(), Path::new(&hook_binary))?;
     assert!(repo.root().join("target/git-hooks/pre-commit").exists());
     assert!(repo.root().join("target/git-hooks/commit-msg").exists());
 
@@ -1097,4 +1128,550 @@ fn skip_scan_paths() {
     assert!(privacy::skip_scan("xtask/data/privacy-denylist.json"));
     assert!(privacy::skip_scan("crates/wire/logo.png"));
     assert!(!privacy::skip_scan("crates/wire/src/lib.rs"));
+}
+
+#[test]
+fn env_scan_fires_outside_config() -> Result<(), Box<dyn std::error::Error>> {
+    let findings = scan_findings(
+        env_scan::check,
+        &[(
+            "crates/gateway/src/auth.rs",
+            "pub fn probe() -> String {\n    std::env::var(\"RIVETHUB_HOST\").unwrap_or_default()\n}\n",
+        )],
+    )?;
+    assert!(
+        findings.iter().any(
+            |finding| finding.starts_with("ENV crates/gateway/src/auth.rs")
+                && finding.contains("env::var")
+        ),
+        "an env read outside config is reported: {findings:?}"
+    );
+
+    let findings = scan_findings(
+        env_scan::check,
+        &[
+            (
+                "crates/config/src/environment.rs",
+                "pub fn load() -> Environment {\n    let vars = std::env::vars_os();\n    let dir = std::env::temp_dir();\n    let home = std::env::home_dir();\n    let cwd = std::env::current_dir();\n    drop((vars, dir, home, cwd));\n}\n",
+            ),
+            (
+                "crates/rivethub/src/main.rs",
+                "fn main() {\n    let vars = std::env::vars_os();\n    drop(vars);\n}\n",
+            ),
+        ],
+    )?;
+    assert!(
+        findings.is_empty(),
+        "config and the rivethub main are exempt: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn privilege_scan_fires_on_fail_open_defaults() -> Result<(), Box<dyn std::error::Error>> {
+    let findings = scan_findings(
+        privilege::check,
+        &[(
+            "crates/gateway/src/auth.rs",
+            "fn role(spec: &Spec) -> Role {\n    spec.role.unwrap_or(Role::Admin)\n}\n\nfn viewer(spec: &Spec) -> Viewer {\n    spec.viewer.unwrap_or(Viewer::System)\n}\n\nfn owner(spec: &Spec) -> Role {\n    spec.role.unwrap_or(Role::Owner)\n}\n\nfn permission(spec: &Spec) -> Permission {\n    spec.permission.unwrap_or_default()\n}\n",
+        )],
+    )?;
+    for needle in [
+        "unwrap_or(..Admin..)",
+        "unwrap_or(..System..)",
+        "unwrap_or(..Owner..)",
+        "unwrap_or_default() on permission",
+    ] {
+        assert!(
+            findings.iter().any(|finding| finding.contains(needle)),
+            "{needle} is reported: {findings:?}"
+        );
+    }
+
+    let findings = scan_findings(
+        privilege::check,
+        &[(
+            "crates/gateway/src/auth.rs",
+            "fn scope(args: &Args) -> MemoryScope {\n    args.scope.unwrap_or(MemoryScope::Both)\n}\n\nfn count(args: &Args) -> usize {\n    args.count.unwrap_or_default()\n}\n",
+        )],
+    )?;
+    assert!(
+        findings.is_empty(),
+        "a non-privilege default passes: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn pathcontain_scan_fires_on_string_containment() -> Result<(), Box<dyn std::error::Error>> {
+    let findings = scan_findings(
+        pathcontain::check,
+        &[(
+            "crates/capture/src/spool.rs",
+            "pub fn inside(path: &Path, root: &Path) -> bool {\n    path.to_string_lossy().starts_with(root.to_string_lossy().to_string().as_str())\n}\n\npub fn inside_str(path: &Path, root: &Path) -> bool {\n    path.to_str().unwrap_or_default().starts_with(\"/srv\")\n}\n\npub fn inside_display(path: &Path, root: &Path) -> bool {\n    path.display().to_string().starts_with(\"/srv\")\n}\n",
+        )],
+    )?;
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|finding| finding.starts_with("PATHCONTAIN"))
+            .count(),
+        3,
+        "all three string containments are reported: {findings:?}"
+    );
+
+    let findings = scan_findings(
+        pathcontain::check,
+        &[(
+            "crates/xtask-check/src/lib.rs",
+            "pub fn inside(path: &Path, root: &Path) -> bool {\n    path.starts_with(root)\n}\n\npub fn label(rel: &str) -> bool {\n    rel.starts_with(\"crates/\")\n}\n",
+        )],
+    )?;
+    assert!(
+        findings.is_empty(),
+        "Path::starts_with and plain prefixes pass: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn waiver_scan_fires_on_inner_attributes() -> Result<(), Box<dyn std::error::Error>> {
+    let findings = scan_findings(
+        waivers::check,
+        &[(
+            "crates/demo/src/lib.rs",
+            "#![expect(dead_code, reason = \"subset\")]\n\npub fn start() {}\n",
+        )],
+    )?;
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.starts_with("WAIVER crates/demo/src/lib.rs")),
+        "a file-wide expect is reported: {findings:?}"
+    );
+
+    let findings = scan_findings(
+        waivers::check,
+        &[(
+            "crates/demo/src/lib.rs",
+            "#![allow(dead_code)]\n\npub fn start() {}\n",
+        )],
+    )?;
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.starts_with("WAIVER crates/demo/src/lib.rs")),
+        "a file-wide allow is reported: {findings:?}"
+    );
+
+    let findings = scan_findings(
+        waivers::check,
+        &[(
+            "crates/demo/src/lib.rs",
+            "#[expect(clippy::manual_div_ceil, reason = \"the divisor is a power of two\")]\npub fn start() {}\n",
+        )],
+    )?;
+    assert!(
+        findings.is_empty(),
+        "an item-level expectation passes: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn reason_scan_fires_on_imitation() -> Result<(), Box<dyn std::error::Error>> {
+    let findings = scan_findings(
+        reasons::check,
+        &[(
+            "crates/kernel/src/scoring.rs",
+            "#[expect(clippy::suboptimal_flops, reason = \"mirrors the TypeScript scoring\")]\npub fn score(a: f64, b: f64) -> f64 {\n    a * b + b\n}\n",
+        )],
+    )?;
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("mirror") && finding.contains("TypeScript")),
+        "an imitation reason is reported: {findings:?}"
+    );
+
+    let findings = scan_findings(
+        reasons::check,
+        &[(
+            "crates/kernel/src/scoring.rs",
+            "#[expect(clippy::suboptimal_flops, reason = \"CONTRACT 2 exception: the event-id hash requires the harness's exact JSON number spelling\")]\npub fn score(a: f64, b: f64) -> f64 {\n    a.mul_add(b, b)\n}\n",
+        )],
+    )?;
+    assert!(
+        findings.is_empty(),
+        "a reason stating the rule passes, JSON included: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn utf16_scan_fires_outside_wire() -> Result<(), Box<dyn std::error::Error>> {
+    let findings = scan_findings(
+        utf16::check,
+        &[(
+            "crates/capture/src/writer.rs",
+            "pub fn cap(text: &str, max: usize) -> String {\n    let mut units = 0usize;\n    let _ = text.chars().map(char::len_utf16).sum::<usize>();\n    String::new()\n}\n",
+        )],
+    )?;
+    assert!(
+        findings.iter().any(|finding| finding.contains("len_utf16")),
+        "len_utf16 is reported: {findings:?}"
+    );
+
+    let findings = scan_findings(
+        utf16::check,
+        &[
+            (
+                "crates/wire/src/cap.rs",
+                "pub fn cap(text: &str) -> usize {\n    text.chars().map(char::len_utf16).sum()\n}\n",
+            ),
+            (
+                "crates/capture/src/event_id.rs",
+                "pub fn width(text: &str) -> usize {\n    text.chars().map(char::len_utf16).sum()\n}\n",
+            ),
+        ],
+    )?;
+    assert!(
+        findings.is_empty(),
+        "wire and the capture event-id hash are exempt: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn jsmodel_scan_fires_on_js_names() -> Result<(), Box<dyn std::error::Error>> {
+    let findings = scan_findings(
+        jsnames::check,
+        &[(
+            "crates/testkit/src/echo.rs",
+            "pub fn js_number(value: u64) -> u64 {\n    value\n}\n\npub struct JsJson;\n",
+        )],
+    )?;
+    assert_eq!(findings.len(), 2, "both names are reported: {findings:?}");
+    assert!(
+        findings.iter().any(|finding| finding.contains("js_number"))
+            && findings.iter().any(|finding| finding.contains("JsJson")),
+        "js_ functions and Js[A-Z] types are reported: {findings:?}"
+    );
+
+    let findings = scan_findings(
+        jsnames::check,
+        &[(
+            "crates/testkit/src/echo.rs",
+            "pub const JSON_LIMIT: usize = 4;\n\npub fn parse_json(text: &str) -> Json {\n    Json\n}\n\npub struct JsonValue;\n",
+        )],
+    )?;
+    assert!(findings.is_empty(), "Json names pass: {findings:?}");
+
+    let findings = scan_findings(
+        jsnames::check,
+        &[(
+            "crates/capture/src/event_id.rs",
+            "pub fn hash(value: JsJson) -> String {\n    String::new()\n}\n",
+        )],
+    )?;
+    assert!(
+        findings.is_empty(),
+        "the capture event-id hash module is exempt: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn jsonbytes_scan_fires_outside_wire() -> Result<(), Box<dyn std::error::Error>> {
+    let findings = scan_findings(
+        jsonbytes::check,
+        &[(
+            "crates/testkit/src/scan.rs",
+            "pub fn scan(bytes: &[u8]) -> usize {\n    let mut depth = 0usize;\n    for byte in bytes {\n        match byte {\n            b'{' => depth += 1,\n            b'}' => depth -= 1,\n            b'\"' => {}\n            _ => {}\n        }\n    }\n    depth\n}\n",
+        )],
+    )?;
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.starts_with("JSONBYTES crates/testkit/src/scan.rs")),
+        "a hand-rolled JSON byte scanner is reported: {findings:?}"
+    );
+
+    let findings = scan_findings(
+        jsonbytes::check,
+        &[(
+            "crates/wire/src/scan.rs",
+            "pub fn scan(bytes: &[u8]) -> usize {\n    let mut depth = 0usize;\n    for byte in bytes {\n        if byte == b'\"' {\n            depth += 1;\n        }\n    }\n    depth\n}\n",
+        )],
+    )?;
+    assert!(findings.is_empty(), "wire is exempt: {findings:?}");
+
+    let findings = scan_findings(
+        jsonbytes::check,
+        &[(
+            "crates/testkit/src/scan.rs",
+            "pub fn scan(bytes: &[u8]) -> usize {\n    bytes.iter().filter(|byte| **byte == b'\"').count()\n}\n",
+        )],
+    )?;
+    assert!(
+        findings.is_empty(),
+        "a lone byte literal is no scanner: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn baseline_counts_duplicate_hits_and_staleness() {
+    let repo = Repo::new().unwrap();
+    repo.write("xtask/baseline.toml", "[[entry]]\ncheck = \"UTF16\"\nfile = \"crates/sample/src/lib.rs\"\ntext = \"len_utf16\"\ncount = 1\n").unwrap();
+    let baseline = baseline::Baseline::load(repo.root()).unwrap();
+    let hit = xtask::rustsrc::Hit {
+        file: "crates/sample/src/lib.rs".into(),
+        line: 2,
+        text: "len_utf16".into(),
+    };
+    let mut findings = Vec::new();
+    baseline::adjudicate(
+        &baseline,
+        "UTF16",
+        std::slice::from_ref(&hit),
+        &mut findings,
+    );
+    assert!(findings.is_empty(), "{findings:?}");
+    baseline::adjudicate(&baseline, "UTF16", &[hit.clone(), hit], &mut findings);
+    assert_eq!(findings.len(), 1);
+    assert!(
+        findings
+            .first()
+            .is_some_and(|finding| finding.contains("occurrence 2"))
+    );
+    findings.clear();
+    baseline::adjudicate(&baseline, "UTF16", &[], &mut findings);
+    assert!(
+        findings
+            .first()
+            .is_some_and(|finding| finding.contains("no longer matches code"))
+    );
+}
+
+#[test]
+fn baseline_may_only_shrink_against_origin_main() {
+    let repo = Repo::new().unwrap();
+    let seed = "[[entry]]\ncheck = \"FALLBACK\"\nfile = \"crates/gateway/src/extract.rs\"\ntext = \"unwrap_or_default\"\ncount = 1\n";
+    repo.write("xtask/baseline.toml", seed).unwrap();
+    repo.track().unwrap();
+    git(
+        repo.root(),
+        &[
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "build: seed the baseline",
+        ],
+    )
+    .unwrap();
+    git(
+        repo.root(),
+        &["update-ref", "refs/remotes/origin/main", "HEAD"],
+    )
+    .unwrap();
+
+    let mut findings = Vec::new();
+    baseline::shrink(repo.root(), &mut findings).unwrap();
+    assert!(
+        findings.is_empty(),
+        "the merge-base set passes: {findings:?}"
+    );
+
+    repo.write(
+        "xtask/baseline.toml",
+        "[[entry]]\ncheck = \"FALLBACK\"\nfile = \"crates/gateway/src/extract.rs\"\ntext = \"unwrap_or_default\"\ncount = 1\n\n[[entry]]\ncheck = \"FALLBACK\"\nfile = \"crates/gateway/src/auth.rs\"\ntext = \"unwrap_or\"\ncount = 1\n",
+    )
+    .unwrap();
+    let mut findings = Vec::new();
+    baseline::shrink(repo.root(), &mut findings).unwrap();
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("crates/gateway/src/auth.rs")
+                && finding.contains("may only shrink")),
+        "an added entry fails: {findings:?}"
+    );
+
+    repo.write("xtask/baseline.toml", "").unwrap();
+    let mut findings = Vec::new();
+    baseline::shrink(repo.root(), &mut findings).unwrap();
+    assert!(
+        findings.is_empty(),
+        "a shrunk baseline passes: {findings:?}"
+    );
+}
+
+#[test]
+fn the_landing_commit_sets_the_baseline_floor() {
+    let repo = Repo::new().unwrap();
+    repo.write("README.md", "runtime\n").unwrap();
+    repo.track().unwrap();
+    git(
+        repo.root(),
+        &["commit", "-q", "--allow-empty", "-m", "build: seed"],
+    )
+    .unwrap();
+    git(
+        repo.root(),
+        &["update-ref", "refs/remotes/origin/main", "HEAD"],
+    )
+    .unwrap();
+    repo.write(
+        "xtask/baseline.toml",
+        "[[entry]]\ncheck = \"FALLBACK\"\nfile = \"crates/gateway/src/extract.rs\"\ntext = \"unwrap_or_default\"\ncount = 1\n",
+    )
+    .unwrap();
+
+    let mut findings = Vec::new();
+    baseline::shrink(repo.root(), &mut findings).unwrap();
+    assert!(
+        findings.is_empty(),
+        "the commit that introduces the baseline sets the floor: {findings:?}"
+    );
+}
+
+#[test]
+fn non_utf8_source_is_a_finding() {
+    let repo = Repo::new().unwrap();
+    let path = repo.root().join("crates/mcp/src/binary.rs");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, [0x70, 0x75, 0x62, 0x20, 0xff, 0x0a]).unwrap();
+    repo.track().unwrap();
+    let mut findings = Vec::new();
+    code::check_code(repo.root(), &mut findings).unwrap();
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.starts_with("UTF8 crates/mcp/src/binary.rs")),
+        "a non-UTF-8 source file is reported: {findings:?}"
+    );
+}
+
+#[test]
+fn baseline_counts_cannot_grow_even_when_the_key_is_unchanged() {
+    let old = baseline::Entry {
+        check: "UTF16".into(),
+        file: "crates/sample/src/lib.rs".into(),
+        text: "len_utf16".into(),
+        count: 2,
+    };
+    let mut current = old.clone();
+    let mut findings = Vec::new();
+    current.count = 3;
+    baseline::compare(
+        std::slice::from_ref(&old),
+        std::slice::from_ref(&current),
+        &mut findings,
+    );
+    assert_eq!(findings.len(), 1);
+    current.count = 1;
+    findings.clear();
+    baseline::compare(&[old], &[current], &mut findings);
+    assert!(findings.is_empty(), "{findings:?}");
+}
+
+#[test]
+fn baseline_duplicate_and_zero_count_entries_are_invalid() {
+    let repo = Repo::new().unwrap();
+    let entry = "[[entry]]\ncheck = \"UTF16\"\nfile = \"crates/sample/src/lib.rs\"\ntext = \"len_utf16\"\ncount = 0\n";
+    repo.write("xtask/baseline.toml", &entry.repeat(2)).unwrap();
+    let baseline = baseline::Baseline::load(repo.root()).unwrap();
+    let mut findings = Vec::new();
+    baseline::validate(&baseline, &mut findings);
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("positive count"))
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("duplicate entry"))
+    );
+}
+
+#[test]
+fn ast_distinguishes_syntax_from_raw_strings_and_nested_attributes()
+-> Result<(), Box<dyn std::error::Error>> {
+    let clean = scan_findings(
+        jsnames::check,
+        &[(
+            "crates/sample/src/lib.rs",
+            "const TEXT: &str = r###\"fn js_fake() {} struct JsFake;\"###;",
+        )],
+    )?;
+    assert!(clean.is_empty(), "{clean:?}");
+    let raw = scan_findings(
+        jsnames::check,
+        &[("crates/sample/src/lib.rs", "fn r#js_real() {}")],
+    )?;
+    assert_eq!(raw.len(), 1);
+    let inner = scan_findings(
+        waivers::check,
+        &[(
+            "crates/sample/src/lib.rs",
+            "mod nested { #![cfg_attr(test, expect(dead_code, reason = r#\"subset\"#))] fn item() {} }",
+        )],
+    )?;
+    assert_eq!(inner.len(), 1);
+    let reason = scan_findings(
+        reasons::check,
+        &[(
+            "crates/sample/src/lib.rs",
+            "#[cfg_attr(test, cfg_attr(unix, expect(dead_code, reason = r#\"mirrors JavaScript\"#)))] fn item() {}",
+        )],
+    )?;
+    assert_eq!(reason.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn malformed_rust_fails_instead_of_being_skipped() {
+    let result = scan_findings(
+        utf16::check,
+        &[("crates/sample/src/lib.rs", "fn incomplete(")],
+    );
+    assert!(result.is_err());
+}
+
+#[test]
+fn importing_an_environment_reader_is_still_a_read_boundary()
+-> Result<(), Box<dyn std::error::Error>> {
+    let hits = scan_findings(
+        env_scan::check,
+        &[(
+            "crates/sample/src/lib.rs",
+            "use std::env::{var as read, current_dir}; fn load() { let _ = read(\"RIVETHUB_HOST\"); }",
+        )],
+    )?;
+    assert_eq!(hits.len(), 2);
+    Ok(())
+}
+
+#[test]
+fn a_second_ast_occurrence_in_the_same_file_exceeds_the_baseline()
+-> Result<(), Box<dyn std::error::Error>> {
+    let hits = scan_findings(
+        utf16::check,
+        &[
+            (
+                "xtask/baseline.toml",
+                "[[entry]]\ncheck = \"UTF16\"\nfile = \"crates/sample/src/lib.rs\"\ntext = \"len_utf16\"\ncount = 1\n",
+            ),
+            (
+                "crates/sample/src/lib.rs",
+                "fn width(c: char) { let _ = c.len_utf16(); let _ = c.len_utf16(); }",
+            ),
+        ],
+    )?;
+    assert_eq!(hits.len(), 1);
+    assert!(hits.first().is_some_and(|hit| hit.contains("occurrence 2")));
+    Ok(())
 }

@@ -1,4 +1,8 @@
 #[path = "common/mod.rs"]
+#[expect(
+    dead_code,
+    reason = "the harness module is included whole by every test binary and this one uses a subset"
+)]
 mod common;
 
 use common::fixed_status_server;

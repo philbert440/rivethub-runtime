@@ -6,10 +6,6 @@ use config::{Finding, PLUGINS_IGNORED, ProviderType, RemovedProviderType, WORKFL
 use libtest_mimic::{Arguments, Failed, Trial};
 use std::str::FromStr;
 
-#[expect(
-    clippy::redundant_pub_crate,
-    reason = "private shared test module: unreachable_pub requires pub(crate) here, the nursery lint disagrees"
-)]
 #[path = "../common/mod.rs"]
 mod common;
 

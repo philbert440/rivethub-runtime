@@ -1,6 +1,6 @@
 #[expect(
-    clippy::redundant_pub_crate,
-    reason = "private shared test module: unreachable_pub requires pub(crate) here, the nursery lint disagrees"
+    dead_code,
+    reason = "integration binaries share fixtures and use different subsets"
 )]
 mod common;
 

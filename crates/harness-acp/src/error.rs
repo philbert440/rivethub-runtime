@@ -61,8 +61,10 @@ pub enum AcpError {
     UnanswerablePermission { decision: ApprovalDecision },
     #[error("the agent reported a tool input that is not a JSON object: {source}")]
     ToolInput { source: serde_json::Error },
-    #[error("the working directory is not available: {source}")]
-    WorkingDir { source: std::io::Error },
+    #[error(
+        "no working directory: the request, the launch command and runtime.workspace all leave it unset"
+    )]
+    WorkingDir,
 }
 
 pub(crate) fn port(error: impl Into<AcpError>) -> kernel::harness::HarnessAdapterError {

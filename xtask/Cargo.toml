@@ -21,7 +21,9 @@ cargo_metadata.workspace = true
 chrono.workspace = true
 hex.workspace = true
 ra-ap-rustc_lexer.workspace = true
+proc-macro2.workspace = true
 regex.workspace = true
+syn.workspace = true
 rmcp = { workspace = true, features = ["client", "server", "transport-child-process"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

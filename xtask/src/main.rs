@@ -8,6 +8,7 @@ use xtask::recmcp;
 
 enum Mode {
     Check { root: PathBuf, locked: bool },
+    Baseline,
     PreCommit,
     CommitMsg { file: PathBuf },
     Commits { range: String },
@@ -39,6 +40,7 @@ fn parse(args: &[String]) -> Result<Mode> {
                 .ok_or_else(|| Error::Usage(recmcp::USAGE.to_owned()))?;
             Ok(Mode::RecordMcp(recmcp::parse(rest)?))
         }
+        Some("baseline") if args.len() == 2 && args.get(1).is_some_and(|arg| arg == "--write") => Ok(Mode::Baseline),
         Some("pre-commit") => Ok(Mode::PreCommit),
         Some("commit-msg") => {
             let file = args
@@ -58,7 +60,7 @@ fn parse(args: &[String]) -> Result<Mode> {
         }
         Some("install-hooks") => Ok(Mode::InstallHooks),
         _ => Err(Error::Usage(
-            "usage: cargo xtask check [--locked]|record-mcp --out DIR [--script FILE] -- COMMAND [ARGS...]|pre-commit|commit-msg FILE|commits RANGE|install-hooks"
+            "usage: cargo xtask check [--locked]|baseline --write|record-mcp --out DIR [--script FILE] -- COMMAND [ARGS...]|pre-commit|commit-msg FILE|commits RANGE|install-hooks"
                 .to_owned(),
         )),
     }
@@ -94,6 +96,7 @@ fn main() -> ExitCode {
     }
     .and_then(|mode| match mode {
         Mode::Check { root, locked } => check::check(&root, locked),
+        Mode::Baseline => xtask::baseline::write(&root),
         Mode::PreCommit => check::pre_commit(&root),
         Mode::CommitMsg { file } => check::commit_msg(&root, &file),
         Mode::Commits { range } => check::commits(&root, &range),

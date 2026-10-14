@@ -1,3 +1,7 @@
+#[expect(
+    dead_code,
+    reason = "the harness module is included whole by every test binary and this one uses a subset"
+)]
 mod common;
 
 use std::path::PathBuf;
@@ -132,6 +136,13 @@ async fn replay(case: Case, node: Option<PathBuf>) -> Result<(), Failed> {
         .await
         .map_err(|error| Failed::from(format!("{}: spawn: {error}", case.name)))?;
     if let Some(parent_kill) = &case.parent_kill {
+        #[cfg_attr(
+            dylint_lib = "rr_lints",
+            expect(
+                sleep,
+                reason = "the child needs a real moment to register with the reaper before the signal arrives"
+            )
+        )]
         tokio::time::sleep(Duration::from_millis(200)).await;
         let pid = manager
             .list()

@@ -1,4 +1,4 @@
-pub const EVENTS: &[(&str, &str)] = &[
+pub(crate) const EVENTS: &[(&str, &str)] = &[
     (
         "plain-tenancy/tenancy-ws-owner-snapshot",
         "B1 hardening: explicit credentials and trusted certificate fingerprints replace implicit identity mapping; tested separately",

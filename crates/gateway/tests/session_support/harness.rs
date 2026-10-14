@@ -16,10 +16,10 @@ struct Session {
 }
 
 #[derive(Debug)]
-pub struct Harness {
+pub(crate) struct Harness {
     sessions: Mutex<BTreeMap<SessionId, Session>>,
-    pub trace: watch::Sender<Vec<String>>,
-    pub finish: Semaphore,
+    pub(crate) trace: watch::Sender<Vec<String>>,
+    pub(crate) finish: Semaphore,
 }
 
 impl Default for Harness {
@@ -49,7 +49,7 @@ impl Harness {
         );
     }
 
-    pub async fn traced(&self, wanted: &str) {
+    pub(crate) async fn traced(&self, wanted: &str) {
         let mut trace = self.trace.subscribe();
         tokio::time::timeout(super::WAIT, async {
             loop {

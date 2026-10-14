@@ -1,8 +1,3 @@
-#![expect(
-    dead_code,
-    reason = "every test binary includes this module and uses a different subset"
-)]
-
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;

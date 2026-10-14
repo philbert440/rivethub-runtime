@@ -166,19 +166,7 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
     ]);
     run_tool(root, &clippy)?;
     nextest_list(root, locked)?;
-    let dylint = Command::new("cargo")
-        .current_dir(root)
-        .args(["dylint", "--all", "--workspace", "--", "--all-targets"])
-        .env("DYLINT_RUSTFLAGS", "-Dwarnings")
-        .env("SQLX_OFFLINE", "true")
-        .status()
-        .map_err(Error::Io)?;
-    if !dylint.success() {
-        return Err(Error::Command {
-            command: "cargo dylint --all --workspace".to_owned(),
-            stderr: String::new(),
-        });
-    }
+    let fallback_hits = crate::fallback::collect(root)?;
     let mut deny = vec!["deny", "--all-features"];
     if locked {
         deny.push("--locked");
@@ -198,6 +186,28 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
     crate::dupfixture::check(root, &mut findings)?;
     crate::labpath::check(root, &mut findings)?;
     crate::lang::privacy_and_secrets(root, &mut findings)?;
+    let baseline = crate::baseline::Baseline::load(root)?;
+    crate::baseline::validate(&baseline, &mut findings);
+    let ast_hits = crate::rustsrc::collect(root)?;
+    for check in [
+        "ENV",
+        "PRIVILEGE",
+        "PATHCONTAIN",
+        "WAIVER",
+        "REASON",
+        "UTF16",
+        "JSMODEL",
+        "JSONBYTES",
+    ] {
+        let hits = ast_hits
+            .iter()
+            .filter(|(name, _)| *name == check)
+            .map(|(_, hit)| hit.clone())
+            .collect::<Vec<_>>();
+        crate::baseline::adjudicate(&baseline, check, &hits, &mut findings);
+    }
+    crate::baseline::adjudicate(&baseline, "FALLBACK", &fallback_hits, &mut findings);
+    crate::baseline::shrink(root, &mut findings)?;
     finish("cargo xtask check", &findings)
 }
 
@@ -236,6 +246,12 @@ pub fn install_hooks(root: &Path) -> Result<()> {
 }
 
 pub fn install_hooks_from(root: &Path, binary: &Path) -> Result<()> {
+    copy_hooks(root, binary)?;
+    git(root, &["config", "core.hooksPath", "target/git-hooks"])?;
+    Ok(())
+}
+
+pub fn copy_hooks(root: &Path, binary: &Path) -> Result<()> {
     let hooks = root.join("target").join("git-hooks");
     std::fs::create_dir_all(&hooks)?;
     for name in ["pre-commit", "commit-msg"] {
@@ -249,7 +265,6 @@ pub fn install_hooks_from(root: &Path, binary: &Path) -> Result<()> {
             std::fs::set_permissions(&hook, permissions)?;
         }
     }
-    git(root, &["config", "core.hooksPath", "target/git-hooks"])?;
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
     writeln!(

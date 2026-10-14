@@ -1,3 +1,7 @@
+#[expect(
+    dead_code,
+    reason = "the harness module is included whole by every test binary and this one uses a subset"
+)]
 mod common;
 
 use std::net::SocketAddr;
@@ -323,6 +327,13 @@ async fn graceful_shutdown_finishes_in_flight_requests() {
             refused = true;
             break;
         }
+        #[cfg_attr(
+            dylint_lib = "rr_lints",
+            expect(
+                sleep,
+                reason = "the listener publishes no awaitable refusal event; the 20 ms poll is bounded by the deadline"
+            )
+        )]
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     assert!(refused, "listener still accepting after cancellation");
@@ -403,6 +414,13 @@ async fn trickled_request_body_hits_the_request_deadline() {
             if writer.write_all(b"a").await.is_err() {
                 break;
             }
+            #[cfg_attr(
+                dylint_lib = "rr_lints",
+                expect(
+                    sleep,
+                    reason = "the request deadline is exercised by a body that trickles; the 200 ms gaps are the fixture"
+                )
+            )]
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
     });
@@ -478,6 +496,13 @@ async fn held_request_survives_the_keep_alive_idle_window() {
         .await
         .expect("search entered the store")
         .expect("watch alive");
+    #[cfg_attr(
+        dylint_lib = "rr_lints",
+        expect(
+            sleep,
+            reason = "the assertion is that the connection outlives the configured 250 ms idle window; the wait must exceed it"
+        )
+    )]
     tokio::time::sleep(Duration::from_millis(400)).await;
     let mut probe = [0u8; 1];
     let survival = tokio::time::timeout(Duration::from_millis(150), stream.read(&mut probe)).await;
@@ -527,6 +552,13 @@ async fn pipelined_request_held_past_the_idle_window_is_not_dropped() {
         .await
         .expect("search entered the store")
         .expect("watch alive");
+    #[cfg_attr(
+        dylint_lib = "rr_lints",
+        expect(
+            sleep,
+            reason = "the assertion is that the pipelined request outlives the configured 250 ms idle window; the wait must exceed it"
+        )
+    )]
     tokio::time::sleep(Duration::from_millis(400)).await;
     store.release.add_permits(1);
     let healthz = tokio::time::timeout(Duration::from_secs(5), read_response(&mut stream))

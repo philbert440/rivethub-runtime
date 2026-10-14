@@ -1,5 +1,9 @@
 #![cfg(test)]
 mod session_skips;
+#[expect(
+    dead_code,
+    reason = "integration binaries share fixtures and use different subsets"
+)]
 mod session_support;
 
 use std::collections::BTreeMap;

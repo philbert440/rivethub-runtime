@@ -1,3 +1,7 @@
+#[expect(
+    dead_code,
+    reason = "the harness module is included whole by every test binary and this one uses a subset"
+)]
 mod common;
 
 use kernel::terminal::TerminalId;
@@ -13,6 +17,10 @@ fn limits_env(vars: &[(&str, &str)]) -> config::Environment {
 }
 
 async fn tick() {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the reaper's blocking tasks only observe the paused clock after a real-time slice"
+    )]
     std::thread::sleep(RealDuration::from_millis(10));
     tokio::time::advance(TokioDuration::from_millis(200)).await;
     tokio::task::yield_now().await;
@@ -22,6 +30,10 @@ async fn sweep_seconds(seconds: u64) {
     for _ in 0..seconds {
         tokio::time::advance(TokioDuration::from_secs(1)).await;
         tokio::task::yield_now().await;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the reaper's blocking tasks only observe the paused clock after a real-time slice"
+        )]
         std::thread::sleep(RealDuration::from_millis(2));
     }
 }
@@ -107,6 +119,10 @@ async fn the_detached_ttl_kills_unattached_terminals_and_spares_attached_ones() 
     for _ in 0..100 {
         tokio::time::advance(TokioDuration::from_secs(20)).await;
         tokio::task::yield_now().await;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the reaper's blocking tasks only observe the paused clock after a real-time slice"
+        )]
         std::thread::sleep(RealDuration::from_millis(2));
     }
     assert!(
@@ -155,6 +171,10 @@ async fn the_idle_ttl_kills_quiet_terminals_and_a_write_resets_it() -> Result<()
     for _ in 0..80 {
         tokio::time::advance(TokioDuration::from_secs(20)).await;
         tokio::task::yield_now().await;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the reaper's blocking tasks only observe the paused clock after a real-time slice"
+        )]
         std::thread::sleep(RealDuration::from_millis(2));
     }
     assert!(
@@ -166,6 +186,10 @@ async fn the_idle_ttl_kills_quiet_terminals_and_a_write_resets_it() -> Result<()
     for _ in 0..80 {
         tokio::time::advance(TokioDuration::from_secs(20)).await;
         tokio::task::yield_now().await;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the reaper's blocking tasks only observe the paused clock after a real-time slice"
+        )]
         std::thread::sleep(RealDuration::from_millis(2));
         assert!(
             record_of(&manager, &id).is_some(),
@@ -195,6 +219,10 @@ async fn an_idle_ttl_of_zero_disables_the_reaper_rule() -> Result<(), Failed> {
     for _ in 0..120 {
         tokio::time::advance(TokioDuration::from_secs(20)).await;
         tokio::task::yield_now().await;
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "the reaper's blocking tasks only observe the paused clock after a real-time slice"
+        )]
         std::thread::sleep(RealDuration::from_millis(2));
     }
     assert!(

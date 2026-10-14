@@ -64,6 +64,23 @@ fn launch(steps: &[&str], extra: &[&str]) -> LaunchTable {
     )])
 }
 
+fn launch_in(steps: &[&str], extra: &[&str], cwd: &Path) -> LaunchTable {
+    let mut args = vec!["--session-id".to_owned(), SESSION.to_owned()];
+    for step in steps {
+        args.push("--steps".to_owned());
+        args.push((*step).to_owned());
+    }
+    args.extend(extra.iter().map(|argument| (*argument).to_owned()));
+    LaunchTable::from_entries([(
+        HarnessId::Opencode,
+        AcpLaunch::Native(AcpCommand {
+            program: fake_agent_program(),
+            args,
+            working_dir: Some(cwd.to_path_buf()),
+        }),
+    )])
+}
+
 fn spec(cwd: &Path) -> SessionSpec {
     SessionSpec {
         session: SessionId::new(HarnessId::Opencode, SESSION),
@@ -347,8 +364,11 @@ fn resume_replays_a_loaded_session_on_a_fresh_agent() {
                 .await
                 .expect("new session")
         };
-        let adapter =
-            AcpHarnessAdapter::with_launch_table(launch(&["text:after"], &["--on-load", "replay"]));
+        let adapter = AcpHarnessAdapter::with_launch_table(launch_in(
+            &["text:after"],
+            &["--on-load", "replay"],
+            cwd.path(),
+        ));
         adapter.resume(&session).await.expect("resume");
         let mut events = adapter.events(&session).await.expect("events");
         adapter
@@ -374,8 +394,12 @@ fn resume_replays_a_loaded_session_on_a_fresh_agent() {
 #[test]
 fn resume_of_an_unknown_session_is_a_typed_protocol_error() {
     runtime().expect("test runtime").block_on(async {
-        let _cwd = tempdir().expect("cwd");
-        let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &["--on-load", "reject"]));
+        let cwd = tempdir().expect("cwd");
+        let adapter = AcpHarnessAdapter::with_launch_table(launch_in(
+            &[],
+            &["--on-load", "reject"],
+            cwd.path(),
+        ));
         let unknown = SessionId::new(HarnessId::Opencode, "ses_other000000000000000019");
         let error = adapter.resume(&unknown).await.expect_err("load rejected");
         assert!(error.to_string().contains("session/load failed"));

@@ -1,12 +1,3 @@
-#![expect(
-    unreachable_pub,
-    reason = "the harness is included as a private module in every test binary"
-)]
-#![expect(
-    dead_code,
-    reason = "every test binary includes this module and uses a different subset"
-)]
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -41,7 +32,7 @@ use tower::ServiceExt;
 const HOSTNAME: &str = "gold-host";
 const NODE: &str = "golden-node";
 
-pub fn settings() -> Settings {
+pub(crate) fn settings() -> Settings {
     Settings {
         hostname: HOSTNAME.to_string(),
         node: NODE.to_string(),
@@ -50,19 +41,19 @@ pub fn settings() -> Settings {
     }
 }
 
-pub fn gateway() -> (Arc<Gateway>, Arc<FakeMemoryStore>) {
+pub(crate) fn gateway() -> (Arc<Gateway>, Arc<FakeMemoryStore>) {
     let store = Arc::new(FakeMemoryStore::default());
     let handle: Arc<dyn MemoryStore> = Arc::clone(&store) as Arc<dyn MemoryStore>;
     let gateway = Arc::new(Gateway::new(handle, settings()));
     (gateway, store)
 }
 
-pub fn failing_gateway() -> Arc<Gateway> {
+pub(crate) fn failing_gateway() -> Arc<Gateway> {
     let handle: Arc<dyn MemoryStore> = Arc::new(FailingStore);
     Arc::new(Gateway::new(handle, settings()))
 }
 
-pub struct FailingStore;
+pub(crate) struct FailingStore;
 
 fn unavailable<T>() -> Result<T, MemoryStoreError> {
     Err(MemoryStoreError::Unavailable("down".into()))
@@ -216,10 +207,10 @@ impl MemoryStore for FailingStore {
     }
 }
 
-pub struct GatedStore {
+pub(crate) struct GatedStore {
     inner: FakeMemoryStore,
-    pub entered: watch::Sender<u64>,
-    pub release: Semaphore,
+    pub(crate) entered: watch::Sender<u64>,
+    pub(crate) release: Semaphore,
 }
 
 impl Default for GatedStore {
@@ -394,7 +385,7 @@ fn remote_addr(request: &Recorded) -> Result<SocketAddr, String> {
     }
 }
 
-pub async fn answer(app: axum::Router, request: Recorded) -> Result<Response, String> {
+pub(crate) async fn answer(app: axum::Router, request: Recorded) -> Result<Response, String> {
     let addr = remote_addr(&request)?;
     let uri: Uri = request
         .target

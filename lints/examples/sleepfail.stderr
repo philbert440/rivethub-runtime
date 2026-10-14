@@ -1,0 +1,16 @@
+warning: tokio::time::sleep sleeps a test: wait for the event with a timeout, or carry #[cfg_attr(dylint_lib = "rr_lints", expect(sleep, reason = "…"))] on the statement → docs/PATTERNS.md#sleep
+  --> $DIR/sleepfail.rs:13:9
+   |
+LL |         tokio::time::sleep(20);
+   |         ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(sleep)]` on by default
+
+warning: tokio::time::sleep_until sleeps a test: wait for the event with a timeout, or carry #[cfg_attr(dylint_lib = "rr_lints", expect(sleep, reason = "…"))] on the statement → docs/PATTERNS.md#sleep
+  --> $DIR/sleepfail.rs:18:9
+   |
+LL |         tokio::time::sleep_until(20);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: 2 warnings emitted
+

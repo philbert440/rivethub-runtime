@@ -1,12 +1,3 @@
-#![expect(
-    unreachable_pub,
-    reason = "the harness is included as a private module in every test binary"
-)]
-#![expect(
-    dead_code,
-    reason = "every test binary includes this module and uses a different subset"
-)]
-
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -20,27 +11,27 @@ use terminal::TerminalManager;
 use terminal::TerminalSettings;
 use tokio::sync::mpsc;
 
-pub const HOSTNAME: &str = "gold-host";
+pub(crate) const HOSTNAME: &str = "gold-host";
 
-pub fn env_from(vars: &[(&str, &str)]) -> config::Environment {
+pub(crate) fn env_from(vars: &[(&str, &str)]) -> config::Environment {
     config::Environment::from_vars(
         vars.iter()
             .map(|(name, value)| ((*name).to_string(), (*value).to_string())),
     )
 }
 
-pub fn settings(env: &config::Environment) -> TerminalSettings {
+pub(crate) fn settings(env: &config::Environment) -> TerminalSettings {
     TerminalSettings::from_config(&config::Config::default(), env, HOSTNAME.to_owned())
 }
 
-pub fn direct_manager(env: &config::Environment) -> Arc<TerminalManager> {
+pub(crate) fn direct_manager(env: &config::Environment) -> Arc<TerminalManager> {
     let manager = TerminalManager::new(settings(env), terminal::MuxPlan::Direct);
     let arc = Arc::new(manager);
     arc.run_tasks(tokio_util::sync::CancellationToken::new());
     arc
 }
 
-pub fn spec(session: &str, cwd: &Path, argv: &[&str]) -> Result<SpawnSpec, terminal::Error> {
+pub(crate) fn spec(session: &str, cwd: &Path, argv: &[&str]) -> Result<SpawnSpec, terminal::Error> {
     Ok(SpawnSpec {
         session: Some(SessionKey::new(session)?),
         roster_key: terminal::RosterKey::new("echo")?,
@@ -51,7 +42,7 @@ pub fn spec(session: &str, cwd: &Path, argv: &[&str]) -> Result<SpawnSpec, termi
     })
 }
 
-pub async fn collect(rx: &mut mpsc::Receiver<Vec<u8>>, millis: u64) -> Vec<u8> {
+pub(crate) async fn collect(rx: &mut mpsc::Receiver<Vec<u8>>, millis: u64) -> Vec<u8> {
     let mut out = Vec::new();
     let window = Duration::from_millis(millis);
     while let Ok(chunk) = tokio::time::timeout(window, rx.recv()).await {
@@ -63,7 +54,7 @@ pub async fn collect(rx: &mut mpsc::Receiver<Vec<u8>>, millis: u64) -> Vec<u8> {
     out
 }
 
-pub async fn wait_for_exit(
+pub(crate) async fn wait_for_exit(
     manager: &TerminalManager,
     id: &TerminalId,
 ) -> Result<terminal::TerminalRecord, String> {
@@ -73,11 +64,11 @@ pub async fn wait_for_exit(
         .map_err(|error| format!("terminal {id} exit wait failed: {error}"))
 }
 
-pub fn child_paths(path_var: &str) -> Vec<PathBuf> {
+pub(crate) fn child_paths(path_var: &str) -> Vec<PathBuf> {
     path_var.split(':').map(PathBuf::from).collect()
 }
 
-pub fn program_on_path(program: &str) -> Option<PathBuf> {
+pub(crate) fn program_on_path(program: &str) -> Option<PathBuf> {
     let path = config::Environment::from_process().text("PATH")?.to_owned();
     child_paths(&path)
         .into_iter()

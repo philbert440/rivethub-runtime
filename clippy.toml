@@ -14,5 +14,6 @@ disallowed-methods = [
   { path = "std::process::exit", reason = "return an error to main; only the binary decides the exit code (EXIT)" },
   { path = "std::env::var", reason = "the environment is read once by the config crate (ENV)" },
   { path = "std::env::var_os", reason = "the environment is read once by the config crate (ENV)" },
+  { path = "std::thread::sleep", reason = "wall-clock sync: tests await the event with a timeout, production timers use pausable tokio::time (SLEEP)" },
   { path = "sqlx::Row::get", reason = "panics on a missing column or a type mismatch; read into a `FromRow` struct or use `try_get` with `?`" },
 ]

@@ -1,8 +1,3 @@
-#![expect(
-    clippy::redundant_pub_crate,
-    reason = "a private module: rustc's unreachable_pub rejects plain pub, so crate visibility is the widest reachable form"
-)]
-
 use chrono::DateTime;
 use chrono::SecondsFormat;
 use chrono::Utc;

@@ -64,7 +64,7 @@ fn recorded_chunk(chunk: &ModelChunk) -> Json {
     )
 }
 
-pub fn model_request(scenario: &str, body: &Json) -> ModelRequest {
+pub(crate) fn model_request(scenario: &str, body: &Json) -> ModelRequest {
     ModelRequest {
         model: demand_some(body.get("model").and_then(Json::as_str), "recorded model").to_owned(),
         messages: decode_messages(body.get("messages")),
@@ -200,7 +200,7 @@ fn expected_usage(scenario: &str) -> Vec<LlmUsage> {
     }
 }
 
-pub async fn drive(scenario: &'static str) {
+pub(crate) async fn drive(scenario: &'static str) {
     let recorded = scenario_record(scenario);
     let server = scenario_server(recorded.canned.clone()).await;
     let provider = chat_provider(server.addr, None);
@@ -240,7 +240,7 @@ pub async fn drive(scenario: &'static str) {
     }
 }
 
-pub async fn model_request_to_stream(
+pub(crate) async fn model_request_to_stream(
     provider: &OpenAiCompatible,
     scenario: &str,
     body: &Json,

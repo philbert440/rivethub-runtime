@@ -66,6 +66,7 @@ struct SessionSnapshot {
 #[derive(Debug)]
 pub struct AcpHarnessAdapter {
     launch: LaunchTable,
+    default_working_dir: Option<PathBuf>,
     sessions: Mutex<BTreeMap<SessionId, SessionEntry>>,
 }
 
@@ -74,6 +75,10 @@ impl AcpHarnessAdapter {
     pub fn new(config: &Config) -> Self {
         Self {
             launch: LaunchTable::from_config(config),
+            default_working_dir: config
+                .runtime
+                .as_ref()
+                .and_then(|runtime| runtime.workspace.clone()),
             sessions: Mutex::new(BTreeMap::new()),
         }
     }
@@ -82,6 +87,7 @@ impl AcpHarnessAdapter {
     pub fn with_launch_table(launch: LaunchTable) -> Self {
         Self {
             launch,
+            default_working_dir: None,
             sessions: Mutex::new(BTreeMap::new()),
         }
     }
@@ -124,28 +130,27 @@ impl AcpHarnessAdapter {
     }
 
     fn working_dir(
+        &self,
         spec: &SessionSpec,
         command: &AcpCommand,
     ) -> Result<PathBuf, HarnessAdapterError> {
-        match spec
-            .working_dir
+        spec.working_dir
             .clone()
             .or_else(|| command.working_dir.clone())
-        {
-            Some(dir) => Ok(dir),
-            None => std::env::current_dir().map_err(|source| port(AcpError::WorkingDir { source })),
-        }
+            .or_else(|| self.default_working_dir.clone())
+            .ok_or_else(|| port(AcpError::WorkingDir))
     }
 
     fn launch_command(&self, harness: HarnessId) -> Result<AcpCommand, HarnessAdapterError> {
         self.launch.verified_command(harness).map_err(port)
     }
 
-    fn resume_dir(command: &AcpCommand) -> Result<PathBuf, HarnessAdapterError> {
-        match command.working_dir.clone() {
-            Some(dir) => Ok(dir),
-            None => std::env::current_dir().map_err(|source| port(AcpError::WorkingDir { source })),
-        }
+    fn resume_dir(&self, command: &AcpCommand) -> Result<PathBuf, HarnessAdapterError> {
+        command
+            .working_dir
+            .clone()
+            .or_else(|| self.default_working_dir.clone())
+            .ok_or_else(|| port(AcpError::WorkingDir))
     }
 
     fn requested_session(spec: &SessionSpec) -> Result<(), HarnessAdapterError> {
@@ -186,7 +191,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
     async fn new_session(&self, spec: SessionSpec) -> Result<SessionId, HarnessAdapterError> {
         Self::requested_session(&spec)?;
         let command = self.launch_command(spec.harness)?;
-        let working_dir = Self::working_dir(&spec, &command)?;
+        let working_dir = self.working_dir(&spec, &command)?;
         let agent = crate::connection::start_new(&command, &working_dir)
             .await
             .map_err(port)?;
@@ -236,7 +241,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
                 }));
             }
         }
-        let working_dir = Self::resume_dir(&command)?;
+        let working_dir = self.resume_dir(&command)?;
         let protocol_session = acp::SessionId(native.native().into());
         let agent = crate::connection::start_loaded(&command, &working_dir, &protocol_session)
             .await

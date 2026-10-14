@@ -42,6 +42,7 @@ memory-sqlite = { path = "crates/memory-sqlite", version = "0.1.0" }
 nix = { version = "0.30", features = ["process", "signal", "fs", "user"] }
 parking_lot = "0.12"
 pgvector = { version = "0.4", features = ["sqlx"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
 portable-pty = "0.9"
 ra-ap-rustc_lexer = "0.177"
 rcgen = { version = "0.13", default-features = false, features = ["crypto", "pem", "aws_lc_rs"] }
@@ -66,6 +67,7 @@ subtle = "2"
 similar-asserts = "2"
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls-aws-lc-rs", "postgres", "uuid", "chrono", "json", "migrate"] }
 strum = { version = "0.27", features = ["derive"] }
+syn = { version = "2", features = ["full", "visit"] }
 tempfile = "3"
 testkit = { path = "crates/testkit", version = "0.1.0" }
 thiserror = "2"
@@ -111,6 +113,7 @@ mem_forget = "deny"
 indexing_slicing = "warn"
 wildcard_enum_match_arm = "warn"
 large_futures = "warn"
+redundant_pub_crate = "allow"
 module_name_repetitions = "allow"
 must_use_candidate = "allow"
 missing_errors_doc = "allow"

@@ -1,6 +1,6 @@
 #[expect(
-    clippy::redundant_pub_crate,
-    reason = "private shared test module: unreachable_pub requires pub(crate) here, the nursery lint disagrees"
+    dead_code,
+    reason = "the harness module is included whole by every test binary and this one uses a subset"
 )]
 mod common;
 

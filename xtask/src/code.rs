@@ -2,7 +2,7 @@ use std::path::Path;
 
 use ra_ap_rustc_lexer::{Cursor, FrontmatterAllowed, TokenKind};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::git;
 
 pub const FILE_CEILING: usize = 600;
@@ -57,11 +57,14 @@ pub fn check_code(root: &Path, findings: &mut Vec<String>) -> Result<usize> {
         if !rel.starts_with("crates/") || !is_rust(rel) {
             continue;
         }
-        let text = match std::fs::read_to_string(root.join(rel)) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::InvalidData => continue,
-            Err(error) => return Err(Error::Io(error)),
+        let bytes = std::fs::read(root.join(rel))?;
+        let Ok(text) = std::str::from_utf8(&bytes) else {
+            findings.push(format!(
+                "UTF8 {rel}: not valid UTF-8; the Rust lexer cannot read the file → docs/PATTERNS.md#utf8"
+            ));
+            continue;
         };
+        let text = text.to_owned();
         check_source(findings, rel, &text);
         if is_naming_violation(rel) {
             findings.push(format!(

@@ -1,12 +1,3 @@
-#![expect(
-    unreachable_pub,
-    reason = "test fixtures are shared by integration binaries"
-)]
-#![expect(
-    dead_code,
-    reason = "integration binaries share fixtures and use different subsets"
-)]
-
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -24,16 +15,16 @@ use tokio::sync::{broadcast, mpsc, watch};
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 
-pub mod harness;
+pub(crate) mod harness;
 
-pub const WAIT: Duration = Duration::from_secs(5);
+pub(crate) const WAIT: Duration = Duration::from_secs(5);
 
-pub fn user(name: &str) -> UserId {
+pub(crate) fn user(name: &str) -> UserId {
     UserId::new(name.into()).expect("test user")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Call {
+pub(crate) enum Call {
     Spawn {
         session: SessionId,
         argv: Vec<String>,
@@ -54,10 +45,10 @@ struct Terminal {
 }
 
 #[derive(Debug)]
-pub struct Mux {
+pub(crate) struct Mux {
     terminals: Mutex<BTreeMap<TerminalId, Terminal>>,
-    pub calls: watch::Sender<Vec<Call>>,
-    pub tasks: tokio_util::task::TaskTracker,
+    pub(crate) calls: watch::Sender<Vec<Call>>,
+    pub(crate) tasks: tokio_util::task::TaskTracker,
 }
 
 impl Default for Mux {
@@ -71,7 +62,7 @@ impl Default for Mux {
 }
 
 impl Mux {
-    pub fn emit(&self, id: &TerminalId, bytes: Vec<u8>) {
+    pub(crate) fn emit(&self, id: &TerminalId, bytes: Vec<u8>) {
         let mut terminals = self.terminals.lock();
         let terminal = terminals.get_mut(id).expect("terminal exists");
         terminal.replay.extend_from_slice(&bytes);
@@ -79,7 +70,7 @@ impl Mux {
         drop(terminals);
     }
 
-    pub fn exit(&self, id: &TerminalId, code: i32) {
+    pub(crate) fn exit(&self, id: &TerminalId, code: i32) {
         self.terminals
             .lock()
             .get(id)
@@ -88,7 +79,7 @@ impl Mux {
             .send_replace(Some(code));
     }
 
-    pub async fn called(&self, predicate: impl Fn(&[Call]) -> bool) {
+    pub(crate) async fn called(&self, predicate: impl Fn(&[Call]) -> bool) {
         let mut calls = self.calls.subscribe();
         tokio::time::timeout(WAIT, async {
             loop {
@@ -242,20 +233,22 @@ impl TerminalMux for Mux {
     }
 }
 
-pub struct Fixture {
-    pub gateway: Arc<gateway::Gateway>,
-    pub service: Arc<TerminalService>,
-    pub registry: Arc<gateway::sessions::SessionRegistry>,
-    pub mux: Arc<Mux>,
-    pub directory: tempfile::TempDir,
+pub(crate) struct Fixture {
+    pub(crate) gateway: Arc<gateway::Gateway>,
+    pub(crate) service: Arc<TerminalService>,
+    pub(crate) registry: Arc<gateway::sessions::SessionRegistry>,
+    pub(crate) mux: Arc<Mux>,
+    pub(crate) directory: tempfile::TempDir,
 }
 
 impl Fixture {
-    pub async fn new() -> Self {
+    pub(crate) async fn new() -> Self {
         Self::with_harness(None).await
     }
 
-    pub async fn with_harness(harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>) -> Self {
+    pub(crate) async fn with_harness(
+        harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
+    ) -> Self {
         let directory = tempfile::tempdir().expect("temporary terminal directory");
         let root = directory.path().to_path_buf();
         let registry = Arc::new(gateway::sessions::SessionRegistry::new(
@@ -323,7 +316,7 @@ impl Fixture {
         }
     }
 
-    pub async fn serve(
+    pub(crate) async fn serve(
         &self,
     ) -> (
         std::net::SocketAddr,
@@ -345,7 +338,7 @@ impl Fixture {
     }
 }
 
-pub async fn http(
+pub(crate) async fn http(
     gateway: &Arc<gateway::Gateway>,
     method: &str,
     path: &str,
@@ -381,10 +374,10 @@ pub async fn http(
     (status, bytes.to_vec())
 }
 
-pub type Socket =
+pub(crate) type Socket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-pub async fn frame(socket: &mut Socket) -> tokio_tungstenite::tungstenite::Message {
+pub(crate) async fn frame(socket: &mut Socket) -> tokio_tungstenite::tungstenite::Message {
     use futures::StreamExt as _;
     tokio::time::timeout(WAIT, socket.next())
         .await

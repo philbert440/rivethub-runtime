@@ -1,4 +1,4 @@
-pub const TERM: &[(&str, &str)] = &[
+pub(crate) const TERM: &[(&str, &str)] = &[
     (
         "term-ws/claim-a-sized",
         "B12 hardening: typed control errors and byte-exact input replace JavaScript coercion and lossy decoding",

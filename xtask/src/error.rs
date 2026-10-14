@@ -10,6 +10,10 @@ pub enum Error {
     Json(#[from] serde_json::Error),
     #[error("toml: {0}")]
     Toml(#[from] toml::de::Error),
+    #[error("Rust parse: {0}")]
+    Rust(#[from] syn::Error),
+    #[error("toml serialization: {0}")]
+    TomlWrite(#[from] toml::ser::Error),
     #[error("regex: {0}")]
     Regex(#[from] regex::Error),
     #[error("cargo metadata: {0}")]

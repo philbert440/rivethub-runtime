@@ -210,7 +210,7 @@ impl<'de> Visitor<'de> for ArgumentVisitor {
 impl Argument {
     #[expect(
         clippy::cast_precision_loss,
-        reason = "the recorded hashes spell every number as the nearest f64"
+        reason = "PATTERNS JSMODEL: event-id hashing spells every number as the nearest f64"
     )]
     fn spelling(&self) -> Result<String, serde_json::Error> {
         Ok(match self {
