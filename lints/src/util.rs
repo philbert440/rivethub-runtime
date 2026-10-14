@@ -50,8 +50,15 @@ pub fn package_or_crate(cx: &LateContext<'_>, span: Span) -> String {
     package(cx, span).unwrap_or_else(|| crate_name(cx))
 }
 
-fn is_main_file(path: &str) -> bool {
-    Path::new(path).file_name() == Some(OsStr::new("main.rs"))
+fn is_composition_root(crate_name: &str, path: &str) -> bool {
+    let file = Path::new(path).file_name();
+    match crate_name {
+        "rivethub" | "rh" => file == Some(OsStr::new("main.rs")),
+        "rivetos" => {
+            file == Some(OsStr::new("main.rs")) || file == Some(OsStr::new("rivetos.rs"))
+        }
+        _ => false,
+    }
 }
 
 pub fn in_test_file(cx: &LateContext<'_>, span: Span) -> bool {
@@ -63,12 +70,12 @@ pub fn in_test_file_sess(sess: &Session, span: Span) -> bool {
 }
 
 pub fn in_rivethub_main(cx: &LateContext<'_>, span: Span) -> bool {
-    crate_name(cx) == "rivethub" && file_path(cx, span).is_some_and(|path| is_main_file(&path))
+    file_path(cx, span).is_some_and(|path| is_composition_root(&crate_name(cx), &path))
 }
 
 pub fn in_rivethub_main_sess(sess: &Session, span: Span) -> bool {
-    sess_crate_name(sess) == "rivethub"
-        && sess_file_path(sess, span).is_some_and(|path| is_main_file(&path))
+    sess_file_path(sess, span)
+        .is_some_and(|path| is_composition_root(&sess_crate_name(sess), &path))
 }
 
 pub fn in_cfg_test(cx: &LateContext<'_>, hir_id: HirId) -> bool {

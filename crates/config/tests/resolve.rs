@@ -8,6 +8,13 @@ use serde::Deserialize;
 )]
 mod common;
 
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private shared test module: unreachable_pub requires pub(crate) here, the nursery lint disagrees"
+)]
+#[path = "common/aliases.rs"]
+mod aliases;
+
 #[derive(Deserialize)]
 struct ResolveCase {
     #[serde(rename = "in")]
@@ -28,6 +35,7 @@ fn resolve_env_vars_replay() -> Result<(), Box<dyn std::error::Error>> {
     for (index, line) in lines.iter().enumerate() {
         let case: ResolveCase = common::parse_case("resolve_env_vars", index, line)?;
         let env = config::Environment::from_vars(case.input.env.clone());
+        aliases::assert_deprecated_aliases(&env);
         let mut actual = case.input.value.clone();
         config::resolve_env_vars_with(&env, &mut actual);
         if actual != case.out {

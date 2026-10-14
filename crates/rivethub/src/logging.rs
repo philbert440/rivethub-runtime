@@ -1,4 +1,5 @@
 use config::Environment;
+use config::LOG_LEVEL_VARIABLE;
 use config::LogLevel;
 use tracing_subscriber::filter::LevelFilter;
 
@@ -21,7 +22,7 @@ pub fn init(env: &Environment) {
         .init();
     if let Some(value) = setting.ignored {
         tracing::warn!(
-            "unknown RIVETOS_LOG_LEVEL \"{value}\" — logging at {}",
+            "unknown {LOG_LEVEL_VARIABLE} \"{value}\" — logging at {}",
             DEFAULT_LEVEL
         );
     }

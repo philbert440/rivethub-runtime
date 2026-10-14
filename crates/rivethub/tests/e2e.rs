@@ -184,7 +184,7 @@ async fn post_recorded_batches(
 async fn recorded_batches_land_and_read_back_through_the_memory_api(pool: PgPool) -> TestResult {
     let url = pool.connect_options().to_url_lossy().to_string();
     migrate::postgres_pool(&pool).await?;
-    let env = Environment::from_vars([("RIVETOS_PG_URL".to_owned(), url)]);
+    let env = Environment::from_vars([(config::POSTGRES_URL_VARIABLE.to_owned(), url)]);
     let config: Config = serde_yaml_ng::from_str("den:\n  host: 127.0.0.1\n  port: 0\n")?;
     let store = rivethub::service::connect(&config, &env).await?;
     let gateway = rivethub::service::compose(&config, &env, store)?;
@@ -359,7 +359,7 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
         "runtime:\n  workspace: /home/user/work\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nmemory:\n  postgres:\n    connection_string: {url}\nden:\n  host: 127.0.0.1\n  port: {port}\n"
     );
     std::fs::write(hub_home.join("config.yaml"), config_text)?;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rivethub"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rh"))
         .env("HOME", home.path())
         .spawn()?;
 
@@ -392,5 +392,67 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
     )?;
     let status = tokio::time::timeout(Duration::from_secs(30), child.wait()).await??;
     assert_eq!(status.code(), Some(0), "SIGTERM must exit cleanly");
+    Ok(())
+}
+
+fn minimal_config() -> &'static str {
+    "runtime:\n  workspace: /home/user/work\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\n"
+}
+
+#[tokio::test]
+async fn first_start_moves_legacy_state_and_the_alias_names_the_new_variable() -> TestResult {
+    let home = tempdir()?;
+    let legacy = home.path().join(".rivetos");
+    std::fs::create_dir_all(legacy.join("nested"))?;
+    std::fs::write(legacy.join("config.yaml"), minimal_config())?;
+    std::fs::write(legacy.join("nested").join("marker"), "kept")?;
+
+    let output = tokio::time::timeout(
+        Duration::from_secs(30),
+        Command::new(env!("CARGO_BIN_EXE_rh"))
+            .env_clear()
+            .env("HOME", home.path())
+            .output(),
+    )
+    .await
+    .map_err(|_| "rh did not exit within 30s")??;
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "missing postgres url exits 1"
+    );
+    assert!(home.path().join(".rivethub/config.yaml").is_file());
+    assert_eq!(
+        std::fs::read_to_string(home.path().join(".rivethub/nested/marker"))?,
+        "kept"
+    );
+    assert!(!legacy.exists());
+    let stderr = String::from_utf8(output.stderr)?;
+    assert!(stderr.contains("moved legacy state"), "{stderr}");
+    assert!(stderr.contains(config::POSTGRES_URL_VARIABLE), "{stderr}");
+    assert!(
+        rivethub::service::StartupError::Url
+            .to_string()
+            .contains(config::POSTGRES_URL_VARIABLE)
+    );
+
+    let again = tokio::time::timeout(
+        Duration::from_secs(30),
+        Command::new(env!("CARGO_BIN_EXE_rivetos"))
+            .env_clear()
+            .env("HOME", home.path())
+            .env("RIVETOS_PG_URL", "postgres://127.0.0.1:1/none")
+            .output(),
+    )
+    .await
+    .map_err(|_| "rivetos did not exit within 30s")??;
+    let stderr = String::from_utf8(again.stderr)?;
+    assert!(
+        !stderr.contains("moved legacy state"),
+        "the directory is moved once: {stderr}"
+    );
+    assert!(stderr.contains("RIVETOS_PG_URL is deprecated"), "{stderr}");
+    assert!(stderr.contains(config::POSTGRES_URL_VARIABLE), "{stderr}");
+    assert_eq!(again.status.code(), Some(2), "{stderr}");
     Ok(())
 }

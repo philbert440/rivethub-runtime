@@ -26,8 +26,8 @@ impl ConfigLocation {
 
 pub fn shared_dir(env: &Environment) -> PathBuf {
     PathBuf::from(
-        configured_value(env, "RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR")
-            .unwrap_or_else(|| DEFAULT_SHARED_DIR.to_owned()),
+        env.configured_shared_dir()
+            .map_or_else(|| DEFAULT_SHARED_DIR.to_owned(), str::to_owned),
     )
 }
 
@@ -37,22 +37,13 @@ pub fn shared_path(env: &Environment, segments: &[&str]) -> PathBuf {
 
 pub fn install_root(env: &Environment) -> PathBuf {
     PathBuf::from(
-        configured_value(env, "RIVETHUB_INSTALL_ROOT", "RIVETOS_INSTALL_ROOT")
-            .unwrap_or_else(|| DEFAULT_INSTALL_ROOT.to_owned()),
+        env.configured_install_root()
+            .map_or_else(|| DEFAULT_INSTALL_ROOT.to_owned(), str::to_owned),
     )
 }
 
 pub fn install_path(env: &Environment, segments: &[&str]) -> PathBuf {
     join(&install_root(env), segments)
-}
-
-fn configured_value(env: &Environment, new_name: &str, legacy_name: &str) -> Option<String> {
-    let raw = env
-        .text(new_name)
-        .or_else(|| env.text(legacy_name))?
-        .trim()
-        .to_owned();
-    if raw.is_empty() { None } else { Some(raw) }
 }
 
 fn join(root: &Path, segments: &[&str]) -> PathBuf {
@@ -155,4 +146,71 @@ impl Paths {
             ConfigLocation::Current(PathBuf::from("config.yaml")),
         ]
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum StateError {
+    #[error("failed to inspect state path {path}: {source}")]
+    Inspect {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to move legacy state {from} to {to}: {source}")]
+    Move {
+        from: PathBuf,
+        to: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+pub fn adopt_legacy_state(env: &Environment) -> Result<Option<String>, StateError> {
+    let paths = Paths::new(env);
+    let hub = paths.hub_home();
+    let legacy = paths.legacy_home();
+    if metadata(&hub)?.is_some() {
+        return Ok(None);
+    }
+    let Some(legacy_meta) = metadata(&legacy)? else {
+        return Ok(None);
+    };
+    if !is_state_directory(&legacy, &legacy_meta) {
+        return Ok(None);
+    }
+    match std::fs::rename(&legacy, &hub) {
+        Ok(()) => Ok(Some(format!(
+            "moved legacy state {} to {} once at first start",
+            legacy.display(),
+            hub.display()
+        ))),
+        Err(source)
+            if matches!(
+                source.kind(),
+                std::io::ErrorKind::AlreadyExists | std::io::ErrorKind::NotFound
+            ) =>
+        {
+            Ok(None)
+        }
+        Err(source) => Err(StateError::Move {
+            from: legacy,
+            to: hub,
+            source,
+        }),
+    }
+}
+
+fn metadata(path: &Path) -> Result<Option<std::fs::Metadata>, StateError> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => Ok(Some(metadata)),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(StateError::Inspect {
+            path: path.to_path_buf(),
+            source,
+        }),
+    }
+}
+
+fn is_state_directory(path: &Path, metadata: &std::fs::Metadata) -> bool {
+    metadata.is_dir() || (metadata.file_type().is_symlink() && path.is_dir())
 }

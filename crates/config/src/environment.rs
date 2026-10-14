@@ -53,6 +53,78 @@ impl TermSettings {
     }
 }
 
+pub const LOG_LEVEL_VARIABLE: &str = "RIVETHUB_LOG_LEVEL";
+pub const NODE_NAME_VARIABLE: &str = "RIVETHUB_NODE_NAME";
+pub const NODE_ID_VARIABLE: &str = "RIVETHUB_NODE_ID";
+pub const POSTGRES_URL_VARIABLE: &str = "RIVETHUB_PG_URL";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Alias {
+    LogLevel,
+    NodeName,
+    NodeId,
+    PostgresUrl,
+    SharedDir,
+    InstallRoot,
+    TermMux,
+    TermMax,
+    TermScrollback,
+    TermDetachedTtl,
+    TermIdleTtl,
+    TermExitLinger,
+    TermSessionGc,
+}
+
+impl Alias {
+    const ALL: [Self; 13] = [
+        Self::LogLevel,
+        Self::NodeName,
+        Self::NodeId,
+        Self::PostgresUrl,
+        Self::SharedDir,
+        Self::InstallRoot,
+        Self::TermMux,
+        Self::TermMax,
+        Self::TermScrollback,
+        Self::TermDetachedTtl,
+        Self::TermIdleTtl,
+        Self::TermExitLinger,
+        Self::TermSessionGc,
+    ];
+
+    const fn names(self) -> (&'static str, &'static str) {
+        match self {
+            Self::LogLevel => (LOG_LEVEL_VARIABLE, "RIVETOS_LOG_LEVEL"),
+            Self::NodeName => (NODE_NAME_VARIABLE, "RIVETOS_DEN_NODE_NAME"),
+            Self::NodeId => (NODE_ID_VARIABLE, "RIVETOS_DEN_NODE_ID"),
+            Self::PostgresUrl => (POSTGRES_URL_VARIABLE, "RIVETOS_PG_URL"),
+            Self::SharedDir => ("RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR"),
+            Self::InstallRoot => ("RIVETHUB_INSTALL_ROOT", "RIVETOS_INSTALL_ROOT"),
+            Self::TermMux => ("RIVETHUB_TERM_MUX", "RIVETOS_TERM_MUX"),
+            Self::TermMax => ("RIVETHUB_TERM_MAX", "RIVETOS_DEN_TERM_MAX"),
+            Self::TermScrollback => ("RIVETHUB_TERM_SCROLLBACK", "RIVETOS_DEN_TERM_SCROLLBACK"),
+            Self::TermDetachedTtl => (
+                "RIVETHUB_TERM_DETACHED_TTL_MS",
+                "RIVETOS_DEN_TERM_DETACHED_TTL_MS",
+            ),
+            Self::TermIdleTtl => ("RIVETHUB_TERM_IDLE_TTL_MS", "RIVETOS_DEN_TERM_IDLE_TTL_MS"),
+            Self::TermExitLinger => (
+                "RIVETHUB_TERM_EXIT_LINGER_MS",
+                "RIVETOS_DEN_TERM_EXIT_LINGER_MS",
+            ),
+            Self::TermSessionGc => (
+                "RIVETHUB_TERM_SESSION_GC_MS",
+                "RIVETOS_DEN_TERM_SESSION_GC_MS",
+            ),
+        }
+    }
+}
+
+#[must_use]
+pub fn deprecated_alias_names() -> Vec<(&'static str, &'static str)> {
+    Alias::ALL.into_iter().map(Alias::names).collect()
+}
+
 impl Environment {
     pub fn from_vars<V, I>(vars: I) -> Self
     where
@@ -91,11 +163,7 @@ impl Environment {
 
     #[must_use]
     pub fn log_level(&self) -> LogLevelSetting {
-        let stated = self
-            .text("RIVETOS_LOG_LEVEL")
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        match stated {
+        match self.setting(Alias::LogLevel) {
             None => LogLevelSetting {
                 level: LogLevel::Info,
                 ignored: None,
@@ -115,39 +183,43 @@ impl Environment {
 
     #[must_use]
     pub fn node_name(&self, hostname: &str) -> String {
-        ["RIVETOS_DEN_NODE_NAME", "RIVETOS_DEN_NODE_ID"]
-            .into_iter()
-            .find_map(|name| {
-                self.text(name)
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-            })
+        self.setting(Alias::NodeName)
+            .or_else(|| self.setting(Alias::NodeId))
             .map_or_else(|| local_node_name(hostname), str::to_owned)
     }
 
     pub(crate) fn postgres_url(&self) -> Option<String> {
-        self.text("RIVETOS_PG_URL")
+        self.setting(Alias::PostgresUrl).map(str::to_owned)
+    }
+
+    pub(crate) fn configured_shared_dir(&self) -> Option<&str> {
+        self.setting(Alias::SharedDir)
+    }
+
+    pub(crate) fn configured_install_root(&self) -> Option<&str> {
+        self.setting(Alias::InstallRoot)
+    }
+
+    fn setting(&self, alias: Alias) -> Option<&str> {
+        let (current, legacy) = alias.names();
+        self.trimmed(current).or_else(|| self.trimmed(legacy))
+    }
+
+    fn trimmed(&self, name: &str) -> Option<&str> {
+        self.text(name)
             .map(str::trim)
-            .filter(|url| !url.is_empty())
-            .map(str::to_owned)
+            .filter(|value| !value.is_empty())
     }
 
     pub fn term_mux(&self) -> Option<&str> {
-        match self
-            .text("RIVETHUB_TERM_MUX")
-            .or_else(|| self.text("RIVETOS_TERM_MUX"))
-        {
+        match self.setting(Alias::TermMux) {
             Some("tmux") | None => None,
             Some(value) => Some(value),
         }
     }
 
     pub fn term_mux_choice(&self) -> TermMuxChoice {
-        let stated = self
-            .text("RIVETHUB_TERM_MUX")
-            .or_else(|| self.text("RIVETOS_TERM_MUX"))
-            .map(str::trim);
-        match stated {
+        match self.setting(Alias::TermMux) {
             None | Some("tmux") => TermMuxChoice {
                 setting: TermMuxSetting::Auto,
                 ignored: None,
@@ -170,69 +242,55 @@ impl Environment {
     pub fn term_settings(&self) -> TermSettings {
         let mut settings = TermSettings::defaults();
         let mut ignored = Vec::new();
-        match self.term_value::<usize>("RIVETHUB_TERM_MAX", "RIVETOS_DEN_TERM_MAX") {
-            Ok(Some(value)) => settings.max_ptys = value,
-            Ok(None) => {}
-            Err(entry) => ignored.push(entry),
-        }
-        match self.term_value::<usize>("RIVETHUB_TERM_SCROLLBACK", "RIVETOS_DEN_TERM_SCROLLBACK") {
-            Ok(Some(value)) => settings.scrollback_bytes = value,
-            Ok(None) => {}
-            Err(entry) => ignored.push(entry),
-        }
-        match self.term_value::<u64>(
-            "RIVETHUB_TERM_DETACHED_TTL_MS",
-            "RIVETOS_DEN_TERM_DETACHED_TTL_MS",
-        ) {
-            Ok(Some(value)) => settings.detached_ttl_ms = value,
-            Ok(None) => {}
-            Err(entry) => ignored.push(entry),
-        }
-        match self.term_value::<u64>("RIVETHUB_TERM_IDLE_TTL_MS", "RIVETOS_DEN_TERM_IDLE_TTL_MS") {
-            Ok(Some(value)) => settings.idle_ttl_ms = value,
-            Ok(None) => {}
-            Err(entry) => ignored.push(entry),
-        }
-        match self.term_value::<u64>(
-            "RIVETHUB_TERM_EXIT_LINGER_MS",
-            "RIVETOS_DEN_TERM_EXIT_LINGER_MS",
-        ) {
-            Ok(Some(value)) => settings.exit_linger_ms = value,
-            Ok(None) => {}
-            Err(entry) => ignored.push(entry),
-        }
-        match self.term_value::<u64>(
-            "RIVETHUB_TERM_SESSION_GC_MS",
-            "RIVETOS_DEN_TERM_SESSION_GC_MS",
-        ) {
-            Ok(Some(value)) => settings.session_gc_ms = value,
-            Ok(None) => {}
-            Err(entry) => ignored.push(entry),
-        }
+        self.apply_term(Alias::TermMax, &mut settings.max_ptys, &mut ignored);
+        self.apply_term(
+            Alias::TermScrollback,
+            &mut settings.scrollback_bytes,
+            &mut ignored,
+        );
+        self.apply_term(
+            Alias::TermDetachedTtl,
+            &mut settings.detached_ttl_ms,
+            &mut ignored,
+        );
+        self.apply_term(Alias::TermIdleTtl, &mut settings.idle_ttl_ms, &mut ignored);
+        self.apply_term(
+            Alias::TermExitLinger,
+            &mut settings.exit_linger_ms,
+            &mut ignored,
+        );
+        self.apply_term(
+            Alias::TermSessionGc,
+            &mut settings.session_gc_ms,
+            &mut ignored,
+        );
         settings.ignored = ignored;
         settings
     }
 
-    fn term_value<T: std::str::FromStr>(
-        &self,
-        new: &str,
-        legacy: &str,
-    ) -> Result<Option<T>, String> {
-        let Some(text) = self
-            .text(new)
-            .or_else(|| self.text(legacy))
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
+    fn apply_term<T>(&self, alias: Alias, slot: &mut T, ignored: &mut Vec<String>)
+    where
+        T: std::str::FromStr + Copy,
+    {
+        match self.term_value::<T>(alias) {
+            Ok(Some(value)) => *slot = value,
+            Ok(None) => {}
+            Err(entry) => ignored.push(entry),
+        }
+    }
+
+    fn term_value<T: std::str::FromStr>(&self, alias: Alias) -> Result<Option<T>, String> {
+        let (current, _) = alias.names();
+        let Some(text) = self.setting(alias) else {
             return Ok(None);
         };
         text.parse::<T>()
             .map(Some)
-            .map_err(|_| format!("{new}={text}"))
+            .map_err(|_| format!("{current}={text}"))
     }
 
     pub fn legacy_notice(&self, new_name: &str, legacy_name: &str) -> Option<String> {
-        if self.text(new_name).is_some() || self.text(legacy_name).is_none() {
+        if self.trimmed(new_name).is_some() || self.text(legacy_name).is_none() {
             return None;
         }
         Some(format!(
@@ -241,29 +299,12 @@ impl Environment {
     }
 
     pub fn legacy_notices(&self) -> Vec<String> {
-        let pairs = [
-            ("RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR"),
-            ("RIVETHUB_INSTALL_ROOT", "RIVETOS_INSTALL_ROOT"),
-            ("RIVETHUB_TERM_MUX", "RIVETOS_TERM_MUX"),
-            ("RIVETHUB_TERM_MAX", "RIVETOS_DEN_TERM_MAX"),
-            ("RIVETHUB_TERM_SCROLLBACK", "RIVETOS_DEN_TERM_SCROLLBACK"),
-            (
-                "RIVETHUB_TERM_DETACHED_TTL_MS",
-                "RIVETOS_DEN_TERM_DETACHED_TTL_MS",
-            ),
-            ("RIVETHUB_TERM_IDLE_TTL_MS", "RIVETOS_DEN_TERM_IDLE_TTL_MS"),
-            (
-                "RIVETHUB_TERM_EXIT_LINGER_MS",
-                "RIVETOS_DEN_TERM_EXIT_LINGER_MS",
-            ),
-            (
-                "RIVETHUB_TERM_SESSION_GC_MS",
-                "RIVETOS_DEN_TERM_SESSION_GC_MS",
-            ),
-        ];
-        pairs
+        Alias::ALL
             .into_iter()
-            .filter_map(|(new_name, legacy_name)| self.legacy_notice(new_name, legacy_name))
+            .filter_map(|alias| {
+                let (current, legacy) = alias.names();
+                self.legacy_notice(current, legacy)
+            })
             .collect()
     }
 

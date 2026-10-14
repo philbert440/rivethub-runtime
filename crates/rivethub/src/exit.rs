@@ -28,7 +28,10 @@ impl Exit {
     #[must_use]
     pub fn from_startup(error: &StartupError) -> Self {
         match error {
-            StartupError::Config(_) | StartupError::Url => Self::Config,
+            StartupError::Config(_)
+            | StartupError::Url
+            | StartupError::State(_)
+            | StartupError::StateTask(_) => Self::Config,
             StartupError::Memory(_) => Self::Memory,
             StartupError::Bind(_) => Self::Bind,
             StartupError::Serve(_) | StartupError::Io(_) => Self::Serve,

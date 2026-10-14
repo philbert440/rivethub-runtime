@@ -4,6 +4,7 @@ use std::sync::Arc;
 use config::Config;
 use config::Environment;
 use config::Finding;
+use config::POSTGRES_URL_VARIABLE;
 use gateway::Gateway;
 use gateway::Settings;
 use gateway::server::BindError;
@@ -24,7 +25,7 @@ pub enum StartupError {
     #[error(transparent)]
     Config(#[from] config::ConfigError),
     #[error(
-        "no Postgres URL for the memory database — set \"memory.postgres.connection_string\" or \"RIVETOS_PG_URL\""
+        "no Postgres URL for the memory database — set \"memory.postgres.connection_string\" or \"{POSTGRES_URL_VARIABLE}\""
     )]
     Url,
     #[error(transparent)]
@@ -35,6 +36,10 @@ pub enum StartupError {
     Serve(#[from] ServeError),
     #[error("the gateway listener failed: {0}")]
     Io(#[from] io::Error),
+    #[error(transparent)]
+    State(#[from] config::StateError),
+    #[error("the legacy state move task aborted")]
+    StateTask(#[source] tokio::task::JoinError),
 }
 
 pub async fn connect(
@@ -83,8 +88,18 @@ pub fn load(env: &Environment) -> Result<Config, StartupError> {
         }
         return Ok(loaded.config);
     }
+    warn_environment(env);
     tracing::warn!("no config file found — running with the built-in defaults");
     Ok(Config::default())
+}
+
+fn warn_environment(env: &Environment) {
+    for notice in env.legacy_notices() {
+        tracing::warn!("{notice}");
+    }
+    for warning in env.deprecation_warnings() {
+        tracing::warn!("{warning}");
+    }
 }
 
 #[must_use]
@@ -106,6 +121,9 @@ pub fn host_name() -> String {
 }
 
 async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), StartupError> {
+    if let Some(notice) = move_legacy_state(env).await? {
+        tracing::warn!("{notice}");
+    }
     let config = load(env)?;
     let store = connect(&config, env).await?;
     let gateway = compose(&config, env, store)?;
@@ -143,6 +161,14 @@ pub async fn start(env: &Environment) -> Exit {
             Exit::from_startup(&error)
         }
     }
+}
+
+async fn move_legacy_state(env: &Environment) -> Result<Option<String>, StartupError> {
+    let env = env.clone();
+    let moved = tokio::task::spawn_blocking(move || config::adopt_legacy_state(&env))
+        .await
+        .map_err(StartupError::StateTask)?;
+    Ok(moved?)
 }
 
 fn report(error: &StartupError) {

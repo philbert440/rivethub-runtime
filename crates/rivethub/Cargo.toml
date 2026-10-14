@@ -6,6 +6,19 @@ publish.workspace = true
 version.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+default-run = "rh"
+
+[lib]
+name = "rivethub"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rh"
+path = "src/main.rs"
+
+[[bin]]
+name = "rivetos"
+path = "src/bin/rivetos.rs"
 
 [dependencies]
 config = { workspace = true }

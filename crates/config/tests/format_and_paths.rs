@@ -9,6 +9,13 @@ use serde::Deserialize;
 )]
 mod common;
 
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "private shared test module: unreachable_pub requires pub(crate) here, the nursery lint disagrees"
+)]
+#[path = "common/aliases.rs"]
+mod aliases;
+
 #[derive(Deserialize)]
 struct FormatCase {
     #[serde(rename = "in")]
@@ -81,6 +88,7 @@ fn replay_paths(
     for (index, line) in lines.iter().enumerate() {
         let case: PathsCase = common::parse_case(name, index, line)?;
         let env = config::Environment::from_vars(case.input.env.clone());
+        aliases::assert_deprecated_aliases(&env);
         let actual = apply(&env, &case.input.segments).display().to_string();
         if actual != case.out {
             failures.push(common::case_failure(
