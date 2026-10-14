@@ -119,7 +119,7 @@ impl TryFrom<EntryRow> for MemoryEntry {
     }
 }
 
-fn stored_role(row: &Row<'_>, index: usize) -> rusqlite::Result<Role> {
+pub(crate) fn stored_role(row: &Row<'_>, index: usize) -> rusqlite::Result<Role> {
     let text = row.get_ref(index)?.as_str()?;
     Role::from_str(text).map_err(|source| {
         rusqlite::Error::FromSqlConversionFailure(index, Type::Text, Box::new(source))

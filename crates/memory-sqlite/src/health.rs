@@ -13,7 +13,7 @@ use crate::error::SqliteError;
 use crate::queue::JobState;
 use crate::time;
 
-const EMBED_MISSING: &str = "embedding endpoint not configured";
+pub(crate) const EMBED_MISSING: &str = "embedding endpoint not configured";
 const EMBED_IMPACT: &str = "Keyword matching still works; meaning-based ranking is offline.";
 const CAPTURE_IMPACT: &str = "Capture progress is not measured by this endpoint yet.";
 

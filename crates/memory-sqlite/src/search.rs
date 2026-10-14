@@ -1,0 +1,560 @@
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::str::FromStr as _;
+
+use chrono::DateTime;
+use chrono::Local;
+use chrono::Utc;
+use kernel::memory::SearchMode;
+use kernel::memory::SearchOutcome;
+use kernel::memory::SearchQuery;
+use kernel::memory::TagLiteral;
+use kernel::memory_core::hybrid_pool;
+use rusqlite::Connection;
+use rusqlite::params;
+use wire::gateway::memory::MemoryDegraded;
+use wire::gateway::memory::MemoryHitSource;
+use wire::gateway::memory::MemoryScope;
+use wire::gateway::memory::TagEntityType;
+use wire::memory::MemorySearchResult;
+use wire::message::Role;
+
+use crate::SqliteStore;
+use crate::error::SqliteError;
+use crate::health::EMBED_MISSING;
+use crate::time;
+
+const KEYWORD_EFFECT: &str = "Keyword / FTS ranking only \u{2014} not meaning-based.";
+const SUMMARY_AGENT: &str = "summary";
+
+const MESSAGE_SQL: &str = "SELECT m.id, m.content, m.role, m.agent, m.created_at, m.conversation_id, \
+     ros_messages_fts.rank \
+     FROM ros_messages_fts \
+     JOIN ros_messages m ON m.id = ros_messages_fts.id \
+     WHERE ros_messages_fts MATCH ?1 \
+       AND (?2 IS NULL OR m.agent = ?2) \
+       AND (?3 IS NULL OR m.created_at >= ?3) \
+       AND (?4 IS NULL OR m.created_at < ?4) \
+     ORDER BY ros_messages_fts.rank ASC \
+     LIMIT ?5";
+
+const SUMMARY_SQL: &str = "SELECT s.id, s.content, s.created_at, s.conversation_id, \
+     ros_summaries_fts.rank \
+     FROM ros_summaries_fts \
+     JOIN ros_summaries s ON s.id = ros_summaries_fts.id \
+     WHERE ros_summaries_fts MATCH ?1 \
+       AND (?2 IS NULL OR EXISTS ( \
+             SELECT 1 FROM ros_conversations c \
+              WHERE c.id = s.conversation_id AND c.agent = ?2)) \
+       AND (?3 IS NULL OR s.created_at >= ?3) \
+       AND (?4 IS NULL OR s.created_at < ?4) \
+     ORDER BY ros_summaries_fts.rank ASC \
+     LIMIT ?5";
+
+const TAGS_SQL: &str =
+    "SELECT entity_type, entity_id, key, value FROM ros_tags WHERE state = 'accepted'";
+
+const SUMMARY_LINKS_SQL: &str = "SELECT id, conversation_id FROM ros_summaries";
+
+const MESSAGE_BUMP: &str = "UPDATE ros_messages \
+     SET access_count = access_count + 1, last_accessed_at = ?1 \
+     WHERE id = ?2";
+
+const SUMMARY_BUMP: &str = "UPDATE ros_summaries \
+     SET access_count = access_count + 1, last_accessed_at = ?1 \
+     WHERE id = ?2";
+
+#[derive(Debug)]
+enum Ready {
+    Empty { armed: bool },
+    Run(Plan),
+}
+
+#[derive(Debug)]
+struct Plan {
+    pattern: String,
+    scope: MemoryScope,
+    agent: Option<String>,
+    tag: Option<TagLiteral>,
+    since: Option<String>,
+    before: Option<String>,
+    limit: i64,
+    fetch_limit: i64,
+    now: DateTime<Utc>,
+    armed: bool,
+}
+
+#[derive(Debug, Clone)]
+enum Kind {
+    Message {
+        role: Role,
+        agent: String,
+        conversation_id: String,
+    },
+    Summary {
+        conversation_id: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct Candidate {
+    id: String,
+    content: String,
+    created_at: DateTime<Utc>,
+    rank: f64,
+    kind: Kind,
+}
+
+#[derive(Debug, Default)]
+struct TagIndex {
+    conversation: BTreeMap<String, BTreeSet<(String, String)>>,
+    summary: BTreeMap<String, BTreeSet<(String, String)>>,
+    summaries_of: BTreeMap<String, Vec<String>>,
+}
+
+impl SqliteStore {
+    pub async fn search_at(
+        &self,
+        query: SearchQuery,
+        now: DateTime<Utc>,
+    ) -> Result<SearchOutcome, SqliteError> {
+        match Plan::prepare(query, now, self.embed_armed())? {
+            Ready::Empty { armed } => Ok(finish(Vec::new(), armed)),
+            Ready::Run(plan) => self.with_conn(move |conn| execute(conn, &plan)).await,
+        }
+    }
+}
+
+impl Plan {
+    fn prepare(query: SearchQuery, now: DateTime<Utc>, armed: bool) -> Result<Ready, SqliteError> {
+        match query.mode {
+            SearchMode::Fts | SearchMode::Hybrid | SearchMode::Vector => {}
+            SearchMode::Trigram | SearchMode::Regex => {
+                return Err(SqliteError::KeywordIndex { mode: query.mode });
+            }
+        }
+        if query.synthesize == Some(true) {
+            return Err(SqliteError::SynthesisUnconfigured);
+        }
+        let range = query.time_range(now, &Local);
+        if range
+            .since
+            .zip(range.before)
+            .is_some_and(|(since, before)| since >= before)
+        {
+            return Err(SqliteError::InvertedRange);
+        }
+        let Some(pattern) = fts_match(&query.text) else {
+            return Ok(Ready::Empty { armed });
+        };
+        let limit = i64::from(query.limit.get());
+        let fetch_limit = if query.tag.is_some() {
+            hybrid_pool(query.limit.get())
+        } else {
+            limit
+        };
+        Ok(Ready::Run(Self {
+            pattern,
+            scope: query.scope,
+            agent: query.agent,
+            tag: query.tag,
+            since: range.since.map(time::stamp),
+            before: range.before.map(time::stamp),
+            limit,
+            fetch_limit,
+            now,
+            armed,
+        }))
+    }
+}
+
+fn fts_match(text: &str) -> Option<String> {
+    let tokens: Vec<String> = text.split_whitespace().filter_map(fts_token).collect();
+    if tokens.is_empty() {
+        None
+    } else {
+        Some(tokens.join(" AND "))
+    }
+}
+
+fn fts_token(raw: &str) -> Option<String> {
+    let cleaned: String = raw.chars().filter(|ch| !stripped(*ch)).collect();
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(format!("\"{cleaned}\""))
+    }
+}
+
+const fn stripped(ch: char) -> bool {
+    matches!(ch, '"' | '\'' | '^' | '~' | '*' | '(' | ')' | ':')
+}
+
+fn execute(conn: &mut Connection, plan: &Plan) -> Result<SearchOutcome, SqliteError> {
+    let mut pool = fetch(conn, plan)?;
+    pool.sort_by(|left, right| {
+        left.rank
+            .total_cmp(&right.rank)
+            .then(left.id.cmp(&right.id))
+    });
+    let index = if plan.tag.is_some() {
+        TagIndex::load(conn)?
+    } else {
+        TagIndex::default()
+    };
+    let mut selected: Vec<Candidate> = pool
+        .iter()
+        .filter(|row| match plan.tag.as_ref() {
+            None => true,
+            Some(tag) => row.tagged(tag, &index),
+        })
+        .cloned()
+        .collect();
+    let matched = !selected.is_empty();
+    selected.truncate(hit_limit(plan.limit)?);
+    let reinforced = if plan.tag.is_some() && matched {
+        pool.as_slice()
+    } else {
+        selected.as_slice()
+    };
+    bump(conn, reinforced, &time::stamp(plan.now))?;
+    let results = selected.into_iter().map(Candidate::into_result).collect();
+    Ok(finish(results, plan.armed))
+}
+
+fn hit_limit(limit: i64) -> Result<usize, SqliteError> {
+    usize::try_from(limit).map_err(SqliteError::Count)
+}
+
+fn fetch(conn: &Connection, plan: &Plan) -> Result<Vec<Candidate>, SqliteError> {
+    let mut found = Vec::new();
+    if matches!(plan.scope, MemoryScope::Messages | MemoryScope::Both) {
+        found.extend(fetch_messages(conn, plan)?);
+    }
+    if matches!(plan.scope, MemoryScope::Summaries | MemoryScope::Both) {
+        found.extend(fetch_summaries(conn, plan)?);
+    }
+    Ok(found)
+}
+
+fn fetch_messages(conn: &Connection, plan: &Plan) -> Result<Vec<Candidate>, SqliteError> {
+    let rows = query_rows(conn, MESSAGE_SQL, plan, "search messages", read_message)?;
+    rows.into_iter().map(Candidate::from_message).collect()
+}
+
+fn fetch_summaries(conn: &Connection, plan: &Plan) -> Result<Vec<Candidate>, SqliteError> {
+    let rows = query_rows(conn, SUMMARY_SQL, plan, "search summaries", read_summary)?;
+    rows.into_iter().map(Candidate::from_summary).collect()
+}
+
+fn query_rows<T, F>(
+    conn: &Connection,
+    sql: &str,
+    plan: &Plan,
+    operation: &'static str,
+    read: F,
+) -> Result<Vec<T>, SqliteError>
+where
+    F: FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
+{
+    let mut statement = conn.prepare(sql).map_err(SqliteError::query(operation))?;
+    let rows = statement
+        .query_map(
+            params![
+                plan.pattern,
+                plan.agent,
+                plan.since,
+                plan.before,
+                plan.fetch_limit,
+            ],
+            read,
+        )
+        .map_err(SqliteError::query(operation))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(SqliteError::query(operation))?;
+    Ok(rows)
+}
+
+struct MessageRow {
+    id: String,
+    content: String,
+    role: Role,
+    agent: String,
+    created_at: String,
+    conversation_id: String,
+    rank: f64,
+}
+
+struct SummaryRow {
+    id: String,
+    content: String,
+    created_at: String,
+    conversation_id: Option<String>,
+    rank: f64,
+}
+
+fn read_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRow> {
+    Ok(MessageRow {
+        id: row.get(0)?,
+        content: row.get(1)?,
+        role: crate::message::stored_role(row, 2)?,
+        agent: row.get(3)?,
+        created_at: row.get(4)?,
+        conversation_id: row.get(5)?,
+        rank: row.get(6)?,
+    })
+}
+
+fn read_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<SummaryRow> {
+    Ok(SummaryRow {
+        id: row.get(0)?,
+        content: row.get(1)?,
+        created_at: row.get(2)?,
+        conversation_id: row.get(3)?,
+        rank: row.get(4)?,
+    })
+}
+
+impl Candidate {
+    fn from_message(row: MessageRow) -> Result<Self, SqliteError> {
+        Ok(Self {
+            id: row.id,
+            content: row.content,
+            created_at: time::stored(&row.created_at, "created_at")?,
+            rank: row.rank,
+            kind: Kind::Message {
+                role: row.role,
+                agent: row.agent,
+                conversation_id: row.conversation_id,
+            },
+        })
+    }
+
+    fn from_summary(row: SummaryRow) -> Result<Self, SqliteError> {
+        Ok(Self {
+            id: row.id,
+            content: row.content,
+            created_at: time::stored(&row.created_at, "created_at")?,
+            rank: row.rank,
+            kind: Kind::Summary {
+                conversation_id: row.conversation_id,
+            },
+        })
+    }
+
+    fn tagged(&self, tag: &TagLiteral, index: &TagIndex) -> bool {
+        match &self.kind {
+            Kind::Message {
+                conversation_id, ..
+            } => index.message_has(conversation_id, tag),
+            Kind::Summary { conversation_id } => {
+                index.summary_has(&self.id, conversation_id.as_deref(), tag)
+            }
+        }
+    }
+
+    fn into_result(self) -> MemorySearchResult {
+        let relevance_score = relevance(self.rank);
+        match self.kind {
+            Kind::Message { role, agent, .. } => MemorySearchResult {
+                id: self.id,
+                source: MemoryHitSource::Message,
+                content: self.content,
+                role: Some(role),
+                agent: Some(agent),
+                relevance_score,
+                created_at: self.created_at,
+            },
+            Kind::Summary { .. } => MemorySearchResult {
+                id: self.id,
+                source: MemoryHitSource::Summary,
+                content: self.content,
+                role: None,
+                agent: Some(SUMMARY_AGENT.to_owned()),
+                relevance_score,
+                created_at: self.created_at,
+            },
+        }
+    }
+
+    fn source(&self) -> MemoryHitSource {
+        match self.kind {
+            Kind::Message { .. } => MemoryHitSource::Message,
+            Kind::Summary { .. } => MemoryHitSource::Summary,
+        }
+    }
+}
+
+fn relevance(rank: f64) -> f64 {
+    rank.abs().mul_add(1.0, 1.0).recip()
+}
+
+impl TagIndex {
+    fn load(conn: &Connection) -> Result<Self, SqliteError> {
+        let mut index = Self::default();
+        index.read_tags(conn)?;
+        index.read_links(conn)?;
+        Ok(index)
+    }
+
+    fn read_tags(&mut self, conn: &Connection) -> Result<(), SqliteError> {
+        let rows = collect_tags(conn)?;
+        for (entity_type, entity_id, key, value) in rows {
+            self.insert_tag(entity_type, entity_id, key, value)?;
+        }
+        Ok(())
+    }
+
+    fn insert_tag(
+        &mut self,
+        entity_type: String,
+        entity_id: String,
+        key: String,
+        value: String,
+    ) -> Result<(), SqliteError> {
+        let kind = TagEntityType::from_str(&entity_type)
+            .map_err(|_| SqliteError::StoredTagType { value: entity_type })?;
+        let pairs = match kind {
+            TagEntityType::Conversation => &mut self.conversation,
+            TagEntityType::Summary => &mut self.summary,
+        };
+        pairs.entry(entity_id).or_default().insert((key, value));
+        Ok(())
+    }
+
+    fn read_links(&mut self, conn: &Connection) -> Result<(), SqliteError> {
+        for (summary_id, conversation_id) in collect_links(conn)? {
+            if let Some(conversation_id) = conversation_id {
+                self.summaries_of
+                    .entry(conversation_id)
+                    .or_default()
+                    .push(summary_id);
+            }
+        }
+        Ok(())
+    }
+
+    fn message_has(&self, conversation_id: &str, tag: &TagLiteral) -> bool {
+        pair_has(&self.conversation, conversation_id, tag)
+            || self
+                .summaries_of
+                .get(conversation_id)
+                .is_some_and(|ids| ids.iter().any(|id| pair_has(&self.summary, id, tag)))
+    }
+
+    fn summary_has(&self, id: &str, conversation_id: Option<&str>, tag: &TagLiteral) -> bool {
+        pair_has(&self.summary, id, tag)
+            || conversation_id
+                .is_some_and(|conversation| pair_has(&self.conversation, conversation, tag))
+    }
+}
+
+fn pair_has(
+    map: &BTreeMap<String, BTreeSet<(String, String)>>,
+    id: &str,
+    tag: &TagLiteral,
+) -> bool {
+    map.get(id).is_some_and(|pairs| {
+        pairs
+            .iter()
+            .any(|(key, value)| key == &tag.key && value == &tag.value)
+    })
+}
+
+fn collect_tags(conn: &Connection) -> Result<Vec<(String, String, String, String)>, SqliteError> {
+    let mut statement = conn
+        .prepare(TAGS_SQL)
+        .map_err(SqliteError::query("search tags"))?;
+    statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+            ))
+        })
+        .map_err(SqliteError::query("search tags"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(SqliteError::query("search tags"))
+}
+
+fn collect_links(conn: &Connection) -> Result<Vec<(String, Option<String>)>, SqliteError> {
+    let mut statement = conn
+        .prepare(SUMMARY_LINKS_SQL)
+        .map_err(SqliteError::query("search summary links"))?;
+    statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(SqliteError::query("search summary links"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(SqliteError::query("search summary links"))
+}
+
+fn bump(conn: &mut Connection, rows: &[Candidate], at: &str) -> Result<(), SqliteError> {
+    if rows.is_empty() {
+        return Ok(());
+    }
+    let tx = conn
+        .transaction()
+        .map_err(SqliteError::query("search access"))?;
+    for row in rows {
+        bump_one(&tx, row, at)?;
+    }
+    tx.commit()
+        .map_err(SqliteError::query("search access commit"))?;
+    Ok(())
+}
+
+fn bump_one(tx: &rusqlite::Transaction<'_>, row: &Candidate, at: &str) -> Result<(), SqliteError> {
+    let sql = match row.source() {
+        MemoryHitSource::Message => MESSAGE_BUMP,
+        MemoryHitSource::Summary => SUMMARY_BUMP,
+    };
+    let updated = tx
+        .execute(sql, params![at, row.id])
+        .map_err(SqliteError::query("search access"))?;
+    if updated == 1 {
+        Ok(())
+    } else {
+        Err(SqliteError::MissingHit { id: row.id.clone() })
+    }
+}
+
+fn finish(results: Vec<MemorySearchResult>, armed: bool) -> SearchOutcome {
+    SearchOutcome {
+        results,
+        degraded: (!armed).then(|| MemoryDegraded {
+            reason: EMBED_MISSING.to_owned(),
+            effect: KEYWORD_EFFECT.to_owned(),
+        }),
+        fallback: None,
+        expanded: Vec::new(),
+        synthesis: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fts_match;
+
+    #[test]
+    fn recorded_fts_match_strings() {
+        assert_eq!(fts_match("deploy").as_deref(), Some("\"deploy\""));
+        assert_eq!(
+            fts_match("deploy release").as_deref(),
+            Some("\"deploy\" AND \"release\"")
+        );
+        assert_eq!(
+            fts_match("\"unbalanced AND (").as_deref(),
+            Some("\"unbalanced\" AND \"AND\"")
+        );
+        assert_eq!(fts_match("*** ^~ ()::''"), None);
+        assert_eq!(
+            fts_match("api.example.com:8443").as_deref(),
+            Some("\"api.example.com8443\"")
+        );
+        assert_eq!(fts_match("zzzzqqq").as_deref(), Some("\"zzzzqqq\""));
+        assert_eq!(fts_match("staging").as_deref(), Some("\"staging\""));
+        assert_eq!(fts_match("rollback").as_deref(), Some("\"rollback\""));
+    }
+}

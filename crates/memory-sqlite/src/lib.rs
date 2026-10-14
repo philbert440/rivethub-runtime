@@ -8,6 +8,7 @@ mod message;
 mod port;
 mod queue;
 mod read;
+mod search;
 mod stats;
 mod time;
 

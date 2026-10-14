@@ -2,6 +2,7 @@ use std::num::TryFromIntError;
 use std::path::PathBuf;
 
 use kernel::memory::MemoryStoreError;
+use kernel::memory::SearchMode;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
@@ -89,6 +90,16 @@ pub enum SqliteError {
         #[source]
         source: serde_json::Error,
     },
+    #[error("since must precede before")]
+    InvertedRange,
+    #[error("stored tag entity type \"{value}\" is not conversation or summary")]
+    StoredTagType { value: String },
+    #[error("search mode {mode} is not answered by the keyword index")]
+    KeywordIndex { mode: SearchMode },
+    #[error("memory synthesis requires a configured summarizer endpoint")]
+    SynthesisUnconfigured,
+    #[error("search hit {id} was not updated")]
+    MissingHit { id: String },
 }
 
 impl SqliteError {
@@ -100,7 +111,10 @@ impl SqliteError {
 impl From<SqliteError> for MemoryStoreError {
     fn from(error: SqliteError) -> Self {
         match error {
-            SqliteError::InvalidTimestamp { .. } => Self::InvalidRequest {
+            SqliteError::InvalidTimestamp { .. }
+            | SqliteError::InvertedRange
+            | SqliteError::KeywordIndex { .. }
+            | SqliteError::SynthesisUnconfigured => Self::InvalidRequest {
                 message: error.to_string(),
             },
             SqliteError::Query { .. }
@@ -115,7 +129,9 @@ impl From<SqliteError> for MemoryStoreError {
             | SqliteError::PayloadNotObject
             | SqliteError::ClaimRejected { .. }
             | SqliteError::InsertRejected
-            | SqliteError::StoredPayload { .. } => Self::Query {
+            | SqliteError::StoredPayload { .. }
+            | SqliteError::StoredTagType { .. }
+            | SqliteError::MissingHit { .. } => Self::Query {
                 message: error.to_string(),
                 source: Box::new(error),
             },

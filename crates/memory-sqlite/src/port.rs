@@ -148,7 +148,12 @@ fn claim_message(error: &SqliteError) -> Option<String> {
         | SqliteError::Clock
         | SqliteError::StoredState { .. }
         | SqliteError::EmbedAlreadyQueued { .. }
-        | SqliteError::InsertRejected => None,
+        | SqliteError::InsertRejected
+        | SqliteError::InvertedRange
+        | SqliteError::StoredTagType { .. }
+        | SqliteError::KeywordIndex { .. }
+        | SqliteError::SynthesisUnconfigured
+        | SqliteError::MissingHit { .. } => None,
     }
 }
 
