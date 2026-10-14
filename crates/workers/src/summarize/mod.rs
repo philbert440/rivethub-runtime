@@ -23,6 +23,8 @@ pub use sweep::handle_enqueue_stale;
 pub use sweep::handle_reap;
 pub use sweep::summary_health;
 
+pub(crate) use llm::llm_error;
+
 pub use prompt::BRANCH_SYSTEM_PROMPT;
 pub use prompt::LEAF_SYSTEM_PROMPT;
 pub use prompt::ROOT_SYSTEM_PROMPT;

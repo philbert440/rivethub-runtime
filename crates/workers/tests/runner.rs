@@ -116,16 +116,24 @@ async fn roles_without_a_handler_refuse_to_start() {
         .claim_roles()
         .expect("the summarizer has a handler");
     assert_eq!(summarizer, vec![WorkerRole::Summarizer]);
-    for role in [ProcessRole::Categorizer, ProcessRole::WikiBuilder] {
-        let rig = rig(role, 1, fnv_provider());
-        let error = rig
-            .runner
-            .run(CancellationToken::new())
-            .await
-            .expect_err("unavailable");
-        assert!(matches!(error, WorkerError::RoleUnavailable { role: got } if got == role));
-        assert_eq!(rig.queue.claims(), 0);
-    }
+    let wiki = rig(ProcessRole::WikiBuilder, 1, fnv_provider());
+    let error = wiki
+        .runner
+        .run(CancellationToken::new())
+        .await
+        .expect_err("unavailable");
+    assert!(matches!(
+        error,
+        WorkerError::RoleUnavailable {
+            role: ProcessRole::WikiBuilder
+        }
+    ));
+    assert_eq!(wiki.queue.claims(), 0);
+    let categorizer = rig(ProcessRole::Categorizer, 1, fnv_provider());
+    let (cancel, run) = spawn(&categorizer);
+    tokio::task::yield_now().await;
+    assert_eq!(categorizer.queue.claims(), 0);
+    finish(cancel, run).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -158,13 +166,18 @@ async fn all_claims_every_role_that_has_a_handler() {
     let (cancel, run) = spawn(&rig);
     rig.queue.wait_phase(embed, Phase::Done).await;
     rig.queue.wait_phase(compact, Phase::Backoff).await;
+    rig.queue.wait_phase(tags, Phase::Backoff).await;
     let failed = rig.queue.view(compact).await;
     assert_eq!(
         failed.error.as_deref(),
         Some("job payload is not a summarizer job: missing field `conversationId`")
     );
-    assert_eq!(rig.queue.claims(), 2);
-    assert_eq!(rig.queue.view(tags).await.phase, Phase::Ready);
+    let tagged = rig.queue.view(tags).await;
+    assert_eq!(
+        tagged.error.as_deref(),
+        Some("job payload is not a suggest-tags job: missing field `summaryId`")
+    );
+    assert_eq!(rig.queue.claims(), 3);
     finish(cancel, run).await;
 }
 
@@ -173,14 +186,14 @@ async fn an_unhandled_claim_is_failed() {
     let rig = rig(ProcessRole::Embedder, 1, fnv_provider());
     let id = rig
         .queue
-        .push_any(fixed(FixedJob::SuggestTags), JsonObject::default(), 1)
+        .push_any(fixed(FixedJob::ExtractWiki), JsonObject::default(), 1)
         .await;
     let (cancel, run) = spawn(&rig);
     rig.queue.wait_phase(id, Phase::Dead).await;
     let job = rig.queue.view(id).await;
     assert_eq!(
         job.error.as_deref(),
-        Some("no handler for job suggest-tags")
+        Some("no handler for job extract-wiki")
     );
     assert_ne!(job.phase, Phase::Done);
     finish(cancel, run).await;
@@ -425,9 +438,11 @@ fn deps(
     WorkerDeps {
         targets,
         summaries: Arc::new(IdleSummaries),
+        memory: Arc::new(testkit::FakeMemoryStore::default()),
         provider,
         embed: settings(),
         summary: SummarySettings::standard("fake-chat").expect("summary settings"),
+        tags: workers::TagSettings::new("tagger-v1", false).expect("tag settings"),
     }
 }
 

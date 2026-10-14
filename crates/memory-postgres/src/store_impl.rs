@@ -21,6 +21,7 @@ use kernel::memory::TagLookup;
 use kernel::memory::TagTaxonomyDecision;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use uuid::Uuid;
 use wire::JsonObject;
 use wire::capture::CaptureBatchRequest;
 use wire::capture::CaptureMessage;
@@ -337,5 +338,19 @@ impl MemoryStore for crate::PostgresMemory {
         merge: TagTaxonomyMerge,
     ) -> Result<TagTaxonomyMergeResult, MemoryStoreError> {
         self.tags_taxonomy_merge(&merge).await
+    }
+
+    async fn tag_job_context(
+        &self,
+        summary_id: Uuid,
+    ) -> Result<Option<kernel::memory::TagJobContext>, MemoryStoreError> {
+        self.tags_job_context(summary_id).await
+    }
+
+    async fn store_tag_suggestions(
+        &self,
+        write: kernel::memory::TagSuggestionWrite,
+    ) -> Result<kernel::memory::TagSuggestionStored, MemoryStoreError> {
+        self.tags_store_suggestions(&write).await
     }
 }

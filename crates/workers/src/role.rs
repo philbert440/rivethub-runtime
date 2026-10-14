@@ -96,6 +96,7 @@ pub(crate) fn handler_ready(name: &JobName) -> bool {
                 | FixedJob::EnqueueIdle
                 | FixedJob::EnqueueStaleCompaction
                 | FixedJob::ReapDeadJobs
+                | FixedJob::SuggestTags
         )
     )
 }

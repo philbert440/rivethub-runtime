@@ -13,12 +13,17 @@ use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
 use kernel::memory::TagEntity;
 use kernel::memory::TagId;
+use kernel::memory::TagJobContext;
 use kernel::memory::TagListQuery;
 use kernel::memory::TagLookup;
+use kernel::memory::TagSuggestKind;
+use kernel::memory::TagSuggestionStored;
+use kernel::memory::TagSuggestionWrite;
 use kernel::memory::TagTaxonomyDecision;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
 use tokio::sync::Mutex;
+use uuid::Uuid;
 use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryStatsResponse;
 use wire::gateway::memory::PendingTagWire;
@@ -31,7 +36,7 @@ use wire::gateway::memory::TagWire;
 use wire::memory::MemoryEntry;
 use wire::memory::MemorySearchResult;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MemoryRequest {
     Append(Vec<MemoryEntry>),
     Search(SearchQuery),
@@ -61,6 +66,8 @@ pub enum MemoryRequest {
     UpsertTagTaxonomy(TagTaxonomyUpsert),
     DecideTagTaxonomy(TagTaxonomyDecision),
     MergeTagTaxonomy(TagTaxonomyMerge),
+    TagJobContext(Uuid),
+    StoreTagSuggestions(TagSuggestionWrite),
     WikiTopics(kernel::wiki::WikiFilter),
     WikiPage(String),
     WikiGaps(u32),
@@ -74,6 +81,7 @@ pub struct FakeMemoryStore {
     wiki_pages: Mutex<BTreeMap<String, wire::gateway::wiki::WikiPageResponse>>,
     wiki_redirects: Mutex<BTreeMap<String, String>>,
     wiki_error: Mutex<Option<MemoryStoreError>>,
+    tag_context: Mutex<Option<TagJobContext>>,
 }
 
 impl FakeMemoryStore {
@@ -95,6 +103,10 @@ impl FakeMemoryStore {
 
     pub async fn requests(&self) -> Vec<MemoryRequest> {
         self.requests.lock().await.clone()
+    }
+
+    pub async fn script_tag_context(&self, context: TagJobContext) {
+        *self.tag_context.lock().await = Some(context);
     }
 
     async fn record(&self, request: MemoryRequest) {
@@ -465,4 +477,50 @@ impl MemoryStore for FakeMemoryStore {
             into: merge.into,
         })
     }
+
+    async fn tag_job_context(
+        &self,
+        summary_id: Uuid,
+    ) -> Result<Option<TagJobContext>, MemoryStoreError> {
+        self.record(MemoryRequest::TagJobContext(summary_id)).await;
+        let context = self.tag_context.lock().await.clone();
+        Ok(context.filter(|loaded| loaded.summary_id == summary_id))
+    }
+
+    async fn store_tag_suggestions(
+        &self,
+        write: TagSuggestionWrite,
+    ) -> Result<TagSuggestionStored, MemoryStoreError> {
+        let stored = count_suggestions(&write)?;
+        self.record(MemoryRequest::StoreTagSuggestions(write)).await;
+        Ok(stored)
+    }
+}
+
+fn count_suggestions(write: &TagSuggestionWrite) -> Result<TagSuggestionStored, MemoryStoreError> {
+    let mut tags = 0u64;
+    let mut removals = 0u64;
+    for row in &write.rows {
+        match row.kind {
+            TagSuggestKind::Add => tags = add_count(tags)?,
+            TagSuggestKind::Remove => removals = add_count(removals)?,
+        }
+    }
+    Ok(TagSuggestionStored {
+        tags,
+        removals,
+        vocabulary: u64::try_from(write.vocabulary.len()).map_err(|_| {
+            MemoryStoreError::InvalidRequest {
+                message: "vocabulary count overflowed".to_owned(),
+            }
+        })?,
+    })
+}
+
+fn add_count(total: u64) -> Result<u64, MemoryStoreError> {
+    total
+        .checked_add(1)
+        .ok_or_else(|| MemoryStoreError::InvalidRequest {
+            message: "tag suggestion count overflowed".to_owned(),
+        })
 }

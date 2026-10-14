@@ -1,4 +1,5 @@
 use kernel::memory::EmbeddingStoreError;
+use kernel::memory::MemoryStoreError;
 use kernel::memory::SummaryStoreError;
 use kernel::queue::JobQueueError;
 use thiserror::Error;
@@ -69,6 +70,21 @@ pub enum WorkerError {
     Count,
     #[error("the summary clock overflowed")]
     Clock,
+    #[error("job payload is not a suggest-tags job: {source}")]
+    SuggestPayload {
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("summary {id} is not in the memory store")]
+    SummaryMissing { id: Uuid },
+    #[error("suggest-tags conversation {payload} does not own summary {summary}")]
+    ConversationMismatch { payload: Uuid, summary: Uuid },
+    #[error("{message}")]
+    TagSuggestions { message: String },
+    #[error("tag settings are invalid: {message}")]
+    TagSettings { message: String },
+    #[error("the memory store failed: {0}")]
+    Memory(#[source] MemoryStoreError),
 }
 
 impl WorkerError {
@@ -83,6 +99,10 @@ impl WorkerError {
     pub(crate) fn summary_payload(source: serde_json::Error) -> Self {
         Self::SummaryPayload { source }
     }
+
+    pub(crate) fn suggest_payload(source: serde_json::Error) -> Self {
+        Self::SuggestPayload { source }
+    }
 }
 
 impl From<EmbeddingStoreError> for WorkerError {
@@ -94,5 +114,11 @@ impl From<EmbeddingStoreError> for WorkerError {
 impl From<SummaryStoreError> for WorkerError {
     fn from(source: SummaryStoreError) -> Self {
         Self::Summary(source)
+    }
+}
+
+impl From<MemoryStoreError> for WorkerError {
+    fn from(source: MemoryStoreError) -> Self {
+        Self::Memory(source)
     }
 }

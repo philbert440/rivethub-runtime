@@ -23,6 +23,7 @@ use wire::gateway::memory::TagEntityType;
 use wire::gateway::memory::TagState;
 use wire::gateway::memory::TagWire;
 
+mod suggest;
 mod taxonomy;
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -544,5 +545,19 @@ impl crate::PostgresMemory {
         lookup: &TagLookup,
     ) -> Result<BTreeMap<String, Vec<TagWire>>, MemoryStoreError> {
         lookup_tags(&self.pool, lookup).await
+    }
+
+    pub(crate) async fn tags_job_context(
+        &self,
+        summary_id: Uuid,
+    ) -> Result<Option<kernel::memory::TagJobContext>, MemoryStoreError> {
+        suggest::tag_job_context(&self.pool, summary_id).await
+    }
+
+    pub(crate) async fn tags_store_suggestions(
+        &self,
+        write: &kernel::memory::TagSuggestionWrite,
+    ) -> Result<kernel::memory::TagSuggestionStored, MemoryStoreError> {
+        suggest::store_tag_suggestions(&self.pool, write).await
     }
 }

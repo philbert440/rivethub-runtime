@@ -279,6 +279,20 @@ impl MemoryStore for FailingStore {
     ) -> Result<wire::gateway::memory::TagTaxonomyMergeResult, MemoryStoreError> {
         unavailable()
     }
+
+    async fn tag_job_context(
+        &self,
+        _summary_id: uuid::Uuid,
+    ) -> Result<Option<kernel::memory::TagJobContext>, MemoryStoreError> {
+        unavailable()
+    }
+
+    async fn store_tag_suggestions(
+        &self,
+        _write: kernel::memory::TagSuggestionWrite,
+    ) -> Result<kernel::memory::TagSuggestionStored, MemoryStoreError> {
+        unavailable()
+    }
 }
 
 pub(crate) struct GatedStore {
@@ -443,6 +457,20 @@ impl MemoryStore for GatedStore {
         merge: wire::gateway::memory::TagTaxonomyMerge,
     ) -> Result<wire::gateway::memory::TagTaxonomyMergeResult, MemoryStoreError> {
         self.inner.merge_tag_taxonomy(merge).await
+    }
+
+    async fn tag_job_context(
+        &self,
+        summary_id: uuid::Uuid,
+    ) -> Result<Option<kernel::memory::TagJobContext>, MemoryStoreError> {
+        self.inner.tag_job_context(summary_id).await
+    }
+
+    async fn store_tag_suggestions(
+        &self,
+        write: kernel::memory::TagSuggestionWrite,
+    ) -> Result<kernel::memory::TagSuggestionStored, MemoryStoreError> {
+        self.inner.store_tag_suggestions(write).await
     }
 }
 

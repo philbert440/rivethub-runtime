@@ -53,7 +53,7 @@ fn text_message(role: Role, text: &str) -> Message {
     }
 }
 
-fn llm_error(error: ModelProviderError) -> WorkerError {
+pub(crate) fn llm_error(error: ModelProviderError) -> WorkerError {
     let text = error.to_string();
     let _owned = error;
     match http_status(&text) {

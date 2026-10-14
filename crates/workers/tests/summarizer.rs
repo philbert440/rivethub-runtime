@@ -286,6 +286,7 @@ fn small_settings() -> SummarySettings {
         stale_min_batch: 2,
         max_leaf_rounds: 10,
         pipeline_version: 5,
+        session_tagging: false,
     })
     .expect("small settings")
 }
@@ -820,10 +821,79 @@ fn summary_settings_reject_an_empty_batch() {
         stale_min_batch: 2,
         max_leaf_rounds: 10,
         pipeline_version: 5,
+        session_tagging: false,
     })
     .expect_err("empty batch");
     assert!(error.to_string().contains("leaf batch"));
     assert_eq!(settings().idle_floor(), 5);
+}
+
+#[tokio::test]
+async fn a_leaf_enqueues_suggest_tags_when_tagging_is_on() {
+    let id = Uuid::parse_str("00000000-0000-4000-8000-000000000002").expect("id");
+    let store = Arc::new(MemStore::new(vec![window(
+        id,
+        "cli:s1",
+        "Session cli:s1",
+        messages(at("2026-10-10T12:00:00Z"), 10),
+    )]));
+    let script = Arc::new(Scripted::success());
+    let jobs = Arc::new(Seen::default());
+    let settings = tagging_settings();
+    let token = cancel();
+    let env = bind(
+        &store,
+        &script,
+        &jobs,
+        &settings,
+        at("2026-10-10T12:10:00Z"),
+        &token,
+    );
+    let outcome = handle_summarize(&env, &payload_of(id, SummaryTrigger::Window))
+        .await
+        .expect("compact");
+    assert_eq!(outcome.summaries, 1);
+    assert!(!outcome.reenqueued);
+    let job = jobs.only().await;
+    let summary_id = store.written.lock().await.first().expect("leaf").id;
+    let key = format!("tags-{summary_id}");
+    assert_eq!(job.name, JobName::Fixed(FixedJob::SuggestTags));
+    assert_eq!(job.key.as_deref(), Some(key.as_str()));
+    assert_eq!(job.key_mode, JobKeyMode::Replace);
+    assert_eq!(job.priority, 6);
+    assert!(job.run_at.is_none());
+    assert_tag_payload(&job, summary_id, id);
+}
+
+fn tagging_settings() -> SummarySettings {
+    SummarySettings::from_parts(SummaryParts {
+        model: "fake-chat".to_owned(),
+        leaf_batch: 10,
+        branch_batch: 8,
+        root_batch: 5,
+        min_leaves_for_branch: 5,
+        min_branches_for_root: 3,
+        idle_minutes: 15,
+        stale_minutes: 5_760,
+        stale_min_batch: 2,
+        max_leaf_rounds: 10,
+        pipeline_version: 5,
+        session_tagging: true,
+    })
+    .expect("tagging settings")
+}
+
+fn assert_tag_payload(job: &Job, summary_id: Uuid, conversation_id: Uuid) {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Body {
+        summary_id: Uuid,
+        conversation_id: Uuid,
+    }
+    let value = serde_json::to_value(&job.payload).expect("payload");
+    let body: Body = serde_json::from_value(value).expect("suggest payload");
+    assert_eq!(body.summary_id, summary_id);
+    assert_eq!(body.conversation_id, conversation_id);
 }
 
 fn bind<'a>(

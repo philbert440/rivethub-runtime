@@ -1,9 +1,17 @@
+mod categorize;
 mod embed;
 mod error;
 mod role;
 mod runner;
 mod summarize;
 
+pub use categorize::CategorizeEnv;
+pub use categorize::SuggestOutcome;
+pub use categorize::TAG_SYSTEM_PROMPT;
+pub use categorize::TagSettings;
+pub use categorize::handle_suggest;
+pub use categorize::suggest_tags_job;
+pub use categorize::tag_user_prompt;
 pub use embed::EmbedSettings;
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;

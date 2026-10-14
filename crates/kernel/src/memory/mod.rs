@@ -29,7 +29,7 @@ use crate::BoxError;
 
 mod embed;
 mod search;
-pub use search::SearchOutcome;
+mod suggest;
 mod summary;
 
 pub use embed::EmbedTable;
@@ -40,6 +40,15 @@ pub use embed::LoadedTarget;
 pub use embed::StoredChunk;
 pub use embed::StoredEmbedding;
 pub use embed::Unembeddable;
+pub use search::SearchOutcome;
+pub use suggest::TagJobContext;
+pub use suggest::TagOnEntity;
+pub use suggest::TagSuggestKind;
+pub use suggest::TagSuggestionRow;
+pub use suggest::TagSuggestionStored;
+pub use suggest::TagSuggestionWrite;
+pub use suggest::TagVocabulary;
+pub use suggest::TagVocabularyProposal;
 pub use summary::ConversationHead;
 pub use summary::ConversationWindow;
 pub use summary::HEARTBEAT_SESSION_PREFIX;
@@ -384,4 +393,14 @@ pub trait MemoryStore: Send + Sync {
         &self,
         merge: TagTaxonomyMerge,
     ) -> Result<TagTaxonomyMergeResult, MemoryStoreError>;
+
+    async fn tag_job_context(
+        &self,
+        summary_id: Uuid,
+    ) -> Result<Option<TagJobContext>, MemoryStoreError>;
+
+    async fn store_tag_suggestions(
+        &self,
+        write: TagSuggestionWrite,
+    ) -> Result<TagSuggestionStored, MemoryStoreError>;
 }

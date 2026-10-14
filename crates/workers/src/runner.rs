@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use kernel::memory::EmbeddingStore;
+use kernel::memory::MemoryStore;
 use kernel::memory::SummaryStore;
 use kernel::model::ModelProvider;
 use kernel::queue::ClaimedJob;
@@ -21,6 +22,9 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
+use crate::categorize::CategorizeEnv;
+use crate::categorize::TagSettings;
+use crate::categorize::handle_suggest;
 use crate::embed::EmbedSettings;
 use crate::embed::handle_embed;
 use crate::error::WorkerError;
@@ -71,9 +75,11 @@ impl RunnerConfig {
 pub struct WorkerDeps {
     pub targets: Arc<dyn EmbeddingStore>,
     pub summaries: Arc<dyn SummaryStore>,
+    pub memory: Arc<dyn MemoryStore>,
     pub provider: Arc<dyn ModelProvider>,
     pub embed: EmbedSettings,
     pub summary: SummarySettings,
+    pub tags: TagSettings,
 }
 
 #[expect(
@@ -84,10 +90,12 @@ pub struct Runner<Q> {
     queue: Arc<Q>,
     targets: Arc<dyn EmbeddingStore>,
     summaries: Arc<dyn SummaryStore>,
+    memory: Arc<dyn MemoryStore>,
     provider: Arc<dyn ModelProvider>,
     config: RunnerConfig,
     embed: EmbedSettings,
     summary: SummarySettings,
+    tags: TagSettings,
     wake: Arc<Notify>,
     idle: watch::Sender<bool>,
     cursor: Arc<AtomicUsize>,
@@ -105,10 +113,12 @@ where
             queue,
             targets: deps.targets,
             summaries: deps.summaries,
+            memory: deps.memory,
             provider: deps.provider,
             config,
             embed: deps.embed,
             summary: deps.summary,
+            tags: deps.tags,
             wake: Arc::new(Notify::new()),
             idle,
             cursor: Arc::new(AtomicUsize::new(0)),
@@ -208,9 +218,11 @@ where
         let env = JobEnv {
             targets: Arc::clone(&self.targets),
             summaries: Arc::clone(&self.summaries),
+            memory: Arc::clone(&self.memory),
             provider: Arc::clone(&self.provider),
             embed: self.embed,
             summary: self.summary.clone(),
+            tags: self.tags.clone(),
         };
         let wake = Arc::clone(&self.wake);
         let open = Arc::clone(&self.open);
@@ -305,9 +317,11 @@ where
 struct JobEnv {
     targets: Arc<dyn EmbeddingStore>,
     summaries: Arc<dyn SummaryStore>,
+    memory: Arc<dyn MemoryStore>,
     provider: Arc<dyn ModelProvider>,
     embed: EmbedSettings,
     summary: SummarySettings,
+    tags: TagSettings,
 }
 
 async fn settle<Q>(
@@ -372,11 +386,21 @@ async fn dispatch<Q: JobQueue>(
             handle_enqueue_stale(&summarize).await.map(|_| ())
         }
         JobName::Fixed(FixedJob::ReapDeadJobs) => handle_reap(&summarize).await.map(|_| ()),
+        JobName::Fixed(FixedJob::SuggestTags) => {
+            let categorize = CategorizeEnv {
+                store: env.memory.as_ref(),
+                provider: env.provider.as_ref(),
+                settings: &env.tags,
+                now: Utc::now(),
+                cancel,
+                attempt: job.attempt,
+            };
+            handle_suggest(&categorize, &job.payload).await.map(|_| ())
+        }
         JobName::Fixed(
             FixedJob::EnqueueUnembedded
             | FixedJob::EnqueueUnchunked
             | FixedJob::SynthesizeToolCall
-            | FixedJob::SuggestTags
             | FixedJob::ExtractWiki
             | FixedJob::EnqueueWikiBackfill
             | FixedJob::ConsolidateWiki

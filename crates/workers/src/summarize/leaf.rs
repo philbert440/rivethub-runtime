@@ -48,8 +48,13 @@ pub(super) async fn write_leaves(
         let content = require_text(&response)?;
         let taken = take_front(&mut window.messages, usize_of(take)?)?;
         let summary = leaf_record(env, &window.conversation, &taken, content)?;
+        let summary_id = summary.id;
+        let conversation_id = summary.conversation_id;
         let node = node_from(&summary);
         env.store.write_summary(summary).await?;
+        if env.settings.session_tagging {
+            enqueue_tags(env, summary_id, conversation_id).await?;
+        }
         window.leaves.push(node);
         written = written.checked_add(1).ok_or(WorkerError::Count)?;
         rounds = rounds.checked_add(1).ok_or(WorkerError::Count)?;
@@ -132,6 +137,20 @@ pub(super) fn count_of(value: usize) -> Result<u32, WorkerError> {
 
 pub(super) fn usize_of(value: u32) -> Result<usize, WorkerError> {
     usize::try_from(value).map_err(|_| WorkerError::Count)
+}
+
+async fn enqueue_tags(
+    env: &SummarizeEnv<'_>,
+    summary_id: Uuid,
+    conversation_id: Uuid,
+) -> Result<(), WorkerError> {
+    env.queue
+        .enqueue(crate::categorize::suggest_tags_job(
+            summary_id,
+            conversation_id,
+        )?)
+        .await
+        .map_err(WorkerError::queue)
 }
 
 fn shrink_batch(batch: u32) -> Result<u32, WorkerError> {
