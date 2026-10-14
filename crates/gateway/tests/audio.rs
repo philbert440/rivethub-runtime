@@ -760,7 +760,7 @@ async fn round_trip(live: &AudioLive) -> Result<(), String> {
     send_binary(&mut socket, &[1, 2, 3, 4]).await?;
     send_text(&mut socket, r#"{"type":"stop"}"#).await?;
     assert_eq!(
-        recv_server(&mut socket).await?,
+        recv_server(&mut socket, "stopped").await?,
         AudioMicServerFrame::Stopped
     );
     assert_eq!(read_pcm(reader)?, vec![1, 2, 3, 4]);
@@ -835,7 +835,9 @@ async fn second_publisher_is_busy(live: &AudioLive) -> Result<(), String> {
     ready(&mut first).await?;
     ready(&mut second).await?;
     let _reader = open_reader(&live.dir.join("mic.pcm"))?;
+    let before = publisher_id(live).await?;
     send_text(&mut first, r#"{"type":"start"}"#).await?;
+    wait_for_publisher_change(live, before.as_ref()).await?;
     send_text(&mut second, r#"{"type":"start"}"#).await?;
     expect_fault(
         &mut second,
@@ -857,7 +859,7 @@ async fn shutdown_sends_close(live: &AudioLive) -> Result<(), String> {
     let mut socket = connect(&live.running.addr, "/audio/mic").await?;
     ready(&mut socket).await?;
     live.running.token.cancel();
-    match next_message(&mut socket).await? {
+    match next_message(&mut socket, "shutdown close").await? {
         Message::Close(_) => Ok(()),
         Message::Text(text) => Err(format!("text during shutdown: {text}")),
         Message::Binary(_) => Err("binary during shutdown".to_owned()),
@@ -870,7 +872,7 @@ async fn shutdown_sends_close(live: &AudioLive) -> Result<(), String> {
 async fn ready(socket: &mut MicSocket) -> Result<(), String> {
     let frame = hello(Some(16_000), Some(1))?;
     send_text(socket, &frame).await?;
-    match recv_server(socket).await? {
+    match recv_server(socket, "ready").await? {
         AudioMicServerFrame::Ready {
             device,
             sample_rate,
@@ -890,12 +892,43 @@ async fn ready(socket: &mut MicSocket) -> Result<(), String> {
     }
 }
 
+async fn publisher_id(live: &AudioLive) -> Result<Option<String>, String> {
+    let status = audio_status(
+        &call(
+            &live.running.gateway.router(false),
+            "GET",
+            "/audio/status",
+            Vec::new(),
+            &[],
+        )
+        .await?,
+    )?;
+    Ok(status.publisher_id)
+}
+
+async fn wait_for_publisher_change(
+    live: &AudioLive,
+    before: Option<&String>,
+) -> Result<(), String> {
+    let deadline = tokio::time::Instant::now() + WAIT;
+    loop {
+        let id = publisher_id(live).await?;
+        if id.is_some() && id.as_ref() != before {
+            return Ok(());
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err("publisher did not arm".to_owned());
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
 async fn expect_fault(
     socket: &mut MicSocket,
     code: AudioMicErrorCode,
     message: &str,
 ) -> Result<(), String> {
-    match recv_server(socket).await? {
+    match recv_server(socket, &format!("fault:{message}")).await? {
         AudioMicServerFrame::Error {
             code: got,
             message: text,
@@ -906,7 +939,7 @@ async fn expect_fault(
         AudioMicServerFrame::Ready { .. } => return Err("ready".to_owned()),
         AudioMicServerFrame::Stopped => return Err("stopped".to_owned()),
     }
-    match next_message(socket).await? {
+    match next_message(socket, "fault close").await? {
         Message::Close(_) => Ok(()),
         Message::Text(text) => Err(format!("text after error: {text}")),
         Message::Binary(_) => Err("binary after error".to_owned()),
@@ -940,8 +973,8 @@ async fn send_binary(socket: &mut MicSocket, bytes: &[u8]) -> Result<(), String>
         .map_err(|error| error.to_string())
 }
 
-async fn recv_server(socket: &mut MicSocket) -> Result<AudioMicServerFrame, String> {
-    match next_message(socket).await? {
+async fn recv_server(socket: &mut MicSocket, step: &str) -> Result<AudioMicServerFrame, String> {
+    match next_message(socket, step).await? {
         Message::Text(text) => serde_json::from_str(&text).map_err(|error| error.to_string()),
         Message::Binary(_) => Err("binary from the mic bridge".to_owned()),
         Message::Ping(_) => Err("ping from the mic bridge".to_owned()),
@@ -951,12 +984,12 @@ async fn recv_server(socket: &mut MicSocket) -> Result<AudioMicServerFrame, Stri
     }
 }
 
-async fn next_message(socket: &mut MicSocket) -> Result<Message, String> {
+async fn next_message(socket: &mut MicSocket, step: &str) -> Result<Message, String> {
     match tokio::time::timeout(WAIT, socket.next()).await {
         Ok(Some(Ok(message))) => Ok(message),
-        Ok(Some(Err(error))) => Err(error.to_string()),
-        Ok(None) => Err("socket closed".to_owned()),
-        Err(error) => Err(error.to_string()),
+        Ok(Some(Err(error))) => Err(format!("{step}: {error}")),
+        Ok(None) => Err(format!("{step}: socket closed")),
+        Err(error) => Err(format!("{step}: {error}")),
     }
 }
 
@@ -966,8 +999,8 @@ async fn connect(addr: &SocketAddr, path: &str) -> Result<MicSocket, String> {
         tokio_tungstenite::connect_async(format!("ws://{addr}{path}")),
     )
     .await
-    .map_err(|error| error.to_string())?
-    .map_err(|error| error.to_string())?;
+    .map_err(|error| format!("mic connect: {error}"))?
+    .map_err(|error| format!("mic connect: {error}"))?;
     Ok(socket)
 }
 

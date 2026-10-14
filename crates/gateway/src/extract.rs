@@ -15,6 +15,7 @@ use kernel::memory::TagLiteral;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::error::Category;
+use wire::JsonObject;
 use wire::gateway::memory::BrowseWindow;
 use wire::gateway::memory::BrowseWindowError;
 use wire::gateway::memory::MemoryScope;
@@ -23,6 +24,7 @@ use wire::gateway::memory::TagState;
 use wire::message::Role;
 
 use crate::error::ApiError;
+use crate::error::body_must_be_object;
 use crate::error::invalid_json;
 use crate::server::RequestDeadlineExceeded;
 
@@ -66,21 +68,31 @@ where
 
     async fn from_request(request: Request, state: &S) -> Result<Self, Self::Rejection> {
         let bytes = limited_bytes(request, state).await?;
-        let text = std::str::from_utf8(&bytes).map_err(|_| invalid_json())?;
-        let trimmed = text.trim_start();
-        if trimmed.is_empty() {
-            return Err(invalid_json());
-        }
-        if !trimmed.starts_with('{') {
-            return Err(crate::error::body_must_be_object());
-        }
-        match serde_json::from_slice::<T>(&bytes) {
-            Ok(value) => Ok(Self(value)),
-            Err(error) if error.classify() == Category::Data => {
-                Err(ApiError::BadRequest(error.to_string()))
-            }
-            Err(_) => Err(invalid_json()),
-        }
+        Ok(Self(decode_json_object(&bytes)?))
+    }
+}
+
+fn decode_json_object<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, ApiError> {
+    if let Err(error) = serde_json::from_slice::<JsonObject>(bytes) {
+        return Err(object_shape_error(&error));
+    }
+    match serde_json::from_slice::<T>(bytes) {
+        Ok(value) => Ok(value),
+        Err(error) => Err(typed_value_error(&error)),
+    }
+}
+
+fn object_shape_error(error: &serde_json::Error) -> ApiError {
+    match error.classify() {
+        Category::Data => body_must_be_object(),
+        Category::Io | Category::Syntax | Category::Eof => invalid_json(),
+    }
+}
+
+fn typed_value_error(error: &serde_json::Error) -> ApiError {
+    match error.classify() {
+        Category::Data => ApiError::BadRequest(error.to_string()),
+        Category::Io | Category::Syntax | Category::Eof => invalid_json(),
     }
 }
 
