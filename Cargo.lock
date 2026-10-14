@@ -19,6 +19,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-loop"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "kernel",
+ "parking_lot",
+ "regex",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "testkit",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "wire",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
