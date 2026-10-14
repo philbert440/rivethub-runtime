@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod audio;
 pub mod capture;
 pub mod capture_schema;
 pub mod chat;
@@ -30,7 +31,7 @@ pub(crate) use surface::MeshCache;
 pub(crate) use surface::rewrite_request;
 
 pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
-    harnesses::mount(files::mount(wiki::router()))
+    audio::mount(harnesses::mount(files::mount(wiki::router())))
         .nest("/api/agents", agents::router())
         .merge(devices::router())
 }

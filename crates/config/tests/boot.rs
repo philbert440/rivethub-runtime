@@ -190,3 +190,53 @@ fn blank_connection_strings_fall_through() -> Result<(), Box<dyn std::error::Err
     alias_warns(&env, "RIVETHUB_PG_URL", "RIVETOS_PG_URL");
     Ok(())
 }
+
+#[test]
+fn audio_flag_accepts_only_explicit_booleans() {
+    assert!(!env_from(&[]).audio_switch().enabled);
+    assert!(
+        env_from(&[("RIVETHUB_AUDIO", "   ")])
+            .audio_switch()
+            .ignored
+            .is_none()
+    );
+    for value in ["1", "true", "yes", "on", " TRUE "] {
+        let current = env_from(&[("RIVETHUB_AUDIO", value)]);
+        assert!(current.audio_switch().enabled, "{value}");
+        assert!(current.audio_switch().ignored.is_none());
+        let legacy = env_from(&[("RIVETOS_DEN_AUDIO", value)]);
+        assert!(legacy.audio_switch().enabled, "{value}");
+        alias_warns(&legacy, "RIVETHUB_AUDIO", "RIVETOS_DEN_AUDIO");
+    }
+    for value in ["0", "false", "no", "off"] {
+        let current = env_from(&[("RIVETHUB_AUDIO", value)]);
+        assert!(!current.audio_switch().enabled, "{value}");
+        assert!(current.audio_switch().ignored.is_none());
+    }
+    let weird = env_from(&[("RIVETHUB_AUDIO", "maybe")]);
+    assert!(!weird.audio_switch().enabled);
+    let ignored = weird.audio_switch().ignored.expect("ignored flag");
+    assert!(ignored.contains("RIVETHUB_AUDIO=maybe"), "{ignored}");
+    let legacy = env_from(&[("RIVETOS_DEN_AUDIO", "maybe")]);
+    let ignored = legacy.audio_switch().ignored.expect("legacy ignored flag");
+    assert!(ignored.contains("RIVETOS_DEN_AUDIO=maybe"), "{ignored}");
+}
+
+#[test]
+fn voice_endpoints_prefer_the_current_name() {
+    let env = env_from(&[
+        ("RIVETOS_DEN_VOICE_STT_URL", " http://legacy/stt "),
+        ("RIVETHUB_VOICE_TTS_URL", " http://current/tts "),
+        ("RIVETHUB_VOICE_TTS_INSTRUCTIONS", " be brief "),
+    ]);
+    let voice = env.voice_endpoints();
+    assert_eq!(voice.stt_url.as_deref(), Some("http://legacy/stt"));
+    assert_eq!(voice.tts_url.as_deref(), Some("http://current/tts"));
+    assert_eq!(voice.instructions.as_deref(), Some("be brief"));
+    alias_warns(&env, "RIVETHUB_VOICE_STT_URL", "RIVETOS_DEN_VOICE_STT_URL");
+    assert!(
+        env.legacy_notices()
+            .iter()
+            .all(|notice| { !notice.contains("RIVETHUB_VOICE_TTS_URL") })
+    );
+}

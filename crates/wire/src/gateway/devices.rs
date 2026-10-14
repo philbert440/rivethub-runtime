@@ -308,7 +308,7 @@ pub enum Notification {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "kebab-case")]
 pub enum AudioBackend {
     FifoShim,
     None,
@@ -343,7 +343,7 @@ pub enum AudioMicServerFrame {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "lowercase")]
 pub enum AudioFormat {
     S16Le,
 }
@@ -382,6 +382,16 @@ pub struct AudioStatus {
     pub armed_at: Option<DateTime<Utc>>,
     pub bytes_written: u64,
     pub runtime_ready: bool,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioHealth {
+    pub ok: bool,
+    pub runtime_ready: bool,
+    pub fifo_path: String,
+    pub message: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]

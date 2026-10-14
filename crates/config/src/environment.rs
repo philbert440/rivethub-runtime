@@ -28,6 +28,19 @@ pub struct TermMuxChoice {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AudioSwitch {
+    pub enabled: bool,
+    pub ignored: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VoiceEndpoints {
+    pub stt_url: Option<String>,
+    pub tts_url: Option<String>,
+    pub instructions: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TermSettings {
     pub max_ptys: usize,
     pub scrollback_bytes: usize,
@@ -98,10 +111,14 @@ enum Alias {
     TermSessionGc,
     UploadMax,
     UploadTtl,
+    Audio,
+    VoiceStt,
+    VoiceTts,
+    VoiceInstructions,
 }
 
 impl Alias {
-    const ALL: [Self; 16] = [
+    const ALL: [Self; 20] = [
         Self::LogLevel,
         Self::NodeName,
         Self::NodeId,
@@ -118,6 +135,10 @@ impl Alias {
         Self::TermSessionGc,
         Self::UploadMax,
         Self::UploadTtl,
+        Self::Audio,
+        Self::VoiceStt,
+        Self::VoiceTts,
+        Self::VoiceInstructions,
     ];
 
     const fn names(self) -> (&'static str, &'static str) {
@@ -147,6 +168,13 @@ impl Alias {
             ),
             Self::UploadMax => (UPLOAD_MAX_BYTES_VARIABLE, "RIVETOS_DEN_UPLOAD_MAX_BYTES"),
             Self::UploadTtl => (UPLOAD_TTL_MS_VARIABLE, "RIVETOS_DEN_UPLOAD_TTL"),
+            Self::Audio => ("RIVETHUB_AUDIO", "RIVETOS_DEN_AUDIO"),
+            Self::VoiceStt => ("RIVETHUB_VOICE_STT_URL", "RIVETOS_DEN_VOICE_STT_URL"),
+            Self::VoiceTts => ("RIVETHUB_VOICE_TTS_URL", "RIVETOS_DEN_VOICE_TTS_URL"),
+            Self::VoiceInstructions => (
+                "RIVETHUB_VOICE_TTS_INSTRUCTIONS",
+                "RIVETOS_DEN_VOICE_TTS_INSTRUCTIONS",
+            ),
         }
     }
 }
@@ -237,8 +265,46 @@ impl Environment {
     }
 
     fn setting(&self, alias: Alias) -> Option<&str> {
+        self.named_setting(alias).map(|(_, value)| value)
+    }
+
+    fn named_setting(&self, alias: Alias) -> Option<(&'static str, &str)> {
         let (current, legacy) = alias.names();
-        self.trimmed(current).or_else(|| self.trimmed(legacy))
+        if let Some(value) = self.trimmed(current) {
+            return Some((current, value));
+        }
+        self.trimmed(legacy).map(|value| (legacy, value))
+    }
+
+    #[must_use]
+    pub fn audio_switch(&self) -> AudioSwitch {
+        let Some((name, value)) = self.named_setting(Alias::Audio) else {
+            return AudioSwitch {
+                enabled: false,
+                ignored: None,
+            };
+        };
+        let Some(enabled) = explicit_flag(value) else {
+            return AudioSwitch {
+                enabled: false,
+                ignored: Some(format!(
+                    "{name}={value} is not a boolean flag and audio stays off"
+                )),
+            };
+        };
+        AudioSwitch {
+            enabled,
+            ignored: None,
+        }
+    }
+
+    #[must_use]
+    pub fn voice_endpoints(&self) -> VoiceEndpoints {
+        VoiceEndpoints {
+            stt_url: self.setting(Alias::VoiceStt).map(str::to_owned),
+            tts_url: self.setting(Alias::VoiceTts).map(str::to_owned),
+            instructions: self.setting(Alias::VoiceInstructions).map(str::to_owned),
+        }
     }
 
     fn trimmed(&self, name: &str) -> Option<&str> {
@@ -405,6 +471,24 @@ impl Environment {
             }
         }
         warnings
+    }
+}
+
+fn explicit_flag(value: &str) -> Option<bool> {
+    if value.eq_ignore_ascii_case("1")
+        || value.eq_ignore_ascii_case("true")
+        || value.eq_ignore_ascii_case("yes")
+        || value.eq_ignore_ascii_case("on")
+    {
+        Some(true)
+    } else if value.eq_ignore_ascii_case("0")
+        || value.eq_ignore_ascii_case("false")
+        || value.eq_ignore_ascii_case("no")
+        || value.eq_ignore_ascii_case("off")
+    {
+        Some(false)
+    } else {
+        None
     }
 }
 

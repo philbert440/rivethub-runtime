@@ -46,6 +46,8 @@ pub enum StartupError {
     State(#[from] config::StateError),
     #[error("the legacy state move task aborted")]
     StateTask(#[source] tokio::task::JoinError),
+    #[error(transparent)]
+    Voice(#[from] gateway::VoiceConfigError),
 }
 
 pub async fn connect(
@@ -73,7 +75,29 @@ pub fn compose(
     let settings =
         Settings::from_config_in(config, env, hostname.clone(), env.node_name(&hostname))?;
     let gateway = Gateway::new(store, settings).with_uploads(uploads(env));
+    let gateway = with_voice_and_audio(gateway, config, env)?;
     Ok(Arc::new(gateway))
+}
+
+pub(crate) fn with_voice_and_audio(
+    mut gateway: Gateway,
+    config: &Config,
+    env: &Environment,
+) -> Result<Gateway, gateway::VoiceConfigError> {
+    let audio = env.audio_switch();
+    if let Some(ignored) = &audio.ignored {
+        tracing::warn!("{ignored}");
+    }
+    if config.terminal_enabled() || audio.enabled {
+        let directory = config::Paths::new(env).state_dir().join("audio");
+        gateway = gateway.with_audio(gateway::AudioConfig::new(directory));
+    }
+    let voice = env.voice_endpoints();
+    gateway.with_voice(gateway::VoiceSettings::new(
+        voice.stt_url,
+        voice.tts_url,
+        voice.instructions,
+    ))
 }
 
 pub(crate) fn uploads(env: &Environment) -> gateway::uploads::UploadService {

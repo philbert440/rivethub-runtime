@@ -17,6 +17,8 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Error)]
 pub enum ComposeError {
     #[error(transparent)]
+    Voice(#[from] gateway::VoiceConfigError),
+    #[error(transparent)]
     Settings(#[from] gateway::SettingsError),
     #[error("gateway composition I/O failed: {0}")]
     Io(#[from] std::io::Error),
@@ -100,6 +102,7 @@ impl Composition {
             .with_uploads(crate::service::uploads(env))
             .with_tenancy(tenancy.clone())
             .with_sessions(sessions.clone());
+        gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
         let home = env
             .home()
             .ok_or_else(|| ComposeError::Invalid("HOME is required".into()))?;

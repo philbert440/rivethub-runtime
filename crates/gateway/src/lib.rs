@@ -24,6 +24,12 @@ use tower::util::MapRequestLayer;
 use wire::harness::HarnessId;
 
 use crate::auth::DenialLog;
+use crate::routes::audio::AudioBridge;
+use crate::routes::audio::VoiceProxy;
+
+pub use crate::routes::audio::AudioConfig;
+pub use crate::routes::audio::VoiceConfigError;
+pub use crate::routes::audio::VoiceSettings;
 
 const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_millis(1_500);
 const DEFAULT_MESH_CACHE_TTL: Duration = Duration::from_secs(10);
@@ -224,6 +230,8 @@ pub struct Gateway {
     presets: routes::agents::AgentRegistry,
     devices: routes::devices::DeviceRuntime,
     mesh_cache: routes::MeshCache,
+    audio: Option<AudioBridge>,
+    voice: VoiceProxy,
 }
 
 impl Gateway {
@@ -251,6 +259,8 @@ impl Gateway {
             presets,
             devices: routes::devices::DeviceRuntime::unconfigured(),
             mesh_cache: routes::MeshCache::default(),
+            audio: None,
+            voice: VoiceProxy::unconfigured(),
         }
     }
 
@@ -300,6 +310,17 @@ impl Gateway {
         self
     }
 
+    #[must_use]
+    pub fn with_audio(mut self, config: AudioConfig) -> Self {
+        self.audio = Some(AudioBridge::start(config));
+        self
+    }
+
+    pub fn with_voice(mut self, settings: VoiceSettings) -> Result<Self, VoiceConfigError> {
+        self.voice = VoiceProxy::from_settings(settings)?;
+        Ok(self)
+    }
+
     pub fn sessions(&self) -> &Arc<sessions::SessionRegistry> {
         &self.sessions
     }
@@ -324,6 +345,9 @@ impl Gateway {
     }
 
     pub async fn close(&self) {
+        if let Some(audio) = &self.audio {
+            audio.shutdown().await;
+        }
         if let Some(terminal) = &self.terminal {
             terminal.close().await;
         }
@@ -331,6 +355,14 @@ impl Gateway {
             uploads.close().await;
         }
         self.sessions.close().await;
+    }
+
+    pub(crate) fn audio(&self) -> Option<&AudioBridge> {
+        self.audio.as_ref()
+    }
+
+    pub(crate) fn voice(&self) -> &VoiceProxy {
+        &self.voice
     }
 
     #[must_use]

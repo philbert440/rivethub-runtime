@@ -57,7 +57,8 @@ fn join(root: &Path, segments: &[&str]) -> PathBuf {
     normalize(&path)
 }
 
-fn normalize(path: &Path) -> PathBuf {
+#[must_use]
+pub fn normalize(path: &Path) -> PathBuf {
     let absolute = path.is_absolute();
     let mut parts: Vec<&OsStr> = Vec::new();
     for component in path.components() {
