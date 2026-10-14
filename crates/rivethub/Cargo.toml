@@ -22,6 +22,16 @@ path = "src/bin/rivetos.rs"
 
 [dependencies]
 cli = { workspace = true }
+agent-loop.workspace = true
+axum.workspace = true
+capture.workspace = true
+chrono.workspace = true
+harness-acp.workspace = true
+providers.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+terminal.workspace = true
+wire.workspace = true
 config = { workspace = true }
 gateway = { workspace = true }
 kernel = { workspace = true }
@@ -35,18 +45,17 @@ tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 rusqlite = { workspace = true }
-capture = { workspace = true }
-chrono = { workspace = true }
+futures.workspace = true
+rcgen.workspace = true
+rustls.workspace = true
+tokio-tungstenite = { workspace = true, features = ["__rustls-tls"] }
 migrate = { workspace = true }
 reqwest = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
 tempfile = { workspace = true }
 testkit = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "macros", "process"] }
-wire = { workspace = true }
 
 [lints]
 workspace = true

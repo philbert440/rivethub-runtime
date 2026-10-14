@@ -1,3 +1,5 @@
+mod certificate;
+
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 
@@ -26,13 +28,20 @@ impl UserId {
 }
 
 #[derive(Debug, Clone)]
-pub struct PeerCertificate(pub [u8; 32]);
+pub enum PeerCertificate {
+    Device {
+        user: Option<String>,
+        device: String,
+    },
+    Unrecognized,
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct Tenancy {
     local: Option<UserId>,
     tokens: Vec<([u8; 32], UserId)>,
-    certificates: BTreeMap<[u8; 32], UserId>,
+    devices: BTreeMap<String, UserId>,
+    unmapped_device_owner: Option<UserId>,
 }
 
 impl Tenancy {
@@ -52,10 +61,44 @@ impl Tenancy {
         Ok(self)
     }
 
+    pub fn with_device(mut self, name: &str, user: UserId) -> Result<Self, ApiError> {
+        let device = match name.strip_prefix("device:") {
+            Some(name) => name,
+            None => name,
+        };
+        if device.is_empty() || device.chars().any(char::is_control) {
+            return Err(ApiError::BadRequest("invalid registry device name".into()));
+        }
+        if self.devices.insert(device.to_owned(), user).is_some() {
+            return Err(ApiError::BadRequest(
+                "duplicate registry device name".into(),
+            ));
+        }
+        Ok(self)
+    }
+
     #[must_use]
-    pub fn with_certificate(mut self, fingerprint: [u8; 32], user: UserId) -> Self {
-        self.certificates.insert(fingerprint, user);
+    pub fn with_unmapped_device_owner(mut self, owner: UserId) -> Self {
+        self.unmapped_device_owner = Some(owner);
         self
+    }
+
+    fn device_user(&self, peer: &PeerCertificate) -> Result<UserId, ApiError> {
+        let PeerCertificate::Device { user, device } = peer else {
+            return Err(ApiError::Unauthorized);
+        };
+        let mapped = self
+            .devices
+            .get(device)
+            .or(self.unmapped_device_owner.as_ref());
+        let mapped = mapped.ok_or(ApiError::Unauthorized)?;
+        if user
+            .as_ref()
+            .is_some_and(|claimed| claimed != mapped.as_str())
+        {
+            return Err(ApiError::Unauthorized);
+        }
+        Ok(mapped.clone())
     }
 
     pub(crate) fn resolve(&self, parts: &Parts) -> Result<UserId, ApiError> {
@@ -72,11 +115,7 @@ impl Tenancy {
             return found.ok_or(ApiError::Unauthorized);
         }
         if let Some(peer) = parts.extensions.get::<PeerCertificate>() {
-            return self
-                .certificates
-                .get(&peer.0)
-                .cloned()
-                .ok_or(ApiError::Unauthorized);
+            return self.device_user(peer);
         }
         if let Some(ConnectInfo(remote)) = parts.extensions.get::<ConnectInfo<SocketAddr>>()
             && crate::auth::is_loopback_remote(*remote)
@@ -97,3 +136,6 @@ impl FromRequestParts<std::sync::Arc<crate::Gateway>> for UserId {
         std::future::ready(gateway.tenancy.resolve(parts))
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -7,10 +7,6 @@ use gateway::tls::resolve_tls;
 use serde::Deserialize;
 use tempfile::tempdir;
 
-fn golden(name: &str) -> PathBuf {
-    testkit::golden_path(env!("CARGO_MANIFEST_DIR"), "tests/golden").join(name)
-}
-
 fn masks() -> testkit::Masks {
     testkit::Masks {
         port: "5174".to_string(),
@@ -40,7 +36,7 @@ struct RefusalEnv {
 
 #[test]
 fn recorded_startup_refusals_reproduce_the_error_lines() {
-    let path = golden("gateway/startup-refusals.json");
+    let path = testkit::recording("gateway/startup.json");
     let recording: Refusals =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("golden readable"))
             .expect("refusal golden parses");
@@ -65,6 +61,7 @@ fn recorded_startup_refusals_reproduce_the_error_lines() {
             tls_cert: material(&run.env.tls_cert),
             tls_key: material(&run.env.tls_key),
             tls_ca: material(&run.env.tls_ca),
+            tls_crl: None,
         };
         let outcome = resolve_tls(&source);
         let expected = testkit::substitute(
@@ -94,6 +91,7 @@ fn tls_paths_resolve_when_the_files_exist() {
         tls_cert: Some(cert),
         tls_key: Some(key),
         tls_ca: None,
+        tls_crl: None,
     };
     let paths = resolve_tls(&source)
         .expect("tls resolves")
@@ -108,6 +106,7 @@ fn missing_cert_file_refuses_before_listen() {
         tls_cert: Some(std::path::PathBuf::from("/nonexistent/no-such-cert.pem")),
         tls_key: Some(std::path::PathBuf::from("/nonexistent/no-such-key.pem")),
         tls_ca: None,
+        tls_crl: None,
     };
     let error = resolve_tls(&source).expect_err("missing cert refuses");
     assert!(matches!(error, BindError::Io(_)));
@@ -134,6 +133,7 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
         tls_cert: None,
         tls_key: None,
         tls_ca: None,
+        tls_crl: None,
     };
     assert!(gateway::server::bind(&source).await.is_ok());
     let source = BindSource {
@@ -142,6 +142,7 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
         tls_cert: None,
         tls_key: None,
         tls_ca: None,
+        tls_crl: None,
     };
     assert!(gateway::server::bind(&source).await.is_ok());
 
@@ -155,6 +156,7 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
         tls_cert: None,
         tls_key: None,
         tls_ca: None,
+        tls_crl: None,
     };
     let error = gateway::server::bind(&source)
         .await

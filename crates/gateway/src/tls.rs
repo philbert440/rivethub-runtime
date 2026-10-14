@@ -5,6 +5,7 @@ use std::sync::Arc;
 use rustls::RootCertStore;
 use rustls::ServerConfig;
 use rustls::pki_types::CertificateDer;
+use rustls::pki_types::CertificateRevocationListDer;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::pki_types::pem::PemObject;
 use rustls::server::WebPkiClientVerifier;
@@ -19,10 +20,15 @@ pub struct TlsPaths {
     pub cert: PathBuf,
     pub key: PathBuf,
     pub ca: Option<PathBuf>,
+    pub crl: Option<PathBuf>,
 }
 
 #[derive(Debug, Error)]
 pub enum TlsError {
+    #[error("configured certificate revocation list contains no CRLs")]
+    EmptyCrl,
+    #[error("a certificate revocation list requires a client CA")]
+    CrlWithoutCa,
     #[error("failed to read PEM from {}", path.display())]
     Pem {
         path: PathBuf,
@@ -63,10 +69,14 @@ pub fn resolve_tls(source: &BindSource) -> Result<Option<TlsPaths>, BindError> {
         cert: cert.to_path_buf(),
         key: key.to_path_buf(),
         ca: source.tls_ca.clone(),
+        crl: source.tls_crl.clone(),
     }))
 }
 
 pub(crate) fn tls_config(paths: &TlsPaths) -> Result<ServerConfig, TlsError> {
+    if paths.crl.is_some() && paths.ca.is_none() {
+        return Err(TlsError::CrlWithoutCa);
+    }
     let certs = load_certs(&paths.cert)?;
     let key = load_key(&paths.key)?;
     let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
@@ -79,9 +89,25 @@ pub(crate) fn tls_config(paths: &TlsPaths) -> Result<ServerConfig, TlsError> {
             for cert in load_certs(ca)? {
                 roots.add(cert).map_err(TlsError::Rustls)?;
             }
-            let verifier = WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider)
-                .build()
-                .map_err(TlsError::Verifier)?;
+            let mut verifier =
+                WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider);
+            if let Some(crl) = &paths.crl {
+                let lists = CertificateRevocationListDer::pem_file_iter(crl)
+                    .map_err(|source| TlsError::Pem {
+                        path: crl.clone(),
+                        source,
+                    })?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|source| TlsError::Pem {
+                        path: crl.clone(),
+                        source,
+                    })?;
+                if lists.is_empty() {
+                    return Err(TlsError::EmptyCrl);
+                }
+                verifier = verifier.with_crls(lists).enforce_revocation_expiration();
+            }
+            let verifier = verifier.build().map_err(TlsError::Verifier)?;
             builder.with_client_cert_verifier(verifier)
         }
         None => builder.with_no_client_auth(),
@@ -89,6 +115,11 @@ pub(crate) fn tls_config(paths: &TlsPaths) -> Result<ServerConfig, TlsError> {
     with_certs
         .with_single_cert(certs, key)
         .map_err(TlsError::Rustls)
+}
+
+pub fn validate(paths: &TlsPaths) -> Result<(), TlsError> {
+    tls_config(paths)?;
+    Ok(())
 }
 
 fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, TlsError> {

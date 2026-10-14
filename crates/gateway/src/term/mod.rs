@@ -64,6 +64,11 @@ pub struct TerminalService {
 }
 
 impl TerminalService {
+    #[must_use]
+    pub fn with_shutdown(mut self, shutdown: CancellationToken) -> Self {
+        self.shutdown = shutdown;
+        self
+    }
     pub async fn new(
         mux: Arc<dyn TerminalMux>,
         registry: Arc<SessionRegistry>,

@@ -113,3 +113,84 @@ fn missing_legacy_stays(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
     assert!(!home.join(".rivetos").exists());
     Ok(())
 }
+
+#[test]
+fn a_live_legacy_owner_refuses_cutover_without_renaming() -> Result<(), Box<dyn std::error::Error>>
+{
+    let home = temp_home("live")?;
+    let legacy = home.join(".rivetos");
+    fs::create_dir_all(&legacy)?;
+    let pid = std::process::id();
+    fs::write(legacy.join("rivetos.pid"), pid.to_string())?;
+    fs::write(legacy.join("marker"), "kept")?;
+    let result = config::adopt_legacy_state(&env_for(&home)?);
+    assert!(
+        matches!(result, Err(config::StateError::LiveOwner { pid: found, .. }) if found == pid)
+    );
+    assert!(!home.join(".rivethub").exists());
+    assert_eq!(fs::read_to_string(legacy.join("marker"))?, "kept");
+    fs::remove_dir_all(home)?;
+    Ok(())
+}
+
+#[test]
+fn a_held_owner_lock_refuses_cutover() -> Result<(), Box<dyn std::error::Error>> {
+    let home = temp_home("locked")?;
+    let legacy = home.join(".rivetos");
+    fs::create_dir_all(&legacy)?;
+    let lock = fs::File::create(legacy.join("rivetos-owner.lock"))?;
+    lock.lock()?;
+    let result = config::adopt_legacy_state(&env_for(&home)?);
+    assert!(matches!(result, Err(config::StateError::Locked { .. })));
+    assert!(legacy.is_dir());
+    assert!(!home.join(".rivethub").exists());
+    drop(lock);
+    config::adopt_legacy_state(&env_for(&home)?)?;
+    assert!(home.join(".rivethub").is_dir());
+    fs::remove_dir_all(home)?;
+    Ok(())
+}
+
+#[test]
+fn malformed_owner_state_fails_closed() -> Result<(), Box<dyn std::error::Error>> {
+    let home = temp_home("malformed")?;
+    let legacy = home.join(".rivetos");
+    fs::create_dir_all(&legacy)?;
+    for pid in ["", "0", "-1", "not a PID", "4294967295"] {
+        fs::write(legacy.join("gateway.pid"), pid)?;
+        let result = config::adopt_legacy_state(&env_for(&home)?);
+        assert!(matches!(
+            result,
+            Err(config::StateError::InvalidOwner { .. })
+        ));
+        assert!(legacy.is_dir());
+        assert!(!home.join(".rivethub").exists());
+    }
+    fs::write(legacy.join("gateway.pid"), format!("1{}", " ".repeat(1024)))?;
+    assert!(matches!(
+        config::adopt_legacy_state(&env_for(&home)?),
+        Err(config::StateError::InvalidOwner { .. })
+    ));
+    fs::remove_dir_all(home)?;
+    Ok(())
+}
+
+#[test]
+fn owner_file_symlinks_cannot_escape_the_state_directory() -> Result<(), Box<dyn std::error::Error>>
+{
+    let home = temp_home("symlink")?;
+    let legacy = home.join(".rivetos");
+    fs::create_dir(&legacy)?;
+    let sibling = home.join("sibling.pid");
+    fs::write(&sibling, "1")?;
+    std::os::unix::fs::symlink(&sibling, legacy.join("gateway.pid"))?;
+    assert!(matches!(
+        config::adopt_legacy_state(&env_for(&home)?),
+        Err(config::StateError::Inspect { .. })
+    ));
+    assert!(legacy.is_dir());
+    assert!(!home.join(".rivethub").exists());
+    assert_eq!(fs::read_to_string(sibling)?, "1");
+    fs::remove_dir_all(home)?;
+    Ok(())
+}

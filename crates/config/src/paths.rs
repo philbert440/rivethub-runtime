@@ -150,6 +150,12 @@ impl Paths {
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
+    #[error("refusing to move legacy state: live process {pid} owns {path}")]
+    LiveOwner { path: PathBuf, pid: u32 },
+    #[error("refusing to move legacy state: owner lock is held at {path}")]
+    Locked { path: PathBuf },
+    #[error("refusing to move legacy state: invalid owner PID in {path}")]
+    InvalidOwner { path: PathBuf },
     #[error("failed to inspect state path {path}: {source}")]
     Inspect {
         path: PathBuf,
@@ -178,6 +184,7 @@ pub fn adopt_legacy_state(env: &Environment) -> Result<Option<String>, StateErro
     if !is_state_directory(&legacy, &legacy_meta) {
         return Ok(None);
     }
+    let _locks = state_owner::check(&legacy)?;
     match std::fs::rename(&legacy, &hub) {
         Ok(()) => Ok(Some(format!(
             "moved legacy state {} to {} once at first start",
@@ -214,3 +221,4 @@ fn metadata(path: &Path) -> Result<Option<std::fs::Metadata>, StateError> {
 fn is_state_directory(path: &Path, metadata: &std::fs::Metadata) -> bool {
     metadata.is_dir() || (metadata.file_type().is_symlink() && path.is_dir())
 }
+mod state_owner;

@@ -50,6 +50,11 @@ pub struct SessionRegistry {
 }
 
 impl SessionRegistry {
+    #[must_use]
+    pub fn with_shutdown(mut self, shutdown: CancellationToken) -> Self {
+        self.shutdown = shutdown;
+        self
+    }
     pub fn new(eviction: Duration) -> Self {
         Self {
             owners: RwLock::new(BTreeMap::new()),

@@ -271,6 +271,7 @@ pub struct MeshTlsPaths {
     pub ca_path: Option<PathBuf>,
     pub cert_path: Option<PathBuf>,
     pub key_path: Option<PathBuf>,
+    pub crl_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -283,6 +284,10 @@ pub struct GatewaySection {
     pub token: Option<String>,
     pub tls_cert: Option<String>,
     pub tls_key: Option<String>,
+    pub tls_ca: Option<PathBuf>,
+    pub tls_crl: Option<PathBuf>,
+    pub users_file: Option<PathBuf>,
+    pub commands_file: Option<PathBuf>,
     pub terminal: Option<TerminalSection>,
     pub static_dir: Option<PathBuf>,
     pub root_redirect: Option<String>,

@@ -22,6 +22,10 @@ use crate::Exit;
 
 #[derive(Debug, Error)]
 pub enum StartupError {
+    #[error("SQLite gateway composition requires a complete SQLite MemoryStore adapter")]
+    SqliteUnavailable,
+    #[error(transparent)]
+    Composition(#[from] crate::composition::ComposeError),
     #[error(transparent)]
     Config(#[from] config::ConfigError),
     #[error(
@@ -46,6 +50,13 @@ pub async fn connect(
     config: &Config,
     env: &Environment,
 ) -> Result<Arc<dyn MemoryStore>, StartupError> {
+    if config.memory.as_ref().is_some_and(|memory| {
+        memory.backend == Some(config::MemoryBackend::Sqlite)
+            || (memory.backend.is_none() && memory.sqlite.is_some() && memory.postgres.is_none())
+    }) || config.pglite_import_pending()
+    {
+        return Err(StartupError::SqliteUnavailable);
+    }
     let url = config.memory_postgres_url(env).ok_or(StartupError::Url)?;
     let memory = PostgresMemory::connect(&url).await?;
     Ok(Arc::new(memory))
@@ -59,23 +70,34 @@ pub fn compose(
     let hostname = host_name();
     let settings =
         Settings::from_config_in(config, env, hostname.clone(), env.node_name(&hostname));
+    let gateway = Gateway::new(store, settings).with_uploads(uploads(env));
+    Ok(Arc::new(gateway))
+}
+
+pub(crate) fn uploads(env: &Environment) -> gateway::uploads::UploadService {
     let uploads = env.upload_settings();
     for ignored in &uploads.ignored {
         tracing::warn!("ignored upload limit {ignored}");
     }
-    let gateway = Gateway::new(store, settings).with_uploads(gateway::uploads::UploadService::new(
-        gateway::uploads::UploadOptions {
-            root: config::Paths::new(env).state_dir().join("uploads"),
-            max_bytes: uploads.max_bytes,
-            ttl: uploads.ttl,
-        },
-    ));
-    Ok(Arc::new(gateway))
+    gateway::uploads::UploadService::new(gateway::uploads::UploadOptions {
+        root: config::Paths::new(env).state_dir().join("uploads"),
+        max_bytes: uploads.max_bytes,
+        ttl: uploads.ttl,
+    })
 }
 
 pub async fn listen(config: &Config) -> Result<(TcpListener, Option<TlsPaths>), StartupError> {
     let source = BindSource::from_config(config);
-    let tls = gateway::tls::resolve_tls(&source)?;
+    let tls_source = source.clone();
+    let tls = tokio::task::spawn_blocking(move || {
+        let tls = gateway::tls::resolve_tls(&tls_source)?;
+        if let Some(paths) = &tls {
+            gateway::tls::validate(paths).map_err(ServeError::Tls)?;
+        }
+        Ok::<_, StartupError>(tls)
+    })
+    .await
+    .map_err(StartupError::StateTask)??;
     let listener = gateway::server::bind(&source).await?;
     Ok((listener, tls))
 }
@@ -133,22 +155,62 @@ pub fn host_name() -> String {
 }
 
 async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), StartupError> {
+    let _cancel_on_drop = shutdown.clone().drop_guard();
     if let Some(notice) = move_legacy_state(env).await? {
         tracing::warn!("{notice}");
     }
-    let config = load(env)?;
-    let store = connect(&config, env).await?;
-    let gateway = compose(&config, env, store)?;
+    let owned_env = env.clone();
+    let config = tokio::task::spawn_blocking(move || load(&owned_env))
+        .await
+        .map_err(StartupError::StateTask)??;
+    let store = tokio::select! {
+        () = shutdown.cancelled() => return Ok(()),
+        store = connect(&config, env) => store?,
+    };
+    let mut composition =
+        crate::composition::Composition::build(&config, env, store, &shutdown).await?;
     let (listener, tls) = listen(&config).await?;
     let addr = listener.local_addr()?;
     tracing::info!(
         "gateway listening on {addr}{}",
         if tls.is_some() { " (tls)" } else { " (plain)" }
     );
-    serve(listener, tls, gateway, shutdown).await
+    let serving = gateway::server::serve_router_with(
+        listener,
+        composition.router(tls.is_some()),
+        tls,
+        shutdown.clone(),
+        gateway::server::ServeOptions::default(),
+    );
+    tokio::pin!(serving);
+    let result = tokio::select! {
+        biased;
+        () = shutdown.cancelled() => { composition.close().await?; serving.await },
+        result = &mut serving => { shutdown.cancel(); composition.close().await?; result },
+        result = composition.failed() => { shutdown.cancel(); composition.close().await?; result?; serving.await },
+    };
+    result?;
+    tracing::info!("gateway stopped");
+    Ok(())
 }
 
 pub async fn start(env: &Environment) -> Exit {
+    start_with_check(env, false).await
+}
+
+pub async fn start_with_check(env: &Environment, check: bool) -> Exit {
+    if check {
+        return match check_config(env).await {
+            Ok(()) => {
+                tracing::info!("gateway configuration valid");
+                Exit::Ok
+            }
+            Err(error) => {
+                report(&error);
+                error.exit()
+            }
+        };
+    }
     let shutdown = CancellationToken::new();
     let mut sigterm = match tokio::signal::unix::signal(SignalKind::terminate()) {
         Ok(signal) => signal,
@@ -158,21 +220,54 @@ pub async fn start(env: &Environment) -> Exit {
         }
     };
     let token = shutdown.clone();
-    tokio::spawn(async move {
+    let signals = tokio::spawn(async move {
         let signal = tokio::select! {
-            _ = tokio::signal::ctrl_c() => "SIGINT",
-            _ = sigterm.recv() => "SIGTERM",
+            result = tokio::signal::ctrl_c() => result.map(|()| "SIGINT"),
+            signal = sigterm.recv() => signal.map(|()| "SIGTERM").ok_or_else(|| io::Error::other("SIGTERM handler closed")),
         };
-        tracing::info!("{signal} received — shutting down");
         token.cancel();
+        let signal = signal?;
+        tracing::info!("{signal} received — shutting down");
+        Ok::<(), io::Error>(())
     });
-    match run(env, shutdown).await {
+    let result = run(env, shutdown.clone()).await;
+    shutdown.cancel();
+    signals.abort();
+    match signals.await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            tracing::error!("signal handler failed: {error}");
+            return Exit::Runtime;
+        }
+        Err(error) if error.is_cancelled() => {}
+        Err(error) => {
+            tracing::error!("signal task failed: {error}");
+            return Exit::Runtime;
+        }
+    }
+    match result {
         Ok(()) => Exit::Ok,
         Err(error) => {
             report(&error);
             error.exit()
         }
     }
+}
+
+async fn check_config(env: &Environment) -> Result<(), StartupError> {
+    let loading_env = env.clone();
+    let config = tokio::task::spawn_blocking(move || {
+        let config = load(&loading_env)?;
+        let source = BindSource::from_config(&config);
+        if let Some(tls) = gateway::tls::resolve_tls(&source)? {
+            gateway::tls::validate(&tls).map_err(ServeError::Tls)?;
+        }
+        Ok::<_, StartupError>(config)
+    })
+    .await
+    .map_err(StartupError::StateTask)??;
+    crate::composition::Composition::validate_users(&config, env).await?;
+    Ok(())
 }
 
 async fn move_legacy_state(env: &Environment) -> Result<Option<String>, StartupError> {

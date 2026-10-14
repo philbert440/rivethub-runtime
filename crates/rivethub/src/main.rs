@@ -53,6 +53,10 @@ async fn dispatch(command: cli::Cli, env: &Environment) -> Exit {
         }
     };
     match dispatch {
+        cli::Dispatch::Gateway { check } => {
+            rivethub::logging::init(env);
+            rivethub::service::start_with_check(env, check).await
+        }
         cli::Dispatch::Start => {
             rivethub::logging::init(env);
             rivethub::service::start(env).await

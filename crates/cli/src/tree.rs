@@ -18,6 +18,11 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    #[command(about = "Run the composed gateway service")]
+    Gateway {
+        #[arg(long)]
+        check: bool,
+    },
     #[command(about = "Manage the systemd service")]
     Service {
         #[command(subcommand)]

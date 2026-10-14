@@ -64,6 +64,7 @@ impl ChannelSettings {
                 cert: paths.cert_path.clone().ok_or(ChannelError::TlsRequired)?,
                 key: paths.key_path.clone().ok_or(ChannelError::TlsRequired)?,
                 ca: Some(paths.ca_path.clone().ok_or(ChannelError::TlsRequired)?),
+                crl: paths.crl_path.clone(),
             },
         };
         let settings = Self {
@@ -119,9 +120,15 @@ pub struct AgentChannel {
     listener: TcpListener,
     tls: Arc<rustls::ServerConfig>,
     dispatch: Arc<Dispatch>,
+    tenancy: Option<crate::tenancy::Tenancy>,
 }
 
 impl AgentChannel {
+    #[must_use]
+    pub fn with_tenancy(mut self, tenancy: crate::tenancy::Tenancy) -> Self {
+        self.tenancy = Some(tenancy);
+        self
+    }
     pub async fn bind(
         settings: ChannelSettings,
         agents: BTreeMap<String, mpsc::Sender<AgentCall>>,
@@ -134,6 +141,7 @@ impl AgentChannel {
         Ok(Self {
             listener,
             tls: Arc::new(config),
+            tenancy: None,
             dispatch: Arc::new(Dispatch {
                 agents,
                 timeout: settings.request_timeout,
@@ -157,6 +165,10 @@ impl AgentChannel {
             .route("/message", routing::post(message))
             .layer(DefaultBodyLimit::max(256 * 1024))
             .with_state(self.dispatch);
+        let router = match self.tenancy {
+            Some(tenancy) => router.layer(axum::middleware::from_fn_with_state(tenancy, authorize)),
+            None => router,
+        };
         serve_router_with_acceptor(
             self.listener,
             router,
@@ -166,6 +178,21 @@ impl AgentChannel {
         )
         .await?;
         Ok(())
+    }
+}
+
+async fn authorize(
+    State(tenancy): State<crate::tenancy::Tenancy>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let (parts, body) = request.into_parts();
+    match tenancy.resolve(&parts) {
+        Ok(_) => {
+            next.run(axum::extract::Request::from_parts(parts, body))
+                .await
+        }
+        Err(error) => error.into_response(),
     }
 }
 

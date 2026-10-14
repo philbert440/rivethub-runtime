@@ -1,0 +1,6 @@
+[
+  {
+    "scenario": "refuse-empty-host",
+    "reason": "The composed binary rejects an empty host during typed configuration validation before reaching the recorded socket-bind refusal. The gateway library still replays the bind refusal."
+  }
+]

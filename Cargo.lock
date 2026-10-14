@@ -611,6 +611,7 @@ name = "config"
 version = "0.1.0"
 dependencies = [
  "libtest-mimic",
+ "nix 0.30.1",
  "regress",
  "serde",
  "serde_ignored",
@@ -1140,6 +1141,7 @@ dependencies = [
  "url",
  "uuid",
  "wire",
+ "x509-parser",
 ]
 
 [[package]]
@@ -2496,25 +2498,34 @@ dependencies = [
 name = "rivethub"
 version = "0.1.0"
 dependencies = [
+ "agent-loop",
+ "axum",
  "capture",
  "chrono",
  "cli",
  "config",
+ "futures",
  "gateway",
+ "harness-acp",
  "kernel",
  "memory-postgres",
  "migrate",
  "nix 0.30.1",
+ "providers",
+ "rcgen",
  "reqwest",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "serde_yaml_ng",
  "sqlx",
  "tempfile",
+ "terminal",
  "testkit",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-tungstenite",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
@@ -3383,7 +3394,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -3596,7 +3607,10 @@ checksum = "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c"
 dependencies = [
  "futures-util",
  "log",
+ "rustls",
+ "rustls-pki-types",
  "tokio",
+ "tokio-rustls",
  "tungstenite",
 ]
 
@@ -3794,6 +3808,8 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.5",
+ "rustls",
+ "rustls-pki-types",
  "sha1 0.10.7",
  "thiserror 2.0.21",
 ]

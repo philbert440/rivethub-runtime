@@ -357,7 +357,8 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
     let port = probe.local_addr()?.port();
     drop(probe);
     let config_text = format!(
-        "runtime:\n  workspace: /home/user/work\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nmemory:\n  postgres:\n    connection_string: {url}\nden:\n  host: 127.0.0.1\n  port: {port}\n"
+        "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:1\n    model: m\nmemory:\n  postgres:\n    connection_string: {url}\nden:\n  host: 127.0.0.1\n  port: {port}\n",
+        home.path().display()
     );
     std::fs::write(hub_home.join("config.yaml"), config_text)?;
     let mut child = Command::new(env!("CARGO_BIN_EXE_rh"))

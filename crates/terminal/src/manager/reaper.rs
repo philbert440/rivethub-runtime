@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use kernel::terminal::TerminalId;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 use crate::error::Error;
 use crate::manager::TerminalManager;
@@ -18,11 +19,17 @@ const REAPER_TICK: Duration = Duration::from_millis(1_000);
 
 impl TerminalManager {
     pub fn run_tasks(self: &Arc<Self>, shutdown: CancellationToken) {
+        let tasks = TaskTracker::new();
+        self.run_tracked(shutdown, &tasks);
+        tasks.close();
+    }
+
+    pub fn run_tracked(self: &Arc<Self>, shutdown: CancellationToken, tasks: &TaskTracker) {
         let taken = self.inner.detach_rx.lock().take();
         if let Some(mut detach_rx) = taken {
             let manager = Arc::clone(self);
             let shutdown = shutdown.clone();
-            tokio::spawn(async move {
+            tasks.spawn(async move {
                 loop {
                     let detached = tokio::select! {
                         () = shutdown.cancelled() => break,
@@ -36,7 +43,7 @@ impl TerminalManager {
             });
         }
         let manager = Arc::clone(self);
-        tokio::spawn(async move {
+        tasks.spawn(async move {
             loop {
                 tokio::select! {
                     () = shutdown.cancelled() => break,

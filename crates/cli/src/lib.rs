@@ -50,6 +50,7 @@ impl Report {
 
 #[derive(Debug)]
 pub enum Dispatch {
+    Gateway { check: bool },
     Start,
     Complete(Report),
 }
@@ -65,6 +66,7 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
     let operation = async {
         match command {
             Command::Start => return Ok(Dispatch::Start),
+            Command::Gateway { check } => return Ok(Dispatch::Gateway { check }),
             Command::Version => Ok(Report::success(version())),
             Command::Config { command } => configuration::run(command, env).await,
             Command::Doctor { json } => doctor::run(env, json).await,

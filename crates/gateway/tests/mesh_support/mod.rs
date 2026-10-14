@@ -49,6 +49,7 @@ impl Material {
             Ok(path)
         };
         let tls = TlsPaths {
+            crl: None,
             cert: write("node.crt", server.pem())?,
             key: write("node.key", server_key.serialize_pem())?,
             ca: Some(write("ca.crt", root.pem())?),

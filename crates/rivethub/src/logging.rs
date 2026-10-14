@@ -17,6 +17,7 @@ fn filter(level: LogLevel) -> LevelFilter {
 pub fn init(env: &Environment) {
     let setting = env.log_level();
     tracing_subscriber::fmt()
+        .with_ansi(false)
         .with_max_level(filter(setting.level))
         .with_writer(std::io::stderr)
         .init();

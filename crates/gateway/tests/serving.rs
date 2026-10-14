@@ -118,6 +118,7 @@ async fn tls_server_with(
         tls_cert: Some(material.cert.clone()),
         tls_key: Some(material.key.clone()),
         tls_ca: None,
+        tls_crl: None,
     })
     .expect("tls resolves")
     .expect("tls paths present");

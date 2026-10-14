@@ -86,6 +86,7 @@ enum Alias {
     NodeName,
     NodeId,
     PostgresUrl,
+    UsersFile,
     SharedDir,
     InstallRoot,
     TermMux,
@@ -100,11 +101,12 @@ enum Alias {
 }
 
 impl Alias {
-    const ALL: [Self; 15] = [
+    const ALL: [Self; 16] = [
         Self::LogLevel,
         Self::NodeName,
         Self::NodeId,
         Self::PostgresUrl,
+        Self::UsersFile,
         Self::SharedDir,
         Self::InstallRoot,
         Self::TermMux,
@@ -124,6 +126,7 @@ impl Alias {
             Self::NodeName => (NODE_NAME_VARIABLE, "RIVETOS_DEN_NODE_NAME"),
             Self::NodeId => (NODE_ID_VARIABLE, "RIVETOS_DEN_NODE_ID"),
             Self::PostgresUrl => (POSTGRES_URL_VARIABLE, "RIVETOS_PG_URL"),
+            Self::UsersFile => ("RIVETHUB_USERS_FILE", "RIVETOS_USERS_FILE"),
             Self::SharedDir => ("RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR"),
             Self::InstallRoot => ("RIVETHUB_INSTALL_ROOT", "RIVETOS_INSTALL_ROOT"),
             Self::TermMux => ("RIVETHUB_TERM_MUX", "RIVETOS_TERM_MUX"),
@@ -183,6 +186,11 @@ impl Environment {
 
     pub fn text(&self, name: &str) -> Option<&str> {
         self.get(name).and_then(OsStr::to_str)
+    }
+
+    pub fn users_file(&self) -> Option<&OsStr> {
+        let (current, legacy) = Alias::UsersFile.names();
+        self.get(current).or_else(|| self.get(legacy))
     }
 
     pub fn home(&self) -> Option<&str> {

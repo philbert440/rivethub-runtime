@@ -21,7 +21,6 @@ use hyper_util::rt::TokioIo;
 use hyper_util::rt::TokioTimer;
 use hyper_util::service::TowerToHyperService;
 use parking_lot::Mutex;
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
@@ -48,6 +47,7 @@ pub struct BindSource {
     pub tls_cert: Option<PathBuf>,
     pub tls_key: Option<PathBuf>,
     pub tls_ca: Option<PathBuf>,
+    pub tls_crl: Option<PathBuf>,
 }
 
 impl BindSource {
@@ -62,7 +62,8 @@ impl BindSource {
                 port: section.port,
                 tls_cert: section.tls_cert.clone().map(PathBuf::from),
                 tls_key: section.tls_key.clone().map(PathBuf::from),
-                tls_ca: None,
+                tls_ca: section.tls_ca.clone(),
+                tls_crl: section.tls_crl.clone(),
             },
             None => Self {
                 host: "127.0.0.1".to_string(),
@@ -70,6 +71,7 @@ impl BindSource {
                 tls_cert: None,
                 tls_key: None,
                 tls_ca: None,
+                tls_crl: None,
             },
         }
     }
@@ -326,7 +328,7 @@ fn peer_certificate(
             .1
             .peer_certificates()
             .and_then(|certs| certs.first())
-            .map(|cert| crate::tenancy::PeerCertificate(Sha256::digest(cert.as_ref()).into())),
+            .map(|cert| crate::tenancy::PeerCertificate::from_verified_leaf(cert.as_ref())),
         Either::Left(_) => None,
     }
 }
