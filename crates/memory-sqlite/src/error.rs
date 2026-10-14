@@ -1,6 +1,15 @@
+use std::num::TryFromIntError;
 use std::path::PathBuf;
 
+use kernel::memory::MemoryStoreError;
 use thiserror::Error;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+#[strum(serialize_all = "snake_case")]
+pub enum TimestampField {
+    CreatedAt,
+    UpdatedAt,
+}
 
 #[derive(Debug, Error)]
 pub enum SqliteError {
@@ -28,4 +37,67 @@ pub enum SqliteError {
     UnsupportedSchema { found: i64 },
     #[error("the blocking memory database worker did not complete")]
     Join(#[source] tokio::task::JoinError),
+    #[error("{field} is not a timestamp")]
+    InvalidTimestamp {
+        field: TimestampField,
+        #[source]
+        source: chrono::ParseError,
+    },
+    #[error("memory {operation} failed")]
+    Query {
+        operation: &'static str,
+        #[source]
+        source: rusqlite::Error,
+    },
+    #[error("the {column} JSON could not be encoded")]
+    Encode {
+        column: &'static str,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("stored {column} is not a JSON object")]
+    StoredJson {
+        column: &'static str,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("stored {column} \"{value}\" is not a timestamp")]
+    StoredTimestamp {
+        column: &'static str,
+        value: String,
+        #[source]
+        source: chrono::ParseError,
+    },
+    #[error("a stored count does not fit an unsigned count")]
+    Count(#[source] TryFromIntError),
+}
+
+impl SqliteError {
+    pub(crate) fn query(operation: &'static str) -> impl FnOnce(rusqlite::Error) -> Self {
+        move |source| Self::Query { operation, source }
+    }
+}
+
+impl From<SqliteError> for MemoryStoreError {
+    fn from(error: SqliteError) -> Self {
+        match error {
+            SqliteError::InvalidTimestamp { .. } => Self::InvalidRequest {
+                message: error.to_string(),
+            },
+            SqliteError::Query { .. }
+            | SqliteError::StoredJson { .. }
+            | SqliteError::StoredTimestamp { .. }
+            | SqliteError::Count(_)
+            | SqliteError::Encode { .. } => Self::Query {
+                message: error.to_string(),
+                source: Box::new(error),
+            },
+            SqliteError::Open { .. }
+            | SqliteError::NotInitialised { .. }
+            | SqliteError::SchemaBehind { .. }
+            | SqliteError::Pragma(_)
+            | SqliteError::UnsupportedSchema { .. }
+            | SqliteError::Join(_) => Self::Unavailable(Box::new(error)),
+        }
+    }
 }

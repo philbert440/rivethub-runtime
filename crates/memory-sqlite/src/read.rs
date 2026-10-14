@@ -1,0 +1,96 @@
+use chrono::DateTime;
+use chrono::Local;
+use chrono::Utc;
+use kernel::memory::BrowseFilter;
+use kernel::memory_core::TimeRange;
+use kernel::memory_core::resolve_window;
+use rusqlite::OptionalExtension as _;
+use rusqlite::params;
+use wire::gateway::memory::MemoryBrowseOrder;
+use wire::memory::MemoryEntry;
+
+use crate::SqliteStore;
+use crate::error::SqliteError;
+use crate::message::ENTRY_COLUMNS;
+use crate::message::EntryRow;
+use crate::time;
+
+const BROWSE_CONDITIONS: &str = "WHERE (?1 OR m.role <> 'tool')
+   AND (?2 IS NULL OR m.conversation_id = ?2)
+   AND (?3 IS NULL OR m.agent = ?3)
+   AND (?4 IS NULL OR m.role = ?4)
+   AND (?5 IS NULL OR m.tool_name = ?5)
+   AND (?6 IS NULL OR m.conversation_id IN (
+         SELECT entity_id FROM ros_tags
+          WHERE entity_type = 'conversation' AND state = 'accepted'
+            AND key = ?6 AND value = ?7))
+   AND (?8 IS NULL OR m.created_at >= ?8)
+   AND (?9 IS NULL OR m.created_at < ?9)";
+
+impl SqliteStore {
+    pub async fn browse_at(
+        &self,
+        filter: BrowseFilter,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<MemoryEntry>, SqliteError> {
+        let bounds = match (filter.since, filter.before, filter.window) {
+            (None, None, Some(window)) => resolve_window(window, now, &Local),
+            (since, before, _) => TimeRange { since, before },
+        };
+        let direction = match filter.order {
+            MemoryBrowseOrder::Asc => "ASC",
+            MemoryBrowseOrder::Desc => "DESC",
+        };
+        let sql = format!(
+            "SELECT {ENTRY_COLUMNS} FROM ros_messages m
+               JOIN ros_conversations c ON c.id = m.conversation_id
+             {BROWSE_CONDITIONS}
+             ORDER BY m.created_at {direction}, m.rowid ASC
+             LIMIT ?10"
+        );
+        self.with_conn(move |conn| {
+            let mut statement = conn.prepare(&sql).map_err(SqliteError::query("browse"))?;
+            let rows = statement
+                .query_map(
+                    params![
+                        filter.include_tools,
+                        filter.conversation_id.map(|id| id.to_string()),
+                        filter.agent,
+                        filter.role.map(|role| role.to_string()),
+                        filter.tool_name,
+                        filter.tag.as_ref().map(|tag| tag.key.as_str()),
+                        filter.tag.as_ref().map(|tag| tag.value.as_str()),
+                        bounds.since.map(time::stamp),
+                        bounds.before.map(time::stamp),
+                        filter.limit.get(),
+                    ],
+                    EntryRow::read,
+                )
+                .map_err(SqliteError::query("browse"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(SqliteError::query("browse"))?;
+            rows.into_iter().map(MemoryEntry::try_from).collect()
+        })
+        .await
+    }
+
+    pub async fn get_full(&self, id: &str) -> Result<Option<MemoryEntry>, SqliteError> {
+        let id = id.to_owned();
+        self.with_conn(move |conn| {
+            conn.query_row(
+                &format!(
+                    "SELECT {ENTRY_COLUMNS} FROM ros_messages m
+                       JOIN ros_conversations c ON c.id = m.conversation_id
+                      WHERE m.id = ?1"
+                ),
+                [&id],
+                EntryRow::read,
+            )
+            .optional()
+            .map_err(SqliteError::query("get full"))?
+            .map(MemoryEntry::try_from)
+            .transpose()
+        })
+        .await
+    }
+}

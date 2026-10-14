@@ -1,4 +1,12 @@
+mod append;
+pub mod capture;
+mod conversation;
 pub mod error;
+mod insert;
+mod message;
+mod read;
+mod stats;
+mod time;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -6,7 +14,9 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use rusqlite::Connection;
 
+pub use capture::MAX_CONTENT_CHARS;
 pub use error::SqliteError;
+pub use error::TimestampField;
 
 pub const SCHEMA_VERSION: i64 = 7;
 
@@ -18,6 +28,7 @@ const MEMORY_PRAGMAS: &str = "PRAGMA foreign_keys = ON;";
 #[derive(Debug)]
 pub struct SqliteStore {
     conn: Arc<Mutex<Connection>>,
+    owner: Option<String>,
 }
 
 impl SqliteStore {
@@ -38,7 +49,20 @@ impl SqliteStore {
             .map_err(SqliteError::Pragma)?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
+            owner: None,
         })
+    }
+
+    #[must_use]
+    pub fn with_owner(mut self, owner: &str) -> Self {
+        let owner = owner.trim();
+        self.owner = (!owner.is_empty()).then(|| owner.to_owned());
+        self
+    }
+
+    #[must_use]
+    pub fn owner(&self) -> Option<&str> {
+        self.owner.as_deref()
     }
 
     pub async fn with_conn<T, F>(&self, f: F) -> Result<T, SqliteError>
@@ -97,6 +121,7 @@ impl SqliteStore {
         migrate::sqlite_connection(&mut conn, chrono::Utc::now())?;
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
+            owner: None,
         })
     }
 }

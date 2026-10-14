@@ -1,0 +1,132 @@
+use chrono::DateTime;
+use chrono::Utc;
+use rusqlite::Transaction;
+use rusqlite::params;
+use uuid::Uuid;
+use wire::memory::MemoryEntry;
+
+use crate::SqliteStore;
+use crate::capture::encode;
+use crate::conversation::ConversationKey;
+use crate::conversation::NewConversation;
+use crate::error::SqliteError;
+use crate::message::NewMessage;
+use crate::time;
+use crate::time::Stamp;
+
+const HEARTBEAT_PREFIX: &str = "heartbeat:";
+const TASK_PREFIX: &str = "task:";
+
+impl SqliteStore {
+    pub async fn append_entries(
+        &self,
+        entries: Vec<MemoryEntry>,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<String>, SqliteError> {
+        let owner = self.owner.clone();
+        self.with_conn(move |conn| {
+            let tx = conn
+                .transaction()
+                .map_err(SqliteError::query("append begin"))?;
+            let ids = entries
+                .iter()
+                .map(|entry| append_one(&tx, entry, owner.as_deref(), now))
+                .collect::<Result<Vec<_>, _>>()?;
+            tx.commit().map_err(SqliteError::query("append commit"))?;
+            Ok(ids)
+        })
+        .await
+    }
+}
+
+fn append_one(
+    tx: &Transaction<'_>,
+    entry: &MemoryEntry,
+    owner: Option<&str>,
+    now: DateTime<Utc>,
+) -> Result<String, SqliteError> {
+    let key = ConversationKey {
+        session_key: entry.session_id.clone(),
+        agent: entry.agent.clone(),
+    };
+    let task_id = task_id(entry);
+    let conversation = match key.find(tx)? {
+        Some(found) => {
+            tx.execute(
+                "UPDATE ros_conversations
+                    SET updated_at = ?2,
+                        task_id = coalesce(task_id, ?3),
+                        owner_user_id = coalesce(owner_user_id, ?4)
+                  WHERE id = ?1",
+                params![
+                    found.id,
+                    time::stamp(now.max(found.updated_at)),
+                    task_id,
+                    owner
+                ],
+            )
+            .map_err(SqliteError::query("conversation update"))?;
+            found
+        }
+        None => NewConversation {
+            key: &key,
+            channel: Some(&entry.channel),
+            title: Some(&title(entry)),
+            settings: None,
+            task_id: task_id.as_deref(),
+            owner,
+            created_at: now,
+            updated_at: now,
+        }
+        .insert(tx)?,
+    };
+    let tool_args = entry
+        .tool_args
+        .as_ref()
+        .map(|args| encode(args, "tool_args"))
+        .transpose()?;
+    let metadata = entry
+        .metadata
+        .as_ref()
+        .map(|metadata| encode(metadata, "metadata"))
+        .transpose()?;
+    let message = NewMessage {
+        conversation_id: &conversation.id,
+        agent: &entry.agent,
+        channel: &entry.channel,
+        role: entry.role,
+        content: &entry.content,
+        tool_name: entry.tool_name.as_deref(),
+        tool_args: tool_args.as_deref(),
+        tool_result: entry.tool_result.as_deref(),
+        metadata: metadata.as_deref(),
+        created_at: Stamp::from(entry.created_at).at(now),
+        owner,
+    };
+    match &entry.id {
+        Some(id) => message.insert_as(tx, id.clone()),
+        None => message.insert(tx),
+    }
+}
+
+fn title(entry: &MemoryEntry) -> String {
+    if entry.session_id.starts_with(HEARTBEAT_PREFIX) {
+        format!("Heartbeat {}", entry.agent)
+    } else {
+        format!("Session {}", entry.session_id)
+    }
+}
+
+fn task_id(entry: &MemoryEntry) -> Option<String> {
+    let from_key = entry.session_id.strip_prefix(TASK_PREFIX);
+    let from_metadata = entry
+        .metadata
+        .as_ref()
+        .and_then(|metadata| metadata.get("taskId"))
+        .and_then(|value| value.as_str());
+    [from_key, from_metadata]
+        .into_iter()
+        .flatten()
+        .find(|candidate| Uuid::parse_str(candidate).is_ok())
+        .map(str::to_owned)
+}
