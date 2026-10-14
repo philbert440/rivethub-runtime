@@ -283,7 +283,7 @@ fn claim_one(
         return Ok(None);
     }
     let tx = conn
-        .transaction()
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
         .map_err(SqliteError::query("job claim begin"))?;
     let Some(row) = select_due(&tx, tasks, now)? else {
         return Ok(None);
