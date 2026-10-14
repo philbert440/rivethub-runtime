@@ -371,6 +371,21 @@ exception (the lone-surrogate escape handling at capture ingest) is the named fu
 `wire::json::replace_lone_surrogates`, and the check exempts `crates/wire/` by path.
 Check: xtask `JSONBYTES`; existing hits live in `xtask/baseline.toml` (see BASELINE).
 
+## PORTS
+Anti-pattern: a service or adapter declares a public trait for a store or external boundary. Pattern: ports live in
+kernel, adapters implement them, and the composition root injects them. Internal seams use restricted visibility;
+a sealed extension trait needs a trait-local `#[expect(..., reason = "PORTS: ...")]` explaining why it is not a port.
+Check: xtask `PORTS` parses Rust with syn and flags `pub trait` declarations in gateway, agent-loop, workers, tasks,
+mcp, capture, providers, harness-acp, terminal, memory-postgres, memory-sqlite and pki, including nested modules.
+Restricted traits and traits with a direct outer expectation whose reason cites the exact `PORTS` id are exempt;
+module-level and conditional expectations do not waive declarations. Existing ports are counted in
+`xtask/baseline.toml` by `cargo xtask baseline --write`; new occurrences fail and stale entries must be removed.
+Services never touch databases directly: cargo-deny restricts `sqlx` and `rusqlite` to memory-postgres, memory-sqlite,
+pki (CA state), migrate, dev-only testkit, and composition crates rivethub and cli through `deny.toml` wrappers.
+The third-party SQLx vector codec pgvector is an additional sqlx wrapper, restricted in turn to memory-postgres;
+services cannot bypass the database ban through it.
+The PORTS metadata check rejects normal and build dependencies on testkit, including renamed and target-specific edges.
+
 ## BASELINE
 Anti-pattern: a scan whose existing hits are waived wholesale (a free allow-list) or whose history is rewritten (line
 numbers that churn, entries re-added after a fix). Pattern: `xtask/baseline.toml` holds one entry per existing hit — check

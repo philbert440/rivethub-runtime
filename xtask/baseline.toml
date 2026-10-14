@@ -249,3 +249,9 @@ check = "FALLBACK"
 file = "crates/testkit/src/ws.rs"
 text = "ok"
 count = 6
+
+[[entry]]
+check = "PORTS"
+file = "crates/capture/src/writer.rs"
+text = "pub trait CaptureTransport"
+count = 1

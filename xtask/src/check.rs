@@ -198,6 +198,7 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
         "UTF16",
         "JSMODEL",
         "JSONBYTES",
+        "PORTS",
     ] {
         let hits = ast_hits
             .iter()

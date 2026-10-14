@@ -44,7 +44,10 @@ impl Baseline {
     }
 
     pub fn known_check(&self, check: &str) -> bool {
-        matches!(check, "FALLBACK" | "JSMODEL" | "JSONBYTES" | "UTF16")
+        matches!(
+            check,
+            "FALLBACK" | "JSMODEL" | "JSONBYTES" | "UTF16" | "PORTS"
+        )
     }
 
     fn count(&self, check: &str, file: &str, text: &str) -> usize {

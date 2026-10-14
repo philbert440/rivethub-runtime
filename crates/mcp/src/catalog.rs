@@ -2,13 +2,13 @@ use crate::{memory, tags};
 use rmcp::model::{Tool, ToolAnnotations};
 use schemars::{JsonSchema, Schema, generate::SchemaSettings};
 
-pub trait ToolInput: JsonSchema {
+pub(crate) trait ToolInput: JsonSchema {
     const NAME: &'static str;
     const DESCRIPTION: &'static str;
     fn annotations() -> ToolAnnotations;
 }
 
-pub fn definition<T: ToolInput>() -> Result<Tool, serde_json::Error> {
+fn definition<T: ToolInput>() -> Result<Tool, serde_json::Error> {
     let schema = SchemaSettings::draft2020_12()
         .with(|settings| settings.inline_subschemas = true)
         .with_transform(recorded_schema_metadata)

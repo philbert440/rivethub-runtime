@@ -53,6 +53,7 @@ pub fn checks() -> &'static [&'static str] {
         "NAMING",
         "PATHCONTAIN",
         "PATTERNS",
+        "PORTS",
         "PRIVILEGE",
         "PRIVACY",
         "REASON",

@@ -62,6 +62,11 @@ impl<'a> Scanner<'a> {
 }
 
 impl<'ast> Visit<'ast> for Scanner<'_> {
+    fn visit_item_trait(&mut self, item: &'ast syn::ItemTrait) {
+        crate::ports::inspect(self.rel, item, &mut self.hits);
+        visit::visit_item_trait(self, item);
+    }
+
     fn visit_ident(&mut self, ident: &'ast syn::Ident) {
         let name = ident.to_string();
         let name = name.strip_prefix("r#").unwrap_or(&name);

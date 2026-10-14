@@ -128,6 +128,7 @@ pub fn manifests(root: &Path, findings: &mut Vec<String>) -> Result<Vec<String>>
     }
     binary_dependency(&metadata, findings);
     migrations_leave_the_runtime(&metadata, findings);
+    crate::ports::testkit_dependencies(&metadata, findings);
     Ok(names)
 }
 
