@@ -42,3 +42,14 @@ user unit `~/.config/systemd/user/rivethub.service`.
 The unit body is generated from one typed struct and serialised in systemd's format. Tests check the generated unit,
 the root/user path choice and the refusal to overwrite, and use a fake `systemctl`/`journalctl` on PATH for the verbs.
 They never touch the real systemd.
+
+## `rh start`, `rh stop`, `rh local` (third slice)
+`rh start` is the node's supervisor. It runs in the foreground and is what the systemd unit's `ExecStart` calls.
+
+| Command | Behaviour | Exit |
+|---|---|---|
+| `rh start [-c/--config <path>]` | Resolves the config like every other command, then refuses to run if another node already owns the state directory (`rh` state lock held, or a live pid in the pid file), with the same refusal `config` uses for a live `~/.rivetos`. Writes its pid to the pid file under the state directory and holds the state lock. Spawns one child per enabled service root, `rh gateway`, `rh worker --role <role>` for each configured worker role and `rh mcp` when the MCP transports are enabled, as subcommands of the same binary, passing `--config`. Restarts a child that exits unexpectedly with exponential backoff (1 s doubling to 60 s, reset after 60 s of uptime), logging each restart. On SIGTERM or SIGINT it forwards SIGTERM to every child, waits up to 10 s for them, sends SIGKILL to any that remain, removes the pid file and exits. | 0 after a signalled shutdown; 1 if no config is found (`No config found. Run \`rh config init\` or use --config <path>`) or the state directory is owned by another node |
+| `rh stop` | as in the first slice: SIGTERM to the supervisor's pid, which shuts its children down | as above |
+| `rh local [--port <n>] [--no-lan] [--yes]` | Standalone node on the SQLite store, in ONE process, with no Postgres and no child processes. If no config exists, it writes one (memory backend sqlite under the state directory, the gateway on `--port`, default 5174, bound to 127.0.0.1 with `--no-lan` and to 0.0.0.0 otherwise) and runs `rivethub-migrate sqlite` once through the migrate library. It then composes the gateway, the workers and the mcp sidecar in-process under one CancellationToken over the SQLite store, until SIGTERM or SIGINT. A bad port is `--port must be an integer 1–65535`, an unknown flag is `unknown flag: <flag>`, and both exit 1. | 0 after a signalled shutdown; 1 on a config or migrate error |
+
+Tests drive `rh start` with fake roots: a test binary that sleeps, crashes or ignores SIGTERM. They check restart and backoff with tokio's paused clock, the forwarded shutdown, the SIGKILL after the grace period, pid-file cleanup and the ownership refusal. `rh local` is tested on a temporary state directory: config generation, the SQLite migration and a `/healthz` answer.
