@@ -1,0 +1,25 @@
+# `rh` command-line contract (B9), first slice
+
+The behaviour operators, scripts and systemd units rely on: command names, flags, exit codes, and the outputs a script
+reads. The wording of human-oriented text is RivetHub's own. Names follow the rename: binary `rh` (with `rivetos` as an
+alias), state in `~/.rivethub`, environment `RIVETHUB_*` (the `RIVETOS_*` aliases are read by `config`).
+
+## Dispatch
+- `rh` with no arguments, `rh help`, `rh --help` and `rh -h` print the command list and exit 0.
+- An unknown command prints `Unknown command: <name>` and the command list to stderr, then exits 1.
+- A failed command prints `Error: <message>` to stderr and exits 1, unless the command defines another code below.
+- `--help` after a command is that command's help (exit 0).
+
+## Commands in this slice
+| Command | Behaviour | Exit |
+|---|---|---|
+| `rh version` | prints `RivetHub v<crate version>`, plus ` (<short git sha>)` when built from a git checkout | 0 |
+| `rh config path` | prints the resolved config path (the order `config` already defines) | 0 found; 1 none, with `No config found. Run: rh config init` |
+| `rh config show` | a summary of the resolved config: agents (name → provider), providers (name → model), the default agent, the workspace path. No secrets are printed | 0; 1 on a parse error, with `Failed to parse config: <message>` |
+| `rh config validate [path]` | validates the file at `path` (default: the resolved path) with `config`'s validation and prints its findings in `config`'s format | 0 valid; 1 unreadable, unparsable or invalid |
+| `rh doctor [--json]` | runs checks and reports each as pass, warn or fail: config valid; the state directory exists and is writable; disk space under the state directory (fail below 256 MB free, warn below 1 GB); the memory backend is reachable and its schema version is current (through the store's schema verification, never running migrations); `herdr` on PATH when the terminal is enabled. `--json` prints `{version, timestamp, checks:[{name, status, message}], summary:{pass, warn, fail}}` | 1 if any check fails, else 0 |
+| `rh status` | reads the gateway's `/healthz` on the configured host and port (3 s timeout) and prints running or not running with the version and uptime when available; falls back to the pid file under the state directory | always 0 |
+| `rh stop` | sends SIGTERM to the pid in the pid file under the state directory and prints `Sent SIGTERM to PID <pid>`. With no pid file: `No running instance found (no PID file).` If the process is gone: `PID file exists but process is not running.` | 0 for those three; 1 on any other error |
+
+Out of this slice (later slices): `start`, `service`, `update --mesh`, `local`, `init`, `ca`, `cert`, `mesh`, `pair`,
+`user`, `memory`, `logs`, `test`, `agent`, `model`, `keys`, `gateway token`.
