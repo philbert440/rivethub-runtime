@@ -13,6 +13,26 @@ const STORE_QUERY_FAILED: &str = "memory query failed";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
+    #[error("body must be a JSON object")]
+    BodyMustBeObject,
+    #[error(transparent)]
+    Transcript(#[from] kernel::transcript::TranscriptReaderError),
+    #[error("unknown command: {0}")]
+    UnknownCommand(String),
+    #[error(transparent)]
+    Terminal(#[from] kernel::terminal::TerminalMuxError),
+    #[error(transparent)]
+    Harness(#[from] kernel::harness::HarnessAdapterError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Task(#[from] tokio::task::JoinError),
+    #[error("session is owned by another user")]
+    SessionForbidden,
+    #[error("{0}")]
+    Conflict(String),
+    #[error("{0}")]
+    Unavailable(String),
     #[error("{0}")]
     BadRequest(String),
     #[error("{0}")]
@@ -38,12 +58,44 @@ pub fn invalid_json() -> ApiError {
 }
 
 pub fn body_must_be_object() -> ApiError {
-    ApiError::BadRequest(BODY_MUST_BE_OBJECT.to_owned())
+    ApiError::BodyMustBeObject
 }
 
 impl ApiError {
     fn status_and_body(self) -> (StatusCode, GatewayError) {
         match self {
+            Self::BodyMustBeObject => (
+                StatusCode::BAD_REQUEST,
+                GatewayError::new(BODY_MUST_BE_OBJECT),
+            ),
+            Self::Transcript(error) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                GatewayError::new(error.to_string()),
+            ),
+            Self::UnknownCommand(command) => (
+                StatusCode::NOT_FOUND,
+                GatewayError::new(format!("unknown command: {command}")),
+            ),
+            Self::Terminal(error) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                GatewayError::new(error.to_string()),
+            ),
+            Self::Harness(error) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                GatewayError::new(error.to_string()),
+            ),
+            Self::Io(_) | Self::Task(_) | Self::Serialize(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                GatewayError::new(INTERNAL_ERROR),
+            ),
+            Self::SessionForbidden => (
+                StatusCode::FORBIDDEN,
+                GatewayError::new("session is owned by another user"),
+            ),
+            Self::Conflict(message) => (StatusCode::CONFLICT, GatewayError::new(message)),
+            Self::Unavailable(message) => {
+                (StatusCode::SERVICE_UNAVAILABLE, GatewayError::new(message))
+            }
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, GatewayError::new(message)),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, GatewayError::new(message)),
             Self::MethodNotAllowed => (
@@ -60,10 +112,6 @@ impl ApiError {
             ),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, GatewayError::new("unauthorized")),
             Self::ForbiddenOrigin => (StatusCode::FORBIDDEN, GatewayError::new("forbidden origin")),
-            Self::Serialize(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                GatewayError::new(INTERNAL_ERROR),
-            ),
             Self::Store(MemoryStoreError::InvalidRequest { message }) => {
                 (StatusCode::BAD_REQUEST, GatewayError::new(message))
             }

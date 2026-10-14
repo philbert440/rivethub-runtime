@@ -36,6 +36,7 @@ use crate::permissions::PermissionRegistry;
 
 #[derive(Debug)]
 struct SessionEntry {
+    reaped: Option<tokio::sync::oneshot::Receiver<Result<(), std::io::Error>>>,
     commands: mpsc::Sender<SessionCommand>,
     acp_session: acp::SessionId,
     permissions: Arc<PermissionRegistry>,
@@ -104,6 +105,7 @@ impl AcpHarnessAdapter {
         sessions.insert(
             session,
             SessionEntry {
+                reaped: Some(agent.reaped),
                 commands: agent.commands,
                 acp_session: agent.acp_session,
                 permissions: agent.permissions,
@@ -159,6 +161,28 @@ impl AcpHarnessAdapter {
 
 #[async_trait]
 impl HarnessAdapter for AcpHarnessAdapter {
+    async fn release(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
+        let mut entry = self
+            .sessions
+            .lock()
+            .remove(session)
+            .ok_or_else(|| HarnessAdapterError::UnknownSession(session.clone()))?;
+        entry.shutdown.cancel();
+        let reaped = entry
+            .reaped
+            .take()
+            .ok_or_else(|| HarnessAdapterError::UnknownSession(session.clone()))?;
+        reaped
+            .await
+            .map_err(|source| HarnessAdapterError::Failed {
+                message: "child reaper closed".into(),
+                source: Box::new(source),
+            })?
+            .map_err(|source| HarnessAdapterError::Failed {
+                message: "child release failed".into(),
+                source: Box::new(source),
+            })
+    }
     async fn new_session(&self, spec: SessionSpec) -> Result<SessionId, HarnessAdapterError> {
         Self::requested_session(&spec)?;
         let command = self.launch_command(spec.harness)?;

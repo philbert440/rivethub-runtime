@@ -3,6 +3,9 @@ pub mod error;
 pub mod extract;
 pub mod routes;
 pub mod server;
+pub mod sessions;
+pub mod tenancy;
+pub mod term;
 pub mod tls;
 
 use std::sync::Arc;
@@ -51,6 +54,10 @@ pub struct Gateway {
     embed_provider: bool,
     policy: auth::OriginPolicy,
     denials: DenialLog,
+    tenancy: tenancy::Tenancy,
+    sessions: Arc<sessions::SessionRegistry>,
+    terminal: Option<Arc<term::TerminalService>>,
+    transcript: Option<Arc<dyn kernel::transcript::TranscriptReader>>,
 }
 
 impl Gateway {
@@ -66,6 +73,12 @@ impl Gateway {
             embed_provider: false,
             policy,
             denials: DenialLog::default(),
+            tenancy: tenancy::Tenancy::default(),
+            sessions: Arc::new(sessions::SessionRegistry::new(
+                std::time::Duration::from_secs(300),
+            )),
+            terminal: None,
+            transcript: None,
         }
     }
 
@@ -73,6 +86,45 @@ impl Gateway {
     pub fn with_embed_provider(mut self) -> Self {
         self.embed_provider = true;
         self
+    }
+
+    #[must_use]
+    pub fn with_tenancy(mut self, tenancy: tenancy::Tenancy) -> Self {
+        self.tenancy = tenancy;
+        self
+    }
+
+    #[must_use]
+    pub fn with_sessions(mut self, sessions: Arc<sessions::SessionRegistry>) -> Self {
+        self.sessions = sessions;
+        self
+    }
+
+    #[must_use]
+    pub fn with_terminal(mut self, terminal: Arc<term::TerminalService>) -> Self {
+        self.sessions = terminal.registry.clone();
+        self.terminal = Some(terminal);
+        self
+    }
+
+    pub fn sessions(&self) -> &Arc<sessions::SessionRegistry> {
+        &self.sessions
+    }
+
+    #[must_use]
+    pub fn with_transcript_reader(
+        mut self,
+        reader: Arc<dyn kernel::transcript::TranscriptReader>,
+    ) -> Self {
+        self.transcript = Some(reader);
+        self
+    }
+
+    pub async fn close(&self) {
+        if let Some(terminal) = &self.terminal {
+            terminal.close().await;
+        }
+        self.sessions.close().await;
     }
 
     #[must_use]
@@ -113,6 +165,8 @@ impl Gateway {
                     )),
             )
             .nest("/api/memory", routes::memory::router())
+            .merge(routes::sessions::router())
+            .merge(routes::terminal::router())
             .fallback(routes::not_found)
             .layer(middleware::from_fn_with_state(guard_state, auth::guard))
             .with_state(Arc::clone(self))

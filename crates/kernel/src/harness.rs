@@ -10,6 +10,8 @@ use wire::stream::ThinkingLevel;
 
 #[derive(Debug, Error)]
 pub enum HarnessAdapterError {
+    #[error("harness does not support releasing session ownership")]
+    ReleaseUnsupported,
     #[error("harness rejected the session id: {0}")]
     InvalidSession(SessionId),
     #[error("harness session is unknown: {0}")]
@@ -114,6 +116,9 @@ pub enum SessionOption {
 
 #[async_trait]
 pub trait HarnessAdapter: Send + Sync {
+    async fn release(&self, _session: &SessionId) -> Result<(), HarnessAdapterError> {
+        Err(HarnessAdapterError::ReleaseUnsupported)
+    }
     async fn new_session(&self, spec: SessionSpec) -> Result<SessionId, HarnessAdapterError>;
 
     async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError>;

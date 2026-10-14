@@ -55,29 +55,33 @@ pub(crate) fn watch_child(
     exited: Arc<AtomicBool>,
     events: mpsc::Sender<SessionEvent>,
     shutdown: CancellationToken,
-) {
+) -> tokio::sync::oneshot::Receiver<Result<(), std::io::Error>> {
+    let (done, reaped) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {
-        let wait = child.wait();
-        tokio::pin!(wait);
-        tokio::select! {
-            () = shutdown.cancelled() => {}
-            status = &mut wait => {
-                let code = reap(status);
+        let outcome = tokio::select! {
+            () = shutdown.cancelled() => child.kill().await,
+            status = child.wait() => match status {
+                Ok(status) => {
+                let code = status.code();
                 exited.store(true, Ordering::Release);
-                if events
-                    .send(SessionEvent::Exited { code })
-                    .await
-                    .is_err()
-                {
-                    tracing::debug!("session event stream closed before the agent exit");
+                tokio::select! {
+                    () = shutdown.cancelled() => tracing::trace!("agent exited during release"),
+                    result = events.send(SessionEvent::Exited { code }) => {
+                        if result.is_err() {
+                            tracing::debug!("session event stream closed before the agent exit");
+                        }
+                    }
                 }
-            }
+                Ok(())
+                }
+                Err(error) => Err(error),
+            },
+        };
+        if done.send(outcome).is_err() {
+            tracing::trace!("harness child reaped without a release waiter");
         }
     });
-}
-
-fn reap(status: Result<std::process::ExitStatus, std::io::Error>) -> Option<i32> {
-    status.ok().and_then(|status| status.code())
+    reaped
 }
 
 pub(crate) async fn pump_stderr(stderr: tokio::process::ChildStderr) {

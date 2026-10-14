@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use kernel::terminal::TermSize;
 use kernel::terminal::TerminalId;
@@ -16,8 +15,6 @@ use crate::manager::TerminalRecord;
 use crate::manager::TerminalState;
 use crate::manager::registry::Runtime;
 use crate::pty;
-
-const DETACH_POLL: Duration = Duration::from_millis(1_000);
 
 impl TerminalManager {
     pub fn attach_stream(&self, id: &TerminalId) -> Result<AttachStream, Error> {
@@ -53,7 +50,7 @@ impl TerminalManager {
         live.viewers += 1;
         drop(state);
         let (out_tx, out_rx) = mpsc::channel(CHUNK_QUEUE);
-        self.spawn_forwarder(id.clone(), source, out_tx, replay.clone());
+        self.spawn_forwarder(id.clone(), source, out_tx);
         Ok(AttachStream {
             record,
             replay,
@@ -138,11 +135,10 @@ impl TerminalManager {
         id: TerminalId,
         mut source: broadcast::Receiver<Arc<[u8]>>,
         out: mpsc::Sender<Vec<u8>>,
-        replay: Vec<u8>,
     ) {
         let detach_tx = self.inner.detach_tx.clone();
         tokio::spawn(async move {
-            let mut alive = out.send(replay).await.is_ok();
+            let mut alive = true;
             while alive {
                 tokio::select! {
                     chunk = source.recv() => match chunk {
@@ -152,11 +148,7 @@ impl TerminalManager {
                             | broadcast::error::RecvError::Lagged(_),
                         ) => break,
                     },
-                    () = tokio::time::sleep(DETACH_POLL) => {
-                        if out.is_closed() {
-                            break;
-                        }
-                    }
+                    () = out.closed() => break,
                 }
             }
             if detach_tx.send(id.clone()).is_err() {

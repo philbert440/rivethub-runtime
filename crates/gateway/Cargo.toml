@@ -20,6 +20,8 @@ regex = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
 serde_urlencoded = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["net", "rt", "sync", "time"] }
@@ -32,6 +34,7 @@ uuid = { workspace = true }
 wire = { workspace = true }
 
 [dev-dependencies]
+hex = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
 libtest-mimic = { workspace = true }

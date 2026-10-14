@@ -16,6 +16,7 @@ use crate::session::SessionKey;
 use crate::settings::TerminalSettings;
 
 mod attach;
+mod port;
 mod reaper;
 mod registry;
 mod spawn;
@@ -69,6 +70,7 @@ struct Inner {
     plan: MuxPlan,
     state: Mutex<BTreeMap<TerminalId, Runtime>>,
     by_session: Mutex<BTreeMap<SessionKey, TerminalId>>,
+    port_backends: Mutex<BTreeMap<TerminalId, TerminalId>>,
     detach_tx: mpsc::UnboundedSender<TerminalId>,
     detach_rx: Mutex<Option<mpsc::UnboundedReceiver<TerminalId>>>,
 }
@@ -102,6 +104,7 @@ impl TerminalManager {
                 plan,
                 state: Mutex::new(BTreeMap::new()),
                 by_session: Mutex::new(BTreeMap::new()),
+                port_backends: Mutex::new(BTreeMap::new()),
                 detach_tx,
                 detach_rx: Mutex::new(Some(detach_rx)),
             }),
@@ -143,6 +146,41 @@ impl TerminalManager {
 
 #[async_trait::async_trait]
 impl kernel::terminal::TerminalMux for TerminalManager {
+    async fn inspect(
+        &self,
+        id: &TerminalId,
+    ) -> Result<kernel::terminal::TerminalDetails, kernel::terminal::TerminalMuxError> {
+        let record = self
+            .list()
+            .into_iter()
+            .find(|record| record.id == *id)
+            .ok_or_else(|| kernel::terminal::TerminalMuxError::UnknownTerminal(id.clone()))?;
+        port_details(&record)
+    }
+
+    async fn open(
+        &self,
+        id: &TerminalId,
+    ) -> Result<kernel::terminal::TerminalAttachment, kernel::terminal::TerminalMuxError> {
+        let stream = self.attach_stream(id)?;
+        let output = match stream.live {
+            Some(output) => output,
+            None => mpsc::channel(1).1,
+        };
+        Ok(kernel::terminal::TerminalAttachment {
+            replay: stream.replay,
+            output,
+        })
+    }
+
+    async fn wait(&self, id: &TerminalId) -> Result<i32, kernel::terminal::TerminalMuxError> {
+        let record = self.wait_exited(id).await?;
+        port_details(&record)?
+            .exit_code
+            .ok_or(kernel::terminal::TerminalMuxError::Unsupported(
+                "terminal still running",
+            ))
+    }
     async fn spawn(
         &self,
         session: &wire::session_id::SessionId,
@@ -162,7 +200,7 @@ impl kernel::terminal::TerminalMux for TerminalManager {
             size,
             entry_env: BTreeMap::new(),
         };
-        self.start(spec)
+        self.port_spawn(spec)
             .await
             .map_err(kernel::terminal::TerminalMuxError::from)
     }
@@ -198,6 +236,10 @@ impl kernel::terminal::TerminalMux for TerminalManager {
     }
 
     async fn kill(&self, id: &TerminalId) -> Result<(), kernel::terminal::TerminalMuxError> {
+        let backend = self.inner.port_backends.lock().get(id).cloned();
+        if let Some(backend) = backend {
+            Self::kill(self, &backend).await?;
+        }
         Self::kill(self, id)
             .await
             .map_err(kernel::terminal::TerminalMuxError::from)
@@ -227,6 +269,23 @@ impl kernel::terminal::TerminalMux for TerminalManager {
             })
             .collect())
     }
+}
+
+fn port_details(
+    record: &TerminalRecord,
+) -> Result<kernel::terminal::TerminalDetails, kernel::terminal::TerminalMuxError> {
+    let exit_code =
+        match record.state {
+            TerminalState::Running => None,
+            TerminalState::Exited { code } => Some(i32::try_from(code).map_err(|source| {
+                kernel::terminal::TerminalMuxError::Unavailable(Box::new(source))
+            })?),
+        };
+    Ok(kernel::terminal::TerminalDetails {
+        pid: record.pid,
+        size: record.size,
+        exit_code,
+    })
 }
 
 async fn forward_port_attach(

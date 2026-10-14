@@ -296,7 +296,7 @@ fn fake_step(method: RpcMethod, params: RequestParams, frames: &[&str]) -> FakeS
 
 fn setup_herdr_dir() -> Result<(tempfile::TempDir, std::path::PathBuf), Failed> {
     let dir = tempfile::tempdir()?;
-    let setup_dir = dir.path().join("config-home");
+    let setup_dir = dir.path().join("c");
     std::fs::create_dir_all(&setup_dir)?;
     Ok((dir, setup_dir))
 }

@@ -22,6 +22,7 @@ use hyper_util::rt::TokioIo;
 use hyper_util::rt::TokioTimer;
 use hyper_util::service::TowerToHyperService;
 use parking_lot::Mutex;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncWrite;
@@ -152,14 +153,18 @@ pub async fn serve_with(
     shutdown: CancellationToken,
     options: ServeOptions,
 ) -> Result<(), ServeError> {
-    serve_router_with(
+    let serving = serve_router_with(
         listener,
         gateway.router(tls.is_some()),
         tls,
-        shutdown,
+        shutdown.clone(),
         options,
-    )
-    .await
+    );
+    tokio::pin!(serving);
+    tokio::select! {
+        result = &mut serving => { gateway.close().await; result },
+        () = shutdown.cancelled() => { gateway.close().await; serving.await },
+    }
 }
 
 pub async fn serve_router_with(
@@ -235,12 +240,14 @@ impl Serving {
             }
             None => Either::Left(tcp),
         };
+        let peer = peer_certificate(&stream);
         let keep_alive = KeepAliveGate::new(self.options.keep_alive_idle_timeout);
         let clock = RequestClock::default();
         let socket_gone = CancellationToken::new();
         let service = TowerToHyperService::new(GatewayService {
             router: self.router,
             remote,
+            peer,
             keep_alive: keep_alive.clone(),
             clock: clock.clone(),
             request_timeout: self.options.request_timeout,
@@ -290,9 +297,24 @@ impl Serving {
 struct GatewayService {
     router: Router,
     remote: SocketAddr,
+    peer: Option<crate::tenancy::PeerCertificate>,
     keep_alive: KeepAliveGate,
     clock: RequestClock,
     request_timeout: Duration,
+}
+
+fn peer_certificate(
+    stream: &Either<TcpStream, tokio_rustls::server::TlsStream<TcpStream>>,
+) -> Option<crate::tenancy::PeerCertificate> {
+    match stream {
+        Either::Right(tls) => tls
+            .get_ref()
+            .1
+            .peer_certificates()
+            .and_then(|certs| certs.first())
+            .map(|cert| crate::tenancy::PeerCertificate(Sha256::digest(cert.as_ref()).into())),
+        Either::Left(_) => None,
+    }
 }
 
 impl tower::Service<Request<Incoming>> for GatewayService {
@@ -307,6 +329,9 @@ impl tower::Service<Request<Incoming>> for GatewayService {
     fn call(&mut self, mut request: Request<Incoming>) -> Self::Future {
         self.keep_alive.disarm();
         request.extensions_mut().insert(ConnectInfo(self.remote));
+        if let Some(peer) = &self.peer {
+            request.extensions_mut().insert(peer.clone());
+        }
         let start = self.clock.start();
         let request = request.map(|body| DeadlineBody::new(body, start, self.request_timeout));
         let routed = self.router.call(request);

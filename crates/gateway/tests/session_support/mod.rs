@@ -1,0 +1,394 @@
+#![expect(
+    unreachable_pub,
+    reason = "test fixtures are shared by integration binaries"
+)]
+#![expect(
+    dead_code,
+    reason = "integration binaries share fixtures and use different subsets"
+)]
+
+use std::collections::BTreeMap;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+
+use async_trait::async_trait;
+use gateway::tenancy::{Tenancy, UserId};
+use gateway::term::{LaunchCommand, TerminalOptions, TerminalService};
+use kernel::terminal::{
+    PtyInfo, TermSize, TerminalAttachment, TerminalDetails, TerminalId, TerminalMux,
+    TerminalMuxError,
+};
+use parking_lot::Mutex;
+use tokio::sync::{broadcast, mpsc, watch};
+use wire::harness::HarnessId;
+use wire::session_id::SessionId;
+
+pub mod harness;
+
+pub const WAIT: Duration = Duration::from_secs(5);
+
+pub fn user(name: &str) -> UserId {
+    UserId::new(name.into()).expect("test user")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Call {
+    Spawn {
+        session: SessionId,
+        argv: Vec<String>,
+        size: TermSize,
+    },
+    Input(Vec<u8>),
+    Resize(TermSize),
+    Kill,
+}
+
+#[derive(Debug)]
+struct Terminal {
+    session: SessionId,
+    size: TermSize,
+    output: broadcast::Sender<Vec<u8>>,
+    exit: watch::Sender<Option<i32>>,
+    replay: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub struct Mux {
+    terminals: Mutex<BTreeMap<TerminalId, Terminal>>,
+    pub calls: watch::Sender<Vec<Call>>,
+    pub tasks: tokio_util::task::TaskTracker,
+}
+
+impl Default for Mux {
+    fn default() -> Self {
+        Self {
+            terminals: Mutex::new(BTreeMap::new()),
+            calls: watch::channel(Vec::new()).0,
+            tasks: tokio_util::task::TaskTracker::new(),
+        }
+    }
+}
+
+impl Mux {
+    pub fn emit(&self, id: &TerminalId, bytes: Vec<u8>) {
+        let mut terminals = self.terminals.lock();
+        let terminal = terminals.get_mut(id).expect("terminal exists");
+        terminal.replay.extend_from_slice(&bytes);
+        terminal.output.send(bytes).expect("attached client");
+        drop(terminals);
+    }
+
+    pub fn exit(&self, id: &TerminalId, code: i32) {
+        self.terminals
+            .lock()
+            .get(id)
+            .expect("terminal exists")
+            .exit
+            .send_replace(Some(code));
+    }
+
+    pub async fn called(&self, predicate: impl Fn(&[Call]) -> bool) {
+        let mut calls = self.calls.subscribe();
+        tokio::time::timeout(WAIT, async {
+            loop {
+                if predicate(&calls.borrow_and_update()) {
+                    return;
+                }
+                calls.changed().await.expect("call stream");
+            }
+        })
+        .await
+        .expect("port call observed");
+    }
+}
+
+#[async_trait]
+impl TerminalMux for Mux {
+    async fn spawn(
+        &self,
+        session: &SessionId,
+        argv: Vec<String>,
+        _cwd: &Path,
+        size: TermSize,
+    ) -> Result<TerminalId, TerminalMuxError> {
+        let mut terminals = self.terminals.lock();
+        let id = TerminalId::new(format!("pty-{}", terminals.len() + 1));
+        terminals.insert(
+            id.clone(),
+            Terminal {
+                session: session.clone(),
+                size,
+                output: broadcast::channel(32).0,
+                exit: watch::channel(None).0,
+                replay: b"AcmeKit harness ready\r\nacme> ".to_vec(),
+            },
+        );
+        drop(terminals);
+        self.calls.send_modify(|calls| {
+            calls.push(Call::Spawn {
+                session: session.clone(),
+                argv,
+                size,
+            });
+        });
+        Ok(id)
+    }
+
+    async fn attach(&self, id: &TerminalId) -> Result<mpsc::Receiver<Vec<u8>>, TerminalMuxError> {
+        Ok(self.open(id).await?.output)
+    }
+
+    async fn inspect(&self, id: &TerminalId) -> Result<TerminalDetails, TerminalMuxError> {
+        let terminals = self.terminals.lock();
+        let terminal = terminals
+            .get(id)
+            .ok_or_else(|| TerminalMuxError::UnknownTerminal(id.clone()))?;
+        let details = TerminalDetails {
+            pid: Some(42),
+            size: terminal.size,
+            exit_code: *terminal.exit.borrow(),
+        };
+        drop(terminals);
+        Ok(details)
+    }
+
+    async fn open(&self, id: &TerminalId) -> Result<TerminalAttachment, TerminalMuxError> {
+        let (replay, mut output, mut exit) = {
+            let terminals = self.terminals.lock();
+            let terminal = terminals
+                .get(id)
+                .ok_or_else(|| TerminalMuxError::UnknownTerminal(id.clone()))?;
+            let subscribed = (
+                terminal.replay.clone(),
+                terminal.output.subscribe(),
+                terminal.exit.subscribe(),
+            );
+            drop(terminals);
+            subscribed
+        };
+        let (tx, rx) = mpsc::channel(32);
+        self.tasks.spawn(async move {
+            if exit.borrow().is_some() {
+                return;
+            }
+            loop {
+                tokio::select! {
+                    () = tx.closed() => break,
+                    changed = exit.changed() => { changed.expect("exit stream"); break; },
+                    data = output.recv() => {
+                        let data = data.expect("terminal output");
+                        if tx.send(data).await.is_err() { break; }
+                    }
+                }
+            }
+        });
+        Ok(TerminalAttachment { replay, output: rx })
+    }
+
+    async fn wait(&self, id: &TerminalId) -> Result<i32, TerminalMuxError> {
+        let mut exit = self
+            .terminals
+            .lock()
+            .get(id)
+            .ok_or_else(|| TerminalMuxError::UnknownTerminal(id.clone()))?
+            .exit
+            .subscribe();
+        loop {
+            let code = *exit.borrow_and_update();
+            if let Some(code) = code {
+                return Ok(code);
+            }
+            exit.changed()
+                .await
+                .map_err(|error| TerminalMuxError::Unavailable(Box::new(error)))?;
+        }
+    }
+
+    async fn input(&self, _id: &TerminalId, bytes: Vec<u8>) -> Result<(), TerminalMuxError> {
+        self.calls
+            .send_modify(|calls| calls.push(Call::Input(bytes)));
+        Ok(())
+    }
+
+    async fn resize(&self, id: &TerminalId, size: TermSize) -> Result<(), TerminalMuxError> {
+        self.terminals
+            .lock()
+            .get_mut(id)
+            .ok_or_else(|| TerminalMuxError::UnknownTerminal(id.clone()))?
+            .size = size;
+        self.calls
+            .send_modify(|calls| calls.push(Call::Resize(size)));
+        Ok(())
+    }
+
+    async fn kill(&self, id: &TerminalId) -> Result<(), TerminalMuxError> {
+        self.exit(id, 0);
+        self.calls.send_modify(|calls| calls.push(Call::Kill));
+        Ok(())
+    }
+
+    async fn list(&self) -> Result<Vec<PtyInfo>, TerminalMuxError> {
+        Ok(self
+            .terminals
+            .lock()
+            .iter()
+            .map(|(id, terminal)| PtyInfo {
+                id: id.clone(),
+                session: terminal.session.clone(),
+                running: terminal.exit.borrow().is_none(),
+            })
+            .collect())
+    }
+}
+
+pub struct Fixture {
+    pub gateway: Arc<gateway::Gateway>,
+    pub service: Arc<TerminalService>,
+    pub registry: Arc<gateway::sessions::SessionRegistry>,
+    pub mux: Arc<Mux>,
+    pub directory: tempfile::TempDir,
+}
+
+impl Fixture {
+    pub async fn new() -> Self {
+        Self::with_harness(None).await
+    }
+
+    pub async fn with_harness(harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>) -> Self {
+        let directory = tempfile::tempdir().expect("temporary terminal directory");
+        let root = directory.path().to_path_buf();
+        let registry = Arc::new(gateway::sessions::SessionRegistry::new(
+            Duration::from_secs(1),
+        ));
+        let mux = Arc::new(Mux::default());
+        let commands = [
+            ("echo", "Acme Echo", true, None),
+            ("shell", "Acme Shell", false, None),
+            ("claude", "Claude Stub", true, Some(HarnessId::ClaudeCode)),
+            ("silent", "Acme Silent", true, None),
+            ("oneshot", "Acme Oneshot", true, None),
+            ("envdump", "Acme Env", false, None),
+            ("missing", "Missing Binary", false, None),
+        ]
+        .into_iter()
+        .map(|(id, label, session, harness)| LaunchCommand {
+            id: id.into(),
+            label: label.into(),
+            argv: vec![id.into()],
+            cwd: root.clone(),
+            harness,
+            session,
+        })
+        .collect();
+        let service = TerminalService::new(
+            mux.clone(),
+            registry.clone(),
+            TerminalOptions {
+                root,
+                default: "echo".into(),
+                commands,
+                max_ptys: 64,
+            },
+        )
+        .await
+        .expect("terminal service");
+        let service = Arc::new(match harness {
+            Some(harness) => service.with_harness(harness),
+            None => service,
+        });
+        let tenancy = Tenancy::local(user("owner"))
+            .with_token("alice-test-token", user("alice"))
+            .expect("token");
+        let gateway = Arc::new(
+            gateway::Gateway::new(
+                Arc::new(testkit::FakeMemoryStore::default()),
+                gateway::Settings {
+                    hostname: "gold-host".into(),
+                    node: "golden-node".into(),
+                    allowed_hosts: vec![],
+                    allowed_origins: vec![],
+                },
+            )
+            .with_tenancy(tenancy)
+            .with_sessions(registry.clone())
+            .with_terminal(service.clone()),
+        );
+        Self {
+            gateway,
+            service,
+            registry,
+            mux,
+            directory,
+        }
+    }
+
+    pub async fn serve(
+        &self,
+    ) -> (
+        std::net::SocketAddr,
+        tokio_util::sync::CancellationToken,
+        tokio::task::JoinHandle<Result<(), gateway::server::ServeError>>,
+    ) {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("listener");
+        let address = listener.local_addr().expect("address");
+        let stop = tokio_util::sync::CancellationToken::new();
+        let task = tokio::spawn(gateway::server::serve(
+            listener,
+            self.gateway.clone(),
+            None,
+            stop.clone(),
+        ));
+        (address, stop, task)
+    }
+}
+
+pub async fn http(
+    gateway: &Arc<gateway::Gateway>,
+    method: &str,
+    path: &str,
+    body: impl Into<Vec<u8>>,
+    token: Option<&str>,
+) -> (u16, Vec<u8>) {
+    use tower::ServiceExt as _;
+    let mut request = axum::http::Request::builder()
+        .method(method)
+        .uri(path)
+        .header("host", "localhost")
+        .header("content-type", "application/json");
+    if let Some(token) = token {
+        request = request.header("authorization", format!("Bearer {token}"));
+    }
+    let mut request = request
+        .body(axum::body::Body::from(body.into()))
+        .expect("request");
+    request.extensions_mut().insert(axum::extract::ConnectInfo(
+        "127.0.0.1:1234"
+            .parse::<std::net::SocketAddr>()
+            .expect("address"),
+    ));
+    let response = gateway
+        .router(false)
+        .oneshot(request)
+        .await
+        .expect("response");
+    let status = response.status().as_u16();
+    let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .expect("body");
+    (status, bytes.to_vec())
+}
+
+pub type Socket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+pub async fn frame(socket: &mut Socket) -> tokio_tungstenite::tungstenite::Message {
+    use futures::StreamExt as _;
+    tokio::time::timeout(WAIT, socket.next())
+        .await
+        .expect("frame timeout")
+        .expect("open stream")
+        .expect("frame")
+}

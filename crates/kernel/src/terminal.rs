@@ -9,6 +9,8 @@ use wire::session_id::SessionId;
 
 #[derive(Debug, Error)]
 pub enum TerminalMuxError {
+    #[error("terminal operation is not supported: {0}")]
+    Unsupported(&'static str),
     #[error("terminal mux is unavailable")]
     Unavailable(#[source] BoxError),
     #[error("terminal is unknown: {0}")]
@@ -58,8 +60,32 @@ pub struct PtyInfo {
     pub running: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TerminalDetails {
+    pub pid: Option<u32>,
+    pub size: TermSize,
+    pub exit_code: Option<i32>,
+}
+
+#[derive(Debug)]
+pub struct TerminalAttachment {
+    pub replay: Vec<u8>,
+    pub output: Receiver<Vec<u8>>,
+}
+
 #[async_trait]
 pub trait TerminalMux: Send + Sync {
+    async fn inspect(&self, _id: &TerminalId) -> Result<TerminalDetails, TerminalMuxError> {
+        Err(TerminalMuxError::Unsupported("inspect"))
+    }
+
+    async fn open(&self, _id: &TerminalId) -> Result<TerminalAttachment, TerminalMuxError> {
+        Err(TerminalMuxError::Unsupported("open"))
+    }
+
+    async fn wait(&self, _id: &TerminalId) -> Result<i32, TerminalMuxError> {
+        Err(TerminalMuxError::Unsupported("wait"))
+    }
     async fn spawn(
         &self,
         session: &SessionId,

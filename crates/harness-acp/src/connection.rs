@@ -130,6 +130,7 @@ pub(crate) fn port_failure(failure: RequestFailure, method: &'static str) -> Acp
 }
 
 pub(crate) struct AgentConnection {
+    pub(crate) reaped: tokio::sync::oneshot::Receiver<Result<(), std::io::Error>>,
     pub(crate) commands: mpsc::Sender<SessionCommand>,
     pub(crate) acp_session: acp::SessionId,
     pub(crate) permissions: Arc<PermissionRegistry>,
@@ -141,6 +142,7 @@ pub(crate) struct AgentConnection {
 }
 
 struct Connecting {
+    reaped: tokio::sync::oneshot::Receiver<Result<(), std::io::Error>>,
     commands: mpsc::Sender<SessionCommand>,
     permissions: Arc<PermissionRegistry>,
     barrier: Arc<StreamBarrier>,
@@ -154,6 +156,7 @@ struct Connecting {
 impl Connecting {
     fn finish(self, acp_session: acp::SessionId) -> AgentConnection {
         let Self {
+            reaped,
             commands,
             permissions,
             barrier,
@@ -165,6 +168,7 @@ impl Connecting {
         } = self;
         drop(guard.disarm());
         AgentConnection {
+            reaped,
             commands,
             acp_session,
             permissions,
@@ -238,7 +242,7 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
         stderr,
     } = pipes;
     tokio::spawn(process::pump_stderr(stderr));
-    process::watch_child(child, exited.clone(), events_tx.clone(), shutdown.clone());
+    let reaped = process::watch_child(child, exited.clone(), events_tx.clone(), shutdown.clone());
 
     let bridge = ClientBridge {
         events: events_tx.clone(),
@@ -268,6 +272,7 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
         source,
     })?;
     Ok(Connecting {
+        reaped,
         commands,
         permissions,
         barrier,

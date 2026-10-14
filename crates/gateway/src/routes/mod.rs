@@ -1,7 +1,10 @@
 pub mod capture;
 pub mod capture_schema;
+pub mod chat;
 pub mod memory;
+pub mod sessions;
 pub mod tags;
+pub mod terminal;
 
 use std::sync::Arc;
 
@@ -17,7 +20,7 @@ pub(crate) const BODY_LIMIT: usize = 256 * 1024;
 pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> Json<HealthzResponse> {
     Json(HealthzResponse {
         ok: true,
-        sessions: 0,
+        sessions: gateway.sessions().count() as u64,
         name: gateway.settings().hostname.clone(),
         node: gateway.settings().node.clone(),
     })
