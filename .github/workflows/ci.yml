@@ -81,7 +81,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest,cargo-llvm-cov
+          tool: cargo-nextest,cargo-llvm-cov,cargo-deny
       - name: sqlx-cli
         run: cargo install sqlx-cli --locked --no-default-features --features rustls,postgres
       - name: Tests under the coverage floor
