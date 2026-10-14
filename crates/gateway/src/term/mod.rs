@@ -6,11 +6,14 @@ use std::collections::BTreeMap;
 use std::path::{Component, PathBuf};
 use std::sync::Arc;
 
-use kernel::terminal::{TermSize, TerminalMux};
+use chrono::Utc;
+use kernel::terminal::{TermSize, TerminalId, TerminalMux};
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use wire::gateway::term::{PtyInfo, TermCommand, TermConfig, TermSpawnRequest, TermSpawnResponse};
+use wire::gateway::term::{
+    Mux, PtyInfo, PtyState, TermCommand, TermConfig, TermSpawnRequest, TermSpawnResponse,
+};
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 
@@ -27,6 +30,13 @@ pub struct LaunchCommand {
     pub cwd: PathBuf,
     pub harness: Option<HarnessId>,
     pub session: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RememberedSession {
+    pub id: String,
+    pub session: String,
+    pub command: String,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +65,7 @@ pub struct TerminalService {
     pub(crate) registry: Arc<SessionRegistry>,
     options: TerminalOptions,
     entries: RwLock<BTreeMap<String, Handle>>,
+    adopted: RwLock<BTreeMap<String, (String, PtyInfo)>>,
     pub(crate) shutdown: CancellationToken,
     tasks: TaskTracker,
     permits: Arc<tokio::sync::Semaphore>,
@@ -83,6 +94,7 @@ impl TerminalService {
             permits: Arc::new(tokio::sync::Semaphore::new(options.max_ptys)),
             options,
             entries: RwLock::new(BTreeMap::new()),
+            adopted: RwLock::new(BTreeMap::new()),
             shutdown: CancellationToken::new(),
             tasks: TaskTracker::new(),
             chats: RwLock::new(BTreeMap::new()),
@@ -260,13 +272,48 @@ impl TerminalService {
         Ok((key.clone(), handle.clone()))
     }
 
+    pub fn remember(&self, user: &UserId, adopted: RememberedSession) -> Result<(), ApiError> {
+        let key = self.registry.claim(user, &adopted.session)?;
+        let info = PtyInfo {
+            id: adopted.id.clone(),
+            session: key.clone(),
+            command: adopted.command,
+            state: PtyState::Running,
+            pid: None,
+            attached: 0,
+            exit_code: None,
+            created_at: Utc::now(),
+            last_output_ts: None,
+            cols: None,
+            rows: None,
+            mux: Some(Mux::Herdr),
+            persisted: Some(true),
+            reattached: Some(true),
+            attach: None,
+        };
+        self.adopted.write().insert(adopted.id, (key, info));
+        Ok(())
+    }
+
     pub fn list(&self, user: &UserId) -> Vec<PtyInfo> {
-        self.entries
+        let mut listed: Vec<PtyInfo> = self
+            .entries
             .read()
             .iter()
             .filter(|(key, _)| self.registry.authorize(user, key).is_ok())
             .filter_map(|(_, handle)| handle.state.borrow().clone())
-            .collect()
+            .collect();
+        let seen: std::collections::BTreeSet<String> =
+            listed.iter().map(|info| info.id.clone()).collect();
+        for (key, info) in self.adopted.read().values() {
+            if seen.contains(&info.id) {
+                continue;
+            }
+            if self.registry.authorize(user, key).is_ok() {
+                listed.push(info.clone());
+            }
+        }
+        listed
     }
 
     pub fn config(&self, user: &UserId) -> TermConfig {
@@ -293,12 +340,28 @@ impl TerminalService {
     }
 
     pub async fn kill(&self, user: &UserId, id: &str) -> Result<(), ApiError> {
-        let (_, handle) = self.find(user, Some(id), None)?;
-        let (reply, result) = oneshot::channel();
-        handle.send(Command::Kill { reply }).await?;
-        result
-            .await
-            .map_err(|_| ApiError::Unavailable("terminal actor closed".into()))?
+        match self.find(user, Some(id), None) {
+            Ok((_, handle)) => {
+                let (reply, result) = oneshot::channel();
+                handle.send(Command::Kill { reply }).await?;
+                result
+                    .await
+                    .map_err(|_| ApiError::Unavailable("terminal actor closed".into()))?
+            }
+            Err(ApiError::NotFound(_)) => self.kill_remembered(user, id).await,
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn kill_remembered(&self, user: &UserId, id: &str) -> Result<(), ApiError> {
+        let key = self.adopted.read().get(id).map(|(key, _)| key.clone());
+        let Some(key) = key else {
+            return Err(ApiError::NotFound("unknown pty"));
+        };
+        self.registry.authorize(user, &key)?;
+        self.mux.kill(&TerminalId::new(id)).await?;
+        self.adopted.write().remove(id);
+        Ok(())
     }
 
     pub async fn remove_session(&self, user: &UserId, session: &str) -> Result<(), ApiError> {

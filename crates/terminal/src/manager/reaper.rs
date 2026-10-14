@@ -9,6 +9,7 @@ use crate::error::Error;
 use crate::manager::TerminalManager;
 use crate::manager::registry::KillPlan;
 use crate::manager::registry::Runtime;
+use crate::mux::MuxPlan;
 use crate::pty;
 use tokio::time::Instant;
 
@@ -143,6 +144,16 @@ impl TerminalManager {
                 Ok(())
             }
             KillPlan::StopHerdr(session) => {
+                let root = self.namespace_root();
+                if !crate::herdr::namespace::session_socket_is_owned(
+                    &root,
+                    session.client.socket(),
+                )? {
+                    return Err(Error::NamespaceEscape {
+                        path: Box::from(session.client.socket()),
+                        root: Box::from(root),
+                    });
+                }
                 session.stop().await?;
                 self.inner.state.lock().remove(id);
                 self.unbind_session(id);
@@ -153,6 +164,13 @@ impl TerminalManager {
                 self.escalate(id.clone(), pid, KILL_GRACE);
                 Ok(())
             }
+        }
+    }
+
+    fn namespace_root(&self) -> std::path::PathBuf {
+        match &self.inner.plan {
+            MuxPlan::Herdr(setup) => setup.config_home.clone(),
+            MuxPlan::Direct | MuxPlan::Unavailable(_) => std::path::PathBuf::new(),
         }
     }
 

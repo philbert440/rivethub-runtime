@@ -113,8 +113,11 @@ impl Composition {
         ));
         let background = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {
+            let owner = tenancy.local_user().cloned().ok_or_else(|| {
+                ComposeError::Invalid("a local user is required for terminals".into())
+            })?;
             gateway = gateway.with_terminal(
-                terminals::build(config, env, sessions, shutdown, &background).await?,
+                terminals::build(config, env, sessions, &owner, shutdown, &background).await?,
             );
         }
         let audit_cancel = shutdown.child_token();
@@ -138,6 +141,11 @@ impl Composition {
             background,
             cancel: shutdown.clone(),
         })
+    }
+
+    #[must_use]
+    pub fn gateway(&self) -> &Arc<Gateway> {
+        &self.gateway
     }
 
     pub fn router(&self, secure: bool) -> axum::Router {

@@ -34,23 +34,16 @@ pub fn config_home_name(state_dir: &Path, port: u16) -> String {
     format!("rivethub-{}", hash8(state_dir, port))
 }
 
-pub fn resolve_config_home(state_dir: &Path, port: u16, uid: u32) -> PathBuf {
-    resolve_config_home_under(Path::new("/run/user"), state_dir, port, uid)
+#[must_use]
+pub fn resolve_config_home(state_dir: &Path, port: u16) -> PathBuf {
+    state_dir
+        .join("run")
+        .join(config_home_name(state_dir, port))
 }
 
-pub fn resolve_config_home_under(
-    runtime_root: &Path,
-    state_dir: &Path,
-    port: u16,
-    uid: u32,
-) -> PathBuf {
-    let name = config_home_name(state_dir, port);
-    let runtime = runtime_root.join(uid.to_string()).join(&name);
-    if runtime.is_dir() {
-        runtime
-    } else {
-        PathBuf::from("/tmp").join(name)
-    }
+#[must_use]
+pub fn sessions_dir(config_home: &Path) -> PathBuf {
+    config_home.join("herdr").join("sessions")
 }
 
 pub fn session_socket(config_home: &Path, session: &str) -> Result<PathBuf, Error> {
@@ -111,7 +104,7 @@ mod tests {
     use super::client_socket;
     use super::config_home_name;
     use super::hash8;
-    use super::resolve_config_home_under;
+    use super::resolve_config_home;
     use super::session_dir_name;
     use super::session_socket;
     use crate::error::Error;
@@ -141,14 +134,22 @@ mod tests {
     }
 
     #[test]
-    fn resolve_prefers_the_runtime_dir_when_it_exists() {
+    fn config_home_stays_under_the_state_root_when_a_host_runtime_dir_exists() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let state = tmp.path().join("state");
         let name = config_home_name(&state, 5174);
         let runtime_root = tmp.path().join("run-user");
         std::fs::create_dir_all(runtime_root.join("1000").join(&name)).expect("mkdir");
-        let resolved = resolve_config_home_under(&runtime_root, &state, 5174, 1000);
-        assert_eq!(resolved, runtime_root.join("1000").join(name));
+        std::fs::create_dir_all(tmp.path().join("tmp").join(&name)).expect("mkdir");
+        let resolved = resolve_config_home(&state, 5174);
+        assert_eq!(resolved, state.join("run").join(name));
+        assert!(resolved.starts_with(&state));
+        assert_ne!(
+            resolved,
+            runtime_root
+                .join("1000")
+                .join(config_home_name(&state, 5174))
+        );
     }
 
     #[test]

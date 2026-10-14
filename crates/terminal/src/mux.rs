@@ -103,8 +103,7 @@ pub async fn resolve(
 }
 
 fn herdr_plan(binary: crate::herdr::HerdrBinary, state_dir: &Path, port: u16) -> MuxPlan {
-    let uid = nix::unistd::Uid::current().as_raw();
-    let config_home = crate::herdr::paths::resolve_config_home(state_dir, port, uid);
+    let config_home = crate::herdr::paths::resolve_config_home(state_dir, port);
     match crate::herdr::paths::client_socket(&config_home) {
         Ok(_) => MuxPlan::Herdr(HerdrSetup {
             binary: binary.path,

@@ -43,8 +43,7 @@ fn run_probe() -> Result<terminal::herdr::HerdrBinary, terminal::herdr::ProbeFai
 
 async fn real_lifecycle(binary: PathBuf) -> Result<Completion, Failed> {
     let state = tempfile::tempdir().map_err(|error| Failed::from(error.to_string()))?;
-    let uid = nix::unistd::Uid::current().as_raw();
-    let config_home = paths::resolve_config_home(state.path(), 5974, uid);
+    let config_home = paths::resolve_config_home(state.path(), 5974);
     let key = SessionKey::new("claude-code:00000000-0000-4000-8000-000000000400")
         .map_err(|error| Failed::from(error.to_string()))?;
     let name = paths::session_dir_name(&key);

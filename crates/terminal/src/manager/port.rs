@@ -36,6 +36,10 @@ impl TerminalManager {
             crate::herdr::CONFIG_HOME_ENV.into(),
             session.config_home.to_string_lossy().into_owned(),
         );
+        attached.entry_env.insert(
+            crate::herdr::RUNTIME_DIR_ENV.into(),
+            session.config_home.to_string_lossy().into_owned(),
+        );
         let manager = self.clone();
         let outcome = tokio::task::spawn_blocking(move || manager.start_pty(&attached))
             .await

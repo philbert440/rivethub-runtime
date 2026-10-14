@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use kernel::terminal::TerminalId;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
@@ -110,6 +112,8 @@ impl TerminalManager {
                 "herdr terminals are keyed by session; the gateway mints the key".to_owned(),
             ));
         };
+        let namespace = crate::herdr::namespace::namespace_id(&setup.config_home)?;
+        let owner = self.inner.owner.lock().clone().ok_or(Error::OwnerUnset)?;
         let herdr_session = HerdrSession::ensure(
             setup,
             session,
@@ -119,6 +123,24 @@ impl TerminalManager {
             spec.roster_key.as_str(),
         )
         .await?;
+        let directory = herdr_session
+            .client
+            .socket()
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| Error::HerdrInit {
+                message: "herdr socket has no session directory".to_owned(),
+            })?;
+        crate::herdr::namespace::write_stamp(
+            &directory,
+            &crate::herdr::namespace::SessionStamp {
+                namespace,
+                session_key: session.clone(),
+                user: owner,
+                roster_key: spec.roster_key.clone(),
+                argv: spec.argv.clone(),
+            },
+        )?;
         let id = self.fresh_id();
         let fields = RecordFields::new(&spec, id.clone(), Backing::Herdr);
         self.inner.state.lock().insert(

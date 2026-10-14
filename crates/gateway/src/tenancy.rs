@@ -45,6 +45,11 @@ pub struct Tenancy {
 }
 
 impl Tenancy {
+    #[must_use]
+    pub fn local_user(&self) -> Option<&UserId> {
+        self.local.as_ref()
+    }
+
     pub fn local(user: UserId) -> Self {
         Self {
             local: Some(user),

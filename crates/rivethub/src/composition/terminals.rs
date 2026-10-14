@@ -4,6 +4,7 @@ use std::sync::Arc;
 use config::{Config, Environment};
 use gateway::sessions::SessionRegistry;
 use gateway::term::{LaunchCommand, TerminalOptions, TerminalService};
+use kernel::terminal::TerminalMux;
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 
@@ -31,6 +32,7 @@ pub(super) async fn build(
     config: &Config,
     env: &Environment,
     sessions: Arc<SessionRegistry>,
+    owner: &gateway::tenancy::UserId,
     shutdown: &CancellationToken,
     tasks: &tokio_util::task::TaskTracker,
 ) -> Result<Arc<TerminalService>, ComposeError> {
@@ -78,8 +80,30 @@ pub(super) async fn build(
     }
     let mux = Arc::new(terminal::TerminalManager::new(settings, plan));
     mux.run_tracked(shutdown.child_token(), tasks);
-    let commands = roster
-        .commands
+    let state_dir = config::Paths::new(env).state_dir();
+    let mut adopted = mux.adopt_namespace(&state_dir, owner.as_str()).await?;
+    let commands = launch_commands(roster.commands);
+    let service = Arc::new(
+        TerminalService::new(
+            Arc::clone(&mux) as Arc<dyn TerminalMux>,
+            sessions,
+            TerminalOptions {
+                root,
+                default: roster.default,
+                commands,
+                max_ptys,
+            },
+        )
+        .await?
+        .with_shutdown(shutdown.child_token())
+        .with_harness(Arc::new(harness_acp::AcpHarnessAdapter::new(config))),
+    );
+    claim_adopted(&service, &mux, owner, &mut adopted)?;
+    Ok(service)
+}
+
+fn launch_commands(commands: Vec<Command>) -> Vec<LaunchCommand> {
+    commands
         .into_iter()
         .map(|command| LaunchCommand {
             id: command.id,
@@ -89,19 +113,32 @@ pub(super) async fn build(
             harness: command.harness,
             session: command.session,
         })
-        .collect();
-    let service = TerminalService::new(
-        mux,
-        sessions,
-        TerminalOptions {
-            root,
-            default: roster.default,
-            commands,
-            max_ptys,
-        },
-    )
-    .await?
-    .with_shutdown(shutdown.child_token())
-    .with_harness(Arc::new(harness_acp::AcpHarnessAdapter::new(config)));
-    Ok(Arc::new(service))
+        .collect()
+}
+
+fn claim_adopted(
+    service: &TerminalService,
+    mux: &terminal::TerminalManager,
+    owner: &gateway::tenancy::UserId,
+    adopted: &mut terminal::Adoption,
+) -> Result<(), ComposeError> {
+    for session in std::mem::take(&mut adopted.adopted) {
+        let remembered = gateway::term::RememberedSession {
+            id: session.id.to_string(),
+            session: session.session.as_str().to_owned(),
+            command: session.roster_key.as_str().to_owned(),
+        };
+        match service.remember(owner, remembered) {
+            Ok(()) => {}
+            Err(gateway::error::ApiError::SessionForbidden) => {
+                mux.release(&session.id);
+                terminal::herdr::namespace::note_skip(
+                    &mut adopted.skipped,
+                    terminal::herdr::namespace::SkipRule::ForeignSessionOwner,
+                );
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
 }

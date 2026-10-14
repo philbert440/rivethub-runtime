@@ -7,11 +7,14 @@ use tokio::sync::watch;
 use tokio::time::Instant;
 
 use crate::herdr::HerdrSession;
+use crate::herdr::namespace::path_is_inside;
+use crate::herdr::paths::sessions_dir;
 use crate::manager::Backing;
 use crate::manager::SpawnSpec;
 use crate::manager::TerminalManager;
 use crate::manager::TerminalRecord;
 use crate::manager::TerminalState;
+use crate::mux::MuxPlan;
 use crate::pty;
 use crate::scrollback::Scrollback;
 use crate::session::RosterKey;
@@ -156,18 +159,30 @@ impl TerminalManager {
     }
 
     pub fn list(&self) -> Vec<TerminalRecord> {
+        let home = match &self.inner.plan {
+            MuxPlan::Herdr(setup) => Some(setup.config_home.clone()),
+            MuxPlan::Direct | MuxPlan::Unavailable(_) => None,
+        };
         self.inner
             .state
             .lock()
             .values()
-            .map(|runtime| match runtime {
-                Runtime::Herdr { fields, .. } => fields.record(None, TerminalState::Running, 0),
+            .filter_map(|runtime| match runtime {
+                Runtime::Herdr { fields, session } => {
+                    let home = home.as_deref()?;
+                    let socket = session.client.socket();
+                    if path_is_inside(&sessions_dir(home), socket) {
+                        Some(fields.record(None, TerminalState::Running, 0))
+                    } else {
+                        None
+                    }
+                }
                 Runtime::Pty {
                     fields,
                     live,
                     exit_code,
                     ..
-                } => Self::pty_record(fields, live.as_ref(), exit_code.as_ref()),
+                } => Some(Self::pty_record(fields, live.as_ref(), exit_code.as_ref())),
             })
             .collect()
     }

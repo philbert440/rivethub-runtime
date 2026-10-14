@@ -15,11 +15,15 @@ use crate::session::RosterKey;
 use crate::session::SessionKey;
 use crate::settings::TerminalSettings;
 
+mod adopt;
 mod attach;
 mod port;
 mod reaper;
 mod registry;
 mod spawn;
+
+pub use adopt::AdoptedSession;
+pub use adopt::Adoption;
 
 const CHUNK_QUEUE: usize = 64;
 
@@ -71,6 +75,7 @@ struct Inner {
     state: Mutex<BTreeMap<TerminalId, Runtime>>,
     by_session: Mutex<BTreeMap<SessionKey, TerminalId>>,
     port_backends: Mutex<BTreeMap<TerminalId, TerminalId>>,
+    owner: Mutex<Option<String>>,
     detach_tx: mpsc::UnboundedSender<TerminalId>,
     detach_rx: Mutex<Option<mpsc::UnboundedReceiver<TerminalId>>>,
 }
@@ -105,6 +110,7 @@ impl TerminalManager {
                 state: Mutex::new(BTreeMap::new()),
                 by_session: Mutex::new(BTreeMap::new()),
                 port_backends: Mutex::new(BTreeMap::new()),
+                owner: Mutex::new(None),
                 detach_tx,
                 detach_rx: Mutex::new(Some(detach_rx)),
             }),

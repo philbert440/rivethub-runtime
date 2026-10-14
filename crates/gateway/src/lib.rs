@@ -326,6 +326,11 @@ impl Gateway {
     }
 
     #[must_use]
+    pub fn terminal(&self) -> Option<&Arc<term::TerminalService>> {
+        self.terminal.as_ref()
+    }
+
+    #[must_use]
     pub fn with_uploads(mut self, uploads: uploads::UploadService) -> Self {
         self.uploads = Some(uploads);
         self

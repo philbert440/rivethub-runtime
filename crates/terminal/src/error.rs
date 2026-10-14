@@ -57,6 +57,15 @@ pub enum Error {
     Spawn(String),
     #[error("terminal io failed: {0}")]
     Io(std::io::Error),
+    #[error("herdr namespace {path} is outside {root}")]
+    NamespaceEscape {
+        path: Box<std::path::Path>,
+        root: Box<std::path::Path>,
+    },
+    #[error("terminal namespace owner is unset")]
+    OwnerUnset,
+    #[error("herdr session stamp is invalid: {message}")]
+    SessionStamp { message: String },
 }
 
 impl From<std::io::Error> for Error {
@@ -84,7 +93,10 @@ impl From<Error> for kernel::terminal::TerminalMuxError {
             | Error::InvalidSessionKey(_)
             | Error::InvalidRosterKey(_)
             | Error::Spawn(_)
-            | Error::Io(_)) => Self::Unavailable(Box::new(other)),
+            | Error::Io(_)
+            | Error::NamespaceEscape { .. }
+            | Error::OwnerUnset
+            | Error::SessionStamp { .. }) => Self::Unavailable(Box::new(other)),
         }
     }
 }

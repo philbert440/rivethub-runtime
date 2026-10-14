@@ -8,6 +8,8 @@ pub mod session;
 pub mod settings;
 
 pub use error::Error;
+pub use manager::AdoptedSession;
+pub use manager::Adoption;
 pub use manager::AttachStream;
 pub use manager::SpawnSpec;
 pub use manager::TerminalManager;

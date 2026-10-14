@@ -1,5 +1,6 @@
 pub mod client;
 pub mod codec;
+pub mod namespace;
 pub mod paths;
 
 use serde::Deserialize;
@@ -16,6 +17,7 @@ use crate::herdr::client::HerdrClient;
 pub const PINNED_VERSION: &str = "0.8.2";
 pub const DEFAULT_PANE: &str = "w1:p1";
 pub const CONFIG_HOME_ENV: &str = "XDG_CONFIG_HOME";
+pub const RUNTIME_DIR_ENV: &str = "XDG_RUNTIME_DIR";
 
 pub const CTL_TIMEOUT: Duration = Duration::from_millis(250);
 pub const SERVER_OPEN_TIMEOUT: Duration = Duration::from_secs(30);
@@ -311,6 +313,24 @@ impl HerdrSession {
             client,
         })
     }
+    pub fn attach_existing(
+        setup: &crate::mux::HerdrSetup,
+        key: &crate::session::SessionKey,
+    ) -> Result<Self, Error> {
+        let name = paths::session_dir_name(key);
+        let socket = paths::session_socket(&setup.config_home, &name)?;
+        Ok(Self {
+            cli: HerdrCli {
+                binary: setup.binary.clone(),
+                session: name.clone(),
+            },
+            config_home: setup.config_home.clone(),
+            name,
+            pane: DEFAULT_PANE.to_owned(),
+            client: HerdrClient::new(&socket),
+        })
+    }
+
     pub async fn stop(&self) -> Result<(), Error> {
         let mut child = server_command(&self.cli.binary, &self.config_home, self.cli.server_stop())
             .spawn()
@@ -361,6 +381,7 @@ fn server_command(binary: &Path, config_home: &Path, args: Vec<String>) -> tokio
     command
         .args(args)
         .env(CONFIG_HOME_ENV, config_home)
+        .env(RUNTIME_DIR_ENV, config_home)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
