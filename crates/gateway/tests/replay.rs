@@ -242,6 +242,25 @@ const OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ),
 ];
 
+const SKIP_REASONS: &[(&str, &str)] = &[
+    (
+        "2",
+        "B1/B2/B12: session, tenancy and static-serving scenarios are outside this health, origin and file-root replay slice",
+    ),
+    (
+        "3",
+        "B1/B3/B6: optional integration and memory routes are outside this HTTP replay slice",
+    ),
+    (
+        "4",
+        "B1/B14: mesh and device-management scenarios require their separate service fixtures",
+    ),
+    (
+        "transport",
+        "B1: raw HTTP parser behavior is outside this router-level replay",
+    ),
+];
+
 fn golden(name: &str) -> PathBuf {
     testkit::recording(name)
 }
@@ -323,10 +342,28 @@ fn start(args: &Arguments, runtime: &tokio::runtime::Runtime) -> libtest_mimic::
                 if !CLAIMS.contains(&case.id.as_str()) {
                     continue;
                 }
-                let case = case.clone();
+                let mut case = case.clone();
                 let id = case.id.clone();
                 let handle = handle.clone();
                 trials.push(Trial::test(format!("gateway {id}"), move || {
+                    if testkit::http::status_of(&case.response.status_line) == 403 {
+                        let body = case
+                            .response
+                            .body
+                            .as_deref()
+                            .ok_or_else(|| Failed::from("missing refusal body"))?;
+                        let mut error: wire::gateway::GatewayError = serde_json::from_str(body)
+                            .map_err(|error| Failed::from(error.to_string()))?;
+                        error.error = testkit::translate_recorded_product_names(&error.error);
+                        error.reason = error
+                            .reason
+                            .as_deref()
+                            .map(testkit::translate_recorded_product_names);
+                        case.response.body = Some(
+                            serde_json::to_string(&error)
+                                .map_err(|error| Failed::from(error.to_string()))?,
+                        );
+                    }
                     let (gateway, masks, _keep) = replay_env(&case.id)?;
                     let app = gateway.router(false);
                     must_pass(testkit::http::replay(&case, &masks, |request| match handle
@@ -383,6 +420,16 @@ fn check_claims() -> Result<(), Failed> {
 }
 
 fn check_enumeration() -> Result<(), Failed> {
+    for (run, id, code) in OUT_OF_SCOPE {
+        if !SKIP_REASONS
+            .iter()
+            .any(|(key, reason)| key == code && !reason.trim().is_empty())
+        {
+            return Err(Failed::from(format!(
+                "missing exclusion reason for {run}/{id}: {code}"
+            )));
+        }
+    }
     let recorded = recorded_cases()?;
     let mut unaccounted: Vec<String> = Vec::new();
     for case in &recorded {

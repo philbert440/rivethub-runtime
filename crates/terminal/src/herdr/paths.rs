@@ -31,7 +31,7 @@ pub fn session_dir_name(key: &SessionKey) -> String {
 
 #[must_use]
 pub fn config_home_name(state_dir: &Path, port: u16) -> String {
-    format!("rivet-den-{}", hash8(state_dir, port))
+    format!("rivethub-{}", hash8(state_dir, port))
 }
 
 pub fn resolve_config_home(state_dir: &Path, port: u16, uid: u32) -> PathBuf {
@@ -130,7 +130,7 @@ mod tests {
         assert_eq!(
             config_home_name(std::path::Path::new("/home/user/.rivethub"), 5174),
             format!(
-                "rivet-den-{}",
+                "rivethub-{}",
                 hash8(std::path::Path::new("/home/user/.rivethub"), 5174)
             ),
         );
@@ -161,18 +161,18 @@ mod tests {
 
     #[test]
     fn socket_paths_sit_under_the_config_home() {
-        let home = std::path::Path::new("/run/user/1000/rivet-den-0123abcd");
+        let home = std::path::Path::new("/run/user/1000/rivethub-0123abcd");
         let socket = session_socket(home, "d0123456789ab").expect("socket");
         assert_eq!(
             socket,
             std::path::PathBuf::from(
-                "/run/user/1000/rivet-den-0123abcd/herdr/sessions/d0123456789ab/herdr.sock"
+                "/run/user/1000/rivethub-0123abcd/herdr/sessions/d0123456789ab/herdr.sock"
             )
         );
         let client = client_socket(home).expect("socket");
         assert_eq!(
             client,
-            std::path::PathBuf::from("/run/user/1000/rivet-den-0123abcd/herdr-client.sock")
+            std::path::PathBuf::from("/run/user/1000/rivethub-0123abcd/herdr-client.sock")
         );
     }
 

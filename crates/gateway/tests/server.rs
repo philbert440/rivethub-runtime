@@ -67,7 +67,10 @@ fn recorded_startup_refusals_reproduce_the_error_lines() {
             tls_ca: material(&run.env.tls_ca),
         };
         let outcome = resolve_tls(&source);
-        let expected = testkit::substitute(&run.error, &masks());
+        let expected = testkit::substitute(
+            &testkit::translate_recorded_product_names(&run.error),
+            &masks(),
+        );
         let expected = expected.replacen("/tmp/golden", tmp_text, 1);
         match outcome {
             Err(error) => {
@@ -118,7 +121,7 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
     assert!(is_bind_loopback("::ffff:127.0.0.1"));
     assert!(!is_bind_loopback("0.0.0.0"));
     assert!(!is_bind_loopback(""));
-    assert!(!is_bind_loopback("den.example.test"));
+    assert!(!is_bind_loopback("gateway.example.test"));
 
     let free = tokio::net::TcpListener::bind(("127.0.0.1", 0))
         .await
@@ -162,7 +165,7 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
 
 #[test]
 fn settings_come_from_the_config_gateway_section() {
-    let document = "den:\n  host: 0.0.0.0\n  port: 6001\n  allowed_origins:\n    - https://hub.example.test\n  allowed_hosts:\n    - den.example.test\n";
+    let document = "den:\n  host: 0.0.0.0\n  port: 6001\n  allowed_origins:\n    - https://hub.example.test\n  allowed_hosts:\n    - gateway.example.test\n";
     let config: config::Config = serde_yaml_ng::from_str(document).expect("config");
     let bind = BindSource::from_config(&config);
     assert_eq!(bind.host, "0.0.0.0");
@@ -170,7 +173,7 @@ fn settings_come_from_the_config_gateway_section() {
     let settings =
         gateway::Settings::from_config(&config, "gold-host".to_string(), "golden-node".to_string());
     assert_eq!(settings.allowed_origins, vec!["https://hub.example.test"]);
-    assert_eq!(settings.allowed_hosts, vec!["den.example.test"]);
+    assert_eq!(settings.allowed_hosts, vec!["gateway.example.test"]);
 
     let empty: config::Config = serde_yaml_ng::from_str("").expect("empty config");
     let bind = BindSource::from_config(&empty);
@@ -185,13 +188,13 @@ fn bind_error_lines_carry_the_recorded_text() {
     };
     assert_eq!(
         error.to_string(),
-        "[den-server] refusing to bind 0.0.0.0: gateway TLS is required off-loopback (set RIVETOS_DEN_TLS_CERT + RIVETOS_DEN_TLS_KEY to the node cert from rivet-ca issue-node; enroll clients with rivet-ca issue-client). Or bind den.host to 127.0.0.1."
+        "[rivethub-gateway] refusing to bind 0.0.0.0: gateway TLS is required off-loopback (set RIVETHUB_TLS_CERT + RIVETHUB_TLS_KEY to the node cert from rivet-ca issue-node; enroll clients with rivet-ca issue-client). Or bind the gateway host to 127.0.0.1."
     );
     let error = BindError::CaMissing {
         path: std::path::PathBuf::from("/tmp/golden/chain.pem"),
     };
     assert_eq!(
         error.to_string(),
-        "[den-server] TLS CA chain missing at /tmp/golden/chain.pem — cannot verify device client certs"
+        "[rivethub-gateway] TLS CA chain missing at /tmp/golden/chain.pem — cannot verify device client certs"
     );
 }

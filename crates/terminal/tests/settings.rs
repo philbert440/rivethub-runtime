@@ -13,7 +13,6 @@ use terminal::TerminalSettings;
 use testkit::Masks;
 use testkit::json_masked_eq;
 use testkit::masked_eq;
-use testkit::recording;
 
 #[test]
 fn term_knobs_come_from_the_environment_with_the_recorded_defaults() {
@@ -106,6 +105,9 @@ fn envdump_settings(home: &str, shared: &str) -> TerminalSettings {
         ("HOME", home),
         ("TZ", "UTC"),
         ("RIVETOS_USER_ID", "from-process"),
+        ("RIVETOS_USER_TOKEN", "legacy-process-token"),
+        ("RIVETHUB_USER_ID", "from-process"),
+        ("RIVETHUB_USER_TOKEN", "process-token"),
         ("RIVETHUB_SHARED_DIR", shared),
     ]);
     let mut config = config::Config::default();
@@ -131,7 +133,13 @@ fn child_env_matches_the_recorded_envdump_lines() {
     let entry = BTreeMap::from([
         ("ACME_ENTRY_ENV".to_owned(), "envdump".to_owned()),
         ("RIVETOS_USER_ID".to_owned(), "from-roster".to_owned()),
-        ("RIVETOS_USER_DBS".to_owned(), "denied".to_owned()),
+        ("RIVETHUB_USER_ID".to_owned(), "from-roster".to_owned()),
+        (
+            "RIVETOS_USER_TOKEN".to_owned(),
+            "legacy-roster-token".to_owned(),
+        ),
+        ("RIVETHUB_USER_TOKEN".to_owned(), "roster-token".to_owned()),
+        ("RIVETHUB_USER_DBS".to_owned(), "denied".to_owned()),
     ]);
     let child = settings.child_env(Some(&session), &roster, &work, &entry);
     let text = |name: &str| {
@@ -156,14 +164,14 @@ fn child_env_matches_the_recorded_envdump_lines() {
         text("PATH").as_deref(),
         Some(format!("/golden/bin:{}/.local/bin", home.display()).as_str())
     );
-    assert_eq!(text("RIVETOS_SESSION_KEY").as_deref(), Some("acme-env"));
-    assert_eq!(text("RIVET_DEN_SESSION").as_deref(), Some("acme-env"));
+    assert_eq!(text("RIVETHUB_SESSION_KEY").as_deref(), Some("acme-env"));
+    assert_eq!(text("RIVETHUB_SESSION").as_deref(), Some("acme-env"));
     assert_eq!(
-        text("RIVET_DEN_NAME").as_deref(),
+        text("RIVETHUB_NAME").as_deref(),
         Some(format!("{}:envdump", common::HOSTNAME).as_str())
     );
     assert_eq!(
-        text("RIVET_DEN_CA").as_deref(),
+        text("RIVETHUB_CA").as_deref(),
         Some(
             shared
                 .join("rivet-ca")
@@ -173,8 +181,8 @@ fn child_env_matches_the_recorded_envdump_lines() {
                 .expect("utf8 ca")
         )
     );
-    assert!(text("RIVETOS_USER_ID").is_none());
-    assert_eq!(text("RIVETOS_USER_DBS").as_deref(), Some("denied"));
+    assert_no_identity_or_legacy_exports(&child);
+    assert_eq!(text("RIVETHUB_USER_DBS").as_deref(), Some("denied"));
     assert_eq!(text("ACME_ENTRY_ENV").as_deref(), Some("envdump"));
 
     let masks = Masks {
@@ -184,47 +192,89 @@ fn child_env_matches_the_recorded_envdump_lines() {
     };
     assert!(masked_eq(
         "http://127.0.0.1:{{PORT}}",
-        text("RIVET_DEN_URL").as_deref().expect("url"),
+        text("RIVETHUB_URL").as_deref().expect("url"),
         &masks
     ));
 
     let anonymous = settings.child_env(None, &roster, &work, &BTreeMap::new());
-    assert!(!anonymous.contains_key("RIVET_DEN_SESSION"));
-    assert!(!anonymous.contains_key("RIVETOS_SESSION_KEY"));
-    assert!(!anonymous.contains_key("RIVET_DEN_TOKEN"));
+    assert!(!anonymous.contains_key("RIVETHUB_SESSION"));
+    assert!(!anonymous.contains_key("RIVETHUB_SESSION_KEY"));
+    assert!(!anonymous.contains_key("RIVETHUB_TOKEN"));
 }
 
 #[test]
-fn the_envdump_fixture_pins_the_managed_env() {
-    #[derive(serde::Deserialize)]
-    struct Frames {
-        steps: Vec<Step>,
-    }
-    #[derive(serde::Deserialize)]
-    struct Step {
-        id: String,
-        #[serde(default)]
-        replay: Option<String>,
-    }
-    let recorded = recording("term/ws-pty-frames.json");
-    let file = std::fs::read_to_string(&recorded).expect("fixture");
-    let parsed: Frames = serde_json::from_str(&file).expect("fixture json");
-    let envdump = parsed
-        .steps
+fn recorded_terminal_environment_matches_after_product_translation() {
+    let path = testkit::golden_path(
+        env!("CARGO_MANIFEST_DIR"),
+        "../wire/tests/golden/term/ws.json",
+    );
+    let steps = testkit::ws::steps(&path).expect("terminal recording");
+    let step = steps
         .iter()
-        .find(|step| step.id == "attach-envdump")
-        .expect("the envdump step");
-    let replay = envdump.replay.as_deref().expect("the envdump replay");
-    for recorded_line in ["TERM=xterm-256color", "COLORTERM=truecolor", "LANG=C.UTF-8"] {
-        assert!(
-            replay.contains(recorded_line),
-            "the fixture must pin {recorded_line}"
+        .find(|step| step.id == "term-ws/attach-envdump")
+        .expect("envdump step");
+    let replay = step
+        .record
+        .frames
+        .values()
+        .flatten()
+        .find_map(|frame| match frame {
+            testkit::ws::FrameRecord::Binary {
+                text: Some(text), ..
+            } => Some(text),
+            testkit::ws::FrameRecord::Text { .. }
+            | testkit::ws::FrameRecord::Binary { text: None, .. }
+            | testkit::ws::FrameRecord::Close { .. }
+            | testkit::ws::FrameRecord::TcpClosed => None,
+        })
+        .expect("environment replay");
+    let masks = Masks {
+        port: "5174".into(),
+        hostname: Some(common::HOSTNAME.into()),
+        tmp: Some("/golden".into()),
+    };
+    let expected: BTreeMap<String, String> = replay
+        .lines()
+        .map(|line| {
+            let (name, value) = line.split_once('=').expect("environment entry");
+            (
+                testkit::translate_recorded_product_names(name),
+                testkit::substitute(value, &masks),
+            )
+        })
+        .collect();
+    let settings = envdump_settings("/golden/runs/term-ws/home", "/golden/runs/term-ws/shared");
+    let session = SessionKey::new("acme-env").expect("session");
+    let roster = RosterKey::new("envdump").expect("roster");
+    let actual = settings.child_env(
+        Some(&session),
+        &roster,
+        Path::new("/golden/runs/term-ws/work"),
+        &BTreeMap::new(),
+    );
+    for name in [
+        "TERM",
+        "COLORTERM",
+        "LANG",
+        "HOME",
+        "PWD",
+        "TZ",
+        "RIVETHUB_SESSION_KEY",
+        "RIVETHUB_SESSION",
+        "RIVETHUB_URL",
+        "RIVETHUB_CA",
+        "RIVETHUB_NAME",
+    ] {
+        assert_eq!(
+            actual
+                .get(name)
+                .expect("child variable")
+                .to_str()
+                .expect("UTF-8 value"),
+            expected.get(name).expect("recorded variable"),
+            "{name}"
         );
     }
-    assert!(replay.contains("RIVET_DEN_NAME={{HOSTNAME}}:envdump"));
-    assert!(replay.contains("RIVET_DEN_URL=http://127.0.0.1:{{PORT}}"));
-    assert!(!replay.contains("RIVETOS_USER_ID="));
-    assert!(replay.contains("RIVETOS_USER_DBS=denied"));
 }
 
 #[test]
@@ -250,4 +300,34 @@ fn json_masked_comparison_accepts_the_recorded_exit_frame() {
     let recorded = serde_json::to_value(&recorded).expect("the recorded frame serializes");
     let actual = serde_json::to_value(&actual).expect("the actual frame serializes");
     assert!(json_masked_eq(&recorded, &actual, &Masks::default()));
+}
+
+#[test]
+fn configured_terminal_token_uses_the_current_name_only() {
+    let mut settings = common::settings(&config::Environment::default());
+    settings.token = Some("configured-terminal-token".into());
+    let roster = RosterKey::new("shell").expect("roster");
+    let child = settings.child_env(None, &roster, Path::new("/work"), &BTreeMap::new());
+    assert_eq!(
+        child.get("RIVETHUB_TOKEN").expect("token").to_str(),
+        Some("configured-terminal-token")
+    );
+    assert!(!child.contains_key("RIVET_DEN_TOKEN"));
+}
+
+fn assert_no_identity_or_legacy_exports(child: &BTreeMap<String, std::ffi::OsString>) {
+    for name in [
+        "RIVETHUB_USER_ID",
+        "RIVETHUB_USER_TOKEN",
+        "RIVETOS_USER_ID",
+        "RIVETOS_USER_TOKEN",
+        "RIVETOS_SESSION_KEY",
+        "RIVET_DEN_SESSION",
+        "RIVET_DEN_URL",
+        "RIVET_DEN_TOKEN",
+        "RIVET_DEN_CA",
+        "RIVET_DEN_NAME",
+    ] {
+        assert!(!child.contains_key(name), "{name}");
+    }
 }

@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+use testkit::translate_recorded_product_names;
+
 use rmcp::{
     ServiceExt,
     model::{CallToolRequestParams, CallToolResult, ClientConfig, ProtocolVersion, Tool},
@@ -147,12 +149,6 @@ async fn typed_memory_search_rejects_wrong_types() {
             Some(true)
         );
     }
-}
-
-fn translate_recorded_product_names(text: &str) -> String {
-    text.replace("~/.rivetos", "~/.rivethub")
-        .replace("RivetOS", "RivetHub")
-        .replace("rivetos", "rh")
 }
 
 #[test]

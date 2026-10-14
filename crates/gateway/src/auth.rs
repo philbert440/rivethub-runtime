@@ -37,7 +37,7 @@ impl DenialLog {
             seen.len() < DENIAL_LOG_CAP && seen.insert(reason.to_owned())
         };
         if first {
-            tracing::warn!("[den-server] refused browser request: {reason}");
+            tracing::warn!("[rivethub-gateway] refused browser request: {reason}");
         }
     }
 }
@@ -93,7 +93,9 @@ impl OriginPolicy {
                 || self.allowed_hosts.contains(&host);
             if !allowed {
                 return Decision::Deny {
-                    reason: format!("host \"{host}\" is not allowed (add it to den.allowed_hosts)"),
+                    reason: format!(
+                        "host \"{host}\" is not allowed (add it to the gateway allowed_hosts setting)"
+                    ),
                 };
             }
         }
@@ -114,7 +116,9 @@ impl OriginPolicy {
             return Decision::Allow { echo: Some(parsed) };
         }
         Decision::Deny {
-            reason: format!("origin \"{parsed}\" is not allowed (add it to den.allowed_origins)"),
+            reason: format!(
+                "origin \"{parsed}\" is not allowed (add it to the gateway allowed_origins setting)"
+            ),
         }
     }
 

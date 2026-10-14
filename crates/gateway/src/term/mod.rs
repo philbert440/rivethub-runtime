@@ -155,7 +155,7 @@ impl TerminalService {
             }
             (None, Some(resume)) => self.registry.authorize(user, resume)?,
             (Some(session), None) => session.clone(),
-            (None, None) => format!("den-{}", uuid::Uuid::new_v4()),
+            (None, None) => format!("rivethub-{}", uuid::Uuid::new_v4()),
         };
         let session = self.registry.claim(user, &session)?;
         let launch = self.launch(request)?;

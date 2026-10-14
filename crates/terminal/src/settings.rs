@@ -50,13 +50,23 @@ impl TerminalSettings {
                 Some((name, value.clone()))
             })
             .collect();
-        for name in ["RIVETOS_USER_ID", "RIVETOS_USER_TOKEN"] {
+        for name in [
+            "RIVETHUB_USER_ID",
+            "RIVETHUB_USER_TOKEN",
+            "RIVETOS_USER_ID",
+            "RIVETOS_USER_TOKEN",
+        ] {
             env.remove(name);
         }
         for (name, value) in entry_env {
             env.insert(name.clone(), OsString::from(value));
         }
-        for name in ["RIVETOS_USER_ID", "RIVETOS_USER_TOKEN"] {
+        for name in [
+            "RIVETHUB_USER_ID",
+            "RIVETHUB_USER_TOKEN",
+            "RIVETOS_USER_ID",
+            "RIVETOS_USER_TOKEN",
+        ] {
             env.remove(name);
         }
         env.insert("TERM".to_owned(), OsString::from(TERM_NAME));
@@ -68,26 +78,26 @@ impl TerminalSettings {
         }
         if let Some(session) = session {
             env.insert(
-                "RIVETOS_SESSION_KEY".to_owned(),
+                "RIVETHUB_SESSION_KEY".to_owned(),
                 OsString::from(session.as_str()),
             );
             env.insert(
-                "RIVET_DEN_SESSION".to_owned(),
+                "RIVETHUB_SESSION".to_owned(),
                 OsString::from(session.as_str()),
             );
         }
         if let Some(url) = &self.url {
-            env.insert("RIVET_DEN_URL".to_owned(), OsString::from(url));
+            env.insert("RIVETHUB_URL".to_owned(), OsString::from(url));
         }
         if let Some(token) = &self.token {
-            env.insert("RIVET_DEN_TOKEN".to_owned(), OsString::from(token));
+            env.insert("RIVETHUB_TOKEN".to_owned(), OsString::from(token));
         }
         env.insert(
-            "RIVET_DEN_CA".to_owned(),
+            "RIVETHUB_CA".to_owned(),
             self.ca_path.as_os_str().to_owned(),
         );
         env.insert(
-            "RIVET_DEN_NAME".to_owned(),
+            "RIVETHUB_NAME".to_owned(),
             OsString::from(format!("{}:{roster_key}", self.node_name)),
         );
         env

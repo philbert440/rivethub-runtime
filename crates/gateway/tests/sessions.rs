@@ -451,3 +451,37 @@ async fn malformed_controls_are_rejected_without_writing_to_the_terminal() {
         .expect("task")
         .expect("server");
 }
+
+#[tokio::test]
+async fn generated_shell_sessions_use_unique_rivethub_uuids() {
+    let fixture = Fixture::new().await;
+    let mut request = spawn("unused");
+    request.session = None;
+    request.command = Some("shell".into());
+    let first = fixture
+        .service
+        .spawn(&user("owner"), request.clone())
+        .await
+        .expect("first shell");
+    let second = fixture
+        .service
+        .spawn(&user("owner"), request)
+        .await
+        .expect("second shell");
+    assert_ne!(first.session, second.session);
+    for session in [&first.session, &second.session] {
+        let suffix = session.strip_prefix("rivethub-").expect("RivetHub prefix");
+        let uuid = uuid::Uuid::parse_str(suffix).expect("UUID");
+        assert_eq!(uuid.get_version(), Some(uuid::Version::Random));
+        assert_eq!(uuid.get_variant(), uuid::Variant::RFC4122);
+        assert_eq!(
+            fixture
+                .registry
+                .authorize(&user("owner"), session)
+                .expect("registered owner"),
+            *session
+        );
+        assert!(fixture.registry.authorize(&user("alice"), session).is_err());
+    }
+    fixture.gateway.close().await;
+}

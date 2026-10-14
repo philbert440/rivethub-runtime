@@ -25,7 +25,7 @@ impl UnavailableReason {
                 "herdr not found on PATH or in ~/.local/bin".to_owned()
             }
             Self::Probe(ProbeFailure::Version { binary, .. }) => format!(
-                "herdr at {} is not {} (den pins {} / protocol 20)",
+                "herdr at {} is not {} (RivetHub pins {} / protocol 20)",
                 binary.display(),
                 crate::herdr::PINNED_VERSION,
                 crate::herdr::PINNED_VERSION

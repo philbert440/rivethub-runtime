@@ -193,7 +193,7 @@ async fn mux_resolution_lands_on_the_recorded_states() -> Result<(), Failed> {
     assert_eq!(
         unavailable.reason.text(),
         format!(
-            "herdr at {} is not {PINNED_VERSION} (den pins {PINNED_VERSION} / protocol 20)",
+            "herdr at {} is not {PINNED_VERSION} (RivetHub pins {PINNED_VERSION} / protocol 20)",
             stale.display()
         )
     );

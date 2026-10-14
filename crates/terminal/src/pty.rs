@@ -97,6 +97,8 @@ pub fn spawn(
     for (name, value) in env {
         command.env(name, value);
     }
+    command.env_remove("RIVETHUB_USER_ID");
+    command.env_remove("RIVETHUB_USER_TOKEN");
     command.env_remove("RIVETOS_USER_ID");
     command.env_remove("RIVETOS_USER_TOKEN");
     let system = native_pty_system();

@@ -111,3 +111,24 @@ The adapter reads the legacy layout once at import, then operates independently 
 hashed tokens and revocations in component-owned SQLite state, performs blocking I/O and crypto on Tokio blocking tasks,
 and writes a standard CRL signed by the intermediate. The composition root configures the existing compatibility CRL path for atomic public-file publication; private keys never go to that path. Revocation by principal covers every certificate issued to it; imported serials
 can be revoked explicitly without inventing a principal from a legacy CN.
+
+## RivetHub operator and terminal names
+
+B1/B12/B16 operator messages use `[rivethub-gateway]`, `RIVETHUB_TLS_CERT` and `RIVETHUB_TLS_KEY`.
+ACP subprocess stderr uses the `rivethub::harness_acp::agent` tracing target. Gateway host and origin guidance
+refers to the gateway settings; the `den` YAML section remains a B10 compatibility key.
+New shell session IDs are `rivethub-<uuid-v4>`. Herdr config homes are `rivethub-<hash8>` under the existing
+runtime directory or temporary directory; the hash inputs and socket layout stay unchanged.
+
+Terminal children receive `RIVETHUB_SESSION_KEY`, `RIVETHUB_SESSION`, `RIVETHUB_URL`, `RIVETHUB_TOKEN`
+when configured, and `RIVETHUB_CA` and `RIVETHUB_NAME`. Both current and deprecated user identity/token variables
+are removed before spawning. B10 deprecated environment aliases remain owned by `config`, including its warning
+and current-name precedence. The B12 `denSession` wire key and B1 legacy identity header remain compatibility
+boundaries owned by `wire` and tenancy; this slice does not change their protocol shapes.
+
+Recorded expected text is translated only by `testkit::translate_recorded_product_names`, including only the
+environment names changed in this slice; other adapters retain their existing boundaries. JSON is parsed into
+typed payloads before translating text fields. Actual results are compared without name normalization. Source
+recordings remain unchanged. Gateway session replay exclusions are named with reasons in `session_skips`, with
+a test accounting for every scenario. Provider, database, capture, mesh schema and config format changes are outside
+this naming slice.

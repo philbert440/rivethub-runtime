@@ -15,7 +15,7 @@ use wire::gateway::GatewayError;
 fn policy() -> OriginPolicy {
     OriginPolicy::new(
         vec!["https://hub.example.test".to_string()],
-        vec!["den.example.test".to_string()],
+        vec!["gateway.example.test".to_string()],
     )
 }
 
@@ -126,7 +126,7 @@ fn origin_policy_applies_the_allow_lists() {
     assert_eq!(
         decide(Some("http://127.0.0.1"), Some("127.0.0.1:5174"), true),
         Decision::Deny {
-            reason: "origin \"http://127.0.0.1\" is not allowed (add it to den.allowed_origins)"
+            reason: "origin \"http://127.0.0.1\" is not allowed (add it to the gateway allowed_origins setting)"
                 .to_string()
         }
     );
@@ -144,7 +144,7 @@ fn origin_policy_applies_the_allow_lists() {
         decide(Some("https://evil.example"), Some("127.0.0.1:5174"), true),
         Decision::Deny {
             reason:
-                "origin \"https://evil.example\" is not allowed (add it to den.allowed_origins)"
+                "origin \"https://evil.example\" is not allowed (add it to the gateway allowed_origins setting)"
                     .to_string()
         }
     );
@@ -155,31 +155,35 @@ fn plain_http_host_rule_applies_to_loopback_callers_only() {
     assert_eq!(
         decide(None, Some("evil.example"), true),
         Decision::Deny {
-            reason: "host \"evil.example\" is not allowed (add it to den.allowed_hosts)"
-                .to_string()
+            reason:
+                "host \"evil.example\" is not allowed (add it to the gateway allowed_hosts setting)"
+                    .to_string()
         }
     );
     assert_eq!(
         decide(None, Some("evil.example:5174"), true),
         Decision::Deny {
-            reason: "host \"evil.example\" is not allowed (add it to den.allowed_hosts)"
-                .to_string()
+            reason:
+                "host \"evil.example\" is not allowed (add it to the gateway allowed_hosts setting)"
+                    .to_string()
         }
     );
     assert_eq!(
         decide(None, Some(""), true),
         Decision::Deny {
-            reason: "host \"\" is not allowed (add it to den.allowed_hosts)".to_string()
+            reason: "host \"\" is not allowed (add it to the gateway allowed_hosts setting)"
+                .to_string()
         }
     );
     assert_eq!(
         decide(None, None, true),
         Decision::Deny {
-            reason: "host \"\" is not allowed (add it to den.allowed_hosts)".to_string()
+            reason: "host \"\" is not allowed (add it to the gateway allowed_hosts setting)"
+                .to_string()
         }
     );
     for host in [
-        "den.example.test:5174",
+        "gateway.example.test:5174",
         "hub.localhost:5174",
         "LOCALHOST:5174",
         "[::1]:5174",

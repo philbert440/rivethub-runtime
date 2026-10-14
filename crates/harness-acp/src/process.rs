@@ -87,6 +87,6 @@ pub(crate) fn watch_child(
 pub(crate) async fn pump_stderr(stderr: tokio::process::ChildStderr) {
     let mut lines = tokio::io::BufReader::new(stderr).lines();
     while let Ok(Some(line)) = lines.next_line().await {
-        tracing::debug!(target: "harness_acp_agent", "{line}");
+        tracing::debug!(target: "rivethub::harness_acp::agent", "{line}");
     }
 }

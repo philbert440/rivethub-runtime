@@ -5,8 +5,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::pin::pin;
 use std::sync::Arc;
-use std::task::Context;
-use std::task::Poll;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use axum::Router;
@@ -79,11 +78,11 @@ impl BindSource {
 #[derive(Debug, Error)]
 pub enum BindError {
     #[error(
-        "[den-server] refusing to bind {host}: gateway TLS is required off-loopback (set RIVETOS_DEN_TLS_CERT + RIVETOS_DEN_TLS_KEY to the node cert from rivet-ca issue-node; enroll clients with rivet-ca issue-client). Or bind den.host to 127.0.0.1."
+        "[rivethub-gateway] refusing to bind {host}: gateway TLS is required off-loopback (set RIVETHUB_TLS_CERT + RIVETHUB_TLS_KEY to the node cert from rivet-ca issue-node; enroll clients with rivet-ca issue-client). Or bind the gateway host to 127.0.0.1."
     )]
     TlsRequired { host: String },
     #[error(
-        "[den-server] TLS CA chain missing at {} — cannot verify device client certs",
+        "[rivethub-gateway] TLS CA chain missing at {} — cannot verify device client certs",
         path.display()
     )]
     CaMissing { path: PathBuf },

@@ -6,7 +6,7 @@ pub enum Error {
     MuxUnavailable(String),
     #[error("herdr not found on PATH or in ~/.local/bin")]
     HerdrNotFound,
-    #[error("herdr at {binary} is not {pinned} (den pins {pinned} / protocol 20)")]
+    #[error("herdr at {binary} is not {pinned} (RivetHub pins {pinned} / protocol 20)")]
     HerdrVersion {
         binary: Box<std::path::Path>,
         pinned: String,
