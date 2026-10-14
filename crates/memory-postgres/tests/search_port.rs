@@ -188,6 +188,7 @@ async fn synthesis_uses_the_injected_provider_and_honours_cancellation(pool: PgP
             content: Some("Deployment is ready.".into()),
             tool_calls: None,
             usage: None,
+            finish_reason: None,
         },
     )]));
     let cancel = CancellationToken::new();
@@ -293,6 +294,7 @@ async fn synthesis_without_text_is_an_error_not_a_silent_default(pool: PgPool) -
             content: None,
             tool_calls: None,
             usage: None,
+            finish_reason: None,
         },
     )]));
     let memory = PostgresMemory::new(pool).with_search_synthesis(SearchSynthesis::new(

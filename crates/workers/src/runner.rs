@@ -27,10 +27,10 @@ use crate::error::WorkerError;
 use crate::role::ProcessRole;
 use crate::summarize::SummarizeEnv;
 use crate::summarize::SummarySettings;
-use crate::summarize::handle_compact;
 use crate::summarize::handle_enqueue_idle;
 use crate::summarize::handle_enqueue_stale;
 use crate::summarize::handle_reap;
+use crate::summarize::handle_summarize;
 
 pub const EMBED_CONCURRENCY: u32 = 4;
 pub const POLL_INTERVAL: Duration = Duration::from_secs(60);
@@ -365,7 +365,7 @@ async fn dispatch<Q: JobQueue>(
             .await
         }
         JobName::Fixed(FixedJob::CompactConversation) => {
-            handle_compact(&summarize, &job.payload).await.map(|_| ())
+            handle_summarize(&summarize, &job.payload).await.map(|_| ())
         }
         JobName::Fixed(FixedJob::EnqueueIdle) => handle_enqueue_idle(&summarize).await.map(|_| ()),
         JobName::Fixed(FixedJob::EnqueueStaleCompaction) => {

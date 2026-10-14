@@ -30,7 +30,7 @@ pub use prompt::ROOT_SYSTEM_PROMPT;
 use crate::error::WorkerError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CompactOutcome {
+pub struct SummarizeOutcome {
     pub summaries: u32,
     pub reenqueued: bool,
 }
@@ -48,12 +48,12 @@ pub struct SummarizeEnv<'a> {
     pub cancel: &'a CancellationToken,
 }
 
-pub async fn handle_compact(
+pub async fn handle_summarize(
     env: &SummarizeEnv<'_>,
     payload: &JsonObject,
-) -> Result<CompactOutcome, WorkerError> {
+) -> Result<SummarizeOutcome, WorkerError> {
     llm::cancelled(env)?;
-    let request = sweep::read_compact(payload)?;
+    let request = sweep::read_summarize(payload)?;
     let Some(mut window) = env.store.conversation(request.conversation_id).await? else {
         return Err(WorkerError::ConversationMissing {
             id: request.conversation_id,
@@ -65,7 +65,7 @@ pub async fn handle_compact(
         .starts_with(HEARTBEAT_SESSION_PREFIX)
     {
         tracing::info!("skipped heartbeat conversation {}", window.conversation.id);
-        return Ok(CompactOutcome {
+        return Ok(SummarizeOutcome {
             summaries: 0,
             reenqueued: false,
         });
@@ -74,11 +74,11 @@ pub async fn handle_compact(
     let reenqueued = reenqueue(env, &window, request.trigger_type, written).await?;
     if written > 0 {
         tracing::info!(
-            "compacted {}: {written} summaries",
+            "summarized {}: {written} summaries",
             id_prefix(window.conversation.id)
         );
     }
-    Ok(CompactOutcome {
+    Ok(SummarizeOutcome {
         summaries: written,
         reenqueued,
     })

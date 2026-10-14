@@ -27,12 +27,12 @@ pub struct SummaryHealth {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct CompactPayload {
+pub(super) struct SummarizePayload {
     pub(super) conversation_id: Uuid,
     pub(super) trigger_type: SummaryTrigger,
 }
 
-pub(super) fn read_compact(payload: &JsonObject) -> Result<CompactPayload, WorkerError> {
+pub(super) fn read_summarize(payload: &JsonObject) -> Result<SummarizePayload, WorkerError> {
     let value = serde_json::to_value(payload).map_err(WorkerError::summary_payload)?;
     serde_json::from_value(value).map_err(WorkerError::summary_payload)
 }
@@ -197,13 +197,17 @@ async fn enqueue(
     trigger: SummaryTrigger,
 ) -> Result<(), WorkerError> {
     env.queue
-        .enqueue(compact_job(id, trigger, env.now)?)
+        .enqueue(summarize_job(id, trigger, env.now)?)
         .await
         .map_err(WorkerError::queue)
 }
 
-fn compact_job(id: Uuid, trigger: SummaryTrigger, now: DateTime<Utc>) -> Result<Job, WorkerError> {
-    let payload = CompactPayload {
+fn summarize_job(
+    id: Uuid,
+    trigger: SummaryTrigger,
+    now: DateTime<Utc>,
+) -> Result<Job, WorkerError> {
+    let payload = SummarizePayload {
         conversation_id: id,
         trigger_type: trigger,
     };

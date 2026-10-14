@@ -50,18 +50,18 @@ use wire::stream::LlmResponse;
 use wire::stream::LlmResponseKind;
 use wire::stream::openai::FinishReason;
 use workers::BRANCH_SYSTEM_PROMPT;
-use workers::CompactOutcome;
 use workers::LEAF_SYSTEM_PROMPT;
 use workers::ROOT_SYSTEM_PROMPT;
 use workers::SummarizeEnv;
+use workers::SummarizeOutcome;
 use workers::SummaryHealth;
 use workers::SummaryParts;
 use workers::SummarySettings;
 use workers::SummaryTrigger;
-use workers::handle_compact;
 use workers::handle_enqueue_idle;
 use workers::handle_enqueue_stale;
 use workers::handle_reap;
+use workers::handle_summarize;
 use workers::summary_health;
 
 const LEAF_TEXT: &str = "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.";
@@ -434,19 +434,19 @@ async fn a_full_window_summarizes_once() {
     assert_eq!(job.key_mode, JobKeyMode::Replace);
     assert_eq!(job.priority, 0);
     assert_eq!(read_trigger(&job.payload), SummaryTrigger::Window);
-    let outcome = handle_compact(&env, &job.payload).await.expect("compact");
+    let outcome = handle_summarize(&env, &job.payload).await.expect("compact");
     assert_eq!(
         outcome,
-        CompactOutcome {
+        SummarizeOutcome {
             summaries: 1,
             reenqueued: false
         }
     );
-    let again = handle_compact(&env, &job.payload).await.expect("second");
+    let again = handle_summarize(&env, &job.payload).await.expect("second");
     assert_eq!(again.summaries, 0);
     assert_calls(&script.calls.lock().await, &chat_calls(recorded));
     assert_rows(&store.written.lock().await, &recorded.tables.summaries);
-    assert_eq!(compacted_counts(&recorded.logs), vec![1]);
+    assert_eq!(summarized_counts(&recorded.logs), vec![1]);
 }
 
 #[tokio::test]
@@ -479,21 +479,23 @@ async fn small_batches_roll_one_branch_then_the_root_on_the_next_job() {
         &token,
     );
     let first_payload = payload_of(id, SummaryTrigger::Window);
-    let first = handle_compact(&env, &first_payload).await.expect("pass 1");
+    let first = handle_summarize(&env, &first_payload)
+        .await
+        .expect("pass 1");
     assert_eq!(
         first,
-        CompactOutcome {
+        SummarizeOutcome {
             summaries: 5,
             reenqueued: true
         }
     );
     let second_job = jobs.only().await;
-    let second = handle_compact(&env, &second_job.payload)
+    let second = handle_summarize(&env, &second_job.payload)
         .await
         .expect("pass 2");
     assert_eq!(
         second,
-        CompactOutcome {
+        SummarizeOutcome {
             summaries: 2,
             reenqueued: false
         }
@@ -502,7 +504,7 @@ async fn small_batches_roll_one_branch_then_the_root_on_the_next_job() {
     assert_calls(&script.calls.lock().await, &chat_calls(recorded));
     assert_rows(&store.written.lock().await, &recorded.tables.summaries);
     assert_sources(&store.written.lock().await, &seeded);
-    assert_eq!(compacted_counts(&recorded.logs), vec![5, 2]);
+    assert_eq!(summarized_counts(&recorded.logs), vec![5, 2]);
     assert_eq!(
         recorded
             .steps
@@ -542,12 +544,12 @@ async fn a_truncated_leaf_shrinks_the_batch_and_sticks() {
         at("2026-10-10T12:10:00Z"),
         &token,
     );
-    let outcome = handle_compact(&env, &payload_of(id, SummaryTrigger::Window))
+    let outcome = handle_summarize(&env, &payload_of(id, SummaryTrigger::Window))
         .await
         .expect("compact");
     assert_eq!(
         outcome,
-        CompactOutcome {
+        SummarizeOutcome {
             summaries: 2,
             reenqueued: false
         }
@@ -555,7 +557,7 @@ async fn a_truncated_leaf_shrinks_the_batch_and_sticks() {
     assert_calls(&script.calls.lock().await, &chat_calls(recorded));
     assert_rows(&store.written.lock().await, &recorded.tables.summaries);
     assert_sources(&store.written.lock().await, &seeded);
-    assert_eq!(compacted_counts(&recorded.logs), vec![2]);
+    assert_eq!(summarized_counts(&recorded.logs), vec![2]);
 }
 
 #[tokio::test]
@@ -590,7 +592,7 @@ async fn a_failing_model_fails_the_job_and_skips_heartbeats() {
         at("2026-10-04T12:22:00Z"),
         &token,
     );
-    let error = handle_compact(&env, &payload_of(id, SummaryTrigger::SessionIdle))
+    let error = handle_summarize(&env, &payload_of(id, SummaryTrigger::SessionIdle))
         .await
         .expect_err("503");
     assert_eq!(error.to_string(), "LLM HTTP 503");
@@ -611,7 +613,7 @@ async fn a_failing_model_fails_the_job_and_skips_heartbeats() {
         .expect("heartbeat")
         .conversation
         .id;
-    let skipped = handle_compact(&env, &payload_of(heartbeat, SummaryTrigger::Window))
+    let skipped = handle_summarize(&env, &payload_of(heartbeat, SummaryTrigger::Window))
         .await
         .expect("heartbeat");
     assert_eq!(skipped.summaries, 0);
@@ -672,7 +674,7 @@ async fn a_permanent_status_still_retries_until_the_rest_revives_it() {
             at("2026-10-04T12:10:00Z"),
             &token,
         );
-        let error = handle_compact(&env, &payload).await.expect_err("400");
+        let error = handle_summarize(&env, &payload).await.expect_err("400");
         assert_eq!(error.to_string(), "LLM HTTP 400 (not retrying)");
     }
     assert!(
@@ -703,7 +705,7 @@ async fn a_permanent_status_still_retries_until_the_rest_revives_it() {
     assert_eq!(handle_reap(&after).await.expect("after rest"), 1);
     assert_eq!(jobs.dead_count(FixedJob::CompactConversation).await, 0);
     assert_eq!(jobs.dead_count(FixedJob::EmbedTarget).await, 1);
-    let outcome = handle_compact(&after, &payload).await.expect("revived");
+    let outcome = handle_summarize(&after, &payload).await.expect("revived");
     assert_eq!(outcome.summaries, 1);
     assert_rows(&store.written.lock().await, &recorded.tables.summaries);
 }
@@ -773,7 +775,7 @@ async fn idle_and_stale_floors_follow_the_recording() {
     assert_eq!(handle_enqueue_idle(&idle).await.expect("idle"), 1);
     let job = jobs.only().await;
     assert_eq!(read_trigger(&job.payload), SummaryTrigger::SessionIdle);
-    let outcome = handle_compact(&idle, &job.payload)
+    let outcome = handle_summarize(&idle, &job.payload)
         .await
         .expect("idle compact");
     assert_eq!(outcome.summaries, 1);
@@ -789,7 +791,7 @@ async fn idle_and_stale_floors_follow_the_recording() {
     assert_eq!(handle_enqueue_stale(&stale).await.expect("stale"), 1);
     let job = jobs.only().await;
     assert_eq!(read_trigger(&job.payload), SummaryTrigger::Stale);
-    let outcome = handle_compact(&stale, &job.payload)
+    let outcome = handle_summarize(&stale, &job.payload)
         .await
         .expect("stale compact");
     assert_eq!(outcome.summaries, 1);
@@ -801,7 +803,7 @@ async fn idle_and_stale_floors_follow_the_recording() {
         health_steps(recorded).get(1).expect("later health"),
     )
     .await;
-    assert_eq!(compacted_counts(&recorded.logs), vec![1, 1]);
+    assert_eq!(summarized_counts(&recorded.logs), vec![1, 1]);
 }
 
 #[test]
@@ -908,13 +910,13 @@ async fn assert_health(store: &MemStore, settings: &SummarySettings, expected: &
     );
 }
 
-fn compacted_counts(logs: &[String]) -> Vec<u32> {
+fn summarized_counts(logs: &[String]) -> Vec<u32> {
     logs.iter()
-        .filter_map(|line| compacted_count(line))
+        .filter_map(|line| summarized_count(line))
         .collect()
 }
 
-fn compacted_count(line: &str) -> Option<u32> {
+fn summarized_count(line: &str) -> Option<u32> {
     let tail = line.rsplit_once(": ").map(|(_, tail)| tail)?;
     let number = tail.strip_suffix(" summaries")?;
     number.parse().ok()
