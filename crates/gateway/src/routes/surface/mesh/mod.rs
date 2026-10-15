@@ -201,7 +201,6 @@ async fn activate(
     for node in &mut overview.nodes {
         if node.id == local {
             node.sessions = Some(0);
-            node.latest = Some(wire::gateway::devices::MeshLatest::NoActivity);
         }
     }
     probe_nodes(settings, &mut overview.nodes).await?;

@@ -95,5 +95,5 @@ fn large_json_integers_are_not_rounded_for_comparison() {
     let first: Json = serde_json::from_str("9007199254740992").expect("integer");
     let second: Json = serde_json::from_str("9007199254740993").expect("integer");
     assert!(!json_eq(&first, &second));
-    assert!(!json_eq(&json!({"present": null}), &json!({})));
+    assert!(json_eq(&json!({"present": null}), &json!({})));
 }

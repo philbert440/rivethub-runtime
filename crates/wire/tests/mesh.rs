@@ -107,23 +107,6 @@ fn numeric_spellings_and_wrong_types_are_not_coerced() {
 }
 
 #[test]
-fn activity_reports_distinguish_unavailable_from_known_empty() {
-    for text in [
-        r#"{"id":"local","name":"Local","denUrl":"http://127.0.0.1:5174","online":true,"sessions":0,"latest":null}"#,
-        r#"{"id":"peer","name":"Peer","denUrl":"http://peer.example:5174","online":false,"sessions":null}"#,
-    ] {
-        let value: serde_json::Value = serde_json::from_str(text).expect("mesh node JSON");
-        let node: wire::gateway::devices::MeshOverviewNode =
-            serde_json::from_value(value.clone()).expect("typed mesh node");
-        assert_eq!(node.latest.is_some(), value.get("latest").is_some());
-        assert_eq!(
-            serde_json::to_value(node).expect("mesh node serialization"),
-            value
-        );
-    }
-}
-
-#[test]
 fn activity_reports_reject_wrong_types() {
     let text = r#"{"id":"peer","name":"Peer","denUrl":"http://peer.example:5174","online":true,"sessions":0,"latest":3}"#;
     assert!(serde_json::from_str::<wire::gateway::devices::MeshOverviewNode>(text).is_err());

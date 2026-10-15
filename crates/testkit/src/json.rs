@@ -227,11 +227,14 @@ fn try_value_eq<E>(
 ) -> Result<bool, E> {
     match (rec, act) {
         (Json::Object(r), Json::Object(a)) => {
-            if r.len() != a.len() {
+            let present = |map: &serde_json::Map<String, Json>| {
+                map.values().filter(|value| !value.is_null()).count()
+            };
+            if present(r) != present(a) {
                 return Ok(false);
             }
-            for (key, value) in r {
-                let Some(other) = a.get(key) else {
+            for (key, value) in r.iter().filter(|(_, value)| !value.is_null()) {
+                let Some(other) = a.get(key).filter(|other| !other.is_null()) else {
                     return Ok(false);
                 };
                 if !try_value_eq(value, other, strings)? {

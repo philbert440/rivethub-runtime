@@ -161,66 +161,6 @@ text = "ok"
 count = 2
 
 [[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/capture.rs"
-text = "ok"
-count = 2
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/fakes.rs"
-text = "ok"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/fakes.rs"
-text = "unwrap_or"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/http.rs"
-text = "ok"
-count = 3
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/http.rs"
-text = "unwrap_or"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/json.rs"
-text = "ok"
-count = 2
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/pgdump.rs"
-text = "map_or"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/pgdump.rs"
-text = "ok"
-count = 2
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/sqlite.rs"
-text = "map_or_else"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/testkit/src/ws.rs"
-text = "ok"
-count = 6
-
-[[entry]]
 check = "PORTS"
 file = "crates/capture/src/writer.rs"
 text = "pub trait CaptureTransport"
