@@ -285,6 +285,38 @@ async fn heartbeat_reports_events_and_stops_without_a_final_write() -> TestResul
     Ok(())
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_restarted_node_republishes_its_record() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let registry = registry(&root).await?;
+    let mut stale = node("local");
+    stale.port = 5175;
+    stale.capabilities = Vec::new();
+    registry
+        .register(stale, Utc::now(), CancellationToken::new())
+        .await?;
+    let mut current = node("local");
+    current.port = 3001;
+    current.capabilities = vec!["den".to_owned()];
+    let heartbeat = Heartbeat::new(
+        registry.clone(),
+        current,
+        Duration::from_secs(5),
+        TimeDelta::seconds(30),
+    )?;
+    let mut reports = heartbeat.subscribe();
+    let shutdown = CancellationToken::new();
+    let task = tokio::spawn(heartbeat.run(shutdown.clone()));
+    tokio::time::timeout(Duration::from_secs(2), reports.changed()).await??;
+    shutdown.cancel();
+    tokio::time::timeout(Duration::from_secs(2), task).await???;
+    let file = registry.snapshot().await?.ok_or("mesh file")?;
+    let published = file.nodes.get("local").ok_or("local node")?;
+    assert_eq!(published.port, 3001);
+    assert_eq!(published.capabilities, vec!["den".to_owned()]);
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_writers_never_lose_an_acknowledged_registration() -> TestResult {
     let root = tempfile::tempdir()?;

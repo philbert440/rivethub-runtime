@@ -54,23 +54,32 @@ impl Heartbeat {
     pub async fn run(self, shutdown: CancellationToken) -> Result<(), RegistryError> {
         let mut ticks = tokio::time::interval(self.interval);
         ticks.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut registered = false;
         loop {
             tokio::select! {
                 biased;
                 () = shutdown.cancelled() => return Ok(()),
                 _tick = ticks.tick() => {}
             }
-            let result = self
-                .registry
-                .heartbeat(
-                    self.local.clone(),
-                    Utc::now(),
-                    self.stale_after,
-                    shutdown.clone(),
-                )
-                .await;
+            let result = if registered {
+                self.registry
+                    .heartbeat(
+                        self.local.clone(),
+                        Utc::now(),
+                        self.stale_after,
+                        shutdown.clone(),
+                    )
+                    .await
+            } else {
+                self.registry
+                    .register(self.local.clone(), Utc::now(), shutdown.clone())
+                    .await
+            };
             let report = match result {
-                Ok(file) => HeartbeatReport::Updated(Arc::new(file)),
+                Ok(file) => {
+                    registered = true;
+                    HeartbeatReport::Updated(Arc::new(file))
+                }
                 Err(RegistryError::Busy | RegistryError::Conflict) => {
                     tracing::warn!("mesh heartbeat deferred: registry has a concurrent writer");
                     HeartbeatReport::Contended
