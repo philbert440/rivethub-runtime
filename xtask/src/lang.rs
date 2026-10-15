@@ -15,6 +15,8 @@ pub struct Languages {
     paths: Vec<String>,
     #[serde(default)]
     globs: Vec<String>,
+    #[serde(default)]
+    deny: Vec<String>,
 }
 
 pub fn load(root: &Path) -> Result<Languages> {
@@ -61,8 +63,19 @@ pub fn check(root: &Path, findings: &mut Vec<String>) -> Result<usize> {
         .iter()
         .map(|glob| glob_to_regex(glob))
         .collect::<Result<_>>()?;
+    let deny_matchers: Vec<regex::Regex> = allow
+        .deny
+        .iter()
+        .map(|glob| glob_to_regex(glob))
+        .collect::<Result<_>>()?;
     let files = git::tracked_files(root)?;
     for file in &files {
+        if deny_matchers.iter().any(|matcher| matcher.is_match(file)) {
+            findings.push(format!(
+                "LANGUAGES {file}: denied by xtask/languages.toml (lane notes live on rivet-shared) → docs/PATTERNS.md#languages"
+            ));
+            continue;
+        }
         if allow.paths.iter().any(|path| path == file) {
             continue;
         }

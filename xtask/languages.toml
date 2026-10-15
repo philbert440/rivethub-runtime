@@ -27,3 +27,6 @@ globs = [
   "lints/ui/**/*.stderr",
   "xtask/data/*.json",
 ]
+deny = [
+  "**/rr-*-NOTES.md",
+]
