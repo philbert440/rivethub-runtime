@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::queue::JobId;
 use kernel::queue::JobName;
+use kernel::queue::JobQueue;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use wire::gateway::sessions::SessionMessage;
@@ -15,11 +17,10 @@ use wire::task::TaskStatus;
 use wire::task::TaskUsage;
 use wire::task::TaskVerdict;
 
-use kernel::tasks::ClaimSelector;
-use kernel::tasks::ClaimedJob;
+use kernel::queue::ClaimSelector;
+use kernel::queue::ClaimedJob;
 use kernel::tasks::Finish;
 use kernel::tasks::TaskJobPayload;
-use kernel::tasks::TaskJobs;
 use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskStore;
 use kernel::tasks::terminal;
@@ -44,7 +45,7 @@ pub enum RunOutcome {
 impl<S, J> Engine<S, J>
 where
     S: TaskStore,
-    J: TaskJobs,
+    J: JobQueue,
 {
     pub async fn run_one(&self) -> Result<RunOutcome, Error> {
         self.store.sweep(&self.settings.worker, Utc::now()).await?;
@@ -57,8 +58,10 @@ where
     pub(crate) fn selector(&self) -> ClaimSelector {
         ClaimSelector {
             names: vec![
-                JobName::Fixed(kernel::queue::FixedJob::RunTask).to_string(),
-                format!("run-task:{}", self.settings.node),
+                JobName::Fixed(kernel::queue::FixedJob::RunTask),
+                JobName::RunTaskOn {
+                    node: self.settings.node.clone(),
+                },
             ],
             only_id: None,
         }
@@ -171,7 +174,7 @@ where
     async fn settle_reply(
         &self,
         task: &TaskRecord,
-        job_id: i64,
+        job_id: JobId,
         reply: SessionPostReply,
         started: DateTime<Utc>,
     ) -> Result<RunOutcome, Error> {
@@ -207,7 +210,7 @@ where
     async fn settle_budget(
         &self,
         task: &TaskRecord,
-        job_id: i64,
+        job_id: JobId,
         usage: Option<TaskUsage>,
         reason: String,
         ended: DateTime<Utc>,
@@ -238,7 +241,7 @@ where
     async fn settle_call_error(
         &self,
         task: &TaskRecord,
-        job_id: i64,
+        job_id: JobId,
         error: Error,
         started: DateTime<Utc>,
     ) -> Result<RunOutcome, Error> {
@@ -280,7 +283,7 @@ where
         .await
     }
 
-    async fn settle_cancelled(&self, id: Uuid, job_id: i64) -> Result<RunOutcome, Error> {
+    async fn settle_cancelled(&self, id: Uuid, job_id: JobId) -> Result<RunOutcome, Error> {
         if self.release_if_killed(id, job_id).await? {
             return Ok(RunOutcome::AlreadyFinished(id));
         }
@@ -290,7 +293,7 @@ where
     async fn fail_clock(
         &self,
         id: Uuid,
-        job_id: i64,
+        job_id: JobId,
         error: Error,
         ended: DateTime<Utc>,
     ) -> Result<RunOutcome, Error> {
@@ -314,7 +317,7 @@ where
         .await
     }
 
-    async fn release_if_killed(&self, id: Uuid, job_id: i64) -> Result<bool, Error> {
+    async fn release_if_killed(&self, id: Uuid, job_id: JobId) -> Result<bool, Error> {
         let current = self.store.load(id).await?;
         if current.status != TaskStatus::Killed {
             return Ok(false);
@@ -326,7 +329,7 @@ where
     async fn finish_ok(
         &self,
         id: Uuid,
-        job_id: i64,
+        job_id: JobId,
         result: TaskResult,
         ended: DateTime<Utc>,
         wall: u64,
@@ -387,7 +390,7 @@ where
         Err(self.fail_job(job_id, error).await)
     }
 
-    async fn fail_job(&self, id: i64, error: Error) -> Error {
+    async fn fail_job(&self, id: JobId, error: Error) -> Error {
         match self.jobs.fail(id, &error.to_string()).await {
             Ok(()) => error,
             Err(cleanup) => Error::Cleanup {
@@ -401,7 +404,7 @@ where
 
 struct RecordedFailure {
     id: Uuid,
-    job_id: i64,
+    job_id: JobId,
     status: TaskStatus,
     result: TaskResult,
     error: Error,
@@ -413,15 +416,11 @@ struct ParsedJob {
 }
 
 fn parse_claimed(claimed: &ClaimedJob) -> Result<ParsedJob, Error> {
-    let name = claimed
-        .identifier
-        .parse::<JobName>()
-        .map_err(Error::JobName)?;
-    let payload: TaskJobPayload = serde_json::from_str(&claimed.payload_text)
-        .map_err(|source| Error::Payload(Box::new(source)))?;
+    let payload: TaskJobPayload =
+        serde_json::from_value(serde_json::Value::Object(claimed.payload.as_map().clone()))
+            .map_err(|source| Error::Payload(Box::new(source)))?;
     let task_id = Uuid::parse_str(&payload.task_id)
         .map_err(|_| Error::Stored("task id is not a uuid".to_string()))?;
-    drop(name);
     Ok(ParsedJob { task_id })
 }
 

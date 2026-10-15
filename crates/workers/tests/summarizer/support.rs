@@ -366,13 +366,14 @@ impl Seen {
             jobs: Mutex::new(Vec::new()),
             dead: Mutex::new(dead),
             notifications: tokio::sync::watch::channel(()).0,
+            next_id: std::sync::atomic::AtomicI64::new(1),
         }
     }
 
     pub(super) async fn only(&self) -> Job {
         let mut jobs = self.jobs.lock().await;
         assert_eq!(jobs.len(), 1);
-        jobs.remove(0)
+        jobs.remove(0).job
     }
 
     pub(super) async fn dead_count(&self, job: FixedJob) -> usize {
@@ -387,41 +388,96 @@ impl Seen {
 
 #[async_trait]
 impl JobQueue for Seen {
+    fn task_names(&self, role: WorkerRole) -> Vec<JobName> {
+        workers::jobs_for(role)
+    }
+
     async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
         Ok(Box::new(self.notifications.subscribe()))
     }
 
-    async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
+    async fn enqueue(&self, job: Job) -> Result<JobId, JobQueueError> {
         let key = job.key.clone();
-        {
+        let id = {
             let mut jobs = self.jobs.lock().await;
             if let Some(key) = key
                 && let Some(existing) = jobs
                     .iter_mut()
-                    .find(|queued| queued.key.as_ref() == Some(&key))
+                    .find(|queued| queued.job.key.as_ref() == Some(&key))
             {
-                *existing = job;
+                let id = existing.id;
+                existing.job = job;
+                id
             } else {
-                jobs.push(job);
+                let id = JobId::new(
+                    self.next_id
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+                );
+                jobs.push(Held {
+                    id,
+                    job,
+                    attempts: 0,
+                    last_error: None,
+                    claimed: false,
+                });
+                id
             }
-        }
+        };
         self.notifications.send_replace(());
-        Ok(())
+        Ok(id)
     }
 
     async fn claim(
         &self,
-        _role: WorkerRole,
+        selector: &kernel::queue::ClaimSelector,
     ) -> Result<Option<kernel::queue::ClaimedJob>, JobQueueError> {
-        Ok(None)
+        let mut jobs = self.jobs.lock().await;
+        let outcome = match jobs.iter_mut().find(|held| {
+            !held.claimed
+                && selector.names.iter().any(|name| name == &held.job.name)
+                && selector.only_id.is_none_or(|only| only == held.id)
+        }) {
+            Some(held) => {
+                held.claimed = true;
+                held.attempts = held.attempts.saturating_add(1);
+                Ok(Some(kernel::queue::ClaimedJob {
+                    id: held.id,
+                    name: held.job.name.clone(),
+                    payload: held.job.payload.clone(),
+                    attempt: held.attempts,
+                }))
+            }
+            None => Ok(None),
+        };
+        drop(jobs);
+        outcome
     }
 
-    async fn complete(&self, _id: JobId) -> Result<(), JobQueueError> {
-        Ok(())
+    async fn complete(&self, id: JobId) -> Result<(), JobQueueError> {
+        let mut jobs = self.jobs.lock().await;
+        let before = jobs.len();
+        jobs.retain(|held| held.id != id);
+        let missing = jobs.len() == before;
+        drop(jobs);
+        if missing {
+            Err(JobQueueError::Missing { id })
+        } else {
+            Ok(())
+        }
     }
 
-    async fn fail(&self, _id: JobId, _error: &str) -> Result<(), JobQueueError> {
-        Ok(())
+    async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError> {
+        let mut jobs = self.jobs.lock().await;
+        let outcome = match jobs.iter_mut().find(|held| held.id == id) {
+            Some(held) => {
+                held.last_error = Some(error.to_owned());
+                held.claimed = false;
+                Ok(())
+            }
+            None => Err(JobQueueError::Missing { id }),
+        };
+        drop(jobs);
+        outcome
     }
 
     async fn revive_dead(
@@ -442,5 +498,44 @@ impl JobQueue for Seen {
             revived
         };
         Ok(revived)
+    }
+
+    async fn read(&self, id: JobId) -> Result<Option<kernel::queue::StoredJob>, JobQueueError> {
+        let jobs = self.jobs.lock().await;
+        let stored = jobs
+            .iter()
+            .find(|held| held.id == id)
+            .map(|held| {
+                let max_attempts = match held.job.max_attempts {
+                    Some(attempts) => attempts,
+                    None => i32::try_from(default_attempts(&held.job.name))
+                        .map_err(|_| JobQueueError::Stored("max_attempts".to_owned()))?,
+                };
+                Ok(kernel::queue::StoredJob {
+                    id,
+                    name: held.job.name.clone(),
+                    payload: held.job.payload.clone(),
+                    key: held.job.key.clone(),
+                    priority: Some(held.job.priority),
+                    max_attempts,
+                    attempts: held.attempts,
+                    last_error: held.last_error.clone(),
+                })
+            })
+            .transpose();
+        drop(jobs);
+        stored
+    }
+}
+
+fn default_attempts(name: &JobName) -> u32 {
+    match name {
+        JobName::Fixed(FixedJob::SummarizeConversation | FixedJob::SynthesizeToolCall) => 3,
+        JobName::Fixed(FixedJob::SuggestTags | FixedJob::ExtractWiki) => 2,
+        JobName::Fixed(FixedJob::EmbedTarget) => 5,
+        JobName::Fixed(FixedJob::RunTask)
+        | JobName::Heartbeat { .. }
+        | JobName::RunTaskOn { .. } => 1,
+        JobName::Fixed(_) => 25,
     }
 }

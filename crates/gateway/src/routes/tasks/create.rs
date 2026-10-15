@@ -343,8 +343,8 @@ async fn persist(api: &TasksApi, record: &TaskRecord) -> Result<(), TaskHttpErro
         .insert(record)
         .await
         .map_err(|error| store_error(&error))?;
-    if let Err(error) = api.jobs.enqueue(&new_job(record, &api.node)).await {
-        return Err(enqueue_cleanup(api, record.id, &error).await);
+    if let Err(error) = api.jobs.enqueue(new_job(record, &api.node)?).await {
+        return Err(enqueue_cleanup(api, record.id, &error.into()).await);
     }
     Ok(())
 }

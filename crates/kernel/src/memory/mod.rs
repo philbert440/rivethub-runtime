@@ -14,6 +14,7 @@ use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryScope;
 use wire::gateway::memory::MemoryStatsResponse;
 use wire::gateway::memory::PendingTagWire;
+pub use wire::gateway::memory::SearchMode;
 use wire::gateway::memory::TagCount;
 use wire::gateway::memory::TagEntityType;
 use wire::gateway::memory::TagEntryPair;
@@ -166,31 +167,6 @@ impl Limit {
     pub const fn get(self) -> u32 {
         self.value
     }
-}
-
-#[derive(
-    serde::Serialize,
-    schemars::JsonSchema,
-    Debug,
-    Clone,
-    Copy,
-    Default,
-    PartialEq,
-    Eq,
-    Hash,
-    strum::Display,
-    strum::EnumString,
-    serde::Deserialize,
-)]
-#[serde(rename_all = "snake_case")]
-#[strum(serialize_all = "snake_case")]
-pub enum SearchMode {
-    #[default]
-    Hybrid,
-    Fts,
-    Vector,
-    Trigram,
-    Regex,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

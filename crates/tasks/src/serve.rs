@@ -3,7 +3,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use tokio_util::sync::CancellationToken;
 
-use kernel::tasks::TaskJobs;
+use kernel::queue::JobQueue;
 use kernel::tasks::TaskStore;
 
 use crate::engine::Engine;
@@ -12,18 +12,18 @@ use crate::error::Error;
 impl<S, J> Engine<S, J>
 where
     S: TaskStore + 'static,
-    J: TaskJobs + 'static,
+    J: JobQueue + 'static,
 {
     pub async fn serve(self: &Arc<Self>, cancel: CancellationToken) -> Result<(), Error> {
         let wake = self.wake();
+        let mut notifications = self.jobs.subscribe().await?;
         self.notify_jobs();
         loop {
             tokio::select! {
                 () = cancel.cancelled() => break,
                 () = wake.notified() => self.drain(&cancel).await,
-                incoming = self.jobs.await_notification(cancel.clone()) => match incoming {
-                    Ok(true) => self.notify_jobs(),
-                    Ok(false) => break,
+                incoming = notifications.recv() => match incoming {
+                    Ok(()) => self.notify_jobs(),
                     Err(error) => {
                         tracing::error!(%error, "job notification failed");
                         break;

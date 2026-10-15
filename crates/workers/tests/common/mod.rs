@@ -11,6 +11,7 @@ use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
 use kernel::model::ModelRequest;
 use kernel::model::ModelStreamItem;
+use kernel::queue::ClaimSelector;
 use kernel::queue::ClaimedJob;
 use kernel::queue::FixedJob;
 use kernel::queue::Job;
@@ -18,6 +19,7 @@ use kernel::queue::JobId;
 use kernel::queue::JobName;
 use kernel::queue::JobQueue;
 use kernel::queue::JobQueueError;
+use kernel::queue::StoredJob;
 use kernel::queue::WorkerRole;
 use serde::Serialize;
 use tokio::sync::Mutex;
@@ -32,7 +34,6 @@ pub use store::Store;
 
 use workers::EmbedSettings;
 use workers::WorkerError;
-use workers::accepts;
 use workers::handle_embed;
 
 pub const WIDTH: u32 = 8;
@@ -274,10 +275,12 @@ fn snapshot(row: &Queued) -> JobView {
     }
 }
 
-fn select_ready(rows: &[Queued], role: WorkerRole) -> Option<usize> {
+fn select_ready(rows: &[Queued], selector: &ClaimSelector) -> Option<usize> {
     let mut chosen: Option<usize> = None;
     for (index, row) in rows.iter().enumerate() {
-        if row.phase != Phase::Ready || !(row.bypass || accepts(role, &row.name)) {
+        let named = selector.names.iter().any(|name| name == &row.name);
+        let pinned = selector.only_id.is_none_or(|only| only == row.id);
+        if row.phase != Phase::Ready || !(row.bypass || (named && pinned)) {
             continue;
         }
         chosen = Some(match chosen {
@@ -332,26 +335,35 @@ fn missing(id: JobId) -> JobQueueError {
 
 #[async_trait]
 impl JobQueue for Queue {
+    fn task_names(&self, role: WorkerRole) -> Vec<JobName> {
+        workers::jobs_for(role)
+    }
+
     async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
         Ok(Box::new(self.notifications.subscribe()))
     }
 
-    async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
-        let max_attempts = default_max_attempts(&job.name);
-        self.add(job.name, job.payload, job.priority, max_attempts, false)
+    async fn enqueue(&self, job: Job) -> Result<JobId, JobQueueError> {
+        let max_attempts = match job.max_attempts {
+            Some(attempts) => u32::try_from(attempts)
+                .map_err(|_| JobQueueError::Stored("max_attempts".to_owned()))?,
+            None => default_max_attempts(&job.name),
+        };
+        let id = self
+            .add(job.name, job.payload, job.priority, max_attempts, false)
             .await;
         self.notifications.send_replace(());
-        Ok(())
+        Ok(id)
     }
 
-    async fn claim(&self, role: WorkerRole) -> Result<Option<ClaimedJob>, JobQueueError> {
+    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, JobQueueError> {
         let pending = self.claim_error.lock().await.take();
         if let Some(error) = pending {
             return Err(error);
         }
         let claimed = {
             let mut rows = self.rows.lock().await;
-            let Some(index) = select_ready(&rows, role) else {
+            let Some(index) = select_ready(&rows, selector) else {
                 return Ok(None);
             };
             let Some(row) = rows.get_mut(index) else {
@@ -454,6 +466,29 @@ impl JobQueue for Queue {
                 source: Box::new(std::io::Error::other("dead job has no dead time")),
             }),
         }
+    }
+
+    async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError> {
+        let rows = self.rows.lock().await;
+        let stored = rows
+            .iter()
+            .find(|row| row.id == id)
+            .map(|row| {
+                Ok(StoredJob {
+                    id: row.id,
+                    name: row.name.clone(),
+                    payload: row.payload.clone(),
+                    key: None,
+                    priority: Some(row.priority),
+                    max_attempts: i32::try_from(row.max_attempts)
+                        .map_err(|_| JobQueueError::Stored("max_attempts".to_owned()))?,
+                    attempts: row.attempt,
+                    last_error: row.last_error.clone(),
+                })
+            })
+            .transpose();
+        drop(rows);
+        stored
     }
 }
 

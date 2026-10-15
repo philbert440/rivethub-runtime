@@ -27,18 +27,18 @@ async fn stored_updated_at(store: &memory_sqlite::SqliteStore) -> TestResult<Str
 async fn updated_at_only_moves_forward() -> TestResult {
     let fresh = fresh_store(None)?;
     let now = instant(common::RECORDED_START)?;
-    let stamped = |updated_at: &str| {
+    let stamped = |updated_at: &str| -> TestResult<CaptureBatchRequest> {
         let mut capture = batch("old-task", "rivet", "cli");
-        capture.updated_at = Some(updated_at.to_owned());
-        capture
+        capture.updated_at = Some(instant(updated_at)?);
+        Ok(capture)
     };
     fresh
         .store
-        .capture(stamped("2025-03-01T01:00:00+01:00"), now)
+        .capture(stamped("2025-03-01T01:00:00+01:00")?, now)
         .await?;
     fresh
         .store
-        .capture(stamped("2024-06-01T00:00:00Z"), now)
+        .capture(stamped("2024-06-01T00:00:00Z")?, now)
         .await?;
     assert_eq!(
         stored_updated_at(&fresh.store).await?,

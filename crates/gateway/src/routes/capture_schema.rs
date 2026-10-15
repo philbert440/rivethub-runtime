@@ -1,10 +1,7 @@
-use std::sync::LazyLock;
-
 use axum::extract::FromRequest;
 use axum::extract::Request;
 use chrono::DateTime;
 use chrono::Utc;
-use regex::Regex;
 use serde::Serialize;
 use wire::capture::CaptureBatchRequest;
 use wire::json::JsonObject;
@@ -16,23 +13,6 @@ use crate::error::invalid_json;
 use crate::extract::limited_bytes;
 
 const CAPTURE_BODY_LIMIT: usize = 1024 * 1024;
-
-const DATETIME_PATTERN: &str = concat!(
-    r"^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29",
-    r"|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)",
-    r"|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?",
-    r"(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$"
-);
-
-#[expect(
-    clippy::expect_used,
-    reason = "constant pattern; the unit test compiles it"
-)]
-static DATETIME: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(DATETIME_PATTERN).expect("datetime pattern compiles"));
-
-static DATETIME_PATTERN_DELIMITED: LazyLock<String> =
-    LazyLock::new(|| format!("/{DATETIME_PATTERN}/"));
 
 #[derive(Debug)]
 pub(crate) struct ValidatedBatch {
@@ -94,14 +74,12 @@ pub(crate) fn validate(batch: CaptureBatchRequest) -> Result<ValidatedBatch, Api
     let mut issues = Vec::new();
     non_empty(&mut issues, &batch.session_key, "session_key");
     non_empty(&mut issues, &batch.agent, "agent");
-    datetime_issue(&mut issues, batch.created_at.as_deref(), "created_at");
-    datetime_issue(&mut issues, batch.updated_at.as_deref(), "updated_at");
     let mut messages = Vec::with_capacity(batch.messages.len());
     for (index, message) in batch.messages.into_iter().enumerate() {
         if message.event_id.is_empty() {
             issues.push(too_small(message_path(index, "event_id")));
         }
-        let created_at = message_timestamp(&mut issues, index, message.created_at);
+        let created_at = message.created_at;
         messages.push(ValidatedMessage {
             event_id: message.event_id,
             role: message.role,
@@ -175,19 +153,6 @@ fn trimmed(path: Vec<PathSegment>) -> Issue {
     }
 }
 
-fn invalid_datetime(path: Vec<PathSegment>) -> Issue {
-    Issue {
-        origin: Some("string"),
-        code: "invalid_format",
-        minimum: None,
-        inclusive: None,
-        format: Some("datetime"),
-        pattern: Some(DATETIME_PATTERN_DELIMITED.as_str()),
-        path,
-        message: "Invalid ISO datetime",
-    }
-}
-
 fn issue_text(issues: &[Issue]) -> Result<String, ApiError> {
     serde_json::to_string_pretty(issues).map_err(ApiError::Serialize)
 }
@@ -207,46 +172,12 @@ fn non_empty(issues: &mut Vec<Issue>, value: &str, field: &str) {
     }
 }
 
-fn datetime_issue(issues: &mut Vec<Issue>, value: Option<&str>, field: &str) {
-    if let Some(value) = value
-        && !iso_datetime_with_offset(value)
-    {
-        issues.push(invalid_datetime(vec![PathSegment::Field(
-            field.to_string(),
-        )]));
-    }
-}
-
-fn message_timestamp(
-    issues: &mut Vec<Issue>,
-    index: usize,
-    raw: Option<String>,
-) -> Option<DateTime<Utc>> {
-    let raw = raw?;
-    if !iso_datetime_with_offset(&raw) {
-        issues.push(invalid_datetime(message_path(index, "created_at")));
-        return None;
-    }
-    let created_at = DateTime::parse_from_rfc3339(&raw)
-        .ok()
-        .map(|parsed| parsed.with_timezone(&Utc));
-    if created_at.is_none() {
-        issues.push(invalid_datetime(message_path(index, "created_at")));
-    }
-    created_at
-}
-
 fn message_path(index: usize, field: &str) -> Vec<PathSegment> {
     vec![
         PathSegment::Field("messages".to_string()),
         PathSegment::Index(index),
         PathSegment::Field(field.to_string()),
     ]
-}
-
-#[must_use]
-pub fn iso_datetime_with_offset(value: &str) -> bool {
-    DATETIME.is_match(value)
 }
 
 #[cfg(test)]
@@ -277,7 +208,11 @@ mod validated_batch_tests {
                 tool_args: None,
                 tool_result: None,
                 metadata: None,
-                created_at: Some("2026-10-10T12:00:00+02:00".to_owned()),
+                created_at: Some(
+                    chrono::DateTime::parse_from_rfc3339("2026-10-10T12:00:00+02:00")
+                        .expect("offset instant")
+                        .with_timezone(&chrono::Utc),
+                ),
             }],
         };
         let validated = validate(batch).expect("valid batch");
@@ -291,13 +226,5 @@ mod validated_batch_tests {
                     .with_timezone(&chrono::Utc)
             )
         );
-    }
-
-    #[test]
-    fn datetime_pattern_compiles_and_matches_the_recorded_examples() {
-        assert!(super::DATETIME.is_match("2026-10-10T12:00:00Z"));
-        assert!(super::DATETIME.is_match("2026-10-10T12:00:00.000+02:00"));
-        assert!(!super::DATETIME.is_match("2026-13-01T00:00:00Z"));
-        assert!(!super::DATETIME.is_match("yesterday"));
     }
 }

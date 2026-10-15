@@ -107,12 +107,17 @@ pub async fn read(store: &dyn MemoryStore, args: Read) -> Result<CallToolResult,
                 .iter()
                 .map(|citation| {
                     let mut line = citation.summary_id.clone();
-                    for detail in [&citation.date, &citation.kind, &citation.note]
-                        .into_iter()
-                        .flatten()
-                    {
+                    if let Some(date) = citation.date {
                         line.push_str(" — ");
-                        line.push_str(detail);
+                        line.push_str(&date.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+                    }
+                    if let Some(kind) = &citation.kind {
+                        line.push_str(" — ");
+                        line.push_str(kind);
+                    }
+                    if let Some(note) = &citation.note {
+                        line.push_str(" — ");
+                        line.push_str(note);
                     }
                     line
                 })
@@ -151,7 +156,7 @@ fn bounded(value: &str, limit: usize) -> String {
 
 fn history(page: &WikiPageResponse) -> String {
     let mut entries: Vec<_> = page.history.iter().collect();
-    entries.sort_by(|a, b| b.date.cmp(&a.date));
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.date));
     entries
         .into_iter()
         .map(|entry| format!("### {} — {}\n{}", entry.date, entry.title, entry.body))

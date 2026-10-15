@@ -40,6 +40,7 @@ fn keyed(target: &str, key: &str, mode: JobKeyMode) -> TestResult<Job> {
         key_mode: mode,
         priority: 7,
         run_at: None,
+        max_attempts: None,
     })
 }
 
@@ -85,12 +86,19 @@ async fn the_store_implements_the_job_queue_port() -> TestResult {
     assert_eq!(cell(row, "max_attempts"), &Json::from(5_i64));
     assert_eq!(cell(row, "attempts"), &Json::from(0_i64));
     assert!(
-        store.claim(WorkerRole::Summarizer).await?.is_none(),
+        store
+            .claim(&kernel::queue::ClaimSelector::matching(
+                store.task_names(WorkerRole::Summarizer)
+            ))
+            .await?
+            .is_none(),
         "a summarizer does not take embed jobs"
     );
 
     let claimed = store
-        .claim(WorkerRole::Embedder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            store.task_names(WorkerRole::Embedder),
+        ))
         .await?
         .ok_or("embedder claims the job")?;
     assert_eq!(claimed.name, JobName::Fixed(FixedJob::EmbedTarget));
@@ -99,18 +107,30 @@ async fn the_store_implements_the_job_queue_port() -> TestResult {
         claimed.payload.get("targetId").and_then(Json::as_str),
         Some("abc")
     );
-    assert!(store.claim(WorkerRole::Embedder).await?.is_none());
+    assert!(
+        store
+            .claim(&kernel::queue::ClaimSelector::matching(
+                store.task_names(WorkerRole::Embedder)
+            ))
+            .await?
+            .is_none()
+    );
 
     store.fail(claimed.id, "boom").await?;
     assert!(
-        store.claim(WorkerRole::Embedder).await?.is_none(),
+        store
+            .claim(&kernel::queue::ClaimSelector::matching(
+                store.task_names(WorkerRole::Embedder)
+            ))
+            .await?
+            .is_none(),
         "a failed job waits for its retry"
     );
     store.complete(claimed.id).await?;
     assert_eq!(jobs(store).await?, Vec::<Json>::new());
 
     let missing = store.complete(JobId::new(9_999)).await;
-    assert!(matches!(missing, Err(JobQueueError::Unavailable(_))));
+    assert!(matches!(missing, Err(JobQueueError::Missing { .. })));
 
     store.enqueue(job("keep", JobKeyMode::KeepRunAt)?).await?;
     store.enqueue(job("other", JobKeyMode::KeepRunAt)?).await?;
@@ -141,7 +161,12 @@ async fn complete_of_a_finished_claim_does_not_take_the_next_job() -> TestResult
             JobKeyMode::Replace,
         )?)
         .await?;
-    let claimed = store.claim(WorkerRole::Embedder).await?.ok_or("claim")?;
+    let claimed = store
+        .claim(&kernel::queue::ClaimSelector::matching(
+            store.task_names(WorkerRole::Embedder),
+        ))
+        .await?
+        .ok_or("claim")?;
     store.complete(claimed.id).await?;
     store
         .enqueue(keyed(
@@ -151,7 +176,7 @@ async fn complete_of_a_finished_claim_does_not_take_the_next_job() -> TestResult
         )?)
         .await?;
     let again = store.complete(claimed.id).await;
-    assert!(matches!(again, Err(JobQueueError::Unavailable(_))));
+    assert!(matches!(again, Err(JobQueueError::Missing { .. })));
     let rows = jobs(store).await?;
     let row = rows.first().ok_or("the second job")?;
     if rows.len() != 1 {
@@ -181,10 +206,16 @@ async fn a_null_payload_is_dead_on_claim() -> TestResult {
             JobKeyMode::Replace,
         )?)
         .await?;
-    let rejected = store.claim(WorkerRole::Embedder).await;
+    let rejected = store
+        .claim(&kernel::queue::ClaimSelector::matching(
+            store.task_names(WorkerRole::Embedder),
+        ))
+        .await;
     assert!(matches!(rejected, Err(JobQueueError::Claim { .. })));
     let claimed = store
-        .claim(WorkerRole::Embedder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            store.task_names(WorkerRole::Embedder),
+        ))
         .await?
         .ok_or("the object payload is still claimable")?;
     assert_eq!(
@@ -216,6 +247,7 @@ async fn a_job_with_no_key_stores_null() -> TestResult {
         key_mode: JobKeyMode::Replace,
         priority: 0,
         run_at: None,
+        max_attempts: None,
     };
     store.enqueue(first.clone()).await?;
     let second = Job {
@@ -236,11 +268,20 @@ async fn queue_notifications_survive_the_empty_claim_to_wait_transition() -> Tes
     let opened = open()?;
     let store = &opened.store;
     let mut notifications = store.subscribe().await?;
-    assert!(store.claim(WorkerRole::Embedder).await?.is_none());
+    assert!(
+        store
+            .claim(&kernel::queue::ClaimSelector::matching(
+                store.task_names(WorkerRole::Embedder)
+            ))
+            .await?
+            .is_none()
+    );
     store.enqueue(job("notified", JobKeyMode::Replace)?).await?;
     tokio::time::timeout(std::time::Duration::from_secs(5), notifications.recv()).await??;
     let claimed = store
-        .claim(WorkerRole::Embedder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            store.task_names(WorkerRole::Embedder),
+        ))
         .await?
         .ok_or("claim after notification")?;
     store.complete(claimed.id).await?;

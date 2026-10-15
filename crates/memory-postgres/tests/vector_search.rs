@@ -64,8 +64,12 @@ fn contents(hits: &[wire::gateway::memory::MemorySearchHit]) -> Vec<String> {
     hits.iter().map(|hit| hit.content.clone()).collect()
 }
 
-fn batch(event_id: &str, content: &str) -> CaptureBatchRequest {
-    CaptureBatchRequest {
+fn stamp(text: &str) -> Result<chrono::DateTime<chrono::Utc>, chrono::ParseError> {
+    Ok(chrono::DateTime::parse_from_rfc3339(text)?.with_timezone(&chrono::Utc))
+}
+
+fn batch(event_id: &str, content: &str) -> Result<CaptureBatchRequest, chrono::ParseError> {
+    Ok(CaptureBatchRequest {
         session_key: "claude-code:vector".to_string(),
         agent: "rivet".to_string(),
         channel: Some("claude-code".to_string()),
@@ -83,15 +87,15 @@ fn batch(event_id: &str, content: &str) -> CaptureBatchRequest {
             tool_args: None,
             tool_result: None,
             metadata: None,
-            created_at: Some(OLD.to_string()),
+            created_at: Some(stamp(OLD)?),
         }],
-    }
+    })
 }
 
 async fn capture(pool: &PgPool, event_id: &str, content: &str) -> TestResult {
     unwired(pool)
         .capture_batch(
-            &batch(event_id, content),
+            &batch(event_id, content)?,
             &memory_postgres::CaptureOptions::default(),
         )
         .await?;

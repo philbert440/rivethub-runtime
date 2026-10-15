@@ -222,11 +222,32 @@ struct MemStore {
     written: Mutex<Vec<NewSummary>>,
 }
 
-#[derive(Default)]
+#[derive(Debug)]
+struct Held {
+    id: JobId,
+    job: Job,
+    attempts: u32,
+    last_error: Option<String>,
+    claimed: bool,
+}
+
+#[derive(Debug)]
 struct Seen {
     notifications: tokio::sync::watch::Sender<()>,
-    jobs: Mutex<Vec<Job>>,
+    jobs: Mutex<Vec<Held>>,
     dead: Mutex<Vec<(JobName, DateTime<Utc>)>>,
+    next_id: std::sync::atomic::AtomicI64,
+}
+
+impl Default for Seen {
+    fn default() -> Self {
+        Self {
+            notifications: tokio::sync::watch::channel(()).0,
+            jobs: Mutex::new(Vec::new()),
+            dead: Mutex::new(Vec::new()),
+            next_id: std::sync::atomic::AtomicI64::new(1),
+        }
+    }
 }
 
 fn fixture() -> Fixture {

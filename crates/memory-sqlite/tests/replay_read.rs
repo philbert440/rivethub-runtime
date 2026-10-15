@@ -22,7 +22,6 @@ use kernel::memory::Limit;
 use memory_sqlite::SqliteStore;
 use serde::Deserialize;
 use testkit::Json;
-use wire::gateway::memory::BrowseWindow;
 use wire::gateway::memory::MemoryBrowseToolArgs;
 use wire::gateway::memory::MemoryStatsResponse;
 use wire::memory::MemoryEntry;
@@ -76,7 +75,7 @@ const SKIPPED_TOOL_LABELS: [(&str, &str); 6] = [
     ),
     (
         "browse bad window",
-        "window text parsing is the mcp tool's job (wire BrowseWindow::parse)",
+        "the recorded error is a TypeScript throw from window parsing; BrowseWindow rejects an unknown window before the store",
     ),
     (
         "browse bad since",
@@ -288,11 +287,7 @@ fn browse_filter(args: &Json) -> TestResult<BrowseFilter> {
         role: None,
         tool_name: None,
         tag: None,
-        window: args
-            .window
-            .as_deref()
-            .map(BrowseWindow::parse)
-            .transpose()?,
+        window: args.window,
         since: None,
         before: None,
         include_tools: args.include_tools == Some(true),

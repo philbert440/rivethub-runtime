@@ -223,7 +223,13 @@ where
         let count = roles.len();
         let start = self.cursor.fetch_add(1, Ordering::Relaxed) % count;
         for role in roles.iter().cycle().skip(start).take(count) {
-            if let Some(job) = self.queue.claim(*role).await.map_err(WorkerError::queue)? {
+            let selector = kernel::queue::ClaimSelector::matching(self.queue.task_names(*role));
+            if let Some(job) = self
+                .queue
+                .claim(&selector)
+                .await
+                .map_err(WorkerError::queue)?
+            {
                 return Ok(Some(job));
             }
         }

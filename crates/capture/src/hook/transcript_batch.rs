@@ -1,3 +1,5 @@
+use chrono::DateTime;
+use chrono::Utc;
 use wire::JsonObject;
 use wire::capture::CaptureBatchRequest;
 use wire::capture::CaptureMessage;
@@ -114,7 +116,7 @@ fn assistant_turns(batch: &mut CaptureBatchRequest, source: &Source<'_>) -> Resu
                 None,
                 None,
             )?),
-            created_at: line.timestamp.clone(),
+            created_at: instant(line.timestamp.as_deref())?,
         });
     }
     Ok(())
@@ -177,11 +179,17 @@ fn recovered_tools(batch: &mut CaptureBatchRequest, source: &Source<'_>) -> Resu
                     Some("PostToolUse"),
                     Some(true),
                 )?),
-                created_at: issuer.timestamp.clone(),
+                created_at: instant(issuer.timestamp.as_deref())?,
             });
         }
     }
     Ok(())
+}
+
+fn instant(raw: Option<&str>) -> Result<Option<DateTime<Utc>>, HookError> {
+    raw.map(|text| DateTime::parse_from_rfc3339(text).map(|parsed| parsed.with_timezone(&Utc)))
+        .transpose()
+        .map_err(HookError::Timestamp)
 }
 
 fn recovered_prompts(
@@ -209,7 +217,7 @@ fn recovered_prompts(
                 None,
                 Some(true),
             )?),
-            created_at: line.timestamp.clone(),
+            created_at: instant(line.timestamp.as_deref())?,
         });
     }
     Ok(())

@@ -1,24 +1,22 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
-use kernel::tasks::ClaimSelector;
-use kernel::tasks::ClaimedJob;
+use kernel::queue::ClaimSelector;
+use kernel::queue::ClaimedJob;
+use kernel::queue::Job;
+use kernel::queue::JobId;
+use kernel::queue::JobName;
+use kernel::queue::JobQueue;
+use kernel::queue::JobQueueError;
+use kernel::queue::WorkerRole;
 use kernel::tasks::Finish;
-use kernel::tasks::NewJob;
-use kernel::tasks::StoredJob;
 use kernel::tasks::TaskError;
-use kernel::tasks::TaskJobs;
 use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskStore;
 use sqlx::PgConnection;
 use sqlx::PgPool;
-use sqlx::postgres::PgListener;
 use sqlx::postgres::PgPoolOptions;
-use tokio::sync::Mutex;
 use tokio::sync::watch;
-use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use wire::task::TaskStatus;
 
@@ -42,7 +40,6 @@ use crate::task_rows::sweep_tasks;
 pub struct PostgresTasks {
     pool: PgPool,
     worker: String,
-    listen: Arc<Mutex<Option<PgListener>>>,
     pub(crate) events: watch::Sender<u64>,
 }
 
@@ -62,7 +59,6 @@ impl PostgresTasks {
         Self {
             pool,
             worker: Uuid::new_v4().to_string(),
-            listen: Arc::new(Mutex::new(None)),
             events,
         }
     }
@@ -178,55 +174,105 @@ impl TaskStore for PostgresTasks {
 }
 
 #[async_trait]
-impl TaskJobs for PostgresTasks {
-    async fn enqueue(&self, job: &NewJob) -> Result<i64, TaskError> {
-        in_transaction(&self.pool, async |conn| enqueue_job(conn, job).await).await
+impl JobQueue for PostgresTasks {
+    fn task_names(&self, role: WorkerRole) -> Vec<JobName> {
+        crate::queue::PostgresQueue::task_list(role).to_vec()
     }
 
-    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, TaskError> {
-        in_transaction(&self.pool, async |conn| {
-            claim_job(conn, selector, &self.worker).await
+    async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
+        crate::graphile::listen(&self.pool)
+            .await
+            .map_err(JobQueueError::from)
+    }
+
+    async fn enqueue(&self, job: Job) -> Result<JobId, JobQueueError> {
+        job_transaction(&self.pool, async |conn| enqueue_job(conn, &job).await).await
+    }
+
+    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, JobQueueError> {
+        let worker = self.worker.clone();
+        job_transaction(&self.pool, async move |conn| {
+            claim_job(conn, selector, &worker).await
         })
         .await
     }
 
-    async fn complete(&self, id: i64) -> Result<(), TaskError> {
-        in_transaction(&self.pool, async |conn| {
-            complete_job(conn, id, &self.worker).await
+    async fn complete(&self, id: JobId) -> Result<(), JobQueueError> {
+        let worker = self.worker.clone();
+        job_transaction(&self.pool, async move |conn| {
+            complete_job(conn, id, &worker).await
         })
         .await
     }
 
-    async fn fail(&self, id: i64, error: &str) -> Result<(), TaskError> {
-        in_transaction(&self.pool, async |conn| {
-            fail_job(conn, id, error, &self.worker).await
+    async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError> {
+        let worker = self.worker.clone();
+        let error = error.to_owned();
+        job_transaction(&self.pool, async move |conn| {
+            fail_job(conn, id, &error, &worker).await
         })
         .await
     }
 
-    async fn read(&self, id: i64) -> Result<Option<StoredJob>, TaskError> {
-        in_transaction(&self.pool, async |conn| read_job(conn, id).await).await
+    async fn revive_dead(
+        &self,
+        name: &JobName,
+        dead_before: chrono::DateTime<chrono::Utc>,
+    ) -> Result<u64, JobQueueError> {
+        crate::graphile::GraphileQueue::new(self.pool.clone())
+            .revive_before(name, dead_before)
+            .await
+            .map_err(JobQueueError::from)
     }
 
-    async fn await_notification(&self, cancel: CancellationToken) -> Result<bool, TaskError> {
-        let parked = self.listen.lock().await.take();
-        let mut listener = if let Some(listener) = parked {
-            listener
-        } else {
-            let mut created = PgListener::connect_with(&self.pool)
+    async fn read(&self, id: JobId) -> Result<Option<kernel::queue::StoredJob>, JobQueueError> {
+        job_transaction(&self.pool, async |conn| read_job(conn, id).await).await
+    }
+}
+
+async fn job_transaction<T>(
+    pool: &PgPool,
+    body: impl AsyncFnOnce(&mut PgConnection) -> Result<T, JobQueueError>,
+) -> Result<T, JobQueueError> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|source| JobQueueError::Unavailable(Box::new(source)))?;
+    if let Err(source) = sqlx::query("SET LOCAL lock_timeout = '2s'")
+        .execute(&mut *tx)
+        .await
+    {
+        return Err(map_queue_sql("lock_timeout", source));
+    }
+    if let Err(source) = sqlx::query("SET LOCAL statement_timeout = '5s'")
+        .execute(&mut *tx)
+        .await
+    {
+        return Err(map_queue_sql("statement_timeout", source));
+    }
+    let result = body(&mut tx).await;
+    match result {
+        Ok(value) => {
+            tx.commit()
                 .await
-                .map_err(|source| map_sql("listen", source))?;
-            created
-                .listen("jobs:insert")
-                .await
-                .map_err(|source| map_sql("listen", source))?;
-            created
-        };
-        let result = tokio::select! {
-            () = cancel.cancelled() => Ok(false),
-            incoming = listener.recv() => incoming.map(|_| true).map_err(|source| map_sql("listen", source)),
-        };
-        *self.listen.lock().await = Some(listener);
-        result
+                .map_err(|source| map_queue_sql("commit", source))?;
+            Ok(value)
+        }
+        Err(primary) => {
+            if let Err(source) = tx.rollback().await {
+                return Err(JobQueueError::Operation {
+                    operation: "rollback",
+                    source: Box::new(source),
+                });
+            }
+            Err(primary)
+        }
+    }
+}
+
+fn map_queue_sql(operation: &'static str, source: sqlx::Error) -> JobQueueError {
+    JobQueueError::Operation {
+        operation,
+        source: Box::new(source),
     }
 }

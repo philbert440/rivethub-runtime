@@ -47,15 +47,26 @@ const EXACT_ZOD_TEXT: &[&str] = &[
     "agent empty",
     "agent spaces",
     "event_id empty",
-    "message created_at bad",
-    "message created_at no offset",
-    "created_at bad",
 ];
 
-const DEVIATIONS: &[(&str, &str)] = &[(
-    "title null",
-    "deliberate deviation: wire's Option<String> maps an explicit null to absent, so the batch is accepted; the recorded zod rejects null with invalid_type (no harness writer sends title:null)",
-)];
+const DEVIATIONS: &[(&str, &str)] = &[
+    (
+        "title null",
+        "deliberate deviation: wire's Option<String> maps an explicit null to absent, so the batch is accepted; the recorded zod rejects null with invalid_type (no harness writer sends title:null)",
+    ),
+    (
+        "message created_at bad",
+        "a non-instant is rejected by serde before a zod issue is built; exact zod issue JSON is the open B3 decision",
+    ),
+    (
+        "message created_at no offset",
+        "a timestamp without an offset is rejected by serde before a zod issue is built; exact zod issue JSON is the open B3 decision",
+    ),
+    (
+        "created_at bad",
+        "a non-instant is rejected by serde before a zod issue is built; exact zod issue JSON is the open B3 decision",
+    ),
+];
 
 #[derive(serde::Deserialize)]
 struct ZodCase {
@@ -346,6 +357,10 @@ fn writer_scenarios() -> Vec<(String, CaptureBatchRequest)> {
     ]
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the capture fixture uses a constant instant"
+)]
 fn single_scenario() -> (String, CaptureBatchRequest) {
     (
         "single".to_owned(),
@@ -355,7 +370,11 @@ fn single_scenario() -> (String, CaptureBatchRequest) {
             batch.channel = Some("claude-code".to_owned());
             batch.messages = vec![message(|message| {
                 message.event_id = "e1".into();
-                message.created_at = Some("2026-10-10T12:00:00.000Z".to_owned());
+                message.created_at = Some(
+                    chrono::DateTime::parse_from_rfc3339("2026-10-10T12:00:00.000Z")
+                        .expect("recorded instant")
+                        .with_timezone(&chrono::Utc),
+                );
             })];
         }),
     )
@@ -473,29 +492,6 @@ fn capture_store_failures_map_to_status_codes() {
     assert_eq!(response.status, 503);
     let parsed = parse_error(&response.body);
     assert_eq!(parsed.error, "memory store unavailable");
-}
-
-#[test]
-fn iso_datetime_rules() {
-    use gateway::routes::capture_schema::iso_datetime_with_offset as iso;
-    assert!(iso("2026-10-10T12:00:00Z"));
-    assert!(iso("2026-10-10T12:00:00.000Z"));
-    assert!(iso("2026-10-10T12:00:00+02:00"));
-    assert!(iso("2026-10-10T12:00:00.5-07:30"));
-    assert!(iso("2024-02-29T00:00:00Z"));
-    assert!(iso("2000-02-29T00:00:00Z"));
-    assert!(!iso("2026-10-10T12:00:00"));
-    assert!(!iso("2026-10-10 12:00:00Z"));
-    assert!(!iso("2026-10-10t12:00:00Z"));
-    assert!(!iso("2026-13-01T00:00:00Z"));
-    assert!(!iso("2023-02-29T00:00:00Z"));
-    assert!(!iso("1900-02-29T00:00:00Z"));
-    assert!(!iso("2026-10-10T24:00:00Z"));
-    assert!(!iso("2026-10-10T12:60:00Z"));
-    assert!(!iso("2026-10-10T12:00:60Z"));
-    assert!(!iso("2026-10-10T12:00:00+24:00"));
-    assert!(!iso("yesterday"));
-    assert!(!iso(""));
 }
 
 #[test]

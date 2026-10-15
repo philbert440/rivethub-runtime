@@ -165,7 +165,7 @@ fn capture_request(group: &EntryGroup) -> Result<CaptureBatchRequest, MemoryStor
             tool_args: entry.tool_args.clone(),
             tool_result: entry.tool_result.clone(),
             metadata,
-            created_at: entry.created_at.map(|at| at.to_rfc3339()),
+            created_at: entry.created_at,
         });
     }
     Ok(CaptureBatchRequest {

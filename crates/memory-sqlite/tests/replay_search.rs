@@ -195,8 +195,8 @@ async fn seed_fts() -> TestResult<Fresh> {
         .store
         .capture(deploy_batch("cli:sess-1", "rivet")?, now)
         .await?;
-    let helper = fresh.store.capture(helper_batch(), now).await?;
-    fresh.store.capture(rollback_batch(), now).await?;
+    let helper = fresh.store.capture(helper_batch()?, now).await?;
+    fresh.store.capture(rollback_batch()?, now).await?;
     let sess1 = deployed.conversation_id;
     let sess2 = helper.conversation_id;
     fresh
@@ -206,13 +206,13 @@ async fn seed_fts() -> TestResult<Fresh> {
     Ok(fresh)
 }
 
-fn helper_batch() -> CaptureBatchRequest {
+fn helper_batch() -> TestResult<CaptureBatchRequest> {
     let mut note = message(
         "h-note",
         Role::User,
         "notes about the staging database migration on db.example.com",
     );
-    note.created_at = Some("2026-10-10T12:01:00.000Z".to_owned());
+    note.created_at = Some(instant("2026-10-10T12:01:00.000Z")?);
     let mut helper = batch("cli:sess-2", "helper", "cli");
     helper.messages = vec![
         note,
@@ -220,7 +220,7 @@ fn helper_batch() -> CaptureBatchRequest {
         message("h-empty-1", Role::User, ""),
         message("h-empty-2", Role::User, ""),
     ];
-    helper
+    Ok(helper)
 }
 
 fn filler_release() -> String {
@@ -229,22 +229,22 @@ fn filler_release() -> String {
     words.join(" ")
 }
 
-fn rollback_batch() -> CaptureBatchRequest {
+fn rollback_batch() -> TestResult<CaptureBatchRequest> {
     let mut user = message(
         "rb-user",
         Role::User,
         "rollback rollback rollback procedure notes",
     );
-    user.created_at = Some("2026-09-01T00:00:00.000Z".to_owned());
+    user.created_at = Some(instant("2026-09-01T00:00:00.000Z")?);
     let mut assistant = message(
         "rb-assistant",
         Role::Assistant,
         "the rollback switches traffic back to the previous colour",
     );
-    assistant.created_at = Some("2026-10-09T00:00:00.000Z".to_owned());
+    assistant.created_at = Some(instant("2026-10-09T00:00:00.000Z")?);
     let mut rollback = batch("cli:sess-3", "rivet", "cli");
     rollback.messages = vec![user, assistant];
-    rollback
+    Ok(rollback)
 }
 
 fn seed_rows(conn: &rusqlite::Connection, sess1: &str, sess2: &str) -> Result<(), SqliteError> {

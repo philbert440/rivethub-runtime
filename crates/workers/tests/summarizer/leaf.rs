@@ -271,7 +271,9 @@ async fn a_failing_model_fails_the_job_and_skips_heartbeats() {
         )
         .await;
     let claimed = queue
-        .claim(WorkerRole::Summarizer)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::Summarizer),
+        ))
         .await
         .expect("claim")
         .expect("job");

@@ -11,16 +11,6 @@ impl Extra {
     pub fn extend(&mut self, other: Self) {
         self.0.extend(other.0);
     }
-
-    #[must_use]
-    pub fn get(&self, key: &str) -> Option<&Value> {
-        self.0.get(key)
-    }
-
-    #[must_use]
-    pub fn as_map(&self) -> &Map<String, Value> {
-        &self.0
-    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

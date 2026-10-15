@@ -105,7 +105,7 @@ fn browse_rejects_bad_filters() {
     let response = call("/api/memory/browse?window=fortnight").expect("in-process answer");
     assert_eq!(response.status, 400);
     let text = error_of(&response).error;
-    assert!(text.starts_with("Unknown window=\"fortnight\""), "{text}");
+    assert!(text.contains("unknown window \"fortnight\""), "{text}");
     assert!(text.contains("last_7d"), "{text}");
 
     let response = call("/api/memory/browse?window=Last%207d").expect("in-process answer");
@@ -227,28 +227,17 @@ fn search_tool_answers_json_text_and_reports_failures() {
     assert_eq!(inner.query, "hello");
     assert_eq!(inner.results.len(), 1);
 
-    let response = post(
-        &app,
-        "/api/memory/tool/memory_search",
-        &MemorySearchToolArgs {
-            since: None,
-            before: None,
-            window: None,
-            expand: None,
-            synthesize: None,
-            query: "hello".to_owned(),
-            mode: Some("bogus".to_owned()),
-            scope: None,
-            limit: None,
-            agent: None,
-            tag: None,
-        },
-    )
+    let response = block_on(answer(
+        app.clone(),
+        recorded(
+            "POST",
+            "/api/memory/tool/memory_search",
+            br#"{"query":"hello","mode":"bogus"}"#.to_vec(),
+        ),
+    ))
     .expect("in-process answer");
-    assert_eq!(
-        tool_text(&response),
-        "Search failed: Unknown search mode: bogus"
-    );
+    assert_eq!(response.status, 400);
+    assert!(error_of(&response).error.contains("bogus"), "{response:?}");
 
     let response = post(
         &app,
@@ -288,27 +277,19 @@ fn stats_tool_answers_json_text() {
 #[test]
 fn browse_tool_validates_args() {
     let (_store, app) = seeded().expect("seed store");
-    let response = post(
-        &app,
-        "/api/memory/tool/memory_browse",
-        &MemoryBrowseToolArgs {
-            conversation_id: None,
-            include_tools: None,
-            since: None,
-            before: None,
-            window: Some("fortnight".to_owned()),
-            agent: None,
-            tag: None,
-            limit: None,
-            order: None,
-        },
-    )
+    let response = block_on(answer(
+        app.clone(),
+        recorded(
+            "POST",
+            "/api/memory/tool/memory_browse",
+            br#"{"window":"fortnight"}"#.to_vec(),
+        ),
+    ))
     .expect("in-process answer");
-    assert_eq!(response.status, 200);
-    let text = tool_text(&response);
+    assert_eq!(response.status, 400);
     assert!(
-        text.starts_with("Browse failed: Unknown window=\"fortnight\""),
-        "{text}"
+        error_of(&response).error.contains("fortnight"),
+        "{response:?}"
     );
 
     let response = post(
@@ -366,7 +347,7 @@ fn browse_tool_carries_filters_to_the_port() {
             include_tools: Some(true),
             since: None,
             before: None,
-            window: Some("last_7d".to_owned()),
+            window: Some(wire::gateway::memory::BrowseWindow::Last7d),
             agent: Some("rivet-claude".to_owned()),
             tag: Some("project:acmekit".to_owned()),
             limit: Some(3),

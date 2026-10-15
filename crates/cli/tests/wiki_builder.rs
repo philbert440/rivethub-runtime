@@ -127,7 +127,9 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
     assert_eq!(enqueued.key, Some(format!("wiki-ext-{}", job.summary_id)));
     queue.enqueue(enqueued).await?;
     let claimed = queue
-        .claim(WorkerRole::WikiBuilder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::WikiBuilder),
+        ))
         .await?
         .expect("wiki job");
     assert_eq!(claimed.name, JobName::Fixed(FixedJob::ExtractWiki));
@@ -144,7 +146,12 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
     assert_eq!(handle_extract_wiki(&env, &claimed.payload).await?, topics);
     assert_eq!(model.chat_requests().await.len(), 1);
     queue.complete(claimed.id).await?;
-    let embed = queue.claim(WorkerRole::Embedder).await?.expect("embedding");
+    let embed = queue
+        .claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::Embedder),
+        ))
+        .await?
+        .expect("embedding");
     assert_eq!(embed.name, JobName::Fixed(FixedJob::EmbedTarget));
     assert_eq!(
         workers::read_target(&embed.payload)?,
@@ -153,7 +160,14 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
             id: "acmekit-deploys".to_owned()
         })
     );
-    assert!(queue.claim(WorkerRole::Embedder).await?.is_none());
+    assert!(
+        queue
+            .claim(&kernel::queue::ClaimSelector::matching(
+                queue.task_names(WorkerRole::Embedder)
+            ))
+            .await?
+            .is_none()
+    );
     let source: (uuid::Uuid, uuid::Uuid) =
         sqlx::query_as("SELECT source_id, conversation_id FROM rh_wiki_provenance")
             .fetch_one(&pool)
@@ -220,7 +234,12 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
     assert_eq!(handle_wiki_backfill(&env).await?, expected.len());
     assert_eq!(handle_wiki_backfill(&env).await?, expected.len());
     let mut actual = std::collections::BTreeSet::new();
-    while let Some(job) = queue.claim(WorkerRole::WikiBuilder).await? {
+    while let Some(job) = queue
+        .claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::WikiBuilder),
+        ))
+        .await?
+    {
         let body: ExtractWiki = serde_json::from_value(serde_json::to_value(job.payload)?)?;
         assert!(actual.insert(body.summary_id));
         queue.complete(job.id).await?;

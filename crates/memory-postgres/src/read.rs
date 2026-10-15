@@ -377,10 +377,10 @@ impl crate::PostgresMemory {
                     )
                 }
                 MemoryHitSource::Summary => {
-                    let label = hit
-                        .kind
-                        .as_deref()
-                        .map_or_else(|| "summary".to_owned(), |kind| format!("summary/{kind}"));
+                    let label = match hit.kind {
+                        Some(kind) => format!("summary/{kind}"),
+                        None => "summary".to_owned(),
+                    };
                     format!(
                         "[{label}, {when} · {}] {}",
                         hit.created_at.format("%Y-%m-%d %H:%M"),

@@ -16,10 +16,10 @@ use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::get;
 use axum::routing::post;
+use kernel::queue::JobQueue;
 use kernel::tasks::ApprovalBroker;
 use kernel::tasks::CatalogSource;
 use kernel::tasks::TaskAgents;
-use kernel::tasks::TaskJobs;
 use kernel::tasks::TaskQuery;
 use kernel::tasks::TaskStore;
 use kernel::tasks::TaskWatch;
@@ -35,7 +35,7 @@ pub const WAIT_DEFAULT_MS: u64 = 30_000;
 #[derive(Debug)]
 pub struct TasksApi {
     pub store: Arc<dyn TaskStore>,
-    pub jobs: Arc<dyn TaskJobs>,
+    pub jobs: Arc<dyn JobQueue>,
     pub query: Arc<dyn TaskQuery>,
     pub watch: Arc<dyn TaskWatch>,
     pub catalog: Arc<dyn CatalogSource>,

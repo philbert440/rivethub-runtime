@@ -128,6 +128,12 @@ pub enum Error {
     TimeoutRange,
 }
 
+impl From<kernel::queue::JobQueueError> for Error {
+    fn from(value: kernel::queue::JobQueueError) -> Self {
+        TaskError::from(value).into()
+    }
+}
+
 impl From<TaskError> for Error {
     fn from(value: TaskError) -> Self {
         match value {

@@ -42,24 +42,6 @@ count = 1
 
 [[entry]]
 check = "FALLBACK"
-file = "crates/gateway/src/routes/capture_schema.rs"
-text = "ok"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/gateway/src/routes/memory.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/gateway/src/routes/memory.rs"
-text = "ok"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
 file = "crates/gateway/src/server.rs"
 text = "Err(..) => value"
 count = 1

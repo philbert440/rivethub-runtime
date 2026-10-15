@@ -1,5 +1,4 @@
 use chrono::DateTime;
-use chrono::SecondsFormat;
 use chrono::Utc;
 use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
@@ -85,7 +84,7 @@ impl PostgresMemory {
                     title: row.title,
                     tags: row.tags,
                     entities: row.entities,
-                    updated_at: timestamp(row.updated_at),
+                    updated_at: row.updated_at,
                     excerpt: row.current_state.chars().take(240).collect(),
                 })
                 .collect(),
@@ -130,8 +129,8 @@ impl PostgresMemory {
             markdown,
             sources,
             git_sha: row.git_sha,
-            last_verified: row.last_verified_at.map(timestamp),
-            updated_at: timestamp(row.updated_at),
+            last_verified: row.last_verified_at,
+            updated_at: row.updated_at,
             related: Some(row.related),
         })))
     }
@@ -164,7 +163,7 @@ impl PostgresMemory {
             .into_iter()
             .map(|row| WikiCitation {
                 summary_id: row.summary_id.to_string(),
-                date: Some(timestamp(row.cited_at)),
+                date: Some(row.cited_at),
                 kind: row.kind,
                 note: row.note,
             })
@@ -240,8 +239,4 @@ impl PostgresMemory {
             stalest: stalest.into_iter().map(|row| row.slug).collect(),
         })
     }
-}
-
-fn timestamp(value: DateTime<Utc>) -> String {
-    value.to_rfc3339_opts(SecondsFormat::Millis, true)
 }

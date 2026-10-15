@@ -44,6 +44,14 @@ fn recency_columns(alias: &str, is_message: bool) -> String {
     )
 }
 
+fn summary_kind(raw: Option<String>) -> Result<Option<kernel::memory::SummaryKind>, Error> {
+    raw.map(|kind| {
+        kind.parse()
+            .map_err(|source| Error::stored("summary kind", source))
+    })
+    .transpose()
+}
+
 fn role_of(raw: Option<String>) -> Result<Option<Role>, Error> {
     raw.map(|role| Role::from_str(&role).map_err(|source| Error::stored("message role", source)))
         .transpose()
@@ -123,7 +131,7 @@ impl ArmSqlRow {
         let (role, kind) = if is_message {
             (role_of(self.role_or_kind)?, None)
         } else {
-            (None, self.role_or_kind)
+            (None, summary_kind(self.role_or_kind)?)
         };
         Ok(ArmRow {
             id: self.id,

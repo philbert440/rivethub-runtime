@@ -1,4 +1,6 @@
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WikiQuery {
@@ -54,17 +56,21 @@ impl From<WikiSlug> for String {
 #[serde(rename_all = "camelCase")]
 #[derive(schemars::JsonSchema)]
 pub struct WikiHistoryEntry {
-    pub date: String,
+    #[schemars(with = "String")]
+    pub date: NaiveDate,
     pub title: String,
     pub body: String,
 }
 
+#[serde_as]
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiCitation {
     pub summary_id: String,
-    pub date: Option<String>,
+    #[serde(default)]
+    #[serde_as(as = "Option<crate::time::Millis>")]
+    pub date: Option<DateTime<Utc>>,
     pub kind: Option<String>,
     pub note: Option<String>,
 }
@@ -89,13 +95,17 @@ pub enum WikiSourceKind {
     Task,
 }
 
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiSourceSpan {
-    pub earliest: String,
-    pub latest: String,
+    #[serde_as(as = "crate::time::Millis")]
+    pub earliest: DateTime<Utc>,
+    #[serde_as(as = "crate::time::Millis")]
+    pub latest: DateTime<Utc>,
 }
 
+#[serde_as]
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,8 +123,11 @@ pub struct WikiPageResponse {
     pub markdown: String,
     pub sources: Vec<WikiSource>,
     pub git_sha: Option<String>,
-    pub last_verified: Option<String>,
-    pub updated_at: String,
+    #[serde(default)]
+    #[serde_as(as = "Option<crate::time::Millis>")]
+    pub last_verified: Option<DateTime<Utc>>,
+    #[serde_as(as = "crate::time::Millis")]
+    pub updated_at: DateTime<Utc>,
     pub related: Option<Vec<String>>,
 }
 
@@ -146,6 +159,7 @@ pub struct WikiGapsResponse {
     pub stalest: Vec<String>,
 }
 
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiTopic {
@@ -153,7 +167,8 @@ pub struct WikiTopic {
     pub title: String,
     pub tags: Vec<String>,
     pub entities: Vec<String>,
-    pub updated_at: String,
+    #[serde_as(as = "crate::time::Millis")]
+    pub updated_at: DateTime<Utc>,
     pub excerpt: String,
 }
 

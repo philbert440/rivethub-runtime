@@ -16,7 +16,7 @@ fn search_routes_forward_every_argument_and_preserve_runtime_degradation() {
     block_on(store.set_search_outcome(outcome.clone()));
     let args = MemorySearchToolArgs {
         query: "release".into(),
-        mode: Some("vector".into()),
+        mode: Some(SearchMode::Vector),
         scope: Some(MemoryScope::Both),
         limit: Some(3),
         agent: Some("acme".into()),

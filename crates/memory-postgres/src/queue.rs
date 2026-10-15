@@ -3,6 +3,7 @@ use crate::graphile::GraphileQueue;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::queue::ClaimSelector;
 use kernel::queue::ClaimedJob;
 use kernel::queue::FixedJob;
 use kernel::queue::Job;
@@ -134,21 +135,24 @@ impl PostgresQueue {
 
 #[async_trait]
 impl JobQueue for PostgresQueue {
+    fn task_names(&self, role: WorkerRole) -> Vec<JobName> {
+        Self::task_list(role).to_vec()
+    }
+
     async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
         self.inner.subscribe().await.map_err(JobQueueError::from)
     }
 
-    async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
+    async fn enqueue(&self, job: Job) -> Result<JobId, JobQueueError> {
         self.inner
             .enqueue(&job)
             .await
-            .map(|_| ())
             .map_err(|source| JobQueueError::Unavailable(Box::new(source)))
     }
 
-    async fn claim(&self, role: WorkerRole) -> Result<Option<ClaimedJob>, JobQueueError> {
+    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, JobQueueError> {
         self.inner
-            .claim(Self::task_list(role))
+            .claim(&selector.names, selector.only_id)
             .await
             .map_err(JobQueueError::from)
     }
@@ -177,6 +181,10 @@ impl JobQueue for PostgresQueue {
             .revive_before(name, dead_before)
             .await
             .map_err(JobQueueError::from)
+    }
+
+    async fn read(&self, id: JobId) -> Result<Option<kernel::queue::StoredJob>, JobQueueError> {
+        self.inner.read(id).await
     }
 }
 

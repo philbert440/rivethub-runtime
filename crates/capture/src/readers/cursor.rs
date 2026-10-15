@@ -73,7 +73,7 @@ impl TranscriptReader for CursorTranscriptReader {
     }
 
     async fn read(&self, session: &SessionId) -> Result<Vec<Turn>, TranscriptReaderError> {
-        project_turns(&self.messages(session, 0).await?)
+        Ok(project_turns(&self.messages(session, 0).await?))
     }
 
     async fn tail(

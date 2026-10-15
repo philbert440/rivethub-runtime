@@ -1,4 +1,4 @@
-use chrono::DateTime;
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde::Deserializer;
 use serde_with::DeserializeAs;
@@ -46,10 +46,10 @@ struct BatchBody {
     finalize: Option<bool>,
     #[serde_as(as = "NotNull")]
     #[serde(default)]
-    created_at: Option<String>,
+    created_at: Option<DateTime<Utc>>,
     #[serde_as(as = "NotNull")]
     #[serde(default)]
-    updated_at: Option<String>,
+    updated_at: Option<DateTime<Utc>>,
     messages: Vec<CaptureMessage>,
 }
 
@@ -84,14 +84,6 @@ fn check_semantics(batch: &CaptureBatchRequest) -> Result<(), BatchError> {
     }
     if batch.agent.trim().is_empty() {
         return Err(BatchError::Invalid("agent is blank"));
-    }
-    let timestamps = [&batch.created_at, &batch.updated_at]
-        .into_iter()
-        .chain(batch.messages.iter().map(|message| &message.created_at))
-        .flatten();
-    for at in timestamps {
-        DateTime::parse_from_rfc3339(at)
-            .map_err(|_| BatchError::Invalid("timestamps are ISO datetimes with an offset"))?;
     }
     if batch
         .messages

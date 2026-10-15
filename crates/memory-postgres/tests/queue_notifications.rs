@@ -16,7 +16,9 @@ async fn subscribed_workers_observe_an_insert_from_another_connection(pool: PgPo
     let mut notifications = queue.subscribe().await.expect("LISTEN before claim");
     assert!(
         queue
-            .claim(WorkerRole::Embedder)
+            .claim(&kernel::queue::ClaimSelector::matching(
+                queue.task_names(WorkerRole::Embedder)
+            ))
             .await
             .expect("claim")
             .is_none()
@@ -29,6 +31,7 @@ async fn subscribed_workers_observe_an_insert_from_another_connection(pool: PgPo
             key_mode: JobKeyMode::Replace,
             priority: 0,
             run_at: None,
+            max_attempts: None,
         })
         .await
         .expect("enqueue");
@@ -37,7 +40,9 @@ async fn subscribed_workers_observe_an_insert_from_another_connection(pool: PgPo
         .expect("notification arrives")
         .expect("notification");
     let claimed = queue
-        .claim(WorkerRole::Embedder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::Embedder),
+        ))
         .await
         .expect("claim")
         .expect("job");

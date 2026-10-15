@@ -18,7 +18,6 @@ use serde::Serialize;
 use uuid::Uuid;
 use wire::capture::CaptureResult;
 use wire::gateway::OkReply;
-use wire::gateway::memory::BrowseWindow;
 use wire::gateway::memory::MemoryAppendToolArgs;
 use wire::gateway::memory::MemoryBrowseMessage;
 use wire::gateway::memory::MemoryBrowseOrder;
@@ -293,13 +292,8 @@ fn serialize_tool<T: Serialize>(value: &T) -> Result<String, ApiError> {
 }
 
 async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<String, ApiError> {
-    let mode = match &args.mode {
-        Some(raw) => match SearchMode::from_str(raw) {
-            Ok(mode) => mode,
-            Err(_) => {
-                return Ok(format!("Search failed: Unknown search mode: {raw}"));
-            }
-        },
+    let mode = match args.mode {
+        Some(mode) => mode,
         None => SearchMode::Hybrid,
     };
     let tag = match args.tag.as_deref().map(TagLiteral::from_str) {
@@ -338,19 +332,6 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
 }
 
 async fn browse_tool(gateway: &Gateway, args: MemoryBrowseToolArgs) -> Result<String, ApiError> {
-    let window = match args.window.as_deref().map(BrowseWindow::parse) {
-        Some(Ok(window)) => Some(window),
-        Some(Err(error)) => return Ok(format!("Browse failed: {error}")),
-        None => None,
-    };
-    let since = parsed_instant(args.since.as_deref());
-    if args.since.is_some() && since.is_none() {
-        return Ok("Browse failed: invalid since".to_owned());
-    }
-    let before = parsed_instant(args.before.as_deref());
-    if args.before.is_some() && before.is_none() {
-        return Ok("Browse failed: invalid before".to_owned());
-    }
     let conversation_id = match args.conversation_id.as_deref().map(Uuid::from_str) {
         Some(Ok(id)) => Some(id),
         Some(Err(_)) => {
@@ -369,9 +350,9 @@ async fn browse_tool(gateway: &Gateway, args: MemoryBrowseToolArgs) -> Result<St
         role: None,
         tool_name: None,
         tag,
-        window,
-        since,
-        before,
+        window: args.window,
+        since: args.since,
+        before: args.before,
         include_tools: args.include_tools.unwrap_or(false),
         order: args.order.unwrap_or_default(),
         limit: Limit::clamped(args.limit, BROWSE_LIMIT_DEFAULT, 1..=BROWSE_LIMIT_MAX),
@@ -384,14 +365,6 @@ async fn browse_tool(gateway: &Gateway, args: MemoryBrowseToolArgs) -> Result<St
         messages: entries.into_iter().map(browse_message).collect(),
     };
     serialize_tool(&response)
-}
-
-fn parsed_instant(raw: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
-    raw.and_then(|raw| {
-        chrono::DateTime::parse_from_rfc3339(raw)
-            .ok()
-            .map(|parsed| parsed.with_timezone(&chrono::Utc))
-    })
 }
 
 async fn get_full_tool(gateway: &Gateway, args: MemoryGetFullToolArgs) -> String {

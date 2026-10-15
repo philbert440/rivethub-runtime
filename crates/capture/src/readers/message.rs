@@ -160,25 +160,19 @@ pub(crate) fn report(format: &str, skipped: &[SkippedRecord]) {
     );
 }
 
-pub(crate) fn project_turns(slice: &TranscriptSlice) -> Result<Vec<Turn>, TranscriptReaderError> {
+pub(crate) fn project_turns(slice: &TranscriptSlice) -> Vec<Turn> {
     let mut turns = Vec::new();
     for message in &slice.messages {
-        let Some(text) = message.created_at.as_deref() else {
+        let Some(at) = message.created_at else {
             continue;
         };
-        let at = DateTime::parse_from_rfc3339(text)
-            .map_err(|error| TranscriptReaderError::Read {
-                message: format!("transcript timestamp {text:?} is not RFC 3339: {error}"),
-                source: Box::new(error),
-            })?
-            .with_timezone(&Utc);
         turns.push(Turn {
             role: message.role,
             content: message.content.clone(),
             at,
         });
     }
-    Ok(turns)
+    turns
 }
 
 pub(crate) fn assemble(
@@ -305,6 +299,15 @@ fn capture(turn: &TextTurn<'_>, tool: ToolFields) -> Result<CaptureMessage, Tran
         tool_args: tool.arguments,
         tool_result: tool.result,
         metadata: Some(metadata),
-        created_at: Some(turn.at.to_owned()),
+        created_at: Some(message_instant(turn.at)?),
     })
+}
+
+fn message_instant(raw: &str) -> Result<DateTime<Utc>, TranscriptReaderError> {
+    DateTime::parse_from_rfc3339(raw)
+        .map(|parsed| parsed.with_timezone(&Utc))
+        .map_err(|error| TranscriptReaderError::Read {
+            message: format!("transcript timestamp {raw:?} is not RFC 3339: {error}"),
+            source: Box::new(error),
+        })
 }

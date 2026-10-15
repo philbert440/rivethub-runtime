@@ -39,11 +39,9 @@ fn gateway_metadata_keeps_a_typed_port_and_rewrites_a_cutover_string() {
     assert_eq!(metadata.gateway_port, Some(6002));
     let endpoint = metadata.gateway_url.as_ref().expect("gateway url");
     assert_eq!(endpoint.port(), Some(5174));
+    let extra = serde_json::to_value(&metadata.extra).expect("extra");
     assert_eq!(
-        metadata
-            .extra
-            .get("rack")
-            .and_then(serde_json::Value::as_str),
+        extra.get("rack").and_then(serde_json::Value::as_str),
         Some("west")
     );
     let written = serde_json::to_value(&typed).unwrap();

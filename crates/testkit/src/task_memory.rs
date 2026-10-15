@@ -5,24 +5,28 @@ use std::sync::atomic::Ordering;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::queue::ClaimSelector;
+use kernel::queue::ClaimedJob;
+use kernel::queue::Job;
+use kernel::queue::JobId;
 use kernel::queue::JobKeyMode;
+use kernel::queue::JobName;
+use kernel::queue::JobQueue;
+use kernel::queue::JobQueueError;
+use kernel::queue::StoredJob;
+use kernel::queue::WorkerRole;
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tokio::sync::watch;
-use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use wire::task::TaskStatus;
 
 mod query;
 
-use kernel::tasks::ClaimSelector;
-use kernel::tasks::ClaimedJob;
+use kernel::queue::FixedJob;
 use kernel::tasks::ConflictAction;
 use kernel::tasks::Finish;
-use kernel::tasks::NewJob;
-use kernel::tasks::StoredJob;
 use kernel::tasks::TaskError;
-use kernel::tasks::TaskJobs;
 use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskStore;
 use kernel::tasks::terminal;
@@ -30,17 +34,16 @@ use kernel::tasks::terminal;
 #[derive(Debug)]
 struct MemoryInner {
     tasks: BTreeMap<Uuid, TaskRecord>,
-    jobs: BTreeMap<i64, MemJob>,
+    jobs: BTreeMap<JobId, MemJob>,
     next_job: i64,
 }
 
 #[derive(Debug, Clone)]
 struct MemJob {
-    id: i64,
-    name: String,
-    payload_text: String,
-    payload: kernel::tasks::TaskJobPayload,
-    key: String,
+    id: JobId,
+    name: JobName,
+    payload: wire::JsonObject,
+    key: Option<String>,
     priority: i16,
     max_attempts: i32,
     attempts: i32,
@@ -55,6 +58,7 @@ pub struct TaskMemory {
     fail_enqueue: Arc<AtomicBool>,
     fail_list: Arc<AtomicBool>,
     generation: Arc<watch::Sender<u64>>,
+    notifications: watch::Sender<()>,
 }
 
 impl TaskMemory {
@@ -68,6 +72,7 @@ impl TaskMemory {
             fail_enqueue: Arc::new(AtomicBool::new(false)),
             fail_list: Arc::new(AtomicBool::new(false)),
             generation: Arc::new(watch::channel(0).0),
+            notifications: watch::channel(()).0,
         }
     }
 
@@ -301,43 +306,70 @@ impl TaskStore for TaskMemory {
 }
 
 #[async_trait]
-impl TaskJobs for TaskMemory {
-    async fn enqueue(&self, job: &NewJob) -> Result<i64, TaskError> {
-        if self.fail_enqueue.swap(false, Ordering::SeqCst) {
-            return Err(TaskError::QueueAbsent);
+impl JobQueue for TaskMemory {
+    fn task_names(&self, role: WorkerRole) -> Vec<JobName> {
+        match role {
+            WorkerRole::Embedder => vec![JobName::Fixed(FixedJob::EmbedTarget)],
+            WorkerRole::Summarizer => vec![
+                JobName::Fixed(FixedJob::SummarizeConversation),
+                JobName::Fixed(FixedJob::SynthesizeToolCall),
+                JobName::Fixed(FixedJob::EnqueueIdle),
+                JobName::Fixed(FixedJob::EnqueueStaleSummaries),
+                JobName::Fixed(FixedJob::ReapDeadJobs),
+            ],
+            WorkerRole::Categorizer => vec![JobName::Fixed(FixedJob::SuggestTags)],
+            WorkerRole::WikiBuilder => vec![
+                JobName::Fixed(FixedJob::ExtractWiki),
+                JobName::Fixed(FixedJob::EnqueueWikiBackfill),
+            ],
         }
-        let payload_text = serde_json::to_string(&job.payload)
-            .map_err(|source| TaskError::Payload(Box::new(source)))?;
+    }
+
+    async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
+        Ok(Box::new(self.notifications.subscribe()))
+    }
+
+    async fn enqueue(&self, job: Job) -> Result<JobId, JobQueueError> {
+        if self.fail_enqueue.swap(false, Ordering::SeqCst) {
+            return Err(JobQueueError::Absent);
+        }
+        let Some(max_attempts) = job.max_attempts else {
+            return Err(JobQueueError::Stored("max_attempts".to_owned()));
+        };
         let mut inner = self.inner.lock();
-        if let Some(existing) = inner.jobs.values_mut().find(|item| item.key == job.key) {
-            existing.name = job.name.to_string();
-            existing.payload_text = payload_text;
-            existing.payload = job.payload.clone();
+        if let Some(existing) = inner
+            .jobs
+            .values_mut()
+            .find(|item| item.key.is_some() && item.key == job.key)
+        {
+            existing.name = job.name;
+            existing.payload = job.payload;
             existing.priority = job.priority;
-            existing.max_attempts = job.max_attempts;
+            existing.max_attempts = max_attempts;
             if !existing.locked && job.key_mode == JobKeyMode::Replace {
                 existing.attempts = 0;
                 existing.last_error = None;
             }
             let id = existing.id;
             drop(inner);
+            self.notifications.send_replace(());
             return Ok(id);
         }
-        let id = inner.next_job;
+        let raw = inner.next_job;
         inner.next_job = inner
             .next_job
             .checked_add(1)
-            .ok_or(TaskError::Stored("job id overflow".to_string()))?;
+            .ok_or_else(|| JobQueueError::Stored("job id overflow".to_owned()))?;
+        let id = JobId::new(raw);
         inner.jobs.insert(
             id,
             MemJob {
                 id,
-                name: job.name.to_string(),
-                payload_text,
-                payload: job.payload.clone(),
-                key: job.key.clone(),
+                name: job.name,
+                payload: job.payload,
+                key: job.key,
                 priority: job.priority,
-                max_attempts: job.max_attempts,
+                max_attempts,
                 attempts: 0,
                 locked: false,
                 run_at: Utc::now(),
@@ -345,12 +377,13 @@ impl TaskJobs for TaskMemory {
             },
         );
         drop(inner);
+        self.notifications.send_replace(());
         Ok(id)
     }
 
-    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, TaskError> {
+    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, JobQueueError> {
         let mut inner = self.inner.lock();
-        let mut choice: Option<i64> = None;
+        let mut choice: Option<JobId> = None;
         for job in inner.jobs.values() {
             if !selectable(job, selector) {
                 continue;
@@ -367,58 +400,77 @@ impl TaskJobs for TaskMemory {
         let job = inner
             .jobs
             .get_mut(&id)
-            .ok_or(TaskError::MissingJob { id })?;
+            .ok_or(JobQueueError::Missing { id })?;
         job.attempts = job
             .attempts
             .checked_add(1)
-            .ok_or(TaskError::Stored("attempt overflow".to_string()))?;
+            .ok_or_else(|| JobQueueError::Stored("attempt overflow".to_owned()))?;
         job.locked = true;
         let attempt =
-            u32::try_from(job.attempts).map_err(|_| TaskError::Stored("attempt".to_string()))?;
+            u32::try_from(job.attempts).map_err(|_| JobQueueError::Stored("attempt".to_owned()))?;
         let claimed = ClaimedJob {
             id,
-            identifier: job.name.clone(),
-            payload_text: job.payload_text.clone(),
+            name: job.name.clone(),
+            payload: job.payload.clone(),
             attempt,
         };
         drop(inner);
         Ok(Some(claimed))
     }
 
-    async fn complete(&self, id: i64) -> Result<(), TaskError> {
+    async fn complete(&self, id: JobId) -> Result<(), JobQueueError> {
         let mut inner = self.inner.lock();
         if inner.jobs.remove(&id).is_none() {
             drop(inner);
-            return Err(TaskError::MissingJob { id });
+            return Err(JobQueueError::Missing { id });
         }
         drop(inner);
         Ok(())
     }
 
-    async fn fail(&self, id: i64, error: &str) -> Result<(), TaskError> {
+    async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError> {
         let mut inner = self.inner.lock();
         let job = inner
             .jobs
             .get_mut(&id)
-            .ok_or(TaskError::MissingJob { id })?;
-        job.last_error = Some(error.to_string());
+            .ok_or(JobQueueError::Missing { id })?;
+        job.last_error = Some(error.to_owned());
         job.locked = false;
         drop(inner);
         Ok(())
     }
 
-    async fn read(&self, id: i64) -> Result<Option<StoredJob>, TaskError> {
+    async fn revive_dead(
+        &self,
+        name: &JobName,
+        dead_before: DateTime<Utc>,
+    ) -> Result<u64, JobQueueError> {
+        let mut inner = self.inner.lock();
+        let mut revived = 0_u64;
+        for job in inner.jobs.values_mut() {
+            if job.name == *name && job.attempts >= job.max_attempts && job.run_at < dead_before {
+                job.attempts = 0;
+                job.locked = false;
+                job.last_error = None;
+                revived = revived.saturating_add(1);
+            }
+        }
+        drop(inner);
+        Ok(revived)
+    }
+
+    async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError> {
         let inner = self.inner.lock();
         let stored = match inner.jobs.get(&id) {
             Some(job) => {
                 let attempts = u32::try_from(job.attempts)
-                    .map_err(|_| TaskError::Stored("attempts".to_string()))?;
+                    .map_err(|_| JobQueueError::Stored("attempts".to_owned()))?;
                 Some(StoredJob {
                     id: job.id,
-                    identifier: job.name.clone(),
+                    name: job.name.clone(),
                     payload: job.payload.clone(),
-                    key: Some(job.key.clone()),
-                    priority: job.priority,
+                    key: job.key.clone(),
+                    priority: Some(job.priority),
                     max_attempts: job.max_attempts,
                     attempts,
                     last_error: job.last_error.clone(),
@@ -428,11 +480,6 @@ impl TaskJobs for TaskMemory {
         };
         drop(inner);
         Ok(stored)
-    }
-
-    async fn await_notification(&self, cancel: CancellationToken) -> Result<bool, TaskError> {
-        cancel.cancelled().await;
-        Ok(false)
     }
 }
 
@@ -448,7 +495,7 @@ fn selectable(job: &MemJob, selector: &ClaimSelector) -> bool {
     selector.names.iter().any(|name| name == &job.name)
 }
 
-fn prefer(jobs: &BTreeMap<i64, MemJob>, current: i64, candidate: i64) -> i64 {
+fn prefer(jobs: &BTreeMap<JobId, MemJob>, current: JobId, candidate: JobId) -> JobId {
     let Some(left) = jobs.get(&current) else {
         return candidate;
     };

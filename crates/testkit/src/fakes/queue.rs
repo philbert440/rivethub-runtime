@@ -1,68 +1,218 @@
-use async_trait::async_trait;
-use kernel::queue::ClaimedJob;
-use kernel::queue::Job;
-use kernel::queue::JobId;
-use kernel::queue::JobQueue;
-use kernel::queue::JobQueueError;
-use kernel::queue::WorkerRole;
 use std::collections::BTreeMap;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::Ordering;
+
+use async_trait::async_trait;
+use kernel::queue::ClaimSelector;
+use kernel::queue::ClaimedJob;
+use kernel::queue::FixedJob;
+use kernel::queue::Job;
+use kernel::queue::JobId;
+use kernel::queue::JobName;
+use kernel::queue::JobQueue;
+use kernel::queue::JobQueueError;
+use kernel::queue::StoredJob;
+use kernel::queue::WorkerRole;
 use tokio::sync::Mutex;
+
+#[derive(Debug)]
+struct Held {
+    job: Job,
+    attempts: u32,
+    last_error: Option<String>,
+    claimed: bool,
+}
 
 #[derive(Debug, Default)]
 pub struct FakeJobQueue {
-    jobs: Mutex<BTreeMap<JobId, Job>>,
+    jobs: Mutex<BTreeMap<JobId, Held>>,
     next_id: AtomicI64,
     notifications: tokio::sync::watch::Sender<()>,
 }
 
 #[async_trait]
 impl JobQueue for FakeJobQueue {
+    fn task_names(&self, role: WorkerRole) -> Vec<JobName> {
+        match role {
+            WorkerRole::Embedder => vec![fixed(FixedJob::EmbedTarget)],
+            WorkerRole::Summarizer => vec![
+                fixed(FixedJob::SummarizeConversation),
+                fixed(FixedJob::SynthesizeToolCall),
+                fixed(FixedJob::EnqueueIdle),
+                fixed(FixedJob::EnqueueStaleSummaries),
+                fixed(FixedJob::ReapDeadJobs),
+            ],
+            WorkerRole::Categorizer => vec![fixed(FixedJob::SuggestTags)],
+            WorkerRole::WikiBuilder => vec![
+                fixed(FixedJob::ExtractWiki),
+                fixed(FixedJob::EnqueueWikiBackfill),
+            ],
+        }
+    }
+
     async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
         Ok(Box::new(self.notifications.subscribe()))
     }
 
-    async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
-        let id = JobId::new(self.next_id.fetch_add(1, Ordering::Relaxed));
-        self.jobs.lock().await.insert(id, job);
+    async fn enqueue(&self, job: Job) -> Result<JobId, JobQueueError> {
+        let mut jobs = self.jobs.lock().await;
+        let replaced = job.key.as_ref().and_then(|key| {
+            jobs.iter()
+                .find(|(_, held)| held.job.key.as_ref() == Some(key))
+                .map(|(id, _)| *id)
+        });
+        let id = if let Some(id) = replaced {
+            let mode = job.key_mode;
+            let Some(held) = jobs.get_mut(&id) else {
+                return Err(JobQueueError::Missing { id });
+            };
+            let claimed = held.claimed;
+            held.job = job;
+            if mode == kernel::queue::JobKeyMode::Replace && !claimed {
+                held.attempts = 0;
+                held.last_error = None;
+            }
+            id
+        } else {
+            let id = JobId::new(self.next_id.fetch_add(1, Ordering::Relaxed));
+            jobs.insert(
+                id,
+                Held {
+                    job,
+                    attempts: 0,
+                    last_error: None,
+                    claimed: false,
+                },
+            );
+            id
+        };
+        drop(jobs);
         self.notifications.send_replace(());
-        Ok(())
+        Ok(id)
     }
 
-    async fn claim(&self, _role: WorkerRole) -> Result<Option<ClaimedJob>, JobQueueError> {
-        let claimed = {
-            let mut jobs = self.jobs.lock().await;
-            jobs.iter()
-                .next()
-                .map(|(id, job)| (*id, job.clone()))
-                .map(|(id, job)| {
-                    jobs.remove(&id);
-                    ClaimedJob {
+    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, JobQueueError> {
+        let mut jobs = self.jobs.lock().await;
+        let outcome = match jobs.iter().find_map(|(id, held)| {
+            let named = selector.names.iter().any(|name| name == &held.job.name);
+            let pinned = selector.only_id.is_none_or(|only| only == *id);
+            (named && pinned && !held.claimed).then_some(*id)
+        }) {
+            None => Ok(None),
+            Some(id) => match jobs.get_mut(&id) {
+                None => Err(JobQueueError::Missing { id }),
+                Some(held) => {
+                    held.claimed = true;
+                    held.attempts = held.attempts.saturating_add(1);
+                    Ok(Some(ClaimedJob {
                         id,
-                        name: job.name,
-                        payload: job.payload,
-                        attempt: 1,
-                    }
-                })
+                        name: held.job.name.clone(),
+                        payload: held.job.payload.clone(),
+                        attempt: held.attempts,
+                    }))
+                }
+            },
         };
-        Ok(claimed)
+        drop(jobs);
+        outcome
     }
 
     async fn complete(&self, id: JobId) -> Result<(), JobQueueError> {
-        self.jobs.lock().await.remove(&id);
-        Ok(())
+        let mut jobs = self.jobs.lock().await;
+        let missing = jobs.remove(&id).is_none();
+        drop(jobs);
+        if missing {
+            Err(JobQueueError::Missing { id })
+        } else {
+            Ok(())
+        }
     }
 
-    async fn fail(&self, _id: JobId, _error: &str) -> Result<(), JobQueueError> {
-        Ok(())
+    async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError> {
+        let mut jobs = self.jobs.lock().await;
+        let outcome = match jobs.get_mut(&id) {
+            Some(held) => {
+                held.last_error = Some(error.to_owned());
+                held.claimed = false;
+                Ok(())
+            }
+            None => Err(JobQueueError::Missing { id }),
+        };
+        drop(jobs);
+        outcome
     }
 
     async fn revive_dead(
         &self,
-        _name: &kernel::queue::JobName,
+        name: &JobName,
         _dead_before: chrono::DateTime<chrono::Utc>,
     ) -> Result<u64, JobQueueError> {
-        Ok(0)
+        let mut jobs = self.jobs.lock().await;
+        let mut revived = 0_u64;
+        let mut failure = None;
+        for held in jobs.values_mut() {
+            let Some(max_attempts) = held.job.max_attempts else {
+                continue;
+            };
+            let Ok(attempts) = i32::try_from(held.attempts) else {
+                failure = Some(JobQueueError::Stored("attempts".to_owned()));
+                break;
+            };
+            if held.job.name == *name && attempts >= max_attempts {
+                held.attempts = 0;
+                held.claimed = false;
+                held.last_error = None;
+                revived = revived.saturating_add(1);
+            }
+        }
+        drop(jobs);
+        match failure {
+            Some(error) => Err(error),
+            None => Ok(revived),
+        }
     }
+
+    async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError> {
+        let jobs = self.jobs.lock().await;
+        let stored = jobs.get(&id).map(|held| StoredJob {
+            id,
+            name: held.job.name.clone(),
+            payload: held.job.payload.clone(),
+            key: held.job.key.clone(),
+            priority: Some(held.job.priority),
+            max_attempts: held
+                .job
+                .max_attempts
+                .unwrap_or_else(|| ceiling(&held.job.name)),
+            attempts: held.attempts,
+            last_error: held.last_error.clone(),
+        });
+        drop(jobs);
+        Ok(stored)
+    }
+}
+
+fn ceiling(name: &JobName) -> i32 {
+    match name {
+        JobName::Fixed(fixed) => match fixed {
+            FixedJob::EmbedTarget => 5,
+            FixedJob::SummarizeConversation | FixedJob::SynthesizeToolCall => 3,
+            FixedJob::SuggestTags | FixedJob::ExtractWiki => 2,
+            FixedJob::RunTask => 1,
+            FixedJob::EnqueueUnembedded
+            | FixedJob::EnqueueUnchunked
+            | FixedJob::EnqueueIdle
+            | FixedJob::EnqueueWikiBackfill
+            | FixedJob::ConsolidateWiki
+            | FixedJob::RecompileWiki
+            | FixedJob::EnqueueStaleWiki
+            | FixedJob::EnqueueStaleSummaries
+            | FixedJob::ReapDeadJobs => 25,
+        },
+        JobName::RunTaskOn { .. } | JobName::Heartbeat { .. } => 1,
+    }
+}
+
+fn fixed(job: FixedJob) -> JobName {
+    JobName::Fixed(job)
 }

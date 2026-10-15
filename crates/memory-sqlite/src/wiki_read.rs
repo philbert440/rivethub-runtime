@@ -188,9 +188,9 @@ fn page(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
         git_sha,
         last_verified: verified
             .as_deref()
-            .map(|text| stamp_text(text, "last_verified_at"))
+            .map(|text| time::stored(text, "last_verified_at"))
             .transpose()?,
-        updated_at: stamp_text(&updated, "updated_at")?,
+        updated_at: time::stored(&updated, "updated_at")?,
         related: Some(json_list(&related, "related")?),
     })))
 }
@@ -332,7 +332,7 @@ fn citations(conn: &Connection, slug: &str) -> Result<Vec<WikiCitation>, SqliteE
         .map(|(summary_id, kind, note, cited_at)| {
             Ok(WikiCitation {
                 summary_id,
-                date: Some(stamp_text(&cited_at, "cited_at")?),
+                date: Some(time::stored(&cited_at, "cited_at")?),
                 kind,
                 note,
             })
@@ -403,13 +403,9 @@ fn topic_wire(topic: Topic) -> Result<WikiTopic, SqliteError> {
         title: topic.title,
         tags: topic.tags,
         entities: topic.entities,
-        updated_at: stamp_text(&topic.updated_at, "updated_at")?,
+        updated_at: time::stored(&topic.updated_at, "updated_at")?,
         excerpt: topic.current_state.chars().take(EXCERPT_CHARS).collect(),
     })
-}
-
-fn stamp_text(text: &str, column: &'static str) -> Result<String, SqliteError> {
-    Ok(time::stamp(time::stored(text, column)?))
 }
 
 fn json_list(text: &str, column: &'static str) -> Result<Vec<String>, SqliteError> {

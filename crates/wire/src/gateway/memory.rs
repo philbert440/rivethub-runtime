@@ -65,29 +65,20 @@ pub enum BrowseWindow {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum BrowseWindowError {
-    #[error("Invalid window=\"\" — expected one of: {expected}")]
-    Empty { expected: String },
-    #[error(
-        "Unknown window=\"{raw}\" (normalized to \"{normalized}\"). Expected one of: {expected}"
-    )]
-    Unknown {
-        raw: String,
-        normalized: String,
-        expected: String,
-    },
+    #[error("window is empty")]
+    Empty,
+    #[error("unknown window {raw:?}; expected {expected}")]
+    Unknown { raw: String, expected: String },
 }
 
 impl BrowseWindow {
     pub fn parse(raw: &str) -> Result<Self, BrowseWindowError> {
         let normalized = raw.trim().to_ascii_lowercase().replace(' ', "_");
         if normalized.is_empty() {
-            return Err(BrowseWindowError::Empty {
-                expected: Self::expected(),
-            });
+            return Err(BrowseWindowError::Empty);
         }
         std::str::FromStr::from_str(&normalized).map_err(|_| BrowseWindowError::Unknown {
             raw: raw.to_owned(),
-            normalized,
             expected: Self::expected(),
         })
     }
@@ -105,9 +96,9 @@ impl BrowseWindow {
 pub struct MemoryBrowseToolArgs {
     pub conversation_id: Option<String>,
     pub include_tools: Option<bool>,
-    pub since: Option<String>,
-    pub before: Option<String>,
-    pub window: Option<String>,
+    pub since: Option<DateTime<Utc>>,
+    pub before: Option<DateTime<Utc>>,
+    pub window: Option<BrowseWindow>,
     pub agent: Option<String>,
     pub tag: Option<String>,
     pub limit: Option<u32>,
@@ -135,7 +126,7 @@ pub struct MemoryAppendToolArgs {
 pub struct MemoryIngestMessage {
     pub role: Role,
     pub content: String,
-    pub created_at: Option<String>,
+    pub created_at: Option<DateTime<Utc>>,
     pub tool_calls: Option<Vec<MemoryIngestToolCall>>,
 }
 
@@ -332,7 +323,7 @@ pub struct SummarizerHealth {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureHealth {
-    pub status: String,
+    pub status: CaptureStatus,
     pub impact: String,
 }
 

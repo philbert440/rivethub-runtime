@@ -150,6 +150,7 @@ async fn enqueue_tags(
             conversation_id,
         )?)
         .await
+        .map(|_| ())
         .map_err(WorkerError::queue)
 }
 

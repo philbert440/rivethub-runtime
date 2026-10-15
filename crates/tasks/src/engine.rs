@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use uuid::Uuid;
 
-use kernel::tasks::TaskJobs;
+use kernel::queue::JobQueue;
 use kernel::tasks::TaskStore;
 
 use crate::directory::Directory;
@@ -61,7 +61,7 @@ pub struct Engine<S, J> {
 impl<S, J> Engine<S, J>
 where
     S: TaskStore,
-    J: TaskJobs,
+    J: JobQueue,
 {
     pub fn new(
         store: S,

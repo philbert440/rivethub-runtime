@@ -37,6 +37,7 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
             key_mode: JobKeyMode::Replace,
             priority: 0,
             run_at: None,
+            max_attempts: None,
         })
         .await?;
     queue
@@ -47,6 +48,7 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
             key_mode: JobKeyMode::Replace,
             priority: 10,
             run_at: None,
+            max_attempts: None,
         })
         .await?;
     let runner = Runner::new(
@@ -80,11 +82,25 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
             .await?;
     assert_eq!(extraction.0, "done");
     assert_eq!(model.chat_requests().await.len(), 1);
-    assert!(queue.claim(WorkerRole::WikiBuilder).await?.is_none());
+    assert!(
+        queue
+            .claim(&kernel::queue::ClaimSelector::matching(
+                queue.task_names(WorkerRole::WikiBuilder)
+            ))
+            .await?
+            .is_none()
+    );
     let untouched: (i64,) = sqlx::query_as("SELECT count(*) FROM graphile_worker._private_jobs j JOIN graphile_worker._private_tasks t ON t.id = j.task_id WHERE t.identifier = 'recompile-wiki' AND j.attempts = 0")
         .fetch_one(&pool).await?;
     assert_eq!(untouched.0, 1);
-    assert!(queue.claim(WorkerRole::Embedder).await?.is_some());
+    assert!(
+        queue
+            .claim(&kernel::queue::ClaimSelector::matching(
+                queue.task_names(WorkerRole::Embedder)
+            ))
+            .await?
+            .is_some()
+    );
     Ok(())
 }
 
@@ -123,7 +139,14 @@ async fn wiki_queue_failure_retries_delivery_without_reextracting(pool: PgPool) 
         vec!["acmekit-deploys"]
     );
     assert_eq!(model.chat_requests().await.len(), 1);
-    assert!(queue.claim(WorkerRole::Embedder).await?.is_some());
+    assert!(
+        queue
+            .claim(&kernel::queue::ClaimSelector::matching(
+                queue.task_names(WorkerRole::Embedder)
+            ))
+            .await?
+            .is_some()
+    );
     Ok(())
 }
 

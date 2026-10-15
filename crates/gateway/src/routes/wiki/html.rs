@@ -7,6 +7,7 @@ use axum::http::header;
 use axum::response::Html;
 use axum::response::IntoResponse;
 use axum::response::Response;
+use chrono::SecondsFormat;
 use kernel::wiki::WikiFilter;
 use wire::gateway::wiki::WikiMissBody;
 use wire::gateway::wiki::WikiPageResponse;
@@ -84,11 +85,14 @@ pub(super) fn index(topics: &WikiTopicList, filter: &WikiFilter) -> Result<Strin
     for topic in &topics.topics {
         output.push_str("<li><h2>");
         link(&mut output, &topic.slug, &topic.title)?;
+        let updated = topic
+            .updated_at
+            .to_rfc3339_opts(SecondsFormat::Millis, true);
         write!(
             output,
             "</h2><p>{}</p><time>{}</time></li>",
             Escaped(&topic.excerpt),
-            Escaped(&topic.updated_at)
+            Escaped(&updated)
         )?;
     }
     output.push_str("</ul>");
@@ -117,10 +121,11 @@ pub(super) fn index(topics: &WikiTopicList, filter: &WikiFilter) -> Result<Strin
 
 pub(super) fn article(page: &WikiPageResponse) -> Result<String, WikiError> {
     let mut output = document(&page.title);
+    let updated = page.updated_at.to_rfc3339_opts(SecondsFormat::Millis, true);
     write!(
         output,
         "<p>Updated <time>{}</time></p><section><h2>Current state</h2><pre>{}</pre></section>",
-        Escaped(&page.updated_at),
+        Escaped(&updated),
         Escaped(&page.current_state)
     )?;
     if let Some(article) = &page.article {
@@ -149,11 +154,12 @@ pub(super) fn article(page: &WikiPageResponse) -> Result<String, WikiError> {
     if !page.history.is_empty() {
         output.push_str("<section><h2>History</h2>");
         for entry in &page.history {
+            let date = entry.date.to_string();
             write!(
                 output,
                 "<h3>{}</h3><time>{}</time><pre>{}</pre>",
                 Escaped(&entry.title),
-                Escaped(&entry.date),
+                Escaped(&date),
                 Escaped(&entry.body)
             )?;
         }

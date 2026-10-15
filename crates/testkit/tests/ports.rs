@@ -344,17 +344,28 @@ fn job_queue_claims_in_order() {
                 key_mode: JobKeyMode::Replace,
                 priority: 0,
                 run_at: None,
+                max_attempts: None,
             })
             .await
             .unwrap();
         let claimed = queue
-            .claim(WorkerRole::Embedder)
+            .claim(&kernel::queue::ClaimSelector::matching(
+                queue.task_names(WorkerRole::Embedder),
+            ))
             .await
             .unwrap()
             .expect("expected one queued job");
         assert_eq!(claimed.name, JobName::Fixed(FixedJob::EmbedTarget));
         queue.complete(claimed.id).await.unwrap();
-        assert!(queue.claim(WorkerRole::Embedder).await.unwrap().is_none());
+        assert!(
+            queue
+                .claim(&kernel::queue::ClaimSelector::matching(
+                    queue.task_names(WorkerRole::Embedder)
+                ))
+                .await
+                .unwrap()
+                .is_none()
+        );
     });
 }
 

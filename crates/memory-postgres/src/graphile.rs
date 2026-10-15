@@ -86,14 +86,7 @@ impl GraphileQueue {
     pub(crate) async fn subscribe(
         &self,
     ) -> Result<Box<dyn kernel::queue::JobNotifications>, Error> {
-        let mut listener = sqlx::postgres::PgListener::connect_with(&self.pool)
-            .await
-            .map_err(|source| Error::operation("queue listen", source))?;
-        listener
-            .listen("jobs:insert")
-            .await
-            .map_err(|source| Error::operation("queue listen", source))?;
-        Ok(Box::new(Notifications(listener)))
+        listen(&self.pool).await
     }
 
     pub(crate) async fn schema_present(pool: &PgPool) -> Result<bool, Error> {
@@ -115,7 +108,10 @@ impl GraphileQueue {
         .bind(job.name.to_string())
         .bind(payload)
         .bind(job.run_at)
-        .bind(max_attempts(&job.name))
+        .bind(match job.max_attempts {
+            Some(attempts) => attempts,
+            None => attempts_for(&job.name),
+        })
         .bind(&job.key)
         .bind(i32::from(job.priority))
         .bind(key_mode(job.key_mode))
@@ -125,12 +121,16 @@ impl GraphileQueue {
         Ok(JobId::new(queued.id))
     }
 
-    pub(crate) async fn claim(&self, tasks: &[JobName]) -> Result<Option<ClaimedJob>, Error> {
+    pub(crate) async fn claim(
+        &self,
+        tasks: &[JobName],
+        only_id: Option<JobId>,
+    ) -> Result<Option<ClaimedJob>, Error> {
         let tasks: Vec<String> = tasks.iter().map(ToString::to_string).collect();
         let locked_by = format!("{}-{}", self.worker, uuid::Uuid::new_v4());
         let row: Option<ClaimedRow> = sqlx::query_as(crate::graphile_sql::CLAIM)
             .bind(&tasks)
-            .bind(None::<i64>)
+            .bind(only_id.map(i64::from))
             .bind(&locked_by)
             .fetch_optional(&self.pool)
             .await
@@ -152,6 +152,18 @@ impl GraphileQueue {
             payload: row.payload.0,
             attempt,
         }))
+    }
+
+    pub(crate) async fn read(
+        &self,
+        id: JobId,
+    ) -> Result<Option<kernel::queue::StoredJob>, kernel::queue::JobQueueError> {
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|source| kernel::queue::JobQueueError::Unavailable(Box::new(source)))?;
+        crate::task_jobs::read_job(&mut conn, id).await
     }
 
     pub(crate) async fn complete(&self, id: JobId) -> Result<u64, Error> {
@@ -333,6 +345,19 @@ impl GraphileQueue {
     }
 }
 
+pub(crate) async fn listen(
+    pool: &PgPool,
+) -> Result<Box<dyn kernel::queue::JobNotifications>, Error> {
+    let mut listener = sqlx::postgres::PgListener::connect_with(pool)
+        .await
+        .map_err(|source| Error::operation("queue listen", source))?;
+    listener
+        .listen("jobs:insert")
+        .await
+        .map_err(|source| Error::operation("queue listen", source))?;
+    Ok(Box::new(Notifications(listener)))
+}
+
 fn count(value: i64) -> Result<u64, Error> {
     u64::try_from(value).map_err(|source| Error::protocol(source.to_string()))
 }
@@ -344,7 +369,7 @@ fn key_mode(mode: JobKeyMode) -> &'static str {
     }
 }
 
-fn max_attempts(name: &JobName) -> i32 {
+pub(crate) fn attempts_for(name: &JobName) -> i32 {
     match name {
         JobName::Fixed(fixed) => match fixed {
             FixedJob::EmbedTarget => 5,

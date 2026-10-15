@@ -9,33 +9,7 @@ use crate::BoxError;
 
 pub const HEARTBEAT_SESSION_PREFIX: &str = "heartbeat:";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
-#[strum(serialize_all = "snake_case")]
-pub enum SummaryKind {
-    Leaf,
-    Branch,
-    Root,
-}
-
-impl SummaryKind {
-    #[must_use]
-    pub const fn depth(self) -> i32 {
-        match self {
-            Self::Leaf => 0,
-            Self::Branch => 1,
-            Self::Root => 2,
-        }
-    }
-
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Leaf => "leaf",
-            Self::Branch => "branch",
-            Self::Root => "root",
-        }
-    }
-}
+pub use wire::gateway::memory::SummaryKind;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConversationHead {

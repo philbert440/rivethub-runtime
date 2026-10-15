@@ -33,6 +33,7 @@ const SKIPPED_SCENARIOS: [(&str, &str); 2] = [
 
 const HISTORY_SKIP: &str = "session and task history reads are not part of this slice";
 const SETTINGS_SKIP: &str = "session settings and task association are not part of this slice";
+const BAD_STAMP: &str = "a capture timestamp is DateTime<Utc>; a non-instant cannot be constructed, and the recorded rejection is a parse throw outside the store";
 
 #[derive(Debug)]
 enum Action {
@@ -148,52 +149,43 @@ fn kept_unless_supplied() -> TestResult<Plan> {
     })
 }
 
-fn timestamps_and_finalize() -> Plan {
-    let session = |updated_at: Option<&str>, created_at: Option<&str>| {
-        let mut capture = batch("old-task", "rivet", "cli");
-        capture.updated_at = updated_at.map(str::to_owned);
-        capture.created_at = created_at.map(str::to_owned);
-        capture
-    };
+fn timestamps_and_finalize() -> TestResult<Plan> {
+    let session =
+        |updated_at: Option<&str>, created_at: Option<&str>| -> TestResult<CaptureBatchRequest> {
+            let mut capture = batch("old-task", "rivet", "cli");
+            capture.updated_at = updated_at.map(instant).transpose()?;
+            capture.created_at = created_at.map(instant).transpose()?;
+            Ok(capture)
+        };
     let mut first = session(
         Some("2025-01-01T00:00:00.000Z"),
         Some("2020-01-01T00:00:00.000Z"),
-    );
+    )?;
     first.messages.push(message("e1", Role::User, "then"));
-    let mut finalize = session(Some("2025-03-01T00:00:00Z"), None);
+    let mut finalize = session(Some("2025-03-01T00:00:00Z"), None)?;
     finalize.finalize = Some(true);
-    let mut bad_message = session(None, None);
-    let mut stamped = message("e2", Role::User, "later");
-    stamped.created_at = Some("soon".to_owned());
-    bad_message.messages.push(stamped);
-    Plan {
+    Ok(Plan {
         steps: vec![
             ("old created/updated", Action::Capture(first)),
             (
                 "older updated_at",
-                Action::Capture(session(Some("2024-06-01T00:00:00Z"), None)),
+                Action::Capture(session(Some("2024-06-01T00:00:00Z"), None)?),
             ),
             (
                 "later updated_at with offset",
-                Action::Capture(session(Some("2025-03-01T01:00:00+01:00"), None)),
+                Action::Capture(session(Some("2025-03-01T01:00:00+01:00"), None)?),
             ),
             ("finalize", Action::Capture(finalize.clone())),
             (
                 "finalize again (already inactive)",
                 Action::Capture(finalize),
             ),
-            (
-                "bad created_at",
-                Action::Capture(session(None, Some("not a date"))),
-            ),
-            (
-                "bad updated_at",
-                Action::Capture(session(Some("yesterday"), None)),
-            ),
-            ("bad message created_at", Action::Capture(bad_message)),
+            ("bad created_at", Action::Skip(BAD_STAMP)),
+            ("bad updated_at", Action::Skip(BAD_STAMP)),
+            ("bad message created_at", Action::Skip(BAD_STAMP)),
         ],
         ..Plan::default()
-    }
+    })
 }
 
 fn pending_tool_fill() -> TestResult<Plan> {
@@ -276,17 +268,17 @@ fn cowork_claim() -> TestResult<Plan> {
     })
 }
 
-fn capped_text() -> Plan {
+fn capped_text() -> TestResult<Plan> {
     let boundary = format!("{}\u{1F600}xxxx", "x".repeat(15_999));
     let kept: String = boundary.chars().take(16_000).collect();
     let full = boundary.chars().count();
     let mut capture = batch("cli:sess-1", "rivet", "cli");
     let mut big = message("big", Role::User, &"x".repeat(20_000));
-    big.created_at = Some("2026-10-04T08:00:00.000Z".to_owned());
+    big.created_at = Some(instant("2026-10-04T08:00:00.000Z")?);
     let mut surrogate = message("sur", Role::Tool, &boundary);
     surrogate.tool_name = Some("Read".to_owned());
     surrogate.tool_result = Some(boundary);
-    surrogate.created_at = Some("2026-10-04T10:00:01.500+02:00".to_owned());
+    surrogate.created_at = Some(instant("2026-10-04T10:00:01.500+02:00")?);
     capture.messages = vec![
         big,
         surrogate,
@@ -300,7 +292,7 @@ fn capped_text() -> Plan {
         value,
         reason,
     };
-    Plan {
+    Ok(Plan {
         steps: vec![("big + surrogate", Action::Capture(capture))],
         deviations: vec![
             cell("content", Json::String(kept.clone())),
@@ -313,7 +305,7 @@ fn capped_text() -> Plan {
             ),
         ],
         ..Plan::default()
-    }
+    })
 }
 
 fn owner_stamp() -> TestResult<Plan> {
@@ -449,12 +441,12 @@ fn plan(name: &str) -> TestResult<Option<Plan>> {
         }
         "title, settings and task id kept unless supplied" => kept_unless_supplied()?,
         "source timestamps kept; updated_at only moves forward; finalize" => {
-            timestamps_and_finalize()
+            timestamps_and_finalize()?
         }
         "pending tool result filled in place" => pending_tool_fill()?,
         "cowork hook prompt rewritten onto the transcript id, once" => cowork_claim()?,
         "UTC timestamps; oversized and surrogate-boundary text capped with metadata" => {
-            capped_text()
+            capped_text()?
         }
         "owner stamp (userId alice)" => owner_stamp()?,
         "append, histories, settings, task ids, heartbeat, other users" => appends()?,
@@ -523,6 +515,29 @@ async fn replay(scenario: &mut Scenario, plan: Plan) -> TestResult<Vec<String>> 
     }
     compare_tables(store, &scenario.tables, &mut ids, &scenario.name).await?;
     Ok(notes)
+}
+
+#[test]
+fn skipped_timestamp_steps_are_the_plan() -> TestResult {
+    let plan = timestamps_and_finalize()?;
+    for name in ["bad created_at", "bad updated_at", "bad message created_at"] {
+        let action = plan
+            .steps
+            .iter()
+            .find(|(label, _)| *label == name)
+            .map(|(_, action)| action)
+            .ok_or_else(|| format!("plan is missing {name}"))?;
+        match action {
+            Action::Skip(reason) if *reason == BAD_STAMP => {}
+            Action::Skip(reason) => {
+                return Err(format!("{name} skipped for {reason}").into());
+            }
+            Action::Capture(_) | Action::Append(_) => {
+                return Err(format!("{name} must skip with the stamp reason").into());
+            }
+        }
+    }
+    Ok(())
 }
 
 #[tokio::test]

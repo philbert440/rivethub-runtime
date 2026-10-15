@@ -30,6 +30,7 @@ pub fn suggest_tags_job(summary_id: Uuid, conversation_id: Uuid) -> Result<Job, 
         key_mode: JobKeyMode::Replace,
         priority: SUGGEST_PRIORITY,
         run_at: None,
+        max_attempts: None,
     })
 }
 

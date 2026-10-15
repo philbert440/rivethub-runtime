@@ -3,6 +3,77 @@ use crate::message::Role;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+#[derive(
+    schemars::JsonSchema,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    strum::Display,
+    strum::EnumString,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum SearchMode {
+    #[default]
+    Hybrid,
+    Fts,
+    Vector,
+    Trigram,
+    Regex,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    strum::Display,
+    strum::EnumString,
+)]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum SummaryKind {
+    Leaf,
+    Branch,
+    Root,
+}
+
+impl SummaryKind {
+    #[must_use]
+    pub const fn depth(self) -> i32 {
+        match self {
+            Self::Leaf => 0,
+            Self::Branch => 1,
+            Self::Root => 2,
+        }
+    }
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Leaf => "leaf",
+            Self::Branch => "branch",
+            Self::Root => "root",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CaptureStatus {
+    Unknown,
+}
+
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemorySearchToolArgs {
@@ -12,7 +83,7 @@ pub struct MemorySearchToolArgs {
     pub expand: Option<bool>,
     pub synthesize: Option<bool>,
     pub query: String,
-    pub mode: Option<String>,
+    pub mode: Option<SearchMode>,
     pub scope: Option<MemoryScope>,
     pub limit: Option<u32>,
     pub agent: Option<String>,
@@ -45,7 +116,7 @@ pub struct MemorySearchHit {
     pub score: f64,
     pub role: Option<Role>,
     pub agent: Option<String>,
-    pub kind: Option<String>,
+    pub kind: Option<SummaryKind>,
     pub tool_name: Option<String>,
     pub conversation_id: Option<String>,
     pub session_id: Option<String>,

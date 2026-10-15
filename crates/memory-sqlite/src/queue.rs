@@ -54,20 +54,12 @@ pub struct ClaimedSqliteJob {
     pub max_attempts: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum FailOutcome {
     Retry,
     Dead,
-}
-
-impl std::fmt::Display for FailOutcome {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Retry => formatter.write_str("retry"),
-            Self::Dead => formatter.write_str("dead"),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,8 +144,15 @@ pub fn retry_delay_ms(attempt: u32) -> u64 {
 
 impl SqliteStore {
     pub async fn enqueue_job(&self, job: JobInsert) -> Result<bool, SqliteError> {
+        Ok(self.enqueue_returning(job).await?.is_some())
+    }
+
+    pub(crate) async fn enqueue_returning(
+        &self,
+        job: JobInsert,
+    ) -> Result<Option<String>, SqliteError> {
         let inserted = self.with_conn(move |conn| insert_job(conn, &job)).await?;
-        if inserted {
+        if inserted.is_some() {
             self.notifications.send_replace(());
         }
         Ok(inserted)
@@ -164,17 +163,20 @@ impl SqliteStore {
         tasks: Vec<String>,
         now: DateTime<Utc>,
     ) -> Result<Option<ClaimedSqliteJob>, SqliteError> {
-        self.with_conn(move |conn| claim_one(conn, &tasks, now, ClaimKind::Inherent))
+        self.with_conn(move |conn| claim_one(conn, &tasks, None, now, ClaimKind::Inherent))
             .await
     }
 
     pub(crate) async fn claim_port(
         &self,
         tasks: Vec<String>,
+        only_id: Option<String>,
         now: DateTime<Utc>,
     ) -> Result<Option<ClaimedSqliteJob>, SqliteError> {
-        self.with_conn(move |conn| claim_one(conn, &tasks, now, ClaimKind::Port))
-            .await
+        self.with_conn(move |conn| {
+            claim_one(conn, &tasks, only_id.as_deref(), now, ClaimKind::Port)
+        })
+        .await
     }
 
     pub async fn fail_job(
@@ -259,10 +261,10 @@ pub(crate) fn enqueue_embed_due(
     let job = JobInsert::new(EMBED_TASK, payload, now)
         .key(format!("embed-{table}-{id}"))
         .run_at(run_at);
-    insert_job(conn, &job)
+    Ok(insert_job(conn, &job)?.is_some())
 }
 
-fn insert_job(conn: &Connection, job: &JobInsert) -> Result<bool, SqliteError> {
+fn insert_job(conn: &Connection, job: &JobInsert) -> Result<Option<String>, SqliteError> {
     let id = Uuid::new_v4().to_string();
     let stamped = time::stamp(job.now);
     let run_at = time::stamp(job.run_at);
@@ -273,8 +275,8 @@ fn insert_job(conn: &Connection, job: &JobInsert) -> Result<bool, SqliteError> {
          ) VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, 'queued', ?7, ?7)",
         params![id, job.task, job.key, job.payload, run_at, max_attempts, stamped],
     ) {
-        Ok(_) => Ok(true),
-        Err(error) if duplicate_key(&error) => Ok(false),
+        Ok(_) => Ok(Some(id)),
+        Err(error) if duplicate_key(&error) => Ok(None),
         Err(error) => Err(SqliteError::query("job enqueue")(error)),
     }
 }
@@ -282,6 +284,7 @@ fn insert_job(conn: &Connection, job: &JobInsert) -> Result<bool, SqliteError> {
 fn claim_one(
     conn: &mut Connection,
     tasks: &[String],
+    only_id: Option<&str>,
     now: DateTime<Utc>,
     kind: ClaimKind,
 ) -> Result<Option<ClaimedSqliteJob>, SqliteError> {
@@ -291,7 +294,7 @@ fn claim_one(
     let tx = conn
         .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
         .map_err(SqliteError::query("job claim begin"))?;
-    let Some(row) = select_due(&tx, tasks, now)? else {
+    let Some(row) = select_due(&tx, tasks, only_id, now)? else {
         return Ok(None);
     };
     let payload = match accepted_payload(&row, kind) {
@@ -320,35 +323,33 @@ fn claim_one(
 fn select_due(
     conn: &Connection,
     tasks: &[String],
+    only_id: Option<&str>,
     now: DateTime<Utc>,
 ) -> Result<Option<DueRow>, SqliteError> {
     let sql = due_sql(tasks.len());
     let stamped = time::stamp(now);
-    let mut bound: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(tasks.len().saturating_add(1));
+    let pinned = only_id.map(str::to_owned);
+    let mut bound: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(tasks.len().saturating_add(2));
     bound.push(&stamped);
     for task in tasks {
         bound.push(task);
     }
+    bound.push(&pinned);
     conn.query_row(&sql, bound.as_slice(), read_due)
         .optional()
         .map_err(SqliteError::query("job claim"))
 }
 
 fn due_sql(count: usize) -> String {
-    let mut slots = String::new();
-    for index in 0..count {
-        if index > 0 {
-            slots.push_str(", ");
-        }
-        slots.push('?');
-        slots.push_str(&(index.saturating_add(2)).to_string());
-    }
+    let slots = (0..count)
+        .map(|index| format!("?{}", index.saturating_add(2)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let pin = count.saturating_add(2);
     format!(
-        "SELECT id, task, job_key, payload, max_attempts
-           FROM ros_jobs
-          WHERE state = 'queued' AND run_at <= ?1 AND task IN ({slots})
-          ORDER BY run_at, rowid
-          LIMIT 1"
+        "SELECT id, task, job_key, payload, max_attempts FROM ros_jobs \
+         WHERE state = 'queued' AND run_at <= ?1 AND task IN ({slots}) \
+         AND (?{pin} IS NULL OR id = ?{pin}) ORDER BY run_at, rowid LIMIT 1"
     )
 }
 

@@ -15,16 +15,17 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::TimeZone;
 use chrono::Utc;
+use kernel::queue::ClaimSelector;
+use kernel::queue::ClaimedJob;
+use kernel::queue::JobName;
+use kernel::queue::JobQueue;
 use kernel::tasks::ApprovalBroker;
 use kernel::tasks::ApprovalDecision;
 use kernel::tasks::ApprovalError;
 use kernel::tasks::CatalogSource;
-use kernel::tasks::ClaimSelector;
-use kernel::tasks::ClaimedJob;
 use kernel::tasks::Finish;
 use kernel::tasks::TaskAgents;
 use kernel::tasks::TaskError;
-use kernel::tasks::TaskJobs;
 use kernel::tasks::TaskListFilter;
 use kernel::tasks::TaskOrigin;
 use kernel::tasks::TaskQuery;
@@ -32,6 +33,7 @@ use kernel::tasks::TaskRecord;
 use parking_lot::Mutex;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use std::str::FromStr;
 use testkit::TaskMemory;
 use uuid::Uuid;
 use wire::gateway::GatewayError;
@@ -544,7 +546,7 @@ async fn only_id(memory: &TaskMemory) -> Uuid {
 async fn claim(memory: &TaskMemory, name: &str) -> Option<ClaimedJob> {
     memory
         .claim(&ClaimSelector {
-            names: vec![name.to_owned()],
+            names: vec![JobName::from_str(name).expect("job name")],
             only_id: None,
         })
         .await

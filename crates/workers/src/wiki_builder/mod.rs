@@ -48,6 +48,7 @@ pub fn extract_wiki_job(job: &ExtractWiki) -> Result<Job, WorkerError> {
         key_mode: JobKeyMode::Replace,
         priority: 8,
         run_at: None,
+        max_attempts: None,
     })
 }
 
@@ -61,7 +62,9 @@ pub async fn handle_wiki_backfill(env: &WikiBuilderEnv<'_>) -> Result<usize, Wor
         tokio::select! {
             biased;
             () = env.cancel.cancelled() => return Err(WorkerError::Cancelled),
-            result = env.queue.enqueue(extract_wiki_job(job)?) => result.map_err(WorkerError::Queue)?,
+            result = env.queue.enqueue(extract_wiki_job(job)?) => {
+                result.map(|_| ()).map_err(WorkerError::Queue)?;
+            }
         }
     }
     Ok(jobs.len())
@@ -96,7 +99,9 @@ pub async fn handle_extract_wiki(
         tokio::select! {
             biased;
             () = env.cancel.cancelled() => return Err(WorkerError::Cancelled),
-            result = env.queue.enqueue(embed_job(slug)?) => result.map_err(WorkerError::Queue)?,
+            result = env.queue.enqueue(embed_job(slug)?) => {
+                result.map(|_| ()).map_err(WorkerError::Queue)?;
+            }
         }
     }
     Ok(topics)
@@ -175,5 +180,6 @@ fn embed_job(slug: &str) -> Result<Job, WorkerError> {
         key_mode: JobKeyMode::Replace,
         priority: 10,
         run_at: None,
+        max_attempts: None,
     })
 }

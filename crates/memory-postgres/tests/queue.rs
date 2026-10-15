@@ -70,6 +70,7 @@ fn embed_job() -> Job {
         key_mode: JobKeyMode::Replace,
         priority: 0,
         run_at: None,
+        max_attempts: None,
     }
 }
 
@@ -91,7 +92,11 @@ async fn enqueue_claims_and_completes_through_the_public_api(pool: PgPool) -> Te
         ))
     );
 
-    let claimed = jobs.claim(WorkerRole::Embedder).await?;
+    let claimed = jobs
+        .claim(&kernel::queue::ClaimSelector::matching(
+            jobs.task_names(WorkerRole::Embedder),
+        ))
+        .await?;
     let claimed = claimed.ok_or("the only job is claimable")?;
     assert_eq!(claimed.name, JobName::Fixed(FixedJob::EmbedTarget));
     assert_eq!(claimed.attempt, 1);
@@ -103,20 +108,30 @@ async fn enqueue_claims_and_completes_through_the_public_api(pool: PgPool) -> Te
             .is_some_and(|target| target == "abc")
     );
     assert!(
-        jobs.claim(WorkerRole::Embedder).await?.is_none(),
+        jobs.claim(&kernel::queue::ClaimSelector::matching(
+            jobs.task_names(WorkerRole::Embedder)
+        ))
+        .await?
+        .is_none(),
         "the claimed job is locked"
     );
 
     jobs.fail(claimed.id, "boom").await?;
     assert!(
-        jobs.claim(WorkerRole::Embedder).await?.is_none(),
+        jobs.claim(&kernel::queue::ClaimSelector::matching(
+            jobs.task_names(WorkerRole::Embedder)
+        ))
+        .await?
+        .is_none(),
         "a failed job waits out graphile's exponential backoff"
     );
     sqlx::query("UPDATE graphile_worker._private_jobs SET run_at = now()")
         .execute(&pool)
         .await?;
     let retried = jobs
-        .claim(WorkerRole::Embedder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            jobs.task_names(WorkerRole::Embedder),
+        ))
         .await?
         .ok_or("the failed job is retried after its backoff")?;
     assert_eq!(retried.id, claimed.id);
@@ -124,7 +139,11 @@ async fn enqueue_claims_and_completes_through_the_public_api(pool: PgPool) -> Te
 
     jobs.complete(retried.id).await?;
     assert!(
-        jobs.claim(WorkerRole::Embedder).await?.is_none(),
+        jobs.claim(&kernel::queue::ClaimSelector::matching(
+            jobs.task_names(WorkerRole::Embedder)
+        ))
+        .await?
+        .is_none(),
         "completion removes the job"
     );
     Ok(())
@@ -141,6 +160,7 @@ async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
         key_mode: JobKeyMode::Replace,
         priority: 0,
         run_at: None,
+        max_attempts: None,
     };
 
     jobs.enqueue(summarize(object(&SummarizeConversationPayload {
@@ -180,16 +200,28 @@ async fn role_scoping_keeps_the_task_lists_apart(pool: PgPool) -> TestResult {
     common::install_graphile(&pool).await?;
     let jobs = queue(&pool).await?;
     assert!(
-        jobs.claim(WorkerRole::Summarizer).await?.is_none(),
+        jobs.claim(&kernel::queue::ClaimSelector::matching(
+            jobs.task_names(WorkerRole::Summarizer)
+        ))
+        .await?
+        .is_none(),
         "an empty queue claims nothing"
     );
 
     jobs.enqueue(embed_job()).await?;
     assert!(
-        jobs.claim(WorkerRole::Summarizer).await?.is_none(),
+        jobs.claim(&kernel::queue::ClaimSelector::matching(
+            jobs.task_names(WorkerRole::Summarizer)
+        ))
+        .await?
+        .is_none(),
         "the summarizer role must not claim embed jobs"
     );
-    let embedder_claim = jobs.claim(WorkerRole::Embedder).await?;
+    let embedder_claim = jobs
+        .claim(&kernel::queue::ClaimSelector::matching(
+            jobs.task_names(WorkerRole::Embedder),
+        ))
+        .await?;
     let claimed = embedder_claim.ok_or("the embedder claims its own job")?;
     jobs.complete(claimed.id).await?;
 
@@ -200,6 +232,7 @@ async fn role_scoping_keeps_the_task_lists_apart(pool: PgPool) -> TestResult {
         key_mode: JobKeyMode::Replace,
         priority: 5,
         run_at: None,
+        max_attempts: None,
     })
     .await?;
     sqlx::query(
@@ -254,6 +287,7 @@ async fn queue_health_reports_buckets(pool: PgPool) -> TestResult {
         key_mode: JobKeyMode::Replace,
         priority: 5,
         run_at: None,
+        max_attempts: None,
     })
     .await?;
     sqlx::query("UPDATE graphile_worker._private_jobs SET attempts = max_attempts")

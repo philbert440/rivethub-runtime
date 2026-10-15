@@ -1,7 +1,10 @@
 use crate::JsonObject;
 use crate::message::Role;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
+#[serde_as]
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CaptureBatchRequest {
@@ -12,11 +15,16 @@ pub struct CaptureBatchRequest {
     pub settings: Option<JsonObject>,
     pub task_id: Option<String>,
     pub finalize: Option<bool>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
+    #[serde(default)]
+    #[serde_as(as = "Option<crate::time::Millis>")]
+    pub created_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    #[serde_as(as = "Option<crate::time::Millis>")]
+    pub updated_at: Option<DateTime<Utc>>,
     pub messages: Vec<CaptureMessage>,
 }
 
+#[serde_as]
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CaptureMessage {
@@ -27,7 +35,9 @@ pub struct CaptureMessage {
     pub tool_args: Option<JsonObject>,
     pub tool_result: Option<String>,
     pub metadata: Option<JsonObject>,
-    pub created_at: Option<String>,
+    #[serde(default)]
+    #[serde_as(as = "Option<crate::time::Millis>")]
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

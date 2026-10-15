@@ -23,15 +23,15 @@ use common::settings;
 use common::spec;
 use common::task;
 use kernel::queue::FixedJob;
+use kernel::queue::Job;
 use kernel::queue::JobKeyMode;
 use kernel::queue::JobName;
+use kernel::queue::JobQueue;
 use tasks::ClaimSelector;
 use tasks::Error;
 use tasks::HeartbeatSpec;
-use tasks::NewJob;
 use tasks::RunOutcome;
 use tasks::TaskJobPayload;
-use tasks::TaskJobs;
 use tasks::TaskOrigin;
 use tasks::TaskStore;
 use tokio_util::sync::CancellationToken;
@@ -223,15 +223,17 @@ async fn an_embed_target_job_stays_unclaimed() {
         settings(None, std::collections::BTreeMap::new()),
     );
     let embed = memory
-        .enqueue(&NewJob {
+        .enqueue(Job {
             name: JobName::Fixed(FixedJob::EmbedTarget),
-            payload: TaskJobPayload {
+            payload: wire::JsonObject::from_serialize(&TaskJobPayload {
                 task_id: "not-a-task".to_string(),
-            },
-            key: "embed-ros_messages-1".to_string(),
+            })
+            .expect("payload"),
+            key: Some("embed-ros_messages-1".to_string()),
             key_mode: JobKeyMode::Replace,
             priority: 0,
-            max_attempts: 5,
+            run_at: None,
+            max_attempts: Some(5),
         })
         .await
         .expect("embed");
@@ -242,7 +244,7 @@ async fn an_embed_target_job_stays_unclaimed() {
     );
     let stored = memory.read(embed).await.expect("read").expect("job");
     assert_eq!(stored.attempts, 0);
-    assert_eq!(stored.identifier, "embed-target");
+    assert_eq!(stored.name, JobName::Fixed(FixedJob::EmbedTarget));
     stub.close().await.expect("stub shuts down");
 }
 
@@ -276,7 +278,9 @@ async fn a_remote_job_is_left_for_the_other_node() {
     );
     let claimed = memory
         .claim(&ClaimSelector {
-            names: vec!["run-task:edge".to_string()],
+            names: vec![JobName::RunTaskOn {
+                node: "edge".to_string(),
+            }],
             only_id: None,
         })
         .await

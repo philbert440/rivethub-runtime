@@ -30,19 +30,23 @@ fn page() -> WikiPageResponse {
         see_also: Some(vec!["related-topic".into()]),
         history: vec![
             WikiHistoryEntry {
-                date: "2026-10-01".into(),
+                date: chrono::NaiveDate::from_ymd_opt(2026, 10, 1).expect("date"),
                 title: "Started".into(),
                 body: "Older history".into(),
             },
             WikiHistoryEntry {
-                date: "2026-10-14".into(),
+                date: chrono::NaiveDate::from_ymd_opt(2026, 10, 14).expect("date"),
                 title: "Ready".into(),
                 body: "Recent history".into(),
             },
         ],
         citations: vec![WikiCitation {
             summary_id: "00000000-0000-4000-8000-000000000001".into(),
-            date: Some("2026-10-14".into()),
+            date: Some(
+                chrono::DateTime::parse_from_rfc3339("2026-10-14T00:00:00Z")
+                    .expect("instant")
+                    .with_timezone(&chrono::Utc),
+            ),
             kind: Some("summary".into()),
             note: Some("Decision 🦀".into()),
         }],
@@ -50,7 +54,9 @@ fn page() -> WikiPageResponse {
         sources: vec![],
         git_sha: None,
         last_verified: None,
-        updated_at: "2026-10-14T00:00:00Z".into(),
+        updated_at: chrono::DateTime::parse_from_rfc3339("2026-10-14T00:00:00Z")
+            .expect("instant")
+            .with_timezone(&chrono::Utc),
         related: None,
     }
 }
@@ -77,7 +83,7 @@ async fn search_preserves_typed_results_and_validates_limits() {
             title: page.title.clone(),
             tags: page.tags.clone(),
             entities: page.entities.clone(),
-            updated_at: page.updated_at.clone(),
+            updated_at: page.updated_at,
             excerpt: page.current_state.clone(),
         }],
         total: 1,
@@ -129,7 +135,7 @@ async fn read_uses_typed_sections_and_preserves_small_markdown() {
         ),
         (
             "citations",
-            "00000000-0000-4000-8000-000000000001 — 2026-10-14 — summary — Decision 🦀",
+            "00000000-0000-4000-8000-000000000001 — 2026-10-14T00:00:00.000Z — summary — Decision 🦀",
         ),
     ] {
         let result = support::call(

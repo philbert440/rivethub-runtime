@@ -29,8 +29,7 @@ use wire::task::TaskUsage;
 use wire::task::VerifierResult;
 
 use crate::BoxError;
-use crate::queue::JobKeyMode;
-use crate::queue::JobName;
+use crate::queue::JobQueueError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConflictAction {
@@ -100,6 +99,31 @@ pub enum TaskError {
     },
     #[error("clock went backwards")]
     Clock,
+}
+
+impl From<JobQueueError> for TaskError {
+    fn from(value: JobQueueError) -> Self {
+        match value {
+            JobQueueError::Unavailable(source) => Self::Unavailable(source),
+            JobQueueError::Claim { message, source } => Self::Operation {
+                operation: "claim",
+                source: Box::new(ClaimFailure { message, source }),
+            },
+            JobQueueError::Absent => Self::QueueAbsent,
+            JobQueueError::Operation { operation, source } => Self::Operation { operation, source },
+            JobQueueError::Missing { id } => Self::MissingJob { id: i64::from(id) },
+            JobQueueError::Payload(source) => Self::Payload(source),
+            JobQueueError::Stored(message) => Self::Stored(message),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("{message}")]
+struct ClaimFailure {
+    message: String,
+    #[source]
+    source: BoxError,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
@@ -176,42 +200,6 @@ pub struct TaskJobPayload {
     pub task_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NewJob {
-    pub name: JobName,
-    pub payload: TaskJobPayload,
-    pub key: String,
-    pub key_mode: JobKeyMode,
-    pub priority: i16,
-    pub max_attempts: i32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClaimSelector {
-    pub names: Vec<String>,
-    pub only_id: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClaimedJob {
-    pub id: i64,
-    pub identifier: String,
-    pub payload_text: String,
-    pub attempt: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoredJob {
-    pub id: i64,
-    pub identifier: String,
-    pub payload: TaskJobPayload,
-    pub key: Option<String>,
-    pub priority: i16,
-    pub max_attempts: i32,
-    pub attempts: u32,
-    pub last_error: Option<String>,
-}
-
 #[async_trait]
 pub trait TaskStore: std::fmt::Debug + Send + Sync {
     async fn insert(&self, task: &TaskRecord) -> Result<(), TaskError>;
@@ -241,21 +229,6 @@ pub trait TaskStore: std::fmt::Debug + Send + Sync {
     async fn set_pending(&self, id: Uuid, message: &str) -> Result<(), TaskError>;
 
     async fn add_harness_session(&self, id: Uuid, session: &str) -> Result<(), TaskError>;
-}
-
-#[async_trait]
-pub trait TaskJobs: std::fmt::Debug + Send + Sync {
-    async fn enqueue(&self, job: &NewJob) -> Result<i64, TaskError>;
-
-    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, TaskError>;
-
-    async fn complete(&self, id: i64) -> Result<(), TaskError>;
-
-    async fn fail(&self, id: i64, error: &str) -> Result<(), TaskError>;
-
-    async fn read(&self, id: i64) -> Result<Option<StoredJob>, TaskError>;
-
-    async fn await_notification(&self, cancel: CancellationToken) -> Result<bool, TaskError>;
 }
 
 #[derive(Debug, Error)]

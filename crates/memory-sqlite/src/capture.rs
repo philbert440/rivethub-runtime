@@ -14,7 +14,6 @@ use crate::SqliteStore;
 use crate::conversation::ConversationKey;
 use crate::conversation::NewConversation;
 use crate::error::SqliteError;
-use crate::error::TimestampField;
 use crate::message::NewMessage;
 use crate::queue::enqueue_embed;
 use crate::time;
@@ -90,8 +89,8 @@ impl SqliteStore {
 
 impl PreparedBatch {
     fn new(batch: CaptureBatchRequest) -> Result<Self, SqliteError> {
-        let created_at = time::supplied(batch.created_at.as_deref(), TimestampField::CreatedAt)?;
-        let updated_at = time::supplied(batch.updated_at.as_deref(), TimestampField::UpdatedAt)?;
+        let created_at = crate::time::Stamp::from(batch.created_at);
+        let updated_at = crate::time::Stamp::from(batch.updated_at);
         let settings = batch
             .settings
             .as_ref()
@@ -215,7 +214,7 @@ impl PreparedBatch {
 
 impl PreparedMessage {
     fn new(message: &CaptureMessage) -> Result<Self, SqliteError> {
-        let created_at = time::supplied(message.created_at.as_deref(), TimestampField::CreatedAt)?;
+        let created_at = crate::time::Stamp::from(message.created_at);
         let (content, full_content_length) = capped(&message.content)?;
         let (tool_result, full_tool_result_length) = match message.tool_result.as_deref() {
             Some(text) => {

@@ -1,18 +1,20 @@
 use chrono::Utc;
+use kernel::queue::ClaimSelector;
 use kernel::queue::FixedJob;
+use kernel::queue::Job;
+use kernel::queue::JobId;
 use kernel::queue::JobKeyMode;
 use kernel::queue::JobName;
-use kernel::tasks::ClaimSelector;
-use kernel::tasks::NewJob;
-use kernel::tasks::TaskError;
+use kernel::queue::JobQueue;
+use kernel::queue::JobQueueError;
 use kernel::tasks::TaskJobPayload;
-use kernel::tasks::TaskJobs;
 use kernel::tasks::TaskOrigin;
 use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskStore;
 use memory_postgres::PostgresTasks;
 use sqlx::PgPool;
 use sqlx::Row;
+use std::str::FromStr;
 use uuid::Uuid;
 use wire::task::TaskBudget;
 use wire::task::TaskExecutorKind;
@@ -20,16 +22,22 @@ use wire::task::TaskPromptMode;
 use wire::task::TaskSpec;
 use wire::task::TaskStatus;
 
-fn job(name: JobName, task_id: &str, key: &str) -> NewJob {
-    NewJob {
+#[expect(
+    clippy::expect_used,
+    reason = "a task payload is a typed struct; serde failure means the fixture is wrong"
+)]
+fn job(name: JobName, task_id: &str, key: &str) -> Job {
+    Job {
         name,
-        payload: TaskJobPayload {
+        payload: wire::JsonObject::from_serialize(&TaskJobPayload {
             task_id: task_id.to_string(),
-        },
-        key: key.to_string(),
+        })
+        .expect("task payload"),
+        key: Some(key.to_string()),
         key_mode: JobKeyMode::Replace,
         priority: 0,
-        max_attempts: 1,
+        run_at: None,
+        max_attempts: Some(1),
     }
 }
 
@@ -103,9 +111,13 @@ async fn count_key(pool: &PgPool, key: &str) -> i64 {
     row.try_get("n").expect("n")
 }
 
-fn selector(name: &str, id: i64) -> ClaimSelector {
+#[expect(
+    clippy::expect_used,
+    reason = "the helper only receives job names the suite constructs"
+)]
+fn selector(name: &str, id: JobId) -> ClaimSelector {
     ClaimSelector {
-        names: vec![name.to_string()],
+        names: vec![JobName::from_str(name).expect("job name")],
         only_id: Some(id),
     }
 }
@@ -114,13 +126,13 @@ fn selector(name: &str, id: i64) -> ClaimSelector {
     clippy::expect_used,
     reason = "a queue helper fails the case when a row or claim does not come back"
 )]
-async fn park(pool: &PgPool, id: i64) {
+async fn park(pool: &PgPool, id: JobId) {
     let updated = sqlx::query(
         "UPDATE graphile_worker._private_jobs \
          SET run_at = now() + interval '1 day' \
          WHERE id = $1 AND locked_at IS NULL",
     )
-    .bind(id)
+    .bind(i64::from(id))
     .execute(pool)
     .await
     .expect("park");
@@ -135,9 +147,9 @@ async fn park(pool: &PgPool, id: i64) {
     clippy::expect_used,
     reason = "a queue helper fails the case when a row or claim does not come back"
 )]
-async fn release(pool: &PgPool, id: i64) {
+async fn release(pool: &PgPool, id: JobId) {
     sqlx::query("UPDATE graphile_worker._private_jobs SET run_at = now() WHERE id = $1")
-        .bind(id)
+        .bind(i64::from(id))
         .execute(pool)
         .await
         .expect("release");
@@ -207,14 +219,14 @@ async fn graphile_rows_match_the_task_queue_contract(pool: PgPool) {
     );
     let postgres = PostgresTasks::from_pool(pool.clone());
     let error = postgres
-        .enqueue(&job(
+        .enqueue(job(
             JobName::Fixed(FixedJob::RunTask),
             "absent",
             "task-absent",
         ))
         .await
         .expect_err("absent");
-    assert!(matches!(error, TaskError::QueueAbsent));
+    assert!(matches!(error, JobQueueError::Absent));
     testkit::install_graphile_worker(&pool)
         .await
         .expect("graphile fixture");
@@ -247,7 +259,7 @@ async fn submitted(pool: &PgPool, postgres: &PostgresTasks) {
         .expect("insert");
     let key = format!("task:{id}");
     let queued = postgres
-        .enqueue(&job(
+        .enqueue(job(
             JobName::Fixed(FixedJob::RunTask),
             &id.to_string(),
             &key,
@@ -288,7 +300,7 @@ async fn named_jobs(pool: &PgPool, postgres: &PostgresTasks, marker: &str) {
     let remote = format!("remote-{marker}");
     let remote_key = format!("task-remote-{marker}");
     let queued = postgres
-        .enqueue(&job(
+        .enqueue(job(
             JobName::RunTaskOn {
                 node: "edge".to_string(),
             },
@@ -307,7 +319,7 @@ async fn named_jobs(pool: &PgPool, postgres: &PostgresTasks, marker: &str) {
     let beat = format!("beat-{marker}");
     let beat_key = format!("heartbeat-worker-1-{marker}");
     let queued = postgres
-        .enqueue(&job(
+        .enqueue(job(
             JobName::Heartbeat {
                 agent: "worker".to_string(),
                 index: 1,
@@ -340,7 +352,7 @@ async fn named_jobs(pool: &PgPool, postgres: &PostgresTasks, marker: &str) {
 async fn replaced(pool: &PgPool, postgres: &PostgresTasks, marker: &str) {
     let key = format!("task-replace-{marker}");
     let first = postgres
-        .enqueue(&job(
+        .enqueue(job(
             JobName::Fixed(FixedJob::RunTask),
             &format!("first-{marker}"),
             &key,
@@ -349,7 +361,7 @@ async fn replaced(pool: &PgPool, postgres: &PostgresTasks, marker: &str) {
         .expect("first");
     park(pool, first).await;
     let second = postgres
-        .enqueue(&job(
+        .enqueue(job(
             JobName::Fixed(FixedJob::RunTask),
             &format!("second-{marker}"),
             &key,
@@ -374,7 +386,7 @@ async fn completed(pool: &PgPool, postgres: &PostgresTasks, marker: &str) {
     let task_id = format!("complete-{marker}");
     let key = format!("task-complete-{marker}");
     let queued = postgres
-        .enqueue(&job(JobName::Fixed(FixedJob::RunTask), &task_id, &key))
+        .enqueue(job(JobName::Fixed(FixedJob::RunTask), &task_id, &key))
         .await
         .expect("complete enqueue");
     park(pool, queued).await;
@@ -396,7 +408,7 @@ async fn failed_job(pool: &PgPool, postgres: &PostgresTasks, marker: &str) {
     let task_id = format!("fail-{marker}");
     let key = format!("task-fail-{marker}");
     let queued = postgres
-        .enqueue(&job(JobName::Fixed(FixedJob::RunTask), &task_id, &key))
+        .enqueue(job(JobName::Fixed(FixedJob::RunTask), &task_id, &key))
         .await
         .expect("fail enqueue");
     park(pool, queued).await;

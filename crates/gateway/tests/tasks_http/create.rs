@@ -507,7 +507,8 @@ async fn job_name(affinity: Option<&str>) -> String {
         .await
         .or(claim(&setup.memory, "run-task:east").await)
         .expect("job")
-        .identifier
+        .name
+        .to_string()
 }
 
 #[tokio::test]

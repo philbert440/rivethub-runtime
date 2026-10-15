@@ -36,7 +36,6 @@ use rusqlite::Connection;
 
 pub use capture::MAX_CONTENT_CHARS;
 pub use error::SqliteError;
-pub use error::TimestampField;
 pub use health::SqliteHealth;
 pub use queue::ClaimedSqliteJob;
 pub use queue::FailOutcome;

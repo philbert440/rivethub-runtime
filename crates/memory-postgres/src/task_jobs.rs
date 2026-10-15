@@ -1,12 +1,17 @@
+use std::str::FromStr;
+
 use sqlx::PgConnection;
 use sqlx::Row;
 use uuid::Uuid;
 
+use kernel::queue::ClaimSelector;
+use kernel::queue::ClaimedJob;
+use kernel::queue::Job;
+use kernel::queue::JobId;
 use kernel::queue::JobKeyMode;
-use kernel::tasks::ClaimSelector;
-use kernel::tasks::ClaimedJob;
-use kernel::tasks::NewJob;
-use kernel::tasks::StoredJob;
+use kernel::queue::JobName;
+use kernel::queue::JobQueueError;
+use kernel::queue::StoredJob;
 use kernel::tasks::TaskError;
 
 pub(crate) fn map_sql(operation: &'static str, source: sqlx::Error) -> TaskError {
@@ -24,80 +29,89 @@ pub(crate) fn map_sql(operation: &'static str, source: sqlx::Error) -> TaskError
     }
 }
 
-pub(crate) async fn enqueue_job(conn: &mut PgConnection, job: &NewJob) -> Result<i64, TaskError> {
+pub(crate) async fn enqueue_job(
+    conn: &mut PgConnection,
+    job: &Job,
+) -> Result<JobId, JobQueueError> {
     let payload = sqlx::types::Json(&job.payload);
+    let attempts = match job.max_attempts {
+        Some(attempts) => attempts,
+        None => crate::graphile::attempts_for(&job.name),
+    };
     let row = sqlx::query(
         "SELECT id FROM graphile_worker.add_job($1, $2::json, null::text, null::timestamptz, $3, $4, $5, null::text[], $6)",
     )
     .bind(job.name.to_string())
     .bind(payload)
-    .bind(job.max_attempts)
+    .bind(attempts)
     .bind(&job.key)
     .bind(i32::from(job.priority))
     .bind(key_mode_text(job.key_mode))
     .fetch_one(&mut *conn)
     .await
-    .map_err(|source| map_sql("enqueue", source))?;
-    cell(&row, "enqueue", "id")
+    .map_err(|source| map_queue("enqueue", source))?;
+    let id: i64 = queue_cell(&row, "enqueue", "id")?;
+    Ok(JobId::new(id))
 }
 
 pub(crate) async fn claim_job(
     conn: &mut PgConnection,
     selector: &ClaimSelector,
     worker: &str,
-) -> Result<Option<ClaimedJob>, TaskError> {
+) -> Result<Option<ClaimedJob>, JobQueueError> {
+    let names: Vec<String> = selector.names.iter().map(ToString::to_string).collect();
     let locked_by = format!("{worker}-{}", Uuid::new_v4());
     let row = sqlx::query(crate::graphile_sql::CLAIM)
-        .bind(&selector.names)
-        .bind(selector.only_id)
+        .bind(&names)
+        .bind(selector.only_id.map(i64::from))
         .bind(locked_by)
         .fetch_optional(&mut *conn)
         .await
-        .map_err(|source| map_sql("claim", source))?;
+        .map_err(|source| map_queue("claim", source))?;
     row.as_ref().map(claimed).transpose()
 }
 
 pub(crate) async fn complete_job(
     conn: &mut PgConnection,
-    id: i64,
+    id: JobId,
     worker: &str,
-) -> Result<(), TaskError> {
+) -> Result<(), JobQueueError> {
     let row = sqlx::query(crate::graphile_sql::COMPLETE)
-        .bind(id)
+        .bind(i64::from(id))
         .bind(format!("{worker}-"))
         .fetch_one(&mut *conn)
         .await
-        .map_err(|source| map_sql("complete", source))?;
-    let removed: i64 = cell(&row, "complete", "removed")?;
+        .map_err(|source| map_queue("complete", source))?;
+    let removed: i64 = queue_cell(&row, "complete", "removed")?;
     if removed == 0 {
-        return Err(TaskError::MissingJob { id });
+        return Err(JobQueueError::Missing { id });
     }
     Ok(())
 }
 
 pub(crate) async fn fail_job(
     conn: &mut PgConnection,
-    id: i64,
+    id: JobId,
     error: &str,
     worker: &str,
-) -> Result<(), TaskError> {
+) -> Result<(), JobQueueError> {
     let failed: i64 = sqlx::query_scalar(crate::graphile_sql::FAIL)
-        .bind(id)
+        .bind(i64::from(id))
         .bind(error)
         .bind(format!("{worker}-"))
         .fetch_one(&mut *conn)
         .await
-        .map_err(|source| map_sql("fail", source))?;
+        .map_err(|source| map_queue("fail", source))?;
     if failed == 0 {
-        return Err(TaskError::MissingJob { id });
+        return Err(JobQueueError::Missing { id });
     }
     Ok(())
 }
 
 pub(crate) async fn read_job(
     conn: &mut PgConnection,
-    id: i64,
-) -> Result<Option<StoredJob>, TaskError> {
+    id: JobId,
+) -> Result<Option<StoredJob>, JobQueueError> {
     let row = sqlx::query(
         "SELECT jobs.id, known.identifier, jobs.payload::text AS payload, jobs.key,
                 jobs.priority::bigint AS priority, jobs.max_attempts::bigint AS max_attempts,
@@ -106,49 +120,81 @@ pub(crate) async fn read_job(
            JOIN graphile_worker._private_tasks AS known ON known.id = jobs.task_id
           WHERE jobs.id = $1",
     )
-    .bind(id)
+    .bind(i64::from(id))
     .fetch_optional(&mut *conn)
     .await
-    .map_err(|source| map_sql("read job", source))?;
+    .map_err(|source| map_queue("read job", source))?;
     row.as_ref().map(stored).transpose()
 }
 
-fn claimed(row: &sqlx::postgres::PgRow) -> Result<ClaimedJob, TaskError> {
-    let attempts: i64 = cell(row, "claim", "attempts")?;
+fn claimed(row: &sqlx::postgres::PgRow) -> Result<ClaimedJob, JobQueueError> {
+    let attempts: i64 = queue_cell(row, "claim", "attempts")?;
+    let id: i64 = queue_cell(row, "claim", "id")?;
+    let identifier: String = queue_cell(row, "claim", "identifier")?;
     Ok(ClaimedJob {
-        id: cell(row, "claim", "id")?,
-        identifier: cell(row, "claim", "identifier")?,
-        payload_text: serde_json::to_string(
-            &cell::<sqlx::types::Json<wire::JsonObject>>(row, "claim", "payload")?.0,
-        )
-        .map_err(|source| TaskError::Payload(Box::new(source)))?,
+        id: JobId::new(id),
+        name: job_name(&identifier)?,
+        payload: queue_cell::<sqlx::types::Json<wire::JsonObject>>(row, "claim", "payload")?.0,
         attempt: narrow(attempts, "attempt")?,
     })
 }
 
-fn stored(row: &sqlx::postgres::PgRow) -> Result<StoredJob, TaskError> {
-    let payload: String = cell(row, "read job", "payload")?;
-    let priority: i64 = cell(row, "read job", "priority")?;
-    let max_attempts: i64 = cell(row, "read job", "max_attempts")?;
-    let attempts: i64 = cell(row, "read job", "attempts")?;
+fn stored(row: &sqlx::postgres::PgRow) -> Result<StoredJob, JobQueueError> {
+    let payload: String = queue_cell(row, "read job", "payload")?;
+    let priority: i64 = queue_cell(row, "read job", "priority")?;
+    let max_attempts: i64 = queue_cell(row, "read job", "max_attempts")?;
+    let attempts: i64 = queue_cell(row, "read job", "attempts")?;
+    let id: i64 = queue_cell(row, "read job", "id")?;
+    let identifier: String = queue_cell(row, "read job", "identifier")?;
     Ok(StoredJob {
-        id: cell(row, "read job", "id")?,
-        identifier: cell(row, "read job", "identifier")?,
+        id: JobId::new(id),
+        name: job_name(&identifier)?,
         payload: serde_json::from_str(&payload)
-            .map_err(|source| TaskError::Payload(Box::new(source)))?,
-        key: cell(row, "read job", "key")?,
-        priority: narrow(priority, "priority")?,
+            .map_err(|source| JobQueueError::Payload(Box::new(source)))?,
+        key: queue_cell(row, "read job", "key")?,
+        priority: Some(narrow(priority, "priority")?),
         max_attempts: narrow(max_attempts, "max_attempts")?,
         attempts: narrow(attempts, "attempts")?,
-        last_error: cell(row, "read job", "last_error")?,
+        last_error: queue_cell(row, "read job", "last_error")?,
     })
 }
 
-fn narrow<T>(value: i64, field: &'static str) -> Result<T, TaskError>
+fn job_name(identifier: &str) -> Result<JobName, JobQueueError> {
+    JobName::from_str(identifier).map_err(|error| JobQueueError::Stored(error.to_string()))
+}
+
+fn narrow<T>(value: i64, field: &'static str) -> Result<T, JobQueueError>
 where
     T: TryFrom<i64>,
 {
-    T::try_from(value).map_err(|_| TaskError::Stored(field.to_string()))
+    T::try_from(value).map_err(|_| JobQueueError::Stored(field.to_string()))
+}
+
+fn map_queue(operation: &'static str, source: sqlx::Error) -> JobQueueError {
+    if let Some(database) = source.as_database_error()
+        && database
+            .code()
+            .as_deref()
+            .is_some_and(|code| code == "42883" || code == "42P01" || code == "3F000")
+    {
+        return JobQueueError::Absent;
+    }
+    JobQueueError::Operation {
+        operation,
+        source: Box::new(source),
+    }
+}
+
+fn queue_cell<'a, T>(
+    row: &'a sqlx::postgres::PgRow,
+    operation: &'static str,
+    name: &'static str,
+) -> Result<T, JobQueueError>
+where
+    T: sqlx::Decode<'a, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
+{
+    row.try_get(name)
+        .map_err(|source| map_queue(operation, source))
 }
 
 pub(crate) fn cell<'a, T>(

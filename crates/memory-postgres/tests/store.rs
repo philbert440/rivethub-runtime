@@ -17,6 +17,10 @@ use sqlx::Row as _;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
+fn stamp(text: &str) -> Result<chrono::DateTime<chrono::Utc>, chrono::ParseError> {
+    Ok(chrono::DateTime::parse_from_rfc3339(text)?.with_timezone(&chrono::Utc))
+}
+
 fn store(pool: &PgPool) -> memory_postgres::PostgresMemory {
     memory_postgres::PostgresMemory::new(pool.clone())
 }
@@ -93,7 +97,7 @@ async fn seed(pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
             .await?;
     }
     let mut older = message("m-old", Role::Assistant, OLDER_AUTOMATION_MESSAGE);
-    older.created_at = Some("2026-01-01T10:00:00Z".to_string());
+    older.created_at = Some(stamp("2026-01-01T10:00:00Z")?);
     let older = batch("claude-code:seed", vec![older]);
     memory
         .capture_batch(&older, &CaptureOptions::default())
@@ -459,15 +463,15 @@ async fn stats_get_full_and_context(pool: PgPool) -> TestResult {
 async fn browse_honours_every_filter_field(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let mut b1 = message("b1", Role::User, "older user prompt");
-    b1.created_at = Some("2026-01-01T10:00:00Z".to_string());
+    b1.created_at = Some(stamp("2026-01-01T10:00:00Z")?);
     let mut b2 = message("b2", Role::Assistant, "assistant reply");
-    b2.created_at = Some("2026-01-01T10:00:01Z".to_string());
+    b2.created_at = Some(stamp("2026-01-01T10:00:01Z")?);
     let mut b3 = message("b3", Role::Tool, "[tool call] Grep");
     b3.tool_name = Some("Grep".to_string());
     b3.tool_result = Some("match found".to_string());
-    b3.created_at = Some("2026-01-01T10:00:02Z".to_string());
+    b3.created_at = Some(stamp("2026-01-01T10:00:02Z")?);
     let mut b4 = message("b4", Role::User, "newer user prompt");
-    b4.created_at = Some("2026-01-02T10:00:00Z".to_string());
+    b4.created_at = Some(stamp("2026-01-02T10:00:00Z")?);
     let batch = batch("claude-code:browse", vec![b1, b2, b3, b4]);
     memory
         .capture_batch(&batch, &CaptureOptions::default())

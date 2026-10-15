@@ -46,6 +46,8 @@ pub enum HookError {
     Missing(&'static str),
     #[error("capture JSON encoding failed: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("transcript timestamp is not RFC 3339")]
+    Timestamp(#[source] chrono::ParseError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

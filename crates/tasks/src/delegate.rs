@@ -4,6 +4,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::queue::JobQueue;
 use kernel::tasks::AgentDirectory;
 use kernel::tasks::AgentNode;
 use kernel::tasks::DelegateOutcome;
@@ -12,7 +13,6 @@ use kernel::tasks::Delegation;
 use kernel::tasks::DelegationError;
 use kernel::tasks::PresetAgent;
 use kernel::tasks::RuntimeAgent;
-use kernel::tasks::TaskJobs;
 use kernel::tasks::TaskOrigin;
 use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskStore;
@@ -274,7 +274,7 @@ fn newest(hosts: &[Host]) -> Option<&Host> {
 impl<S, J> Delegation for Engine<S, J>
 where
     S: TaskStore + 'static,
-    J: TaskJobs + 'static,
+    J: JobQueue + 'static,
 {
     async fn agents(&self) -> Result<AgentDirectory, DelegationError> {
         Ok(self.directory.catalog())
@@ -357,7 +357,7 @@ fn task_request(request: &DelegateRequest, input: &TargetInput, millis: u64) -> 
 impl<S, J> Engine<S, J>
 where
     S: TaskStore,
-    J: TaskJobs,
+    J: JobQueue,
 {
     async fn wait(
         &self,

@@ -1,9 +1,9 @@
 mod common;
 
-use kernel::queue::{JobQueue, WorkerRole};
-use kernel::tasks::{ClaimSelector, TaskJobs};
+use kernel::queue::{ClaimSelector, JobId, JobName, JobQueue, WorkerRole};
 use memory_postgres::{PostgresQueue, PostgresTasks};
 use sqlx::PgPool;
+use std::str::FromStr;
 use std::time::Duration;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -33,11 +33,10 @@ async fn concurrent_workers_serialize_each_named_queue_and_release_on_completion
     let second = add(&pool, Some("serial")).await?;
     let left = PostgresQueue::connect(pool.clone()).await?;
     let right = PostgresQueue::connect(pool.clone()).await?;
+    let left_selector = ClaimSelector::matching(left.task_names(WorkerRole::Embedder));
+    let right_selector = ClaimSelector::matching(right.task_names(WorkerRole::Embedder));
     let (a, b) = tokio::time::timeout(Duration::from_secs(10), async {
-        tokio::join!(
-            left.claim(WorkerRole::Embedder),
-            right.claim(WorkerRole::Embedder)
-        )
+        tokio::join!(left.claim(&left_selector), right.claim(&right_selector))
     })
     .await?;
     let (winner, loser, job) = match (a?, b?) {
@@ -56,11 +55,20 @@ async fn concurrent_workers_serialize_each_named_queue_and_release_on_completion
     loser.complete(job.id).await?;
     loser.fail(job.id, "foreign worker").await?;
     assert_eq!(owner(&pool, "serial").await?, Some(locked));
-    assert!(loser.claim(WorkerRole::Embedder).await?.is_none());
+    assert!(
+        loser
+            .claim(&kernel::queue::ClaimSelector::matching(
+                loser.task_names(WorkerRole::Embedder)
+            ))
+            .await?
+            .is_none()
+    );
     winner.complete(job.id).await?;
     assert_eq!(owner(&pool, "serial").await?, None);
     let next = loser
-        .claim(WorkerRole::Embedder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            loser.task_names(WorkerRole::Embedder),
+        ))
         .await?
         .ok_or("second job")?;
     assert_eq!(i64::from(next.id), second);
@@ -76,7 +84,9 @@ async fn failure_unlocks_the_queue_and_preserves_retry_metadata(pool: PgPool) ->
     let second = add(&pool, Some("serial")).await?;
     let queue = PostgresQueue::connect(pool.clone()).await?;
     let job = queue
-        .claim(WorkerRole::Embedder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::Embedder),
+        ))
         .await?
         .ok_or("first job")?;
     queue.fail(job.id, "retry me").await?;
@@ -86,7 +96,9 @@ async fn failure_unlocks_the_queue_and_preserves_retry_metadata(pool: PgPool) ->
     ).bind(first).fetch_one(&pool).await?;
     assert_eq!(state, (1, Some("retry me".to_owned()), None, true));
     let next = queue
-        .claim(WorkerRole::Embedder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::Embedder),
+        ))
         .await?
         .ok_or("second job")?;
     assert_eq!(i64::from(next.id), second);
@@ -95,7 +107,12 @@ async fn failure_unlocks_the_queue_and_preserves_retry_metadata(pool: PgPool) ->
         .bind(first)
         .execute(&pool)
         .await?;
-    let retry = queue.claim(WorkerRole::Embedder).await?.ok_or("retry")?;
+    let retry = queue
+        .claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::Embedder),
+        ))
+        .await?
+        .ok_or("retry")?;
     assert_eq!(retry.attempt, 2);
     queue.complete(retry.id).await?;
     Ok(())
@@ -114,18 +131,39 @@ async fn locked_queues_do_not_block_other_queues_or_unnamed_jobs(pool: PgPool) -
     .execute(&mut *lock)
     .await?;
     let queue = PostgresQueue::connect(pool.clone()).await?;
-    let first = tokio::time::timeout(Duration::from_secs(10), queue.claim(WorkerRole::Embedder))
-        .await??
-        .ok_or("independent queue")?;
+    let first = tokio::time::timeout(
+        Duration::from_secs(10),
+        queue.claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::Embedder),
+        )),
+    )
+    .await??
+    .ok_or("independent queue")?;
     assert_eq!(i64::from(first.id), independent);
     let second = queue
-        .claim(WorkerRole::Embedder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            queue.task_names(WorkerRole::Embedder),
+        ))
         .await?
         .ok_or("unnamed job")?;
     assert_eq!(i64::from(second.id), unnamed);
-    assert!(queue.claim(WorkerRole::Embedder).await?.is_none());
+    assert!(
+        queue
+            .claim(&kernel::queue::ClaimSelector::matching(
+                queue.task_names(WorkerRole::Embedder)
+            ))
+            .await?
+            .is_none()
+    );
     lock.rollback().await?;
-    assert!(queue.claim(WorkerRole::Embedder).await?.is_some());
+    assert!(
+        queue
+            .claim(&kernel::queue::ClaimSelector::matching(
+                queue.task_names(WorkerRole::Embedder)
+            ))
+            .await?
+            .is_some()
+    );
     Ok(())
 }
 
@@ -137,18 +175,31 @@ async fn expired_locks_are_reclaimed_and_old_workers_cannot_release_the_new_owne
     add(&pool, Some("serial")).await?;
     let old = PostgresQueue::connect(pool.clone()).await?;
     let new = PostgresQueue::connect(pool.clone()).await?;
-    let claimed = old.claim(WorkerRole::Embedder).await?.ok_or("old claim")?;
+    let claimed = old
+        .claim(&kernel::queue::ClaimSelector::matching(
+            old.task_names(WorkerRole::Embedder),
+        ))
+        .await?
+        .ok_or("old claim")?;
     sqlx::query("UPDATE graphile_worker._private_jobs SET locked_at = now() - interval '5 hours'")
         .execute(&pool)
         .await?;
-    assert!(new.claim(WorkerRole::Embedder).await?.is_none());
+    assert!(
+        new.claim(&kernel::queue::ClaimSelector::matching(
+            new.task_names(WorkerRole::Embedder)
+        ))
+        .await?
+        .is_none()
+    );
     sqlx::query(
         "UPDATE graphile_worker._private_job_queues SET locked_at = now() - interval '5 hours'",
     )
     .execute(&pool)
     .await?;
     let reclaimed = new
-        .claim(WorkerRole::Embedder)
+        .claim(&kernel::queue::ClaimSelector::matching(
+            new.task_names(WorkerRole::Embedder),
+        ))
         .await?
         .ok_or("expired claim")?;
     assert_eq!(claimed.id, reclaimed.id);
@@ -170,17 +221,24 @@ async fn task_and_worker_claims_share_named_queue_exclusion(pool: PgPool) -> Tes
     let other = PostgresTasks::from_pool(pool.clone());
     let queue = PostgresQueue::connect(pool.clone()).await?;
     let selector = ClaimSelector {
-        names: vec!["embed-target".to_owned()],
-        only_id: Some(first),
+        names: vec![JobName::from_str("embed-target").expect("embed-target")],
+        only_id: Some(JobId::new(first)),
     };
     let job = tasks.claim(&selector).await?.ok_or("task claim")?;
     assert!(other.complete(job.id).await.is_err());
     assert!(other.fail(job.id, "foreign").await.is_err());
-    assert!(queue.claim(WorkerRole::Embedder).await?.is_none());
+    assert!(
+        queue
+            .claim(&kernel::queue::ClaimSelector::matching(
+                queue.task_names(WorkerRole::Embedder)
+            ))
+            .await?
+            .is_none()
+    );
     tasks.fail(job.id, "retry").await?;
     assert_eq!(owner(&pool, "serial").await?, None);
     let selector = ClaimSelector {
-        only_id: Some(second),
+        only_id: Some(JobId::new(second)),
         ..selector
     };
     let job = tasks.claim(&selector).await?.ok_or("second task claim")?;

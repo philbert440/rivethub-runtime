@@ -1,8 +1,10 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use kernel::queue::FixedJob;
+use kernel::queue::JobName;
+use kernel::queue::JobQueue;
 use kernel::tasks::ApprovalDecision;
-use kernel::tasks::TaskJobs;
 use kernel::tasks::TaskStore;
 use uuid::Uuid;
 use wire::task::TaskApprovalAccepted;
@@ -207,7 +209,7 @@ async fn steer_sets_pending_and_enqueues_another_job() {
     assert_eq!(status, 202, "{}", String::from_utf8_lossy(&bytes));
     assert!(parse::<TaskSteerAccepted>(&bytes).ok);
     let second = claim(&setup.memory, "run-task").await.expect("second job");
-    assert_eq!(second.identifier, "run-task");
+    assert_eq!(second.name, JobName::Fixed(FixedJob::RunTask));
     let stored = setup
         .memory
         .load(Uuid::parse_str(&created.id).expect("id"))

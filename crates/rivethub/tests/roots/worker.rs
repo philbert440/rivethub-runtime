@@ -30,6 +30,7 @@ fn reap_job() -> Job {
         key_mode: JobKeyMode::KeepRunAt,
         priority: 0,
         run_at: None,
+        max_attempts: None,
     }
 }
 

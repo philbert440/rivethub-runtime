@@ -39,6 +39,10 @@ async fn answer(app: &axum::Router, request: Request) -> Response {
         .expect("request succeeds")
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the page fixture uses a constant calendar date and instant"
+)]
 fn page() -> WikiPageResponse {
     WikiPageResponse {
         slug: "release".to_owned(),
@@ -52,7 +56,7 @@ fn page() -> WikiPageResponse {
         ),
         see_also: None,
         history: vec![WikiHistoryEntry {
-            date: "2026-10-01".to_owned(),
+            date: chrono::NaiveDate::from_ymd_opt(2026, 10, 1).expect("date"),
             title: "Start".to_owned(),
             body: "First release".to_owned(),
         }],
@@ -66,7 +70,9 @@ fn page() -> WikiPageResponse {
         sources: Vec::new(),
         git_sha: Some("abc123".to_owned()),
         last_verified: None,
-        updated_at: "2026-10-14T00:00:00.000Z".to_owned(),
+        updated_at: chrono::DateTime::parse_from_rfc3339("2026-10-14T00:00:00.000Z")
+            .expect("instant")
+            .with_timezone(&chrono::Utc),
         related: Some(vec!["quotes 'and' $(substitutions) 🚀".to_owned()]),
     }
 }

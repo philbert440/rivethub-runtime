@@ -369,20 +369,6 @@ pub(crate) fn prepare_capture_message(message: &CaptureMessage) -> Result<Prepar
         content: content.to_string(),
         tool_result,
         metadata: metadata.clone(),
-        created_at: created_at(message)?,
+        created_at: message.created_at,
     })
-}
-
-fn created_at(message: &CaptureMessage) -> Result<Option<DateTime<Utc>>, Error> {
-    let Some(raw) = message.created_at.as_deref() else {
-        return Ok(None);
-    };
-    DateTime::parse_from_rfc3339(raw)
-        .map(|parsed| Some(parsed.with_timezone(&Utc)))
-        .map_err(|source| {
-            Error::protocol(format!(
-                "message {} created_at is not an ISO timestamp with an offset: {source}",
-                message.event_id
-            ))
-        })
 }

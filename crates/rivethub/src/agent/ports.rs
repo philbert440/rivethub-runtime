@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use kernel::queue::JobQueue;
 use kernel::tasks::CatalogSource;
 use kernel::tasks::TaskAgents;
 use kernel::tasks::TaskError;
-use kernel::tasks::TaskJobs;
 use kernel::tasks::TaskQuery;
 use kernel::tasks::TaskStore;
 use kernel::tasks::TaskWatch;
@@ -85,7 +85,7 @@ pub(super) fn api(
     tasks: &PostgresTasks,
 ) -> Arc<gateway::routes::tasks::TasksApi> {
     let store: Arc<dyn TaskStore> = Arc::new(tasks.clone());
-    let jobs: Arc<dyn TaskJobs> = Arc::new(tasks.clone());
+    let jobs: Arc<dyn JobQueue> = Arc::new(tasks.clone());
     let query: Arc<dyn TaskQuery> = Arc::new(tasks.clone());
     let watch: Arc<dyn TaskWatch> = Arc::new(tasks.clone());
     let node = roster.node.clone();

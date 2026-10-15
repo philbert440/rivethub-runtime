@@ -102,7 +102,7 @@ pub struct AckResult {
     #[serde(rename = "type")]
     pub kind: AckResultKind,
     #[serde(flatten)]
-    pub fields: wire::Extra,
+    pub fields: wire::JsonObject,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -145,7 +145,7 @@ pub struct AckFrame {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct EventFrame {
     pub event: HerdrEventKind,
-    pub data: wire::Extra,
+    pub data: wire::JsonObject,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

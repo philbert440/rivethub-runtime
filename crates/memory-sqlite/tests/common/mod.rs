@@ -331,7 +331,7 @@ pub(crate) fn deploy_messages() -> TestResult<Vec<CaptureMessage>> {
         Role::Assistant,
         "run the deploy script from the release branch, then watch the health check",
     );
-    assistant.created_at = Some("2026-10-04T08:00:00.000Z".to_owned());
+    assistant.created_at = Some(instant("2026-10-04T08:00:00.000Z")?);
     let mut tool = message("e3", Role::Tool, "");
     tool.tool_name = Some("Bash".to_owned());
     tool.tool_args = Some(object(r#"{"command":"make deploy"}"#)?);

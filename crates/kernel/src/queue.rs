@@ -19,6 +19,20 @@ pub enum JobQueueError {
         #[source]
         source: BoxError,
     },
+    #[error("graphile worker queue is absent")]
+    Absent,
+    #[error("database operation failed: {operation}")]
+    Operation {
+        operation: &'static str,
+        #[source]
+        source: BoxError,
+    },
+    #[error("job {id} is missing")]
+    Missing { id: JobId },
+    #[error("job payload is not a task job")]
+    Payload(#[source] BoxError),
+    #[error("stored job field is invalid: {0}")]
+    Stored(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -173,6 +187,23 @@ pub struct Job {
     pub key_mode: JobKeyMode,
     pub priority: i16,
     pub run_at: Option<DateTime<Utc>>,
+    pub max_attempts: Option<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClaimSelector {
+    pub names: Vec<JobName>,
+    pub only_id: Option<JobId>,
+}
+
+impl ClaimSelector {
+    #[must_use]
+    pub fn matching(names: Vec<JobName>) -> Self {
+        Self {
+            names,
+            only_id: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,13 +214,27 @@ pub struct ClaimedJob {
     pub attempt: u32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredJob {
+    pub id: JobId,
+    pub name: JobName,
+    pub payload: JsonObject,
+    pub key: Option<String>,
+    pub priority: Option<i16>,
+    pub max_attempts: i32,
+    pub attempts: u32,
+    pub last_error: Option<String>,
+}
+
 #[async_trait]
-pub trait JobQueue: Send + Sync {
+pub trait JobQueue: std::fmt::Debug + Send + Sync {
+    fn task_names(&self, role: WorkerRole) -> Vec<JobName>;
+
     async fn subscribe(&self) -> Result<Box<dyn JobNotifications>, JobQueueError>;
 
-    async fn enqueue(&self, job: Job) -> Result<(), JobQueueError>;
+    async fn enqueue(&self, job: Job) -> Result<JobId, JobQueueError>;
 
-    async fn claim(&self, role: WorkerRole) -> Result<Option<ClaimedJob>, JobQueueError>;
+    async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, JobQueueError>;
 
     async fn complete(&self, id: JobId) -> Result<(), JobQueueError>;
 
@@ -200,6 +245,8 @@ pub trait JobQueue: Send + Sync {
         name: &JobName,
         dead_before: DateTime<Utc>,
     ) -> Result<u64, JobQueueError>;
+
+    async fn read(&self, id: JobId) -> Result<Option<StoredJob>, JobQueueError>;
 }
 
 #[async_trait]

@@ -38,15 +38,12 @@ fn window_parse_normalizes_case_and_whitespace() {
 }
 
 #[test]
-fn window_parse_reports_the_spec_errors() {
+fn window_parse_reports_empty_and_unknown() {
     let empty = BrowseWindow::parse("   ").unwrap_err().to_string();
-    assert_eq!(
-        empty,
-        "Invalid window=\"\" — expected one of: today, yesterday, this_morning, this_week, last_24h, last_7d, last_14d"
-    );
+    assert_eq!(empty, "window is empty");
     let unknown = BrowseWindow::parse("Fortnight").unwrap_err().to_string();
     assert_eq!(
         unknown,
-        "Unknown window=\"Fortnight\" (normalized to \"fortnight\"). Expected one of: today, yesterday, this_morning, this_week, last_24h, last_7d, last_14d"
+        "unknown window \"Fortnight\"; expected today, yesterday, this_morning, this_week, last_24h, last_7d, last_14d"
     );
 }

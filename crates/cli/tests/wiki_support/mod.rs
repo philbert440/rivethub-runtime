@@ -34,7 +34,9 @@ pub(crate) fn patch() -> WikiPatch {
         article: Some("## Process\nCut the release branch on Monday, run the deploy script, watch the health check.".to_owned()),
         related: None,
         history_entry: Some(WikiHistoryEntry {
-            date: "2026-10-10".to_owned(), title: "Blue-green adopted".to_owned(), body: "Decided to deploy blue-green.".to_owned(),
+            date: chrono::NaiveDate::from_ymd_opt(2026, 10, 10).expect("history date"),
+            title: "Blue-green adopted".to_owned(),
+            body: "Decided to deploy blue-green.".to_owned(),
         }),
     }
 }

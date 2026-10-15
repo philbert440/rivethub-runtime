@@ -8,8 +8,12 @@ use wire::message::Role;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn batch(content: String) -> CaptureBatchRequest {
-    CaptureBatchRequest {
+fn stamp(text: &str) -> Result<chrono::DateTime<chrono::Utc>, chrono::ParseError> {
+    Ok(chrono::DateTime::parse_from_rfc3339(text)?.with_timezone(&chrono::Utc))
+}
+
+fn batch(content: String) -> Result<CaptureBatchRequest, chrono::ParseError> {
+    Ok(CaptureBatchRequest {
         session_key: "final-fix".to_owned(),
         agent: "agent".to_owned(),
         channel: Some("cli".to_owned()),
@@ -27,9 +31,9 @@ fn batch(content: String) -> CaptureBatchRequest {
             tool_args: None,
             tool_result: None,
             metadata: None,
-            created_at: Some("2026-10-15T12:00:00Z".to_owned()),
+            created_at: Some(stamp("2026-10-15T12:00:00Z")?),
         }],
-    }
+    })
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
@@ -37,7 +41,7 @@ async fn missing_channel_refuses_before_any_write_and_supplied_owner_is_preserve
     pool: PgPool,
 ) -> TestResult {
     let store = PostgresMemory::new(pool.clone());
-    let mut batch = batch("hello".to_owned());
+    let mut batch = batch("hello".to_owned())?;
     batch.channel = None;
     let options = CaptureOptions {
         owner_user_id: Some("owner".to_owned()),
@@ -69,7 +73,7 @@ async fn capture_caps_scalars_and_merges_provenance_without_losing_metadata(
 ) -> TestResult {
     let store = PostgresMemory::new(pool.clone());
     let content = format!("{}😀tail", "a".repeat(15_999));
-    let mut batch = batch(content);
+    let mut batch = batch(content)?;
     let message = batch.messages.first_mut().ok_or("message")?;
     message.metadata = Some(serde_json::from_str(
         r#"{"keep":{"n":18446744073709551615},"event_id":"untrusted"}"#,
@@ -130,7 +134,7 @@ async fn context_without_a_user_query_does_not_run_empty_semantic_search(
     pool: PgPool,
 ) -> TestResult {
     let store = PostgresMemory::new(pool.clone());
-    let mut batch = batch("assistant only".to_owned());
+    let mut batch = batch("assistant only".to_owned())?;
     batch.messages.first_mut().ok_or("message")?.role = Role::Assistant;
     store
         .capture_batch(&batch, &CaptureOptions::default())
@@ -149,7 +153,7 @@ async fn caller_time_zone_controls_calendar_windows(pool: PgPool) -> TestResult 
     use wire::gateway::memory::{BrowseWindow, MemoryBrowseOrder, MemoryScope};
 
     let store = PostgresMemory::new(pool.clone());
-    let mut batch = batch("release".to_owned());
+    let mut batch = batch("release".to_owned())?;
     for (event, at) in [
         ("before", "2026-10-14T18:00:00Z"),
         ("local-day", "2026-10-14T19:00:00Z"),
@@ -157,7 +161,7 @@ async fn caller_time_zone_controls_calendar_windows(pool: PgPool) -> TestResult 
     ] {
         let message = batch.messages.first_mut().ok_or("message")?;
         message.event_id = event.to_owned();
-        message.created_at = Some(at.to_owned());
+        message.created_at = Some(stamp(at)?);
         store
             .capture_batch(&batch, &CaptureOptions::default())
             .await?;

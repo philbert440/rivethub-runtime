@@ -104,10 +104,19 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
         Some("Article with <script> and quotes")
     );
     assert_eq!(actual.related, Some(vec!["known".to_owned()]));
-    assert_eq!(actual.updated_at, "2026-10-14T00:00:00.000Z");
     assert_eq!(
-        actual.last_verified.as_deref(),
-        Some("2026-10-01T00:00:00.000Z")
+        actual.updated_at,
+        chrono::DateTime::parse_from_rfc3339("2026-10-14T00:00:00.000Z")
+            .expect("instant")
+            .with_timezone(&chrono::Utc)
+    );
+    assert_eq!(
+        actual.last_verified,
+        Some(
+            chrono::DateTime::parse_from_rfc3339("2026-10-01T00:00:00.000Z")
+                .expect("instant")
+                .with_timezone(&chrono::Utc)
+        )
     );
     let citation = actual.citations.first().ok_or("one citation")?;
     let source = actual.sources.first().ok_or("one source")?;

@@ -60,16 +60,20 @@ fn tag_literal_rejects_strings_without_a_literal_shape() {
         })
     );
     assert_eq!(
-        TagLiteral::from_str(":").unwrap_err().to_string(),
-        "tag must be key:value (got \":\")"
+        TagLiteral::from_str(":"),
+        Err(TagLiteralError::Filter {
+            raw: ":".to_string()
+        })
     );
 }
 
 #[test]
 fn tag_literal_add_path_reports_the_store_error() {
     assert_eq!(
-        TagLiteral::parse_add("acme").unwrap_err().to_string(),
-        "invalid tag literal \"acme\" (want key:value)"
+        TagLiteral::parse_add("acme"),
+        Err(TagLiteralError::Literal {
+            raw: "acme".to_string()
+        })
     );
     let literal = TagLiteral::parse_add("project:acme").unwrap();
     assert_eq!(literal, TagLiteral::from_str("project:acme").unwrap());

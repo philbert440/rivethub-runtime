@@ -5,13 +5,6 @@ use kernel::memory::MemoryStoreError;
 use kernel::memory::SearchMode;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
-#[strum(serialize_all = "snake_case")]
-pub enum TimestampField {
-    CreatedAt,
-    UpdatedAt,
-}
-
 #[derive(Debug, Error)]
 pub enum SqliteError {
     #[error("the memory file at {path} could not be opened")]
@@ -38,12 +31,6 @@ pub enum SqliteError {
     UnsupportedSchema { found: i64 },
     #[error("the blocking memory database worker did not complete")]
     Join(#[source] tokio::task::JoinError),
-    #[error("{field} is not a timestamp")]
-    InvalidTimestamp {
-        field: TimestampField,
-        #[source]
-        source: chrono::ParseError,
-    },
     #[error("memory {operation} failed")]
     Query {
         operation: &'static str,
@@ -119,8 +106,7 @@ impl SqliteError {
 impl From<SqliteError> for MemoryStoreError {
     fn from(error: SqliteError) -> Self {
         match error {
-            SqliteError::InvalidTimestamp { .. }
-            | SqliteError::InvertedRange
+            SqliteError::InvertedRange
             | SqliteError::KeywordIndex { .. }
             | SqliteError::SynthesisUnconfigured
             | SqliteError::Invalid { .. }

@@ -1,6 +1,8 @@
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::queue::Job;
 use kernel::queue::JobKeyMode;
+use kernel::queue::JobQueue;
 use uuid::Uuid;
 use wire::task::AcceptanceCriterion;
 use wire::task::ContextRef;
@@ -12,10 +14,8 @@ use wire::task::TaskSpec;
 use wire::task::TaskStatus;
 
 use kernel::tasks::Finish;
-use kernel::tasks::NewJob;
 use kernel::tasks::TaskError;
 use kernel::tasks::TaskJobPayload;
-use kernel::tasks::TaskJobs;
 use kernel::tasks::TaskOrigin;
 use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskStore;
@@ -42,7 +42,7 @@ pub struct HeartbeatSpec {
 impl<S, J> Engine<S, J>
 where
     S: TaskStore,
-    J: TaskJobs,
+    J: JobQueue,
 {
     pub async fn submit(&self, task: NewTask) -> Result<Uuid, Error> {
         let id = Uuid::now_v7();
@@ -50,8 +50,8 @@ where
             .record(id, &task.request, task.origin, Utc::now())
             .await?;
         self.store.insert(&record).await?;
-        let job = new_job(&record, &prepared);
-        if let Err(error) = self.jobs.enqueue(&job).await {
+        let job = new_job(&record, &prepared)?;
+        if let Err(error) = self.jobs.enqueue(job).await {
             return Err(self.mark_enqueue_failed(id, error.into()).await);
         }
         self.notify_jobs();
@@ -76,7 +76,7 @@ where
             node_affinity: task.node_affinity.clone(),
             agent_id: task.agent_id.clone(),
         })?;
-        self.jobs.enqueue(&new_job(&task, &prepared)).await?;
+        self.jobs.enqueue(new_job(&task, &prepared)?).await?;
         self.notify_jobs();
         Ok(())
     }
@@ -103,7 +103,7 @@ where
             .record(Uuid::now_v7(), &request, TaskOrigin::Heartbeat, now)
             .await?;
         self.store.insert(&record).await?;
-        if let Err(error) = self.jobs.enqueue(&new_job(&record, &prepared)).await {
+        if let Err(error) = self.jobs.enqueue(new_job(&record, &prepared)?).await {
             return Err(self.mark_enqueue_failed(record.id, error.into()).await);
         }
         self.notify_jobs();
@@ -298,17 +298,19 @@ async fn chain<S: TaskStore>(
     Ok((Some(parent_id), depth))
 }
 
-fn new_job(record: &TaskRecord, prepared: &Prepared) -> NewJob {
-    NewJob {
+fn new_job(record: &TaskRecord, prepared: &Prepared) -> Result<Job, Error> {
+    Ok(Job {
         name: prepared.job_name.clone(),
-        payload: TaskJobPayload {
+        payload: wire::JsonObject::from_serialize(&TaskJobPayload {
             task_id: record.id.to_string(),
-        },
-        key: format!("task:{}", record.id),
+        })
+        .map_err(|source| Error::Payload(Box::new(source)))?,
+        key: Some(format!("task:{}", record.id)),
         key_mode: JobKeyMode::Replace,
         priority: 0,
-        max_attempts: 1,
-    }
+        run_at: None,
+        max_attempts: Some(1),
+    })
 }
 
 fn heartbeat_request(spec: &HeartbeatSpec, session_key: &str) -> TaskCreateRequest {

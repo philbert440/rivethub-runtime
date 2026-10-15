@@ -158,7 +158,7 @@ impl MemoryStore for FakeMemoryStore {
                 title: page.title.clone(),
                 tags: page.tags.clone(),
                 entities: page.entities.clone(),
-                updated_at: page.updated_at.clone(),
+                updated_at: page.updated_at,
                 excerpt: page.current_state.chars().take(240).collect(),
             })
             .collect();

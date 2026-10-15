@@ -199,6 +199,7 @@ async fn enqueue(
     env.queue
         .enqueue(summarize_job(id, trigger, env.now)?)
         .await
+        .map(|_| ())
         .map_err(WorkerError::queue)
 }
 
@@ -218,6 +219,7 @@ fn summarize_job(
         key_mode: JobKeyMode::Replace,
         priority: 0,
         run_at: Some(now),
+        max_attempts: None,
     })
 }
 

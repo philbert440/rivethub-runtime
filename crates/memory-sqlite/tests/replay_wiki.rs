@@ -232,7 +232,7 @@ fn project_topic(topic: &Json) -> TestResult<WikiTopic> {
         title: json_text(topic, "title")?,
         tags: string_list(topic, "tags")?,
         entities: string_list(topic, "entities")?,
-        updated_at: json_text(topic, "updatedAt")?,
+        updated_at: common::instant(&json_text(topic, "updatedAt")?)?,
         excerpt,
     })
 }
