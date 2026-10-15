@@ -159,6 +159,49 @@ fn explicit_unmapped_policy_applies_only_to_verified_device_names() -> TestResul
 }
 
 #[test]
+fn spiffe_parse_feeds_device_identity_and_refuses_other_principals() -> TestResult {
+    let tenancy = registry()?;
+    let device = leaf(
+        "ignored",
+        None,
+        &["spiffe://rivet.mesh/device/alice/laptop"],
+    )?;
+    assert!(matches!(
+        device.verified_principal()?,
+        Some(kernel::ca::Principal::Device { user, device })
+            if user == "alice" && device == "laptop"
+    ));
+    assert_eq!(resolve(&tenancy, Some(device), "127.0.0.2:1234")?, "alice");
+    let node = leaf("ignored", None, &["spiffe://rivet.mesh/node/laptop"])?;
+    assert!(matches!(
+        node.verified_principal()?,
+        Some(kernel::ca::Principal::Node { node }) if node == "laptop"
+    ));
+    let agent = leaf(
+        "ignored",
+        None,
+        &["spiffe://rivet.mesh/agent/laptop/worker"],
+    )?;
+    assert!(matches!(
+        agent.verified_principal()?,
+        Some(kernel::ca::Principal::Agent { node, agent })
+            if node == "laptop" && agent == "worker"
+    ));
+    let legacy = leaf("device:laptop", None, &[])?;
+    assert!(legacy.verified_principal()?.is_none());
+    assert_eq!(resolve(&tenancy, Some(legacy), "127.0.0.2:1234")?, "alice");
+    for peer in [
+        node,
+        agent,
+        leaf("ignored", None, &["spiffe://rivet.mesh/agent/only-one"])?,
+        PeerCertificate::Unrecognized,
+    ] {
+        assert!(resolve(&tenancy, Some(peer), "127.0.0.1:1234").is_err());
+    }
+    Ok(())
+}
+
+#[test]
 fn ambiguous_and_invalid_device_mappings_are_refused() -> TestResult {
     assert!(
         registry()?

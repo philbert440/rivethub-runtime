@@ -1,3 +1,6 @@
+use std::str::FromStr;
+
+use kernel::ca::Principal;
 use x509_parser::extensions::GeneralName;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
@@ -89,28 +92,14 @@ fn identity(der: &[u8]) -> Result<PeerCertificate, IdentityError> {
 }
 
 fn spiffe(uri: &str) -> Result<PeerCertificate, IdentityError> {
-    let path = uri
-        .strip_prefix("spiffe://rivet.mesh/device/")
-        .ok_or_else(|| IdentityError::Invalid("not a RivetHub device principal".into()))?;
-    let components: Vec<_> = path.split('/').collect();
-    let [user, device] = components.as_slice() else {
-        return Err(IdentityError::Invalid("invalid device principal".into()));
-    };
-    for component in [user, device] {
-        if component.is_empty()
-            || component.len() > 128
-            || matches!(*component, "." | "..")
-            || !component.bytes().all(|byte| {
-                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~')
-            })
-        {
-            return Err(IdentityError::Invalid(
-                "invalid device principal segment".into(),
-            ));
-        }
-    }
-    Ok(PeerCertificate::Device {
-        user: Some((*user).to_owned()),
-        device: (*device).to_owned(),
+    let principal =
+        Principal::from_str(uri).map_err(|error| IdentityError::Invalid(error.to_string()))?;
+    Ok(match principal {
+        Principal::Node { node } => PeerCertificate::Node { node },
+        Principal::Agent { node, agent } => PeerCertificate::Agent { node, agent },
+        Principal::Device { user, device } => PeerCertificate::Device {
+            user: Some(user),
+            device,
+        },
     })
 }

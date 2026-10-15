@@ -73,7 +73,21 @@ pub fn resolve_tls(source: &BindSource) -> Result<Option<TlsPaths>, BindError> {
     }))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClientCertificateMode {
+    Required,
+    Optional,
+}
+
 pub(crate) fn tls_config(paths: &TlsPaths) -> Result<ServerConfig, TlsError> {
+    build_tls(paths, ClientCertificateMode::Required)
+}
+
+pub(crate) fn listener_tls_config(paths: &TlsPaths) -> Result<ServerConfig, TlsError> {
+    build_tls(paths, ClientCertificateMode::Optional)
+}
+
+fn build_tls(paths: &TlsPaths, mode: ClientCertificateMode) -> Result<ServerConfig, TlsError> {
     if paths.crl.is_some() && paths.ca.is_none() {
         return Err(TlsError::CrlWithoutCa);
     }
@@ -91,20 +105,11 @@ pub(crate) fn tls_config(paths: &TlsPaths) -> Result<ServerConfig, TlsError> {
             }
             let mut verifier =
                 WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider);
+            if mode == ClientCertificateMode::Optional {
+                verifier = verifier.allow_unauthenticated();
+            }
             if let Some(crl) = &paths.crl {
-                let lists = CertificateRevocationListDer::pem_file_iter(crl)
-                    .map_err(|source| TlsError::Pem {
-                        path: crl.clone(),
-                        source,
-                    })?
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|source| TlsError::Pem {
-                        path: crl.clone(),
-                        source,
-                    })?;
-                if lists.is_empty() {
-                    return Err(TlsError::EmptyCrl);
-                }
+                let lists = load_crls(crl)?;
                 verifier = verifier.with_crls(lists).enforce_revocation_expiration();
             }
             let verifier = verifier.build().map_err(TlsError::Verifier)?;
@@ -115,6 +120,23 @@ pub(crate) fn tls_config(paths: &TlsPaths) -> Result<ServerConfig, TlsError> {
     with_certs
         .with_single_cert(certs, key)
         .map_err(TlsError::Rustls)
+}
+
+fn load_crls(crl: &PathBuf) -> Result<Vec<CertificateRevocationListDer<'static>>, TlsError> {
+    let lists = CertificateRevocationListDer::pem_file_iter(crl)
+        .map_err(|source| TlsError::Pem {
+            path: crl.clone(),
+            source,
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|source| TlsError::Pem {
+            path: crl.clone(),
+            source,
+        })?;
+    if lists.is_empty() {
+        return Err(TlsError::EmptyCrl);
+    }
+    Ok(lists)
 }
 
 pub fn validate(paths: &TlsPaths) -> Result<(), TlsError> {

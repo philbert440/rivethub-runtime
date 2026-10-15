@@ -228,6 +228,7 @@ pub struct Gateway {
     transcript: Option<Arc<dyn kernel::transcript::TranscriptReader>>,
     uploads: Option<uploads::UploadService>,
     presets: routes::agents::AgentRegistry,
+    certificate_authority: Option<Arc<dyn kernel::ca::CertificateAuthority>>,
     devices: routes::devices::DeviceRuntime,
     mesh_cache: routes::MeshCache,
     audio: Option<AudioBridge>,
@@ -257,6 +258,7 @@ impl Gateway {
             transcript: None,
             uploads: None,
             presets,
+            certificate_authority: None,
             devices: routes::devices::DeviceRuntime::unconfigured(),
             mesh_cache: routes::MeshCache::default(),
             audio: None,
@@ -281,8 +283,15 @@ impl Gateway {
         mut self,
         authority: Arc<dyn kernel::ca::CertificateAuthority>,
     ) -> Self {
+        self.certificate_authority = Some(Arc::clone(&authority));
         self.devices = self.devices.with_authority(authority);
         self
+    }
+
+    pub(crate) fn certificate_authority(
+        &self,
+    ) -> Option<&Arc<dyn kernel::ca::CertificateAuthority>> {
+        self.certificate_authority.as_ref()
     }
 
     #[must_use]

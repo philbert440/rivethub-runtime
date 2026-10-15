@@ -38,7 +38,7 @@ use tokio_util::task::TaskTracker;
 use crate::Gateway;
 use crate::tls::TlsError;
 use crate::tls::TlsPaths;
-use crate::tls::tls_config;
+use crate::tls::listener_tls_config;
 
 const ACCEPT_BACKOFF: Duration = Duration::from_millis(50);
 
@@ -181,7 +181,7 @@ pub async fn serve_router_with(
 ) -> Result<(), ServeError> {
     let acceptor = match tls {
         Some(paths) => {
-            let config = tokio::task::spawn_blocking(move || tls_config(&paths)).await??;
+            let config = tokio::task::spawn_blocking(move || listener_tls_config(&paths)).await??;
             Some(TlsAcceptor::from(Arc::new(config)))
         }
         None => None,

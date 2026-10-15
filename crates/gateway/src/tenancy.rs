@@ -33,7 +33,38 @@ pub enum PeerCertificate {
         user: Option<String>,
         device: String,
     },
+    Node {
+        node: String,
+    },
+    Agent {
+        node: String,
+        agent: String,
+    },
     Unrecognized,
+}
+
+impl PeerCertificate {
+    pub(crate) fn verified_principal(
+        &self,
+    ) -> Result<Option<kernel::ca::Principal>, kernel::ca::CaError> {
+        let principal = match self {
+            Self::Node { node } => kernel::ca::Principal::Node { node: node.clone() },
+            Self::Agent { node, agent } => kernel::ca::Principal::Agent {
+                node: node.clone(),
+                agent: agent.clone(),
+            },
+            Self::Device {
+                user: Some(user),
+                device,
+            } => kernel::ca::Principal::Device {
+                user: user.clone(),
+                device: device.clone(),
+            },
+            Self::Device { user: None, .. } | Self::Unrecognized => return Ok(None),
+        };
+        principal.spiffe_uri()?;
+        Ok(Some(principal))
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -89,8 +120,11 @@ impl Tenancy {
     }
 
     fn device_user(&self, peer: &PeerCertificate) -> Result<UserId, ApiError> {
-        let PeerCertificate::Device { user, device } = peer else {
-            return Err(ApiError::Unauthorized);
+        let (user, device) = match peer {
+            PeerCertificate::Device { user, device } => (user, device),
+            PeerCertificate::Node { .. }
+            | PeerCertificate::Agent { .. }
+            | PeerCertificate::Unrecognized => return Err(ApiError::Unauthorized),
         };
         let mapped = self
             .devices

@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod audio;
+pub mod ca;
 pub mod capture;
 pub mod capture_schema;
 pub mod chat;

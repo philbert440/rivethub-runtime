@@ -104,8 +104,7 @@ matching CSR. Holders schedule renewal at two-thirds of lifetime with a new key/
 
 The gateway serves `POST /ca/v1/sign`, `GET /ca/v1/chain` and `GET /ca/v1/crl` through the port. Its verifier checks the
 chain, validity, SAN and revocation before producing a typed principal; authorization defaults to refusal. During migration,
-legacy device CN/OU certificates map through the users registry with a deprecation log. Gateway routes, verification and
-CLI commands are later slices, not implemented by the adapter. The offline root ceremony belongs to CLI init; import of an
+legacy device CN/OU certificates map through the users registry with a deprecation log. `routes::ca::router()` is the gateway slice: the composition root mounts it, verification reuses `Principal`'s SPIFFE parse, and the CLI commands stay in the cli crate. The offline root ceremony belongs to CLI init; import of an
 existing CA requires only root/intermediate certificates, the intermediate key and index/serial state, never the root key.
 
 The adapter reads the legacy layout once at import, then operates independently from its state directory. It persists serials,
