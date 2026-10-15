@@ -35,6 +35,11 @@ pub enum Command {
         #[arg(long)]
         check: bool,
     },
+    #[command(about = "Run the task engine")]
+    Agent {
+        #[arg(long)]
+        check: bool,
+    },
     #[command(about = "Manage the systemd service")]
     Service {
         #[command(subcommand)]

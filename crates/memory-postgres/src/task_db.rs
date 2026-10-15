@@ -17,6 +17,7 @@ use sqlx::PgPool;
 use sqlx::postgres::PgListener;
 use sqlx::postgres::PgPoolOptions;
 use tokio::sync::Mutex;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use wire::task::TaskStatus;
@@ -41,6 +42,7 @@ use crate::task_rows::sweep_tasks;
 pub struct PostgresTasks {
     pool: PgPool,
     listen: Arc<Mutex<Option<PgListener>>>,
+    pub(crate) events: watch::Sender<u64>,
 }
 
 impl PostgresTasks {
@@ -55,10 +57,17 @@ impl PostgresTasks {
 
     #[must_use]
     pub fn from_pool(pool: PgPool) -> Self {
+        let (events, _receiver) = watch::channel(0);
         Self {
             pool,
             listen: Arc::new(Mutex::new(None)),
+            events,
         }
+    }
+
+    #[must_use]
+    pub(crate) fn pool(&self) -> &PgPool {
+        &self.pool
     }
 }
 

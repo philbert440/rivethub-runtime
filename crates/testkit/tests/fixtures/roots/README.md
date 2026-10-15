@@ -1,6 +1,6 @@
 # Service root recordings
 
-`rh gateway`, `rh worker`, and `rh mcp` are separate composition roots in the `rh` binary.
+`rh gateway`, `rh agent`, `rh worker`, and `rh mcp` are separate composition roots in the `rh` binary.
 `rh start` still launches the gateway. Supervising those processes is a later slice.
 
 The MCP catalog recording is `mcp/tools-list.json` (14 tools, protocol notes in `mcp/README.md`).
@@ -12,12 +12,11 @@ graphile_worker schema, so the proof first applies `crates/rivethub/tests/fixtur
 a schema-only snapshot of the lane database. The worker is not pointed at the live lane database.
 Each live root is then stopped with SIGTERM and must exit 0.
 Gateway coverage starts `rh gateway` with an initialized certificate authority and checks
-`/api/phone-pairing` plus the file-backed agent presets. `--check` never connects or binds.
+`/api/phone-pairing`, the file-backed agent presets, and `/api/tasks`, `/api/catalog`, and
+`/api/outcomes`. `rh agent` runs the task engine against that database. `--check` never connects or binds.
 
 ## Omitted
 
-- `delegate_task` — B7: no kernel delegation port
-- `list_agents` — B7: no kernel agent registry port
 - `internet_search` — B7: harness owns web tools; removed by design
 - `web_fetch` — B7: harness owns web tools; removed by design
 - `echo` — Product decision: not a sidecar tool

@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod composition;
 pub mod exit;
 pub mod logging;

@@ -1,0 +1,391 @@
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+use std::io::ErrorKind;
+use std::path::Path;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use config::Config;
+use config::Environment;
+use config::POSTGRES_URL_VARIABLE;
+use gateway::server::BindSource;
+use memory_postgres::PostgresTasks;
+use thiserror::Error;
+use wire::gateway::agents::AgentPreset;
+use wire::gateway::agents::AgentsFile;
+use wire::mesh::MeshNode;
+
+use super::LocalBinding;
+use super::TaskEngine;
+use super::ports::Roster;
+use crate::service::StartupError;
+use crate::service::postgres_url;
+
+#[derive(Debug, Error)]
+pub enum AgentError {
+    #[error("SQLite gateway composition requires a complete SQLite MemoryStore adapter")]
+    SqliteUnavailable,
+    #[error(
+        "no Postgres URL for the memory database — set \"memory.postgres.connection_string\" or \"{POSTGRES_URL_VARIABLE}\""
+    )]
+    Url,
+    #[error(transparent)]
+    Settings(#[from] gateway::SettingsError),
+    #[error(transparent)]
+    Tasks(#[from] tasks::Error),
+    #[error(transparent)]
+    Store(#[from] kernel::tasks::TaskError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("task configuration JSON is invalid: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Mesh(#[from] gateway::mesh::RegistryError),
+    #[error("task worker failed: {0}")]
+    Join(#[from] tokio::task::JoinError),
+    #[error("tasks are disabled")]
+    Disabled,
+    #[error("gateway token is empty")]
+    EmptyToken,
+    #[error("agent preset {0} has an empty node")]
+    EmptyNode(String),
+    #[error("agent preset name {0} is duplicated")]
+    DuplicatePreset(String),
+    #[error("agent preset id {0} is duplicated")]
+    DuplicatePresetId(String),
+    #[error("pricing for {0} needs input_per_mtok and output_per_mtok")]
+    Pricing(String),
+    #[error("gateway url is invalid")]
+    GatewayUrl,
+    #[error("agents.json escapes the state directory")]
+    Escape,
+    #[error("{0}")]
+    Invalid(String),
+    #[error("task watch closed")]
+    WatchClosed,
+}
+
+impl AgentError {
+    pub(crate) fn exit(&self) -> crate::Exit {
+        match self {
+            Self::SqliteUnavailable
+            | Self::Url
+            | Self::Store(kernel::tasks::TaskError::Unavailable(_)) => crate::Exit::Memory,
+            Self::Io(_) => crate::Exit::Serve,
+            Self::Settings(_)
+            | Self::Tasks(_)
+            | Self::Store(_)
+            | Self::Json(_)
+            | Self::Mesh(_)
+            | Self::Join(_)
+            | Self::Disabled
+            | Self::EmptyToken
+            | Self::EmptyNode(_)
+            | Self::DuplicatePreset(_)
+            | Self::DuplicatePresetId(_)
+            | Self::Pricing(_)
+            | Self::GatewayUrl
+            | Self::Escape
+            | Self::Invalid(_)
+            | Self::WatchClosed => crate::Exit::Failure,
+        }
+    }
+}
+
+pub(super) struct Plan {
+    pub(super) node: String,
+    worker: String,
+    postgres: String,
+    pub gateway: url::Url,
+    files_root: Option<PathBuf>,
+    pub allowed: Option<Vec<wire::harness::HarnessId>>,
+    pricing: BTreeMap<String, tasks::TokenRate>,
+    pub api_token: Option<String>,
+    pub mesh_secret: Option<String>,
+    pub mesh: bool,
+    state_dir: PathBuf,
+}
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        manualderive,
+        reason = "Debug omits the postgres url, gateway token, and mesh secret"
+    )
+)]
+impl std::fmt::Debug for Plan {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Plan")
+            .field("node", &self.node)
+            .field("worker", &self.worker)
+            .field("gateway", &self.gateway)
+            .field("files_root", &self.files_root)
+            .field("allowed", &self.allowed)
+            .field("pricing_models", &self.pricing.len())
+            .field("has_postgres_url", &!self.postgres.is_empty())
+            .field("has_api_token", &self.api_token.is_some())
+            .field("has_mesh_secret", &self.mesh_secret.is_some())
+            .field("mesh", &self.mesh)
+            .field("state_dir", &self.state_dir)
+            .finish()
+    }
+}
+
+impl Plan {
+    pub(super) fn settings(&self) -> tasks::Settings {
+        tasks::Settings {
+            node: self.node.clone(),
+            worker: self.worker.clone(),
+            files_root: self.files_root.clone(),
+            pricing: self.pricing.clone(),
+            api_token: self.api_token.clone(),
+        }
+    }
+}
+
+pub(super) struct Connected {
+    pub tasks: PostgresTasks,
+    pub roster: Arc<Roster>,
+    pub plan: Plan,
+}
+
+impl Connected {
+    pub(super) fn engine(self) -> Result<Arc<TaskEngine>, AgentError> {
+        let directory = self.roster.directory(&self.plan)?;
+        Ok(Arc::new(tasks::Engine::new(
+            self.tasks.clone(),
+            self.tasks,
+            directory,
+            self.plan.settings(),
+        )?))
+    }
+}
+
+pub(super) fn ensure_enabled(config: &Config) -> Result<(), AgentError> {
+    if config
+        .tasks
+        .as_ref()
+        .is_some_and(|tasks| tasks.enabled == Some(false))
+    {
+        Err(AgentError::Disabled)
+    } else {
+        Ok(())
+    }
+}
+
+pub(super) fn plan(config: &Config, env: &Environment) -> Result<Plan, AgentError> {
+    let hostname = crate::service::host_name();
+    let node = env.node_name(&hostname);
+    if node.is_empty() {
+        return Err(AgentError::Invalid("node name is empty".into()));
+    }
+    let worker = format!("{node}:agent");
+    let settings = gateway::Settings::from_config_in(config, env, hostname, node.clone())?;
+    Ok(Plan {
+        node,
+        worker,
+        postgres: require_postgres(config, env)?,
+        gateway: gateway_url(config)?,
+        files_root: settings.files_root,
+        allowed: settings.allowed_harnesses,
+        pricing: pricing(config)?,
+        api_token: api_token(config)?,
+        mesh_secret: mesh_secret(config),
+        mesh: mesh_enabled(config),
+        state_dir: settings.state_dir,
+    })
+}
+
+pub(super) async fn connect(config: &Config, env: &Environment) -> Result<Connected, AgentError> {
+    let plan = plan(config, env)?;
+    let presets = load_presets(plan.state_dir.clone()).await?;
+    let nodes = load_nodes(config, env).await?;
+    let roster = Arc::new(Roster {
+        node: plan.node.clone(),
+        mesh: plan.mesh,
+        local: local_agents(config)?,
+        presets,
+        nodes,
+    });
+    let tasks = PostgresTasks::connect(&plan.postgres).await?;
+    Ok(Connected {
+        tasks,
+        roster,
+        plan,
+    })
+}
+
+fn require_postgres(config: &Config, env: &Environment) -> Result<String, AgentError> {
+    match postgres_url(config, env) {
+        Ok(url) => Ok(url),
+        Err(StartupError::Url) => Err(AgentError::Url),
+        Err(StartupError::SqliteUnavailable) => Err(AgentError::SqliteUnavailable),
+        Err(error) => Err(AgentError::Invalid(error.to_string())),
+    }
+}
+
+fn gateway_url(config: &Config) -> Result<url::Url, AgentError> {
+    let source = BindSource::from_config(config);
+    let mut url = url::Url::parse("http://127.0.0.1/").map_err(|_| AgentError::GatewayUrl)?;
+    if source.tls_cert.is_some() {
+        url.set_scheme("https")
+            .map_err(|()| AgentError::GatewayUrl)?;
+    }
+    url.set_host(Some(bare_host(&source.host)))
+        .map_err(|_| AgentError::GatewayUrl)?;
+    url.set_port(Some(source.port))
+        .map_err(|()| AgentError::GatewayUrl)?;
+    url.set_path("/");
+    if url.host_str().is_none() {
+        return Err(AgentError::GatewayUrl);
+    }
+    Ok(url)
+}
+
+fn bare_host(host: &str) -> &str {
+    match host.strip_prefix('[') {
+        Some(rest) => match rest.strip_suffix(']') {
+            Some(bare) => bare,
+            None => host,
+        },
+        None => host,
+    }
+}
+
+fn pricing(config: &Config) -> Result<BTreeMap<String, tasks::TokenRate>, AgentError> {
+    let Some(section) = &config.tasks else {
+        return Ok(BTreeMap::new());
+    };
+    let Some(entries) = &section.pricing else {
+        return Ok(BTreeMap::new());
+    };
+    let mut rates = BTreeMap::new();
+    for (model, entry) in entries {
+        let Some(input) = entry.input_per_mtok else {
+            return Err(AgentError::Pricing(model.clone()));
+        };
+        let Some(output) = entry.output_per_mtok else {
+            return Err(AgentError::Pricing(model.clone()));
+        };
+        rates.insert(model.clone(), tasks::TokenRate::new(input, output)?);
+    }
+    Ok(rates)
+}
+
+fn api_token(config: &Config) -> Result<Option<String>, AgentError> {
+    match config
+        .gateway
+        .as_ref()
+        .and_then(|gateway| gateway.token.clone())
+    {
+        Some(token) if token.is_empty() => Err(AgentError::EmptyToken),
+        Some(token) => Ok(Some(token)),
+        None => Ok(None),
+    }
+}
+
+fn mesh_enabled(config: &Config) -> bool {
+    config
+        .mesh
+        .as_ref()
+        .is_some_and(|mesh| mesh.enabled == Some(true))
+}
+
+fn mesh_secret(config: &Config) -> Option<String> {
+    if mesh_enabled(config) {
+        config.mesh.as_ref().and_then(|mesh| mesh.secret.clone())
+    } else {
+        None
+    }
+}
+
+fn local_agents(config: &Config) -> Result<BTreeMap<String, LocalBinding>, AgentError> {
+    let Some(agents) = &config.agents else {
+        return Ok(BTreeMap::new());
+    };
+    let mut local = BTreeMap::new();
+    for (name, entry) in agents {
+        if name.is_empty() {
+            return Err(AgentError::Invalid("agent id is empty".into()));
+        }
+        local.insert(
+            name.clone(),
+            LocalBinding {
+                model: entry.model.clone(),
+                provider: entry.provider.clone(),
+            },
+        );
+    }
+    Ok(local)
+}
+
+async fn load_presets(state_dir: PathBuf) -> Result<Vec<AgentPreset>, AgentError> {
+    match tokio::task::spawn_blocking(move || read_presets(&state_dir)).await {
+        Ok(result) => result,
+        Err(error) => Err(AgentError::Join(error)),
+    }
+}
+
+fn read_presets(state_dir: &Path) -> Result<Vec<AgentPreset>, AgentError> {
+    let root = match state_dir.canonicalize() {
+        Ok(path) => path,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.into()),
+    };
+    let file = root.join("agents.json");
+    if !file.starts_with(&root) {
+        return Err(AgentError::Escape);
+    }
+    match std::fs::symlink_metadata(&file) {
+        Ok(metadata) if metadata.file_type().is_symlink() => return Err(AgentError::Escape),
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(AgentError::Invalid("agents.json is not a file".into()));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.into()),
+    }
+    let canonical = file.canonicalize()?;
+    if !canonical.starts_with(&root) {
+        return Err(AgentError::Escape);
+    }
+    let parsed: AgentsFile = serde_json::from_slice(&std::fs::read(canonical)?)?;
+    validate_presets(&parsed.agents)?;
+    Ok(parsed.agents)
+}
+
+fn validate_presets(presets: &[AgentPreset]) -> Result<(), AgentError> {
+    let mut names = BTreeSet::new();
+    let mut ids = BTreeSet::new();
+    for preset in presets {
+        if preset.name.is_empty() {
+            return Err(AgentError::Invalid("agent preset name is empty".into()));
+        }
+        if preset.id.is_empty() {
+            return Err(AgentError::Invalid("agent preset id is empty".into()));
+        }
+        if preset.node.as_deref() == Some("") {
+            return Err(AgentError::EmptyNode(preset.name.clone()));
+        }
+        if !names.insert(preset.name.clone()) {
+            return Err(AgentError::DuplicatePreset(preset.name.clone()));
+        }
+        if !ids.insert(preset.id.clone()) {
+            return Err(AgentError::DuplicatePresetId(preset.id.clone()));
+        }
+    }
+    Ok(())
+}
+
+async fn load_nodes(config: &Config, env: &Environment) -> Result<Vec<MeshNode>, AgentError> {
+    if !mesh_enabled(config) {
+        return Ok(Vec::new());
+    }
+    let registry =
+        gateway::mesh::Registry::open(config::shared_dir(env), PathBuf::from("mesh.json")).await?;
+    match registry.snapshot().await? {
+        Some(file) => Ok(file.nodes.into_values().collect()),
+        None => Ok(Vec::new()),
+    }
+}

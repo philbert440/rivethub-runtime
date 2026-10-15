@@ -236,6 +236,7 @@ pub struct Gateway {
     mesh_cache: routes::MeshCache,
     audio: Option<AudioBridge>,
     voice: VoiceProxy,
+    tasks: Option<Arc<routes::tasks::TasksApi>>,
 }
 
 impl Gateway {
@@ -267,7 +268,14 @@ impl Gateway {
             mesh_cache: routes::MeshCache::default(),
             audio: None,
             voice: VoiceProxy::unconfigured(),
+            tasks: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_tasks(mut self, api: Arc<routes::tasks::TasksApi>) -> Self {
+        self.tasks = Some(api);
+        self
     }
 
     #[must_use]
@@ -446,7 +454,11 @@ impl Gateway {
         let rewritten = ServiceBuilder::new()
             .layer(MapRequestLayer::new(routes::rewrite_request))
             .service(mounted);
-        Router::new()
+        let mut served = Router::new();
+        if let Some(api) = &self.tasks {
+            served = served.merge(routes::tasks::router(Arc::clone(api)));
+        }
+        served
             .fallback_service(rewritten)
             .layer(middleware::from_fn_with_state(guard_state, auth::guard))
     }

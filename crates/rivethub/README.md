@@ -1,12 +1,12 @@
 # Service composition
 
-`rh gateway`, `rh worker`, and `rh mcp` are the composition roots. Each one
+`rh gateway`, `rh agent`, `rh worker`, and `rh mcp` are the composition roots. Each one
 runs on the multithreaded Tokio runtime built in `rh`'s `main`, with one
 cancellation tree and a task tracker, and stops on SIGTERM or SIGINT.
 `rh start` remains the gateway launcher. Supervising the roots as separate
 processes is a later slice. Invoking `rh` without arguments prints help.
 
-`rh gateway --check`, `rh worker --role <role> --check`, and `rh mcp --check`
+`rh gateway --check`, `rh agent --check`, `rh worker --role <role> --check`, and `rh mcp --check`
 validate configuration without connecting the memory database, binding
 listeners, or moving legacy state. Configuration uses `~/.rivethub/config.yaml`
 and the config crate's `RIVETHUB_*` environment resolution and deprecated aliases.
@@ -74,11 +74,19 @@ wiki-builder fail closed. The runner uses the Postgres job queue, embedding
 store, and summary store, plus the default agent's OpenAI-compatible provider.
 An absent queue fails closed.
 
-`rh mcp` serves the memory and wiki tools on stdio, or on streamable HTTP and
-a Unix socket when `transports.mcp` selects them. It does not serve
-delegation, agent listing, web, echo, or skills.
+`rh agent` runs the task engine: it claims `run-task` jobs, executes each
+session through the gateway HTTP API, and finishes under the process shutdown
+token. `rh agent --check` validates the node, worker, pricing, gateway URL, and
+Postgres URL without connecting. `tasks.enabled: false` refuses the process.
+The gateway still serves `/api/tasks`, `/api/catalog`, and `/api/outcomes`.
 
-No kernel tasks port exists in this checkout, so neither root invents one.
+`rh mcp` serves the memory and wiki tools on stdio, or on streamable HTTP and
+a Unix socket when `transports.mcp` selects them. Stdio also serves
+`delegate_task` and `list_agents`; a network listener serves `list_agents`.
+The sidecar does not claim jobs. It does not serve web, echo, or skills.
+
+The task engine uses the kernel task ports. `rh agent` runs the job loop,
+`rh mcp` exposes delegation, and `rh gateway` serves the task HTTP API.
 CLI-backed providers are refused until their complete provider port is
 available.
 

@@ -2863,6 +2863,7 @@ name = "rivethub"
 version = "0.1.0"
 dependencies = [
  "agent-loop",
+ "async-trait",
  "axum",
  "capture",
  "chrono",
@@ -2887,6 +2888,7 @@ dependencies = [
  "serde_json",
  "serde_yaml_ng",
  "sqlx",
+ "tasks",
  "tempfile",
  "terminal",
  "testkit",
@@ -2897,6 +2899,8 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
+ "url",
+ "uuid",
  "wire",
  "workers",
 ]

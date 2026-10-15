@@ -90,6 +90,10 @@ where
         self.finished.subscribe()
     }
 
+    pub fn wake_waiters(&self) {
+        self.finished.send_modify(|_finished| {});
+    }
+
     pub(crate) fn publish(&self, id: Uuid) {
         let _previous = self.finished.send_replace(Some(id));
     }

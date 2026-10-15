@@ -1,3 +1,4 @@
+mod agent;
 mod checks;
 mod gateway;
 mod mcp;
@@ -14,8 +15,6 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 const DEAD_POSTGRES: &str = "postgres://127.0.0.1:1/none";
 
 const OMITTED: &[(&str, &str)] = &[
-    ("delegate_task", "B7: no kernel delegation port"),
-    ("list_agents", "B7: no kernel agent registry port"),
     (
         "internet_search",
         "B7: harness owns web tools; removed by design",

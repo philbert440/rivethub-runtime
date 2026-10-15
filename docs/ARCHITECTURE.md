@@ -47,7 +47,7 @@ One process per service, each with one tokio multi-thread runtime built in its o
 `rh gateway` (gateway with its session registry, terminal, devices, and the certificate authority),
 `rh worker --role <embedder|summarizer|categorizer|wiki-builder|all>`, and `rh mcp` (sidecar).
 In this checkout `rh start` still launches that gateway; `rh stop` and `rh status` keep the single-process contract.
-Supervising separate gateway, worker, and mcp processes is a later slice. `rh agent` is not a composition root here.
+Supervising separate gateway, agent, worker, and mcp processes is a later slice. `rh agent` runs the task engine in this checkout.
 Processes communicate only through contract boundaries (HTTP API B1,
 Postgres queue B4/B13). Inside a process: supervised tasks under one `CancellationToken` tree; `parking_lot` for short state,
 `tokio::sync` across awaits, `spawn_blocking` for blocking work; `tracing` for logs.

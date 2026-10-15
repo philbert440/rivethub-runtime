@@ -22,6 +22,8 @@ enum SidecarError {
     Join(#[from] tokio::task::JoinError),
     #[error("{0}")]
     Invalid(String),
+    #[error(transparent)]
+    Agent(#[from] crate::agent::AgentError),
 }
 
 impl SidecarError {
@@ -30,6 +32,7 @@ impl SidecarError {
             Self::Startup(error) => error.exit(),
             Self::Mcp(error) => mcp_exit(error),
             Self::Join(_) | Self::Invalid(_) => Exit::Failure,
+            Self::Agent(error) => error.exit(),
         }
     }
 }
@@ -117,7 +120,10 @@ fn finish(result: Result<(), SidecarError>, ready: &str) -> Exit {
 fn report_sidecar(error: &SidecarError) {
     match error {
         SidecarError::Startup(error) => report(error),
-        SidecarError::Mcp(_) | SidecarError::Join(_) | SidecarError::Invalid(_) => {
+        SidecarError::Mcp(_)
+        | SidecarError::Join(_)
+        | SidecarError::Invalid(_)
+        | SidecarError::Agent(_) => {
             tracing::error!("{error}");
         }
     }
@@ -134,10 +140,23 @@ async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), Sidec
     let config = read_config(env).await?;
     let selected = select(&config)?;
     let memory = Arc::new(postgres(&config, env).await?) as Arc<dyn MemoryStore>;
-    let server = mcp::Server::new(memory, false, shutdown.child_token())?;
-    serve(server, selected, shutdown).await?;
+    let delegation = crate::agent::open_delegation(&config, env, &shutdown).await?;
+    let server = mcp::Server::builder(memory, false, shutdown.child_token())
+        .delegation(Arc::clone(&delegation.port), surface(&selected))
+        .build()?;
+    let ran = serve(server, selected, shutdown).await;
+    let stopped = delegation.shutdown().await;
+    ran?;
+    stopped?;
     tracing::info!("mcp stopped");
     Ok(())
+}
+
+fn surface(selected: &Selected) -> mcp::Surface {
+    match selected {
+        Selected::Stdio => mcp::Surface::Stdio,
+        Selected::Network { .. } => mcp::Surface::Remote,
+    }
 }
 
 async fn read_config(env: &Environment) -> Result<Config, SidecarError> {

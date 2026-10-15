@@ -53,6 +53,8 @@ pub enum ComposeError {
     Devices(#[from] gateway::routes::devices::SetupError),
     #[error(transparent)]
     Pki(#[from] pki::Error),
+    #[error(transparent)]
+    Tasks(#[from] crate::agent::AgentError),
 }
 
 #[expect(
@@ -140,7 +142,17 @@ impl Composition {
         } else {
             None
         };
-        let tasks = mesh::start(config, env, agents, identity.tenancy, shutdown).await?;
+        let mut tasks = mesh::start(config, env, agents, identity.tenancy, shutdown).await?;
+        let crate::agent::Attached { gateway, watch } =
+            crate::agent::attach(gateway, config, env, shutdown).await?;
+        if let Some(watch) = watch {
+            tasks.spawn(async move {
+                match watch.await {
+                    Ok(result) => result.map_err(ComposeError::from),
+                    Err(error) => Err(ComposeError::Task(error)),
+                }
+            });
+        }
         Ok(Self {
             gateway: Arc::new(gateway),
             v1,

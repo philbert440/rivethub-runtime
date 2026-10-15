@@ -61,6 +61,9 @@ pub enum Dispatch {
     Mcp {
         check: bool,
     },
+    Agent {
+        check: bool,
+    },
     Complete(Report),
 }
 
@@ -78,6 +81,7 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
             Command::Gateway { check } => return Ok(Dispatch::Gateway { check }),
             Command::Worker { role, check } => return Ok(Dispatch::Worker { role, check }),
             Command::Mcp { check } => return Ok(Dispatch::Mcp { check }),
+            Command::Agent { check } => return Ok(Dispatch::Agent { check }),
             Command::Version => Ok(Report::success(version())),
             Command::Config { command } => configuration::run(command, env).await,
             Command::Doctor { json } => doctor::run(env, json).await,

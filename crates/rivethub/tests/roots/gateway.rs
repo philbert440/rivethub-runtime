@@ -7,7 +7,10 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use wire::gateway::agents::AgentListResponse;
 use wire::gateway::agents::AgentStoreBackend;
+use wire::gateway::catalog::CatalogSheet;
+use wire::gateway::catalog::OutcomesResponse;
 use wire::gateway::devices::PhonePairingAvailability;
+use wire::task::TasksListResponse;
 
 use super::{TestResult, init_authority, provider_config, run_rh, stderr, terminate, write_state};
 
@@ -122,6 +125,55 @@ async fn phone_pairing_uses_the_authority_and_agents_stay_on_the_file_store(
         .json::<AgentListResponse>()
         .await?;
     assert_eq!(agents.backend, Some(AgentStoreBackend::File));
+    let catalog = client
+        .get(format!("{base}/api/catalog"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<CatalogSheet>()
+        .await?;
+    assert!(
+        catalog
+            .executors
+            .iter()
+            .any(|entry| entry.key == "chat-loop" && entry.implemented == Some(true)),
+        "{catalog:?}"
+    );
+    assert!(
+        catalog
+            .executors
+            .iter()
+            .any(|entry| entry.key == "harness-session" && entry.implemented == Some(true)),
+        "{catalog:?}"
+    );
+    assert!(
+        catalog.executors.iter().all(|entry| entry.key != "mesh"),
+        "{catalog:?}"
+    );
+    assert!(catalog.tools.is_empty(), "{catalog:?}");
+    assert!(
+        catalog.agents.iter().any(|agent| matches!(
+            agent,
+            wire::gateway::catalog::CatalogAgent::Node(node) if node.id == "main" && node.local
+        )),
+        "{catalog:?}"
+    );
+    let tasks = client
+        .get(format!("{base}/api/tasks"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<TasksListResponse>()
+        .await?;
+    assert!(tasks.tasks.is_empty(), "{tasks:?}");
+    let outcomes = client
+        .get(format!("{base}/api/outcomes"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<OutcomesResponse>()
+        .await?;
+    assert_eq!(outcomes.totals.tasks, 0);
     let pid = child.id().ok_or("gateway already stopped")?;
     terminate(pid)?;
     let status = tokio::time::timeout(Duration::from_secs(30), child.wait()).await??;

@@ -290,7 +290,7 @@ async fn conflict_or_missing<T>(
     })
 }
 
-fn decode_task(
+pub(crate) fn decode_task(
     row: &sqlx::postgres::PgRow,
     operation: &'static str,
 ) -> Result<TaskRecord, TaskError> {
