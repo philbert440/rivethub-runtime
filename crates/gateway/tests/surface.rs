@@ -221,3 +221,87 @@ fn a_dead_local_url_is_offline() {
     assert_eq!(local.sessions, Some(0));
     assert!(local.latest.is_none());
 }
+
+fn tls_peer(probes: usize) -> Result<(u16, String), Box<dyn std::error::Error>> {
+    let ca_key = rcgen::KeyPair::generate()?;
+    let mut ca = rcgen::CertificateParams::new(Vec::<String>::new())?;
+    ca.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    let ca_cert = ca.self_signed(&ca_key)?;
+    let issuer = rcgen::Issuer::new(ca, ca_key);
+    let leaf_key = rcgen::KeyPair::generate()?;
+    let leaf = rcgen::CertificateParams::new(vec!["127.0.0.1".to_owned()])?
+        .signed_by(&leaf_key, &issuer)?;
+    let provider = std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let config = rustls::ServerConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()?
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![leaf.der().clone()],
+            rustls::pki_types::PrivateKeyDer::try_from(leaf_key.serialize_der())?,
+        )?;
+    let config = std::sync::Arc::new(config);
+    let listener = TcpListener::bind(("127.0.0.1", 0))?;
+    let port = listener.local_addr()?.port();
+    std::thread::spawn(move || {
+        for _ in 0..probes {
+            let Ok((tcp, _)) = listener.accept() else {
+                break;
+            };
+            let Ok(server) = rustls::ServerConnection::new(config.clone()) else {
+                break;
+            };
+            let mut stream = rustls::StreamOwned::new(server, tcp);
+            let mut buf = [0_u8; 2048];
+            if stream.read(&mut buf).is_err() {
+                continue;
+            }
+            let body = br#"{"ok":true,"sessions":0,"name":"peer","node":"peer"}"#;
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            if stream.write_all(head.as_bytes()).is_err() || stream.write_all(body).is_err() {
+                continue;
+            }
+            stream.conn.send_close_notify();
+            let _flushed = stream.flush();
+        }
+    });
+    Ok((port, ca_cert.pem()))
+}
+
+#[test]
+fn a_tls_peer_is_probed_against_the_mesh_ca() {
+    let (port, ca_pem) = tls_peer(2).expect("tls peer");
+    let scratch = tempfile::tempdir().expect("temp");
+    let ca = scratch.path().join("mesh-ca.pem");
+    std::fs::write(&ca, ca_pem).expect("ca");
+    let mesh = scratch.path().join("mesh.json");
+    let document = common::roster::document(
+        &[member(
+            "peer-tls",
+            "TLS peer",
+            &format!("https://127.0.0.1:{port}"),
+            &[],
+        )],
+        1_760_000_000_000,
+    )
+    .expect("document");
+    std::fs::write(&mesh, document).expect("mesh");
+    let online = |mesh_ca: Option<std::path::PathBuf>| {
+        let mut settings = common::settings();
+        settings.mesh_file = Some(mesh.clone());
+        settings.node = "absent-local".to_owned();
+        settings.mesh_ca = mesh_ca;
+        let response = call(app(settings), "/mesh.json").expect("mesh");
+        let overview: MeshOverview = serde_json::from_slice(&response.body).expect("overview");
+        overview
+            .nodes
+            .iter()
+            .find(|node| node.id == "peer-tls")
+            .expect("peer")
+            .online
+    };
+    assert!(online(Some(ca)), "trusted through the mesh CA");
+    assert!(!online(None), "the system roots do not know the mesh CA");
+}

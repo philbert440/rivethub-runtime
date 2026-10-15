@@ -227,7 +227,11 @@ async fn probe_nodes(settings: &Settings, nodes: &mut [MeshOverviewNode]) -> Res
     if targets.is_empty() {
         return Ok(());
     }
-    let client = probe_client(settings.probe_timeout)?;
+    let roots = match &settings.mesh_ca {
+        Some(path) => Some(mesh_roots(path).await?),
+        None => None,
+    };
+    let client = probe_client(settings.probe_timeout, roots)?;
     let mut tasks = JoinSet::new();
     for (index, url) in targets {
         let client = client.clone();
@@ -248,8 +252,26 @@ async fn probe_nodes(settings: &Settings, nodes: &mut [MeshOverviewNode]) -> Res
     Ok(())
 }
 
-fn probe_client(timeout: Duration) -> Result<reqwest::Client, ApiError> {
-    reqwest::Client::builder()
+async fn mesh_roots(path: &std::path::Path) -> Result<Vec<reqwest::Certificate>, ApiError> {
+    let pem = tokio::fs::read(path).await.map_err(|error| {
+        tracing::error!("mesh CA bundle {}: {error}", path.display());
+        ApiError::Internal
+    })?;
+    reqwest::Certificate::from_pem_bundle(&pem).map_err(|error| {
+        tracing::error!("mesh CA bundle {}: {error}", path.display());
+        ApiError::Internal
+    })
+}
+
+fn probe_client(
+    timeout: Duration,
+    roots: Option<Vec<reqwest::Certificate>>,
+) -> Result<reqwest::Client, ApiError> {
+    let builder = match roots {
+        Some(roots) => reqwest::Client::builder().tls_certs_only(roots),
+        None => reqwest::Client::builder(),
+    };
+    builder
         .timeout(timeout)
         .connect_timeout(timeout)
         .redirect(reqwest::redirect::Policy::none())
@@ -345,6 +367,7 @@ mod tests {
             devices_enabled: false,
             probe_timeout: Duration::from_millis(50),
             mesh_cache_ttl: Duration::ZERO,
+            mesh_ca: None,
         }
     }
 

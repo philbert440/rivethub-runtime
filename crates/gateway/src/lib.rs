@@ -64,6 +64,7 @@ pub struct Settings {
     pub allowed_harnesses: Option<Vec<HarnessId>>,
     pub devices_enabled: bool,
     pub probe_timeout: Duration,
+    pub mesh_ca: Option<PathBuf>,
     pub mesh_cache_ttl: Duration,
 }
 
@@ -117,6 +118,7 @@ impl Settings {
                 .map(|entries| entries.iter().filter_map(known_harness).collect()),
             devices_enabled: section.devices.enabled == Some(true),
             probe_timeout: DEFAULT_PROBE_TIMEOUT,
+            mesh_ca: section.tls_ca,
             mesh_cache_ttl: mesh_cache_ttl(env)?,
         })
     }

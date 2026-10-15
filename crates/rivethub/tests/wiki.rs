@@ -76,6 +76,7 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
             devices_enabled: false,
             probe_timeout: Duration::from_millis(200),
             mesh_cache_ttl: Duration::ZERO,
+            mesh_ca: None,
         },
     ));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;

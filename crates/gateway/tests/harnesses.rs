@@ -42,6 +42,7 @@ fn settings() -> Settings {
         devices_enabled: false,
         probe_timeout: Duration::from_millis(200),
         mesh_cache_ttl: Duration::ZERO,
+        mesh_ca: None,
     }
 }
 
