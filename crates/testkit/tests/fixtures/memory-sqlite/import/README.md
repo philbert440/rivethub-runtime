@@ -20,8 +20,7 @@ The recording command requires `DATABASE_URL` and `pg_dump` on PATH. It writes
 No database service is started or configured. Only the test's isolated database is
 migrated and populated.
 
-The real recording has not been produced in this environment: pg_dump is absent.
-Do not describe the handwritten fixture as a recording or silently substitute it.
+`pre-0020.pg.txt` was recorded 2026-10-15 with pg_dump 16.14 against PostgreSQL 16.13 (isolated sqlx test database).
 
 `skips.json` is the checked, empty list of out-of-slice import scenarios. All supplied
 handwritten cases replay. A recording operation is explicitly invoked, not a replay

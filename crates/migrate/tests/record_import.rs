@@ -1,4 +1,4 @@
-use sqlx::{ConnectOptions, PgPool};
+use sqlx::PgPool;
 
 #[sqlx::test(migrations = false)]
 #[ignore = "explicit recording operation requires a real pg_dump executable on PATH"]
@@ -17,11 +17,24 @@ async fn record_pre_0020_import(pool: PgPool) -> Result<(), Box<dyn std::error::
     .await?;
     let output = std::process::Command::new("pg_dump")
         .args(memory_sqlite::import::ImportTable::pg_dump_arguments())
-        .arg(pool.connect_options().to_url_lossy().as_str())
+        .args(connection_arguments(&pool))
         .output()?;
     if !output.status.success() {
         return Err(String::from_utf8(output.stderr)?.into());
     }
     std::fs::write(directory.join("pre-0020.pg.txt"), output.stdout)?;
     Ok(())
+}
+
+fn connection_arguments(pool: &PgPool) -> Vec<String> {
+    let options = pool.connect_options();
+    let mut arguments = vec![
+        format!("--host={}", options.get_host()),
+        format!("--port={}", options.get_port()),
+        format!("--username={}", options.get_username()),
+    ];
+    if let Some(database) = options.get_database() {
+        arguments.push(format!("--dbname={database}"));
+    }
+    arguments
 }
