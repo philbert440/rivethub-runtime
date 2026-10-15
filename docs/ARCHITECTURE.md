@@ -34,6 +34,13 @@ A port exists only where several implementations exist or where it is the bounda
 reach sessions over the HTTP API), `Env` (config owns the environment), `Fs` (direct I/O; tests use temp directories),
 `Clock` (functions take `now: DateTime<Utc>` as an argument where time is data; timers use `tokio::time`, paused in tests).
 
+### SQLite store gaps on schema v7
+
+`memory-sqlite` implements `MemoryStore`, `JobQueue`, `EmbeddingStore` and `SummaryStore` on schema v7. One gap remains:
+v7 has no message-chunk table, so `EmbeddingStore` refuses chunked embeddings (`EmbedTable::MessageChunks`, or a
+`StoredEmbedding` with chunks) with a typed error. Standalone nodes run the embedder with chunking disabled. Chunks
+arrive with schema v8, alongside the sqlite-vec index after cutover.
+
 ## Process shape (Phil 2026-10-12)
 
 One process per service, each with one tokio multi-thread runtime built in its own composition root:
