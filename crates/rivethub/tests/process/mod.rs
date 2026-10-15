@@ -40,12 +40,20 @@ pub async fn init_authority(home: &std::path::Path) -> TestResult {
 
 impl Running {
     pub async fn start(home: &std::path::Path) -> TestResult<Self> {
+        Self::start_with_environment(home, &[]).await
+    }
+
+    pub async fn start_with_environment(
+        home: &std::path::Path,
+        environment: &[(&str, &str)],
+    ) -> TestResult<Self> {
         init_authority(home).await?;
         let mut child = Command::new(env!("CARGO_BIN_EXE_rh"))
             .arg("gateway")
             .env_clear()
             .env("HOME", home)
             .env("RIVETHUB_SHARED_DIR", home)
+            .envs(environment.iter().copied())
             .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()?;
