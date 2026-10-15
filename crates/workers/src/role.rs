@@ -54,10 +54,10 @@ pub fn jobs_for(role: WorkerRole) -> Vec<JobName> {
     match role {
         WorkerRole::Embedder => vec![fixed(FixedJob::EmbedTarget)],
         WorkerRole::Summarizer => vec![
-            fixed(FixedJob::CompactConversation),
+            fixed(FixedJob::SummarizeConversation),
             fixed(FixedJob::SynthesizeToolCall),
             fixed(FixedJob::EnqueueIdle),
-            fixed(FixedJob::EnqueueStaleCompaction),
+            fixed(FixedJob::EnqueueStaleSummaries),
             fixed(FixedJob::ReapDeadJobs),
         ],
         WorkerRole::Categorizer => vec![fixed(FixedJob::SuggestTags)],
@@ -85,9 +85,9 @@ pub(crate) fn handler_ready(name: &JobName) -> bool {
         name,
         JobName::Fixed(
             FixedJob::EmbedTarget
-                | FixedJob::CompactConversation
+                | FixedJob::SummarizeConversation
                 | FixedJob::EnqueueIdle
-                | FixedJob::EnqueueStaleCompaction
+                | FixedJob::EnqueueStaleSummaries
                 | FixedJob::ReapDeadJobs
                 | FixedJob::SuggestTags
                 | FixedJob::ExtractWiki

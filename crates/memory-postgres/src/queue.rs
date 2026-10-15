@@ -55,10 +55,10 @@ impl PostgresQueue {
         match role {
             WorkerRole::Embedder => &[JobName::Fixed(FixedJob::EmbedTarget)],
             WorkerRole::Summarizer => &[
-                JobName::Fixed(FixedJob::CompactConversation),
+                JobName::Fixed(FixedJob::SummarizeConversation),
                 JobName::Fixed(FixedJob::SynthesizeToolCall),
                 JobName::Fixed(FixedJob::EnqueueIdle),
-                JobName::Fixed(FixedJob::EnqueueStaleCompaction),
+                JobName::Fixed(FixedJob::EnqueueStaleSummaries),
                 JobName::Fixed(FixedJob::ReapDeadJobs),
             ],
             WorkerRole::Categorizer => &[JobName::Fixed(FixedJob::SuggestTags)],
@@ -92,7 +92,7 @@ impl PostgresQueue {
                 ),
                 cron(
                     "stale-compaction-sweep",
-                    JobName::Fixed(FixedJob::EnqueueStaleCompaction),
+                    JobName::Fixed(FixedJob::EnqueueStaleSummaries),
                     "*/15 * * * *",
                 ),
                 cron(

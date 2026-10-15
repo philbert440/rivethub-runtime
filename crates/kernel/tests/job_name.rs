@@ -17,7 +17,7 @@ const FIXED: [(&str, JobName); 15] = [
     ),
     (
         "compact-conversation",
-        JobName::Fixed(FixedJob::CompactConversation),
+        JobName::Fixed(FixedJob::SummarizeConversation),
     ),
     (
         "synthesize-tool-call",
@@ -41,7 +41,7 @@ const FIXED: [(&str, JobName); 15] = [
     ),
     (
         "enqueue-stale-compaction",
-        JobName::Fixed(FixedJob::EnqueueStaleCompaction),
+        JobName::Fixed(FixedJob::EnqueueStaleSummaries),
     ),
     ("reap-dead-jobs", JobName::Fixed(FixedJob::ReapDeadJobs)),
     ("run-task", JobName::Fixed(FixedJob::RunTask)),

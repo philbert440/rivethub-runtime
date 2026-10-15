@@ -109,7 +109,7 @@ pub async fn handle_reap(env: &SummarizeEnv<'_>) -> Result<u64, WorkerError> {
         .checked_sub_signed(DEAD_REST)
         .ok_or(WorkerError::Clock)?;
     env.queue
-        .revive_dead(&JobName::Fixed(FixedJob::CompactConversation), cutoff)
+        .revive_dead(&JobName::Fixed(FixedJob::SummarizeConversation), cutoff)
         .await
         .map_err(WorkerError::queue)
 }
@@ -212,7 +212,7 @@ fn summarize_job(
         trigger_type: trigger,
     };
     Ok(Job {
-        name: JobName::Fixed(FixedJob::CompactConversation),
+        name: JobName::Fixed(FixedJob::SummarizeConversation),
         payload: JsonObject::from_serialize(&payload).map_err(WorkerError::summary_payload)?,
         key: Some(format!("compact-{id}")),
         key_mode: JobKeyMode::Replace,

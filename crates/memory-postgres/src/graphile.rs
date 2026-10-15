@@ -348,7 +348,7 @@ fn max_attempts(name: &JobName) -> i32 {
     match name {
         JobName::Fixed(fixed) => match fixed {
             FixedJob::EmbedTarget => 5,
-            FixedJob::CompactConversation | FixedJob::SynthesizeToolCall => 3,
+            FixedJob::SummarizeConversation | FixedJob::SynthesizeToolCall => 3,
             FixedJob::SuggestTags | FixedJob::ExtractWiki => 2,
             FixedJob::RunTask => 1,
             FixedJob::EnqueueUnembedded
@@ -358,7 +358,7 @@ fn max_attempts(name: &JobName) -> i32 {
             | FixedJob::ConsolidateWiki
             | FixedJob::RecompileWiki
             | FixedJob::EnqueueStaleWiki
-            | FixedJob::EnqueueStaleCompaction
+            | FixedJob::EnqueueStaleSummaries
             | FixedJob::ReapDeadJobs => 25,
         },
         JobName::RunTaskOn { .. } | JobName::Heartbeat { .. } => 1,

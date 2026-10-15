@@ -74,7 +74,9 @@ async fn a_full_window_summarizes_once() {
     assert_eq!(job.key_mode, JobKeyMode::Replace);
     assert_eq!(job.priority, 0);
     assert_eq!(read_trigger(&job.payload), SummaryTrigger::Window);
-    let outcome = handle_summarize(&env, &job.payload).await.expect("compact");
+    let outcome = handle_summarize(&env, &job.payload)
+        .await
+        .expect("summarize");
     assert_eq!(
         outcome,
         SummarizeOutcome {
@@ -186,7 +188,7 @@ async fn a_truncated_leaf_shrinks_the_batch_and_sticks() {
     );
     let outcome = handle_summarize(&env, &payload_of(id, SummaryTrigger::Window))
         .await
-        .expect("compact");
+        .expect("summarize");
     assert_eq!(
         outcome,
         SummarizeOutcome {
@@ -263,7 +265,7 @@ async fn a_failing_model_fails_the_job_and_skips_heartbeats() {
     let queue = Queue::new();
     let queued = queue
         .push(
-            JobName::Fixed(FixedJob::CompactConversation),
+            JobName::Fixed(FixedJob::SummarizeConversation),
             payload_of(id, SummaryTrigger::SessionIdle),
             3,
         )

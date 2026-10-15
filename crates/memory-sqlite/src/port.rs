@@ -225,7 +225,7 @@ fn port_max_attempts(name: &JobName) -> u32 {
 
 fn fixed_attempts(fixed: FixedJob) -> u32 {
     match fixed {
-        FixedJob::CompactConversation | FixedJob::SynthesizeToolCall => 3,
+        FixedJob::SummarizeConversation | FixedJob::SynthesizeToolCall => 3,
         FixedJob::SuggestTags | FixedJob::ExtractWiki => 2,
         FixedJob::RunTask => 1,
         FixedJob::EmbedTarget
@@ -236,7 +236,7 @@ fn fixed_attempts(fixed: FixedJob) -> u32 {
         | FixedJob::ConsolidateWiki
         | FixedJob::RecompileWiki
         | FixedJob::EnqueueStaleWiki
-        | FixedJob::EnqueueStaleCompaction
+        | FixedJob::EnqueueStaleSummaries
         | FixedJob::ReapDeadJobs => 5,
     }
 }

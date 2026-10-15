@@ -291,7 +291,8 @@ pub struct MemoryHealthResponse {
     pub observed_at: Option<DateTime<Utc>>,
     pub queue_status: Option<QueueStatus>,
     pub queues: Option<QueueHealth>,
-    pub compaction: Option<CompactionHealth>,
+    #[serde(rename = "compaction")]
+    pub summarizer: Option<SummarizerHealth>,
     pub failed_embeddings: Option<u64>,
     pub skipped_embeddings: Option<u64>,
     pub capture: Option<CaptureHealth>,
@@ -322,7 +323,7 @@ pub struct QueueHealth {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CompactionHealth {
+pub struct SummarizerHealth {
     pub eligible: bool,
     pub active_tail: bool,
     pub below_floor: bool,

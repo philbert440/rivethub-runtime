@@ -47,7 +47,7 @@ pub struct SqliteQueueHealth {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SqliteCompaction {
+pub struct SqliteSummarizerHealth {
     pub eligible: u64,
     pub active_tail: u64,
     pub below_floor: u64,
@@ -71,7 +71,8 @@ pub struct SqliteHealth {
     pub skipped_embeddings: u64,
     pub queue_status: QueueStatus,
     pub queues: Vec<SqliteQueueHealth>,
-    pub compaction: SqliteCompaction,
+    #[serde(rename = "compaction")]
+    pub summarizer: SqliteSummarizerHealth,
     pub capture: SqliteCaptureHealth,
 }
 
@@ -143,7 +144,7 @@ fn read_health(
         skipped_embeddings: skipped,
         queue_status: QueueStatus::Unavailable,
         queues: queue_health(conn, now)?,
-        compaction: SqliteCompaction {
+        summarizer: SqliteSummarizerHealth {
             eligible: 0,
             active_tail: 0,
             below_floor: messages,

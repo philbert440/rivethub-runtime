@@ -429,11 +429,11 @@ async fn dispatch<Q: JobQueue>(
             )
             .await
         }
-        JobName::Fixed(FixedJob::CompactConversation) => {
+        JobName::Fixed(FixedJob::SummarizeConversation) => {
             handle_summarize(&summarize, &job.payload).await.map(|_| ())
         }
         JobName::Fixed(FixedJob::EnqueueIdle) => handle_enqueue_idle(&summarize).await.map(|_| ()),
-        JobName::Fixed(FixedJob::EnqueueStaleCompaction) => {
+        JobName::Fixed(FixedJob::EnqueueStaleSummaries) => {
             handle_enqueue_stale(&summarize).await.map(|_| ())
         }
         JobName::Fixed(FixedJob::ReapDeadJobs) => handle_reap(&summarize).await.map(|_| ()),

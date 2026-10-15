@@ -14,7 +14,7 @@ async fn a_permanent_status_still_retries_until_the_rest_revives_it() {
     let script = Arc::new(Scripted::fail_with(vec![400, 400, 400]));
     let jobs = Arc::new(Seen::with_dead(vec![
         (
-            JobName::Fixed(FixedJob::CompactConversation),
+            JobName::Fixed(FixedJob::SummarizeConversation),
             at("2026-10-04T12:30:00Z"),
         ),
         (
@@ -53,7 +53,7 @@ async fn a_permanent_status_still_retries_until_the_rest_revives_it() {
         &token,
     );
     assert_eq!(handle_reap(&within).await.expect("within rest"), 0);
-    assert_eq!(jobs.dead_count(FixedJob::CompactConversation).await, 1);
+    assert_eq!(jobs.dead_count(FixedJob::SummarizeConversation).await, 1);
     let after = bind(
         &store,
         &script,
@@ -63,7 +63,7 @@ async fn a_permanent_status_still_retries_until_the_rest_revives_it() {
         &token,
     );
     assert_eq!(handle_reap(&after).await.expect("after rest"), 1);
-    assert_eq!(jobs.dead_count(FixedJob::CompactConversation).await, 0);
+    assert_eq!(jobs.dead_count(FixedJob::SummarizeConversation).await, 0);
     assert_eq!(jobs.dead_count(FixedJob::EmbedTarget).await, 1);
     let outcome = handle_summarize(&after, &payload).await.expect("revived");
     assert_eq!(outcome.summaries, 1);
@@ -137,7 +137,7 @@ async fn idle_and_stale_floors_follow_the_recording() {
     assert_eq!(read_trigger(&job.payload), SummaryTrigger::SessionIdle);
     let outcome = handle_summarize(&idle, &job.payload)
         .await
-        .expect("idle compact");
+        .expect("idle summarize");
     assert_eq!(outcome.summaries, 1);
     let stale = bind(
         &store,
@@ -153,7 +153,7 @@ async fn idle_and_stale_floors_follow_the_recording() {
     assert_eq!(read_trigger(&job.payload), SummaryTrigger::Stale);
     let outcome = handle_summarize(&stale, &job.payload)
         .await
-        .expect("stale compact");
+        .expect("stale summarize");
     assert_eq!(outcome.summaries, 1);
     assert_calls(&script.calls.lock().await, &chat_calls(recorded));
     assert_rows(&store.written.lock().await, &recorded.tables.summaries);
@@ -210,7 +210,7 @@ async fn a_leaf_enqueues_suggest_tags_when_tagging_is_on() {
     );
     let outcome = handle_summarize(&env, &payload_of(id, SummaryTrigger::Window))
         .await
-        .expect("compact");
+        .expect("summarize");
     assert_eq!(outcome.summaries, 1);
     assert!(!outcome.reenqueued);
     let job = jobs.only().await;

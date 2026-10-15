@@ -72,7 +72,8 @@ pub enum FixedJob {
     EmbedTarget,
     EnqueueUnembedded,
     EnqueueUnchunked,
-    CompactConversation,
+    #[strum(serialize = "compact-conversation")]
+    SummarizeConversation,
     SynthesizeToolCall,
     SuggestTags,
     EnqueueIdle,
@@ -81,7 +82,8 @@ pub enum FixedJob {
     ConsolidateWiki,
     RecompileWiki,
     EnqueueStaleWiki,
-    EnqueueStaleCompaction,
+    #[strum(serialize = "enqueue-stale-compaction")]
+    EnqueueStaleSummaries,
     ReapDeadJobs,
     RunTask,
 }

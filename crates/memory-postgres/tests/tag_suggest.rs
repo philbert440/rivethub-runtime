@@ -54,7 +54,7 @@ async fn tag_job_context_reads_the_summary(pool: PgPool) -> TestResult {
     insert_taxonomy(
         &pool,
         "topic",
-        "memory-compaction",
+        "memory-summarizer",
         "",
         "accepted",
         stamp(1),
@@ -91,7 +91,7 @@ async fn tag_job_context_reads_the_summary(pool: PgPool) -> TestResult {
     assert_eq!(loaded.vocabulary.len(), 2);
     let first = loaded.vocabulary.first().expect("first vocabulary");
     assert_eq!(first.key, "topic");
-    assert_eq!(first.value, "memory-compaction");
+    assert_eq!(first.value, "memory-summarizer");
     assert_eq!(first.state, TagState::Accepted);
     let second = loaded.vocabulary.get(1).expect("second vocabulary");
     assert_eq!(second.value, "acmekit");

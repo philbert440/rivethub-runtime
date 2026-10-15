@@ -51,7 +51,7 @@ query-instruction text and chunking are checkable.
 
 **Chat endpoint** (`https://llm.example.com/v1`, model `fake-chat` unless stated). It answers by the request's system prompt,
 identified by exact equality with the memory-core constant (`prompt` in recorded calls; sha256 of each in
-`compaction.json` `prompts_sha256`): LEAF → the leaf text below, BRANCH → `Branch summary: several deploy sessions for AcmeKit settled on blue-green releases with a health-check gate.`, ROOT → `Root summary: the whole AcmeKit deploy conversation, from the first release plan to the documented rollback.`,
+`summarizer.json` `prompts_sha256`): LEAF → the leaf text below, BRANCH → `Branch summary: several deploy sessions for AcmeKit settled on blue-green releases with a health-check gate.`, ROOT → `Root summary: the whole AcmeKit deploy conversation, from the first release plan to the documented rollback.`,
 WIKI_EXTRACT → `JSON.stringify(PATCH)`, WIKI_RECOMPILE → `JSON.stringify(RECOMPILE)`, TAG → `JSON.stringify(TAG_ANSWER)`.
 Answers are `{ choices: [{ finish_reason: 'stop', message: { content } }] }`; a scenario may override one call
 (a status, `finish_reason: 'length'`, other text) and says so in its name. Constants:
@@ -131,7 +131,7 @@ by the repo privacy scanner in these contexts, so it is not used.
 | `search.json` | Helper outputs; FTS-only `memory.search` (with raw ranks) and `backend.search` (tags, tag filter, errors); tag pool widening; hybrid search (literal arm, trigram fallback, degraded query embedding). |
 | `context.json` | `getContextForTurn` text: Recent, Wiki, Relevant, dedup, budget, heartbeat exclusion, wiki failure log. |
 | `jobs.json` | Queue rows across enqueue/claim/fail/dead/revive/requeue/recover; runner ticks, sweeps and log lines; embed-target failures to dead and the sweep revival; unembeddable, zero vector, model and width changes. |
-| `compaction.json` | Leaf, leaf/branch/root tree, truncation shrink, LLM failure, dead-job rest, idle/stale buckets. Chat calls include the full user prompt. |
+| `summarizer.json` | Leaf, leaf/branch/root tree, truncation shrink, LLM failure, dead-job rest, idle/stale buckets. Chat calls include the full user prompt. |
 | `tags.json` | Tag store lifecycle, vocabulary edits and merges, tagger suggestions (chat and native shapes), removal suggestions and the protected rule. |
 | `wiki.json` | Index operations, extraction on the job loop (page files, git log), page update by alias, failure and backfill retry, consolidate and recompile. |
 | `tools.json` | Tool definitions (write and read sets) and every tool's text output, including `Error:` answers and thrown errors. |
@@ -139,4 +139,4 @@ by the repo privacy scanner in these contexts, so it is not used.
 | `export.ndjson` | Gunzipped export stream of a seeded store (header + rows). |
 | `portability.json` | `--since` exports, round-trip import, merge, a Postgres-shaped dump import, refusals. |
 
-`summarizer.json` is the recording the TypeScript recorder named `compaction.json` (the memory summarizer; renamed per the naming rule).
+`summarizer.json` records the memory summarizer. Recorded queue names, keys, health fields and log text retain their compatibility spellings; Rust identifiers use summarizer names.

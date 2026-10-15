@@ -81,7 +81,7 @@ fn context(summary_id: Uuid, conversation_id: Uuid) -> TagJobContext {
         summary: "A deploy summary.".to_owned(),
         vocabulary: vec![TagVocabulary {
             key: "topic".to_owned(),
-            value: "memory-compaction".to_owned(),
+            value: "memory-summarizer".to_owned(),
             display: String::new(),
             aliases: Vec::new(),
             state: TagState::Accepted,

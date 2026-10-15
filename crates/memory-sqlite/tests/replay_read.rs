@@ -31,7 +31,7 @@ use wire::message::Role;
 const SKIPPED_STATS_SCENARIOS: [(&str, &str); 2] = [
     (
         "embedding endpoint: queued, then drained, queues and buckets",
-        "embedding job enqueue, drain and compaction are outside this slice",
+        "embedding job enqueue, drain and summarization are outside this slice",
     ),
     (
         "embedding keeps failing → degraded; old failures age out",

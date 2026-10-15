@@ -26,7 +26,7 @@ struct EmbedTargetPayload<'a> {
 }
 
 #[derive(serde::Serialize)]
-struct CompactConversationPayload<'a> {
+struct SummarizeConversationPayload<'a> {
     #[serde(rename = "conversationId")]
     conversation_id: &'a str,
 }
@@ -134,8 +134,8 @@ async fn enqueue_claims_and_completes_through_the_public_api(pool: PgPool) -> Te
 async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
     common::install_graphile(&pool).await?;
     let jobs = queue(&pool).await?;
-    let compact = |payload: JsonObject| Job {
-        name: JobName::Fixed(FixedJob::CompactConversation),
+    let summarize = |payload: JsonObject| Job {
+        name: JobName::Fixed(FixedJob::SummarizeConversation),
         payload,
         key: Some("conv-key".to_string()),
         key_mode: JobKeyMode::Replace,
@@ -143,11 +143,11 @@ async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
         run_at: None,
     };
 
-    jobs.enqueue(compact(object(&CompactConversationPayload {
+    jobs.enqueue(summarize(object(&SummarizeConversationPayload {
         conversation_id: "one",
     })))
     .await?;
-    jobs.enqueue(compact(object(&CompactConversationPayload {
+    jobs.enqueue(summarize(object(&SummarizeConversationPayload {
         conversation_id: "two",
     })))
     .await?;
@@ -157,7 +157,7 @@ async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
     sqlx::query("UPDATE graphile_worker._private_jobs SET attempts = max_attempts")
         .execute(&pool)
         .await?;
-    jobs.enqueue(compact(object(&CompactConversationPayload {
+    jobs.enqueue(summarize(object(&SummarizeConversationPayload {
         conversation_id: "three",
     })))
     .await?;
@@ -232,7 +232,7 @@ async fn role_scoping_keeps_the_task_lists_apart(pool: PgPool) -> TestResult {
         .reap_dead_corpses(
             &[
                 JobName::Fixed(FixedJob::ExtractWiki),
-                JobName::Fixed(FixedJob::CompactConversation),
+                JobName::Fixed(FixedJob::SummarizeConversation),
                 JobName::Fixed(FixedJob::EmbedTarget),
             ],
             200,
@@ -269,7 +269,7 @@ async fn queue_health_reports_buckets(pool: PgPool) -> TestResult {
     assert_eq!(health.pending, 0);
 
     assert!(
-        jobs.queue_health(&JobName::Fixed(FixedJob::CompactConversation))
+        jobs.queue_health(&JobName::Fixed(FixedJob::SummarizeConversation))
             .await?
             .is_none(),
         "a task without jobs reports no bucket"
@@ -310,6 +310,6 @@ fn crontab_and_task_lists_follow_the_roles() {
     );
     assert!(
         PostgresQueue::task_list(WorkerRole::Summarizer)
-            .contains(&JobName::Fixed(FixedJob::CompactConversation))
+            .contains(&JobName::Fixed(FixedJob::SummarizeConversation))
     );
 }

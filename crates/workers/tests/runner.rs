@@ -71,7 +71,7 @@ fn roles_match_the_kernel_task_lists() {
     );
     assert!(accepts(&fixed(FixedJob::EmbedTarget), WorkerRole::Embedder));
     assert!(!accepts(
-        &fixed(FixedJob::CompactConversation),
+        &fixed(FixedJob::SummarizeConversation),
         WorkerRole::Embedder
     ));
     assert!(accepts(
@@ -499,10 +499,10 @@ async fn all_claims_every_role_that_has_a_handler() {
             5,
         )
         .await;
-    let compact = rig
+    let summarize = rig
         .queue
         .push(
-            fixed(FixedJob::CompactConversation),
+            fixed(FixedJob::SummarizeConversation),
             JsonObject::default(),
             5,
         )
@@ -522,9 +522,9 @@ async fn all_claims_every_role_that_has_a_handler() {
     let (cancel, run) = spawn(&rig);
     rig.queue.wait_phase(wiki_job, Phase::Done).await;
     rig.queue.wait_phase(embed, Phase::Done).await;
-    rig.queue.wait_phase(compact, Phase::Backoff).await;
+    rig.queue.wait_phase(summarize, Phase::Backoff).await;
     rig.queue.wait_phase(tags, Phase::Backoff).await;
-    let failed = rig.queue.view(compact).await;
+    let failed = rig.queue.view(summarize).await;
     assert_eq!(
         failed.error.as_deref(),
         Some("job payload is not a summarizer job: missing field `conversationId`")
