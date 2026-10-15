@@ -413,6 +413,11 @@ impl Gateway {
         &self.mesh_cache
     }
 
+    #[must_use]
+    pub fn admits_without_client_auth(&self, method: &axum::http::Method, path: &str) -> bool {
+        auth::admits_without_client_auth(method, path, self.devices().enrollment_on())
+    }
+
     pub fn router(self: &Arc<Self>, secure: bool) -> Router {
         let guard_state = GuardState {
             gateway: Arc::clone(self),

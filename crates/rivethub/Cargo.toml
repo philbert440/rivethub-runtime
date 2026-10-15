@@ -58,6 +58,7 @@ serde_yaml_ng = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
 tempfile = { workspace = true }
 testkit = { workspace = true }
+tower = { workspace = true }
 rmcp = { workspace = true, features = ["client", "transport-child-process"] }
 tokio = { workspace = true, features = ["io-util", "macros", "process"] }
 

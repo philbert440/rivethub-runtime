@@ -260,7 +260,7 @@ pub(crate) async fn guard(
     response
 }
 
-fn admits_without_client_auth(method: &Method, path: &str, enrollment_on: bool) -> bool {
+pub(crate) fn admits_without_client_auth(method: &Method, path: &str, enrollment_on: bool) -> bool {
     matches!(
         path,
         "/healthz" | "/ca/v1/chain" | "/ca/v1/crl" | "/ca/v1/sign"
