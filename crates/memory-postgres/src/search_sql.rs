@@ -9,8 +9,6 @@ use kernel::memory_core::hybrid_pool;
 use kernel::memory_core::recency_boost;
 use pgvector::HalfVector;
 use sqlx::QueryBuilder;
-#[cfg(test)]
-use sqlx::Row as _;
 use std::collections::BTreeMap;
 use std::str::FromStr as _;
 use wire::gateway::memory::MemoryHitSource;
@@ -191,45 +189,7 @@ struct ArmContext<'a> {
     tag_filter: Option<&'a TagFilter>,
 }
 
-const TRIGRAM_THRESHOLD: &str = "0.3";
-const WORD_TRIGRAM_THRESHOLD: &str = "0.6";
-
-fn push_trigram_score(query: &mut QueryBuilder<sqlx::Postgres>, column: &str, text: &str) {
-    query.push("GREATEST(similarity(");
-    query.push(column);
-    query.push(", ");
-    query.push_bind(text.to_owned());
-    query.push("), word_similarity(");
-    query.push_bind(text.to_owned());
-    query.push(", ");
-    query.push(column);
-    query.push("))");
-}
-
-fn push_trigram_match(query: &mut QueryBuilder<sqlx::Postgres>, column: &str, text: &str) {
-    query.push(column);
-    query.push(" % ");
-    query.push_bind(text.to_owned());
-    query.push(" OR ");
-    query.push(column);
-    query.push(" %> ");
-    query.push_bind(text.to_owned());
-}
-
-async fn set_trigram_thresholds(tx: &mut sqlx::PgConnection) -> Result<(), Error> {
-    for (setting, value) in [
-        ("pg_trgm.similarity_threshold", TRIGRAM_THRESHOLD),
-        ("pg_trgm.word_similarity_threshold", WORD_TRIGRAM_THRESHOLD),
-    ] {
-        let _applied = sqlx::query("SELECT set_config($1, $2, true)")
-            .bind(setting)
-            .bind(value)
-            .execute(&mut *tx)
-            .await
-            .map_err(|source| Error::operation("trigram search", source))?;
-    }
-    Ok(())
-}
+const ESCAPE_HATCH_TIMEOUT: &str = "30s";
 
 impl crate::PostgresMemory {
     pub(crate) async fn arm_rows(
@@ -243,77 +203,160 @@ impl crate::PostgresMemory {
             options,
             tag_filter,
         };
-        let mut rows = if kind == ArmKind::Trigram {
-            let mut tx = self
-                .pool
-                .begin()
-                .await
-                .map_err(|source| Error::operation("trigram search", source))?;
-            set_trigram_thresholds(&mut tx).await?;
-            let fetched = self
-                .collect_arm_rows(&context, kind, query_vector, &mut tx)
-                .await?;
-            tx.commit()
-                .await
-                .map_err(|source| Error::operation("trigram search", source))?;
-            fetched
-        } else {
-            let mut connection = self
-                .pool
-                .acquire()
-                .await
-                .map_err(|source| Error::operation("search", source))?;
-            self.collect_arm_rows(&context, kind, query_vector, &mut connection)
-                .await?
-        };
+        let mut rows = Vec::new();
+        if matches!(options.scope, MemoryScope::Messages | MemoryScope::Both) {
+            rows.extend(self.arm_table(&context, kind, true, query_vector).await?);
+        }
+        if matches!(options.scope, MemoryScope::Summaries | MemoryScope::Both) {
+            rows.extend(self.arm_table(&context, kind, false, query_vector).await?);
+        }
         rows.sort_by(|a, b| b.arm_score.total_cmp(&a.arm_score));
         Ok(rows)
     }
 
-    async fn collect_arm_rows(
-        &self,
-        context: &ArmContext<'_>,
-        kind: ArmKind,
-        query_vector: Option<&[f32]>,
-        conn: &mut sqlx::PgConnection,
-    ) -> Result<Vec<ArmRow>, Error> {
-        let mut rows = Vec::new();
-        if matches!(
-            context.options.scope,
-            MemoryScope::Messages | MemoryScope::Both
-        ) {
-            rows.extend(
-                self.arm_table(context, kind, true, query_vector, conn)
-                    .await?,
-            );
-        }
-        if matches!(
-            context.options.scope,
-            MemoryScope::Summaries | MemoryScope::Both
-        ) {
-            rows.extend(
-                self.arm_table(context, kind, false, query_vector, conn)
-                    .await?,
-            );
-        }
-        Ok(rows)
-    }
-
+    #[expect(clippy::too_many_lines, reason = "one SQL builder covers both tables")]
     async fn arm_table(
         &self,
         context: &ArmContext<'_>,
         kind: ArmKind,
         is_message: bool,
         query_vector: Option<&[f32]>,
-        conn: &mut sqlx::PgConnection,
     ) -> Result<Vec<ArmRow>, Error> {
+        let options = context.options;
+        let tag_filter = context.tag_filter;
+        let pool = hybrid_pool(options.limit);
+        let alias = if is_message { "m" } else { "s" };
         let mut query = QueryBuilder::new("");
-        fill_arm_query(&mut query, context, kind, is_message, query_vector);
-        let fetched = query
-            .build_query_as::<ArmSqlRow>()
-            .fetch_all(&mut *conn)
-            .await
-            .map_err(|source| Error::operation("search", source))?;
+        push_select_prefix(&mut query, is_message);
+        match kind {
+            ArmKind::Fts | ArmKind::FtsExplicit => {
+                query.push(format!(
+                    "ts_rank_cd({alias}.content_tsv, plainto_tsquery('english', "
+                ));
+                query.push_bind(options.text.clone());
+                query.push(if is_message {
+                    "), 32)::float8"
+                } else {
+                    "))::float8"
+                });
+            }
+            ArmKind::Trigram => {
+                if is_message {
+                    query.push("GREATEST(similarity(m.content, ");
+                    query.push_bind(options.text.clone());
+                    query.push("), similarity(coalesce(m.tool_result, ''), ");
+                    query.push_bind(options.text.clone());
+                    query.push("))::float8");
+                } else {
+                    query.push("similarity(s.content, ");
+                    query.push_bind(options.text.clone());
+                    query.push(")::float8");
+                }
+            }
+            ArmKind::Regex => {
+                query.push("1.0::float8");
+            }
+        }
+        query.push(" AS score, ");
+        if let Some(vector) = query_vector.map(HalfVector::from_f32_slice) {
+            let distance = format!("{alias}.embedding");
+            push_embedded_semantic(&mut query, &distance, alias, &vector);
+        } else {
+            query.push(semantic_floor(alias));
+            query.push("::float8 AS semantic, ");
+        }
+        query.push(format!("{} FROM ", recency_columns(alias, is_message)));
+        query.push(if is_message {
+            "rh_messages m"
+        } else {
+            "rh_summaries s"
+        });
+        query.push(" WHERE ");
+        if let Some(filter) = tag_filter {
+            filter.push_condition(&mut query, is_message);
+        } else {
+            query.push("true");
+        }
+        match kind {
+            ArmKind::Fts | ArmKind::FtsExplicit => {
+                query.push(" AND ");
+                query.push(format!(
+                    "{alias}.content_tsv @@ plainto_tsquery('english', "
+                ));
+                query.push_bind(options.text.clone());
+                query.push(")");
+            }
+            ArmKind::Trigram => {
+                query.push(" AND (similarity(");
+                query.push(format!("{alias}.content, "));
+                query.push_bind(options.text.clone());
+                query.push(") > 0.3");
+                if is_message {
+                    query.push(" OR similarity(coalesce(m.tool_result, ''), ");
+                    query.push_bind(options.text.clone());
+                    query.push(") > 0.3");
+                }
+                query.push(")");
+            }
+            ArmKind::Regex => {
+                query.push(" AND ");
+                if is_message {
+                    query.push("(m.content ~* ");
+                    query.push_bind(options.text.clone());
+                    query.push(" OR coalesce(m.tool_result, '') ~* ");
+                    query.push_bind(options.text.clone());
+                    query.push(")");
+                } else {
+                    query.push("s.content ~* ");
+                    query.push_bind(options.text.clone());
+                }
+            }
+        }
+        if kind == ArmKind::Fts {
+            if is_message {
+                query.push(format!(
+                    " AND CASE WHEN m.role = 'tool'
+                                THEN length(btrim(coalesce(m.tool_result, '')))
+                                ELSE length(btrim(m.content)) END >= {HYBRID_MIN_CONTENT_LEN}"
+                ));
+            } else {
+                query.push(format!(
+                    " AND length(btrim(s.content)) >= {HYBRID_MIN_CONTENT_LEN}"
+                ));
+            }
+        }
+        push_time_conditions(&mut query, options, alias);
+        if let Some(agent) = &options.agent {
+            push_agent_condition(&mut query, agent, is_message);
+        }
+        query.push(format!(" ORDER BY score DESC LIMIT {pool}"));
+        let fetched = if matches!(kind, ArmKind::Trigram | ArmKind::Regex) {
+            let mut tx = self
+                .pool
+                .begin()
+                .await
+                .map_err(|source| Error::operation("search", source))?;
+            sqlx::query("select set_config('statement_timeout', $1, true)")
+                .bind(ESCAPE_HATCH_TIMEOUT)
+                .execute(&mut *tx)
+                .await
+                .map_err(|source| Error::operation("search", source))?;
+            let rows = query
+                .build_query_as::<ArmSqlRow>()
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(|source| Error::operation("search", source))?;
+            tx.commit()
+                .await
+                .map_err(|source| Error::operation("search", source))?;
+            rows
+        } else {
+            query
+                .build_query_as::<ArmSqlRow>()
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|source| Error::operation("search", source))?
+        };
         fetched
             .into_iter()
             .map(|row| row.into_arm(is_message))
@@ -449,150 +492,6 @@ impl crate::PostgresMemory {
             .map_err(|source| Error::operation("chunk search", source))?;
         fetched.into_iter().map(|row| row.into_arm(true)).collect()
     }
-}
-
-#[expect(clippy::too_many_lines, reason = "one SQL builder covers both tables")]
-fn fill_arm_query(
-    query: &mut QueryBuilder<sqlx::Postgres>,
-    context: &ArmContext<'_>,
-    kind: ArmKind,
-    is_message: bool,
-    query_vector: Option<&[f32]>,
-) {
-    let options = context.options;
-    let tag_filter = context.tag_filter;
-    let pool = hybrid_pool(options.limit);
-    let alias = if is_message { "m" } else { "s" };
-    push_select_prefix(query, is_message);
-    match kind {
-        ArmKind::Fts | ArmKind::FtsExplicit => {
-            query.push(format!(
-                "ts_rank_cd({alias}.content_tsv, plainto_tsquery('english', "
-            ));
-            query.push_bind(options.text.clone());
-            query.push(if is_message {
-                "), 32)::float8"
-            } else {
-                "))::float8"
-            });
-        }
-        ArmKind::Trigram => {
-            query.push("GREATEST(");
-            push_trigram_score(query, &format!("{alias}.content"), &options.text);
-            if is_message {
-                query.push(", ");
-                push_trigram_score(query, "coalesce(m.tool_result, '')", &options.text);
-            }
-            query.push(")::float8");
-        }
-        ArmKind::Regex => {
-            query.push("1.0::float8");
-        }
-    }
-    query.push(" AS score, ");
-    if let Some(vector) = query_vector.map(HalfVector::from_f32_slice) {
-        let distance = format!("{alias}.embedding");
-        push_embedded_semantic(query, &distance, alias, &vector);
-    } else {
-        query.push(semantic_floor(alias));
-        query.push("::float8 AS semantic, ");
-    }
-    query.push(format!("{} FROM ", recency_columns(alias, is_message)));
-    query.push(if is_message {
-        "rh_messages m"
-    } else {
-        "rh_summaries s"
-    });
-    query.push(" WHERE ");
-    if let Some(filter) = tag_filter {
-        filter.push_condition(query, is_message);
-    } else {
-        query.push("true");
-    }
-    match kind {
-        ArmKind::Fts | ArmKind::FtsExplicit => {
-            query.push(" AND ");
-            query.push(format!(
-                "{alias}.content_tsv @@ plainto_tsquery('english', "
-            ));
-            query.push_bind(options.text.clone());
-            query.push(")");
-        }
-        ArmKind::Trigram => {
-            query.push(" AND (");
-            push_trigram_match(query, &format!("{alias}.content"), &options.text);
-            if is_message {
-                query.push(" OR (m.tool_result IS NOT NULL AND length(m.tool_result) > 0 AND (");
-                push_trigram_match(query, "m.tool_result", &options.text);
-                query.push("))");
-            }
-            query.push(")");
-        }
-        ArmKind::Regex => {
-            query.push(" AND ");
-            if is_message {
-                query.push("(m.content ~* ");
-                query.push_bind(options.text.clone());
-                query.push(" OR coalesce(m.tool_result, '') ~* ");
-                query.push_bind(options.text.clone());
-                query.push(")");
-            } else {
-                query.push("s.content ~* ");
-                query.push_bind(options.text.clone());
-            }
-        }
-    }
-    if kind == ArmKind::Fts {
-        if is_message {
-            query.push(format!(
-                " AND CASE WHEN m.role = 'tool'
-                            THEN length(btrim(coalesce(m.tool_result, '')))
-                            ELSE length(btrim(m.content)) END >= {HYBRID_MIN_CONTENT_LEN}"
-            ));
-        } else {
-            query.push(format!(
-                " AND length(btrim(s.content)) >= {HYBRID_MIN_CONTENT_LEN}"
-            ));
-        }
-    }
-    push_time_conditions(query, options, alias);
-    if let Some(agent) = &options.agent {
-        push_agent_condition(query, agent, is_message);
-    }
-    query.push(format!(" ORDER BY score DESC LIMIT {pool}"));
-}
-
-#[cfg(test)]
-pub(crate) async fn explain_arm(
-    conn: &mut sqlx::PgConnection,
-    options: &SearchOptions,
-    is_message: bool,
-) -> Result<String, Error> {
-    let context = ArmContext {
-        options,
-        tag_filter: None,
-    };
-    set_trigram_thresholds(conn).await?;
-    let _seqscan = sqlx::query("SELECT set_config('enable_seqscan', 'off', true)")
-        .execute(&mut *conn)
-        .await
-        .map_err(|source| Error::operation("trigram explain", source))?;
-    let mut query = QueryBuilder::new("EXPLAIN (FORMAT TEXT) ");
-    fill_arm_query(&mut query, &context, ArmKind::Trigram, is_message, None);
-    let rows = query
-        .build()
-        .fetch_all(&mut *conn)
-        .await
-        .map_err(|source| Error::operation("trigram explain", source))?;
-    let mut plan = String::new();
-    for row in rows {
-        let line: String = row
-            .try_get("QUERY PLAN")
-            .map_err(|source| Error::operation("trigram explain", source))?;
-        plan.push_str(&line);
-        plan.push('\n');
-    }
-    Ok(plan)
 }
 
 fn merge_chunk_arm(parents: Vec<ArmRow>, chunks: Vec<ArmRow>) -> Vec<ArmRow> {
