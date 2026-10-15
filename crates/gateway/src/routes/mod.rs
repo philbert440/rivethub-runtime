@@ -35,6 +35,7 @@ pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
     audio::mount(harnesses::mount(files::mount(wiki::router())))
         .nest("/api/agents", agents::router())
         .merge(devices::router())
+        .merge(ca::router())
 }
 
 pub(crate) fn mount(router: Router<Arc<Gateway>>) -> Router<Arc<Gateway>> {

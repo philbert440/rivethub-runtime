@@ -87,7 +87,6 @@ async fn sign_rate_limit_refuses_without_calling_the_authority_again() -> Result
 fn out_of_slice_scenarios_are_named_and_explained() -> Result {
     let entries: Vec<Skipped> = serde_json::from_str(include_str!("fixtures/ca/skipped.json"))?;
     let expected = [
-        "composition_mounts_the_ca_router",
         "crl_reload_without_listener_restart",
         "mesh_channel_optional_client_certificates",
     ];
