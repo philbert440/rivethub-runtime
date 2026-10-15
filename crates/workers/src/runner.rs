@@ -12,6 +12,7 @@ use kernel::queue::ClaimedJob;
 use kernel::queue::FixedJob;
 use kernel::queue::JobId;
 use kernel::queue::JobName;
+use kernel::queue::JobNotifications;
 use kernel::queue::JobQueue;
 use kernel::queue::WorkerRole;
 use tokio::sync::Mutex;
@@ -131,10 +132,6 @@ where
         }
     }
 
-    pub fn wake(&self) {
-        self.wake.notify_one();
-    }
-
     #[must_use]
     pub fn with_wiki_builder(mut self, deps: WikiBuilderDeps) -> Self {
         self.wiki = Some(deps);
@@ -147,22 +144,32 @@ where
     }
 
     pub async fn run(&self, cancel: CancellationToken) -> Result<(), WorkerError> {
-        let mut roles = self.config.role.claim_roles()?;
-        if self.wiki.is_none() {
-            roles.retain(|role| *role != WorkerRole::WikiBuilder);
-        }
-        if roles.is_empty() {
-            return Err(WorkerError::RoleUnavailable {
-                role: self.config.role,
+        let roles = self.config.role.claim_roles()?;
+        if self.wiki.is_none() && roles.contains(&WorkerRole::WikiBuilder) {
+            return Err(WorkerError::MissingDependencies {
+                role: ProcessRole::WikiBuilder,
             });
         }
         let permits =
             usize::try_from(self.config.concurrency).map_err(|_| WorkerError::Concurrency)?;
         let semaphore = Arc::new(Semaphore::new(permits));
+        let cancel = cancel.child_token();
         let mut tasks = JoinSet::new();
+        let mut notifications = tokio::select! {
+            biased;
+            () = cancel.cancelled() => return Ok(()),
+            result = self.queue.subscribe() => result.map_err(WorkerError::queue)?,
+        };
         let outcome = self
-            .claim_loop(&roles, &semaphore, &mut tasks, &cancel)
+            .claim_loop(
+                &roles,
+                &semaphore,
+                &mut tasks,
+                notifications.as_mut(),
+                &cancel,
+            )
             .await;
+        cancel.cancel();
         let reaped = self.reap(&mut tasks, true).await;
         outcome.and(reaped)
     }
@@ -172,6 +179,7 @@ where
         roles: &[WorkerRole],
         semaphore: &Arc<Semaphore>,
         tasks: &mut JoinSet<Result<(), WorkerError>>,
+        notifications: &mut dyn JobNotifications,
         cancel: &CancellationToken,
     ) -> Result<(), WorkerError> {
         loop {
@@ -185,7 +193,7 @@ where
             let Some(job) = self.claim_one(roles).await? else {
                 drop(permit);
                 self.publish_idle(tasks.is_empty());
-                if !self.park(cancel).await {
+                if !self.park(notifications, cancel).await? {
                     return Ok(());
                 }
                 continue;
@@ -213,9 +221,6 @@ where
 
     async fn claim_one(&self, roles: &[WorkerRole]) -> Result<Option<ClaimedJob>, WorkerError> {
         let count = roles.len();
-        if count == 0 {
-            return Ok(None);
-        }
         let start = self.cursor.fetch_add(1, Ordering::Relaxed) % count;
         for role in roles.iter().cycle().skip(start).take(count) {
             if let Some(job) = self.queue.claim(*role).await.map_err(WorkerError::queue)? {
@@ -259,12 +264,17 @@ where
         });
     }
 
-    async fn park(&self, cancel: &CancellationToken) -> bool {
+    async fn park(
+        &self,
+        notifications: &mut dyn JobNotifications,
+        cancel: &CancellationToken,
+    ) -> Result<bool, WorkerError> {
         tokio::select! {
             biased;
-            () = cancel.cancelled() => false,
-            () = self.wake.notified() => true,
-            () = tokio::time::sleep(self.config.poll_interval) => true,
+            () = cancel.cancelled() => Ok(false),
+            notification = notifications.recv() => notification.map(|()| true).map_err(WorkerError::queue),
+            () = self.wake.notified() => Ok(true),
+            () = tokio::time::sleep(self.config.poll_interval) => Ok(true),
         }
     }
 
@@ -390,7 +400,7 @@ async fn dispatch<Q: JobQueue>(
     };
     match &job.name {
         JobName::Fixed(FixedJob::ExtractWiki | FixedJob::EnqueueWikiBackfill) => {
-            let wiki = env.wiki.as_ref().ok_or(WorkerError::RoleUnavailable {
+            let wiki = env.wiki.as_ref().ok_or(WorkerError::MissingDependencies {
                 role: ProcessRole::WikiBuilder,
             })?;
             let wiki_env = WikiBuilderEnv {

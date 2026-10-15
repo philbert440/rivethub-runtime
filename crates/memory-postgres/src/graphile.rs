@@ -11,6 +11,19 @@ use sqlx::PgPool;
 use std::str::FromStr;
 use wire::JsonObject;
 
+struct Notifications(sqlx::postgres::PgListener);
+
+#[async_trait::async_trait]
+impl kernel::queue::JobNotifications for Notifications {
+    async fn recv(&mut self) -> Result<(), kernel::queue::JobQueueError> {
+        self.0
+            .recv()
+            .await
+            .map(|_| ())
+            .map_err(|source| kernel::queue::JobQueueError::Unavailable(Box::new(source)))
+    }
+}
+
 #[derive(Debug, sqlx::FromRow)]
 struct QueuedJob {
     id: i64,
@@ -68,6 +81,19 @@ impl GraphileQueue {
             pool,
             worker: uuid::Uuid::new_v4().to_string(),
         }
+    }
+
+    pub(crate) async fn subscribe(
+        &self,
+    ) -> Result<Box<dyn kernel::queue::JobNotifications>, Error> {
+        let mut listener = sqlx::postgres::PgListener::connect_with(&self.pool)
+            .await
+            .map_err(|source| Error::operation("queue listen", source))?;
+        listener
+            .listen("jobs:insert")
+            .await
+            .map_err(|source| Error::operation("queue listen", source))?;
+        Ok(Box::new(Notifications(listener)))
     }
 
     pub(crate) async fn schema_present(pool: &PgPool) -> Result<bool, Error> {

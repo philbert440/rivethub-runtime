@@ -90,6 +90,7 @@ pub struct SqliteStore {
     embed: Arc<AtomicBool>,
     claims: Arc<ClaimIds>,
     clock: SharedClock,
+    notifications: tokio::sync::watch::Sender<()>,
 }
 
 impl SqliteStore {
@@ -215,6 +216,7 @@ fn from_conn(conn: Connection, clock: SharedClock) -> SqliteStore {
         embed: Arc::new(AtomicBool::new(false)),
         claims: Arc::new(ClaimIds::default()),
         clock,
+        notifications: tokio::sync::watch::channel(()).0,
     }
 }
 

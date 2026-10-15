@@ -10,6 +10,9 @@
 )]
 mod common;
 
+#[path = "common/wiki.rs"]
+mod wiki;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -108,7 +111,7 @@ fn unknown_roles_list_the_enum_and_zero_concurrency_is_rejected() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn roles_without_a_handler_refuse_to_start() {
+async fn missing_wiki_dependencies_refuse_to_start() {
     let summarizer = ProcessRole::Summarizer
         .claim_roles()
         .expect("the summarizer has a handler");
@@ -121,7 +124,7 @@ async fn roles_without_a_handler_refuse_to_start() {
         .expect_err("unavailable");
     assert!(matches!(
         error,
-        WorkerError::RoleUnavailable {
+        WorkerError::MissingDependencies {
             role: ProcessRole::WikiBuilder
         }
     ));
@@ -134,48 +137,20 @@ async fn roles_without_a_handler_refuse_to_start() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn all_claims_every_role_that_has_a_handler() {
+async fn all_refuses_to_start_when_wiki_dependencies_are_missing() {
     let rig = rig(ProcessRole::All, 1, fnv_provider());
-    rig.store
-        .insert(EmbedTable::Messages, "m", "hello", None)
+    let error = rig
+        .runner
+        .run(CancellationToken::new())
         .await
-        .expect("seed");
-    let embed = rig
-        .queue
-        .push(
-            fixed(FixedJob::EmbedTarget),
-            target_payload("ros_messages", "m"),
-            5,
-        )
-        .await;
-    let compact = rig
-        .queue
-        .push(
-            fixed(FixedJob::CompactConversation),
-            JsonObject::default(),
-            5,
-        )
-        .await;
-    let tags = rig
-        .queue
-        .push(fixed(FixedJob::SuggestTags), JsonObject::default(), 2)
-        .await;
-    let (cancel, run) = spawn(&rig);
-    rig.queue.wait_phase(embed, Phase::Done).await;
-    rig.queue.wait_phase(compact, Phase::Backoff).await;
-    rig.queue.wait_phase(tags, Phase::Backoff).await;
-    let failed = rig.queue.view(compact).await;
-    assert_eq!(
-        failed.error.as_deref(),
-        Some("job payload is not a summarizer job: missing field `conversationId`")
-    );
-    let tagged = rig.queue.view(tags).await;
-    assert_eq!(
-        tagged.error.as_deref(),
-        Some("job payload is not a suggest-tags job: missing field `summaryId`")
-    );
-    assert_eq!(rig.queue.claims(), 3);
-    finish(cancel, run).await;
+        .expect_err("missing wiki dependencies");
+    assert!(matches!(
+        error,
+        WorkerError::MissingDependencies {
+            role: ProcessRole::WikiBuilder
+        }
+    ));
+    assert_eq!(rig.queue.claims(), 0);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -362,7 +337,7 @@ async fn the_last_attempt_is_dead_and_not_completed() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn wake_claims_without_waiting_out_the_poll() {
+async fn queue_notification_claims_without_waiting_out_the_poll() {
     let rig = rig(ProcessRole::Embedder, 1, fnv_provider());
     let mut idle = rig.runner.idle();
     let (cancel, run) = spawn(&rig);
@@ -375,7 +350,6 @@ async fn wake_claims_without_waiting_out_the_poll() {
             5,
         )
         .await;
-    rig.runner.wake();
     rig.queue.wait_phase(id, Phase::Done).await;
     assert_eq!(rig.queue.claims(), 1);
     finish(cancel, run).await;
@@ -389,7 +363,7 @@ async fn a_parked_runner_waits_out_the_poll_interval() {
     wait_bool(&mut idle, true).await;
     let id = rig
         .queue
-        .push(
+        .push_without_notification(
             fixed(FixedJob::EmbedTarget),
             target_payload("ros_messages", "m"),
             5,
@@ -494,5 +468,72 @@ fn spawn(rig: &Rig) -> (CancellationToken, JoinHandle<Result<(), WorkerError>>) 
 
 async fn finish(cancel: CancellationToken, run: JoinHandle<Result<(), WorkerError>>) {
     cancel.cancel();
-    run.await.expect("join").expect("runner");
+    tokio::time::timeout(Duration::from_secs(5), run)
+        .await
+        .expect("runner stops")
+        .expect("join")
+        .expect("runner");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn all_claims_every_role_that_has_a_handler() {
+    let mut rig = rig(ProcessRole::All, 1, fnv_provider());
+    let Ok(runner) = Arc::try_unwrap(rig.runner) else {
+        panic!("unstarted runner is owned");
+    };
+    rig.runner = Arc::new(
+        runner.with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
+            store: Arc::new(wiki::WikiStore::default()),
+            model: "wiki-model".to_owned(),
+        }),
+    );
+    rig.store
+        .insert(EmbedTable::Messages, "m", "hello", None)
+        .await
+        .expect("seed");
+    let embed = rig
+        .queue
+        .push(
+            fixed(FixedJob::EmbedTarget),
+            target_payload("ros_messages", "m"),
+            5,
+        )
+        .await;
+    let compact = rig
+        .queue
+        .push(
+            fixed(FixedJob::CompactConversation),
+            JsonObject::default(),
+            5,
+        )
+        .await;
+    let tags = rig
+        .queue
+        .push(fixed(FixedJob::SuggestTags), JsonObject::default(), 2)
+        .await;
+    let wiki_job = rig
+        .queue
+        .push(
+            fixed(FixedJob::EnqueueWikiBackfill),
+            JsonObject::default(),
+            2,
+        )
+        .await;
+    let (cancel, run) = spawn(&rig);
+    rig.queue.wait_phase(wiki_job, Phase::Done).await;
+    rig.queue.wait_phase(embed, Phase::Done).await;
+    rig.queue.wait_phase(compact, Phase::Backoff).await;
+    rig.queue.wait_phase(tags, Phase::Backoff).await;
+    let failed = rig.queue.view(compact).await;
+    assert_eq!(
+        failed.error.as_deref(),
+        Some("job payload is not a summarizer job: missing field `conversationId`")
+    );
+    let tagged = rig.queue.view(tags).await;
+    assert_eq!(
+        tagged.error.as_deref(),
+        Some("job payload is not a suggest-tags job: missing field `summaryId`")
+    );
+    assert_eq!(rig.queue.claims(), 4);
+    finish(cancel, run).await;
 }

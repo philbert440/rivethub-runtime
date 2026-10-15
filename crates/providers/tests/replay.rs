@@ -65,7 +65,7 @@ async fn probe_replays_against_the_recording() {
         chunks: Vec::new(),
     };
     drop(server);
-    testkit::provider::replay(&recorded, |_| turn).expect("the probe replays");
+    common::replay(&recorded, &turn);
 }
 
 #[tokio::test]

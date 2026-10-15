@@ -166,7 +166,7 @@ impl ModelProvider for OpenAiCompatible {
 
     async fn list_models(&self) -> Result<Vec<String>, ModelProviderError> {
         if !self.probe_models {
-            return Ok(Vec::new());
+            return Ok(vec![self.model.clone()]);
         }
         let url = body::models_url(&self.base_url, &self.api_prefix);
         let response = token::dispatch(&self.auth, || self.client.get(url.clone())).await?;

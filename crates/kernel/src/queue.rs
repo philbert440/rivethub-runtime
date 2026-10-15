@@ -182,6 +182,8 @@ pub struct ClaimedJob {
 
 #[async_trait]
 pub trait JobQueue: Send + Sync {
+    async fn subscribe(&self) -> Result<Box<dyn JobNotifications>, JobQueueError>;
+
     async fn enqueue(&self, job: Job) -> Result<(), JobQueueError>;
 
     async fn claim(&self, role: WorkerRole) -> Result<Option<ClaimedJob>, JobQueueError>;
@@ -195,4 +197,18 @@ pub trait JobQueue: Send + Sync {
         name: &JobName,
         dead_before: DateTime<Utc>,
     ) -> Result<u64, JobQueueError>;
+}
+
+#[async_trait]
+pub trait JobNotifications: Send {
+    async fn recv(&mut self) -> Result<(), JobQueueError>;
+}
+
+#[async_trait]
+impl JobNotifications for tokio::sync::watch::Receiver<()> {
+    async fn recv(&mut self) -> Result<(), JobQueueError> {
+        self.changed()
+            .await
+            .map_err(|source| JobQueueError::Unavailable(Box::new(source)))
+    }
 }

@@ -67,3 +67,9 @@ the fixture README explicitly excludes CLI subprocesses. The named skip table
 covers only the HTTP availability probe and is checked against the fixture
 inventory. Additional tests cover permissions, lifecycle errors, cancellation,
 concurrency, Unicode, usage, config typing, discovery and embeddings.
+
+OpenAI-compatible discovery returns the configured model when `probe_models` is
+false and makes no HTTP request. Embedding replies require typed numeric vectors
+and explicit, unique indices covering every input; malformed replies fail instead
+of selecting slot zero. Token errors retain their original typed sources across
+concurrent callers.

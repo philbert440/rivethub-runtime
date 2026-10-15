@@ -36,6 +36,8 @@ async fn binary_dispatch_preserves_stdout_stderr_and_exit_codes() {
                 .args(&args)
                 .env_clear()
                 .env("HOME", home.path())
+                .env("TOKIO_WORKER_THREADS", "2")
+                .kill_on_drop(true)
                 .current_dir(home.path())
                 .output(),
         )
@@ -64,6 +66,8 @@ async fn one_release_compatibility_binary_dispatches_the_same_tree() {
         Duration::from_secs(10),
         Command::new(env!("CARGO_BIN_EXE_rivetos"))
             .arg("version")
+            .env("TOKIO_WORKER_THREADS", "2")
+            .kill_on_drop(true)
             .output(),
     )
     .await

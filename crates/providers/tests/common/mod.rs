@@ -1,8 +1,6 @@
 use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
-use std::time::Instant;
 
 use axum::body::Body;
 use axum::body::Bytes;
@@ -164,17 +162,12 @@ pub(crate) async fn fixed_status_server(status: u16, body: String) -> FixedStatu
 
 #[derive(Clone, Default)]
 pub(crate) struct Disconnect {
-    flag: Arc<Mutex<bool>>,
-    done: Arc<Mutex<bool>>,
+    closed: tokio_util::sync::CancellationToken,
 }
 
 impl Disconnect {
-    pub(crate) fn is_disconnected(&self) -> bool {
-        *self.flag.lock()
-    }
-
-    pub(crate) fn wrote_done(&self) -> bool {
-        *self.done.lock()
+    pub(crate) async fn wait(&self) {
+        self.closed.cancelled().await;
     }
 }
 
@@ -182,7 +175,7 @@ struct DisconnectGuard(Disconnect);
 
 impl Drop for DisconnectGuard {
     fn drop(&mut self) {
-        *self.0.flag.lock() = true;
+        self.0.closed.cancel();
     }
 }
 
@@ -197,35 +190,17 @@ async fn slow_handler(
     let call = capture(request).await;
     recorder.lock().push(call);
     let event = body.as_bytes().to_vec();
-    let marker = disconnect.clone();
-    let stream = unfold((0u8, event, DisconnectGuard(disconnect)), move |state| {
-        let marker = marker.clone();
-        async move {
-            let (phase, event, guard) = state;
-            if phase == 0 {
-                return Some((
-                    Ok::<_, std::io::Error>(Bytes::from(event.clone())),
-                    (1, event, guard),
-                ));
+    let stream = unfold(
+        (Some(event), DisconnectGuard(disconnect)),
+        |(event, guard)| async move {
+            if let Some(event) = event {
+                return Some((Ok::<_, std::io::Error>(Bytes::from(event)), (None, guard)));
             }
-            #[cfg_attr(
-                dylint_lib = "rr_lints",
-                expect(
-                    sleep,
-                    reason = "the fixture holds the stream open past the client's idle timeout; the wait is the fixture"
-                )
-            )]
-            tokio::time::sleep(Duration::from_secs(30)).await;
-            if phase == 1 {
-                *marker.done.lock() = true;
-                return Some((
-                    Ok(Bytes::from_static(b"data: [DONE]\n\n")),
-                    (2, event, guard),
-                ));
-            }
-            Some((Ok(Bytes::new()), (2, event, guard)))
-        }
-    });
+            std::future::pending::<()>().await;
+            drop(guard);
+            None
+        },
+    );
     streaming_response(stream)
 }
 
@@ -235,25 +210,11 @@ async fn streaming_handler(
 ) -> axum::response::Response {
     let call = capture(request).await;
     recorder.lock().push(call);
-    let text = body.as_bytes().to_vec();
-    let stream = unfold((0usize, text), |state| async move {
-        let (index, text) = state;
-        if index > 0 {
-            #[cfg_attr(
-                dylint_lib = "rr_lints",
-                expect(
-                    sleep,
-                    reason = "chunks arrive one at a time; the 20 ms pacing makes the client read them separately"
-                )
-            )]
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-        Some((
-            Ok::<_, std::io::Error>(Bytes::from(text.clone())),
-            (index + 1, text),
-        ))
-    });
-    streaming_response(stream)
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+        body.as_ref().clone(),
+    )
+        .into_response()
 }
 
 fn streaming_response(
@@ -300,54 +261,6 @@ async fn capture(request: axum::extract::Request) -> CapturedCall {
     }
 }
 
-pub(crate) async fn wait_for(condition: impl Fn() -> bool, timeout: Duration) -> bool {
-    let deadline = Instant::now() + timeout;
-    loop {
-        if condition() {
-            return true;
-        }
-        if Instant::now() >= deadline {
-            return condition();
-        }
-        #[cfg_attr(
-            dylint_lib = "rr_lints",
-            expect(
-                sleep,
-                reason = "the stub's state change has no awaitable event; the 5 ms tick is the poll interval bounded by the timeout"
-            )
-        )]
-        tokio::time::sleep(Duration::from_millis(5)).await;
-    }
-}
-
-pub(crate) fn canonicalize_arguments(value: &mut Json) {
-    match value {
-        Json::Object(map) => {
-            for (key, member) in map.iter_mut() {
-                if key == "arguments"
-                    && let Some(text) = member.as_str()
-                    && let Ok(parsed) = serde_json::from_str::<Json>(text)
-                {
-                    *member = Json::String(parsed.to_string());
-                }
-                canonicalize_arguments(member);
-            }
-        }
-        Json::Array(items) => {
-            for item in items {
-                canonicalize_arguments(item);
-            }
-        }
-        Json::Null | Json::Bool(_) | Json::Number(_) | Json::String(_) => {}
-    }
-}
-
-pub(crate) fn canonical_body(body: &str) -> String {
-    let mut parsed: Json = demand(serde_json::from_str(body), "recorded body parses");
-    canonicalize_arguments(&mut parsed);
-    parsed.to_string()
-}
-
 pub(crate) fn chat_provider(addr: SocketAddr, max_tokens: Option<u32>) -> OpenAiCompatible {
     let provider = config::provider::OpenaiProvider {
         model: Some("test-model".to_owned()),
@@ -388,7 +301,7 @@ pub(crate) fn scenario_record(scenario: &str) -> ProviderScenario {
             testkit::strip_b8_deltas(&request.body),
             "recorded body strips",
         );
-        request.body = canonical_body(&stripped);
+        request.body = stripped;
     }
     if let Some(chunks) = recorded.chunks.as_mut() {
         chunks.retain(|chunk| chunk.get("type").and_then(Json::as_str) != Some("tool_call_done"));
@@ -407,13 +320,12 @@ pub(crate) fn captured_requests(recorder: &Recorder) -> Vec<CapturedRequest> {
                 Some(value) => vec![("authorization".to_owned(), value.clone())],
                 None => Vec::new(),
             },
-            body: if call.body.is_empty() {
-                String::new()
-            } else {
-                canonical_body(&call.body)
-            },
+            body: call.body.clone(),
         })
         .collect()
 }
 
 include!("scenario.rs");
+
+mod compare;
+pub(crate) use compare::replay;

@@ -42,12 +42,8 @@ impl ProcessRole {
     }
 
     pub fn claim_roles(self) -> Result<Vec<WorkerRole>, WorkerError> {
-        let runnable: Vec<WorkerRole> = self
-            .selected()
-            .into_iter()
-            .filter(|role| role_has_handler(*role))
-            .collect();
-        if runnable.is_empty() {
+        let runnable = self.selected();
+        if runnable.iter().any(|role| !role_has_handler(*role)) {
             return Err(WorkerError::RoleUnavailable { role: self });
         }
         Ok(runnable)

@@ -220,7 +220,9 @@ async fn mint(argv: &[String], timeout: Duration) -> Result<String, TokenError> 
         Err(error) => return stopped(stop(&mut child).await, error),
     };
     let status = match tokio::time::timeout_at(deadline, child.wait()).await {
-        Ok(status) => status.map_err(|source| TokenError::Read { source })?,
+        Ok(status) => status.map_err(|source| TokenError::Read {
+            source: Arc::new(source),
+        })?,
         Err(elapsed) => return stopped(stop(&mut child).await, timed_out(elapsed)),
     };
     if !status.success() {
@@ -240,9 +242,9 @@ fn spawn(argv: &[String]) -> Result<tokio::process::Child, TokenError> {
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .kill_on_drop(true);
-    command
-        .spawn()
-        .map_err(|source| TokenError::Spawn { source })
+    command.spawn().map_err(|source| TokenError::Spawn {
+        source: Arc::new(source),
+    })
 }
 
 async fn read_with_deadline(
@@ -265,7 +267,9 @@ async fn read_capped(
         let read = stdout
             .read(&mut chunk)
             .await
-            .map_err(|source| TokenError::Read { source })?;
+            .map_err(|source| TokenError::Read {
+                source: Arc::new(source),
+            })?;
         if read == 0 {
             return Ok(buf);
         }
@@ -282,29 +286,31 @@ async fn read_capped(
     }
 }
 
-async fn stop(child: &mut tokio::process::Child) -> Result<(), std::io::Error> {
+async fn stop(child: &mut tokio::process::Child) -> Result<(), TokenError> {
     let kill = child.start_kill();
     let waited = child.wait().await;
     match (kill, waited) {
         (_, Ok(_)) => Ok(()),
-        (Ok(()), Err(source)) => Err(source),
-        (Err(kill_error), Err(wait_error)) => Err(std::io::Error::new(
-            wait_error.kind(),
-            format!("token_command kill failed: {kill_error}; wait failed: {wait_error}"),
-        )),
+        (Ok(()), Err(source)) => Err(TokenError::Stop {
+            source: Arc::new(source),
+        }),
+        (Err(kill), Err(source)) => Err(TokenError::StopAfterKill {
+            kill: Arc::new(kill),
+            source: Arc::new(source),
+        }),
     }
 }
 
-fn stopped(cleanup: Result<(), std::io::Error>, error: TokenError) -> Result<String, TokenError> {
+fn stopped(cleanup: Result<(), TokenError>, error: TokenError) -> Result<String, TokenError> {
     match cleanup {
         Ok(()) => Err(error),
-        Err(source) => Err(TokenError::Stop { source }),
+        Err(error) => Err(error),
     }
 }
 
 fn timed_out(elapsed: tokio::time::error::Elapsed) -> TokenError {
     TokenError::TimedOut {
-        source: std::io::Error::new(std::io::ErrorKind::TimedOut, elapsed),
+        source: Arc::new(elapsed),
     }
 }
 

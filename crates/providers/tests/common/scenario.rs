@@ -235,9 +235,7 @@ pub(crate) async fn drive(scenario: &'static str) {
         chunks,
     };
     drop(server);
-    if let Err(mismatch) = testkit::provider::replay(&recorded, |_| turn) {
-        halt(&format!("the scenario replays: {mismatch:?}"));
-    }
+    replay(&recorded, &turn);
 }
 
 pub(crate) async fn model_request_to_stream(

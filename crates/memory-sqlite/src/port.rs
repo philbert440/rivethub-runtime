@@ -21,6 +21,10 @@ use crate::queue::JobPayload;
 
 #[async_trait]
 impl JobQueue for SqliteStore {
+    async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
+        Ok(Box::new(self.notifications.subscribe()))
+    }
+
     async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
         let payload = serde_json::to_string(&job.payload).map_err(|source| {
             unavailable(SqliteError::Encode {

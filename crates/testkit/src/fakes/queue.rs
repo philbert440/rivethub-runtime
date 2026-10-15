@@ -14,13 +14,19 @@ use tokio::sync::Mutex;
 pub struct FakeJobQueue {
     jobs: Mutex<BTreeMap<JobId, Job>>,
     next_id: AtomicI64,
+    notifications: tokio::sync::watch::Sender<()>,
 }
 
 #[async_trait]
 impl JobQueue for FakeJobQueue {
+    async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
+        Ok(Box::new(self.notifications.subscribe()))
+    }
+
     async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
         let id = JobId::new(self.next_id.fetch_add(1, Ordering::Relaxed));
         self.jobs.lock().await.insert(id, job);
+        self.notifications.send_replace(());
         Ok(())
     }
 

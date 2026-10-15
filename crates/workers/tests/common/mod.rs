@@ -139,6 +139,7 @@ pub struct Queue {
     claim_error: Mutex<Option<JobQueueError>>,
     claims: AtomicUsize,
     events: watch::Sender<u64>,
+    notifications: watch::Sender<()>,
 }
 
 impl Queue {
@@ -150,10 +151,24 @@ impl Queue {
             claim_error: Mutex::new(None),
             claims: AtomicUsize::new(0),
             events,
+            notifications: watch::channel(()).0,
         }
     }
 
     pub async fn push(&self, name: JobName, payload: JsonObject, max_attempts: u32) -> JobId {
+        let id = self
+            .push_without_notification(name, payload, max_attempts)
+            .await;
+        self.notifications.send_replace(());
+        id
+    }
+
+    pub async fn push_without_notification(
+        &self,
+        name: JobName,
+        payload: JsonObject,
+        max_attempts: u32,
+    ) -> JobId {
         self.add(name, payload, 0, max_attempts, false).await
     }
 
@@ -317,10 +332,15 @@ fn missing(id: JobId) -> JobQueueError {
 
 #[async_trait]
 impl JobQueue for Queue {
+    async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
+        Ok(Box::new(self.notifications.subscribe()))
+    }
+
     async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
         let max_attempts = default_max_attempts(&job.name);
         self.add(job.name, job.payload, job.priority, max_attempts, false)
             .await;
+        self.notifications.send_replace(());
         Ok(())
     }
 

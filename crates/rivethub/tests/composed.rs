@@ -309,6 +309,8 @@ async fn check_validates_without_moving_legacy_state_or_connecting_postgres() ->
             .args(["gateway", "--check"])
             .env_clear()
             .env("HOME", home.path())
+            .env("TOKIO_WORKER_THREADS", "2")
+            .kill_on_drop(true)
             .output(),
     )
     .await??;
@@ -325,6 +327,8 @@ async fn check_validates_without_moving_legacy_state_or_connecting_postgres() ->
             .arg("gateway")
             .env_clear()
             .env("HOME", home.path())
+            .env("TOKIO_WORKER_THREADS", "2")
+            .kill_on_drop(true)
             .output(),
     )
     .await??;

@@ -152,7 +152,11 @@ pub fn retry_delay_ms(attempt: u32) -> u64 {
 
 impl SqliteStore {
     pub async fn enqueue_job(&self, job: JobInsert) -> Result<bool, SqliteError> {
-        self.with_conn(move |conn| insert_job(conn, &job)).await
+        let inserted = self.with_conn(move |conn| insert_job(conn, &job)).await?;
+        if inserted {
+            self.notifications.send_replace(());
+        }
+        Ok(inserted)
     }
 
     pub async fn claim_tasks(
@@ -222,7 +226,9 @@ impl SqliteStore {
         now: DateTime<Utc>,
     ) -> Result<(), SqliteError> {
         self.with_conn(move |conn| replace(conn, &key, &payload, run_at, now))
-            .await
+            .await?;
+        self.notifications.send_replace(());
+        Ok(())
     }
 }
 

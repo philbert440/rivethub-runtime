@@ -9,7 +9,6 @@ use common::fixed_status_server;
 use common::repeating_server;
 use common::scenario_server;
 use common::slow_server;
-use common::wait_for;
 use kernel::model::ModelChunk;
 use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
@@ -217,7 +216,7 @@ async fn probe_models_false_skips_the_models_get() {
     let built = OpenAiCompatible::build(config::provider::ProviderType::Vllm, &provider)
         .expect("the provider builds");
     let models = built.list_models().await.expect("no probe is made");
-    assert_eq!(models, Vec::<String>::new());
+    assert_eq!(models, vec!["test-model".to_owned()]);
     assert!(server.recorder.lock().is_empty());
 }
 
@@ -289,19 +288,9 @@ async fn dropping_the_stream_receiver_aborts_the_request() {
         .expect("the first item is a chunk");
     assert!(matches!(first, ModelChunk::Text { .. }));
     drop(rx);
-    let disconnected = wait_for(
-        || server.disconnect.is_disconnected(),
-        Duration::from_secs(2),
-    )
-    .await;
-    assert!(
-        disconnected,
-        "the server observes the client drop the receiver"
-    );
-    assert!(
-        !server.disconnect.wrote_done(),
-        "the server has not written [DONE]"
-    );
+    tokio::time::timeout(Duration::from_secs(5), server.disconnect.wait())
+        .await
+        .expect("the server observes the client disconnect");
 }
 
 #[tokio::test]

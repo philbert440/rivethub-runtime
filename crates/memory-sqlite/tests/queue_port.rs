@@ -230,3 +230,19 @@ async fn a_job_with_no_key_stores_null() -> TestResult {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn queue_notifications_survive_the_empty_claim_to_wait_transition() -> TestResult {
+    let opened = open()?;
+    let store = &opened.store;
+    let mut notifications = store.subscribe().await?;
+    assert!(store.claim(WorkerRole::Embedder).await?.is_none());
+    store.enqueue(job("notified", JobKeyMode::Replace)?).await?;
+    tokio::time::timeout(std::time::Duration::from_secs(5), notifications.recv()).await??;
+    let claimed = store
+        .claim(WorkerRole::Embedder)
+        .await?
+        .ok_or("claim after notification")?;
+    store.complete(claimed.id).await?;
+    Ok(())
+}

@@ -71,15 +71,20 @@ impl SqliteStore {
         let prepared = PreparedBatch::new(batch)?;
         let owner = self.owner.clone();
         let embed = self.embed_armed();
-        self.with_conn(move |conn| {
-            let tx = conn
-                .transaction()
-                .map_err(SqliteError::query("capture begin"))?;
-            let result = prepared.write(&tx, owner.as_deref(), now, embed)?;
-            tx.commit().map_err(SqliteError::query("capture commit"))?;
-            Ok(result)
-        })
-        .await
+        let result = self
+            .with_conn(move |conn| {
+                let tx = conn
+                    .transaction()
+                    .map_err(SqliteError::query("capture begin"))?;
+                let result = prepared.write(&tx, owner.as_deref(), now, embed)?;
+                tx.commit().map_err(SqliteError::query("capture commit"))?;
+                Ok(result)
+            })
+            .await?;
+        if embed {
+            self.notifications.send_replace(());
+        }
+        Ok(result)
     }
 }
 

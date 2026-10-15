@@ -22,6 +22,8 @@ pub enum WorkerError {
     UnknownRole { text: String, expected: String },
     #[error("{role} has no handler in this build")]
     RoleUnavailable { role: ProcessRole },
+    #[error("{role} dependencies were not supplied")]
+    MissingDependencies { role: ProcessRole },
     #[error("worker concurrency must be at least 1")]
     Concurrency,
     #[error("embedding width must be at least 1")]

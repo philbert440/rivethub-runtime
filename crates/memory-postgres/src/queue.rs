@@ -169,6 +169,13 @@ impl PostgresQueue {
 
 #[async_trait]
 impl JobQueue for PostgresQueue {
+    async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
+        match self {
+            Self::Graphile(queue) => queue.subscribe().await.map_err(JobQueueError::from),
+            Self::Absent => Err(absent()),
+        }
+    }
+
     async fn enqueue(&self, job: Job) -> Result<(), JobQueueError> {
         match self {
             Self::Graphile(queue) => queue
