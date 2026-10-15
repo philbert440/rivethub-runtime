@@ -40,6 +40,7 @@ pub struct SpawnSpec {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerminalState {
     Running,
+    Failed,
     Exited { code: u32 },
 }
 
@@ -70,6 +71,8 @@ pub struct AttachStream {
 }
 
 struct Inner {
+    tasks: tokio_util::task::TaskTracker,
+    shutdown: tokio_util::sync::CancellationToken,
     settings: TerminalSettings,
     plan: MuxPlan,
     state: Mutex<BTreeMap<TerminalId, Runtime>>,
@@ -105,6 +108,8 @@ impl TerminalManager {
         let (detach_tx, detach_rx) = mpsc::unbounded_channel();
         Self {
             inner: Arc::new(Inner {
+                tasks: tokio_util::task::TaskTracker::new(),
+                shutdown: tokio_util::sync::CancellationToken::new(),
                 settings,
                 plan,
                 state: Mutex::new(BTreeMap::new()),
@@ -117,17 +122,10 @@ impl TerminalManager {
         }
     }
 
-    #[must_use]
-    pub fn plan(&self) -> &MuxPlan {
-        &self.inner.plan
-    }
-
-    #[must_use]
-    pub fn settings(&self) -> &TerminalSettings {
-        &self.inner.settings
-    }
-
     pub async fn start(&self, spec: SpawnSpec) -> Result<TerminalId, Error> {
+        if self.inner.shutdown.is_cancelled() {
+            return Err(Error::ShuttingDown);
+        }
         if let MuxPlan::Unavailable(unavailable) = &self.inner.plan {
             return Err(unavailable.reason.to_error());
         }
@@ -141,11 +139,16 @@ impl TerminalManager {
             self.evict(&victim);
         }
         match &self.inner.plan {
-            MuxPlan::Direct => self.start_pty(&spec),
+            MuxPlan::Direct => {
+                let manager = self.clone();
+                self.inner
+                    .tasks
+                    .spawn_blocking(move || manager.start_pty(&spec))
+                    .await
+                    .map_err(Error::Worker)?
+            }
             MuxPlan::Herdr(setup) => self.start_herdr(setup, spec).await,
-            MuxPlan::Unavailable(_) => Err(Error::MuxUnavailable(
-                "terminal mux is unavailable".to_owned(),
-            )),
+            MuxPlan::Unavailable(unavailable) => Err(unavailable.reason.to_error()),
         }
     }
 }
@@ -181,11 +184,12 @@ impl kernel::terminal::TerminalMux for TerminalManager {
 
     async fn wait(&self, id: &TerminalId) -> Result<i32, kernel::terminal::TerminalMuxError> {
         let record = self.wait_exited(id).await?;
-        port_details(&record)?
-            .exit_code
-            .ok_or(kernel::terminal::TerminalMuxError::Unsupported(
-                "terminal still running",
-            ))
+        port_details(&record)?.exit_code.ok_or_else(|| {
+            Error::Failed {
+                terminal: id.clone(),
+            }
+            .into()
+        })
     }
     async fn spawn(
         &self,
@@ -219,7 +223,13 @@ impl kernel::terminal::TerminalMux for TerminalManager {
             .attach_stream(id)
             .map_err(kernel::terminal::TerminalMuxError::from)?;
         let (tx, rx) = mpsc::channel(CHUNK_QUEUE);
-        tokio::spawn(forward_port_attach(stream.replay, stream.live, tx));
+        let shutdown = self.inner.shutdown.clone();
+        self.inner.tasks.spawn(async move {
+            tokio::select! {
+                () = shutdown.cancelled() => {},
+                () = forward_port_attach(stream.replay, stream.live, tx) => {},
+            }
+        });
         Ok(rx)
     }
 
@@ -254,26 +264,23 @@ impl kernel::terminal::TerminalMux for TerminalManager {
     async fn list(
         &self,
     ) -> Result<Vec<kernel::terminal::PtyInfo>, kernel::terminal::TerminalMuxError> {
-        Ok(self
-            .list()
+        self.list()
             .into_iter()
             .filter_map(|record| {
-                let session = match record.session {
-                    Some(session) => {
-                        match wire::session_id::SessionId::from_str(session.as_str()) {
-                            Ok(session) => session,
-                            Err(_) => return None,
-                        }
-                    }
-                    None => return None,
-                };
-                Some(kernel::terminal::PtyInfo {
-                    id: record.id,
-                    session,
-                    running: record.state == TerminalState::Running,
-                })
+                let session = record.session?;
+                Some(
+                    wire::session_id::SessionId::from_str(session.as_str())
+                        .map(|session| kernel::terminal::PtyInfo {
+                            id: record.id,
+                            session,
+                            running: record.state == TerminalState::Running,
+                        })
+                        .map_err(|source| {
+                            kernel::terminal::TerminalMuxError::Unavailable(Box::new(source))
+                        }),
+                )
             })
-            .collect())
+            .collect()
     }
 }
 
@@ -283,6 +290,12 @@ fn port_details(
     let exit_code =
         match record.state {
             TerminalState::Running => None,
+            TerminalState::Failed => {
+                return Err(Error::Failed {
+                    terminal: record.id.clone(),
+                }
+                .into());
+            }
             TerminalState::Exited { code } => Some(i32::try_from(code).map_err(|source| {
                 kernel::terminal::TerminalMuxError::Unavailable(Box::new(source))
             })?),
@@ -312,12 +325,14 @@ async fn forward_port_attach(
 }
 
 fn roster_key_from_argv(argv: &[String]) -> Result<RosterKey, Error> {
-    let program = argv
-        .first()
-        .ok_or_else(|| Error::Spawn("argv is empty".to_owned()))?;
+    let program = argv.first().ok_or(Error::EmptyArgv)?;
     let name = Path::new(program)
         .file_name()
         .and_then(std::ffi::OsStr::to_str)
-        .unwrap_or(program);
+        .ok_or_else(|| Error::InvalidRosterKey(program.clone()))?;
     RosterKey::new(name.to_owned())
 }
+
+#[cfg(test)]
+#[path = "../../tests/manager_ttl/mod.rs"]
+mod ttl_tests;

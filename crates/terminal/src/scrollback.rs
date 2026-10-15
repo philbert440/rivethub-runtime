@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 #[derive(Debug)]
-pub struct Scrollback {
+pub(crate) struct Scrollback {
     capacity: usize,
     chunks: VecDeque<Vec<u8>>,
     held: usize,
@@ -10,7 +10,7 @@ pub struct Scrollback {
 
 impl Scrollback {
     #[must_use]
-    pub fn new(capacity: usize) -> Self {
+    pub(crate) fn new(capacity: usize) -> Self {
         Self {
             capacity: capacity.max(1),
             chunks: VecDeque::new(),
@@ -19,7 +19,7 @@ impl Scrollback {
         }
     }
 
-    pub fn push(&mut self, chunk: &[u8]) {
+    pub(crate) fn push(&mut self, chunk: &[u8]) {
         if chunk.len() >= self.capacity {
             let tail: Vec<u8> = chunk
                 .iter()
@@ -55,7 +55,7 @@ impl Scrollback {
     }
 
     #[must_use]
-    pub fn snapshot(&self) -> Vec<u8> {
+    pub(crate) fn snapshot(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.held);
         for chunk in &self.chunks {
             out.extend_from_slice(chunk);
@@ -63,13 +63,13 @@ impl Scrollback {
         out
     }
 
-    #[must_use]
-    pub fn held(&self) -> usize {
+    #[cfg(test)]
+    fn held(&self) -> usize {
         self.held
     }
 
-    #[must_use]
-    pub fn dropped(&self) -> usize {
+    #[cfg(test)]
+    fn dropped(&self) -> usize {
         self.dropped
     }
 }

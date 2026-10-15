@@ -11,7 +11,6 @@ use terminal::RosterKey;
 use terminal::SessionKey;
 use terminal::TerminalSettings;
 use testkit::Masks;
-use testkit::json_masked_eq;
 use testkit::masked_eq;
 
 #[test]
@@ -123,6 +122,7 @@ fn child_env_matches_the_recorded_envdump_lines() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let home = tmp.path().join("home");
     let shared = tmp.path().join("shared");
+    let ca = shared.join("rivet-ca/intermediate/chain.pem");
     let settings = envdump_settings(
         home.to_str().expect("utf8 home"),
         shared.to_str().expect("utf8 shared"),
@@ -141,7 +141,9 @@ fn child_env_matches_the_recorded_envdump_lines() {
         ("RIVETHUB_USER_TOKEN".to_owned(), "roster-token".to_owned()),
         ("RIVETHUB_USER_DBS".to_owned(), "denied".to_owned()),
     ]);
-    let child = settings.child_env(Some(&session), &roster, &work, &entry);
+    let child = settings
+        .child_env(Some(&session), &roster, &work, &entry)
+        .expect("child environment");
     let text = |name: &str| {
         child
             .get(name)
@@ -172,14 +174,7 @@ fn child_env_matches_the_recorded_envdump_lines() {
     );
     assert_eq!(
         text("RIVETHUB_CA").as_deref(),
-        Some(
-            shared
-                .join("rivet-ca")
-                .join("intermediate")
-                .join("chain.pem")
-                .to_str()
-                .expect("utf8 ca")
-        )
+        Some(ca.to_str().expect("utf8 ca"))
     );
     assert_no_identity_or_legacy_exports(&child);
     assert_eq!(text("RIVETHUB_USER_DBS").as_deref(), Some("denied"));
@@ -196,7 +191,9 @@ fn child_env_matches_the_recorded_envdump_lines() {
         &masks
     ));
 
-    let anonymous = settings.child_env(None, &roster, &work, &BTreeMap::new());
+    let anonymous = settings
+        .child_env(None, &roster, &work, &BTreeMap::new())
+        .expect("child environment");
     assert!(!anonymous.contains_key("RIVETHUB_SESSION"));
     assert!(!anonymous.contains_key("RIVETHUB_SESSION_KEY"));
     assert!(!anonymous.contains_key("RIVETHUB_TOKEN"));
@@ -204,30 +201,26 @@ fn child_env_matches_the_recorded_envdump_lines() {
 
 #[test]
 fn recorded_terminal_environment_matches_after_product_translation() {
-    let path = testkit::golden_path(
-        env!("CARGO_MANIFEST_DIR"),
-        "../wire/tests/golden/term/ws.json",
-    );
-    let steps = testkit::ws::steps(&path).expect("terminal recording");
-    let step = steps
-        .iter()
-        .find(|step| step.id == "term-ws/attach-envdump")
-        .expect("envdump step");
-    let replay = step
-        .record
-        .frames
-        .values()
-        .flatten()
-        .find_map(|frame| match frame {
-            testkit::ws::FrameRecord::Binary {
-                text: Some(text), ..
-            } => Some(text),
-            testkit::ws::FrameRecord::Text { .. }
-            | testkit::ws::FrameRecord::Binary { text: None, .. }
-            | testkit::ws::FrameRecord::Close { .. }
-            | testkit::ws::FrameRecord::TcpClosed => None,
-        })
-        .expect("environment replay");
+    #[derive(serde::Deserialize)]
+    struct Recording {
+        steps: Vec<Step>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Step {
+        id: String,
+        replay: Option<String>,
+    }
+    let recording: Recording = serde_json::from_str(
+        &std::fs::read_to_string(testkit::recording("term/ws-pty-frames.json")).expect("recording"),
+    )
+    .expect("typed recording");
+    let replay = recording
+        .steps
+        .into_iter()
+        .find(|step| step.id == "attach-envdump")
+        .expect("environment scenario")
+        .replay
+        .expect("environment bytes");
     let masks = Masks {
         port: "5174".into(),
         hostname: Some(common::HOSTNAME.into()),
@@ -243,15 +236,17 @@ fn recorded_terminal_environment_matches_after_product_translation() {
             )
         })
         .collect();
-    let settings = envdump_settings("/golden/runs/term-ws/home", "/golden/runs/term-ws/shared");
+    let settings = envdump_settings("/golden/runs/term-ws/user", "/golden/runs/term-ws/shared");
     let session = SessionKey::new("acme-env").expect("session");
     let roster = RosterKey::new("envdump").expect("roster");
-    let actual = settings.child_env(
-        Some(&session),
-        &roster,
-        Path::new("/golden/runs/term-ws/work"),
-        &BTreeMap::new(),
-    );
+    let actual = settings
+        .child_env(
+            Some(&session),
+            &roster,
+            Path::new("/golden/runs/term-ws/work"),
+            &BTreeMap::new(),
+        )
+        .expect("child environment");
     for name in [
         "TERM",
         "COLORTERM",
@@ -288,26 +283,13 @@ fn the_ca_chain_sits_under_the_shared_dir() {
 }
 
 #[test]
-fn json_masked_comparison_accepts_the_recorded_exit_frame() {
-    let recorded = wire::gateway::term::TermServerFrame::Exit {
-        code: Some(3),
-        signal: None,
-    };
-    let actual = wire::gateway::term::TermServerFrame::Exit {
-        code: Some(3),
-        signal: None,
-    };
-    let recorded = serde_json::to_value(&recorded).expect("the recorded frame serializes");
-    let actual = serde_json::to_value(&actual).expect("the actual frame serializes");
-    assert!(json_masked_eq(&recorded, &actual, &Masks::default()));
-}
-
-#[test]
 fn configured_terminal_token_uses_the_current_name_only() {
     let mut settings = common::settings(&config::Environment::default());
     settings.token = Some("configured-terminal-token".into());
     let roster = RosterKey::new("shell").expect("roster");
-    let child = settings.child_env(None, &roster, Path::new("/work"), &BTreeMap::new());
+    let child = settings
+        .child_env(None, &roster, Path::new("/work"), &BTreeMap::new())
+        .expect("child environment");
     assert_eq!(
         child.get("RIVETHUB_TOKEN").expect("token").to_str(),
         Some("configured-terminal-token")
@@ -330,4 +312,26 @@ fn assert_no_identity_or_legacy_exports(child: &BTreeMap<String, std::ffi::OsStr
     ] {
         assert!(!child.contains_key(name), "{name}");
     }
+}
+
+#[test]
+fn absent_gateway_configuration_stays_absent() {
+    let settings = common::settings(&config::Environment::default());
+    assert_eq!(settings.url, None);
+    assert_eq!(settings.token, None);
+}
+
+#[test]
+fn invalid_environment_names_are_reported_instead_of_dropped() {
+    use std::os::unix::ffi::OsStringExt;
+    let env = config::Environment::from_vars([(
+        std::ffi::OsString::from_vec(vec![0xff]),
+        std::ffi::OsString::from("value"),
+    )]);
+    let settings = common::settings(&env);
+    let roster = RosterKey::new("shell").expect("roster");
+    assert!(matches!(
+        settings.child_env(None, &roster, Path::new("/work"), &BTreeMap::new()),
+        Err(terminal::Error::EnvironmentName)
+    ));
 }

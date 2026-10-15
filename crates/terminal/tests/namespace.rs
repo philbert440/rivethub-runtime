@@ -8,7 +8,6 @@ use terminal::MuxPlan;
 use terminal::TerminalManager;
 use terminal::TerminalSettings;
 use terminal::herdr::namespace;
-use terminal::herdr::namespace::ForeignMarker;
 use terminal::herdr::namespace::HostRoots;
 use terminal::herdr::namespace::SessionStamp;
 use terminal::herdr::namespace::SkipRule;
@@ -16,6 +15,20 @@ use terminal::herdr::paths;
 use terminal::mux::HerdrSetup;
 use terminal::session::RosterKey;
 use terminal::session::SessionKey;
+
+#[derive(Debug, serde::Serialize)]
+struct ForeignMarker {
+    command: String,
+    user: String,
+    #[serde(rename = "paneId")]
+    pane_id: String,
+    created: i64,
+    #[serde(rename = "denKey")]
+    recorded_key: String,
+    pid: u32,
+    #[serde(rename = "agentPane")]
+    agent_pane: String,
+}
 
 fn settings() -> TerminalSettings {
     TerminalSettings::from_config(
@@ -304,4 +317,62 @@ async fn the_manager_adopts_only_its_namespace_and_a_foreign_socket_survives_kil
         .expect_err("missing");
     assert!(matches!(missing, Error::UnknownTerminal { .. }));
     assert_eq!(std::fs::read(&foreign).expect("foreign bytes"), b"foreign");
+}
+
+#[test]
+fn an_ancestor_symlink_cannot_redirect_the_namespace_outside_state()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    let state = temp.path().join("state");
+    let outside = temp.path().join("outside");
+    std::fs::create_dir_all(&state)?;
+    std::fs::create_dir_all(&outside)?;
+    symlink(&outside, state.join("run"))?;
+    let config_home = paths::resolve_config_home(&state, 5174);
+    std::fs::create_dir_all(paths::sessions_dir(&config_home))?;
+    let hosts = HostRoots {
+        runtime: temp.path(),
+        temp: temp.path(),
+        uid: 1,
+    };
+    assert!(matches!(
+        namespace::scan(&state, &config_home, "owner", &hosts),
+        Err(Error::NamespaceEscape { .. })
+    ));
+    assert!(matches!(
+        namespace::scan(&state, &config_home, "", &hosts),
+        Err(Error::OwnerUnset)
+    ));
+    Ok(())
+}
+
+#[test]
+fn a_stamp_symlink_is_neither_read_nor_overwritten() -> Result<(), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    let state = temp.path().join("state");
+    let home = paths::resolve_config_home(&state, 5174);
+    let namespace_id = namespace::namespace_id(&home)?;
+    let key = SessionKey::new("claude-code:linked-stamp")?;
+    let dir = session_dir(&home, &key);
+    std::fs::create_dir_all(&dir)?;
+    let outside = temp.path().join("outside.json");
+    let stamp = stamp(&namespace_id, &key, "owner")?;
+    let bytes = serde_json::to_vec(&stamp)?;
+    std::fs::write(&outside, &bytes)?;
+    symlink(&outside, dir.join("rivethub.json"))?;
+    assert!(matches!(
+        namespace::write_stamp(&dir, &stamp),
+        Err(Error::Io(_))
+    ));
+    let hosts = HostRoots {
+        runtime: temp.path(),
+        temp: temp.path(),
+        uid: 1,
+    };
+    assert!(matches!(
+        namespace::scan(&state, &home, "owner", &hosts),
+        Err(Error::Io(_))
+    ));
+    assert_eq!(std::fs::read(&outside)?, bytes);
+    Ok(())
 }

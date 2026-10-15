@@ -91,36 +91,28 @@ pub struct RequestFrame {
 
 impl RequestFrame {
     pub fn encode(&self) -> Result<Vec<u8>, Error> {
-        encode_request(&self.id, self.method, &self.params)
+        let mut line = serde_json::to_vec(self)?;
+        line.push(b'\n');
+        Ok(line)
     }
 }
 
-pub fn encode_request(
-    id: &str,
-    method: RpcMethod,
-    params: &RequestParams,
-) -> Result<Vec<u8>, Error> {
-    #[derive(Serialize)]
-    struct Wire<'a> {
-        id: &'a str,
-        method: RpcMethod,
-        params: &'a RequestParams,
-    }
-    let mut line =
-        serde_json::to_vec(&Wire { id, method, params }).map_err(|error| Error::Rpc {
-            method: std::borrow::Cow::Borrowed("encode"),
-            message: error.to_string(),
-        })?;
-    line.push(b'\n');
-    Ok(line)
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct AckResult {
+    #[serde(rename = "type")]
+    pub kind: AckResultKind,
+    #[serde(flatten)]
+    pub fields: wire::Extra,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum AckResult {
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AckResultKind {
     SubscriptionStarted,
-    #[serde(other)]
-    Unrecorded,
+    WorkspaceCreated,
+    Ok,
+    #[serde(untagged)]
+    Other(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Display)]
@@ -134,9 +126,9 @@ pub enum AckErrorCode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, thiserror::Error)]
-#[error("{}", self.message.as_deref().map_or_else(|| self.code.to_string(), str::to_owned))]
+#[error("code {code:?}, message {message:?}")]
 pub struct AckError {
-    pub code: AckErrorCode,
+    pub code: Option<AckErrorCode>,
     #[serde(default)]
     pub message: Option<String>,
 }
@@ -164,17 +156,12 @@ pub enum InboundFrame {
 }
 
 pub fn decode_line(line: &[u8]) -> Result<InboundFrame, Error> {
-    serde_json::from_slice(line).map_err(|error| Error::Rpc {
-        method: std::borrow::Cow::Borrowed("decode"),
-        message: error.to_string(),
-    })
+    Ok(serde_json::from_slice(line)?)
 }
 
-pub fn decode_request(line: &[u8]) -> Result<RequestFrame, Error> {
-    serde_json::from_slice(line).map_err(|error| Error::Rpc {
-        method: std::borrow::Cow::Borrowed("decode"),
-        message: error.to_string(),
-    })
+#[cfg(test)]
+fn decode_request(line: &[u8]) -> Result<RequestFrame, Error> {
+    Ok(serde_json::from_slice(line)?)
 }
 
 pub fn shell_join(argv: &[String]) -> String {
@@ -202,7 +189,7 @@ pub fn shell_join(argv: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::AckErrorCode;
-    use super::AckResult;
+    use super::AckResultKind;
     use super::AgentStartParams;
     use super::EventFrame;
     use super::InboundFrame;
@@ -213,6 +200,7 @@ mod tests {
     use super::RpcMethod;
     use super::WorkspaceCreateParams;
     use super::decode_line;
+    use super::decode_request;
     use super::shell_join;
     use crate::herdr::AgentKind;
     use crate::herdr::DEFAULT_PANE;
@@ -233,8 +221,8 @@ mod tests {
         };
         let line = frame.encode().expect("encode");
         assert_eq!(
-            String::from_utf8(line).expect("utf8"),
-            "{\"id\":\"1\",\"method\":\"workspace.create\",\"params\":{\"cwd\":\"/home/user/AcmeKit\",\"env\":{\"ACME_ROSTER_ENV\":\"roster\"},\"label\":\"acme\"}}\n"
+            decode_request(&line).expect("request"),
+            decode_request("{\"id\":\"1\",\"method\":\"workspace.create\",\"params\":{\"cwd\":\"/home/user/AcmeKit\",\"env\":{\"ACME_ROSTER_ENV\":\"roster\"},\"label\":\"acme\"}}\n".as_bytes()).expect("recorded request")
         );
     }
 
@@ -256,8 +244,8 @@ mod tests {
         };
         let line = frame.encode().expect("encode");
         assert_eq!(
-            String::from_utf8(line).expect("utf8"),
-            "{\"id\":\"2\",\"method\":\"agent.start\",\"params\":{\"name\":\"d0123456789ab\",\"kind\":\"claude\",\"pane_id\":\"w1:p1\",\"args\":[\"--resume\",\"00000000-0000-4000-8000-000000000002\"],\"timeout_ms\":10000}}\n"
+            decode_request(&line).expect("request"),
+            decode_request("{\"id\":\"2\",\"method\":\"agent.start\",\"params\":{\"name\":\"d0123456789ab\",\"kind\":\"claude\",\"pane_id\":\"w1:p1\",\"args\":[\"--resume\",\"00000000-0000-4000-8000-000000000002\"],\"timeout_ms\":10000}}\n".as_bytes()).expect("recorded request")
         );
     }
 
@@ -271,8 +259,12 @@ mod tests {
             }),
         };
         assert_eq!(
-            String::from_utf8(get.encode().expect("encode")).expect("utf8"),
-            "{\"id\":\"3\",\"method\":\"pane.get\",\"params\":{\"pane_id\":\"w1:p1\"}}\n"
+            decode_request(&get.encode().expect("encode")).expect("request"),
+            decode_request(
+                "{\"id\":\"3\",\"method\":\"pane.get\",\"params\":{\"pane_id\":\"w1:p1\"}}\n"
+                    .as_bytes()
+            )
+            .expect("recorded request")
         );
         let send = RequestFrame {
             id: "4".to_owned(),
@@ -283,8 +275,8 @@ mod tests {
             }),
         };
         assert_eq!(
-            String::from_utf8(send.encode().expect("encode")).expect("utf8"),
-            "{\"id\":\"4\",\"method\":\"pane.send_text\",\"params\":{\"pane_id\":\"w1:p1\",\"text\":\"bash -l\\n\"}}\n"
+            decode_request(&send.encode().expect("encode")).expect("request"),
+            decode_request("{\"id\":\"4\",\"method\":\"pane.send_text\",\"params\":{\"pane_id\":\"w1:p1\",\"text\":\"bash -l\\n\"}}\n".as_bytes()).expect("recorded request")
         );
     }
 
@@ -295,7 +287,10 @@ mod tests {
         match frame {
             InboundFrame::Ack(ack) => {
                 assert_eq!(ack.id, "7");
-                assert_eq!(ack.result, Some(AckResult::SubscriptionStarted));
+                assert_eq!(
+                    ack.result.expect("result").kind,
+                    AckResultKind::SubscriptionStarted
+                );
                 assert!(ack.error.is_none());
             }
             InboundFrame::Event(_) => panic!("an ack must not decode as an event"),
@@ -303,13 +298,16 @@ mod tests {
     }
 
     #[test]
-    fn unrecorded_result_types_decode_as_unrecorded() {
+    fn workspace_created_result_decodes() {
         let frame = decode_line(
             b"{\"id\":\"8\",\"result\":{\"type\":\"workspace_created\",\"pane_id\":\"w1:p1\"}}",
         )
         .expect("ack");
         match frame {
-            InboundFrame::Ack(ack) => assert_eq!(ack.result, Some(AckResult::Unrecorded)),
+            InboundFrame::Ack(ack) => assert_eq!(
+                ack.result.expect("result").kind,
+                AckResultKind::WorkspaceCreated
+            ),
             InboundFrame::Event(_) => panic!("an ack must not decode as an event"),
         }
     }
@@ -324,18 +322,21 @@ mod tests {
             panic!("an ack must not decode as an event")
         };
         let error = ack.error.expect("error object");
-        assert_eq!(error.code, AckErrorCode::AgentPaneBusy);
+        assert_eq!(error.code, Some(AckErrorCode::AgentPaneBusy));
         assert_eq!(error.message.as_deref(), Some("pane w1:p1 is busy"));
-        assert_eq!(error.to_string(), "pane w1:p1 is busy");
+        assert!(error.to_string().contains("pane w1:p1 is busy"));
         let other =
             decode_line(b"{\"id\":\"10\",\"error\":{\"code\":\"pane_not_found\"}}").expect("ack");
         let InboundFrame::Ack(ack) = other else {
             panic!("an ack must not decode as an event")
         };
         let error = ack.error.expect("error object");
-        assert_eq!(error.code, AckErrorCode::Other("pane_not_found".to_owned()));
+        assert_eq!(
+            error.code,
+            Some(AckErrorCode::Other("pane_not_found".to_owned()))
+        );
         assert_eq!(error.message, None);
-        assert_eq!(error.to_string(), "pane_not_found");
+        assert!(error.to_string().contains("pane_not_found"));
     }
 
     #[test]

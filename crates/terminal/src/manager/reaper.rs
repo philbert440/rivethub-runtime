@@ -19,13 +19,16 @@ const DETACH_KILL_GRACE: Duration = Duration::from_millis(1_000);
 const REAPER_TICK: Duration = Duration::from_millis(1_000);
 
 impl TerminalManager {
-    pub fn run_tasks(self: &Arc<Self>, shutdown: CancellationToken) {
-        let tasks = TaskTracker::new();
-        self.run_tracked(shutdown, &tasks);
-        tasks.close();
-    }
-
     pub fn run_tracked(self: &Arc<Self>, shutdown: CancellationToken, tasks: &TaskTracker) {
+        let manager = Arc::clone(self);
+        let worker_shutdown = shutdown.clone();
+        tasks.spawn(async move {
+            worker_shutdown.cancelled().await;
+            manager.inner.shutdown.cancel();
+            manager.close();
+            manager.inner.tasks.close();
+            manager.inner.tasks.wait().await;
+        });
         let taken = self.inner.detach_rx.lock().take();
         if let Some(mut detach_rx) = taken {
             let manager = Arc::clone(self);
@@ -144,16 +147,20 @@ impl TerminalManager {
                 Ok(())
             }
             KillPlan::StopHerdr(session) => {
-                let root = self.namespace_root();
-                if !crate::herdr::namespace::session_socket_is_owned(
-                    &root,
-                    session.client.socket(),
-                )? {
-                    return Err(Error::NamespaceEscape {
-                        path: Box::from(session.client.socket()),
-                        root: Box::from(root),
-                    });
-                }
+                let root = self.namespace_root()?;
+                let socket = session.client.socket().to_path_buf();
+                self.inner
+                    .tasks
+                    .spawn_blocking(move || {
+                        if !crate::herdr::namespace::session_socket_is_owned(&root, &socket)? {
+                            return Err(Error::NamespaceEscape {
+                                path: socket.into_boxed_path(),
+                                root: root.into_boxed_path(),
+                            });
+                        }
+                        Ok(())
+                    })
+                    .await??;
                 session.stop().await?;
                 self.inner.state.lock().remove(id);
                 self.unbind_session(id);
@@ -167,16 +174,17 @@ impl TerminalManager {
         }
     }
 
-    fn namespace_root(&self) -> std::path::PathBuf {
+    fn namespace_root(&self) -> Result<std::path::PathBuf, Error> {
         match &self.inner.plan {
-            MuxPlan::Herdr(setup) => setup.config_home.clone(),
-            MuxPlan::Direct | MuxPlan::Unavailable(_) => std::path::PathBuf::new(),
+            MuxPlan::Herdr(setup) => Ok(setup.config_home.clone()),
+            MuxPlan::Direct => Err(Error::MissingServer),
+            MuxPlan::Unavailable(unavailable) => Err(unavailable.reason.to_error()),
         }
     }
 
     fn escalate(&self, id: TerminalId, pid: u32, grace: Duration) {
         let inner = Arc::clone(&self.inner);
-        tokio::spawn(async move {
+        self.inner.tasks.spawn(async move {
             tokio::time::sleep(grace).await;
             let alive = matches!(
                 inner.state.lock().get(&id),
@@ -192,7 +200,7 @@ impl TerminalManager {
         });
     }
 
-    fn sweep(&self) {
+    pub(super) fn sweep(&self) {
         let now = Instant::now();
         let limits = &self.inner.settings.limits;
         let detached_ttl = Duration::from_millis(limits.detached_ttl_ms);

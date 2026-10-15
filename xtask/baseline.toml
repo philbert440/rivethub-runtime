@@ -168,30 +168,6 @@ count = 2
 
 [[entry]]
 check = "FALLBACK"
-file = "crates/terminal/src/herdr/client.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/terminal/src/herdr/mod.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/terminal/src/herdr/mod.rs"
-text = "unwrap_or"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/terminal/src/manager/mod.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
 file = "crates/testkit/src/capture.rs"
 text = "ok"
 count = 2

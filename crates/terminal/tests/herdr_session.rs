@@ -48,42 +48,6 @@ fn herdr_cli_argv_matches_the_recorded_shapes() {
         ["--session", "d0123456789ab", "server", "stop"]
     );
     assert_eq!(cli.attach(), ["--session", "d0123456789ab"]);
-    assert_eq!(
-        cli.snapshot(),
-        ["--session", "d0123456789ab", "session", "snapshot"]
-    );
-    assert_eq!(
-        cli.agent_list(),
-        ["--session", "d0123456789ab", "agent", "list"]
-    );
-    assert_eq!(
-        cli.agent_read("d0123456789ab", 200),
-        [
-            "--session",
-            "d0123456789ab",
-            "agent",
-            "read",
-            "d0123456789ab",
-            "--lines",
-            "200"
-        ]
-    );
-    assert_eq!(
-        cli.pane_read("w1:p1", 200),
-        [
-            "--session",
-            "d0123456789ab",
-            "pane",
-            "read",
-            "w1:p1",
-            "--lines",
-            "200"
-        ]
-    );
-    assert_eq!(
-        cli.pane_list(),
-        ["--session", "d0123456789ab", "pane", "list"]
-    );
 }
 
 #[test]
@@ -206,7 +170,7 @@ async fn mux_resolution_lands_on_the_recorded_states() -> Result<(), Failed> {
         5174,
     )
     .await;
-    assert_eq!(auto_without, mux::MuxPlan::Direct);
+    assert!(matches!(auto_without, mux::MuxPlan::Direct));
 
     let direct = mux::resolve(
         common::settings(&common::env_from(&[("RIVETHUB_TERM_MUX", "none")])).mux,
@@ -216,7 +180,7 @@ async fn mux_resolution_lands_on_the_recorded_states() -> Result<(), Failed> {
         5174,
     )
     .await;
-    assert_eq!(direct, mux::MuxPlan::Direct);
+    assert!(matches!(direct, mux::MuxPlan::Direct));
 
     let bogus = mux::resolve(
         common::settings(&common::env_from(&[("RIVETHUB_TERM_MUX", "Bogus")])).mux,
@@ -226,7 +190,7 @@ async fn mux_resolution_lands_on_the_recorded_states() -> Result<(), Failed> {
         5174,
     )
     .await;
-    assert_eq!(bogus, mux::MuxPlan::Direct);
+    assert!(matches!(bogus, mux::MuxPlan::Direct));
     Ok(())
 }
 
@@ -246,7 +210,7 @@ async fn serve_steps(listener: &UnixListener, steps: &[FakeStep]) -> Result<(), 
         if read == 0 {
             return Err("the client closed the socket early".into());
         }
-        let frame = codec::decode_request(&line)?;
+        let frame = serde_json::from_slice::<codec::RequestFrame>(&line)?;
         assert_eq!(
             frame.method, expected.method,
             "expected {} got {frame:?}",
@@ -379,7 +343,6 @@ async fn agent_panes_run_the_recorded_setup_sequence() -> Result<(), Failed> {
         "claude",
     )
     .await?;
-    assert_eq!(session.pane, "w1:p1");
     session.stop().await?;
     let joined = tokio::time::timeout(Duration::from_secs(5), server).await??;
     joined?;

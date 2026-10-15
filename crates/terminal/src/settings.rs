@@ -24,12 +24,12 @@ pub struct TerminalSettings {
 impl TerminalSettings {
     #[must_use]
     pub fn from_config(config: &config::Config, env: &Environment, node_name: String) -> Self {
-        let gateway = config.gateway.clone().unwrap_or_default();
+        let gateway = config.gateway.as_ref();
         Self {
             limits: env.term_settings(),
             mux: env.term_mux_choice(),
-            url: gateway_url(&gateway),
-            token: gateway.token,
+            url: gateway.map(gateway_url),
+            token: gateway.and_then(|gateway| gateway.token.clone()),
             ca_path: shared_ca_path(env),
             node_name,
             process_env: env.clone(),
@@ -41,15 +41,18 @@ impl TerminalSettings {
         roster_key: &RosterKey,
         cwd: &Path,
         entry_env: &BTreeMap<String, String>,
-    ) -> BTreeMap<String, OsString> {
+    ) -> Result<BTreeMap<String, OsString>, crate::Error> {
         let mut env: BTreeMap<String, OsString> = self
             .process_env
             .iter()
-            .filter_map(|(name, value)| {
-                let name = name.to_str().map(str::to_owned)?;
-                Some((name, value.clone()))
+            .map(|(name, value)| {
+                let name = name
+                    .to_str()
+                    .ok_or(crate::Error::EnvironmentName)?
+                    .to_owned();
+                Ok((name, value.clone()))
             })
-            .collect();
+            .collect::<Result<_, crate::Error>>()?;
         for name in [
             "RIVETHUB_USER_ID",
             "RIVETHUB_USER_TOKEN",
@@ -100,7 +103,7 @@ impl TerminalSettings {
             "RIVETHUB_NAME".to_owned(),
             OsString::from(format!("{}:{roster_key}", self.node_name)),
         );
-        env
+        Ok(env)
     }
 
     fn local_bin_path(&self, env: &BTreeMap<String, OsString>) -> Option<OsString> {
@@ -114,16 +117,13 @@ impl TerminalSettings {
     }
 }
 
-fn gateway_url(gateway: &config::model::GatewaySection) -> Option<String> {
-    if gateway.port == 0 {
-        return None;
-    }
+fn gateway_url(gateway: &config::model::GatewaySection) -> String {
     let scheme = if gateway.tls_cert.is_some() || gateway.tls_key.is_some() {
         "https"
     } else {
         "http"
     };
-    Some(format!("{scheme}://127.0.0.1:{}", gateway.port))
+    format!("{scheme}://127.0.0.1:{}", gateway.port)
 }
 
 fn shared_ca_path(env: &Environment) -> PathBuf {

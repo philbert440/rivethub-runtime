@@ -3,7 +3,7 @@ pub mod herdr;
 pub mod manager;
 pub mod mux;
 pub mod pty;
-pub mod scrollback;
+mod scrollback;
 pub mod session;
 pub mod settings;
 

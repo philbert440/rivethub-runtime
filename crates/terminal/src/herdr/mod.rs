@@ -9,6 +9,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 use strum::EnumString;
+use strum::IntoEnumIterator;
 use tokio::net::UnixStream;
 
 use crate::Error;
@@ -30,7 +31,17 @@ pub const SEND_TEXT_TIMEOUT: Duration = Duration::from_millis(2_000);
 pub const PANE_BUSY_RETRY: Duration = Duration::from_millis(50);
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, strum::Display,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    EnumString,
+    strum::Display,
+    strum::EnumIter,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -59,13 +70,6 @@ pub enum AgentKind {
     Maki,
 }
 
-impl AgentKind {
-    #[must_use]
-    pub fn is_bare(argv0: &str) -> bool {
-        Self::try_from(argv0).is_ok()
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaneKind {
     Agent(AgentKind),
@@ -92,10 +96,9 @@ pub fn classify(argv0: &str) -> PaneKind {
     if argv0.contains('/') {
         return PaneKind::Plain;
     }
-    match AgentKind::try_from(argv0) {
-        Ok(kind) => PaneKind::Agent(kind),
-        Err(_) => PaneKind::Plain,
-    }
+    AgentKind::iter()
+        .find(|kind| kind.to_string() == argv0)
+        .map_or(PaneKind::Plain, PaneKind::Agent)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,37 +123,6 @@ impl HerdrCli {
         self.subcommand(&[])
     }
 
-    #[must_use]
-    pub fn snapshot(&self) -> Vec<String> {
-        self.subcommand(&["session", "snapshot"])
-    }
-
-    #[must_use]
-    pub fn agent_list(&self) -> Vec<String> {
-        self.subcommand(&["agent", "list"])
-    }
-
-    #[must_use]
-    pub fn agent_read(&self, target: &str, lines: u32) -> Vec<String> {
-        let mut argv = self.subcommand(&["agent", "read", target]);
-        argv.push("--lines".to_owned());
-        argv.push(lines.to_string());
-        argv
-    }
-
-    #[must_use]
-    pub fn pane_read(&self, pane: &str, lines: u32) -> Vec<String> {
-        let mut argv = self.subcommand(&["pane", "read", pane]);
-        argv.push("--lines".to_owned());
-        argv.push(lines.to_string());
-        argv
-    }
-
-    #[must_use]
-    pub fn pane_list(&self) -> Vec<String> {
-        self.subcommand(&["pane", "list"])
-    }
-
     fn subcommand(&self, rest: &[&str]) -> Vec<String> {
         let mut argv = vec!["--session".to_owned(), self.session.clone()];
         argv.extend(rest.iter().map(ToString::to_string));
@@ -163,26 +135,36 @@ pub struct HerdrBinary {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error)]
 pub enum ProbeFailure {
+    #[error("herdr not found on PATH or in ~/.local/bin")]
     NotFound,
+    #[error(
+        "herdr at {binary} is not {PINNED_VERSION} (RivetHub pins {PINNED_VERSION} / protocol 20)"
+    )]
     Version { binary: PathBuf, found: String },
+    #[error("cannot execute herdr at {binary}: {source}")]
+    Execute {
+        binary: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("cannot inspect herdr at {binary}: {source}")]
+    Inspect {
+        binary: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("herdr at {binary} exited with {status}")]
+    Status {
+        binary: PathBuf,
+        status: std::process::ExitStatus,
+    },
+    #[error("herdr version is not UTF-8: {0}")]
+    Encoding(#[from] std::string::FromUtf8Error),
 }
 
-impl From<&ProbeFailure> for Error {
-    fn from(value: &ProbeFailure) -> Self {
-        match value {
-            ProbeFailure::NotFound => Self::HerdrNotFound,
-            ProbeFailure::Version { binary, found } => Self::HerdrVersion {
-                binary: Box::from(binary.as_path()),
-                pinned: PINNED_VERSION.to_owned(),
-                found: found.clone(),
-            },
-        }
-    }
-}
-
-pub fn search_paths(paths: &[PathBuf], home: Option<&Path>) -> Vec<PathBuf> {
+fn search_paths(paths: &[PathBuf], home: Option<&Path>) -> Vec<PathBuf> {
     let mut candidates: Vec<PathBuf> = paths.iter().map(|dir| dir.join("herdr")).collect();
     if let Some(home) = home {
         candidates.push(home.join(".local").join("bin").join("herdr"));
@@ -190,27 +172,40 @@ pub fn search_paths(paths: &[PathBuf], home: Option<&Path>) -> Vec<PathBuf> {
     candidates
 }
 
-pub fn find_binary(paths: &[PathBuf], home: Option<&Path>) -> Option<HerdrBinary> {
-    search_paths(paths, home)
-        .into_iter()
-        .find(|candidate| candidate.is_file())
-        .map(|path| HerdrBinary { path })
+async fn find_binary(paths: &[PathBuf], home: Option<&Path>) -> Result<HerdrBinary, ProbeFailure> {
+    for path in search_paths(paths, home) {
+        match tokio::fs::metadata(&path).await {
+            Ok(metadata) if metadata.is_file() => return Ok(HerdrBinary { path }),
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(source) => {
+                return Err(ProbeFailure::Inspect {
+                    binary: path,
+                    source,
+                });
+            }
+        }
+    }
+    Err(ProbeFailure::NotFound)
 }
 
 pub async fn probe(paths: &[PathBuf], home: Option<&Path>) -> Result<HerdrBinary, ProbeFailure> {
-    let binary = find_binary(paths, home).ok_or(ProbeFailure::NotFound)?;
-    let versioned = tokio::process::Command::new(&binary.path)
+    let binary = find_binary(paths, home).await?;
+    let output = tokio::process::Command::new(&binary.path)
         .arg("--version")
         .output()
-        .await;
-    let Ok(output) = versioned else {
-        return Err(ProbeFailure::Version {
+        .await
+        .map_err(|source| ProbeFailure::Execute {
             binary: binary.path.clone(),
-            found: "unreadable".to_owned(),
+            source,
+        })?;
+    if !output.status.success() {
+        return Err(ProbeFailure::Status {
+            binary: binary.path,
+            status: output.status,
         });
-    };
-    let found = String::from_utf8_lossy(&output.stdout);
-    let found = found.lines().next().unwrap_or("").trim().to_owned();
+    }
+    let found = String::from_utf8(output.stdout)?.trim().to_owned();
     if found
         .split_whitespace()
         .any(|token| token == PINNED_VERSION)
@@ -229,7 +224,6 @@ pub struct HerdrSession {
     pub cli: HerdrCli,
     pub config_home: PathBuf,
     pub name: String,
-    pub pane: String,
     pub client: HerdrClient,
 }
 
@@ -248,15 +242,11 @@ impl HerdrSession {
             session: name.clone(),
         };
         let socket = paths::session_socket(&setup.config_home, &name)?;
-        std::fs::create_dir_all(&setup.config_home).map_err(|error| Error::HerdrInit {
-            message: error.to_string(),
-        })?;
-        if !socket.exists() {
+        tokio::fs::create_dir_all(&setup.config_home).await?;
+        if !tokio::fs::try_exists(&socket).await? {
             server_command(&cli.binary, &setup.config_home, cli.server())
                 .spawn()
-                .map_err(|error| Error::HerdrInit {
-                    message: error.to_string(),
-                })?;
+                .map_err(Error::Io)?;
         }
         paths::wait_for_socket(&socket, SERVER_OPEN_TIMEOUT, &name).await?;
         let client = HerdrClient::new(&socket);
@@ -268,7 +258,7 @@ impl HerdrSession {
             })
             .await?;
         let Some(argv0) = argv.first() else {
-            return Err(Error::Spawn("argv is empty".to_owned()));
+            return Err(Error::EmptyArgv);
         };
         match classify(argv0) {
             PaneKind::Agent(kind) => {
@@ -309,7 +299,6 @@ impl HerdrSession {
             cli,
             config_home: setup.config_home.clone(),
             name,
-            pane: DEFAULT_PANE.to_owned(),
             client,
         })
     }
@@ -326,7 +315,6 @@ impl HerdrSession {
             },
             config_home: setup.config_home.clone(),
             name,
-            pane: DEFAULT_PANE.to_owned(),
             client: HerdrClient::new(&socket),
         })
     }
@@ -334,17 +322,14 @@ impl HerdrSession {
     pub async fn stop(&self) -> Result<(), Error> {
         let mut child = server_command(&self.cli.binary, &self.config_home, self.cli.server_stop())
             .spawn()
-            .map_err(|error| Error::HerdrStop {
-                session: self.name.clone(),
-                message: error.to_string(),
-            })?;
+            .map_err(Error::Io)?;
         let socket = self.client.socket().to_path_buf();
         let confirm = async {
-            child.wait().await.map_err(|error| Error::HerdrStop {
-                session: self.name.clone(),
-                message: error.to_string(),
-            })?;
-            wait_for_server_exit(&socket).await;
+            let status = child.wait().await?;
+            if !status.success() {
+                return Err(Error::StopStatus(status));
+            }
+            wait_for_server_exit(&socket).await?;
             Ok::<(), Error>(())
         };
         match tokio::time::timeout(SERVER_EXIT_WINDOW, confirm).await {
@@ -352,27 +337,35 @@ impl HerdrSession {
             Err(_) => {
                 return Err(Error::HerdrStopTimeout {
                     socket: Box::from(self.client.socket()),
-                    timeout_ms: paths::duration_ms(SERVER_EXIT_WINDOW),
+                    timeout_ms: SERVER_EXIT_WINDOW.as_millis(),
                     session: self.name.clone(),
                 });
             }
         }
         if let Some(dir) = self.client.socket().parent()
-            && let Err(error) = std::fs::remove_dir_all(dir)
+            && let Err(error) = tokio::fs::remove_dir_all(dir).await
             && error.kind() != std::io::ErrorKind::NotFound
         {
-            tracing::warn!(
-                "herdr session dir {} kept after a clean stop ({error})",
-                dir.display()
-            );
+            return Err(Error::Io(error));
         }
         Ok(())
     }
 }
 
-async fn wait_for_server_exit(socket: &Path) {
-    while UnixStream::connect(socket).await.is_ok() {
-        tokio::time::sleep(SERVER_EXIT_POLL).await;
+async fn wait_for_server_exit(socket: &Path) -> Result<(), Error> {
+    loop {
+        match UnixStream::connect(socket).await {
+            Ok(_) => tokio::time::sleep(SERVER_EXIT_POLL).await,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+                ) =>
+            {
+                return Ok(());
+            }
+            Err(error) => return Err(Error::Io(error)),
+        }
     }
 }
 

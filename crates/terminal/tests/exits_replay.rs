@@ -4,7 +4,6 @@
 )]
 mod common;
 
-use std::path::PathBuf;
 use std::time::Duration;
 
 use libtest_mimic::Arguments;
@@ -74,27 +73,13 @@ fn cases() -> Result<Vec<Case>, Failed> {
         .collect()
 }
 
-fn kill_signal(parent_kill: &str) -> nix::sys::signal::Signal {
+fn kill_signal(parent_kill: &str) -> Result<nix::sys::signal::Signal, Failed> {
     match parent_kill {
-        "SIGTERM" => nix::sys::signal::Signal::SIGTERM,
-        "SIGKILL" => nix::sys::signal::Signal::SIGKILL,
-        _ => nix::sys::signal::Signal::SIGHUP,
+        "SIGTERM" => Ok(nix::sys::signal::Signal::SIGTERM),
+        "SIGKILL" => Ok(nix::sys::signal::Signal::SIGKILL),
+        "SIGHUP" | "(default)" => Ok(nix::sys::signal::Signal::SIGHUP),
+        other => Err(format!("unknown signal {other}").into()),
     }
-}
-
-fn silent_child(argv: Vec<String>) -> Result<Vec<String>, Failed> {
-    if argv.iter().any(|part| part.ends_with("acme-tty.mjs")) {
-        let program = argv
-            .first()
-            .ok_or_else(|| Failed::from("the recorded argv is empty"))?
-            .clone();
-        return Ok(vec![
-            program,
-            "-e".to_owned(),
-            "setInterval(() => {}, 1000)".to_owned(),
-        ]);
-    }
-    Ok(argv)
 }
 
 async fn wait_exit(
@@ -102,33 +87,29 @@ async fn wait_exit(
     id: &kernel::terminal::TerminalId,
     name: &str,
 ) -> Result<terminal::TerminalRecord, Failed> {
-    manager
-        .wait_exited(id)
+    tokio::time::timeout(Duration::from_secs(30), manager.wait_exited(id))
         .await
+        .map_err(|error| Failed::from(error.to_string()))?
         .map_err(|error| Failed::from(format!("{name}: the exit wait failed: {error}")))
 }
 
-async fn replay(case: Case, node: Option<PathBuf>) -> Result<(), Failed> {
+async fn replay(case: Case) -> Result<(), Failed> {
     let manager = common::direct_manager(&config::Environment::default());
     let session = "claude-code:00000000-0000-4000-8000-000000000300";
     let tmp = tempfile::tempdir().map_err(|error| Failed::from(error.to_string()))?;
-    let tmp_path = tmp.path().to_str().ok_or("the tempdir is not utf8")?;
-    let argv = if case.argv.first().is_some_and(|part| part.contains("node")) {
-        let node = node.ok_or_else(|| {
-            Failed::from("node is not installed on this machine; the recorded argv needs it")
-        })?;
-        let bin = tmp.path().join("bin");
-        std::fs::create_dir_all(&bin).map_err(|error| Failed::from(error.to_string()))?;
-        std::os::unix::fs::symlink(&node, bin.join("node"))
-            .map_err(|error| Failed::from(error.to_string()))?;
-        let substituted: Vec<String> = case
-            .argv
-            .iter()
-            .map(|part| part.replace("{{TMP}}", tmp_path))
-            .collect();
-        silent_child(substituted)?
-    } else {
-        case.argv.clone()
+    let argv = match case.name.as_str() {
+        "exit-0" => vec!["/bin/sh".into(), "-c".into(), "exit 0".into()],
+        "exit-3" => vec!["/bin/sh".into(), "-c".into(), "exit 3".into()],
+        "exit-255" => vec!["/bin/sh".into(), "-c".into(), "exit 255".into()],
+        "self-sigterm" => vec!["/bin/sh".into(), "-c".into(), "kill -TERM $$".into()],
+        "self-sigkill" => vec!["/bin/sh".into(), "-c".into(), "kill -KILL $$".into()],
+        "self-sigint" => vec!["/bin/sh".into(), "-c".into(), "kill -INT $$".into()],
+        "parent-kill-default"
+        | "parent-kill-SIGHUP"
+        | "parent-kill-SIGTERM"
+        | "parent-kill-SIGKILL" => vec!["/bin/cat".into()],
+        "missing-binary" => case.argv.clone(),
+        other => return Err(format!("unhandled recording {other}").into()),
     };
     let borrowed: Vec<&str> = argv.iter().map(String::as_str).collect();
     let id = manager
@@ -136,21 +117,13 @@ async fn replay(case: Case, node: Option<PathBuf>) -> Result<(), Failed> {
         .await
         .map_err(|error| Failed::from(format!("{}: spawn: {error}", case.name)))?;
     if let Some(parent_kill) = &case.parent_kill {
-        #[cfg_attr(
-            dylint_lib = "rr_lints",
-            expect(
-                sleep,
-                reason = "the child needs a real moment to register with the reaper before the signal arrives"
-            )
-        )]
-        tokio::time::sleep(Duration::from_millis(200)).await;
         let pid = manager
             .list()
             .into_iter()
             .find(|record| record.id == id)
             .and_then(|record| record.pid)
             .ok_or_else(|| Failed::from(format!("{}: no pid to signal", case.name)))?;
-        terminal::pty::signal(pid, kill_signal(parent_kill))
+        terminal::pty::signal(pid, kill_signal(parent_kill)?)
             .map_err(|error| Failed::from(format!("{}: {error}", case.name)))?;
     }
     let record = wait_exit(&manager, &id, &case.name).await?;
@@ -178,22 +151,20 @@ async fn replay(case: Case, node: Option<PathBuf>) -> Result<(), Failed> {
     Ok(())
 }
 
-fn replay_case(case: Case, node: Option<PathBuf>) -> Result<(), Failed> {
+fn replay_case(case: Case) -> Result<(), Failed> {
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| Failed::from(format!("dev test runtime: {error}")))?;
-    runtime.block_on(replay(case, node))
+    runtime.block_on(replay(case))
 }
 
 fn main() {
     let args = Arguments::from_args();
-    let node = common::program_on_path("node");
     match cases() {
         Ok(recorded) => {
             let mut trials = Vec::new();
             for case in recorded {
-                let node = node.clone();
                 trials.push(Trial::test(format!("node-pty {}", case.name), move || {
-                    replay_case(case, node)
+                    replay_case(case)
                 }));
             }
             run(&args, trials).exit()

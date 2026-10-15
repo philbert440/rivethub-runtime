@@ -12,37 +12,11 @@ use portable_pty::native_pty_system;
 
 use crate::Error;
 
-pub const READ_BUFFER: usize = 8192;
-pub const MISSING_BINARY_OUTPUT: &[u8] = b"execvp(3) failed.: No such file or directory\r\n";
-pub const MISSING_BINARY_EXIT: u32 = 1;
+const READ_BUFFER: usize = 8192;
+pub(crate) const MISSING_BINARY_OUTPUT: &[u8] = b"execvp(3) failed.: No such file or directory\r\n";
+pub(crate) const MISSING_BINARY_EXIT: u32 = 1;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Size {
-    pub cols: u16,
-    pub rows: u16,
-}
-
-impl From<kernel::terminal::TermSize> for Size {
-    fn from(value: kernel::terminal::TermSize) -> Self {
-        Self {
-            cols: value.cols,
-            rows: value.rows,
-        }
-    }
-}
-
-impl From<Size> for PtySize {
-    fn from(value: Size) -> Self {
-        Self {
-            cols: value.cols,
-            rows: value.rows,
-            pixel_width: 0,
-            pixel_height: 0,
-        }
-    }
-}
-
-pub struct Spawned {
+pub(crate) struct Spawned {
     pub master: Box<dyn MasterPty + Send>,
     pub pid: Option<u32>,
     pub child: Box<dyn Child + Send + Sync>,
@@ -64,18 +38,18 @@ impl std::fmt::Debug for Spawned {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ExitOutcome {
+pub(crate) struct ExitOutcome {
     pub code: u32,
 }
 
 #[derive(Debug)]
-pub enum SpawnOutcome {
+pub(crate) enum SpawnOutcome {
     Live(Spawned),
     MissingBinary,
 }
 
 #[must_use]
-pub fn recorded_exit_code(status: &portable_pty::ExitStatus) -> u32 {
+fn recorded_exit_code(status: &portable_pty::ExitStatus) -> u32 {
     if status.signal().is_some() {
         0
     } else {
@@ -83,14 +57,14 @@ pub fn recorded_exit_code(status: &portable_pty::ExitStatus) -> u32 {
     }
 }
 
-pub fn spawn(
+pub(crate) fn spawn(
     argv: &[String],
     cwd: &Path,
-    size: Size,
+    size: kernel::terminal::TermSize,
     env: &BTreeMap<String, OsString>,
 ) -> Result<SpawnOutcome, Error> {
     if argv.is_empty() {
-        return Err(Error::Spawn("argv is empty".to_owned()));
+        return Err(Error::EmptyArgv);
     }
     let mut command = CommandBuilder::from_argv(argv.iter().map(OsString::from).collect());
     command.cwd(cwd);
@@ -103,8 +77,13 @@ pub fn spawn(
     command.env_remove("RIVETOS_USER_TOKEN");
     let system = native_pty_system();
     let pair = system
-        .openpty(size.into())
-        .map_err(|error| Error::Spawn(error.to_string()))?;
+        .openpty(PtySize {
+            cols: size.cols,
+            rows: size.rows,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|error| Error::PtyBackend(error.into()))?;
     match pair.slave.spawn_command(command) {
         Ok(child) => Ok(SpawnOutcome::Live(Spawned {
             pid: child.process_id(),
@@ -112,7 +91,7 @@ pub fn spawn(
             master: pair.master,
         })),
         Err(error) if is_missing_binary(error.chain()) => Ok(SpawnOutcome::MissingBinary),
-        Err(error) => Err(Error::Spawn(error.to_string())),
+        Err(error) => Err(Error::PtyBackend(error.into())),
     }
 }
 
@@ -137,44 +116,53 @@ fn is_missing_binary<'a>(
 }
 
 pub fn signal(pid: u32, signal: nix::sys::signal::Signal) -> Result<(), Error> {
-    let Ok(target) = i32::try_from(pid) else {
-        return Err(Error::Spawn(format!(
-            "pid {pid} does not fit a signal target"
-        )));
-    };
-    nix::sys::signal::kill(nix::unistd::Pid::from_raw(target), signal)
-        .map_err(|error| Error::Spawn(format!("{signal} to {pid} failed: {error}")))
+    if pid == 0 {
+        return Err(Error::InvalidPid(pid));
+    }
+    let target = i32::try_from(pid).map_err(|_| Error::InvalidPid(pid))?;
+    nix::sys::signal::kill(nix::unistd::Pid::from_raw(target), signal).map_err(|source| {
+        Error::Signal {
+            pid,
+            signal,
+            source,
+        }
+    })
 }
 
-pub fn spawn_exit_watcher(
+pub(crate) fn spawn_exit_watcher(
+    tasks: &tokio_util::task::TaskTracker,
     mut child: Box<dyn Child + Send + Sync>,
-    outcome: tokio::sync::oneshot::Sender<ExitOutcome>,
+    outcome: tokio::sync::oneshot::Sender<Result<ExitOutcome, Error>>,
 ) {
-    std::thread::spawn(move || {
-        let code = match child.wait() {
-            Ok(status) => recorded_exit_code(&status),
-            Err(error) => {
-                tracing::warn!("terminal exit watch failed ({error}) — recorded as exit 0");
-                0
-            }
-        };
-        #[expect(
-            clippy::let_underscore_must_use,
-            reason = "the exit watcher sends once; the receiver lives in the manager and outlives this thread"
-        )]
-        let _: Result<(), ExitOutcome> = outcome.send(ExitOutcome { code });
+    tasks.spawn_blocking(move || {
+        let result = child
+            .wait()
+            .map(|status| ExitOutcome {
+                code: recorded_exit_code(&status),
+            })
+            .map_err(Error::Io);
+        drop(outcome.send(result));
     });
 }
 
-pub fn spawn_reader(mut reader: Box<dyn Read + Send>, sink: tokio::sync::mpsc::Sender<Vec<u8>>) {
-    std::thread::spawn(move || {
+pub(crate) fn spawn_reader(
+    tasks: &tokio_util::task::TaskTracker,
+    mut reader: Box<dyn Read + Send>,
+    sink: tokio::sync::mpsc::Sender<Result<Vec<u8>, Error>>,
+) {
+    tasks.spawn_blocking(move || {
         loop {
             let mut chunk = vec![0u8; READ_BUFFER];
             match reader.read(&mut chunk) {
-                Ok(0) | Err(_) => break,
+                Ok(0) => break,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(error) => {
+                    drop(sink.blocking_send(Err(Error::Io(error))));
+                    break;
+                }
                 Ok(read) => {
                     chunk.truncate(read);
-                    if sink.blocking_send(chunk).is_err() {
+                    if sink.blocking_send(Ok(chunk)).is_err() {
                         break;
                     }
                 }
@@ -183,13 +171,23 @@ pub fn spawn_reader(mut reader: Box<dyn Read + Send>, sink: tokio::sync::mpsc::S
     });
 }
 
-pub fn spawn_writer(
+#[derive(Debug)]
+pub(crate) struct WriteRequest {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) result: tokio::sync::oneshot::Sender<Result<(), Error>>,
+}
+
+pub(crate) fn spawn_writer(
+    tasks: &tokio_util::task::TaskTracker,
     mut writer: Box<dyn Write + Send>,
-    mut source: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    mut source: tokio::sync::mpsc::Receiver<WriteRequest>,
 ) {
-    std::thread::spawn(move || {
-        while let Some(bytes) = source.blocking_recv() {
-            if writer.write_all(&bytes).is_err() {
+    tasks.spawn_blocking(move || {
+        while let Some(request) = source.blocking_recv() {
+            let result = writer.write_all(&request.bytes).map_err(Error::Io);
+            let failed = result.is_err();
+            drop(request.result.send(result));
+            if failed {
                 break;
             }
         }

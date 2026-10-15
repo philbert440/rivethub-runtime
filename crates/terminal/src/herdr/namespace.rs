@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
@@ -12,7 +13,6 @@ use crate::session::RosterKey;
 use crate::session::SessionKey;
 
 const STAMP_FILE: &str = "rivethub.json";
-const FOREIGN_FILE: &str = "rivet.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::Display)]
 #[strum(serialize_all = "kebab-case")]
@@ -29,20 +29,6 @@ pub struct SessionStamp {
     pub user: String,
     pub roster_key: RosterKey,
     pub argv: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ForeignMarker {
-    pub command: String,
-    pub user: String,
-    #[serde(rename = "paneId")]
-    pub pane_id: String,
-    pub created: i64,
-    #[serde(rename = "denKey")]
-    pub recorded_key: String,
-    pub pid: u32,
-    #[serde(rename = "agentPane")]
-    pub agent_pane: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -71,11 +57,6 @@ enum Class {
     Owned(OwnedSession),
     Inactive(SessionKey),
     Skip(SkipRule),
-}
-
-enum ForeignRead {
-    Marker,
-    Unrecognized,
 }
 
 pub fn note_skip(skipped: &mut BTreeSet<SkipRule>, rule: SkipRule) {
@@ -108,10 +89,16 @@ pub fn path_is_inside(root: &Path, child: &Path) -> bool {
 }
 
 pub fn write_stamp(dir: &Path, stamp: &SessionStamp) -> Result<(), Error> {
-    let bytes = serde_json::to_vec(stamp).map_err(|error| Error::SessionStamp {
-        message: error.to_string(),
-    })?;
-    std::fs::write(dir.join(STAMP_FILE), bytes).map_err(Error::Io)
+    let bytes = serde_json::to_vec(stamp).map_err(Error::SessionStamp)?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .custom_flags(nix::libc::O_NOFOLLOW)
+        .open(dir.join(STAMP_FILE))?;
+    std::io::Write::write_all(&mut file, &bytes)?;
+    Ok(())
 }
 
 pub fn session_socket_is_owned(config_home: &Path, socket: &Path) -> Result<bool, Error> {
@@ -121,10 +108,9 @@ pub fn session_socket_is_owned(config_home: &Path, socket: &Path) -> Result<bool
     if is_symlink(socket)? {
         return Ok(false);
     }
-    match socket.parent() {
-        Some(parent) if is_symlink(parent)? => Ok(false),
-        Some(_) | None => Ok(true),
-    }
+    let root = std::fs::canonicalize(config_home)?;
+    let resolved = std::fs::canonicalize(socket)?;
+    Ok(resolved.starts_with(root.join("herdr").join("sessions")))
 }
 
 pub fn scan(
@@ -133,6 +119,9 @@ pub fn scan(
     owner: &str,
     hosts: &HostRoots<'_>,
 ) -> Result<Scan, Error> {
+    if owner.is_empty() {
+        return Err(Error::OwnerUnset);
+    }
     if !covers(state_dir, config_home) {
         return Err(escape(config_home, state_dir));
     }
@@ -146,7 +135,17 @@ pub fn scan(
     if !path_is_inside(config_home, &sessions) {
         return Err(escape(&sessions, config_home));
     }
-    read_sessions(&sessions, &namespace, owner, &mut scan)?;
+    match std::fs::canonicalize(&sessions) {
+        Ok(resolved) => {
+            let root = std::fs::canonicalize(state_dir)?;
+            if !resolved.starts_with(&root) {
+                return Err(escape(&sessions, state_dir));
+            }
+            read_sessions(&sessions, &namespace, owner, &mut scan)?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(Error::Io(error)),
+    }
     Ok(scan)
 }
 
@@ -179,7 +178,7 @@ fn classify_entry(
         dylint_lib = "rr_lints",
         expect(
             fallback,
-            reason = "PATTERNS FALLBACK: a non-utf8 directory name is the foreign-herdr-namespace rule"
+            reason = "CONTRACT B12: refuse a non-UTF-8 directory as a foreign herdr namespace"
         )
     )]
     let Ok(name) = entry.file_name().into_string() else {
@@ -200,17 +199,18 @@ fn classify_entry(
 }
 
 fn read_owned(dir: &Path, namespace: &str, owner: &str, dir_name: &str) -> Result<Class, Error> {
-    let bytes = match std::fs::read(dir.join(STAMP_FILE)) {
-        Ok(bytes) => bytes,
+    let file = match std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(nix::libc::O_NOFOLLOW)
+        .open(dir.join(STAMP_FILE))
+    {
+        Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return classify_unstamped(dir);
+            return Ok(Class::Skip(SkipRule::ForeignHerdrNamespace));
         }
         Err(error) => return Err(Error::Io(error)),
     };
-    let stamp =
-        serde_json::from_slice::<SessionStamp>(&bytes).map_err(|error| Error::SessionStamp {
-            message: error.to_string(),
-        })?;
+    let stamp: SessionStamp = serde_json::from_reader(file).map_err(Error::SessionStamp)?;
     if stamp.namespace != namespace || paths::session_dir_name(&stamp.session_key) != dir_name {
         return Ok(Class::Skip(SkipRule::ForeignHerdrNamespace));
     }
@@ -233,30 +233,6 @@ fn read_owned(dir: &Path, namespace: &str, owner: &str, dir_name: &str) -> Resul
             Ok(Class::Inactive(stamp.session_key))
         }
         Err(error) => Err(Error::Io(error)),
-    }
-}
-
-fn classify_unstamped(dir: &Path) -> Result<Class, Error> {
-    match std::fs::read(dir.join(FOREIGN_FILE)) {
-        Ok(bytes) => Ok(Class::Skip(foreign_rule(&bytes))),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            Ok(Class::Skip(SkipRule::ForeignHerdrNamespace))
-        }
-        Err(error) => Err(Error::Io(error)),
-    }
-}
-
-fn foreign_rule(bytes: &[u8]) -> SkipRule {
-    match read_foreign(bytes) {
-        ForeignRead::Marker | ForeignRead::Unrecognized => SkipRule::ForeignHerdrNamespace,
-    }
-}
-
-fn read_foreign(bytes: &[u8]) -> ForeignRead {
-    if serde_json::from_slice::<ForeignMarker>(bytes).is_ok() {
-        ForeignRead::Marker
-    } else {
-        ForeignRead::Unrecognized
     }
 }
 

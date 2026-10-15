@@ -8,7 +8,6 @@ use libtest_mimic::Trial;
 use libtest_mimic::run;
 use terminal::herdr::DEFAULT_PANE;
 use terminal::herdr::HerdrEventKind;
-use terminal::herdr::PINNED_VERSION;
 use terminal::herdr::codec;
 use terminal::herdr::paths;
 use terminal::herdr::probe;
@@ -20,8 +19,11 @@ fn process_env() -> config::Environment {
 }
 
 fn search_paths() -> Vec<PathBuf> {
-    let path = process_env().text("PATH").unwrap_or_default().to_owned();
-    let mut dirs: Vec<PathBuf> = path.split(':').map(PathBuf::from).collect();
+    let env = process_env();
+    let mut dirs = Vec::new();
+    if let Some(path) = env.text("PATH") {
+        dirs.extend(std::env::split_paths(path));
+    }
     if let Some(home) = home_dir() {
         dirs.push(home.join(".local").join("bin"));
     }
@@ -32,13 +34,12 @@ fn home_dir() -> Option<PathBuf> {
     process_env().home().map(PathBuf::from)
 }
 
-fn run_probe() -> Result<terminal::herdr::HerdrBinary, terminal::herdr::ProbeFailure> {
-    let outcome =
-        tokio::runtime::Runtime::new().map_err(|error| terminal::herdr::ProbeFailure::Version {
-            binary: PathBuf::from("herdr"),
-            found: format!("dev test runtime: {error}"),
-        })?;
-    outcome.block_on(probe(&search_paths(), home_dir().as_deref()))
+fn run_probe() -> Result<terminal::herdr::HerdrBinary, Failed> {
+    let runtime =
+        tokio::runtime::Runtime::new().map_err(|error| Failed::from(error.to_string()))?;
+    runtime
+        .block_on(probe(&search_paths(), home_dir().as_deref()))
+        .map_err(|error| Failed::from(error.to_string()))
 }
 
 async fn real_lifecycle(binary: PathBuf) -> Result<Completion, Failed> {
@@ -109,39 +110,18 @@ async fn real_lifecycle(binary: PathBuf) -> Result<Completion, Failed> {
 
 fn main() {
     let args = Arguments::from_args();
-    let trials = match run_probe() {
-        Ok(binary) => vec![
-            Trial::test("herdr pinned binary is installed", {
-                let binary = binary.path.clone();
-                move || match run_probe() {
-                    Ok(found) if found.path == binary => Ok(()),
-                    Ok(found) => Err(Failed::from(format!(
-                        "the probe moved: {} then {}",
-                        binary.display(),
-                        found.path.display()
-                    ))),
-                    Err(failure) => Err(Failed::from(format!("probe flapped: {failure:?}"))),
-                }
-            })
-            .with_ignored_flag(true),
-            Trial::ignorable_test("herdr server lifecycle", move || {
-                let runtime = tokio::runtime::Runtime::new()
-                    .map_err(|error| Failed::from(format!("dev test runtime: {error}")))?;
-                runtime.block_on(real_lifecycle(binary.path))
-            })
-            .with_ignored_flag(true),
-        ],
-        Err(failure) => vec![Trial::ignorable_test(
-            "herdr pinned binary is installed",
-            move || {
-                Ok(Completion::Ignored {
-                    reason: Some(format!(
-                        "herdr {PINNED_VERSION} is not installed on this machine ({failure:?}) — the socket and RPC conformance runs need the real binary"
-                    )),
-                })
-            },
-        )
-        .with_ignored_flag(true)],
-    };
+    let trials = vec![
+        Trial::test("herdr pinned binary is installed", || {
+            run_probe().map(|_| ())
+        })
+        .with_ignored_flag(true),
+        Trial::ignorable_test("herdr server lifecycle", || {
+            let binary = run_probe()?;
+            let runtime =
+                tokio::runtime::Runtime::new().map_err(|error| Failed::from(error.to_string()))?;
+            runtime.block_on(real_lifecycle(binary.path))
+        })
+        .with_ignored_flag(true),
+    ];
     run(&args, trials).exit();
 }

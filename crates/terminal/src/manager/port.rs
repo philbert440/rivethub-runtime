@@ -10,9 +10,11 @@ impl TerminalManager {
             MuxPlan::Herdr(_) => self.port_herdr(spec).await,
             MuxPlan::Direct => {
                 let manager = self.clone();
-                tokio::task::spawn_blocking(move || manager.start_pty(&spec))
+                self.inner
+                    .tasks
+                    .spawn_blocking(move || manager.start_pty(&spec))
                     .await
-                    .map_err(|error| Error::Spawn(error.to_string()))?
+                    .map_err(Error::Worker)?
             }
             MuxPlan::Unavailable(unavailable) => Err(unavailable.reason.to_error()),
         }
@@ -25,7 +27,7 @@ impl TerminalManager {
             match state.get(&server) {
                 Some(Runtime::Herdr { session, .. }) => session.clone(),
                 Some(Runtime::Pty { .. }) | None => {
-                    return Err(Error::Spawn("herdr server record missing".into()));
+                    return Err(Error::MissingServer);
                 }
             }
         };
@@ -41,9 +43,12 @@ impl TerminalManager {
             session.config_home.to_string_lossy().into_owned(),
         );
         let manager = self.clone();
-        let outcome = tokio::task::spawn_blocking(move || manager.start_pty(&attached))
+        let outcome = self
+            .inner
+            .tasks
+            .spawn_blocking(move || manager.start_pty(&attached))
             .await
-            .map_err(|error| Error::Spawn(error.to_string()))?;
+            .map_err(Error::Worker)?;
         match outcome {
             Ok(id) => {
                 self.inner.port_backends.lock().insert(id.clone(), server);

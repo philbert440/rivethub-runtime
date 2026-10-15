@@ -21,25 +21,40 @@ use crate::herdr::codec::AckError;
 use crate::herdr::codec::AckErrorCode;
 use crate::herdr::codec::AckFrame;
 use crate::herdr::codec::AckResult;
+use crate::herdr::codec::AckResultKind;
 use crate::herdr::codec::AgentStartParams;
 use crate::herdr::codec::EventFrame;
 use crate::herdr::codec::EventsSubscribeParams;
 use crate::herdr::codec::InboundFrame;
 use crate::herdr::codec::PaneGetParams;
 use crate::herdr::codec::PaneSendTextParams;
+use crate::herdr::codec::RequestFrame;
 use crate::herdr::codec::RequestParams;
 use crate::herdr::codec::RpcMethod;
 use crate::herdr::codec::WorkspaceCreateParams;
 use crate::herdr::codec::decode_line;
-use crate::herdr::codec::encode_request;
 
 const EVENT_CAPACITY: usize = 64;
+
+#[derive(Debug)]
+struct Lifetime {
+    shutdown: tokio_util::sync::CancellationToken,
+    tasks: tokio_util::task::TaskTracker,
+}
+
+impl Drop for Lifetime {
+    fn drop(&mut self) {
+        self.shutdown.cancel();
+        self.tasks.close();
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct HerdrClient {
     socket: PathBuf,
-    events: broadcast::Sender<EventFrame>,
+    events: broadcast::Sender<Result<EventFrame, Arc<Error>>>,
     next_id: Arc<AtomicU64>,
+    lifetime: Arc<Lifetime>,
 }
 
 impl HerdrClient {
@@ -50,6 +65,10 @@ impl HerdrClient {
             socket: socket.to_path_buf(),
             events,
             next_id: Arc::new(AtomicU64::new(1)),
+            lifetime: Arc::new(Lifetime {
+                shutdown: tokio_util::sync::CancellationToken::new(),
+                tasks: tokio_util::task::TaskTracker::new(),
+            }),
         }
     }
 
@@ -59,11 +78,15 @@ impl HerdrClient {
     }
 
     #[must_use]
-    pub fn subscribe_events(&self) -> broadcast::Receiver<EventFrame> {
+    pub fn subscribe_events(&self) -> broadcast::Receiver<Result<EventFrame, Arc<Error>>> {
         self.events.subscribe()
     }
 
-    pub async fn call(&self, method: RpcMethod, params: RequestParams) -> Result<AckResult, Error> {
+    pub async fn call(
+        &self,
+        method: RpcMethod,
+        params: RequestParams,
+    ) -> Result<Option<AckResult>, Error> {
         self.call_with_timeout(method, params, call_timeout(method))
             .await
     }
@@ -73,20 +96,25 @@ impl HerdrClient {
         method: RpcMethod,
         params: RequestParams,
         timeout: Duration,
-    ) -> Result<AckResult, Error> {
+    ) -> Result<Option<AckResult>, Error> {
         let id = self.fresh_id();
-        let encoded = encode_request(&id, method, &params)?;
-        let outcome = tokio::time::timeout(timeout, self.round_trip(method, encoded)).await;
+        let encoded = RequestFrame {
+            id: id.clone(),
+            method,
+            params,
+        }
+        .encode()?;
+        let outcome = tokio::time::timeout(timeout, self.round_trip(method, &id, encoded)).await;
         match outcome {
             Ok(result) => result,
-            Err(_) => Err(Error::Rpc {
-                method: std::borrow::Cow::Owned(method.to_string()),
-                message: format!("timed out after {}ms", timeout.as_millis()),
+            Err(_) => Err(Error::RpcTimeout {
+                method,
+                timeout_ms: timeout.as_millis(),
             }),
         }
     }
 
-    pub async fn agent_start(&self, params: AgentStartParams) -> Result<AckResult, Error> {
+    pub async fn agent_start(&self, params: AgentStartParams) -> Result<Option<AckResult>, Error> {
         let deadline = tokio::time::Instant::now() + PANE_READY_TIMEOUT;
         loop {
             match self
@@ -100,7 +128,7 @@ impl HerdrClient {
                 Err(Error::Ack {
                     error:
                         AckError {
-                            code: AckErrorCode::AgentPaneBusy,
+                            code: Some(AckErrorCode::AgentPaneBusy),
                             ..
                         },
                     ..
@@ -112,7 +140,10 @@ impl HerdrClient {
         }
     }
 
-    pub async fn pane_send_text(&self, params: PaneSendTextParams) -> Result<AckResult, Error> {
+    pub async fn pane_send_text(
+        &self,
+        params: PaneSendTextParams,
+    ) -> Result<Option<AckResult>, Error> {
         self.call(RpcMethod::PaneSendText, RequestParams::PaneSendText(params))
             .await
     }
@@ -120,7 +151,7 @@ impl HerdrClient {
     pub async fn workspace_create(
         &self,
         params: WorkspaceCreateParams,
-    ) -> Result<AckResult, Error> {
+    ) -> Result<Option<AckResult>, Error> {
         self.call(
             RpcMethod::WorkspaceCreate,
             RequestParams::WorkspaceCreate(params),
@@ -128,35 +159,51 @@ impl HerdrClient {
         .await
     }
 
-    pub async fn pane_get(&self, params: PaneGetParams) -> Result<AckResult, Error> {
+    pub async fn pane_get(&self, params: PaneGetParams) -> Result<Option<AckResult>, Error> {
         self.call(RpcMethod::PaneGet, RequestParams::PaneGet(params))
             .await
     }
 
     pub async fn events_subscribe(&self, params: EventsSubscribeParams) -> Result<(), Error> {
         let id = self.fresh_id();
-        let encoded = encode_request(
-            &id,
-            RpcMethod::EventsSubscribe,
-            &RequestParams::EventsSubscribe(params),
-        )?;
-        let stream = self.open().await?;
-        let (reader, mut writer) = stream.into_split();
-        write_frame(&mut writer, &encoded).await?;
-        let mut reader = BufReader::new(reader);
-        let ack = self
-            .first_ack(RpcMethod::EventsSubscribe, &mut reader)
-            .await?;
-        match ack_outcome(RpcMethod::EventsSubscribe, ack)? {
-            AckResult::SubscriptionStarted => {}
-            AckResult::Unrecorded => {
-                return Err(Error::Rpc {
-                    method: std::borrow::Cow::Borrowed("events.subscribe"),
-                    message: "expected subscription_started".to_owned(),
-                });
-            }
+        let encoded = RequestFrame {
+            id: id.clone(),
+            method: RpcMethod::EventsSubscribe,
+            params: RequestParams::EventsSubscribe(params),
         }
-        tokio::spawn(event_pump(self.events.clone(), reader));
+        .encode()?;
+        let handshake = async {
+            let stream = self.open().await?;
+            let (reader, mut writer) = stream.into_split();
+            write_frame(&mut writer, &encoded).await?;
+            let mut reader = BufReader::new(reader);
+            let ack = self
+                .first_ack(RpcMethod::EventsSubscribe, &id, &mut reader)
+                .await?;
+            Ok::<_, Error>((reader, ack))
+        };
+        let (reader, ack) = tokio::time::timeout(CTL_TIMEOUT, handshake)
+            .await
+            .map_err(|_| Error::RpcTimeout {
+                method: RpcMethod::EventsSubscribe,
+                timeout_ms: CTL_TIMEOUT.as_millis(),
+            })??;
+        if !ack_outcome(RpcMethod::EventsSubscribe, ack)?
+            .is_some_and(|result| result.kind == AckResultKind::SubscriptionStarted)
+        {
+            return Err(Error::SubscriptionResult);
+        }
+        let events = self.events.clone();
+        let shutdown = self.lifetime.shutdown.clone();
+        self.lifetime.tasks.spawn(async move {
+            let result = tokio::select! {
+                () = shutdown.cancelled() => return,
+                result = event_pump(&events, reader) => result,
+            };
+            if let Err(error) = result {
+                drop(events.send(Err(Arc::new(error))));
+            }
+        });
         Ok(())
     }
 
@@ -164,18 +211,24 @@ impl HerdrClient {
         Ok(UnixStream::connect(&self.socket).await?)
     }
 
-    async fn round_trip(&self, method: RpcMethod, encoded: Vec<u8>) -> Result<AckResult, Error> {
+    async fn round_trip(
+        &self,
+        method: RpcMethod,
+        id: &str,
+        encoded: Vec<u8>,
+    ) -> Result<Option<AckResult>, Error> {
         let stream = self.open().await?;
         let (reader, mut writer) = stream.into_split();
         write_frame(&mut writer, &encoded).await?;
         let mut reader = BufReader::new(reader);
-        let ack = self.first_ack(method, &mut reader).await?;
+        let ack = self.first_ack(method, id, &mut reader).await?;
         ack_outcome(method, ack)
     }
 
     async fn first_ack(
         &self,
         method: RpcMethod,
+        id: &str,
         reader: &mut BufReader<tokio::net::unix::OwnedReadHalf>,
     ) -> Result<AckFrame, Error> {
         let mut line = Vec::new();
@@ -183,18 +236,25 @@ impl HerdrClient {
             line.clear();
             let read = reader.read_until(b'\n', &mut line).await?;
             if read == 0 {
-                return Err(closed(method));
+                return Err(Error::RpcClosed { method });
             }
             let trimmed: &[u8] = trim_newline(&line);
             if trimmed.is_empty() {
                 continue;
             }
-            match decode_line(trimmed) {
-                Ok(InboundFrame::Ack(ack)) => return Ok(ack),
-                Ok(InboundFrame::Event(event)) => {
-                    drop(self.events.send(event));
+            match decode_line(trimmed)? {
+                InboundFrame::Ack(ack) => {
+                    if ack.id != id {
+                        return Err(Error::AckId {
+                            expected: id.to_owned(),
+                            actual: ack.id,
+                        });
+                    }
+                    return Ok(ack);
                 }
-                Err(_) => {}
+                InboundFrame::Event(event) => {
+                    drop(self.events.send(Ok(event)));
+                }
             }
         }
     }
@@ -214,26 +274,26 @@ async fn write_frame(
 }
 
 async fn event_pump(
-    events: broadcast::Sender<EventFrame>,
+    events: &broadcast::Sender<Result<EventFrame, Arc<Error>>>,
     mut reader: BufReader<tokio::net::unix::OwnedReadHalf>,
-) {
+) -> Result<(), Error> {
     let mut line = Vec::new();
     loop {
         line.clear();
-        let read = reader.read_until(b'\n', &mut line).await;
-        match read {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {
-                let trimmed: &[u8] = trim_newline(&line);
-                if trimmed.is_empty() {
-                    continue;
-                }
-                if let Ok(InboundFrame::Event(event)) = decode_line(trimmed)
-                    && events.send(event).is_err()
-                {
-                    break;
-                }
+        if reader.read_until(b'\n', &mut line).await? == 0 {
+            return Err(Error::RpcClosed {
+                method: RpcMethod::EventsSubscribe,
+            });
+        }
+        let trimmed = trim_newline(&line);
+        if trimmed.is_empty() {
+            continue;
+        }
+        match decode_line(trimmed)? {
+            InboundFrame::Event(event) => {
+                drop(events.send(Ok(event)));
             }
+            InboundFrame::Ack(_) => return Err(Error::SubscriptionResult),
         }
     }
 }
@@ -246,17 +306,10 @@ fn call_timeout(method: RpcMethod) -> Duration {
     }
 }
 
-fn closed(method: RpcMethod) -> Error {
-    Error::Rpc {
-        method: std::borrow::Cow::Owned(method.to_string()),
-        message: "socket closed".to_owned(),
-    }
-}
-
-fn ack_outcome(method: RpcMethod, ack: AckFrame) -> Result<AckResult, Error> {
+fn ack_outcome(method: RpcMethod, ack: AckFrame) -> Result<Option<AckResult>, Error> {
     match ack.error {
         Some(error) => Err(Error::Ack { method, error }),
-        None => Ok(ack.result.unwrap_or(AckResult::Unrecorded)),
+        None => Ok(ack.result),
     }
 }
 

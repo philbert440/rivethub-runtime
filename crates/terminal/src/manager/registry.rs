@@ -23,7 +23,7 @@ use crate::session::SessionKey;
 pub(super) struct LivePty {
     pub(super) master: Box<dyn portable_pty::MasterPty + Send>,
     pub(super) pid: Option<u32>,
-    pub(super) writer: mpsc::Sender<Vec<u8>>,
+    pub(super) writer: mpsc::Sender<pty::WriteRequest>,
     pub(super) output: broadcast::Sender<Arc<[u8]>>,
     pub(super) viewers: u32,
     pub(super) detached_since: Instant,
@@ -37,7 +37,7 @@ pub(super) enum Runtime {
         scrollback: Scrollback,
         fields: RecordFields,
         live: Option<LivePty>,
-        exit_code: Option<u32>,
+        exit_code: Option<Result<u32, Arc<crate::Error>>>,
         exited_at: Option<Instant>,
         exit_watch: watch::Sender<TerminalState>,
     },
@@ -149,7 +149,7 @@ impl TerminalManager {
     pub(super) fn pty_record(
         fields: &RecordFields,
         live: Option<&LivePty>,
-        exit_code: Option<&u32>,
+        exit_code: Option<&Result<u32, Arc<crate::Error>>>,
     ) -> TerminalRecord {
         fields.record(
             live.and_then(|live| live.pid),
@@ -188,32 +188,32 @@ impl TerminalManager {
     }
 
     pub fn close(&self) {
-        let mut state = self.inner.state.lock();
-        for runtime in state.values_mut() {
-            let Runtime::Pty {
-                live: Some(live), ..
-            } = runtime
-            else {
-                continue;
-            };
-            if live.hangup_sent {
-                continue;
-            }
-            live.hangup_sent = true;
-            if let Some(pid) = live.pid
-                && let Err(error) = pty::signal(pid, nix::sys::signal::Signal::SIGHUP)
-            {
-                tracing::warn!("terminal shutdown SIGHUP to {pid} failed ({error})");
-            }
+        let ids: Vec<_> = self
+            .inner
+            .state
+            .lock()
+            .iter()
+            .filter_map(|(id, runtime)| match runtime {
+                Runtime::Pty {
+                    live: Some(live), ..
+                } if !live.hangup_sent => Some(id.clone()),
+                Runtime::Pty { .. } | Runtime::Herdr { .. } => None,
+            })
+            .collect();
+        for id in ids {
+            self.evict(&id);
         }
     }
 }
 
-pub(super) fn record_state(live: Option<&LivePty>, exit_code: Option<&u32>) -> TerminalState {
+pub(super) fn record_state(
+    live: Option<&LivePty>,
+    exit_code: Option<&Result<u32, Arc<crate::Error>>>,
+) -> TerminalState {
     match (live, exit_code) {
         (Some(_), _) => TerminalState::Running,
-        (None, Some(code)) => TerminalState::Exited { code: *code },
-        (None, None) => TerminalState::Exited { code: 0 },
+        (None, Some(Ok(code))) => TerminalState::Exited { code: *code },
+        (None, Some(Err(_)) | None) => TerminalState::Failed,
     }
 }
 

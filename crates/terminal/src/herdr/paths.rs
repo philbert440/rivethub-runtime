@@ -10,9 +10,9 @@ use crate::session::SessionKey;
 pub const SUN_PATH_MAX: usize = 107;
 
 #[must_use]
-pub fn hash8(state_dir: &Path, port: u16) -> String {
+fn hash8(state_dir: &Path, port: u16) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(state_dir.to_string_lossy().as_bytes());
+    hasher.update(state_dir.as_os_str().as_encoded_bytes());
     hasher.update(b":");
     hasher.update(port.to_string().as_bytes());
     let digest = hasher.finalize();
@@ -60,7 +60,7 @@ pub fn client_socket(config_home: &Path) -> Result<PathBuf, Error> {
     assert_sun_path(&config_home.join("herdr-client.sock"))
 }
 
-pub fn assert_sun_path(path: &Path) -> Result<PathBuf, Error> {
+fn assert_sun_path(path: &Path) -> Result<PathBuf, Error> {
     let len = path.as_os_str().len();
     if len > SUN_PATH_MAX {
         return Err(Error::SocketPathTooLong {
@@ -76,10 +76,10 @@ pub async fn wait_for_socket(
     timeout: std::time::Duration,
     session: &str,
 ) -> Result<(), Error> {
-    let timeout_ms = duration_ms(timeout);
+    let timeout_ms = timeout.as_millis();
     let deadline = tokio::time::Instant::now() + timeout;
     loop {
-        if socket.exists() {
+        if tokio::fs::try_exists(socket).await? {
             return Ok(());
         }
         if tokio::time::Instant::now() >= deadline {
@@ -91,11 +91,6 @@ pub async fn wait_for_socket(
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-}
-
-#[must_use]
-pub fn duration_ms(timeout: std::time::Duration) -> u64 {
-    timeout.as_secs() * 1000 + u64::from(timeout.subsec_millis())
 }
 
 #[cfg(test)]

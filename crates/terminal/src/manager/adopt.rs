@@ -10,7 +10,6 @@ use crate::herdr::namespace::OwnedSession;
 use crate::herdr::namespace::Scan;
 use crate::herdr::namespace::SkipRule;
 use crate::manager::Backing;
-use crate::manager::SpawnSpec;
 use crate::manager::TerminalManager;
 use crate::manager::registry::RecordFields;
 use crate::manager::registry::Runtime;
@@ -34,6 +33,9 @@ pub struct Adoption {
 
 impl TerminalManager {
     pub async fn adopt_namespace(&self, state_dir: &Path, owner: &str) -> Result<Adoption, Error> {
+        if owner.is_empty() {
+            return Err(Error::OwnerUnset);
+        }
         *self.inner.owner.lock() = Some(owner.to_owned());
         let setup = match &self.inner.plan {
             MuxPlan::Direct => return Ok(Adoption::default()),
@@ -57,10 +59,14 @@ impl TerminalManager {
             )
         })
         .await
-        .map_err(|error| Error::HerdrInit {
-            message: error.to_string(),
-        })??;
-        self.install_owned(&setup.binary, &setup.config_home, scanned)
+        .map_err(Error::Worker)??;
+        let manager = self.clone();
+        self.inner
+            .tasks
+            .spawn_blocking(move || {
+                manager.install_owned(&setup.binary, &setup.config_home, scanned)
+            })
+            .await?
     }
 
     pub fn release(&self, id: &TerminalId) {
@@ -102,16 +108,15 @@ impl TerminalManager {
                 root: Box::from(config_home),
             });
         }
-        let spec = SpawnSpec {
+        let id = self.fresh_id();
+        let fields = RecordFields {
+            id: id.clone(),
             session: Some(owned.session.clone()),
             roster_key: owned.roster_key.clone(),
             argv: owned.argv.clone(),
-            cwd: std::path::PathBuf::new(),
             size: TermSize { cols: 80, rows: 24 },
-            entry_env: std::collections::BTreeMap::new(),
+            backing: Backing::Herdr,
         };
-        let id = self.fresh_id();
-        let fields = RecordFields::new(&spec, id.clone(), Backing::Herdr);
         self.inner
             .state
             .lock()

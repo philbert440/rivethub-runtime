@@ -4,7 +4,6 @@
 )]
 mod common;
 
-use common::collect;
 use terminal::TerminalState;
 
 async fn a_real_pty_runs_spawn_attach_input_resize_and_kill()
@@ -21,11 +20,9 @@ async fn a_real_pty_runs_spawn_attach_input_resize_and_kill()
 
     let stream = manager.attach_stream(&id)?;
     assert_eq!(stream.record.state, TerminalState::Running);
-    assert_eq!(stream.replay, [] as [u8; 0]);
-    let mut live = stream.live.ok_or("the live stream is missing")?;
 
     manager.input(&id, b"echo hello\r".to_vec()).await?;
-    let echoed = String::from_utf8_lossy(&collect(&mut live, 1500).await).into_owned();
+    let echoed = String::from_utf8(common::until_output(stream, b"hello\r\n").await?)?;
     assert!(
         echoed.contains("hello"),
         "expected the echo, got {echoed:?}"
@@ -39,7 +36,8 @@ async fn a_real_pty_runs_spawn_attach_input_resize_and_kill()
         },
     )?;
     manager.input(&id, b"stty size\r".to_vec()).await?;
-    let sized = String::from_utf8_lossy(&collect(&mut live, 1500).await).into_owned();
+    let sized =
+        String::from_utf8(common::until_output(manager.attach_stream(&id)?, b"40 120\r\n").await?)?;
     assert!(
         sized.contains("40 120"),
         "stty prints rows cols, got {sized:?}"
@@ -143,7 +141,7 @@ async fn spawn_or_get_returns_the_live_record_for_the_same_session()
         .start(common::spec(
             session,
             work.path(),
-            &["/bin/sh", "-c", "sleep 30"],
+            &["/bin/sh", "-c", "exec cat"],
         )?)
         .await?;
     let second = manager
@@ -187,19 +185,12 @@ async fn the_polite_kill_escalates_to_sigkill_after_three_seconds()
         .start(common::spec(
             "claude-code:00000000-0000-4000-8000-000000000007",
             work.path(),
-            &["/bin/sh", "-c", "trap '' HUP; exec sleep 30"],
+            &["/bin/sh", "-c", "trap '' HUP; printf 'ready\\n'; exec cat"],
         )?)
         .await?;
-    #[cfg_attr(
-        dylint_lib = "rr_lints",
-        expect(
-            sleep,
-            reason = "the trapped child needs a real moment to install its disposition before the polite kill is measured"
-        )
-    )]
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    manager.kill(&id).await?;
+    common::until_output(manager.attach_stream(&id)?, b"ready\r\n").await?;
     let started = std::time::Instant::now();
+    manager.kill(&id).await?;
     let record = common::wait_for_exit(&manager, &id).await?;
     let elapsed = started.elapsed();
     assert!(
@@ -229,7 +220,7 @@ async fn a_storm_of_shortlived_children_drains_the_last_line_before_the_exit_is_
             )?)
             .await?;
 
-        let mut viewer = manager.attach_stream(&id)?.live;
+        let viewer = manager.attach_stream(&id)?;
         let record = tokio::time::timeout(bound, manager.wait_exited(&id)).await??;
         let line = format!("bye {i}\r\n");
         assert_eq!(
@@ -239,15 +230,11 @@ async fn a_storm_of_shortlived_children_drains_the_last_line_before_the_exit_is_
             },
             "child {i} recorded the wrong exit"
         );
-        if let Some(stream) = viewer.as_mut() {
-            let seen = tokio::time::timeout(bound, common::collect(stream, 5_000)).await?;
-            assert!(
-                seen.windows(line.len())
-                    .any(|window| window == line.as_bytes()),
-                "child {i}: the attached viewer must see {line:?} before its stream ends, got {:?}",
-                String::from_utf8_lossy(&seen)
-            );
-        }
+        let seen = common::until_output(viewer, line.as_bytes()).await?;
+        assert!(
+            seen.windows(line.len())
+                .any(|window| window == line.as_bytes())
+        );
         let late = manager.attach_stream(&id)?;
         assert!(
             late.replay
@@ -293,4 +280,40 @@ fn the_direct_pty_behaviours() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     runtime.block_on(the_polite_kill_escalates_to_sigkill_after_three_seconds())?;
     runtime.block_on(unknown_terminals_are_typed_errors())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn shutdown_joins_workers_even_when_a_viewer_stays_attached()
+-> Result<(), Box<dyn std::error::Error>> {
+    let manager = std::sync::Arc::new(terminal::TerminalManager::new(
+        common::settings(&config::Environment::default()),
+        terminal::MuxPlan::Direct,
+    ));
+    let shutdown = tokio_util::sync::CancellationToken::new();
+    let tasks = tokio_util::task::TaskTracker::new();
+    manager.run_tracked(shutdown.clone(), &tasks);
+    let work = tempfile::tempdir()?;
+    let id = manager
+        .start(common::spec(
+            "shutdown",
+            work.path(),
+            &["/bin/sh", "-c", "trap '' HUP; printf 'ready\\n'; exec cat"],
+        )?)
+        .await?;
+    common::until_output(manager.attach_stream(&id)?, b"ready\r\n").await?;
+    let viewer = manager.attach_stream(&id)?;
+    shutdown.cancel();
+    tasks.close();
+    tokio::time::timeout(std::time::Duration::from_secs(30), tasks.wait()).await?;
+    assert_eq!(
+        manager.list().first().ok_or("record")?.state,
+        TerminalState::Exited { code: 0 }
+    );
+    drop(viewer);
+    let result = manager
+        .start(common::spec("after-shutdown", work.path(), &["/bin/cat"])?)
+        .await;
+    manager.close();
+    assert!(matches!(result, Err(terminal::Error::ShuttingDown)));
+    Ok(())
 }

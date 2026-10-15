@@ -4,59 +4,43 @@ use std::path::PathBuf;
 use crate::error::Error;
 use crate::herdr::ProbeFailure;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct HerdrSetup {
     pub binary: PathBuf,
     pub config_home: PathBuf,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum UnavailableReason {
-    Probe(ProbeFailure),
+    Probe(std::sync::Arc<ProbeFailure>),
     SocketPath { len: usize, path: PathBuf },
-    Init { message: String },
+    Init(std::sync::Arc<Error>),
 }
 
 impl UnavailableReason {
     #[must_use]
     pub fn text(&self) -> String {
-        match self {
-            Self::Probe(ProbeFailure::NotFound) => {
-                "herdr not found on PATH or in ~/.local/bin".to_owned()
-            }
-            Self::Probe(ProbeFailure::Version { binary, .. }) => format!(
-                "herdr at {} is not {} (RivetHub pins {} / protocol 20)",
-                binary.display(),
-                crate::herdr::PINNED_VERSION,
-                crate::herdr::PINNED_VERSION
-            ),
-            Self::SocketPath { len, path } => {
-                format!("socket path too long ({len} > 107): {}", path.display())
-            }
-            Self::Init { message } => format!("failed to init herdr ({message})"),
-        }
+        self.to_error().to_string()
     }
 
     pub fn to_error(&self) -> Error {
         match self {
-            Self::Probe(failure) => Error::from(failure),
+            Self::Probe(failure) => Error::Probe(std::sync::Arc::clone(failure)),
             Self::SocketPath { len, path } => Error::SocketPathTooLong {
                 len: *len,
                 path: Box::from(path.as_path()),
             },
-            Self::Init { message } => Error::HerdrInit {
-                message: message.clone(),
-            },
+            Self::Init(error) => Error::PtyFailure(std::sync::Arc::clone(error)),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct HerdrSetupUnavailable {
     pub reason: UnavailableReason,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum MuxPlan {
     Herdr(HerdrSetup),
     Direct,
@@ -80,7 +64,7 @@ pub async fn resolve(
         config::TermMuxSetting::Auto => match crate::herdr::probe(paths, home).await {
             Ok(binary) => herdr_plan(binary, state_dir, port),
             Err(reason) => {
-                let reason = UnavailableReason::Probe(reason);
+                let reason = UnavailableReason::Probe(std::sync::Arc::new(reason));
                 tracing::warn!(
                     "terminal mux: {} — falling back to direct PTY (sessions will not survive restarts)",
                     reason.text()
@@ -91,7 +75,7 @@ pub async fn resolve(
         config::TermMuxSetting::Herdr => match crate::herdr::probe(paths, home).await {
             Ok(binary) => herdr_plan(binary, state_dir, port),
             Err(reason) => {
-                let reason = UnavailableReason::Probe(reason);
+                let reason = UnavailableReason::Probe(std::sync::Arc::new(reason));
                 tracing::warn!(
                     "terminal mux: term.mux is 'herdr' but {} — terminals unavailable",
                     reason.text()
@@ -121,9 +105,7 @@ fn herdr_plan(binary: crate::herdr::HerdrBinary, state_dir: &Path, port: u16) ->
             MuxPlan::Unavailable(HerdrSetupUnavailable { reason })
         }
         Err(error) => {
-            let reason = UnavailableReason::Init {
-                message: error.to_string(),
-            };
+            let reason = UnavailableReason::Init(std::sync::Arc::new(error));
             tracing::warn!(
                 "terminal mux: term.mux is 'herdr' but {} — terminals unavailable",
                 reason.text()

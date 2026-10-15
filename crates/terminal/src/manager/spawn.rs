@@ -26,16 +26,28 @@ const BROADCAST_CAPACITY: usize = 256;
 
 impl TerminalManager {
     pub(super) fn start_pty(&self, spec: &SpawnSpec) -> Result<TerminalId, Error> {
+        if self.inner.shutdown.is_cancelled() {
+            return Err(Error::ShuttingDown);
+        }
+        let id = self.create_pty(spec)?;
+        if self.inner.shutdown.is_cancelled() {
+            self.close();
+            return Err(Error::ShuttingDown);
+        }
+        Ok(id)
+    }
+
+    fn create_pty(&self, spec: &SpawnSpec) -> Result<TerminalId, Error> {
         let env = self.inner.settings.child_env(
             spec.session.as_ref(),
             &spec.roster_key,
             &spec.cwd,
             &spec.entry_env,
-        );
+        )?;
         let now = Instant::now();
         let id = self.fresh_id();
         let fields = RecordFields::new(spec, id.clone(), Backing::Pty);
-        match pty::spawn(&spec.argv, &spec.cwd, spec.size.into(), &env)? {
+        match pty::spawn(&spec.argv, &spec.cwd, spec.size, &env)? {
             pty::SpawnOutcome::MissingBinary => {
                 let mut scrollback = Scrollback::new(self.inner.settings.limits.scrollback_bytes);
                 scrollback.push(pty::MISSING_BINARY_OUTPUT);
@@ -48,7 +60,7 @@ impl TerminalManager {
                         scrollback,
                         fields,
                         live: None,
-                        exit_code: Some(pty::MISSING_BINARY_EXIT),
+                        exit_code: Some(Ok(pty::MISSING_BINARY_EXIT)),
                         exited_at: Some(now),
                         exit_watch,
                     },
@@ -65,14 +77,14 @@ impl TerminalManager {
                 let master_reader = spawned
                     .master
                     .try_clone_reader()
-                    .map_err(|error| Error::Spawn(error.to_string()))?;
+                    .map_err(|error| Error::PtyBackend(error.into()))?;
                 let master_writer = spawned
                     .master
                     .take_writer()
-                    .map_err(|error| Error::Spawn(error.to_string()))?;
-                pty::spawn_reader(master_reader, reader_tx);
-                pty::spawn_writer(master_writer, writer_rx);
-                pty::spawn_exit_watcher(spawned.child, exit_tx);
+                    .map_err(|error| Error::PtyBackend(error.into()))?;
+                pty::spawn_reader(&self.inner.tasks, master_reader, reader_tx);
+                pty::spawn_writer(&self.inner.tasks, master_writer, writer_rx);
+                pty::spawn_exit_watcher(&self.inner.tasks, spawned.child, exit_tx);
                 let live = LivePty {
                     master: spawned.master,
                     pid: spawned.pid,
@@ -108,9 +120,7 @@ impl TerminalManager {
         spec: SpawnSpec,
     ) -> Result<TerminalId, Error> {
         let Some(session) = &spec.session else {
-            return Err(Error::Spawn(
-                "herdr terminals are keyed by session; the gateway mints the key".to_owned(),
-            ));
+            return Err(Error::MissingSession);
         };
         let namespace = crate::herdr::namespace::namespace_id(&setup.config_home)?;
         let owner = self.inner.owner.lock().clone().ok_or(Error::OwnerUnset)?;
@@ -128,19 +138,18 @@ impl TerminalManager {
             .socket()
             .parent()
             .map(Path::to_path_buf)
-            .ok_or_else(|| Error::HerdrInit {
-                message: "herdr socket has no session directory".to_owned(),
-            })?;
-        crate::herdr::namespace::write_stamp(
-            &directory,
-            &crate::herdr::namespace::SessionStamp {
-                namespace,
-                session_key: session.clone(),
-                user: owner,
-                roster_key: spec.roster_key.clone(),
-                argv: spec.argv.clone(),
-            },
-        )?;
+            .ok_or(Error::MissingSessionDirectory)?;
+        let stamp = crate::herdr::namespace::SessionStamp {
+            namespace,
+            session_key: session.clone(),
+            user: owner,
+            roster_key: spec.roster_key.clone(),
+            argv: spec.argv.clone(),
+        };
+        self.inner
+            .tasks
+            .spawn_blocking(move || crate::herdr::namespace::write_stamp(&directory, &stamp))
+            .await??;
         let id = self.fresh_id();
         let fields = RecordFields::new(&spec, id.clone(), Backing::Herdr);
         self.inner.state.lock().insert(

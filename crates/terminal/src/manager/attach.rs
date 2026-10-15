@@ -32,11 +32,11 @@ impl TerminalManager {
             ..
         } = runtime
         else {
-            return Err(Error::MuxUnavailable(
-                "herdr terminals stream through the herdr attach client — the gateway owns the /term byte path"
-                    .to_owned(),
-            ));
+            return Err(Error::HerdrStream);
         };
+        if let Some(Err(error)) = exit_code {
+            return Err(Error::PtyFailure(Arc::clone(error)));
+        }
         let record = Self::pty_record(fields, live.as_ref(), exit_code.as_ref());
         let replay = scrollback.snapshot();
         let Some(live) = live else {
@@ -68,10 +68,7 @@ impl TerminalManager {
                     });
                 }
                 Some(Runtime::Herdr { .. }) => {
-                    return Err(Error::MuxUnavailable(
-                        "herdr terminals stream through the herdr attach client — the gateway owns the /term byte path"
-                            .to_owned(),
-                    ));
+                    return Err(Error::HerdrStream);
                 }
                 Some(Runtime::Pty {
                     live: Some(live),
@@ -85,9 +82,14 @@ impl TerminalManager {
                 }
             }
         };
-        writer.send(bytes).await.map_err(|_| Error::Exited {
-            terminal: id.clone(),
-        })?;
+        let (result, written) = oneshot::channel();
+        writer
+            .send(pty::WriteRequest { bytes, result })
+            .await
+            .map_err(|_| Error::Exited {
+                terminal: id.clone(),
+            })?;
+        written.await??;
         {
             let mut state = self.inner.state.lock();
             if let Some(Runtime::Pty {
@@ -120,7 +122,7 @@ impl TerminalManager {
                         pixel_width: 0,
                         pixel_height: 0,
                     })
-                    .map_err(|error| Error::Spawn(error.to_string()))?;
+                    .map_err(|error| Error::PtyBackend(error.into()))?;
                 fields.size = size;
                 Ok(())
             }
@@ -137,18 +139,25 @@ impl TerminalManager {
         out: mpsc::Sender<Vec<u8>>,
     ) {
         let detach_tx = self.inner.detach_tx.clone();
-        tokio::spawn(async move {
+        let shutdown = self.inner.shutdown.clone();
+        self.inner.tasks.spawn(async move {
             let mut alive = true;
             while alive {
                 tokio::select! {
                     chunk = source.recv() => match chunk {
-                        Ok(chunk) => alive = out.send(chunk.to_vec()).await.is_ok(),
+                        Ok(chunk) => {
+                            alive = tokio::select! {
+                                () = shutdown.cancelled() => break,
+                                sent = out.send(chunk.to_vec()) => sent.is_ok(),
+                            };
+                        },
                         Err(
                             broadcast::error::RecvError::Closed
                             | broadcast::error::RecvError::Lagged(_),
                         ) => break,
                     },
                     () = out.closed() => break,
+                    () = shutdown.cancelled() => break,
                 }
             }
             if detach_tx.send(id.clone()).is_err() {
@@ -162,12 +171,20 @@ impl TerminalManager {
     pub(super) fn stream_until_exit(
         &self,
         id: TerminalId,
-        mut output: mpsc::Receiver<Vec<u8>>,
-        exit: oneshot::Receiver<pty::ExitOutcome>,
+        mut output: mpsc::Receiver<Result<Vec<u8>, Error>>,
+        exit: oneshot::Receiver<Result<pty::ExitOutcome, Error>>,
     ) {
         let inner = Arc::clone(&self.inner);
-        tokio::spawn(async move {
+        self.inner.tasks.spawn(async move {
+            let mut failure = None;
             while let Some(chunk) = output.recv().await {
+                let chunk = match chunk {
+                    Ok(chunk) => chunk,
+                    Err(error) => {
+                        failure = Some(error);
+                        break;
+                    }
+                };
                 let mut state = inner.state.lock();
                 let Some(Runtime::Pty {
                     scrollback,
@@ -184,11 +201,19 @@ impl TerminalManager {
                 drop(state);
                 drop(sent);
             }
-            let code = if let Ok(outcome) = exit.await {
-                outcome.code
-            } else {
-                tracing::warn!("terminal {id} exit watch dropped — recorded as exit 0");
-                0
+            let outcome = match failure {
+                Some(error) => Err(error),
+                None => match exit.await {
+                    Ok(result) => result.map(|outcome| outcome.code),
+                    Err(error) => Err(Error::WorkerClosed(error)),
+                },
+            };
+            let terminal_state = match &outcome {
+                Ok(code) => TerminalState::Exited { code: *code },
+                Err(error) => {
+                    tracing::error!(terminal = %id, %error, "terminal worker failed");
+                    TerminalState::Failed
+                }
             };
             let mut state = inner.state.lock();
             if let Some(Runtime::Pty {
@@ -200,9 +225,9 @@ impl TerminalManager {
             }) = state.get_mut(&id)
             {
                 live.take();
-                exit_code.get_or_insert(code);
+                *exit_code = Some(outcome.map_err(Arc::new));
                 exited_at.get_or_insert_with(Instant::now);
-                exit_watch.send_replace(TerminalState::Exited { code });
+                exit_watch.send_replace(terminal_state);
             }
         });
     }
@@ -213,10 +238,7 @@ impl TerminalManager {
             match state.get(id) {
                 Some(Runtime::Pty { exit_watch, .. }) => exit_watch.subscribe(),
                 Some(Runtime::Herdr { .. }) => {
-                    return Err(Error::MuxUnavailable(
-                        "herdr terminals have no manager-visible exit — the gateway owns the /term byte path"
-                            .to_owned(),
-                    ));
+                    return Err(Error::HerdrExit);
                 }
                 None => {
                     return Err(Error::UnknownTerminal {
@@ -226,9 +248,14 @@ impl TerminalManager {
             }
         };
         while *exit.borrow_and_update() == TerminalState::Running {
-            if exit.changed().await.is_err() {
-                break;
-            }
+            exit.changed().await?;
+        }
+        if let Some(Runtime::Pty {
+            exit_code: Some(Err(error)),
+            ..
+        }) = self.inner.state.lock().get(id)
+        {
+            return Err(Error::PtyFailure(Arc::clone(error)));
         }
         self.list()
             .into_iter()

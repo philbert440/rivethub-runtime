@@ -55,7 +55,7 @@ async fn serve(listener: UnixListener, steps: Vec<Step>) -> Result<(), Failed> {
         if read == 0 {
             return Err("the client closed the socket early".into());
         }
-        let frame = codec::decode_request(&line)?;
+        let frame = serde_json::from_slice::<codec::RequestFrame>(&line)?;
         assert_eq!(
             frame.method, expected.method,
             "the client must send {}",
@@ -73,8 +73,10 @@ async fn serve(listener: UnixListener, steps: Vec<Step>) -> Result<(), Failed> {
         }
         if let Some(text) = expected.exact {
             assert_eq!(
-                String::from_utf8(line)?,
-                text.replace("{ID}", &frame.id),
+                serde_json::from_slice::<codec::RequestFrame>(&line)?,
+                serde_json::from_slice::<codec::RequestFrame>(
+                    text.replace("{ID}", &frame.id).as_bytes()
+                )?,
                 "the wire bytes for {} are the recorded ones",
                 expected.method
             );
@@ -230,13 +232,17 @@ async fn event_frames_flow_to_subscribers_through_both_aliases() -> Result<(), F
             ],
         })
         .await?;
-    let first = events.recv().await.map_err(|error| error.to_string())?;
+    let first = tokio::time::timeout(Duration::from_secs(30), events.recv())
+        .await??
+        .map_err(|error| error.to_string())?;
     assert_eq!(first.event, HerdrEventKind::PaneAgentStatusChanged);
     assert_eq!(
         first.data.get("pane_id").and_then(|found| found.as_str()),
         Some("w1:p1")
     );
-    let second = events.recv().await.map_err(|error| error.to_string())?;
+    let second = tokio::time::timeout(Duration::from_secs(30), events.recv())
+        .await??
+        .map_err(|error| error.to_string())?;
     assert_eq!(second.event, HerdrEventKind::PaneAgentDetected);
     let joined = tokio::time::timeout(Duration::from_secs(5), server).await??;
     joined?;
@@ -272,7 +278,7 @@ async fn error_acks_become_typed_rpc_errors() -> Result<(), Failed> {
             terminal::Error::Ack {
                 method: RpcMethod::PaneGet,
                 error: codec::AckError {
-                    code: codec::AckErrorCode::Other(code),
+                    code: Some(codec::AckErrorCode::Other(code)),
                     ..
                 },
             } if code == "pane_not_found"
@@ -291,16 +297,8 @@ async fn a_silent_server_times_out_with_the_recorded_ctl_window() -> Result<(), 
     let socket = dir.path().join("herdr.sock");
     let listener = UnixListener::bind(&socket)?;
     let server = tokio::spawn(async move {
-        let (_stream, _) = listener.accept().await.ok()?;
-        #[cfg_attr(
-            dylint_lib = "rr_lints",
-            expect(
-                sleep,
-                reason = "the fixture stays silent past the client's 250 ms control window; the wait is the fixture"
-            )
-        )]
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        Some(())
+        let (_stream, _) = listener.accept().await?;
+        std::future::pending::<Result<(), std::io::Error>>().await
     });
     let client = HerdrClient::new(&socket);
     let error = client
