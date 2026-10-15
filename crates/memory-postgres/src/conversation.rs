@@ -29,8 +29,7 @@ impl CaptureWriter<'_> {
                 title: row.title,
             });
         }
-        let settings = serde_json::to_value(ensure.settings)
-            .map_err(|source| Error::protocol(source.to_string()))?;
+        let settings = sqlx::types::Json(ensure.settings);
         let inserted = sqlx::query!(
             "insert into rh_conversations
                (session_key, agent, channel, title, settings, active, created_at, updated_at,
@@ -42,7 +41,7 @@ impl CaptureWriter<'_> {
             ensure.agent,
             ensure.channel,
             ensure.title,
-            settings,
+            settings as _,
             ensure.active,
             ensure.created_at,
             ensure.updated_at,
@@ -63,11 +62,7 @@ impl CaptureWriter<'_> {
         &mut self,
         upsert: &ConversationUpsert<'_>,
     ) -> Result<Uuid, Error> {
-        let settings = upsert
-            .settings
-            .map(serde_json::to_value)
-            .transpose()
-            .map_err(|source| Error::protocol(source.to_string()))?;
+        let settings = upsert.settings.map(sqlx::types::Json);
         let record = sqlx::query!(
             "insert into rh_conversations (session_key, agent, channel, title, settings,
                                            task_id, owner_user_id)
@@ -85,7 +80,7 @@ impl CaptureWriter<'_> {
             upsert.agent,
             upsert.channel,
             upsert.title,
-            settings,
+            settings as _,
             upsert.task_id,
             upsert.owner_user_id,
             upsert.title.is_some(),

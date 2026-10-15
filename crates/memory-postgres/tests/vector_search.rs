@@ -58,7 +58,7 @@ fn query(text: &str, mode: SearchMode) -> SearchQuery {
     }
 }
 
-fn contents(hits: &[memory_postgres::search::SearchHit]) -> Vec<String> {
+fn contents(hits: &[wire::gateway::memory::MemorySearchHit]) -> Vec<String> {
     hits.iter().map(|hit| hit.content.clone()).collect()
 }
 
@@ -184,7 +184,7 @@ async fn vector_mode_ranks_seeded_embeddings(pool: PgPool) -> TestResult {
             .is_some_and(|hit| hit.score > 0.0 && hit.score < 1.0)
     );
     assert_eq!(outcome.degraded, None);
-    assert_eq!(memory.vector_arm_dropped(), 0);
+    assert_eq!(memory.vector_arm_dropped(), Some(0));
     Ok(())
 }
 
@@ -201,7 +201,7 @@ async fn vector_mode_without_a_provider_searches_fts_silently(pool: PgPool) -> T
         contents(&outcome.hits)
     );
     assert_eq!(outcome.degraded, None);
-    assert_eq!(memory.vector_arm_dropped(), 0);
+    assert_eq!(memory.vector_arm_dropped(), None);
     Ok(())
 }
 
@@ -218,7 +218,7 @@ async fn hybrid_without_a_provider_carries_no_degradation(pool: PgPool) -> TestR
         contents(&outcome.hits)
     );
     assert_eq!(outcome.degraded, None);
-    assert_eq!(memory.vector_arm_dropped(), 0);
+    assert_eq!(memory.vector_arm_dropped(), None);
     Ok(())
 }
 
@@ -240,13 +240,19 @@ async fn hybrid_with_a_failing_provider_degrades_and_counts(pool: PgPool) -> Tes
         "the text arms still answer: {:?}",
         contents(&outcome.hits)
     );
-    assert_eq!(outcome.degraded.as_deref(), Some("http 503"));
-    assert_eq!(memory.vector_arm_dropped(), 1);
+    assert_eq!(
+        outcome.degraded.as_deref(),
+        Some("provider request failed: http 503")
+    );
+    assert_eq!(memory.vector_arm_dropped(), Some(1));
     let again = memory
         .search_outcome_for(&query("rollback", SearchMode::Hybrid))
         .await?;
-    assert_eq!(again.degraded.as_deref(), Some("http 503"));
-    assert_eq!(memory.vector_arm_dropped(), 2);
+    assert_eq!(
+        again.degraded.as_deref(),
+        Some("provider request failed: http 503")
+    );
+    assert_eq!(memory.vector_arm_dropped(), Some(2));
     Ok(())
 }
 
@@ -280,7 +286,7 @@ async fn hybrid_fuses_the_vector_arm_with_the_text_arms(pool: PgPool) -> TestRes
     );
     assert!(ranked.contains(&BANANA_ONCE));
     assert_eq!(fused.degraded, None);
-    assert_eq!(memory.vector_arm_dropped(), 0);
+    assert_eq!(memory.vector_arm_dropped(), Some(0));
     Ok(())
 }
 
@@ -297,7 +303,11 @@ async fn vector_mode_fallbacks_record_every_degraded_reason(pool: PgPool) -> Tes
             Script::EmbedNetwork,
         ]),
     );
-    for reason in ["bad response", "empty vector", "network"] {
+    for reason in [
+        "bad response",
+        "empty vector",
+        "provider request failed: connection refused",
+    ] {
         let outcome = memory
             .search_outcome_for(&query("deploy", SearchMode::Vector))
             .await?;
@@ -307,7 +317,7 @@ async fn vector_mode_fallbacks_record_every_degraded_reason(pool: PgPool) -> Tes
             "the fts fallback answers for {reason}"
         );
     }
-    assert_eq!(memory.vector_arm_dropped(), 3);
+    assert_eq!(memory.vector_arm_dropped(), Some(3));
     Ok(())
 }
 
@@ -322,14 +332,21 @@ async fn explicit_fts_embeds_for_semantics_and_degrades_quietly(pool: PgPool) ->
         .search_outcome_for(&query("deploy", SearchMode::Fts))
         .await?;
     assert_eq!(scored.degraded, None);
-    assert_eq!(scoring.vector_arm_dropped(), 0);
+    assert_eq!(scoring.vector_arm_dropped(), Some(0));
 
     let (failing, _) = wired(&pool, FakeProvider::new(vec![Script::EmbedHttpStatus(500)]));
     let degraded = failing
         .search_outcome_for(&query("deploy", SearchMode::Fts))
         .await?;
-    assert_eq!(degraded.degraded.as_deref(), Some("http 500"));
-    assert_eq!(failing.vector_arm_dropped(), 0, "explicit fts warns only");
+    assert_eq!(
+        degraded.degraded.as_deref(),
+        Some("provider request failed: http 500")
+    );
+    assert_eq!(
+        failing.vector_arm_dropped(),
+        Some(0),
+        "explicit fts warns only"
+    );
 
     let with_embed = scored
         .hits

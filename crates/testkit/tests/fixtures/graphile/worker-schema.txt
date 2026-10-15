@@ -7,7 +7,9 @@ CREATE TABLE graphile_worker._private_tasks (
 
 CREATE TABLE graphile_worker._private_job_queues (
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    queue_name text NOT NULL UNIQUE
+    queue_name text NOT NULL UNIQUE,
+    locked_at timestamptz,
+    locked_by text
 );
 
 CREATE TABLE graphile_worker._private_jobs (

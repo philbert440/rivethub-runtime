@@ -21,8 +21,8 @@ use kernel::memory::TagLookup;
 use kernel::memory::TagTaxonomyDecision;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use serde::Deserialize as _;
 use uuid::Uuid;
-use wire::JsonObject;
 use wire::capture::CaptureBatchRequest;
 use wire::capture::CaptureMessage;
 use wire::capture::CaptureResult;
@@ -40,12 +40,24 @@ impl crate::PostgresMemory {
         batch: &CaptureBatchRequest,
         options: &CaptureOptions,
     ) -> Result<CaptureResult, Error> {
+        let channel = batch.channel.as_deref().ok_or(Error::MissingChannel)?;
         let cwd = batch
             .settings
             .as_ref()
-            .and_then(|settings| settings.get("cwd"))
-            .and_then(|value| value.as_str())
-            .map(str::to_string);
+            .map(|settings| {
+                CaptureSettings::deserialize(serde::de::value::MapDeserializer::<
+                    _,
+                    serde_json::Error,
+                >::new(
+                    settings
+                        .as_map()
+                        .iter()
+                        .map(|(key, value)| (key.as_str(), value)),
+                ))
+                .map(|settings| settings.cwd)
+            })
+            .transpose()?
+            .flatten();
         let tag = project::resolve_project_tag_blocking(cwd, options.allow_filesystem).await?;
         let owner = options.owner_user_id.as_deref();
         let mut writer = CaptureWriter::begin(&self.pool, &batch.session_key).await?;
@@ -53,7 +65,7 @@ impl crate::PostgresMemory {
             .upsert_conversation(&ConversationUpsert {
                 session_key: &batch.session_key,
                 agent: &batch.agent,
-                channel: Some(batch.channel.as_deref().unwrap_or("unknown")),
+                channel: Some(channel),
                 title: batch.title.as_deref(),
                 settings: batch.settings.as_ref(),
                 task_id: batch.task_id.as_deref(),
@@ -76,7 +88,7 @@ impl crate::PostgresMemory {
                 .insert_message(&MessageRow {
                     conversation_id,
                     agent: &batch.agent,
-                    channel: batch.channel.as_deref().unwrap_or("unknown"),
+                    channel,
                     role: message.role,
                     content: &prepared.content,
                     tool_name: message.tool_name.as_deref(),
@@ -100,9 +112,14 @@ impl crate::PostgresMemory {
             ok: true,
             conversation_id: conversation_id.to_string(),
             inserted,
-            skipped: batch.messages.len() as u64 - inserted,
+            skipped: u64::try_from(batch.messages.len())? - inserted,
         })
     }
+}
+
+#[derive(serde::Deserialize)]
+struct CaptureSettings {
+    cwd: Option<String>,
 }
 
 struct EntryGroup {
@@ -134,13 +151,12 @@ fn group_entries(batch: Vec<MemoryEntry>) -> Vec<EntryGroup> {
 fn capture_request(group: &EntryGroup) -> Result<CaptureBatchRequest, MemoryStoreError> {
     let mut messages = Vec::with_capacity(group.entries.len());
     for entry in &group.entries {
-        let event_id = entry_event_id(entry).ok_or_else(|| MemoryStoreError::InvalidRequest {
-            message: "memory entry is missing an event id".to_string(),
-        })?;
-        let mut metadata = entry.metadata.clone().unwrap_or_default();
-        if metadata.get("event_id").is_none() {
-            metadata = merge_event_id(&metadata, &event_id)?;
-        }
+        let event_id = entry_event_id(entry)?;
+        let mut metadata = entry.metadata.clone();
+        metadata
+            .get_or_insert_default()
+            .insert("event_id", &event_id)
+            .map_err(Error::from)?;
         messages.push(CaptureMessage {
             event_id,
             role: entry.role,
@@ -148,7 +164,7 @@ fn capture_request(group: &EntryGroup) -> Result<CaptureBatchRequest, MemoryStor
             tool_name: entry.tool_name.clone(),
             tool_args: entry.tool_args.clone(),
             tool_result: entry.tool_result.clone(),
-            metadata: Some(metadata),
+            metadata,
             created_at: entry.created_at.map(|at| at.to_rfc3339()),
         });
     }
@@ -166,41 +182,41 @@ fn capture_request(group: &EntryGroup) -> Result<CaptureBatchRequest, MemoryStor
     })
 }
 
-fn entry_event_id(entry: &MemoryEntry) -> Option<String> {
-    entry
-        .metadata
-        .as_ref()
-        .and_then(|metadata| metadata.get("event_id"))
-        .and_then(|value| value.as_str())
-        .map(str::to_string)
-        .or_else(|| Some(append_event_id(entry)))
+#[derive(serde::Deserialize)]
+struct EntryMetadata {
+    event_id: Option<String>,
 }
 
-fn append_event_id(entry: &MemoryEntry) -> String {
-    use sha2::Digest as _;
-    let digest = sha2::Sha256::digest(
-        format!(
-            "append\0{}\0{}\0{}\0{}\0{}",
-            entry.session_id,
-            entry.agent,
-            entry.role,
-            entry.content,
-            entry.tool_name.as_deref().unwrap_or("")
-        )
-        .as_bytes(),
-    );
-    hex::encode(digest)
-}
-
-fn merge_event_id(metadata: &JsonObject, event_id: &str) -> Result<JsonObject, Error> {
-    let mut json =
-        serde_json::to_value(metadata).map_err(|source| Error::protocol(source.to_string()))?;
-    if let Some(object) = json.as_object_mut() {
-        let member =
-            serde_json::to_value(event_id).map_err(|source| Error::protocol(source.to_string()))?;
-        object.insert("event_id".to_string(), member);
+fn entry_event_id(entry: &MemoryEntry) -> Result<String, Error> {
+    if let Some(metadata) = &entry.metadata {
+        let metadata = EntryMetadata::deserialize(serde::de::value::MapDeserializer::<
+            _,
+            serde_json::Error,
+        >::new(
+            metadata
+                .as_map()
+                .iter()
+                .map(|(key, value)| (key.as_str(), value)),
+        ))?;
+        if let Some(event_id) = metadata.event_id {
+            return Ok(event_id);
+        }
     }
-    serde_json::from_value(json).map_err(|source| Error::protocol(source.to_string()))
+    append_event_id(entry)
+}
+
+fn append_event_id(entry: &MemoryEntry) -> Result<String, Error> {
+    use sha2::Digest as _;
+    let input = (
+        &entry.session_id,
+        &entry.agent,
+        entry.role,
+        &entry.content,
+        &entry.tool_name,
+    );
+    Ok(hex::encode(sha2::Sha256::digest(serde_json::to_vec(
+        &input,
+    )?)))
 }
 
 #[async_trait]

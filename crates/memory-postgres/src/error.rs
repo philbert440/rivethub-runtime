@@ -4,6 +4,28 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("capture channel is required")]
+    MissingChannel,
+    #[error("time windows must be resolved by the caller with its time zone")]
+    UnresolvedWindow,
+    #[error("invalid memory id: {0}")]
+    InvalidId(#[from] uuid::Error),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Integer(#[from] std::num::TryFromIntError),
+    #[error("invalid stored {field}: {source}")]
+    StoredValue {
+        field: &'static str,
+        #[source]
+        source: kernel::BoxError,
+    },
+    #[error("project lookup failed")]
+    ProjectIo(#[from] std::io::Error),
+    #[error("project lookup returned invalid UTF-8")]
+    ProjectEncoding(#[from] std::string::FromUtf8Error),
+    #[error("project lookup task failed")]
+    ProjectTask(#[from] tokio::task::JoinError),
     #[error("connection to the memory database failed")]
     Connection(#[source] sqlx::Error),
     #[error(
@@ -26,6 +48,16 @@ pub enum Error {
 }
 
 impl Error {
+    pub(crate) fn stored(
+        field: &'static str,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::StoredValue {
+            field,
+            source: Box::new(source),
+        }
+    }
+
     pub(crate) fn operation(operation: &'static str, source: sqlx::Error) -> Self {
         Self::Operation {
             operation,
@@ -54,6 +86,20 @@ impl From<Error> for MemoryStoreError {
             }
             Error::NotAdopted => Self::Unavailable(Box::new(Error::NotAdopted)),
             Error::QueueAbsent => Self::Unavailable(Box::new(Error::QueueAbsent)),
+            Error::MissingChannel
+            | Error::UnresolvedWindow
+            | Error::InvalidId(_)
+            | Error::Json(_) => Self::InvalidRequest {
+                message: value.to_string(),
+            },
+            Error::Integer(_)
+            | Error::ProjectIo(_)
+            | Error::ProjectEncoding(_)
+            | Error::ProjectTask(_) => Self::Unavailable(Box::new(value)),
+            error @ Error::StoredValue { .. } => Self::Query {
+                message: error.to_string(),
+                source: Box::new(error),
+            },
             Error::Operation {
                 message, source, ..
             } => Self::Query {
@@ -73,6 +119,18 @@ impl From<Error> for JobQueueError {
             }
             Error::NotAdopted => Self::Unavailable(Box::new(Error::NotAdopted)),
             Error::QueueAbsent => Self::Unavailable(Box::new(Error::QueueAbsent)),
+            Error::MissingChannel
+            | Error::UnresolvedWindow
+            | Error::InvalidId(_)
+            | Error::Json(_)
+            | Error::Integer(_)
+            | Error::ProjectIo(_)
+            | Error::ProjectEncoding(_)
+            | Error::ProjectTask(_) => Self::Unavailable(Box::new(value)),
+            error @ Error::StoredValue { .. } => Self::Claim {
+                message: error.to_string(),
+                source: Box::new(error),
+            },
             Error::Operation {
                 message, source, ..
             } => Self::Claim {

@@ -210,6 +210,15 @@ pub struct SearchQuery {
 
 impl SearchQuery {
     #[must_use]
+    pub fn resolve_window<Tz: chrono::TimeZone>(mut self, now: DateTime<Utc>, zone: &Tz) -> Self {
+        let range = self.time_range(now, zone);
+        self.since = range.since;
+        self.before = range.before;
+        self.window = None;
+        self
+    }
+
+    #[must_use]
     pub fn time_range<Tz: chrono::TimeZone>(
         &self,
         now: DateTime<Utc>,
@@ -238,6 +247,22 @@ pub struct BrowseFilter {
     pub include_tools: bool,
     pub order: MemoryBrowseOrder,
     pub limit: Limit,
+}
+
+impl BrowseFilter {
+    #[must_use]
+    pub fn resolve_window<Tz: chrono::TimeZone>(mut self, now: DateTime<Utc>, zone: &Tz) -> Self {
+        if self.since.is_none()
+            && self.before.is_none()
+            && let Some(window) = self.window
+        {
+            let range = crate::memory_core::resolve_window(window, now, zone);
+            self.since = range.since;
+            self.before = range.before;
+        }
+        self.window = None;
+        self
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

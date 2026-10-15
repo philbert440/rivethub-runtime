@@ -101,22 +101,12 @@ struct PendingTagRow {
     excerpt: Option<String>,
 }
 
-fn parse_state(raw: &str) -> Option<TagState> {
-    TagState::from_str(raw).ok()
-}
-
-fn parse_entity(raw: &str) -> Option<TagEntityType> {
-    TagEntityType::from_str(raw).ok()
-}
-
 fn state_of(raw: &str) -> Result<TagState, Error> {
-    parse_state(raw)
-        .ok_or_else(|| Error::protocol(format!("tag row has an unknown state \"{raw}\"")))
+    TagState::from_str(raw).map_err(|source| Error::stored("tag state", source))
 }
 
 fn entity_type_of(raw: &str) -> Result<TagEntityType, Error> {
-    parse_entity(raw)
-        .ok_or_else(|| Error::protocol(format!("tag row has an unknown entity_type \"{raw}\"")))
+    TagEntityType::from_str(raw).map_err(|source| Error::stored("tag entity type", source))
 }
 
 enum TagTables<T> {

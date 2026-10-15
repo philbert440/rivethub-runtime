@@ -1,9 +1,10 @@
+mod common;
+
 use kernel::queue::FixedJob;
 use kernel::queue::Job;
 use kernel::queue::JobKeyMode;
 use kernel::queue::JobName;
 use kernel::queue::JobQueue as _;
-use kernel::queue::JobQueueError;
 use kernel::queue::WorkerRole;
 use memory_postgres::PostgresMemory;
 use memory_postgres::PostgresQueue;
@@ -44,10 +45,6 @@ fn store(pool: &PgPool) -> PostgresMemory {
     PostgresMemory::new(pool.clone())
 }
 
-async fn gated(pool: &PgPool) -> Result<bool, Box<dyn std::error::Error>> {
-    Ok(testkit::queue_present(pool).await?)
-}
-
 async fn stored_jobs(
     pool: &PgPool,
 ) -> Result<Vec<(String, Option<String>, i64, i64, i64)>, sqlx::Error> {
@@ -78,9 +75,7 @@ fn embed_job() -> Job {
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn enqueue_claims_and_completes_through_the_public_api(pool: PgPool) -> TestResult {
-    if !gated(&pool).await? {
-        return Ok(());
-    }
+    common::install_graphile(&pool).await?;
     let jobs = queue(&pool).await?;
 
     jobs.enqueue(embed_job()).await?;
@@ -137,9 +132,7 @@ async fn enqueue_claims_and_completes_through_the_public_api(pool: PgPool) -> Te
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
-    if !gated(&pool).await? {
-        return Ok(());
-    }
+    common::install_graphile(&pool).await?;
     let jobs = queue(&pool).await?;
     let compact = |payload: JsonObject| Job {
         name: JobName::Fixed(FixedJob::CompactConversation),
@@ -184,9 +177,7 @@ async fn job_keys_replace_preserve_and_revive(pool: PgPool) -> TestResult {
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn role_scoping_keeps_the_task_lists_apart(pool: PgPool) -> TestResult {
-    if !gated(&pool).await? {
-        return Ok(());
-    }
+    common::install_graphile(&pool).await?;
     let jobs = queue(&pool).await?;
     assert!(
         jobs.claim(WorkerRole::Summarizer).await?.is_none(),
@@ -254,9 +245,7 @@ async fn role_scoping_keeps_the_task_lists_apart(pool: PgPool) -> TestResult {
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn queue_health_reports_buckets(pool: PgPool) -> TestResult {
-    if !gated(&pool).await? {
-        return Ok(());
-    }
+    common::install_graphile(&pool).await?;
     let jobs = queue(&pool).await?;
     jobs.enqueue(Job {
         name: JobName::Fixed(FixedJob::ExtractWiki),
@@ -290,22 +279,10 @@ async fn queue_health_reports_buckets(pool: PgPool) -> TestResult {
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn the_store_reports_the_queue_as_unavailable(pool: PgPool) -> TestResult {
-    if gated(&pool).await? {
-        return Ok(());
-    }
-    let jobs = queue(&pool).await?;
-    let refused = jobs.enqueue(embed_job()).await;
-    assert!(
-        matches!(refused, Err(JobQueueError::Unavailable(_))),
-        "enqueue without the graphile schema is refused: {refused:?}"
-    );
-    let refused = jobs.claim(WorkerRole::Embedder).await;
-    assert!(matches!(refused, Err(JobQueueError::Unavailable(_))));
-    let refused = jobs.complete(kernel::queue::JobId::new(1)).await;
-    assert!(matches!(refused, Err(JobQueueError::Unavailable(_))));
-    let refused = jobs.fail(kernel::queue::JobId::new(1), "boom").await;
-    assert!(matches!(refused, Err(JobQueueError::Unavailable(_))));
-
+    assert!(matches!(
+        PostgresQueue::connect(pool.clone()).await,
+        Err(memory_postgres::Error::QueueAbsent)
+    ));
     let memory = store(&pool);
     assert!(!memory.queue_available().await?);
     Ok(())
@@ -334,57 +311,5 @@ fn crontab_and_task_lists_follow_the_roles() {
     assert!(
         PostgresQueue::task_list(WorkerRole::Summarizer)
             .contains(&JobName::Fixed(FixedJob::CompactConversation))
-    );
-
-    assert_eq!(
-        PostgresQueue::heartbeat_schedule("5"),
-        Some("*/5 * * * *".to_string())
-    );
-    assert_eq!(
-        PostgresQueue::heartbeat_schedule("2h"),
-        Some("0 */2 * * *".to_string())
-    );
-    assert_eq!(
-        PostgresQueue::heartbeat_schedule("*/15 * * * *"),
-        Some("*/15 * * * *".to_string())
-    );
-    assert_eq!(PostgresQueue::heartbeat_schedule("weekly"), None);
-}
-
-#[test]
-fn job_names_map_to_recorded_max_attempts() {
-    let attempts = |name: JobName| {
-        let payload = JsonObject::default();
-        Job {
-            name,
-            payload,
-            key: None,
-            key_mode: JobKeyMode::Replace,
-            priority: 0,
-            run_at: None,
-        }
-        .name
-        .to_string()
-    };
-    assert_eq!(
-        attempts(JobName::Fixed(FixedJob::EmbedTarget)),
-        "embed-target"
-    );
-    assert_eq!(
-        attempts(JobName::Fixed(FixedJob::CompactConversation)),
-        "compact-conversation"
-    );
-    assert_eq!(
-        attempts(JobName::RunTaskOn {
-            node: "east".to_string()
-        }),
-        "run-task:east"
-    );
-    assert_eq!(
-        attempts(JobName::Heartbeat {
-            agent: "rivet".to_string(),
-            index: 2
-        }),
-        "heartbeat-rivet-2"
     );
 }

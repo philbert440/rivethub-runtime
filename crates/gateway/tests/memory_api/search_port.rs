@@ -53,7 +53,7 @@ fn search_routes_forward_every_argument_and_preserve_runtime_degradation() {
     assert_eq!(query.limit.get(), 3);
     assert_eq!(query.since, args.since);
     assert_eq!(query.before, args.before);
-    assert_eq!(query.window, args.window);
+    assert_eq!(query.window, None);
     assert_eq!(query.expand, args.expand);
     assert_eq!(query.synthesize, args.synthesize);
 }

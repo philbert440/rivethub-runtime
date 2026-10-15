@@ -18,24 +18,29 @@ pub struct ProjectTag {
     pub source: RuleSource,
 }
 
-#[must_use]
-pub fn plan_project_rule_tag(cwd: Option<&str>, allow_filesystem: bool) -> Option<ProjectTag> {
-    let trimmed = cwd.map(str::trim).filter(|c| !c.is_empty())?;
+fn plan_project_rule_tag(
+    cwd: Option<&str>,
+    allow_filesystem: bool,
+) -> Result<Option<ProjectTag>, Error> {
+    let Some(trimmed) = cwd.map(str::trim).filter(|c| !c.is_empty()) else {
+        return Ok(None);
+    };
     if allow_filesystem {
         let dir = Path::new(trimmed);
         if dir.is_dir() {
             if let Some(tag) =
-                git_rule(dir, RuleSource::GitRemote, &["remote", "get-url", "origin"])
+                git_rule(dir, RuleSource::GitRemote, &["remote", "get-url", "origin"])?
             {
-                return Some(tag);
+                return Ok(Some(tag));
             }
-            if let Some(tag) = git_rule(dir, RuleSource::GitRoot, &["rev-parse", "--show-toplevel"])
+            if let Some(tag) =
+                git_rule(dir, RuleSource::GitRoot, &["rev-parse", "--show-toplevel"])?
             {
-                return Some(tag);
+                return Ok(Some(tag));
             }
         }
     }
-    Some(basename_rule(trimmed))
+    Ok(Some(basename_rule(trimmed)))
 }
 
 pub(crate) async fn resolve_project_tag_blocking(
@@ -44,7 +49,7 @@ pub(crate) async fn resolve_project_tag_blocking(
 ) -> Result<Option<ProjectTag>, Error> {
     tokio::task::spawn_blocking(move || plan_project_rule_tag(cwd.as_deref(), allow_filesystem))
         .await
-        .map_err(|source| Error::protocol(format!("project tag lookup failed: {source}")))
+        .map_err(Error::from)?
 }
 
 fn basename_rule(cwd: &str) -> ProjectTag {
@@ -60,16 +65,16 @@ fn basename_rule(cwd: &str) -> ProjectTag {
     }
 }
 
-fn git_rule(dir: &Path, source: RuleSource, args: &[&str]) -> Option<ProjectTag> {
+fn git_rule(dir: &Path, source: RuleSource, args: &[&str]) -> Result<Option<ProjectTag>, Error> {
     let mut command = Command::new("git");
     command.args(args).current_dir(dir);
-    let out = command.output().ok()?;
+    let out = command.output()?;
     if !out.status.success() {
-        return None;
+        return Ok(None);
     }
-    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let text = String::from_utf8(out.stdout)?.trim().to_string();
     if text.is_empty() {
-        return None;
+        return Ok(None);
     }
     let name = match source {
         RuleSource::GitRemote => Path::new(text.trim_end_matches('/'))
@@ -77,19 +82,17 @@ fn git_rule(dir: &Path, source: RuleSource, args: &[&str]) -> Option<ProjectTag>
             .map_or_else(|| text.clone(), |n| n.to_string_lossy().into_owned())
             .trim_end_matches(".git")
             .to_string(),
-        RuleSource::GitRoot | RuleSource::CwdBasename => {
-            text.rsplit('/').next().unwrap_or(&text).to_string()
-        }
+        RuleSource::GitRoot | RuleSource::CwdBasename => basename_rule(&text).display,
     };
     if name.is_empty() {
-        return None;
+        return Ok(None);
     }
-    Some(ProjectTag {
+    Ok(Some(ProjectTag {
         key: "project".to_string(),
         value: slug(&name),
         display: name,
         source,
-    })
+    }))
 }
 
 fn slug(text: &str) -> String {

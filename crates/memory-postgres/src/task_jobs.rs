@@ -25,8 +25,7 @@ pub(crate) fn map_sql(operation: &'static str, source: sqlx::Error) -> TaskError
 }
 
 pub(crate) async fn enqueue_job(conn: &mut PgConnection, job: &NewJob) -> Result<i64, TaskError> {
-    let payload = serde_json::to_string(&job.payload)
-        .map_err(|source| TaskError::Payload(Box::new(source)))?;
+    let payload = sqlx::types::Json(&job.payload);
     let row = sqlx::query(
         "SELECT id FROM graphile_worker.add_job($1, $2::json, null::text, null::timestamptz, $3, $4, $5, null::text[], $6)",
     )
@@ -45,54 +44,30 @@ pub(crate) async fn enqueue_job(conn: &mut PgConnection, job: &NewJob) -> Result
 pub(crate) async fn claim_job(
     conn: &mut PgConnection,
     selector: &ClaimSelector,
+    worker: &str,
 ) -> Result<Option<ClaimedJob>, TaskError> {
-    let locked_by = format!("tasks-{}", Uuid::new_v4());
-    let row = sqlx::query(
-        "WITH selected AS (
-            SELECT jobs.id FROM graphile_worker._private_jobs AS jobs
-            JOIN graphile_worker._private_tasks AS known ON known.id = jobs.task_id
-            WHERE known.identifier = ANY($1)
-              AND jobs.attempts < jobs.max_attempts
-              AND (jobs.locked_at IS NULL OR jobs.locked_at < now() - interval '4 hours')
-              AND jobs.run_at <= now()
-              AND ($2::bigint IS NULL OR jobs.id = $2)
-            ORDER BY jobs.priority ASC, jobs.run_at ASC, jobs.id ASC
-            LIMIT 1
-            FOR UPDATE SKIP LOCKED
-         )
-         UPDATE graphile_worker._private_jobs AS jobs
-            SET attempts = jobs.attempts + 1, locked_at = now(), locked_by = $3, updated_at = now()
-           FROM selected, graphile_worker._private_tasks AS known
-          WHERE jobs.id = selected.id AND known.id = jobs.task_id
-          RETURNING jobs.id, known.identifier, jobs.payload::text AS payload,
-                    jobs.attempts::bigint AS attempts",
-    )
-    .bind(&selector.names)
-    .bind(selector.only_id)
-    .bind(locked_by)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(|source| map_sql("claim", source))?;
+    let locked_by = format!("{worker}-{}", Uuid::new_v4());
+    let row = sqlx::query(crate::graphile_sql::CLAIM)
+        .bind(&selector.names)
+        .bind(selector.only_id)
+        .bind(locked_by)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|source| map_sql("claim", source))?;
     row.as_ref().map(claimed).transpose()
 }
 
-pub(crate) async fn complete_job(conn: &mut PgConnection, id: i64) -> Result<(), TaskError> {
-    let row = sqlx::query(
-        "WITH unlocked AS (
-            UPDATE graphile_worker._private_jobs
-               SET locked_at = NULL, locked_by = NULL, updated_at = now()
-             WHERE id = $1
-            RETURNING id
-         )
-         SELECT count(*)::bigint AS removed
-           FROM graphile_worker.complete_jobs(
-               COALESCE((SELECT array_agg(id) FROM unlocked), ARRAY[]::bigint[])
-           )",
-    )
-    .bind(id)
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(|source| map_sql("complete", source))?;
+pub(crate) async fn complete_job(
+    conn: &mut PgConnection,
+    id: i64,
+    worker: &str,
+) -> Result<(), TaskError> {
+    let row = sqlx::query(crate::graphile_sql::COMPLETE)
+        .bind(id)
+        .bind(format!("{worker}-"))
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(|source| map_sql("complete", source))?;
     let removed: i64 = cell(&row, "complete", "removed")?;
     if removed == 0 {
         return Err(TaskError::MissingJob { id });
@@ -104,21 +79,16 @@ pub(crate) async fn fail_job(
     conn: &mut PgConnection,
     id: i64,
     error: &str,
+    worker: &str,
 ) -> Result<(), TaskError> {
-    let result = sqlx::query(
-        "UPDATE graphile_worker._private_jobs
-            SET last_error = $2, locked_at = null, locked_by = null, updated_at = now(),
-                run_at = CASE WHEN attempts < max_attempts
-                              THEN now() + ('1 second'::interval * least(power(2, attempts)::int, 3600))
-                              ELSE run_at END
-          WHERE id = $1",
-    )
-    .bind(id)
-    .bind(error)
-    .execute(&mut *conn)
-    .await
-    .map_err(|source| map_sql("fail", source))?;
-    if result.rows_affected() == 0 {
+    let failed: i64 = sqlx::query_scalar(crate::graphile_sql::FAIL)
+        .bind(id)
+        .bind(error)
+        .bind(format!("{worker}-"))
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(|source| map_sql("fail", source))?;
+    if failed == 0 {
         return Err(TaskError::MissingJob { id });
     }
     Ok(())
@@ -148,7 +118,10 @@ fn claimed(row: &sqlx::postgres::PgRow) -> Result<ClaimedJob, TaskError> {
     Ok(ClaimedJob {
         id: cell(row, "claim", "id")?,
         identifier: cell(row, "claim", "identifier")?,
-        payload_text: cell(row, "claim", "payload")?,
+        payload_text: serde_json::to_string(
+            &cell::<sqlx::types::Json<wire::JsonObject>>(row, "claim", "payload")?.0,
+        )
+        .map_err(|source| TaskError::Payload(Box::new(source)))?,
         attempt: narrow(attempts, "attempt")?,
     })
 }

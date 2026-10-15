@@ -129,10 +129,14 @@ fn browse_rejects_bad_filters() {
             value: "acme".to_owned(),
         })
     );
-    assert_eq!(
-        filter.window,
-        Some(wire::gateway::memory::BrowseWindow::Today)
+    assert_eq!(filter.window, None);
+    let today = kernel::memory_core::resolve_window(
+        wire::gateway::memory::BrowseWindow::Today,
+        chrono::Utc::now(),
+        &chrono::Local,
     );
+    assert_eq!(filter.since, today.since);
+    assert_eq!(filter.before, today.before);
     assert_eq!(filter.limit, Limit::clamped(Some(11), 50, 1..=200));
 }
 
@@ -352,6 +356,7 @@ fn browse_tool_validates_args() {
 
 #[test]
 fn browse_tool_carries_filters_to_the_port() {
+    let started = chrono::Utc::now();
     let (store, app) = seeded().expect("seed store");
     let response = post(
         &app,
@@ -385,10 +390,11 @@ fn browse_tool_carries_filters_to_the_port() {
             value: "acmekit".to_owned(),
         })
     );
-    assert_eq!(
-        filter.window,
-        Some(wire::gateway::memory::BrowseWindow::Last7d)
-    );
+    assert_eq!(filter.window, None);
+    let since = filter.since.expect("resolved window start");
+    assert!(since >= started - chrono::Duration::days(7));
+    assert!(since <= chrono::Utc::now() - chrono::Duration::days(7));
+    assert_eq!(filter.before, None);
     assert!(filter.include_tools);
     assert_eq!(filter.order, wire::gateway::memory::MemoryBrowseOrder::Asc);
     assert_eq!(

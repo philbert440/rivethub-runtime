@@ -156,21 +156,24 @@ pub async fn search(store: &dyn MemoryStore, args: Search) -> Result<CallToolRes
     };
     json(
         &store
-            .search(SearchQuery {
-                since: args.since,
-                before: args.before,
-                window: args.window,
-                expand: args.expand,
-                synthesize: args.synthesize,
-                text: args.query,
-                mode: args.mode,
-                scope,
-                agent: args.agent,
-                tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
-                    |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),
-                )?,
-                limit: limit(args.limit, 10, 50)?,
-            })
+            .search(
+                SearchQuery {
+                    since: args.since,
+                    before: args.before,
+                    window: args.window,
+                    expand: args.expand,
+                    synthesize: args.synthesize,
+                    text: args.query,
+                    mode: args.mode,
+                    scope,
+                    agent: args.agent,
+                    tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
+                        |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),
+                    )?,
+                    limit: limit(args.limit, 10, 50)?,
+                }
+                .resolve_window(chrono::Utc::now(), &chrono::Local),
+            )
             .await?,
     )
 }
@@ -188,21 +191,24 @@ pub async fn browse(store: &dyn MemoryStore, args: Browse) -> Result<CallToolRes
     }
     json(
         &store
-            .browse(BrowseFilter {
-                conversation_id: args.conversation_id,
-                agent: args.agent,
-                role: None,
-                tool_name: None,
-                tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
-                    |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),
-                )?,
-                window: args.window,
-                since: args.since,
-                before: args.before,
-                include_tools: args.include_tools,
-                order: args.order,
-                limit: limit(args.limit, 50, 200)?,
-            })
+            .browse(
+                BrowseFilter {
+                    conversation_id: args.conversation_id,
+                    agent: args.agent,
+                    role: None,
+                    tool_name: None,
+                    tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
+                        |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),
+                    )?,
+                    window: args.window,
+                    since: args.since,
+                    before: args.before,
+                    include_tools: args.include_tools,
+                    order: args.order,
+                    limit: limit(args.limit, 50, 200)?,
+                }
+                .resolve_window(chrono::Utc::now(), &chrono::Local),
+            )
             .await?,
     )
 }

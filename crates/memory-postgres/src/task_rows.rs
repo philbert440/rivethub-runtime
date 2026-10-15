@@ -71,11 +71,11 @@ pub(crate) async fn insert_task(
         .bind(Json(&task.context_refs))
         .bind(Json(&task.acceptance_criteria))
         .bind(stored_json(&StoredSpec::from(&task.spec))?)
-        .bind(as_text(&task.executor)?)
+        .bind(task.executor.to_string())
         .bind(&task.executor_target)
         .bind(&task.requested_by)
         .bind(&task.agent_id)
-        .bind(as_text(&task.origin)?)
+        .bind(task.origin.to_string())
         .bind(task.parent_task_id)
         .bind(i32_in(task.chain_depth)?)
         .bind(stored_json(&StoredBudget::from(task.budget))?)
@@ -83,7 +83,7 @@ pub(crate) async fn insert_task(
         .bind(&task.session_key)
         .bind(&task.pending_message)
         .bind(i32_in(task.max_attempts)?)
-        .bind(as_text(&task.status)?)
+        .bind(task.status.to_string())
         .execute(&mut *conn)
         .await
         .map_err(|source| map_sql("insert task", source))?;
@@ -142,7 +142,7 @@ pub(crate) async fn finish_task(
          WHERE id = $1 AND status <> 'killed'",
     )
     .bind(id)
-    .bind(as_text(&finish.status)?)
+    .bind(finish.status.to_string())
     .bind(result_json)
     .bind(&finish.error)
     .bind(usage_json)
@@ -199,7 +199,7 @@ pub(crate) async fn kill_task(
     match row {
         Some(row) => {
             let status: String = cell(&row, "kill task", "status")?;
-            from_text(&status)
+            parse_text(&status)
         }
         None => conflict_or_missing(conn, id, ConflictAction::Kill).await,
     }
@@ -316,17 +316,17 @@ pub(crate) fn decode_task(
         context_refs: context_refs.0,
         acceptance_criteria: acceptance_criteria.0,
         spec: spec.0,
-        executor: from_text(&executor)?,
+        executor: parse_text(&executor)?,
         executor_target: cell(row, operation, "executor_target")?,
         requested_by: cell(row, operation, "requested_by")?,
         agent_id: cell(row, operation, "agent_id")?,
-        origin: from_text(&origin)?,
+        origin: parse_text(&origin)?,
         parent_task_id: cell(row, operation, "parent_task_id")?,
         chain_depth: u32_from(chain_depth)?,
         budget: budget.0,
         node_affinity: cell(row, operation, "node_affinity")?,
         usage: usage.map(|usage| usage.0),
-        status: from_text(&status)?,
+        status: parse_text(&status)?,
         attempt: u32_from(attempt)?,
         max_attempts: u32_from(max_attempts)?,
         result: result.map(|result| result.0),
@@ -477,14 +477,12 @@ fn u32_from(value: i32) -> Result<u32, TaskError> {
     u32::try_from(value).map_err(|_| TaskError::Stored("negative integer".to_string()))
 }
 
-fn as_text<T: Serialize>(value: &T) -> Result<String, TaskError> {
-    let encoded =
-        serde_json::to_string(value).map_err(|source| TaskError::Stored(source.to_string()))?;
-    serde_json::from_str(&encoded).map_err(|source| TaskError::Stored(source.to_string()))
-}
-
-fn from_text<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, TaskError> {
-    let encoded =
-        serde_json::to_string(text).map_err(|source| TaskError::Stored(source.to_string()))?;
-    serde_json::from_str(&encoded).map_err(|source| TaskError::Stored(source.to_string()))
+fn parse_text<T: std::str::FromStr>(text: &str) -> Result<T, TaskError>
+where
+    T::Err: std::error::Error + Send + Sync + 'static,
+{
+    text.parse().map_err(|source: T::Err| TaskError::Operation {
+        operation: "parse stored task enum",
+        source: Box::new(source),
+    })
 }

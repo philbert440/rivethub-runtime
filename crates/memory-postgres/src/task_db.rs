@@ -41,6 +41,7 @@ use crate::task_rows::sweep_tasks;
 #[derive(Clone, Debug)]
 pub struct PostgresTasks {
     pool: PgPool,
+    worker: String,
     listen: Arc<Mutex<Option<PgListener>>>,
     pub(crate) events: watch::Sender<u64>,
 }
@@ -60,6 +61,7 @@ impl PostgresTasks {
         let (events, _receiver) = watch::channel(0);
         Self {
             pool,
+            worker: Uuid::new_v4().to_string(),
             listen: Arc::new(Mutex::new(None)),
             events,
         }
@@ -182,15 +184,24 @@ impl TaskJobs for PostgresTasks {
     }
 
     async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, TaskError> {
-        in_transaction(&self.pool, async |conn| claim_job(conn, selector).await).await
+        in_transaction(&self.pool, async |conn| {
+            claim_job(conn, selector, &self.worker).await
+        })
+        .await
     }
 
     async fn complete(&self, id: i64) -> Result<(), TaskError> {
-        in_transaction(&self.pool, async |conn| complete_job(conn, id).await).await
+        in_transaction(&self.pool, async |conn| {
+            complete_job(conn, id, &self.worker).await
+        })
+        .await
     }
 
     async fn fail(&self, id: i64, error: &str) -> Result<(), TaskError> {
-        in_transaction(&self.pool, async |conn| fail_job(conn, id, error).await).await
+        in_transaction(&self.pool, async |conn| {
+            fail_job(conn, id, error, &self.worker).await
+        })
+        .await
     }
 
     async fn read(&self, id: i64) -> Result<Option<StoredJob>, TaskError> {

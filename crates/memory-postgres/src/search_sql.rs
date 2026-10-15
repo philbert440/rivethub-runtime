@@ -44,8 +44,9 @@ fn recency_columns(alias: &str, is_message: bool) -> String {
     )
 }
 
-fn role_of(raw: Option<String>) -> Option<Role> {
-    raw.and_then(|role| Role::from_str(&role).ok())
+fn role_of(raw: Option<String>) -> Result<Option<Role>, Error> {
+    raw.map(|role| Role::from_str(&role).map_err(|source| Error::stored("message role", source)))
+        .transpose()
 }
 
 impl TagFilter {
@@ -118,13 +119,13 @@ struct ArmSqlRow {
 }
 
 impl ArmSqlRow {
-    fn into_arm(self, is_message: bool) -> ArmRow {
+    fn into_arm(self, is_message: bool) -> Result<ArmRow, Error> {
         let (role, kind) = if is_message {
-            (role_of(self.role_or_kind), None)
+            (role_of(self.role_or_kind)?, None)
         } else {
             (None, self.role_or_kind)
         };
-        ArmRow {
+        Ok(ArmRow {
             id: self.id,
             source: if is_message {
                 MemoryHitSource::Message
@@ -141,7 +142,7 @@ impl ArmSqlRow {
             arm_score: self.score,
             semantic: self.semantic,
             boost: recency_boost(self.age_days, self.access_count, self.importance),
-        }
+        })
     }
 }
 
@@ -324,10 +325,10 @@ impl crate::PostgresMemory {
             .fetch_all(&self.pool)
             .await
             .map_err(|source| Error::operation("search", source))?;
-        Ok(fetched
+        fetched
             .into_iter()
             .map(|row| row.into_arm(is_message))
-            .collect())
+            .collect()
     }
 
     pub(crate) async fn vector_arm_rows(
@@ -335,7 +336,7 @@ impl crate::PostgresMemory {
         options: &SearchOptions,
         tag_filter: Option<&TagFilter>,
         query_vector: &[f32],
-        ef_search: u32,
+        ef_search: u64,
     ) -> Result<Vec<ArmRow>, Error> {
         let vector = HalfVector::from_f32_slice(query_vector);
         let mut tx = self
@@ -357,8 +358,8 @@ impl crate::PostgresMemory {
         let mut rows = Vec::new();
         if matches!(options.scope, MemoryScope::Messages | MemoryScope::Both) {
             let message_rows = self.vector_table(&context, &vector, true, &mut tx).await?;
-            let chunks = self.chunk_arm_rows(&context, &vector, &mut tx).await;
-            rows.extend(merge_chunk_arm_or_parent_only(message_rows, chunks));
+            let chunks = self.chunk_arm_rows(&context, &vector, &mut tx).await?;
+            rows.extend(merge_chunk_arm(message_rows, chunks));
         }
         if matches!(options.scope, MemoryScope::Summaries | MemoryScope::Both) {
             rows.extend(self.vector_table(&context, &vector, false, &mut tx).await?);
@@ -418,10 +419,10 @@ impl crate::PostgresMemory {
             .fetch_all(&mut *tx)
             .await
             .map_err(|source| Error::operation("vector search", source))?;
-        Ok(fetched
+        fetched
             .into_iter()
             .map(|row| row.into_arm(is_message))
-            .collect())
+            .collect()
     }
 
     async fn chunk_arm_rows(
@@ -457,30 +458,22 @@ impl crate::PostgresMemory {
             .fetch_all(&mut *tx)
             .await
             .map_err(|source| Error::operation("chunk search", source))?;
-        Ok(fetched.into_iter().map(|row| row.into_arm(true)).collect())
+        fetched.into_iter().map(|row| row.into_arm(true)).collect()
     }
 }
 
-fn merge_chunk_arm_or_parent_only(
-    parents: Vec<ArmRow>,
-    chunks: Result<Vec<ArmRow>, Error>,
-) -> Vec<ArmRow> {
-    match chunks {
-        Ok(chunks) => {
-            let mut merged: BTreeMap<String, ArmRow> = parents
-                .into_iter()
-                .map(|row| (row.id.clone(), row))
-                .collect();
-            for chunk in chunks {
-                match merged.get(&chunk.id) {
-                    Some(current) if current.arm_score > chunk.arm_score => {}
-                    _ => {
-                        merged.insert(chunk.id.clone(), chunk);
-                    }
-                }
-            }
-            merged.into_values().collect()
+fn merge_chunk_arm(parents: Vec<ArmRow>, chunks: Vec<ArmRow>) -> Vec<ArmRow> {
+    let mut merged: BTreeMap<String, ArmRow> = parents
+        .into_iter()
+        .map(|row| (row.id.clone(), row))
+        .collect();
+    for chunk in chunks {
+        if merged
+            .get(&chunk.id)
+            .is_none_or(|current| current.arm_score <= chunk.arm_score)
+        {
+            merged.insert(chunk.id.clone(), chunk);
         }
-        Err(_) => parents,
     }
+    merged.into_values().collect()
 }

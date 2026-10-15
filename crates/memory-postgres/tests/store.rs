@@ -563,7 +563,9 @@ async fn browse_honours_every_filter_field(pool: PgPool) -> TestResult {
 
     let mut window = base();
     window.window = Some(wire::gateway::memory::BrowseWindow::Last14d);
-    let recent = memory.browse(window).await?;
+    let recent = memory
+        .browse(window.resolve_window("2026-10-15T12:00:00Z".parse()?, &chrono::Utc))
+        .await?;
     assert_eq!(
         recent.len(),
         0,

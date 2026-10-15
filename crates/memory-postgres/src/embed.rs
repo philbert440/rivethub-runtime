@@ -27,7 +27,7 @@ pub struct QueryEmbed {
     provider: Arc<dyn ModelProvider>,
     instruction: String,
     timeout: Duration,
-    ef_search: u32,
+    ef_search: u64,
 }
 
 #[cfg_attr(
@@ -65,59 +65,39 @@ impl QueryEmbed {
             provider,
             instruction: instruction.unwrap_or_else(|| DEFAULT_EMBED_QUERY_INSTRUCTION.to_owned()),
             timeout: Duration::from_millis(timeout_ms),
-            ef_search: u32::try_from(ef_search).unwrap_or(HNSW_EF_SEARCH_MAX),
+            ef_search,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum EmbedFailure {
-    Http(u16),
+    #[error(transparent)]
+    Provider(#[from] ModelProviderError),
+    #[error("bad response")]
     BadResponse,
+    #[error("empty vector")]
     EmptyVector,
-    Timeout,
-    Network,
+    #[error("timeout")]
+    Timeout(#[source] tokio::time::error::Elapsed),
 }
 
 impl EmbedFailure {
     pub(crate) fn reason(&self) -> String {
-        match self {
-            Self::Http(status) => format!("http {status}"),
-            Self::BadResponse => "bad response".to_owned(),
-            Self::EmptyVector => "empty vector".to_owned(),
-            Self::Timeout => "timeout".to_owned(),
-            Self::Network => "network".to_owned(),
-        }
+        self.to_string()
     }
 }
 
-impl From<&ModelProviderError> for EmbedFailure {
-    fn from(error: &ModelProviderError) -> Self {
-        let message = match error {
-            ModelProviderError::Request { message, .. }
-            | ModelProviderError::Stream { message, .. } => message,
-        };
-        http_failure(message)
-    }
-}
-
-fn http_failure(message: &str) -> EmbedFailure {
-    message
-        .strip_prefix("http ")
-        .and_then(|status| status.parse::<u16>().ok())
-        .map_or(EmbedFailure::Network, EmbedFailure::Http)
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub(crate) enum EmbedAttempt {
     NotWired,
     Embedded {
         vector: Vec<f32>,
-        ef_search: u32,
+        ef_search: u64,
     },
     Failed {
         failure: EmbedFailure,
-        elapsed_ms: u64,
+        elapsed_ms: u128,
     },
 }
 
@@ -175,12 +155,12 @@ impl EmbedArm {
         self.dropped.load(Ordering::Relaxed)
     }
 
-    pub(crate) fn record_drop(&self, failure: &EmbedFailure, elapsed_ms: u64) {
+    pub(crate) fn record_drop(&self, failure: &EmbedFailure, elapsed_ms: u128) {
         self.dropped.fetch_add(1, Ordering::Relaxed);
         self.warn_drop(failure, elapsed_ms);
     }
 
-    pub(crate) fn warn_drop(&self, failure: &EmbedFailure, elapsed_ms: u64) {
+    pub(crate) fn warn_drop(&self, failure: &EmbedFailure, elapsed_ms: u128) {
         let now = Instant::now();
         let throttled = {
             let mut last = self.last_warn.lock();
@@ -213,17 +193,17 @@ impl EmbedArm {
             self.wiring.provider.embed(vec![input.clone()]),
         )
         .await;
-        let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let elapsed_ms = started.elapsed().as_millis();
         let vector = match attempt {
-            Err(_) => {
+            Err(source) => {
                 return EmbedAttempt::Failed {
-                    failure: EmbedFailure::Timeout,
+                    failure: EmbedFailure::Timeout(source),
                     elapsed_ms,
                 };
             }
             Ok(Err(error)) => {
                 return EmbedAttempt::Failed {
-                    failure: EmbedFailure::from(&error),
+                    failure: EmbedFailure::from(error),
                     elapsed_ms,
                 };
             }
@@ -296,21 +276,21 @@ impl crate::PostgresMemory {
         }
     }
 
-    pub(crate) fn vector_dropped(&self, failure: &EmbedFailure, elapsed_ms: u64) {
+    pub(crate) fn vector_dropped(&self, failure: &EmbedFailure, elapsed_ms: u128) {
         if let Some(arm) = &self.embed {
             arm.record_drop(failure, elapsed_ms);
         }
     }
 
-    pub(crate) fn vector_warn_only(&self, failure: &EmbedFailure, elapsed_ms: u64) {
+    pub(crate) fn vector_warn_only(&self, failure: &EmbedFailure, elapsed_ms: u128) {
         if let Some(arm) = &self.embed {
             arm.warn_drop(failure, elapsed_ms);
         }
     }
 
     #[must_use]
-    pub fn vector_arm_dropped(&self) -> u64 {
-        self.embed.as_ref().map_or(0, EmbedArm::dropped)
+    pub fn vector_arm_dropped(&self) -> Option<u64> {
+        self.embed.as_ref().map(EmbedArm::dropped)
     }
 }
 
@@ -331,7 +311,7 @@ mod tests {
         Harness { arm, provider }
     }
 
-    fn failure_of(attempt: EmbedAttempt) -> (String, u64) {
+    fn failure_of(attempt: EmbedAttempt) -> (String, u128) {
         match attempt {
             EmbedAttempt::Failed {
                 failure,
@@ -378,8 +358,14 @@ mod tests {
     #[tokio::test]
     async fn embed_failure_reasons_come_from_the_typed_provider_cases() {
         for (script, want) in [
-            (vec![Script::EmbedHttpStatus(503)], "http 503"),
-            (vec![Script::EmbedNetwork], "network"),
+            (
+                vec![Script::EmbedHttpStatus(503)],
+                "provider request failed: http 503",
+            ),
+            (
+                vec![Script::EmbedNetwork],
+                "provider request failed: connection refused",
+            ),
             (vec![Script::Embed(vec![])], "bad response"),
             (
                 vec![Script::Embed(vec![Embedding {
@@ -497,10 +483,8 @@ mod tests {
         assert_eq!(arm.dropped(), 2);
         assert_eq!(lines.lock().len(), 1);
         assert!(
-            lines
-                .lock()
-                .first()
-                .is_some_and(|line| line.contains("[memory-search] vector arm dropped: http 500")),
+            lines.lock().first().is_some_and(|line| line
+                .contains("[memory-search] vector arm dropped: provider request failed: http 500")),
             "the recorded warn line drifted: {:?}",
             lines.lock().first()
         );
@@ -514,7 +498,10 @@ mod tests {
     async fn warn_only_failures_warn_without_counting() {
         let (guard, lines) = warnings();
         let arm = harness(vec![Script::EmbedNetwork], None).arm;
-        arm.warn_drop(&EmbedFailure::Network, 3);
+        let EmbedAttempt::Failed { failure, .. } = arm.query_vector("query").await else {
+            panic!("provider must fail")
+        };
+        arm.warn_drop(&failure, 3);
         assert_eq!(arm.dropped(), 0);
         assert_eq!(lines.lock().len(), 1);
         drop(guard);

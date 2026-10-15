@@ -101,9 +101,7 @@ async fn run(
     let config = tokio::task::spawn_blocking(move || load(&owned)).await??;
     let memory = Arc::new(postgres(&config, env).await?);
     let queue = memory.queue().await.map_err(StartupError::from)?;
-    if !queue.available() {
-        return Err(StartupError::Memory(memory_postgres::Error::QueueAbsent).into());
-    }
+
     let model = provider_model(&config)?;
     let runner = build_runner(role, memory, queue, &config, model)?;
     tracing::info!("worker running {role}");

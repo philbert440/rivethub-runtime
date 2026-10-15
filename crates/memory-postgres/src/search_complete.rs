@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{Local, Utc};
 use kernel::memory::{MemoryStoreError, SearchOutcome, SearchQuery};
 use kernel::model::{ModelProvider, ModelRequest};
 use tokio_util::sync::CancellationToken;
@@ -107,9 +106,12 @@ impl SearchSynthesis {
 impl crate::PostgresMemory {
     pub(crate) async fn complete_search(
         &self,
-        mut query: SearchQuery,
+        query: SearchQuery,
     ) -> Result<SearchOutcome, MemoryStoreError> {
-        let range = query.time_range(Utc::now(), &Local);
+        let range = kernel::memory_core::TimeRange {
+            since: query.since,
+            before: query.before,
+        };
         if range
             .since
             .zip(range.before)
@@ -131,9 +133,6 @@ impl crate::PostgresMemory {
         } else {
             None
         };
-        query.since = range.since;
-        query.before = range.before;
-        query.window = None;
         let outcome = self.search_outcome_for(&query).await?;
         let reason = match outcome.degraded {
             Some(reason) => Some(reason),
@@ -149,7 +148,15 @@ impl crate::PostgresMemory {
             results: outcome
                 .hits
                 .into_iter()
-                .map(crate::search::SearchHit::into_port_result)
+                .map(|hit| wire::memory::MemorySearchResult {
+                    id: hit.id,
+                    source: hit.source,
+                    content: hit.content,
+                    role: hit.role,
+                    agent: hit.agent,
+                    relevance_score: hit.score,
+                    created_at: hit.created_at,
+                })
                 .collect(),
             degraded: reason.map(|reason| MemoryDegraded {
                 reason,
@@ -167,7 +174,7 @@ impl crate::PostgresMemory {
 
     async fn expand_summaries(
         &self,
-        hits: &[crate::search::SearchHit],
+        hits: &[wire::gateway::memory::MemorySearchHit],
         query: &SearchQuery,
     ) -> Result<Vec<MemoryEntry>, Error> {
         let ids = crate::search::hit_uuids(hits, MemoryHitSource::Summary)?;

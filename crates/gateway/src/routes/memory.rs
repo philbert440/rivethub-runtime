@@ -158,7 +158,10 @@ async fn search(
             1..=SEARCH_LIMIT_MAX,
         ),
     };
-    let results = gateway.store().search(query).await?;
+    let results = gateway
+        .store()
+        .search(query.resolve_window(chrono::Utc::now(), &chrono::Local))
+        .await?;
     Ok(Json(MemorySearchResponse {
         query: text,
         scope,
@@ -209,7 +212,10 @@ async fn browse(
             1..=BROWSE_LIMIT_MAX,
         ),
     };
-    let entries = gateway.store().browse(filter).await?;
+    let entries = gateway
+        .store()
+        .browse(filter.resolve_window(chrono::Utc::now(), &chrono::Local))
+        .await?;
     Ok(Json(MemoryBrowseResponse {
         messages: entries.into_iter().map(browse_message).collect(),
     }))
@@ -315,7 +321,10 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
         tag,
         limit: Limit::clamped(args.limit, SEARCH_TOOL_LIMIT_DEFAULT, 1..=SEARCH_LIMIT_MAX),
     };
-    let results = gateway.store().search(query).await?;
+    let results = gateway
+        .store()
+        .search(query.resolve_window(chrono::Utc::now(), &chrono::Local))
+        .await?;
     let response = MemorySearchResponse {
         query: args.query,
         scope,
@@ -367,7 +376,10 @@ async fn browse_tool(gateway: &Gateway, args: MemoryBrowseToolArgs) -> Result<St
         order: args.order.unwrap_or_default(),
         limit: Limit::clamped(args.limit, BROWSE_LIMIT_DEFAULT, 1..=BROWSE_LIMIT_MAX),
     };
-    let entries = gateway.store().browse(filter).await?;
+    let entries = gateway
+        .store()
+        .browse(filter.resolve_window(chrono::Utc::now(), &chrono::Local))
+        .await?;
     let response = MemoryBrowseResponse {
         messages: entries.into_iter().map(browse_message).collect(),
     };

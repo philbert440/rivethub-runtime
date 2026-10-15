@@ -19,8 +19,13 @@ fn setup(write: bool) -> (Server, Arc<FakeMemoryStore>) {
 }
 
 #[tokio::test]
-async fn memory_requests_reach_kernel_unchanged() {
+async fn memory_requests_reach_kernel_with_resolved_windows() {
     let (server, store) = setup(false);
+    let today = kernel::memory_core::resolve_window(
+        BrowseWindow::Today,
+        chrono::Utc::now(),
+        &chrono::Local,
+    );
     for (name, args) in [
         (
             "memory_search",
@@ -44,61 +49,62 @@ async fn memory_requests_reach_kernel_unchanged() {
             "{name}"
         );
     }
-    assert_eq!(
-        store.requests().await,
-        vec![
-            MemoryRequest::Search(SearchQuery {
-                since: None,
-                before: None,
-                window: None,
-                expand: None,
-                synthesize: None,
-                text: "日本語".into(),
-                mode: SearchMode::Trigram,
-                scope: MemoryScope::Messages,
-                agent: None,
-                tag: Some("project:acme".parse().expect("tag")),
-                limit: Limit::clamped(Some(7), 10, 1..=50)
-            }),
-            MemoryRequest::Browse(BrowseFilter {
-                conversation_id: None,
-                agent: None,
-                role: None,
-                tool_name: None,
-                tag: None,
-                window: Some(BrowseWindow::Today),
-                since: None,
-                before: None,
-                include_tools: true,
-                order: MemoryBrowseOrder::Asc,
-                limit: Limit::clamped(None, 50, 1..=200)
-            }),
-            MemoryRequest::Stats,
-            MemoryRequest::GetFull("row-1".into()),
-            MemoryRequest::PendingTags(Limit::clamped(None, 100, 1..=1000)),
-            MemoryRequest::ListTags(TagListQuery {
-                entity_type: None,
-                entity_id: None,
-                key: None,
-                value: None,
-                states: vec![TagState::Accepted],
-                limit: Limit::clamped(None, 100, 1..=1000)
-            }),
-            MemoryRequest::TagCounts(TagCountsQuery {
-                key: Some("project".into()),
-                limit: Limit::clamped(None, 100, 1..=1000)
-            }),
-            MemoryRequest::LookupTags(TagLookup {
-                session_keys: vec!["s".into()],
-                states: vec![]
-            }),
-            MemoryRequest::TagTaxonomy(TagTaxonomyQuery {
-                key: Some("project".into()),
-                state: None,
-                limit: Limit::clamped(None, 100, 1..=1000)
-            }),
-        ]
-    );
+    assert_eq!(store.requests().await, expected_requests(today));
+}
+
+fn expected_requests(today: kernel::memory_core::TimeRange) -> Vec<MemoryRequest> {
+    vec![
+        MemoryRequest::Search(SearchQuery {
+            since: None,
+            before: None,
+            window: None,
+            expand: None,
+            synthesize: None,
+            text: "日本語".into(),
+            mode: SearchMode::Trigram,
+            scope: MemoryScope::Messages,
+            agent: None,
+            tag: Some("project:acme".parse().expect("tag")),
+            limit: Limit::clamped(Some(7), 10, 1..=50),
+        }),
+        MemoryRequest::Browse(BrowseFilter {
+            conversation_id: None,
+            agent: None,
+            role: None,
+            tool_name: None,
+            tag: None,
+            window: None,
+            since: today.since,
+            before: today.before,
+            include_tools: true,
+            order: MemoryBrowseOrder::Asc,
+            limit: Limit::clamped(None, 50, 1..=200),
+        }),
+        MemoryRequest::Stats,
+        MemoryRequest::GetFull("row-1".into()),
+        MemoryRequest::PendingTags(Limit::clamped(None, 100, 1..=1000)),
+        MemoryRequest::ListTags(TagListQuery {
+            entity_type: None,
+            entity_id: None,
+            key: None,
+            value: None,
+            states: vec![TagState::Accepted],
+            limit: Limit::clamped(None, 100, 1..=1000),
+        }),
+        MemoryRequest::TagCounts(TagCountsQuery {
+            key: Some("project".into()),
+            limit: Limit::clamped(None, 100, 1..=1000),
+        }),
+        MemoryRequest::LookupTags(TagLookup {
+            session_keys: vec!["s".into()],
+            states: vec![],
+        }),
+        MemoryRequest::TagTaxonomy(TagTaxonomyQuery {
+            key: Some("project".into()),
+            state: None,
+            limit: Limit::clamped(None, 100, 1..=1000),
+        }),
+    ]
 }
 
 #[tokio::test]
@@ -287,7 +293,7 @@ async fn search_forwards_every_argument_and_preserves_the_outcome() {
             limit: Limit::clamped(Some(3), 10, 1..=50),
             since: Some("2026-10-12T00:00:00Z".parse().expect("since")),
             before: Some("2026-10-13T00:00:00Z".parse().expect("before")),
-            window: Some(BrowseWindow::Today),
+            window: None,
             expand: Some(true),
             synthesize: Some(true),
         })]
@@ -297,6 +303,7 @@ async fn search_forwards_every_argument_and_preserves_the_outcome() {
 #[tokio::test]
 async fn search_accepts_windows_and_false_flags_but_rejects_wrong_types() {
     let (server, store) = setup(false);
+    let started = chrono::Utc::now();
     let reply = support::call(
         &server,
         "memory_search",
@@ -308,7 +315,11 @@ async fn search_accepts_windows_and_false_flags_but_rejects_wrong_types() {
     let [MemoryRequest::Search(query)] = requests.as_slice() else {
         panic!("search request")
     };
-    assert_eq!(query.window, Some(BrowseWindow::Last7d));
+    assert_eq!(query.window, None);
+    let since = query.since.expect("resolved window start");
+    assert!(since >= started - chrono::Duration::days(7));
+    assert!(since <= chrono::Utc::now() - chrono::Duration::days(7));
+    assert_eq!(query.before, None);
     assert_eq!(query.expand, Some(false));
     assert_eq!(query.synthesize, Some(false));
     for args in [

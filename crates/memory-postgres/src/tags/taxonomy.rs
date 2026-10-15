@@ -204,7 +204,7 @@ async fn merge_tag_taxonomy(
         .map_err(|source| store_error("taxonomy merge", source))?;
     Ok(TagTaxonomyMergeResult {
         moved,
-        dropped: dropped_rows.len() as u64,
+        dropped: u64::try_from(dropped_rows.len()).map_err(crate::Error::from)?,
         into: merge.into.clone(),
     })
 }

@@ -4,6 +4,7 @@ pub mod embed;
 mod embedding_store;
 pub mod error;
 mod graphile;
+mod graphile_sql;
 pub mod project;
 pub mod queue;
 pub mod read;
@@ -25,8 +26,6 @@ mod wiki_builder;
 pub use task_db::PostgresTasks;
 
 use std::cmp::Ordering;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering as AtomicOrdering;
 use std::time::Duration;
 
 pub use capture::CaptureOptions;
@@ -38,7 +37,7 @@ pub use capture::ConversationUpsert;
 pub use capture::MessageRow;
 pub use embed::QueryEmbed;
 pub use error::Error;
-pub use graphile::GraphileQueue;
+use graphile::GraphileQueue;
 pub use queue::PostgresQueue;
 
 use sqlx::PgPool;
@@ -49,7 +48,6 @@ pub const SCHEMA_VERSION: i64 = 21;
 #[derive(Debug)]
 pub struct PostgresMemory {
     pool: PgPool,
-    wiki_available: AtomicBool,
     embed: Option<embed::EmbedArm>,
     synthesis: Option<SearchSynthesis>,
 }
@@ -59,7 +57,6 @@ impl PostgresMemory {
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
-            wiki_available: AtomicBool::new(true),
             embed: None,
             synthesis: None,
         }
@@ -116,17 +113,7 @@ impl PostgresMemory {
     }
 
     pub async fn queue_available(&self) -> Result<bool, Error> {
-        Ok(self.queue().await?.available())
-    }
-
-    #[must_use]
-    pub fn wiki_available(&self) -> bool {
-        self.wiki_available.load(AtomicOrdering::Relaxed)
-    }
-
-    pub(crate) fn set_wiki_available(&self, available: bool) {
-        self.wiki_available
-            .store(available, AtomicOrdering::Relaxed);
+        GraphileQueue::schema_present(&self.pool).await
     }
 }
 

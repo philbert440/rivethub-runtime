@@ -2,7 +2,6 @@ use crate::capture::char_prefix;
 use crate::error::Error;
 use crate::search::SearchOptions;
 use chrono::DateTime;
-use chrono::Local;
 use chrono::Utc;
 use kernel::memory::BrowseFilter;
 use kernel::memory::SearchMode;
@@ -10,7 +9,6 @@ use kernel::memory_core::TimeRange;
 use std::str::FromStr as _;
 use uuid::Uuid;
 use wire::JsonObject;
-use wire::gateway::memory::BrowseWindow;
 use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryScope;
@@ -52,11 +50,8 @@ impl TryFrom<MessageEntryRow> for MemoryEntry {
             .role_text
             .as_deref()
             .ok_or_else(|| Error::protocol("message row is missing its role"))?;
-        let role = Role::from_str(role_text).map_err(|source| {
-            Error::protocol(format!(
-                "message row has an unknown role \"{role_text}\": {source}"
-            ))
-        })?;
+        let role =
+            Role::from_str(role_text).map_err(|source| Error::stored("message role", source))?;
         Ok(Self {
             id: row.id,
             session_id: row.session_key,
@@ -79,35 +74,28 @@ fn stored_json(raw: Option<String>, column: &'static str) -> Result<Option<JsonO
     };
     serde_json::from_str(&text)
         .map(Some)
-        .map_err(|source| Error::protocol(format!("stored {column} is not JSON: {source}")))
+        .map_err(|source| Error::stored(column, source))
 }
 
 fn count(value: i64) -> Result<u64, Error> {
     u64::try_from(value).map_err(|source| Error::protocol(source.to_string()))
 }
 
-pub(crate) fn window_bounds(window: BrowseWindow) -> TimeRange {
-    kernel::memory_core::resolve_window(window, Utc::now(), &Local)
-}
-
-fn filter_bounds(filter: &BrowseFilter) -> TimeRange {
-    match (filter.since, filter.before, filter.window) {
-        (None, None, Some(window)) => window_bounds(window),
-        _ => TimeRange {
-            since: filter.since,
-            before: filter.before,
-        },
+fn filter_bounds(filter: &BrowseFilter) -> Result<TimeRange, Error> {
+    if filter.window.is_some() && filter.since.is_none() && filter.before.is_none() {
+        return Err(Error::UnresolvedWindow);
     }
+    Ok(TimeRange {
+        since: filter.since,
+        before: filter.before,
+    })
 }
 
 fn push_tag_condition(
     query: &mut sqlx::QueryBuilder<sqlx::Postgres>,
     tag: &kernel::memory::TagLiteral,
 ) {
-    query.push(
-        " and m.conversation_id in (select entity_id from rh_tags \
-         where key = ",
-    );
+    query.push(" and m.conversation_id in (select entity_id from rh_tags where key = ");
     query.push_bind(tag.key.clone());
     query.push(" and value = ");
     query.push_bind(tag.value.clone());
@@ -147,7 +135,7 @@ impl crate::PostgresMemory {
         if let Some(tag) = &filter.tag {
             push_tag_condition(&mut query, tag);
         }
-        let bounds = filter_bounds(filter);
+        let bounds = filter_bounds(filter)?;
         if let Some(since) = bounds.since {
             query.push(" and m.created_at >= ");
             query.push_bind(since);
@@ -177,9 +165,7 @@ impl crate::PostgresMemory {
     }
 
     pub async fn memory_get_full(&self, id: &str) -> Result<Option<MemoryEntry>, Error> {
-        let Ok(uuid) = Uuid::parse_str(id) else {
-            return Ok(None);
-        };
+        let uuid = Uuid::parse_str(id)?;
         let record = sqlx::query_as!(
             MessageEntryRow,
             "select m.id::text as id, c.session_key as \"session_key!\", \
@@ -344,25 +330,16 @@ impl crate::PostgresMemory {
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|source| Error::operation("context", source))?
-        .unwrap_or_default();
+        .map_err(|source| Error::operation("context", source))?;
+        let Some(query_text) = query_text else {
+            return Ok(sections.join("\n"));
+        };
 
-        if self.wiki_available() {
-            match self
-                .wiki_section(&query_text, &mut dedup, &mut budget)
-                .await
-            {
-                Ok(section) => {
-                    if let Some(section) = section {
-                        sections.push(section);
-                    }
-                }
-                Err(error) => {
-                    if error.to_string().contains("does not exist") {
-                        self.set_wiki_available(false);
-                    }
-                }
-            }
+        if let Some(section) = self
+            .wiki_section(&query_text, &mut dedup, &mut budget)
+            .await?
+        {
+            sections.push(section);
         }
 
         let hits = self
@@ -389,7 +366,10 @@ impl crate::PostgresMemory {
                     let role = hit
                         .role
                         .ok_or_else(|| Error::protocol("message hit is missing its role"))?;
-                    let agent_name = hit.agent.clone().unwrap_or_else(|| agent.clone());
+                    let agent_name = hit
+                        .agent
+                        .as_ref()
+                        .ok_or_else(|| Error::protocol("message hit is missing its agent"))?;
                     format!(
                         "[{agent_name}/{role}, {when} · {}] {}",
                         hit.created_at.format("%Y-%m-%d %H:%M"),

@@ -103,7 +103,13 @@ async fn every_arm_filters_both_tables_before_limiting(pool: PgPool) -> TestResu
             query.scope = scope;
             bounds(&mut query)?;
             query.window = Some(BrowseWindow::Today);
-            let outcome = memory.search(query.clone()).await?;
+            let outcome = memory
+                .search(
+                    query
+                        .clone()
+                        .resolve_window(chrono::Utc::now(), &chrono::Utc),
+                )
+                .await?;
             assert_eq!(outcome.results.len(), 1, "{mode:?} {scope:?}");
             assert_eq!(
                 outcome.results.first().ok_or("missing result")?.created_at,
@@ -170,7 +176,7 @@ async fn runtime_embedding_failure_reaches_the_port_with_results(pool: PgPool) -
         let outcome = memory.search(query(mode)).await?;
         assert_eq!(outcome.results.len(), 1);
         let notice = outcome.degraded.ok_or("missing notice")?;
-        assert_eq!(notice.reason, "http 503");
+        assert_eq!(notice.reason, "provider request failed: http 503");
         assert_eq!(
             notice.effect,
             "Keyword / FTS ranking only — not meaning-based."
@@ -200,7 +206,14 @@ async fn synthesis_uses_the_injected_provider_and_honours_cancellation(pool: PgP
     let mut query = query(SearchMode::Fts);
     query.synthesize = Some(true);
     assert_eq!(
-        memory.search(query.clone()).await?.synthesis,
+        memory
+            .search(
+                query
+                    .clone()
+                    .resolve_window(chrono::Utc::now(), &chrono::Utc)
+            )
+            .await?
+            .synthesis,
         Some("Deployment is ready.".into())
     );
     let requests = provider.chat_requests().await;
@@ -221,7 +234,17 @@ async fn synthesis_uses_the_injected_provider_and_honours_cancellation(pool: PgP
     assert!(memory.search(query.clone()).await.is_err());
     assert_eq!(provider.chat_requests().await.len(), 1);
     query.synthesize = Some(false);
-    assert_eq!(memory.search(query.clone()).await?.synthesis, None);
+    assert_eq!(
+        memory
+            .search(
+                query
+                    .clone()
+                    .resolve_window(chrono::Utc::now(), &chrono::Utc)
+            )
+            .await?
+            .synthesis,
+        None
+    );
     query.synthesize = Some(true);
     let unwired = PostgresMemory::new(pool);
     assert!(matches!(
@@ -243,9 +266,26 @@ async fn window_filters_and_each_explicit_bound_overrides_it(pool: PgPool) -> Te
     let mut query = query(SearchMode::Regex);
     query.scope = MemoryScope::Messages;
     query.window = Some(BrowseWindow::Last24h);
-    assert_eq!(memory.search(query.clone()).await?.results.len(), 1);
+    assert_eq!(
+        memory
+            .search(
+                query
+                    .clone()
+                    .resolve_window(chrono::Utc::now(), &chrono::Utc)
+            )
+            .await?
+            .results
+            .len(),
+        1
+    );
     query.before = Some("2026-10-12T00:00:00Z".parse()?);
-    let outcome = memory.search(query.clone()).await?;
+    let outcome = memory
+        .search(
+            query
+                .clone()
+                .resolve_window(chrono::Utc::now(), &chrono::Utc),
+        )
+        .await?;
     assert_eq!(outcome.results.len(), 1);
     assert_eq!(
         outcome.results.first().ok_or("missing result")?.created_at,

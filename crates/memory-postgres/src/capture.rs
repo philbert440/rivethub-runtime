@@ -2,7 +2,6 @@ use crate::error::Error;
 use crate::project;
 use chrono::DateTime;
 use chrono::Utc;
-use serde::Serialize;
 use sqlx::Acquire as _;
 use sqlx::PgPool;
 use sqlx::Transaction;
@@ -142,8 +141,7 @@ impl<'a> CaptureWriter<'a> {
         &mut self,
         update: &ConversationUpdate<'_>,
     ) -> Result<(), Error> {
-        let settings = serde_json::to_value(update.settings)
-            .map_err(|source| Error::protocol(source.to_string()))?;
+        let settings = sqlx::types::Json(update.settings);
         sqlx::query!(
             "update rh_conversations
                 set updated_at = coalesce($2, now()),
@@ -155,7 +153,7 @@ impl<'a> CaptureWriter<'a> {
             update.updated_at,
             update.active,
             update.title,
-            settings
+            settings as _
         )
         .execute(&mut *self.tx)
         .await
@@ -164,12 +162,11 @@ impl<'a> CaptureWriter<'a> {
     }
 
     pub async fn touch_settings(&mut self, id: Uuid, settings: &JsonObject) -> Result<(), Error> {
-        let json =
-            serde_json::to_value(settings).map_err(|source| Error::protocol(source.to_string()))?;
+        let json = sqlx::types::Json(settings);
         sqlx::query!(
             "update rh_conversations set updated_at = now(), settings = $2 where id = $1",
             id,
-            json
+            json as _
         )
         .execute(&mut *self.tx)
         .await
@@ -190,13 +187,8 @@ impl<'a> CaptureWriter<'a> {
     }
 
     pub async fn insert_message(&mut self, row: &MessageRow<'_>) -> Result<Uuid, Error> {
-        let tool_args = row
-            .tool_args
-            .map(serde_json::to_value)
-            .transpose()
-            .map_err(|source| Error::protocol(source.to_string()))?;
-        let metadata = serde_json::to_value(row.metadata)
-            .map_err(|source| Error::protocol(source.to_string()))?;
+        let tool_args = row.tool_args.map(sqlx::types::Json);
+        let metadata = sqlx::types::Json(row.metadata);
         let record = sqlx::query!(
             "insert into rh_messages
                (conversation_id, agent, channel, role, content, tool_name, tool_args,
@@ -209,9 +201,9 @@ impl<'a> CaptureWriter<'a> {
             row.role.to_string(),
             row.content,
             row.tool_name,
-            tool_args,
+            tool_args as _,
             row.tool_result,
-            metadata,
+            metadata as _,
             row.owner_user_id,
             row.created_at,
         )
@@ -339,12 +331,12 @@ pub(crate) fn char_prefix(text: &str, max: usize) -> &str {
         .map_or(text, |(end, _)| &text[..end])
 }
 
-fn capped(text: &str) -> (&str, Option<u64>) {
+fn capped(text: &str) -> Result<(&str, Option<u64>), Error> {
     let kept = char_prefix(text, MAX_CONTENT_CHARS);
-    (
-        kept,
-        (kept.len() < text.len()).then(|| text.chars().count() as u64),
-    )
+    let full = (kept.len() < text.len())
+        .then(|| u64::try_from(text.chars().count()))
+        .transpose()?;
+    Ok((kept, full))
 }
 
 pub(crate) struct PreparedMessage {
@@ -354,55 +346,29 @@ pub(crate) struct PreparedMessage {
     pub(crate) created_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Serialize)]
-struct CaptureProvenance<'a> {
-    event_id: &'a str,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    truncated: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    full_content_length: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    full_tool_result_length: Option<u64>,
-}
-
 pub(crate) fn prepare_capture_message(message: &CaptureMessage) -> Result<PreparedMessage, Error> {
-    let (content, full_content_length) = capped(&message.content);
+    let (content, full_content_length) = capped(&message.content)?;
     let (tool_result, full_tool_result_length) = match message.tool_result.as_deref() {
         Some(text) => {
-            let (kept, full) = capped(text);
+            let (kept, full) = capped(text)?;
             (Some(kept.to_owned()), full)
         }
         None => (None, None),
     };
-    let metadata: JsonObject = message.metadata.clone().unwrap_or_default();
-    let mut metadata =
-        serde_json::to_value(metadata).map_err(|source| Error::protocol(source.to_string()))?;
-    let provenance = serde_json::to_value(CaptureProvenance {
-        event_id: message.event_id.as_str(),
-        truncated: full_content_length.is_some(),
-        full_content_length,
-        full_tool_result_length,
-    })
-    .map_err(|source| Error::protocol(source.to_string()))?;
-    let Some(object) = metadata.as_object_mut() else {
-        return Err(Error::protocol(
-            "capture metadata did not serialize as an object".to_owned(),
-        ));
-    };
-    let Some(provenance) = provenance.as_object() else {
-        return Err(Error::protocol(
-            "capture provenance did not serialize as an object".to_owned(),
-        ));
-    };
-    for (key, value) in provenance {
-        object.insert(key.clone(), value.clone());
+    let mut metadata = message.metadata.clone();
+    let metadata = metadata.get_or_insert_default();
+    metadata.insert("event_id", &message.event_id)?;
+    if let Some(length) = full_content_length {
+        metadata.insert("truncated", true)?;
+        metadata.insert("full_content_length", length)?;
     }
-    let metadata: JsonObject =
-        serde_json::from_value(metadata).map_err(|source| Error::protocol(source.to_string()))?;
+    if let Some(length) = full_tool_result_length {
+        metadata.insert("full_tool_result_length", length)?;
+    }
     Ok(PreparedMessage {
         content: content.to_string(),
         tool_result,
-        metadata,
+        metadata: metadata.clone(),
         created_at: created_at(message)?,
     })
 }

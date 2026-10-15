@@ -65,66 +65,6 @@ text = "Err(..) => value"
 count = 1
 
 [[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/embed.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/embed.rs"
-text = "ok"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/embed.rs"
-text = "unwrap_or"
-count = 2
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/project.rs"
-text = "ok"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/queue.rs"
-text = "ok"
-count = 3
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/read.rs"
-text = "let Ok(..) = .. else"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/search_sql.rs"
-text = "Err(..) => value"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/search_sql.rs"
-text = "ok"
-count = 1
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/store_impl.rs"
-text = "unwrap_or"
-count = 3
-
-[[entry]]
-check = "FALLBACK"
-file = "crates/memory-postgres/src/tags/mod.rs"
-text = "ok"
-count = 2
-
-[[entry]]
 check = "PORTS"
 file = "crates/capture/src/writer.rs"
 text = "pub trait CaptureTransport"

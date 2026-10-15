@@ -95,7 +95,11 @@ async fn wiki_queue_failure_retries_delivery_without_reextracting(pool: PgPool) 
     let cancel = CancellationToken::new();
     let source = seed(&pool).await?;
     let payload = extract_wiki_job(&source)?.payload;
-    let absent = PostgresQueue::Absent;
+    testkit::install_graphile_worker(&pool).await?;
+    let absent = PostgresQueue::connect(pool.clone()).await?;
+    sqlx::query("DROP SCHEMA graphile_worker CASCADE")
+        .execute(&pool)
+        .await?;
     let env = WikiBuilderEnv {
         store: &store,
         provider: &model,

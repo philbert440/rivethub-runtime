@@ -97,12 +97,7 @@ async fn worker_claims_a_reap_job_and_stops_on_sigterm(pool: PgPool) -> TestResu
     install_queue(&pool).await?;
     let memory = PostgresMemory::new(pool.clone());
     let queue = memory.queue().await?;
-    if !queue.available() {
-        return Err(
-            "the graphile_worker schema is absent on the lane database; refusing to skip the worker proof"
-                .into(),
-        );
-    }
+
     queue.enqueue(reap_job()).await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
