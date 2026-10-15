@@ -56,10 +56,11 @@ pub(super) async fn start(
             shutdown.child_token(),
         ));
     }
+    let channel_port = settings.agent_channel_port;
     let channel = AgentChannel::bind(settings, mailboxes, shutdown.child_token())
         .await?
         .with_tenancy(tenancy);
-    let local = local_node(config, name, host, port, agent_ids);
+    let local = local_node(config, name, host, channel_port, port, agent_ids)?;
     let heartbeat = Heartbeat::new(
         registry,
         local,
@@ -78,37 +79,46 @@ pub(super) async fn start(
     Ok(tasks)
 }
 
+const GATEWAY_CAPABILITY: &str = "den";
+
 fn local_node(
     config: &Config,
     name: String,
     host: String,
-    port: u16,
+    channel_port: u16,
+    gateway_port: u16,
     agents: Vec<String>,
-) -> MeshNode {
+) -> Result<MeshNode, ComposeError> {
     let now = Utc::now();
-    MeshNode {
+    let gateway_url = url::Url::parse(&format!("https://{host}:{gateway_port}/"))
+        .map_err(|error| ComposeError::Invalid(format!("mesh gateway url: {error}")))?;
+    Ok(MeshNode {
         id: name.clone(),
         name,
         role: None,
         agents,
         host,
-        port,
+        port: channel_port,
         providers: config
             .providers
             .as_ref()
             .map_or_else(Vec::new, |providers| providers.keys().cloned().collect()),
         models: Vec::new(),
-        capabilities: Vec::new(),
+        capabilities: vec![GATEWAY_CAPABILITY.to_owned()],
         status: MeshNodeStatus::Online,
         last_seen: now,
         registered_at: now,
         version: env!("CARGO_PKG_VERSION").into(),
-        metadata: None,
+        metadata: Some(wire::mesh::MeshMetadata {
+            gateway_url: Some(gateway_url),
+            gateway_port: Some(gateway_port),
+            extra: wire::Extra::default(),
+        }),
         ssh_user: None,
         install_root: None,
         platform: None,
         extra: wire::Extra::default(),
-    }
+    })
 }
 
 async fn listen(
@@ -189,5 +199,36 @@ async fn run_call(id: String, model: String, runner: Arc<dyn TurnRunner>, call: 
             }
         }
         Err(error) => tracing::warn!("agent channel turn failed: {error}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_local_node_advertises_its_gateway_and_agent_channel()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let loaded = Config::from_str(
+            &config::Environment::default(),
+            "runtime:\n  workspace: /tmp\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\n",
+        )?;
+        let node = local_node(
+            &loaded.config,
+            "node-a".to_owned(),
+            "192.0.2.15".to_owned(),
+            3001,
+            5175,
+            vec!["rivet".to_owned()],
+        )?;
+        assert_eq!(node.port, 3001);
+        assert_eq!(node.capabilities, vec![GATEWAY_CAPABILITY.to_owned()]);
+        let metadata = node.metadata.ok_or("metadata")?;
+        assert_eq!(
+            metadata.gateway_url.map(String::from).as_deref(),
+            Some("https://192.0.2.15:5175/")
+        );
+        assert_eq!(metadata.gateway_port, Some(5175));
+        Ok(())
     }
 }
