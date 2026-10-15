@@ -11,6 +11,7 @@ use terminal::RosterKey;
 use terminal::SessionKey;
 use terminal::TerminalSettings;
 use testkit::Masks;
+use testkit::json_masked_eq;
 use testkit::masked_eq;
 
 #[test]

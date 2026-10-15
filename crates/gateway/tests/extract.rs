@@ -42,7 +42,7 @@ fn recorded_bad_json_bodies_match() {
             let answered = handle.block_on(common::answer(app.clone(), request.clone()));
             match answered {
                 Ok(response) => response,
-                Err(error) => testkit::Response::json(599, &error),
+                Err(error) => testkit::Response::json(599, &error).expect("error body serializes"),
             }
         });
         if let Err(mismatch) = outcome {

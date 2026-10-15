@@ -629,5 +629,5 @@ async fn a_served_delegation_returns_the_model_and_the_reply() {
         .expect("serve joined")
         .expect("spawn")
         .expect("serve");
-    stub.close().await;
+    stub.close().await.expect("stub closed");
 }
