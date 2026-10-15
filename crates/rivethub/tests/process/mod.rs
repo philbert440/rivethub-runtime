@@ -15,27 +15,18 @@ pub struct Running {
 }
 
 pub async fn init_authority(home: &std::path::Path) -> TestResult {
+    let hub = home.join(".rivethub");
+    std::fs::create_dir_all(&hub)?;
     let offline = home.join("offline");
     std::fs::create_dir_all(&offline)?;
-    let output = tokio::time::timeout(
-        Duration::from_secs(30),
-        Command::new(env!("CARGO_BIN_EXE_rh"))
-            .args(["ca", "init", "--root-key-out"])
-            .arg(offline.join("root.key.pem"))
-            .env_clear()
-            .env("HOME", home)
-            .output(),
+    let authority = pki::Pki::initialize(
+        hub.join("ca"),
+        offline.join("root.key.pem"),
+        tokio_util::sync::CancellationToken::new(),
     )
-    .await??;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "ca init failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into())
-    }
+    .await?;
+    drop(authority);
+    Ok(())
 }
 
 impl Running {

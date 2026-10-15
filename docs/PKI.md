@@ -43,6 +43,8 @@ This supersedes the CA parts of DESIGN-2026-10-12 ("certificate authority comman
    and the device enrollment routes through that port. `rh ca …` commands (init/import, token, revoke, crl, status) and
    `rh cert renew` (the holder side: keygen, CSR, renewal loop) live in cli.
 
+The CA takes node names from the operator roster and never from `/mesh.json`, because that registry is self-registered.
+
 ## Migration (no flag day)
 1. `rh ca import` reads rivet-ca.sh's root/intermediate and index.txt once. Existing certificates stay valid until
    they expire (same chain).

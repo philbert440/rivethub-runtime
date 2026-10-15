@@ -6,10 +6,60 @@ pub enum Error {
     Service(#[from] crate::service::ServiceError),
     #[error(transparent)]
     Ca(#[from] kernel::ca::CaError),
-    #[error(transparent)]
-    Pki(#[from] pki::Error),
     #[error("PKI: {0}")]
     PkiInput(&'static str),
+    #[error("rh ca requires --ca-url")]
+    CaUrlRequired,
+    #[error("rh ca requires --root")]
+    RootRequired,
+    #[error("rh ca token and rh ca revoke require --provisioner-password-file")]
+    PasswordRequired,
+    #[error("rh ca token node and rh ca token agent require --roster")]
+    RosterRequired,
+    #[error("certificate authority file is not a regular file")]
+    CaFile,
+    #[error("certificate authority path escapes its directory")]
+    CaEscape,
+    #[error("certificate authority path contains traversal")]
+    CaTraversal,
+    #[error("certificate authority file is not UTF-8")]
+    CaEncoding,
+    #[error("the operator roster cannot be mesh.json, because that registry is self-registered")]
+    MeshRegistry,
+    #[error("operator roster line {line} is malformed")]
+    RosterLine { line: usize },
+    #[error("operator roster line {line} repeats node `{name}`")]
+    RosterNode { line: usize, name: String },
+    #[error("operator roster line {line} repeats agent `{name}`")]
+    RosterAgent { line: usize, name: String },
+    #[error("operator roster line {line} repeats address {address}")]
+    RosterAddress {
+        line: usize,
+        address: std::net::IpAddr,
+    },
+    #[error("node `{0}` is not in the operator roster")]
+    UnknownNode(String),
+    #[error("agent `{0}` is not in the operator roster")]
+    UnknownAgent(String),
+    #[error("device name is not a single unreserved name")]
+    DeviceName,
+    #[error("certificate serial is not a canonical decimal integer")]
+    Serial,
+    #[error("step ca {action} failed: {detail}")]
+    StepFailed {
+        action: &'static str,
+        detail: String,
+    },
+    #[error("step ca returned an empty or invalid one-time token")]
+    StepToken,
+    #[error("step ca output is not valid UTF-8")]
+    StepEncoding,
+    #[error("step ca output exceeds 1 MiB")]
+    StepOutput,
+    #[error("step ca did not provide pipes")]
+    StepPipe,
+    #[error("certificate authority root is not an X.509 certificate")]
+    CaCertificate,
     #[error("holder cryptography failed: {0}")]
     Crypto(#[from] rcgen::Error),
     #[error(transparent)]

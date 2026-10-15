@@ -1,17 +1,17 @@
 # RivetHub certificate commands
 
-The PKI CLI implements the approved design in `docs/PKI.md` and the step-ca addendum. `rh ca` still uses the kernel CA port and the typed scenarios in `tests/fixtures/pki/principals.json`. `rh cert renew` talks to step-ca. Its acceptance tests replay `crates/testkit/tests/fixtures/stepca/api.json` through a local HTTPS signer. No production CA material is read or checked in.
+The PKI CLI implements the approved design in `docs/PKI.md` and the step-ca addendum. `rh ca` mints one-time tokens and revokes serials by running the `step` CLI against a step-ca the operator already bootstrapped. Node and agent names come from the operator roster, never from `/mesh.json`. `rh cert renew` talks to step-ca. Its acceptance tests replay `crates/testkit/tests/fixtures/stepca/api.json` through a local HTTPS signer. No production CA material is read or checked in.
 
 ## Operator commands
 
-- `rh ca init --root-key-out /offline/export/root.key.pem` creates a P-256 root and intermediate. The root key is written once, exclusively, with mode 0600 at the operator-selected location outside CA state. It is never written in CA state. Move that export offline after initialization; only the intermediate key remains in CA state. Existing output files and existing CA databases are refused.
-- `rh ca import <legacy-directory>` imports the conventional OpenSSL layout described in `crates/pki/README.md`, including the existing chain, index and next serial. It does not read a legacy root key or modify the source. Import is one-time.
-- `rh ca token spiffe://rivet.mesh/node/node-a` prints one 256-bit enrollment token followed by one newline, exactly once. The CA stores only its digest. Redirect stdout to a protected file for delivery to the holder.
-- `rh ca revoke <SPIFFE-principal|hexadecimal-serial>` revokes the principal or one issued/imported serial and updates the CRL.
-- `rh ca crl` prints the signed X.509 CRL as PEM.
-- `rh ca status` prints the issuer subjects and expiration dates, without key material or tokens.
+`--ca-url` and `--root` are required. `--provisioner-password-file` is required for `token` and `revoke`. `--roster` is required for node and agent tokens. A roster whose file name is `mesh.json` is refused. `rh ca` does not create a CA and does not read CA state.
 
-CA state defaults to `~/.rivethub/ca`. `--state <directory>` selects another state directory, and `--crl-out <path>` atomically publishes the compatibility CRL outside it. The directory lock prevents concurrent owners. Commands use the complete `kernel::ca::CertificateAuthority` port; initialization/import/open and legacy serial revocation use the adapter's existing or added inherent administrative methods. State/database logic remains in `pki`.
+- `rh ca token node <name> --ca-url <url> --root <pem> --provisioner-password-file <file> --roster <file>` runs `step ca token`. Each roster line is `node:ip:agent`. The token subject is the node name, and the pinned names are that node's IP, `<name>`, and `<name>.rivet.mesh`.
+- `rh ca token agent <name>` uses the same flags. `<name>` must be the agent field of one roster line. The subject and only SAN are `spiffe://rivet.mesh/agent/<node>/<agent>`.
+- `rh ca token device <name>` does not read the roster. The subject and only SAN are `<name>`, one unreserved label.
+- `rh ca revoke <serial>` runs `step ca revoke` for one canonical positive decimal serial.
+- `rh ca crl` prints the PEM CRL from `stepca::Authority::crl`. `--crl-out <path>` publishes that PEM atomically, mode 0644, and is ignored on the other commands.
+- `rh ca status` prints `Certificate authority ready.` and each root subject and expiry from `stepca::Authority::roots`.
 
 ## Holder commands
 
@@ -32,9 +32,9 @@ Without `--once`, the process waits until two thirds of the certificate's actual
 
 ## Coverage and exclusions
 
-`ca` tests are unchanged. `cert` tests use a local TLS server that signs the submitted CSR and returns the recorded `/1.0/sign` and `/1.0/renew` document shape, including the recorded refusal text. They cover token-SAN enrollment, mTLS renewal, key locality, same-origin and foreign redirects, a wrong key, a wrong principal, an extra name, a reused token, a revoked renewal, cancellation, and unsafe paths. Paused-clock tests cover the renewal timer. `stepca_scope` requires every case in the step-ca recording, plus the recorded CRL, to be exercised or skipped with a reason. This command skips `sign-san-not-granted`, `renew-without-certificate`, `revoke-own-mtls`, `roots`, and `crl`: it never builds an ungranted CSR, never renews without a certificate, and it does not revoke, fetch roots, or read the CRL. `pki_scope` still requires an empty `tests/fixtures/pki/skipped.json`.
+`ca` tests mint tokens through a fake `step` on `PATH`, refuse roster and path escapes, and replay the recorded roots and CRL. `cert` tests use a local TLS server that signs the submitted CSR and returns the recorded `/1.0/sign` and `/1.0/renew` document shape, including the recorded refusal text. They cover token-SAN enrollment, mTLS renewal, key locality, same-origin and foreign redirects, a wrong key, a wrong principal, an extra name, a reused token, a revoked renewal, cancellation, and unsafe paths. Paused-clock tests cover the renewal timer. `stepca_scope` requires every case in the step-ca recording, plus the recorded CRL, to be exercised or skipped with a reason. This command skips `sign-san-not-granted`, `renew-without-certificate`, `revoke-own-mtls`, `roots`, and `crl`: it never builds an ungranted CSR, never renews without a certificate, and it does not revoke, fetch roots, or read the CRL. `pki_scope` still requires an empty `tests/fixtures/pki/skipped.json`.
 
-The production gateway routes, `rh ca`, and the pki adapter remain separate slices. The test server is an acceptance fixture.
+The production gateway routes and the pki adapter remain separate slices. The test server is an acceptance fixture.
 
 # RivetHub systemd commands
 
