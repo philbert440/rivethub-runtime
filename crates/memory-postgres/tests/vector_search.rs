@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
+use std::time::Instant;
 
 use kernel::memory::Limit;
 use kernel::memory::SearchMode;
@@ -451,16 +452,35 @@ async fn the_chunk_arm_surfaces_and_merges_parents(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-async fn deploy_score(memory: &PostgresMemory) -> Result<f64, Box<dyn std::error::Error>> {
+const RECENCY_SCORE_SLOPE: f64 = 0.3 * 0.05 * 1.25;
+
+struct ObservedScore {
+    score: f64,
+    slack: f64,
+}
+
+async fn observe_recency(
+    pool: &PgPool,
+    memory: &PostgresMemory,
+    age_days: f64,
+    access_count: i32,
+) -> Result<ObservedScore, Box<dyn std::error::Error>> {
+    let started = Instant::now();
+    set_recency(pool, age_days, access_count).await?;
     let outcome = memory
         .search_outcome_for(&query("deploy", SearchMode::Fts))
         .await?;
-    Ok(outcome
+    let score = outcome
         .hits
         .iter()
         .find(|hit| hit.content == DEPLOY)
         .ok_or("the deploy hit is missing")?
-        .score)
+        .score;
+    let elapsed_days = started.elapsed().as_secs_f64() / 86_400.0;
+    Ok(ObservedScore {
+        score,
+        slack: elapsed_days.mul_add(RECENCY_SCORE_SLOPE, 1e-9),
+    })
 }
 
 async fn set_recency(pool: &PgPool, age_days: f64, access_count: i32) -> TestResult {
@@ -480,26 +500,28 @@ async fn reads_reinforce_and_age_decays_the_recency_boost(pool: PgPool) -> TestR
     capture(&pool, "deploy", DEPLOY).await?;
     let memory = unwired(&pool);
 
-    set_recency(&pool, 0.0, 0).await?;
-    let fresh = deploy_score(&memory).await?;
-    set_recency(&pool, 0.0, 25).await?;
-    let reinforced = deploy_score(&memory).await?;
-    set_recency(&pool, 0.0, 400).await?;
-    let capped = deploy_score(&memory).await?;
-    set_recency(&pool, 2.0_f64.ln() / 0.05, 0).await?;
-    let half_life = deploy_score(&memory).await?;
+    let fresh = observe_recency(&pool, &memory, 0.0, 0).await?;
+    let reinforced = observe_recency(&pool, &memory, 0.0, 25).await?;
+    let capped = observe_recency(&pool, &memory, 0.0, 400).await?;
+    let half_life = observe_recency(&pool, &memory, 2.0_f64.ln() / 0.05, 0).await?;
 
     assert!(
-        (reinforced - fresh - 0.075).abs() < 1e-6,
-        "{reinforced} vs {fresh}"
+        (reinforced.score - fresh.score - 0.075).abs() < fresh.slack + reinforced.slack,
+        "{} vs {}",
+        reinforced.score,
+        fresh.score
     );
     assert!(
-        (capped - reinforced).abs() < 1e-6,
-        "{capped} vs {reinforced}"
+        (capped.score - reinforced.score).abs() < capped.slack + reinforced.slack,
+        "{} vs {}",
+        capped.score,
+        reinforced.score
     );
     assert!(
-        (fresh - half_life - 0.15).abs() < 1e-6,
-        "{fresh} vs {half_life}"
+        (fresh.score - half_life.score - 0.15).abs() < fresh.slack + half_life.slack,
+        "{} vs {}",
+        fresh.score,
+        half_life.score
     );
     Ok(())
 }
