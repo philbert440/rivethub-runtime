@@ -258,6 +258,28 @@ async fn a_storm_of_shortlived_children_drains_the_last_line_before_the_exit_is_
     Ok(())
 }
 
+async fn killing_an_exited_terminal_keeps_the_record() -> Result<(), Box<dyn std::error::Error>> {
+    let manager = common::direct_manager(&config::Environment::default());
+    let work = tempfile::tempdir()?;
+    let id = manager
+        .start(common::spec(
+            "claude-code:00000000-0000-4000-8000-000000000008",
+            work.path(),
+            &["/bin/sh", "-c", "exit 0"],
+        )?)
+        .await?;
+    let exited = common::wait_for_exit(&manager, &id).await?;
+    assert_eq!(exited.state, TerminalState::Exited { code: 0 });
+    manager.kill(&id).await?;
+    let again = common::wait_for_exit(&manager, &id).await?;
+    assert_eq!(again.state, TerminalState::Exited { code: 0 });
+    assert!(
+        manager.list().iter().any(|record| record.id == id),
+        "an exited terminal stays addressable after kill"
+    );
+    Ok(())
+}
+
 async fn unknown_terminals_are_typed_errors() -> Result<(), Box<dyn std::error::Error>> {
     let manager = common::direct_manager(&config::Environment::default());
     let unknown = kernel::terminal::TerminalId::new("pty-00000000");
@@ -283,6 +305,7 @@ fn the_direct_pty_behaviours() -> Result<(), Box<dyn std::error::Error>> {
         a_storm_of_shortlived_children_drains_the_last_line_before_the_exit_is_reported(),
     )?;
     runtime.block_on(the_polite_kill_escalates_to_sigkill_after_three_seconds())?;
+    runtime.block_on(killing_an_exited_terminal_keeps_the_record())?;
     runtime.block_on(unknown_terminals_are_typed_errors())
 }
 

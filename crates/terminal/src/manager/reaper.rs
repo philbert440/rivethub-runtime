@@ -134,13 +134,14 @@ impl TerminalManager {
                         None => KillPlan::Remove,
                     }
                 }
-                Some(Runtime::Pty { .. }) => KillPlan::Remove,
+                Some(Runtime::Pty { .. }) => KillPlan::Settled,
             }
         };
         match plan {
             KillPlan::Unknown => Err(Error::UnknownTerminal {
                 terminal: id.clone(),
             }),
+            KillPlan::Settled => Ok(()),
             KillPlan::Remove => {
                 self.inner.state.lock().remove(id);
                 self.unbind_session(id);

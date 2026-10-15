@@ -253,12 +253,16 @@ impl kernel::terminal::TerminalMux for TerminalManager {
 
     async fn kill(&self, id: &TerminalId) -> Result<(), kernel::terminal::TerminalMuxError> {
         let backend = self.inner.port_backends.lock().get(id).cloned();
-        if let Some(backend) = backend {
-            Self::kill(self, &backend).await?;
-        }
         Self::kill(self, id)
             .await
-            .map_err(kernel::terminal::TerminalMuxError::from)
+            .map_err(kernel::terminal::TerminalMuxError::from)?;
+        if let Some(backend) = backend {
+            Self::kill(self, &backend)
+                .await
+                .map_err(kernel::terminal::TerminalMuxError::from)?;
+            self.inner.port_backends.lock().remove(id);
+        }
+        Ok(())
     }
 
     async fn list(

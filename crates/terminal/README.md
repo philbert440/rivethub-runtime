@@ -10,4 +10,4 @@ The TTL tests live in `tests/manager_ttl/mod.rs`, included as crate tests so the
 
 Direct PTY selection and the crate size target remain subject to the decisions listed in the final-fix brief. Compatibility names in recordings are translated in tests. Child processes strip the deprecated `RIVETOS_USER_ID` and `RIVETOS_USER_TOKEN` identity variables as well as their current spellings. The `denKey` field is a recorded foreign marker; `rivet-ca/intermediate/chain.pem` is the existing shared CA layout.
 
-The two opt-in herdr binary conformance tests remain ignored in normal runs. Listing tests does not probe installed programs or read their state; explicit execution uses an isolated temporary herdr namespace.
+The opt-in herdr binary conformance tests remain ignored in normal runs. Listing tests does not probe installed programs or read their state; explicit execution uses an isolated temporary herdr namespace.

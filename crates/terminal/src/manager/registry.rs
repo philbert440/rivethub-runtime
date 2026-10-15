@@ -86,6 +86,7 @@ impl RecordFields {
 pub(super) enum KillPlan {
     Unknown,
     Remove,
+    Settled,
     Hangup { pid: u32 },
     StopHerdr(HerdrSession),
 }

@@ -42,6 +42,95 @@ fn run_probe() -> Result<terminal::herdr::HerdrBinary, Failed> {
         .map_err(|error| Failed::from(error.to_string()))
 }
 
+fn manager_for(binary: PathBuf, state: &std::path::Path, port: u16) -> terminal::TerminalManager {
+    let config_home = paths::resolve_config_home(state, port);
+    let mut path = std::ffi::OsString::from("/usr/bin:/bin");
+    if let Some(dir) = binary.parent() {
+        path.push(":");
+        path.push(dir);
+    }
+    let setup = HerdrSetup {
+        binary,
+        config_home,
+    };
+    let settings = terminal::TerminalSettings::from_config(
+        &config::Config::default(),
+        &config::Environment::from_vars([("HOME", "/tmp")]).with_override("PATH", path),
+        "herdr-kill".to_owned(),
+    );
+    terminal::TerminalManager::new(settings, terminal::MuxPlan::Herdr(setup))
+}
+
+async fn kill_by_returned_id(binary: PathBuf) -> Result<Completion, Failed> {
+    let state = tempfile::tempdir().map_err(|error| Failed::from(error.to_string()))?;
+    let work = state.path().join("work");
+    std::fs::create_dir_all(&work).map_err(|error| Failed::from(error.to_string()))?;
+    let manager = std::sync::Arc::new(manager_for(binary, state.path(), 5975));
+    let tasks = tokio_util::task::TaskTracker::new();
+    manager.run_tracked(tokio_util::sync::CancellationToken::new(), &tasks);
+    manager
+        .adopt_namespace(state.path(), "owner")
+        .await
+        .map_err(|error| Failed::from(format!("adopt: {error}")))?;
+    let session: wire::session_id::SessionId = "claude-code:00000000-0000-4000-8000-000000000410"
+        .parse()
+        .map_err(|error: wire::session_id::SessionIdError| Failed::from(error.to_string()))?;
+    let id = kernel::terminal::TerminalMux::spawn(
+        manager.as_ref(),
+        &session,
+        vec!["/bin/cat".to_owned()],
+        &work,
+        kernel::terminal::TermSize { cols: 80, rows: 24 },
+    )
+    .await
+    .map_err(|error| Failed::from(format!("spawn: {error}")))?;
+    let listed: Vec<String> = manager
+        .list()
+        .into_iter()
+        .map(|record| format!("{} {:?}", record.id, record.backing))
+        .collect();
+    if !manager.list().iter().any(|record| record.id == id) {
+        return Err(Failed::from(format!(
+            "spawn returned {id} but the roster is {listed:?}"
+        )));
+    }
+    kernel::terminal::TerminalMux::kill(manager.as_ref(), &id)
+        .await
+        .map_err(|error| Failed::from(format!("kill {id} roster {listed:?}: {error}")))?;
+    if !manager.list().iter().any(|record| record.id == id) {
+        return Err(Failed::from(format!(
+            "kill dropped {id}; roster is now {:?}",
+            manager
+                .list()
+                .into_iter()
+                .map(|record| record.id.to_string())
+                .collect::<Vec<_>>()
+        )));
+    }
+    let code = kernel::terminal::TerminalMux::wait(manager.as_ref(), &id)
+        .await
+        .map_err(|error| Failed::from(format!("wait after kill of {id}: {error}")))?;
+    if code != 0 {
+        return Err(Failed::from(format!("kill exit code {code}")));
+    }
+    manager
+        .kill(&id)
+        .await
+        .map_err(|error| Failed::from(format!("second kill of exited {id}: {error}")))?;
+    let unknown = kernel::terminal::TerminalId::new("pty-00000000");
+    let missing = manager
+        .kill(&unknown)
+        .await
+        .err()
+        .ok_or_else(|| Failed::from("an unknown id must stay a typed error"))?;
+    if !matches!(missing, terminal::Error::UnknownTerminal { .. }) {
+        return Err(Failed::from(format!(
+            "unexpected missing-id error: {missing}"
+        )));
+    }
+    Ok(Completion::Completed)
+}
+
 async fn real_lifecycle(binary: PathBuf) -> Result<Completion, Failed> {
     let state = tempfile::tempdir().map_err(|error| Failed::from(error.to_string()))?;
     let config_home = paths::resolve_config_home(state.path(), 5974);
@@ -120,6 +209,13 @@ fn main() {
             let runtime =
                 tokio::runtime::Runtime::new().map_err(|error| Failed::from(error.to_string()))?;
             runtime.block_on(real_lifecycle(binary.path))
+        })
+        .with_ignored_flag(true),
+        Trial::ignorable_test("herdr spawn can be killed by the returned id", || {
+            let binary = run_probe()?;
+            let runtime =
+                tokio::runtime::Runtime::new().map_err(|error| Failed::from(error.to_string()))?;
+            runtime.block_on(kill_by_returned_id(binary.path))
         })
         .with_ignored_flag(true),
     ];
