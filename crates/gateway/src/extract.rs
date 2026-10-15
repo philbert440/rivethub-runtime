@@ -14,8 +14,12 @@ use chrono::Utc;
 use kernel::memory::TagLiteral;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use serde::de::Deserializer;
+use serde::de::SeqAccess;
+use serde::de::Visitor;
 use serde_json::error::Category;
 use wire::JsonObject;
+use wire::events::AgentEvent;
 use wire::gateway::memory::BrowseWindow;
 use wire::gateway::memory::BrowseWindowError;
 use wire::gateway::memory::MemoryScope;
@@ -358,5 +362,88 @@ impl StateFilter {
     #[must_use]
     pub fn into_vec(self) -> Vec<TagState> {
         self.0
+    }
+}
+
+const BATCH_LIMIT: usize = 100;
+const BATCH_SHAPE: &str = "expected an array of 1-100 events";
+
+struct EventBatch(Vec<AgentEvent>);
+
+struct BatchVisitor;
+
+impl<'de> Visitor<'de> for BatchVisitor {
+    type Value = EventBatch;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(BATCH_SHAPE)
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+        let mut events = Vec::new();
+        loop {
+            let index = events.len();
+            if index == BATCH_LIMIT {
+                return match seq.next_element::<AgentEvent>() {
+                    Ok(None) => Ok(EventBatch(events)),
+                    Ok(Some(_)) => Err(serde::de::Error::custom(BATCH_SHAPE)),
+                    Err(error) => element_error(index, &error),
+                };
+            }
+            match seq.next_element::<AgentEvent>() {
+                Ok(Some(event)) => events.push(event),
+                Ok(None) => {
+                    return if events.is_empty() {
+                        Err(serde::de::Error::custom(BATCH_SHAPE))
+                    } else {
+                        Ok(EventBatch(events))
+                    };
+                }
+                Err(error) => return element_error(index, &error),
+            }
+        }
+    }
+}
+
+fn element_error<E: serde::de::Error>(
+    index: usize,
+    error: &impl std::fmt::Display,
+) -> Result<EventBatch, E> {
+    tracing::debug!("event batch element {index}: {error}");
+    Err(serde::de::Error::custom(format!(
+        "event[{index}] is not a valid v1 AgentEvent"
+    )))
+}
+
+pub(crate) fn decode_event_batch(bytes: &[u8]) -> Result<Vec<AgentEvent>, ApiError> {
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    let events = match Deserializer::deserialize_seq(&mut deserializer, BatchVisitor) {
+        Ok(EventBatch(events)) => events,
+        Err(error) => return Err(batch_error(&error)),
+    };
+    match deserializer.end() {
+        Ok(()) => Ok(events),
+        Err(error) => Err(batch_error(&error)),
+    }
+}
+
+fn batch_error(error: &serde_json::Error) -> ApiError {
+    let sentence = strip_location(&error.to_string());
+    if sentence.starts_with("event[") {
+        return ApiError::Unprocessable(sentence);
+    }
+    match error.classify() {
+        Category::Data => ApiError::BadRequest(BATCH_SHAPE.to_owned()),
+        Category::Io | Category::Syntax | Category::Eof => invalid_json(),
+    }
+}
+
+fn strip_location(text: &str) -> String {
+    match text.rfind(" at line ") {
+        Some(index) if text.is_char_boundary(index) => {
+            let (head, _) = text.split_at(index);
+            head.to_owned()
+        }
+        Some(_) | None => text.to_owned(),
     }
 }

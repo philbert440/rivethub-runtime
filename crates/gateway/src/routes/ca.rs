@@ -53,9 +53,10 @@ enum CaRouteError {
 impl From<ApiError> for CaRouteError {
     fn from(error: ApiError) -> Self {
         match error {
-            ApiError::BadRequest(_) | ApiError::BodyMustBeObject | ApiError::Serialize(_) => {
-                Self::BadRequest
-            }
+            ApiError::BadRequest(_)
+            | ApiError::Unprocessable(_)
+            | ApiError::BodyMustBeObject
+            | ApiError::Serialize(_) => Self::BadRequest,
             ApiError::BodyTooLarge => Self::BodyTooLarge,
             ApiError::Unauthorized | ApiError::ForbiddenOrigin | ApiError::SessionForbidden => {
                 Self::Unauthorized

@@ -29,21 +29,33 @@ use wire::events::ProtocolVersion;
 const OWN: &[&str] = &[
     "plain-failclosed/failclosed-healthz",
     "plain-failclosed/failclosed-options",
+    "plain-failclosed/failclosed-static",
     "plain-main/alias-api-events",
     "plain-main/alias-api-events-event",
     "plain-main/alias-api-events-sessions",
     "plain-main/alias-api-events-state",
+    "plain-main/alias-api-terminal",
+    "plain-main/alias-api-terminal-config",
+    "plain-main/alias-api-terminal-harness-sessions",
+    "plain-main/alias-api-terminal-inject",
+    "plain-main/alias-api-terminal-list",
+    "plain-main/alias-api-terminal-prefix",
     "plain-main/delete-session-again",
     "plain-main/delete-session-canonical",
     "plain-main/delete-session-known",
     "plain-main/delete-session-missing-param",
     "plain-main/event-canonical-uuid-room",
     "plain-main/event-empty-body",
+    "plain-main/event-get",
     "plain-main/event-invalid-json",
     "plain-main/event-valid-chunked",
     "plain-main/event-valid-expect-continue",
     "plain-main/event-valid-session-start",
     "plain-main/events-100",
+    "plain-main/events-101",
+    "plain-main/events-bad-element-2",
+    "plain-main/events-empty-array",
+    "plain-main/events-not-array",
     "plain-main/events-valid-batch",
     "plain-main/host-allowed-env",
     "plain-main/host-dot-localhost",
@@ -72,6 +84,7 @@ const OWN: &[&str] = &[
     "plain-main/origin-same-with-path",
     "plain-main/origin-unparseable",
     "plain-main/remote-plain-api",
+    "plain-main/session-get",
     "plain-main/sessions-after-delete",
     "plain-main/sessions-list",
     "plain-main/state-after-rejected-batch",
@@ -80,14 +93,20 @@ const OWN: &[&str] = &[
     "plain-main/state-empty-param",
     "plain-main/state-known",
     "plain-main/state-missing-param",
+    "plain-main/state-post",
     "plain-main/state-reserialized",
     "plain-main/state-unknown",
+    "plain-main/static-term-nested",
+    "plain-main/term-config",
+    "plain-main/term-post-disabled",
+    "plain-nostatic/nostatic-ws-get",
     "plain-tenancy/tenancy-healthz",
     "plain-tenancy/tenancy-ingest-alice-session",
     "plain-tenancy/tenancy-ingest-owner-session",
     "plain-tenancy/tenancy-sessions-owner",
     "plain-tenancy/tenancy-state-own",
     "plain-tenancy/tenancy-state-unknown",
+    "plain-tenancy/tenancy-static",
     "tls-main/tls-api-no-cert",
     "tls-main/tls-api-node-leaf",
     "tls-main/tls-api-path-html-accept",
@@ -169,12 +188,25 @@ fn settings() -> Settings {
     }
 }
 
-fn app(run: &str) -> Result<axum::Router, String> {
+const INDEX: &str = "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><title>golden hub</title></head><body>golden index</body></html>\n";
+
+fn static_root() -> Result<tempfile::TempDir, String> {
+    let root = tempfile::tempdir().map_err(|error| format!("static dir: {error}"))?;
+    std::fs::write(root.path().join("index.html"), INDEX)
+        .map_err(|error| format!("index.html: {error}"))?;
+    Ok(root)
+}
+
+fn app(run: &str, static_dir: Option<&Path>) -> Result<axum::Router, String> {
     let owner = UserId::new("owner".to_owned()).map_err(|error| format!("owner: {error}"))?;
     let store = Arc::new(testkit::FakeMemoryStore::default());
     let handle: Arc<dyn kernel::memory::MemoryStore> = store;
+    let mut configured = settings();
+    if let Some(dir) = static_dir {
+        configured.static_dir = Some(dir.to_path_buf());
+    }
     let gateway =
-        Arc::new(gateway::Gateway::new(handle, settings()).with_tenancy(Tenancy::local(owner)));
+        Arc::new(gateway::Gateway::new(handle, configured).with_tenancy(Tenancy::local(owner)));
     for (session, name) in seeded_owners(run)? {
         let user = UserId::new(name).map_err(|error| format!("seed user: {error}"))?;
         gateway
@@ -458,19 +490,24 @@ fn run_has_owned(run: &str, cases: &[HttpCase], owned: &BTreeSet<&str>) -> bool 
         .any(|case| case.id.starts_with(&prefix) && owned.contains(case.id.as_str()))
 }
 
+struct Lane<'a> {
+    static_root: Option<&'a Path>,
+    seen: &'a mut BTreeSet<String>,
+    failures: &'a mut Vec<String>,
+}
+
 async fn replay_run(
     run: &str,
     cases: &[HttpCase],
     chunks: &BTreeMap<String, String>,
     owned: &BTreeSet<&str>,
-    seen: &mut BTreeSet<String>,
-    failures: &mut Vec<String>,
+    lane: &mut Lane<'_>,
 ) {
     let prefix = format!("{run}/");
-    let app = match app(run) {
+    let app = match app(run, served_static(run, lane.static_root)) {
         Ok(app) => app,
         Err(error) => {
-            failures.push(format!("app {run}: {error}"));
+            lane.failures.push(format!("app {run}: {error}"));
             return;
         }
     };
@@ -480,19 +517,20 @@ async fn replay_run(
         }
         if case.id == "plain-main/event-reserialize" {
             if let Err(detail) = apply_reserialized(&app).await {
-                failures.push(format!("{} :: {detail}", case.id));
+                lane.failures.push(format!("{} :: {detail}", case.id));
             }
             continue;
         }
         if !owned.contains(case.id.as_str()) {
             continue;
         }
-        if !seen.insert(case.id.clone()) {
-            failures.push(format!("replayed twice {}", case.id));
+        if !lane.seen.insert(case.id.clone()) {
+            lane.failures.push(format!("replayed twice {}", case.id));
             continue;
         }
         if let Err(detail) = play(case, chunks, &app).await {
-            failures.push(format!("{} :: {}", case.id, detail.replace('\n', " | ")));
+            lane.failures
+                .push(format!("{} :: {}", case.id, detail.replace('\n', " | ")));
         }
     }
 }
@@ -505,30 +543,32 @@ fn http_paths() -> [PathBuf; 2] {
     ]
 }
 
-async fn replay_recording(
-    path: &Path,
-    owned: &BTreeSet<&str>,
-    seen: &mut BTreeSet<String>,
-    failures: &mut Vec<String>,
-) {
+fn served_static<'a>(run: &str, root: Option<&'a Path>) -> Option<&'a Path> {
+    match run {
+        "plain-failclosed" | "plain-tenancy" => root,
+        _ => None,
+    }
+}
+
+async fn replay_recording(path: &Path, owned: &BTreeSet<&str>, lane: &mut Lane<'_>) {
     let cases = match testkit::http::cases(path) {
         Ok(cases) => cases,
         Err(error) => {
-            failures.push(format!("{}: {error}", path.display()));
+            lane.failures.push(format!("{}: {error}", path.display()));
             return;
         }
     };
     let chunks = match chunked_bodies(path) {
         Ok(chunks) => chunks,
         Err(error) => {
-            failures.push(error);
+            lane.failures.push(error);
             return;
         }
     };
     let runs = match runs_of(&cases) {
         Ok(runs) => runs,
         Err(error) => {
-            failures.push(error);
+            lane.failures.push(error);
             return;
         }
     };
@@ -536,7 +576,7 @@ async fn replay_recording(
         if !run_has_owned(run, &cases, owned) {
             continue;
         }
-        replay_run(run, &cases, &chunks, owned, seen, failures).await;
+        replay_run(run, &cases, &chunks, owned, lane).await;
     }
 }
 
@@ -561,8 +601,16 @@ async fn replay_all() -> Result<(), String> {
     let owned: BTreeSet<&str> = OWN.iter().copied().collect();
     let mut seen = BTreeSet::new();
     let mut failures = Vec::new();
-    for path in http_paths() {
-        replay_recording(&path, &owned, &mut seen, &mut failures).await;
+    let static_dir = static_root()?;
+    {
+        let mut lane = Lane {
+            static_root: Some(static_dir.path()),
+            seen: &mut seen,
+            failures: &mut failures,
+        };
+        for path in http_paths() {
+            replay_recording(&path, &owned, &mut lane).await;
+        }
     }
     finish(&owned, &seen, failures)
 }

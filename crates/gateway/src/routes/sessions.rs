@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
-use axum::extract::{RawQuery, State, WebSocketUpgrade};
+use axum::extract::{FromRequestParts, RawQuery, State, WebSocketUpgrade};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
@@ -63,12 +63,12 @@ pub struct Ingested {
 
 pub(crate) fn router() -> Router<Arc<Gateway>> {
     Router::new()
-        .route("/event", post(event))
-        .route("/events", post(events))
-        .route("/sessions", get(list))
-        .route("/state", get(state))
-        .route("/session", delete(remove))
-        .route("/ws", get(upgrade))
+        .route("/event", post(event).fallback(super::not_found))
+        .route("/events", post(events).fallback(super::not_found))
+        .route("/sessions", get(list).fallback(super::not_found))
+        .route("/state", get(state).fallback(super::not_found))
+        .route("/session", delete(remove).fallback(super::not_found))
+        .route("/ws", get(upgrade).fallback(super::not_found))
         .route("/api/events/event", post(event))
         .route("/api/events", post(events))
         .route("/api/events/sessions", get(list))
@@ -91,8 +91,7 @@ async fn events(
     request: axum::extract::Request,
 ) -> Result<Json<Ingested>, ApiError> {
     let bytes = crate::extract::limited_bytes(request, &gateway).await?;
-    let events: Vec<AgentEvent> =
-        serde_json::from_slice(&bytes).map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let events = crate::extract::decode_event_batch(&bytes)?;
     let ingested = events.len();
     ingest(&gateway, &user, events).await?;
     Ok(Json(Ingested { ok: true, ingested }))
@@ -154,8 +153,17 @@ async fn upgrade(
     State(gateway): State<Arc<Gateway>>,
     user: UserId,
     Query(query): Query<Selection>,
-    upgrade: WebSocketUpgrade,
+    request: axum::extract::Request,
 ) -> Response {
+    let (mut parts, body) = request.into_parts();
+    drop(body);
+    let upgrade = match WebSocketUpgrade::from_request_parts(&mut parts, &()).await {
+        Ok(upgrade) => upgrade,
+        Err(rejection) => {
+            tracing::debug!(%rejection, "session upgrade rejected");
+            return super::plain_get(&gateway, &parts.method, parts.uri.path()).await;
+        }
+    };
     let subscription = gateway.sessions.subscribe(&user, query.session.as_deref());
     let filter = query
         .session

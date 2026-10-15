@@ -8,7 +8,7 @@ use wire::gateway::sessions::{SessionPostAccepted, SessionPostRequest};
 use wire::harness::{HarnessId, HarnessSessionSummary};
 
 use super::sessions::Accepted;
-use super::terminal::service;
+use super::terminal::{require, service};
 use crate::Gateway;
 use crate::error::ApiError;
 use crate::extract::Body;
@@ -43,7 +43,7 @@ async fn list(
     State(gateway): State<Arc<Gateway>>,
     user: UserId,
 ) -> Result<Json<wire::harness::HarnessSessionList>, ApiError> {
-    Ok(Json(service(&gateway)?.harness_sessions(&user)))
+    Ok(Json(require(&gateway)?.harness_sessions(&user)))
 }
 
 async fn transcript(
@@ -51,6 +51,7 @@ async fn transcript(
     user: UserId,
     Path(session): Path<String>,
 ) -> Result<Json<wire::gateway::sessions::TranscriptResponse>, ApiError> {
+    require(&gateway)?;
     gateway.sessions.authorize(&user, &session)?;
     let reader = gateway
         .transcript

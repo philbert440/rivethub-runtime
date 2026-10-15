@@ -8,10 +8,6 @@
     "reason": "Certificate and users.json tenancy is not applied by the loopback owner, so isolation and database refusals differ from the recording."
   },
   {
-    "id": "plain-failclosed/failclosed-static",
-    "reason": "Static serving refuses a parent segment or guesses a different media type than the recording."
-  },
-  {
     "id": "plain-failclosed/failclosed-ws",
     "reason": "B1 hardening: explicit credentials and trusted certificate fingerprints replace implicit identity mapping; tested separately"
   },
@@ -22,30 +18,6 @@
   {
     "id": "plain-main/alias-api-mesh",
     "reason": "The mesh overview with live session counts is not produced for this exchange."
-  },
-  {
-    "id": "plain-main/alias-api-terminal",
-    "reason": "With no terminal service the route returns terminals disabled; the recording returns a disabled-terminal document or a different status."
-  },
-  {
-    "id": "plain-main/alias-api-terminal-config",
-    "reason": "With no terminal service the route returns terminals disabled; the recording returns a disabled-terminal document or a different status."
-  },
-  {
-    "id": "plain-main/alias-api-terminal-harness-sessions",
-    "reason": "With no terminal service the route returns terminals disabled; the recording returns a disabled-terminal document or a different status."
-  },
-  {
-    "id": "plain-main/alias-api-terminal-inject",
-    "reason": "With no terminal service the route returns terminals disabled; the recording returns a disabled-terminal document or a different status."
-  },
-  {
-    "id": "plain-main/alias-api-terminal-list",
-    "reason": "With no terminal service the route returns terminals disabled; the recording returns a disabled-terminal document or a different status."
-  },
-  {
-    "id": "plain-main/alias-api-terminal-prefix",
-    "reason": "With no terminal service the route returns terminals disabled; the recording returns a disabled-terminal document or a different status."
   },
   {
     "id": "plain-main/alias-api-terminal-ws-http",
@@ -65,43 +37,23 @@
   },
   {
     "id": "plain-main/event-bad-ts",
-    "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
-  },
-  {
-    "id": "plain-main/event-get",
-    "reason": "The method is rejected by the typed route table; the recording uses a not-found status."
+    "reason": "A string timestamp is a typed field error from the timestamp parser; the recording collapses it to 422 not a valid v1 AgentEvent."
   },
   {
     "id": "plain-main/event-json-string",
-    "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
+    "reason": "A JSON string is a typed object-shape error (400, body must be a JSON object); the recording collapses it to 422 not a valid v1 AgentEvent."
   },
   {
     "id": "plain-main/event-reserialize",
-    "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
+    "reason": "Typed UTF-8 JSON rejects this body (a lone UTF-16 surrogate, and numbers that are not canonical integers); the recording accepts the JavaScript text and returns ok."
   },
   {
     "id": "plain-main/event-unknown-type",
-    "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
+    "reason": "An unknown event type is a typed enum error; the recording collapses it to 422 not a valid v1 AgentEvent."
   },
   {
     "id": "plain-main/event-wrong-version",
-    "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
-  },
-  {
-    "id": "plain-main/events-101",
-    "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
-  },
-  {
-    "id": "plain-main/events-bad-element-2",
-    "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
-  },
-  {
-    "id": "plain-main/events-empty-array",
-    "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
-  },
-  {
-    "id": "plain-main/events-not-array",
-    "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
+    "reason": "Protocol version 2 is a typed version error (protocol version must be 1); the recording collapses it to 422 not a valid v1 AgentEvent."
   },
   {
     "id": "plain-main/healthz-double-slash",
@@ -139,45 +91,22 @@
     "id": "plain-main/remote-plain-html",
     "reason": "The HTML response headers do not match the recording's CORS or content-type pins."
   },
-  {
-    "id": "plain-main/session-get",
-    "reason": "The method is rejected by the typed route table; the recording uses a not-found status."
-  },
-  {
-    "id": "plain-main/state-post",
-    "reason": "The method is rejected by the typed route table; the recording uses a not-found status."
-  },
+
   {
     "id": "plain-main/static-dotdot",
-    "reason": "Static serving refuses a parent segment or guesses a different media type than the recording."
-  },
-  {
-    "id": "plain-main/static-term-nested",
-    "reason": "Static serving refuses a parent segment or guesses a different media type than the recording."
+    "reason": "Parent segments are refused by component-wise path containment; the recording serves the SPA after a JavaScript path collapse of dot-dot."
   },
   {
     "id": "plain-main/static-unknown-extension",
-    "reason": "Static serving refuses a parent segment or guesses a different media type than the recording."
+    "reason": "The ecosystem mime map types .xyz as chemical/x-xyz; the recording's application/octet-stream is the JavaScript unknown-extension default."
   },
   {
     "id": "plain-main/static-uppercase-extension",
-    "reason": "Static serving refuses a parent segment or guesses a different media type than the recording."
-  },
-  {
-    "id": "plain-main/term-config",
-    "reason": "With no terminal service the route returns terminals disabled; the recording returns a disabled-terminal document or a different status."
-  },
-  {
-    "id": "plain-main/term-post-disabled",
-    "reason": "With no terminal service the route returns terminals disabled; the recording returns a disabled-terminal document or a different status."
+    "reason": "Media types come from the ecosystem mime map, which is case-insensitive, so IMAGE.PNG is image/png; the recording's application/octet-stream is a case-sensitive JavaScript extension table."
   },
   {
     "id": "plain-main/ws-path-http",
     "reason": "A plain GET of a websocket path is handled by the upgrade route; the recording returns the SPA document or another status."
-  },
-  {
-    "id": "plain-nostatic/nostatic-ws-get",
-    "reason": "The method is rejected by the typed route table; the recording uses a not-found status."
   },
   {
     "id": "plain-tenancy/tenancy-delete-alice",
@@ -194,10 +123,6 @@
   {
     "id": "plain-tenancy/tenancy-state-alice",
     "reason": "Certificate and users.json tenancy is not applied by the loopback owner, so isolation and database refusals differ from the recording."
-  },
-  {
-    "id": "plain-tenancy/tenancy-static",
-    "reason": "Static serving refuses a parent segment or guesses a different media type than the recording."
   },
   {
     "id": "plain-tenancy/tenancy-unknown-user-token",

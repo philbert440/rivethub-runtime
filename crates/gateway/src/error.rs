@@ -39,6 +39,8 @@ pub enum ApiError {
     #[error("{0}")]
     BadRequest(String),
     #[error("{0}")]
+    Unprocessable(String),
+    #[error("{0}")]
     NotFound(&'static str),
     #[error("method not allowed")]
     MethodNotAllowed,
@@ -105,6 +107,9 @@ impl ApiError {
                 (StatusCode::SERVICE_UNAVAILABLE, GatewayError::new(message))
             }
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, GatewayError::new(message)),
+            Self::Unprocessable(message) => {
+                (StatusCode::UNPROCESSABLE_ENTITY, GatewayError::new(message))
+            }
             Self::NotFound(message) => (StatusCode::NOT_FOUND, GatewayError::new(message)),
             Self::MethodNotAllowed => (
                 StatusCode::METHOD_NOT_ALLOWED,

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use axum::extract::{State, WebSocketUpgrade};
+use axum::extract::{FromRequestParts, State, WebSocketUpgrade};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{any, get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use wire::gateway::term::{PtyList, TermConfig, TermSpawnRequest, TermSpawnResponse};
@@ -31,14 +31,23 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route("/api/terminal/config", get(config))
         .route("/api/terminal/list", get(list))
         .route("/api/terminal/inject", post(inject))
+        .route("/term/{*rest}", any(missing))
         .merge(crate::routes::chat::router())
 }
 
 pub(crate) fn service(gateway: &Gateway) -> Result<Arc<TerminalService>, ApiError> {
+    opened(gateway, "terminals disabled")
+}
+
+pub(crate) fn require(gateway: &Gateway) -> Result<Arc<TerminalService>, ApiError> {
+    opened(gateway, "terminal disabled")
+}
+
+fn opened(gateway: &Gateway, message: &str) -> Result<Arc<TerminalService>, ApiError> {
     gateway
         .terminal
         .clone()
-        .ok_or_else(|| ApiError::Unavailable("terminals disabled".into()))
+        .ok_or_else(|| ApiError::Unavailable(message.into()))
 }
 
 async fn spawn(
@@ -46,6 +55,7 @@ async fn spawn(
     user: UserId,
     body: Result<Body<TermSpawnRequest>, ApiError>,
 ) -> Result<(axum::http::StatusCode, Json<TermSpawnResponse>), ApiError> {
+    let service = require(&gateway)?;
     let Body(request) = body.map_err(|error| {
         if matches!(error, ApiError::BodyMustBeObject) {
             ApiError::BadRequest("expected an object".into())
@@ -55,7 +65,7 @@ async fn spawn(
     })?;
     Ok((
         axum::http::StatusCode::CREATED,
-        Json(service(&gateway)?.spawn(&user, request).await?),
+        Json(service.spawn(&user, request).await?),
     ))
 }
 
@@ -64,7 +74,7 @@ async fn kill(
     user: UserId,
     Query(query): Query<Selection>,
 ) -> Result<Json<Accepted>, ApiError> {
-    service(&gateway)?
+    require(&gateway)?
         .kill(
             &user,
             query
@@ -76,11 +86,12 @@ async fn kill(
     Ok(Json(Accepted { ok: true }))
 }
 
-async fn config(
-    State(gateway): State<Arc<Gateway>>,
-    user: UserId,
-) -> Result<Json<TermConfig>, ApiError> {
-    Ok(Json(service(&gateway)?.config(&user)))
+async fn config(State(gateway): State<Arc<Gateway>>, user: UserId) -> Json<TermConfig> {
+    let document = match gateway.terminal.clone() {
+        Some(service) => service.config(&user),
+        None => TermConfig::disabled(config::TermSettings::defaults().max_ptys as u64),
+    };
+    Json(document)
 }
 
 async fn list(
@@ -88,7 +99,7 @@ async fn list(
     user: UserId,
 ) -> Result<Json<PtyList>, ApiError> {
     Ok(Json(PtyList {
-        ptys: service(&gateway)?.list(&user),
+        ptys: require(&gateway)?.list(&user),
     }))
 }
 
@@ -97,25 +108,52 @@ async fn inject(
     user: UserId,
     Body(request): Body<wire::gateway::term::TermInjectRequest>,
 ) -> Result<Json<wire::gateway::term::TermInjectResponse>, ApiError> {
+    require(&gateway)?;
     gateway.sessions.authorize(&user, &request.session)?;
     Err(ApiError::Conflict(
         "chat messages use turn-end handoff; terminal injection is disabled".into(),
     ))
 }
 
+async fn missing(State(gateway): State<Arc<Gateway>>) -> Response {
+    match require(&gateway) {
+        Ok(service) => {
+            drop(service);
+            ApiError::NotFound("not found").into_response()
+        }
+        Err(error) => error.into_response(),
+    }
+}
+
 async fn upgrade(
     State(gateway): State<Arc<Gateway>>,
     user: UserId,
     Query(query): Query<Selection>,
-    upgrade: WebSocketUpgrade,
-) -> Result<Response, ApiError> {
-    let service = service(&gateway)?;
-    let (_, handle) = service.find(&user, query.id.as_deref(), query.session.as_deref())?;
-    Ok(upgrade
+    request: axum::extract::Request,
+) -> Response {
+    let service = match require(&gateway) {
+        Ok(service) => service,
+        Err(error) => return error.into_response(),
+    };
+    let (mut parts, body) = request.into_parts();
+    drop(body);
+    let upgrade = match WebSocketUpgrade::from_request_parts(&mut parts, &()).await {
+        Ok(upgrade) => upgrade,
+        Err(rejection) => {
+            tracing::debug!(%rejection, "terminal upgrade rejected");
+            return rejection.into_response();
+        }
+    };
+    let found = service.find(&user, query.id.as_deref(), query.session.as_deref());
+    let (_, handle) = match found {
+        Ok(pair) => pair,
+        Err(error) => return error.into_response(),
+    };
+    upgrade
         .on_upgrade(move |socket| async move {
             if let Err(error) = crate::term::socket::run(socket, service, handle).await {
                 tracing::debug!(%error, "terminal websocket ended");
             }
         })
-        .into_response())
+        .into_response()
 }
