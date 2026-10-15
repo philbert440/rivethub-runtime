@@ -32,6 +32,8 @@ struct FakeArgs {
     crash_on: Option<CrashPoint>,
     #[arg(long)]
     hang_until_cancel: bool,
+    #[arg(long)]
+    list_sessions: bool,
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -54,6 +56,7 @@ struct AgentState {
     stop: acp::StopReason,
     crash_on: Option<CrashPoint>,
     hang_until_cancel: bool,
+    list_sessions: bool,
     cancelled: AtomicBool,
     cancel_notify: Notify,
     selection: Mutex<Selection>,
@@ -77,6 +80,7 @@ fn prepare(args: FakeArgs) -> Option<AgentState> {
         stop,
         crash_on: args.crash_on,
         hang_until_cancel: args.hang_until_cancel,
+        list_sessions: args.list_sessions,
         cancelled: AtomicBool::new(false),
         cancel_notify: Notify::new(),
         selection: Mutex::new(Selection::initial()),
@@ -98,7 +102,12 @@ fn on_initialize(
 ) -> Result<(), acp::Error> {
     responder.respond(
         acp::InitializeResponse::new(request.protocol_version).agent_capabilities(
-            acp::AgentCapabilities::new().load_session(!matches!(state.on_load, OnLoad::None)),
+            acp::AgentCapabilities::new()
+                .load_session(!matches!(state.on_load, OnLoad::None))
+                .session_capabilities(
+                    acp::SessionCapabilities::new()
+                        .list(state.list_sessions.then(acp::SessionListCapabilities::new)),
+                ),
         ),
     )
 }

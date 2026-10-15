@@ -88,7 +88,11 @@ pub(crate) fn fixture_options(selection: &Selection) -> Vec<acp::SessionConfigOp
             "model",
             "Model",
             selection.model.clone(),
-            choices(&["grok-5", "grok-4.7", "grok-4.5"]),
+            vec![
+                acp::SessionConfigSelectOption::new("grok-5", "Grok 5"),
+                acp::SessionConfigSelectOption::new("grok-4.7", "Grok 4.7 (recommended)"),
+                acp::SessionConfigSelectOption::new("grok-4.5", "Grok 4.5"),
+            ],
         )
         .category(acp::SessionConfigOptionCategory::Model),
         acp::SessionConfigOption::select(

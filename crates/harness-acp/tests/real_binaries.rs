@@ -54,7 +54,7 @@ fn start(args: &Arguments, runtime: &tokio::runtime::Runtime) -> libtest_mimic::
         let session_handle = handle.clone();
         trials.push(
             Trial::ignorable_test(format!("real {harness}"), move || {
-                session_handle.block_on(run_harness(harness))
+                session_handle.block_on(with_deadline(run_harness(harness)))
             })
             .with_ignored_flag(true)
             .with_kind("installed harnesses"),
@@ -62,7 +62,7 @@ fn start(args: &Arguments, runtime: &tokio::runtime::Runtime) -> libtest_mimic::
         let handshake_handle = handle.clone();
         trials.push(
             Trial::ignorable_test(format!("initialize {harness}"), move || {
-                handshake_handle.block_on(run_initialize(harness))
+                handshake_handle.block_on(with_deadline(run_initialize(harness)))
             })
             .with_ignored_flag(true)
             .with_kind("needs the real binary"),
@@ -71,12 +71,29 @@ fn start(args: &Arguments, runtime: &tokio::runtime::Runtime) -> libtest_mimic::
     libtest_mimic::run(args, trials)
 }
 
-async fn probe(program: &Path) -> bool {
-    tokio::process::Command::new(program)
-        .arg("--version")
-        .output()
-        .await
-        .is_ok()
+async fn probe(program: &Path) -> Result<bool, Failed> {
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::process::Command::new(program)
+            .arg("--version")
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
+    .map_err(|error| {
+        Failed::from(format!(
+            "{} version probe timed out: {error}",
+            program.display()
+        ))
+    })?;
+    match output {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(Failed::from(format!(
+            "{} version probe failed: {error}",
+            program.display()
+        ))),
+    }
 }
 
 fn user_local_binary(program: &Path) -> Option<PathBuf> {
@@ -124,14 +141,14 @@ async fn resolve_installed(
     table: LaunchTable,
     configured: &Path,
 ) -> Result<Result<LaunchTable, String>, Failed> {
-    if probe(configured).await {
+    if probe(configured).await? {
         return Ok(Ok(table));
     }
     let Some(user_local) = user_local_binary(configured) else {
         return Ok(Err(not_installed(harness, &[configured.to_owned()])));
     };
     let resolved = table_with_binary(harness, &user_local, None)?;
-    if probe(&user_local).await {
+    if probe(&user_local).await? {
         return Ok(Ok(resolved));
     }
     Ok(Err(not_installed(
@@ -209,14 +226,7 @@ async fn run_initialize(harness: HarnessId) -> Result<Completion, Failed> {
     let launch = table
         .launch(harness)
         .map_err(|error| Failed::from(format!("launch table: {error}")))?;
-    let configured = match launch {
-        AcpLaunch::Native(command) | AcpLaunch::Adapter(command) => command,
-        AcpLaunch::Unverified { reason, .. } => {
-            return Ok(Completion::ignored_with(format!(
-                "{harness} is not verified: {reason}"
-            )));
-        }
-    };
+    let configured = launch.command().clone();
     let table = match resolve_installed(harness, table, &configured.program).await {
         Ok(Ok(table)) => table,
         Ok(Err(reason)) => return Ok(Completion::ignored_with(reason)),
@@ -228,9 +238,13 @@ async fn run_initialize(harness: HarnessId) -> Result<Completion, Failed> {
         .command()
         .clone();
     let cwd = tempdir().map_err(|error| Failed::from(format!("temp dir: {error}")))?;
-    initialize_handshake(&command, cwd.path())
-        .await
-        .map_err(|error| Failed::from(format!("{harness} initialize: {error}")))?;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        initialize_handshake(&command, cwd.path()),
+    )
+    .await
+    .map_err(|error| Failed::from(format!("{harness} initialize timeout: {error}")))?
+    .map_err(|error| Failed::from(format!("{harness} initialize: {error}")))?;
     Ok(Completion::Completed)
 }
 
@@ -244,4 +258,12 @@ async fn wait_for_turn_end(
             None => return Err("the event stream ended before the turn ended".to_owned()),
         }
     }
+}
+
+async fn with_deadline(
+    future: impl std::future::Future<Output = Result<Completion, Failed>>,
+) -> Result<Completion, Failed> {
+    tokio::time::timeout(std::time::Duration::from_secs(60), future)
+        .await
+        .map_err(|error| Failed::from(format!("live ACP test deadline: {error}")))?
 }

@@ -82,7 +82,10 @@ fn hermes_accepts_stamped_ids_and_rejects_unknown_prefixed_ones() {
     ] {
         let parsed = NativeSession::parse(HarnessId::Hermes, native);
         assert!(
-            matches!(parsed, Err(IdentityError::Shape { .. })),
+            matches!(
+                parsed,
+                Err(IdentityError::Shape { .. } | IdentityError::Timestamp { .. })
+            ),
             "hermes must reject {native:?}"
         );
     }
@@ -162,4 +165,13 @@ fn canonical_ids_without_a_known_harness_are_rejected() {
     let session = SessionId::from_str("claude-code:not-a-uuid").expect("canonical parses");
     let parsed = harness_acp::identity::from_canonical(&session);
     assert!(matches!(parsed, Err(IdentityError::Shape { .. })));
+}
+
+#[test]
+fn malformed_hermes_timestamps_preserve_the_parse_error() {
+    use std::error::Error as _;
+    let error = NativeSession::parse(HarnessId::Hermes, "20260230_120000_abcdef")
+        .expect_err("invalid date");
+    assert!(matches!(error, IdentityError::Timestamp { .. }));
+    assert!(error.source().is_some());
 }

@@ -5,22 +5,32 @@ use tokio::sync::mpsc;
 use crate::events;
 use crate::permissions::PermissionRegistry;
 
+#[derive(Clone)]
+pub(crate) struct SessionClient {
+    pub(crate) events: mpsc::Sender<SessionEvent>,
+    pub(crate) permissions: std::sync::Arc<PermissionRegistry>,
+    pub(crate) options: std::sync::Arc<crate::options::SessionOptions>,
+}
+
 pub(crate) async fn on_session_update(
     notification: acp::SessionNotification,
     events: &mpsc::Sender<SessionEvent>,
+    options: &crate::options::SessionOptions,
 ) -> Result<(), acp::Error> {
+    if let acp::SessionUpdate::ConfigOptionUpdate(update) = notification.update {
+        options.replace(update.config_options);
+        return Ok(());
+    }
     match events::session_event(notification.update) {
-        Ok(event) => {
+        Ok(Some(event)) => {
             if events.send(event).await.is_err() {
                 Err(acp::Error::internal_error().data("session event stream is closed"))
             } else {
                 Ok(())
             }
         }
-        Err(error) => {
-            tracing::warn!(%error, "session update has no session-event form; dropped");
-            Ok(())
-        }
+        Ok(None) => Ok(()),
+        Err(error) => Err(acp::Error::invalid_params().data(error.to_string())),
     }
 }
 

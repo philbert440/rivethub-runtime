@@ -1,6 +1,7 @@
 pub mod adapter;
 pub mod client;
 pub mod connection;
+mod discovery;
 pub mod error;
 pub mod events;
 pub mod identity;
@@ -21,3 +22,6 @@ pub use launch::AcpCommand;
 pub use launch::AcpLaunch;
 pub use launch::LaunchFact;
 pub use launch::LaunchTable;
+
+#[cfg(test)]
+mod event_tests;

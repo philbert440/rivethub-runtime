@@ -20,6 +20,11 @@ pub enum IdentityError {
     Shape { harness: HarnessId, native: String },
     #[error("{harness} native session id {native:?} is not a version-7 uuid")]
     UuidVersion { harness: HarnessId, native: String },
+    #[error("invalid Hermes session timestamp in {native:?}: {source}")]
+    Timestamp {
+        native: String,
+        source: chrono::ParseError,
+    },
     #[error("session id {canonical:?} is not a harness-prefixed native session id")]
     Canonical { canonical: String },
 }
@@ -73,7 +78,7 @@ fn matches_shape(harness: HarnessId, native: &str) -> Result<(), IdentityError> 
         | HarnessId::Cowork
         | HarnessId::Codex
         | HarnessId::GrokBuild => is_uuid(native),
-        HarnessId::Hermes => is_hermes(native),
+        HarnessId::Hermes => is_hermes(native)?,
         HarnessId::KimiCode => is_kimi(native),
         HarnessId::Opencode => is_opencode(native),
     };
@@ -98,28 +103,29 @@ fn is_uuid(native: &str) -> bool {
     Uuid::parse_str(native).is_ok_and(|uuid| uuid.hyphenated().to_string() == native)
 }
 
-fn is_hermes(native: &str) -> bool {
+fn is_hermes(native: &str) -> Result<bool, IdentityError> {
     let mut fields = native.split('_');
-    let Some(day) = fields.next() else {
-        return false;
+    let (Some(day), Some(clock), Some(tag), None) =
+        (fields.next(), fields.next(), fields.next(), fields.next())
+    else {
+        return Ok(false);
     };
-    let Some(clock) = fields.next() else {
-        return false;
-    };
-    let Some(tag) = fields.next() else {
-        return false;
-    };
-    fields.next().is_none() && is_hermes_stamp(day, clock) && is_hermes_tag(tag)
-}
-
-fn is_hermes_stamp(day: &str, clock: &str) -> bool {
-    let Ok(date) = NaiveDate::parse_from_str(day, "%Y%m%d") else {
-        return false;
-    };
-    let Ok(time) = chrono::NaiveTime::parse_from_str(clock, "%H%M%S") else {
-        return false;
-    };
-    date.year() > 0 && time.hour() < 24 && time.minute() < 60 && time.second() < 60
+    let date =
+        NaiveDate::parse_from_str(day, "%Y%m%d").map_err(|source| IdentityError::Timestamp {
+            native: native.to_owned(),
+            source,
+        })?;
+    let time = chrono::NaiveTime::parse_from_str(clock, "%H%M%S").map_err(|source| {
+        IdentityError::Timestamp {
+            native: native.to_owned(),
+            source,
+        }
+    })?;
+    Ok(date.year() > 0
+        && time.hour() < 24
+        && time.minute() < 60
+        && time.second() < 60
+        && is_hermes_tag(tag))
 }
 
 fn is_hermes_tag(tag: &str) -> bool {

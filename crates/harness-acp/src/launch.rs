@@ -147,7 +147,12 @@ fn entry_for(config: &Config, harness: HarnessId) -> LaunchEntry {
             "grok",
             vec!["agent".to_owned(), "stdio".to_owned()],
         ))),
-        HarnessId::ClaudeCode => unverified(config, harness, "claude-code-acp", Vec::new()),
+        HarnessId::ClaudeCode => LaunchEntry::Launch(AcpLaunch::Adapter(acp_command(
+            config,
+            harness,
+            "claude-agent-acp",
+            Vec::new(),
+        ))),
         HarnessId::Codex => unverified(config, harness, "codex-acp", Vec::new()),
         HarnessId::Opencode => unverified(config, harness, "opencode", vec!["acp".to_owned()]),
         HarnessId::Hermes => unverified(config, harness, "hermes", Vec::new()),
@@ -188,10 +193,7 @@ fn configured(config: &Config, harness: HarnessId, default: &str) -> PathBuf {
         .and_then(|tasks| tasks.harnesses.as_ref())
         .and_then(|harnesses| harnesses.get(&HarnessSlot::Known(harness)))
         .and_then(|entry| entry.binary.as_ref())
-        .map_or_else(
-            || PathBuf::from(default),
-            |binary| PathBuf::from(binary.trim()),
-        )
+        .map_or_else(|| PathBuf::from(default), PathBuf::from)
 }
 
 fn configured_dir(config: &Config, harness: HarnessId) -> Option<PathBuf> {

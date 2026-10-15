@@ -20,6 +20,39 @@ impl SessionOptions {
         *self.options.lock() = options;
     }
 
+    pub(crate) fn models(
+        &self,
+    ) -> Result<Option<Vec<wire::harness::HarnessModelOption>>, AcpError> {
+        let options = self.options.lock();
+        let Some(model) = options.iter().find(|option| {
+            option.category.as_ref() == Some(&acp::SessionConfigOptionCategory::Model)
+        }) else {
+            return Ok(None);
+        };
+        let acp::SessionConfigKind::Select(select) = &model.kind else {
+            return Err(AcpError::ConfigOptionUnavailable { category: "model" });
+        };
+        let items = select_options(&select.options)?;
+        if !items.iter().any(|item| item.value == select.current_value) {
+            return Err(AcpError::ConfigValueRejected {
+                category: "model",
+                value: select.current_value.0.to_string(),
+            });
+        }
+        let models = items
+            .into_iter()
+            .map(|item| wire::harness::HarnessModelOption {
+                id: item.value.0.to_string(),
+                label: item.name.clone(),
+                is_default: Some(item.value == select.current_value),
+                input_modalities: None,
+                efforts: None,
+            })
+            .collect();
+        drop(options);
+        Ok(Some(models))
+    }
+
     pub(crate) fn select(&self, option: &SessionOption) -> Result<ConfigSelection, AcpError> {
         let options = self.options.lock();
         select(&options, option)
@@ -76,23 +109,25 @@ fn select_ids(
     category: &'static str,
 ) -> Result<Vec<acp::SessionConfigValueId>, AcpError> {
     match &option.kind {
-        acp::SessionConfigKind::Select(select) => Ok(offered_ids(&select.options)),
+        acp::SessionConfigKind::Select(select) => Ok(select_options(&select.options)?
+            .into_iter()
+            .map(|item| item.value.clone())
+            .collect()),
         acp::SessionConfigKind::Boolean(_) | _ => {
             Err(AcpError::ConfigOptionUnavailable { category })
         }
     }
 }
 
-fn offered_ids(options: &acp::SessionConfigSelectOptions) -> Vec<acp::SessionConfigValueId> {
+fn select_options(
+    options: &acp::SessionConfigSelectOptions,
+) -> Result<Vec<&acp::SessionConfigSelectOption>, AcpError> {
     match options {
-        acp::SessionConfigSelectOptions::Ungrouped(items) => {
-            items.iter().map(|item| item.value.clone()).collect()
+        acp::SessionConfigSelectOptions::Ungrouped(items) => Ok(items.iter().collect()),
+        acp::SessionConfigSelectOptions::Grouped(groups) => {
+            Ok(groups.iter().flat_map(|group| &group.options).collect())
         }
-        acp::SessionConfigSelectOptions::Grouped(groups) => groups
-            .iter()
-            .flat_map(|group| group.options.iter().map(|item| item.value.clone()))
-            .collect(),
-        _ => Vec::new(),
+        _ => Err(AcpError::ConfigOptionUnavailable { category: "select" }),
     }
 }
 

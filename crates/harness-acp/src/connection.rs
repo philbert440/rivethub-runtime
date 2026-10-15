@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,6 +16,7 @@ use tokio_util::compat::TokioAsyncReadCompatExt as _;
 use tokio_util::compat::TokioAsyncWriteCompatExt as _;
 use tokio_util::sync::CancellationToken;
 use tokio_util::sync::DropGuard;
+use tokio_util::task::TaskTracker;
 
 use crate::error::AcpError;
 use crate::launch::AcpCommand;
@@ -70,6 +70,8 @@ pub(crate) fn port_failure(failure: RequestFailure, method: &'static str) -> Acp
 }
 
 pub(crate) struct AgentConnection {
+    pub(crate) capabilities: acp::AgentCapabilities,
+    pub(crate) tasks: TaskTracker,
     pub(crate) reaped: tokio::sync::oneshot::Receiver<Result<(), std::io::Error>>,
     pub(crate) commands: mpsc::Sender<SessionCommand>,
     pub(crate) acp_session: acp::SessionId,
@@ -82,6 +84,8 @@ pub(crate) struct AgentConnection {
 }
 
 struct Connecting {
+    capabilities: acp::AgentCapabilities,
+    tasks: TaskTracker,
     reaped: tokio::sync::oneshot::Receiver<Result<(), std::io::Error>>,
     commands: mpsc::Sender<SessionCommand>,
     permissions: Arc<PermissionRegistry>,
@@ -101,6 +105,8 @@ impl Connecting {
     ) -> AgentConnection {
         self.options.replace(config_options);
         let Self {
+            capabilities,
+            tasks,
             reaped,
             commands,
             permissions,
@@ -113,6 +119,8 @@ impl Connecting {
         } = self;
         drop(guard.disarm());
         AgentConnection {
+            capabilities,
+            tasks,
             reaped,
             commands,
             acp_session,
@@ -178,13 +186,16 @@ pub async fn initialize_handshake(
     let connected = connect(command, working_dir).await?;
     let Connecting {
         reaped,
+        tasks,
         shutdown,
         guard,
         ..
     } = connected;
     shutdown.cancel();
     drop(guard.disarm());
-    match reaped.await {
+    let outcome = reaped.await;
+    tasks.wait().await;
+    match outcome {
         Ok(Ok(())) => Ok(()),
         Ok(Err(source)) => Err(AcpError::Launch {
             program: command.program.display().to_string(),
@@ -212,31 +223,35 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
         stdout,
         stderr,
     } = pipes;
-    spawn_detached(process::pump_stderr(stderr));
+    let tasks = TaskTracker::new();
+    process::watch_stderr(stderr, shutdown.clone(), &tasks);
     let reaped = process::watch_child(
         child,
         Arc::clone(&exited),
         events_tx.clone(),
         shutdown.clone(),
+        &tasks,
     );
     let (connection_ended_tx, connection_ended_rx) = oneshot::channel();
-    spawn_detached(forward_turn_ends(
+    tasks.spawn(forward_turn_ends(
         events_tx.clone(),
         turn_end_rx,
         connection_ended_rx,
+        shutdown.clone(),
     ));
     let (ready_tx, ready_rx) = oneshot::channel();
-    let session_permissions = Arc::clone(&permissions);
-    spawn_detached(async move {
-        let outcome = serve(
-            stdin,
-            stdout,
-            events_tx,
-            session_permissions,
-            commands_rx,
-            ready_tx,
-        )
-        .await;
+    let client = crate::client::SessionClient {
+        events: events_tx,
+        permissions: Arc::clone(&permissions),
+        options: Arc::clone(&options),
+    };
+    let protocol_shutdown = shutdown.clone();
+    tasks.spawn(async move {
+        let protocol = serve(stdin, stdout, client, commands_rx, ready_tx);
+        let outcome = tokio::select! {
+            () = protocol_shutdown.cancelled() => Ok(()),
+            outcome = protocol => outcome,
+        };
         drop(connection_ended_tx);
         if let Err(error) = outcome {
             tracing::debug!(%error, "agent protocol stream failed");
@@ -245,11 +260,14 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
     let initialized = ready_rx.await.map_err(|_| AcpError::Closed {
         method: "initialize",
     })?;
-    initialized.map_err(|source| AcpError::Protocol {
+    let capabilities = initialized.map_err(|source| AcpError::Protocol {
         method: "initialize",
         source,
     })?;
+    tasks.close();
     Ok(Connecting {
+        capabilities,
+        tasks,
         reaped,
         commands,
         permissions,
@@ -262,33 +280,37 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
     })
 }
 
-fn spawn_detached(task: impl Future<Output = ()> + Send + 'static) {
-    drop(tokio::spawn(task));
-}
-
 async fn serve(
     stdin: tokio::process::ChildStdin,
     stdout: tokio::process::ChildStdout,
-    events: mpsc::Sender<SessionEvent>,
-    permissions: Arc<PermissionRegistry>,
+    client: crate::client::SessionClient,
     commands_rx: mpsc::Receiver<SessionCommand>,
-    ready_tx: oneshot::Sender<Result<(), acp::Error>>,
+    ready_tx: oneshot::Sender<Result<acp::AgentCapabilities, acp::Error>>,
 ) -> Result<(), acp::Error> {
-    let session_events = events.clone();
-    let permission_events = events;
+    let session_client = client.clone();
     Client
         .builder()
         .name("rivethub")
         .on_receive_notification(
             async move |notification: acp::SessionNotification, _cx| {
-                crate::client::on_session_update(notification, &session_events).await
+                crate::client::on_session_update(
+                    notification,
+                    &session_client.events,
+                    &session_client.options,
+                )
+                .await
             },
             agent_client_protocol::on_receive_notification!(),
         )
         .on_receive_request(
             async move |request: acp::RequestPermissionRequest, responder, _cx| {
-                crate::client::on_permission(request, responder, &permissions, &permission_events)
-                    .await
+                crate::client::on_permission(
+                    request,
+                    responder,
+                    &client.permissions,
+                    &client.events,
+                )
+                .await
             },
             agent_client_protocol::on_receive_request!(),
         )
@@ -316,7 +338,7 @@ fn initialize_request() -> acp::InitializeRequest {
 async fn drive(
     connection: ConnectionTo<Agent>,
     commands_rx: mpsc::Receiver<SessionCommand>,
-    ready_tx: oneshot::Sender<Result<(), acp::Error>>,
+    ready_tx: oneshot::Sender<Result<acp::AgentCapabilities, acp::Error>>,
 ) -> Result<(), acp::Error> {
     let initialized = connection
         .send_request(initialize_request())
@@ -328,7 +350,7 @@ async fn drive(
                 load_session = response.agent_capabilities.load_session,
                 "agent initialized"
             );
-            if ready_tx.send(Ok(())).is_err() {
+            if ready_tx.send(Ok(response.agent_capabilities)).is_err() {
                 return Ok(());
             }
         }
@@ -367,7 +389,7 @@ async fn command_loop(
                         acp_session,
                         text,
                         reply,
-                    } => spawn_prompt(connection.clone(), acp_session, text, reply),
+                    } => spawn_prompt(&connection, acp_session, text, reply),
                     SessionCommand::SetConfig {
                         acp_session,
                         config_id,
@@ -433,13 +455,14 @@ async fn set_config(
 }
 
 fn spawn_prompt(
-    connection: ConnectionTo<Agent>,
+    connection: &ConnectionTo<Agent>,
     acp_session: acp::SessionId,
     text: String,
     reply: oneshot::Sender<Result<acp::PromptResponse, acp::Error>>,
 ) {
-    spawn_detached(async move {
-        let response = connection
+    let prompt_connection = connection.clone();
+    if let Err(error) = connection.spawn(async move {
+        let response = prompt_connection
             .send_request(acp::PromptRequest::new(
                 acp_session,
                 vec![acp::ContentBlock::from(text)],
@@ -447,22 +470,31 @@ fn spawn_prompt(
             .block_task()
             .await;
         deliver(reply, response);
-    });
+        Ok(())
+    }) {
+        tracing::warn!(%error, "prompt task failed to start");
+    }
 }
 
 async fn forward_turn_ends(
     events: mpsc::Sender<SessionEvent>,
     mut turn_ends: mpsc::UnboundedReceiver<()>,
     mut connection_ended: oneshot::Receiver<()>,
+    shutdown: CancellationToken,
 ) {
     loop {
         tokio::select! {
             biased;
+            () = shutdown.cancelled() => break,
             turn = turn_ends.recv() => {
                 let Some(()) = turn else {
                     break;
                 };
-                if events.send(SessionEvent::TurnEnded).await.is_err() {
+                let sent = tokio::select! {
+                    () = shutdown.cancelled() => break,
+                    sent = events.send(SessionEvent::TurnEnded) => sent,
+                };
+                if sent.is_err() {
                     tracing::debug!("turn end had no listener");
                     break;
                 }

@@ -62,7 +62,6 @@ fn harnesses_that_are_not_installed_stay_unverified() {
     let table = LaunchTable::from_config(&Config::default());
     let defaults = [
         (HarnessId::Opencode, "opencode", vec!["acp".to_owned()]),
-        (HarnessId::ClaudeCode, "claude-code-acp", Vec::new()),
         (HarnessId::Codex, "codex-acp", Vec::new()),
         (HarnessId::Hermes, "hermes", Vec::new()),
         (HarnessId::KimiCode, "kimi", Vec::new()),
@@ -152,4 +151,32 @@ fn an_explicit_table_serves_exactly_its_entries() {
             harness: HarnessId::GrokBuild
         }
     ));
+}
+
+#[test]
+fn claude_uses_the_current_acp_adapter() {
+    let table = LaunchTable::from_config(&Config::default());
+    let launch = table
+        .launch(HarnessId::ClaudeCode)
+        .expect("Claude launcher");
+    assert!(matches!(launch, AcpLaunch::Adapter(_)));
+    assert_eq!(
+        table
+            .verified_command(HarnessId::ClaudeCode)
+            .expect("known invocation")
+            .program,
+        Path::new("claude-agent-acp")
+    );
+}
+
+#[test]
+fn configured_binary_paths_are_not_trimmed() {
+    let config: Config = serde_yaml_ng::from_str(
+        "tasks:\n  harnesses:\n    claude-code:\n      binary: ' /path with spaces/adapter '\n",
+    )
+    .expect("config");
+    let command = LaunchTable::from_config(&config)
+        .verified_command(HarnessId::ClaudeCode)
+        .expect("command");
+    assert_eq!(command.program, Path::new(" /path with spaces/adapter "));
 }

@@ -1,12 +1,6 @@
-use std::path::Path;
-use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::OnceLock;
 
-use harness_acp::AcpCommand;
 use harness_acp::AcpHarnessAdapter;
-use harness_acp::AcpLaunch;
-use harness_acp::LaunchTable;
 use kernel::harness::Command;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::PlanEntry;
@@ -27,68 +21,13 @@ use wire::json::JsonObject;
 use wire::session_id::SessionId;
 use wire::stream::ThinkingLevel;
 
-const SESSION: &str = "ses_fake0123456789abcdefgh";
+#[cfg(test)]
+mod protocol_support;
+use protocol_support::{SESSION, collect_until_turn_end, launch, launch_in, run, spec};
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct CommandInput {
     command: String,
-}
-
-fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
-    static RUNTIME: OnceLock<Result<tokio::runtime::Runtime, String>> = OnceLock::new();
-    match RUNTIME.get_or_init(|| tokio::runtime::Runtime::new().map_err(|error| error.to_string()))
-    {
-        Ok(runtime) => Ok(runtime),
-        Err(error) => Err(error.clone()),
-    }
-}
-
-fn fake_agent_program() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_fake-acp-agent"))
-}
-
-fn launch(steps: &[&str], extra: &[&str]) -> LaunchTable {
-    let mut args = vec!["--session-id".to_owned(), SESSION.to_owned()];
-    for step in steps {
-        args.push("--steps".to_owned());
-        args.push((*step).to_owned());
-    }
-    args.extend(extra.iter().map(|argument| (*argument).to_owned()));
-    LaunchTable::from_entries([(
-        HarnessId::Opencode,
-        AcpLaunch::Native(AcpCommand {
-            program: fake_agent_program(),
-            args,
-            working_dir: None,
-        }),
-    )])
-}
-
-fn launch_in(steps: &[&str], extra: &[&str], cwd: &Path) -> LaunchTable {
-    let mut args = vec!["--session-id".to_owned(), SESSION.to_owned()];
-    for step in steps {
-        args.push("--steps".to_owned());
-        args.push((*step).to_owned());
-    }
-    args.extend(extra.iter().map(|argument| (*argument).to_owned()));
-    LaunchTable::from_entries([(
-        HarnessId::Opencode,
-        AcpLaunch::Native(AcpCommand {
-            program: fake_agent_program(),
-            args,
-            working_dir: Some(cwd.to_path_buf()),
-        }),
-    )])
-}
-
-fn spec(cwd: &Path) -> SessionSpec {
-    SessionSpec {
-        session: SessionId::new(HarnessId::Opencode, SESSION),
-        harness: HarnessId::Opencode,
-        model: None,
-        effort: None,
-        working_dir: Some(cwd.to_path_buf()),
-    }
 }
 
 fn expected_events(input: JsonObject) -> Vec<SessionEvent> {
@@ -142,7 +81,7 @@ fn a_turn_streams_the_mapped_events_in_order() {
         ],
         &[],
     ));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
             .new_session(spec(cwd.path()))
@@ -174,7 +113,7 @@ fn a_permission_request_is_answered_through_the_port() {
         &["tool:run build", "permission"],
         &[],
     )));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
             .new_session(spec(cwd.path()))
@@ -234,7 +173,7 @@ fn a_denied_permission_ends_the_turn_normally() {
         &["permission"],
         &[],
     )));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
             .new_session(spec(cwd.path()))
@@ -275,7 +214,7 @@ fn an_unanswerable_decision_is_a_typed_error() {
         &["permission"],
         &[],
     )));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
             .new_session(spec(cwd.path()))
@@ -318,7 +257,7 @@ fn cancel_ends_a_hanging_turn() {
         &["text:partial"],
         &["--hang-until-cancel"],
     )));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
             .new_session(spec(cwd.path()))
@@ -354,7 +293,7 @@ fn cancel_ends_a_hanging_turn() {
 
 #[test]
 fn resume_replays_a_loaded_session_on_a_fresh_agent() {
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let session = {
             let adapter =
@@ -393,7 +332,7 @@ fn resume_replays_a_loaded_session_on_a_fresh_agent() {
 
 #[test]
 fn resume_of_an_unknown_session_is_a_typed_protocol_error() {
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let adapter = AcpHarnessAdapter::with_launch_table(launch_in(
             &[],
@@ -410,7 +349,7 @@ fn resume_of_an_unknown_session_is_a_typed_protocol_error() {
 #[test]
 fn a_crashed_agent_ends_the_stream() {
     let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &["--crash-on", "prompt"]));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
             .new_session(spec(cwd.path()))
@@ -438,7 +377,7 @@ fn a_crashed_agent_ends_the_stream() {
 #[test]
 fn an_agent_that_dies_at_spawn_is_a_typed_error() {
     let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &["--crash-on", "new"]));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let error = adapter
             .new_session(spec(cwd.path()))
@@ -451,7 +390,7 @@ fn an_agent_that_dies_at_spawn_is_a_typed_error() {
 #[test]
 fn set_option_round_trips_model_and_effort() {
     let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &[]));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
             .new_session(spec(cwd.path()))
@@ -487,7 +426,7 @@ fn set_option_round_trips_model_and_effort() {
 #[test]
 fn a_rejected_config_value_fails_closed() {
     let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &[]));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
             .new_session(spec(cwd.path()))
@@ -506,7 +445,7 @@ fn a_rejected_config_value_fails_closed() {
 #[test]
 fn the_spec_model_and_effort_are_applied_at_new_session() {
     let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &[]));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let full = SessionSpec {
             session: SessionId::new(HarnessId::Opencode, SESSION),
@@ -538,7 +477,7 @@ fn the_spec_model_and_effort_are_applied_at_new_session() {
 #[test]
 fn port_refusals_are_typed() {
     let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &[]));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let unknown = SessionId::new(HarnessId::Opencode, "ses_absent000000000000000001");
         let error = adapter
@@ -589,7 +528,7 @@ fn port_refusals_are_typed() {
 #[test]
 fn raw_array_tool_input_has_no_event_form() {
     let adapter = AcpHarnessAdapter::with_launch_table(launch(&["tool-raw-array"], &[]));
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let session = adapter
             .new_session(spec(cwd.path()))
@@ -609,7 +548,7 @@ fn raw_array_tool_input_has_no_event_form() {
 
 #[test]
 fn resume_refuses_an_active_session() {
-    runtime().expect("test runtime").block_on(async {
+    run(async {
         let cwd = tempdir().expect("cwd");
         let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &["--on-load", "replay"]));
         let session = adapter
@@ -619,22 +558,4 @@ fn resume_refuses_an_active_session() {
         let error = adapter.resume(&session).await.expect_err("still active");
         assert!(error.to_string().contains("already active"));
     });
-}
-
-async fn collect_until_turn_end(
-    events: &mut tokio::sync::mpsc::Receiver<SessionEvent>,
-) -> Result<Vec<SessionEvent>, String> {
-    let mut collected = Vec::new();
-    loop {
-        match events.recv().await {
-            Some(event) => {
-                let ended = matches!(event, SessionEvent::TurnEnded);
-                collected.push(event);
-                if ended {
-                    return Ok(collected);
-                }
-            }
-            None => return Err("the stream ended before the turn did".to_owned()),
-        }
-    }
 }

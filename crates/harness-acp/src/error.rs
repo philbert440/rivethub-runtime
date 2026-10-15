@@ -75,6 +75,12 @@ pub enum AcpError {
         category: &'static str,
         value: String,
     },
+    #[error("the permission request has no tool title")]
+    MissingPermissionTitle,
+    #[error("ACP media content cannot be represented as text")]
+    NonTextContent,
+    #[error("ACP discovery timed out")]
+    DiscoveryTimeout,
     #[error("the session update has no kernel event")]
     UnmappedUpdate,
     #[error(transparent)]

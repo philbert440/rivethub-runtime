@@ -276,7 +276,7 @@ fn install_probe_rejects_missing_parents_and_directories() {
 
     let nested = directory.path().join("bin");
     std::fs::create_dir(&nested).expect("bin");
-    std::fs::write(nested.join("claude-code-acp"), b"bin").expect("program");
+    std::fs::write(nested.join("claude-agent-acp"), b"bin").expect("program");
     let adapter = AcpHarnessAdapter::new(&Config::default()).with_search_paths(vec![nested]);
     let listed = block_on(adapter.offerings()).expect("offerings");
     assert_eq!(listed.len(), 1);
@@ -285,7 +285,7 @@ fn install_probe_rejects_missing_parents_and_directories() {
         HarnessId::ClaudeCode
     );
 
-    let parent = PathBuf::from("..").join("claude-code-acp");
+    let parent = PathBuf::from("..").join("claude-agent-acp");
     assert_eq!(
         offerings(&format!(
             "tasks:\n  harnesses:\n    claude-code:\n      binary: {}\n",

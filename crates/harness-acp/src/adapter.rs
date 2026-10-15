@@ -40,6 +40,7 @@ use crate::sheets::SheetInput;
 
 #[derive(Debug)]
 struct SessionEntry {
+    tasks: tokio_util::task::TaskTracker,
     reaped: Option<tokio::sync::oneshot::Receiver<Result<(), std::io::Error>>>,
     commands: mpsc::Sender<SessionCommand>,
     acp_session: acp::SessionId,
@@ -74,6 +75,7 @@ pub struct AcpHarnessAdapter {
     sessions: Mutex<BTreeMap<SessionId, SessionEntry>>,
     sheets: BTreeMap<HarnessId, SheetInput>,
     search_paths: Vec<PathBuf>,
+    advertised: Mutex<BTreeMap<HarnessId, crate::discovery::Advertisement>>,
 }
 
 impl AcpHarnessAdapter {
@@ -88,6 +90,7 @@ impl AcpHarnessAdapter {
             sessions: Mutex::new(BTreeMap::new()),
             sheets: sheet_inputs(config),
             search_paths: Vec::new(),
+            advertised: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -99,6 +102,7 @@ impl AcpHarnessAdapter {
             sessions: Mutex::new(BTreeMap::new()),
             sheets: BTreeMap::new(),
             search_paths: Vec::new(),
+            advertised: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -127,6 +131,7 @@ impl AcpHarnessAdapter {
         sessions.insert(
             session,
             SessionEntry {
+                tasks: agent.tasks,
                 reaped: Some(agent.reaped),
                 commands: agent.commands,
                 acp_session: agent.acp_session,
@@ -193,7 +198,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
             .reaped
             .take()
             .ok_or_else(|| HarnessAdapterError::UnknownSession(session.clone()))?;
-        reaped
+        let outcome = reaped
             .await
             .map_err(|source| HarnessAdapterError::Failed {
                 message: "child reaper closed".into(),
@@ -202,7 +207,9 @@ impl HarnessAdapter for AcpHarnessAdapter {
             .map_err(|source| HarnessAdapterError::Failed {
                 message: "child release failed".into(),
                 source: Box::new(source),
-            })
+            });
+        entry.tasks.wait().await;
+        outcome
     }
     async fn new_session(&self, spec: SessionSpec) -> Result<SessionId, HarnessAdapterError> {
         Self::requested_session(&spec)?;
@@ -227,6 +234,10 @@ impl HarnessAdapter for AcpHarnessAdapter {
                 return Err(port(AcpError::SessionActive { session: canonical }));
             }
         }
+        self.advertised.lock().insert(
+            spec.harness,
+            crate::discovery::Advertisement::from_agent(&agent),
+        );
         self.insert(canonical.clone(), agent);
         if let Some(model) = spec.model
             && let Err(error) = self
@@ -263,6 +274,10 @@ impl HarnessAdapter for AcpHarnessAdapter {
         let agent = crate::connection::start_loaded(&command, &working_dir, &protocol_session)
             .await
             .map_err(port)?;
+        self.advertised.lock().insert(
+            native.harness(),
+            crate::discovery::Advertisement::from_agent(&agent),
+        );
         self.insert(session.clone(), agent);
         Ok(())
     }
@@ -383,17 +398,40 @@ impl HarnessAdapter for AcpHarnessAdapter {
             if !present {
                 continue;
             }
-            offerings.push(
-                crate::sheets::offering(
-                    fact.harness,
-                    fact.verified_chat,
-                    self.sheets.get(&fact.harness),
-                )
-                .map_err(|error| HarnessAdapterError::Failed {
-                    message: error.to_string(),
-                    source: Box::new(error),
-                })?,
-            );
+            let mut offering = crate::sheets::offering(
+                fact.harness,
+                fact.verified_chat,
+                self.sheets.get(&fact.harness),
+            )
+            .map_err(|error| HarnessAdapterError::Failed {
+                message: error.to_string(),
+                source: Box::new(error),
+            })?;
+            let known = self.advertised.lock().get(&fact.harness).cloned();
+            if let Some(advertised) = known {
+                advertised
+                    .apply(&mut offering, self.sheets.get(&fact.harness))
+                    .map_err(port)?;
+            } else {
+                let launch = self.launch.launch(fact.harness).map_err(port)?;
+                if launch.is_verified() {
+                    let command = launch.command();
+                    if let Some(cwd) = command
+                        .working_dir
+                        .as_ref()
+                        .or(self.default_working_dir.as_ref())
+                    {
+                        let advertised = crate::discovery::discover(command, cwd)
+                            .await
+                            .map_err(port)?;
+                        advertised
+                            .apply(&mut offering, self.sheets.get(&fact.harness))
+                            .map_err(port)?;
+                        self.advertised.lock().insert(fact.harness, advertised);
+                    }
+                }
+            }
+            offerings.push(offering);
         }
         Ok(offerings)
     }

@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering;
+use uuid::Uuid;
 
 use agent_client_protocol::schema::v1 as acp;
 use parking_lot::Mutex;
@@ -17,7 +16,6 @@ pub(crate) struct PendingPermission {
 
 #[derive(Debug, Default)]
 pub(crate) struct PermissionRegistry {
-    next_id: AtomicU64,
     pending: Mutex<BTreeMap<String, PendingPermission>>,
 }
 
@@ -26,10 +24,7 @@ impl PermissionRegistry {
         &self,
         options: Vec<acp::PermissionOption>,
     ) -> (String, oneshot::Receiver<acp::RequestPermissionOutcome>) {
-        let request_id = format!(
-            "acp-permission-{}",
-            self.next_id.fetch_add(1, Ordering::Relaxed)
-        );
+        let request_id = Uuid::new_v4().to_string();
         let (respond, answer) = oneshot::channel();
         self.pending
             .lock()
@@ -80,9 +75,9 @@ impl PermissionRegistry {
             drop(pending);
             entry
         };
-        let Some(entry) = answered else {
-            return Ok(());
-        };
+        let entry = answered.ok_or_else(|| AcpError::UnknownPermission {
+            request_id: request_id.to_owned(),
+        })?;
         if entry.respond.send(outcome).is_err() {
             return Err(AcpError::Closed {
                 method: "session/request_permission",

@@ -55,9 +55,10 @@ pub(crate) fn watch_child(
     exited: Arc<AtomicBool>,
     events: mpsc::Sender<SessionEvent>,
     shutdown: CancellationToken,
+    tasks: &tokio_util::task::TaskTracker,
 ) -> tokio::sync::oneshot::Receiver<Result<(), std::io::Error>> {
     let (done, reaped) = tokio::sync::oneshot::channel();
-    tokio::spawn(async move {
+    tasks.spawn(async move {
         let outcome = tokio::select! {
             () = shutdown.cancelled() => child.kill().await,
             status = child.wait() => match status {
@@ -84,9 +85,27 @@ pub(crate) fn watch_child(
     reaped
 }
 
-pub(crate) async fn pump_stderr(stderr: tokio::process::ChildStderr) {
+pub(crate) async fn pump_stderr(stderr: tokio::process::ChildStderr) -> std::io::Result<()> {
     let mut lines = tokio::io::BufReader::new(stderr).lines();
-    while let Ok(Some(line)) = lines.next_line().await {
+    while let Some(line) = lines.next_line().await? {
         tracing::debug!(target: "rivethub::harness_acp::agent", "{line}");
     }
+    Ok(())
+}
+
+pub(crate) fn watch_stderr(
+    stderr: tokio::process::ChildStderr,
+    shutdown: CancellationToken,
+    tasks: &tokio_util::task::TaskTracker,
+) {
+    tasks.spawn(async move {
+        tokio::select! {
+            () = shutdown.cancelled() => {},
+            result = pump_stderr(stderr) => {
+                if let Err(error) = result {
+                    tracing::warn!(%error, "agent stderr failed");
+                }
+            }
+        }
+    });
 }

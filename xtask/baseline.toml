@@ -102,12 +102,6 @@ count = 1
 
 [[entry]]
 check = "FALLBACK"
-file = "crates/harness-acp/src/identity.rs"
-text = "let Ok(..) = .. else"
-count = 2
-
-[[entry]]
-check = "FALLBACK"
 file = "crates/memory-postgres/src/embed.rs"
 text = "Err(..) => value"
 count = 1
