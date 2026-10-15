@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::LazyLock;
 
-use regex::Captures;
 use regex::Regex;
 use serde::Deserialize;
 
@@ -64,24 +62,8 @@ pub struct ErrorRecord {
     pub name: String,
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "the timestamp pattern is a constant; the pg replay tests match it"
-)]
-static ISO_ONLY: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(ISO_TIMESTAMP).expect("the ISO timestamp pattern is a constant"));
-
-#[expect(
-    clippy::expect_used,
-    reason = "the uuid pattern is a constant; the pg replay tests match it"
-)]
-static UUID: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z")
-        .expect("the uuid pattern is a constant")
-});
-
 fn looks_like_uuid(text: &str) -> bool {
-    UUID.is_match(text)
+    text.len() == 36 && uuid::Uuid::try_parse(text).is_ok()
 }
 
 fn placeholder_category(text: &str) -> Option<(&'static str, String)> {
@@ -156,21 +138,32 @@ impl PgNorm {
         }
     }
 
-    fn normalize_text(&mut self, text: &str, kept: &[String]) -> String {
-        let replaced = ISO_ONLY.replace_all(text, |caps: &Captures<'_>| {
-            let matched = caps.get(0).map_or("", |found| found.as_str());
-            self.placeholder(matched, "now")
-        });
-        let out = replaced.into_owned();
+    fn normalize_text(&mut self, text: &str, kept: &[String]) -> Result<String, Mismatch> {
+        let pattern = Regex::new(ISO_TIMESTAMP)?;
+        let mut replaced = String::new();
+        let mut cursor = 0;
+        for found in pattern.find_iter(text) {
+            replaced.push_str(
+                text.get(cursor..found.start())
+                    .ok_or_else(|| Mismatch::new("timestamp", "invalid match boundary"))?,
+            );
+            replaced.push_str(&self.placeholder(found.as_str(), "now"));
+            cursor = found.end();
+        }
+        replaced.push_str(
+            text.get(cursor..)
+                .ok_or_else(|| Mismatch::new("timestamp", "invalid match boundary"))?,
+        );
+        let out = replaced;
         if looks_like_uuid(&out) && !kept.iter().any(|k| k.eq_ignore_ascii_case(&out)) {
             let category = self
                 .categories
                 .get(&out)
                 .cloned()
                 .unwrap_or_else(|| "id".to_string());
-            return self.placeholder(&out, &category);
+            return Ok(self.placeholder(&out, &category));
         }
-        out
+        Ok(out)
     }
 
     fn normalize_value(
@@ -180,7 +173,7 @@ impl PgNorm {
         column: Option<&str>,
         kept: &[String],
         root: Option<&str>,
-    ) {
+    ) -> Result<(), Mismatch> {
         match value {
             Json::Object(map) => {
                 for (name, member) in map.iter_mut() {
@@ -189,20 +182,21 @@ impl PgNorm {
                     } else {
                         column
                     };
-                    self.normalize_value(member, table.or(Some(name)), member_column, kept, root);
+                    self.normalize_value(member, table.or(Some(name)), member_column, kept, root)?;
                 }
             }
             Json::Array(items) => {
                 for item in items {
-                    self.normalize_value(item, table, column, kept, root);
+                    self.normalize_value(item, table, column, kept, root)?;
                 }
             }
             Json::String(text) => {
                 *text = rewrite_fixtures(text, root);
-                *text = self.normalize_text(text, kept);
+                *text = self.normalize_text(text, kept)?;
             }
             Json::Null | Json::Bool(_) | Json::Number(_) => {}
         }
+        Ok(())
     }
 }
 
@@ -225,25 +219,6 @@ fn collect_input_uuids(value: &Json, out: &mut Vec<String>) {
         }
         Json::Null | Json::Bool(_) | Json::Number(_) => {}
     }
-}
-
-const CONTENT_CAP: usize = 16_000;
-const TITLE_CAP: usize = 120;
-const TRUNCATION_MARKER: &str = "\n\u{2026}[truncated]";
-
-fn same_cut(recorded: &str, actual: &str) -> bool {
-    let (recorded, actual, cap) = match (
-        recorded.strip_suffix(TRUNCATION_MARKER),
-        actual.strip_suffix(TRUNCATION_MARKER),
-    ) {
-        (Some(recorded), Some(actual)) => (recorded, actual, CONTENT_CAP),
-        (None, None) => match recorded.strip_suffix('\u{fffd}') {
-            Some(recorded) => (recorded, actual, TITLE_CAP),
-            None => return false,
-        },
-        _ => return false,
-    };
-    actual.chars().count() <= cap && actual.starts_with(recorded)
 }
 
 fn pg_value_eq(rec: &Json, act: &Json, map: &mut BTreeMap<(String, String), String>) -> bool {
@@ -272,13 +247,12 @@ fn pg_value_eq(rec: &Json, act: &Json, map: &mut BTreeMap<(String, String), Stri
                 }
                 (None, None) => {
                     r == a
-                        || same_cut(r, a)
-                        || matches!((json_text(r), json_text(a)), (Some(r), Some(a)) if pg_value_eq(&r, &a, map))
+                        || matches!((json_text(r), json_text(a)), (Ok(r), Ok(a)) if pg_value_eq(&r, &a, map))
                 }
                 _ => false,
             }
         }
-        (Json::Number(r), Json::Number(a)) => r == a || r.as_f64() == a.as_f64(),
+        (Json::Number(r), Json::Number(a)) => r == a,
         (Json::Null, Json::Null) => true,
         (Json::Bool(r), Json::Bool(a)) => r == a,
         _ => false,
@@ -360,8 +334,7 @@ fn compare_pg_step(
 
 pub fn scenarios(recording: &Path) -> Result<Vec<ScenarioRecord>, Error> {
     let raw = crate::read_text(recording)?;
-    let sanitized = crate::capture::sanitize_surrogates(&raw);
-    let doc: Recording = crate::parse_json(recording, &sanitized)?;
+    let doc: Recording = crate::parse_json(recording, &raw)?;
     Ok(doc.scenarios)
 }
 
@@ -393,10 +366,10 @@ pub fn replay_scenario(
             norm.collect_categories(rows);
         }
         if let Some(result) = actual.result.as_mut() {
-            norm.normalize_value(result, None, None, &kept, fixtures_root);
+            norm.normalize_value(result, None, None, &kept, fixtures_root)?;
         }
         if let Some(rows) = actual.rows.as_mut() {
-            norm.normalize_value(rows, None, None, &kept, fixtures_root);
+            norm.normalize_value(rows, None, None, &kept, fixtures_root)?;
         }
         compare_pg_step(&id, step, &actual, &mut map)?;
     }

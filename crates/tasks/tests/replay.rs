@@ -115,7 +115,8 @@ fn exchanges() -> Vec<Exchange> {
             Exchange {
                 method: parsed.method,
                 target: parsed.target,
-                status: testkit::http::status_of(&case.response.status_line),
+                status: testkit::http::status_of(&case.response.status_line)
+                    .expect("recorded HTTP status"),
                 content_type: content_type(&case.response.headers),
                 body: case.response.body.unwrap_or_default(),
             }
@@ -196,7 +197,7 @@ async fn replay_exchange(exchange: &Exchange) {
         assert_eq!(status, exchange.status);
         assert_eq!(*document, expected);
     }
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[expect(

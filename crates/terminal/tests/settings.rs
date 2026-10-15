@@ -185,11 +185,14 @@ fn child_env_matches_the_recorded_envdump_lines() {
         hostname: Some(common::HOSTNAME.to_owned()),
         tmp: None,
     };
-    assert!(masked_eq(
-        "http://127.0.0.1:{{PORT}}",
-        text("RIVETHUB_URL").as_deref().expect("url"),
-        &masks
-    ));
+    assert!(
+        masked_eq(
+            "http://127.0.0.1:{{PORT}}",
+            text("RIVETHUB_URL").as_deref().expect("url"),
+            &masks
+        )
+        .expect("recorded mask")
+    );
 
     let anonymous = settings
         .child_env(None, &roster, &work, &BTreeMap::new())
@@ -280,6 +283,21 @@ fn the_ca_chain_sits_under_the_shared_dir() {
         settings.ca_path,
         Path::new("/golden/shared/rivet-ca/intermediate/chain.pem")
     );
+}
+
+#[test]
+fn json_masked_comparison_accepts_the_recorded_exit_frame() {
+    let recorded = wire::gateway::term::TermServerFrame::Exit {
+        code: Some(3),
+        signal: None,
+    };
+    let actual = wire::gateway::term::TermServerFrame::Exit {
+        code: Some(3),
+        signal: None,
+    };
+    let recorded = serde_json::to_value(&recorded).expect("the recorded frame serializes");
+    let actual = serde_json::to_value(&actual).expect("the actual frame serializes");
+    assert!(json_masked_eq(&recorded, &actual, &Masks::default()).expect("recorded mask"));
 }
 
 #[test]

@@ -119,7 +119,7 @@ async fn existing_preflight_and_not_found_recordings_survive_the_mount() {
         .expect("HTTP replay");
         assert_eq!(
             actual.status,
-            testkit::http::status_of(&case.response.status_line),
+            testkit::http::status_of(&case.response.status_line).expect("recorded HTTP status"),
             "{}",
             case.id
         );

@@ -180,7 +180,7 @@ async fn terminal_http_recordings() {
         .await;
         assert_eq!(
             status,
-            testkit::http::status_of(&case.response.status_line),
+            testkit::http::status_of(&case.response.status_line).expect("recorded HTTP status"),
             "{}",
             case.id
         );

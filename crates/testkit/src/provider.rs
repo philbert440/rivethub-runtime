@@ -114,7 +114,9 @@ pub struct ProviderScenario {
 pub fn load_scenario(scenario: &Path) -> Result<ProviderScenario, Error> {
     let name = scenario
         .file_name()
-        .map_or_else(String::new, |name| name.to_string_lossy().to_string());
+        .and_then(std::ffi::OsStr::to_str)
+        .ok_or_else(|| Error::format(scenario, "scenario requires a UTF-8 filename"))?
+        .to_owned();
     let requests_path = scenario.join("requests.json");
     let text = crate::read_text(&requests_path)?;
     let requests: Vec<RequestRecord> = crate::parse_json(&requests_path, &text)?;
@@ -214,7 +216,7 @@ fn compare_request(
     let Ok(got_body) = serde_json::from_str(&got.body) else {
         return Err(Mismatch::new(id, "actual request body is not JSON"));
     };
-    if !json_masked_eq(&want_body, &got_body, masks) {
+    if !json_masked_eq(&want_body, &got_body, masks)? {
         return Err(Mismatch::new(
             id,
             format!("request body mismatch\n    recorded: {want_body}\n    actual:   {got_body}"),
@@ -238,7 +240,7 @@ fn compare_chunks(
         ));
     }
     for (index, (want, got)) in recorded.iter().zip(actual).enumerate() {
-        if !json_masked_eq(want, got, masks) {
+        if !json_masked_eq(want, got, masks)? {
             return Err(Mismatch::new(
                 format!("{}/chunk-{index}", scenario.name),
                 format!("chunk mismatch\n    recorded: {want}\n    actual:   {got}"),

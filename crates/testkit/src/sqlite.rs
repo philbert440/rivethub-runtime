@@ -27,10 +27,10 @@ impl FixtureCopy {
 
 pub fn copy_fixture(path: &Path) -> Result<FixtureCopy, Error> {
     let dir = tempfile::tempdir().map_err(|source| Error::io(path, source))?;
-    let target = dir.path().join(path.file_name().map_or_else(
-        || "fixture.sqlite".to_string(),
-        |n| n.to_string_lossy().to_string(),
-    ));
+    let name = path
+        .file_name()
+        .ok_or_else(|| Error::format(path, "fixture has no filename"))?;
+    let target = dir.path().join(name);
     std::fs::copy(path, &target).map_err(|source| Error::io(path, source))?;
     let mut permissions = std::fs::metadata(&target)
         .map_err(|source| Error::io(&target, source))?
@@ -66,21 +66,18 @@ pub fn open_fixture(path: &Path) -> Result<FixtureDb, Error> {
     Ok(FixtureDb { copy, conn })
 }
 
-fn value_to_json(value: ValueRef<'_>) -> Json {
-    match value {
+fn value_to_json(value: ValueRef<'_>) -> Result<Json, Error> {
+    Ok(match value {
         ValueRef::Null => Json::Null,
         ValueRef::Integer(i) => Json::from(i),
         ValueRef::Real(f) => Json::from(f),
-        ValueRef::Text(text) => std::str::from_utf8(text).map_or_else(
-            |_| Json::String(String::from_utf8_lossy(text).into_owned()),
-            |text| Json::String(text.to_string()),
-        ),
+        ValueRef::Text(text) => Json::String(std::str::from_utf8(text)?.to_owned()),
         ValueRef::Blob(blob) => {
             let mut map = serde_json::Map::new();
             map.insert("$blob_hex".to_string(), Json::String(hex::encode(blob)));
             Json::Object(map)
         }
-    }
+    })
 }
 
 pub fn query_json(conn: &Connection, sql: &str, params: &[&dyn ToSql]) -> Result<Vec<Json>, Error> {
@@ -95,7 +92,7 @@ pub fn query_json(conn: &Connection, sql: &str, params: &[&dyn ToSql]) -> Result
     while let Some(row) = rows.next()? {
         let mut map = serde_json::Map::new();
         for (index, name) in columns.iter().enumerate() {
-            let value = value_to_json(row.get_ref(index)?);
+            let value = value_to_json(row.get_ref(index)?)?;
             map.insert(name.clone(), value);
         }
         out.push(Json::Object(map));
@@ -109,7 +106,7 @@ pub fn rows_eq(a: &[Json], b: &[Json]) -> bool {
 }
 
 fn text_cell_eq(a: &str, b: &str) -> bool {
-    a == b || matches!((json_text(a), json_text(b)), (Some(x), Some(y)) if json_eq(&x, &y))
+    a == b || matches!((json_text(a), json_text(b)), (Ok(x), Ok(y)) if json_eq(&x, &y))
 }
 
 #[must_use]

@@ -649,18 +649,25 @@ fn play_masked(
     must_pass(testkit::http::replay(&case, masks, |request| {
         let request = match fixture::expand(request.clone()) {
             Ok(request) => request,
-            Err(error) => return testkit::Response::json(599, &format!("recipe: {error}")),
+            Err(error) => {
+                return testkit::Response::bytes(599, "text/plain", format!("recipe: {error}"));
+            }
         };
         match handle.block_on(common::answer(app.clone(), request)) {
             Ok(response) => response,
-            Err(error) => testkit::Response::json(599, &format!("harness failure: {error}")),
+            Err(error) => {
+                testkit::Response::bytes(599, "text/plain", format!("harness failure: {error}"))
+            }
         }
     }))
 }
 
 fn translated_refusal(case: &testkit::http::HttpCase) -> Result<testkit::http::HttpCase, Failed> {
     let mut case = case.clone();
-    if testkit::http::status_of(&case.response.status_line) != 403 {
+    if testkit::http::status_of(&case.response.status_line)
+        .map_err(|error| Failed::from(error.to_string()))?
+        != 403
+    {
         return Ok(case);
     }
     let body = case

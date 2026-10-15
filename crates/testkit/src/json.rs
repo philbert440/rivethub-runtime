@@ -14,7 +14,7 @@ pub struct Masks {
     pub tmp: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum TokenClass {
     Date,
     Timestamp,
@@ -27,8 +27,8 @@ enum TokenClass {
     NodeVersion,
     Key,
     GenId,
-    Pty { id: u32 },
-    Pid { id: u32 },
+    Pty { id: String },
+    Pid { id: String },
 }
 
 impl TokenClass {
@@ -64,7 +64,10 @@ impl TokenClass {
 
     fn numbered(name: &str) -> Option<Self> {
         let (prefix, number) = name.split_once('_')?;
-        let id = number.parse::<u32>().ok()?;
+        if number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        let id = number.to_owned();
         match prefix {
             "PTY" => Some(Self::Pty { id }),
             "PID" => Some(Self::Pid { id }),
@@ -72,7 +75,7 @@ impl TokenClass {
         }
     }
 
-    fn pattern(self) -> &'static str {
+    fn pattern(&self) -> &'static str {
         match self {
             Self::Date => Self::DATE_PATTERN,
             Self::Timestamp => Self::TIMESTAMP_PATTERN,
@@ -88,7 +91,7 @@ impl TokenClass {
         }
     }
 
-    fn concrete(self, masks: &Masks) -> Option<String> {
+    fn concrete(&self, masks: &Masks) -> Option<String> {
         match self {
             Self::Port => Some(masks.port.clone()),
             Self::Tmp => masks.tmp.clone(),
@@ -107,31 +110,17 @@ impl TokenClass {
     }
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "the token pattern is a constant; the mask unit tests match it"
-)]
-static TOKEN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\{\{[^{}]*\}\}|<ts>").expect("the token pattern is a constant"));
-
 static PATTERN_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> = LazyLock::new(Mutex::default);
 
-fn token_regex() -> &'static Regex {
-    &TOKEN
-}
-
-#[expect(
-    clippy::expect_used,
-    reason = "the composed source is built from constant class patterns plus regex::escape'd literals; the mask unit tests compile every class"
-)]
-fn compiled(source: &str) -> Regex {
-    let mut cache = PATTERN_CACHE.lock();
-    if let Some(built) = cache.get(source) {
-        return built.clone();
+fn compiled(source: &str) -> Result<Regex, regex::Error> {
+    if let Some(built) = PATTERN_CACHE.lock().get(source) {
+        return Ok(built.clone());
     }
-    let built = Regex::new(source).expect("composed mask patterns are built from constants");
-    cache.insert(source.to_string(), built.clone());
-    built
+    let built = Regex::new(source)?;
+    PATTERN_CACHE
+        .lock()
+        .insert(source.to_owned(), built.clone());
+    Ok(built)
 }
 
 struct Masked {
@@ -139,14 +128,14 @@ struct Masked {
     numbered: Vec<(TokenClass, String)>,
 }
 
-fn masked_pattern(rec: &str, masks: &Masks) -> Option<Masked> {
-    let finder = token_regex();
+fn masked_pattern(rec: &str, masks: &Masks) -> Result<Masked, regex::Error> {
+    let finder = compiled(r"\{\{[^{}]*\}\}|<ts>")?;
     let mut source = String::with_capacity(rec.len() + 32);
     source.push_str(r"\A");
     let mut numbered = Vec::new();
     let mut cursor = 0;
     for found in finder.find_iter(rec) {
-        source.push_str(&regex::escape(rec.get(cursor..found.start())?));
+        source.push_str(&regex::escape(&rec[cursor..found.start()]));
         cursor = found.end();
         let token = found.as_str();
         let named = token
@@ -188,9 +177,9 @@ fn masked_pattern(rec: &str, masks: &Masks) -> Option<Masked> {
             | TokenClass::GenId => source.push_str(class.pattern()),
         }
     }
-    source.push_str(&regex::escape(rec.get(cursor..)?));
+    source.push_str(&regex::escape(&rec[cursor..]));
     source.push_str(r"\z");
-    Some(Masked { source, numbered })
+    Ok(Masked { source, numbered })
 }
 
 fn numbered_consistent(captures: &regex::Captures<'_>, numbered: &[(TokenClass, String)]) -> bool {
@@ -208,25 +197,22 @@ fn numbered_consistent(captures: &regex::Captures<'_>, numbered: &[(TokenClass, 
             if bound.iter().any(|(_, seen)| *seen == text) {
                 return false;
             }
-            bound.push((*class, text));
+            bound.push((class.clone(), text));
         }
     }
     true
 }
 
-#[must_use]
-pub fn masked_eq(rec: &str, act: &str, masks: &Masks) -> bool {
+pub fn masked_eq(rec: &str, act: &str, masks: &Masks) -> Result<bool, regex::Error> {
     if !has_tokens(rec) {
-        return rec == act;
+        return Ok(rec == act);
     }
-    let Some(masked) = masked_pattern(rec, masks) else {
-        return false;
-    };
-    let regex = compiled(&masked.source);
+    let masked = masked_pattern(rec, masks)?;
+    let regex = compiled(&masked.source)?;
     let Some(captures) = regex.captures(act) else {
-        return false;
+        return Ok(false);
     };
-    numbered_consistent(&captures, &masked.numbered)
+    Ok(numbered_consistent(&captures, &masked.numbered))
 }
 
 #[must_use]
@@ -234,42 +220,51 @@ pub fn has_tokens(rec: &str) -> bool {
     rec.contains("{{") || rec.contains("<ts>")
 }
 
-fn num_eq(a: &Json, b: &Json) -> bool {
-    if a == b {
-        return true;
-    }
-    match (a.as_f64(), b.as_f64()) {
-        (Some(x), Some(y)) => x == y,
-        _ => false,
-    }
-}
-
-pub(crate) fn value_eq(rec: &Json, act: &Json, strings: &dyn Fn(&str, &str) -> bool) -> bool {
+fn try_value_eq<E>(
+    rec: &Json,
+    act: &Json,
+    strings: &impl Fn(&str, &str) -> Result<bool, E>,
+) -> Result<bool, E> {
     match (rec, act) {
         (Json::Object(r), Json::Object(a)) => {
-            r.iter().filter(|(_, v)| !v.is_null()).all(|(k, rv)| {
-                a.get(k)
-                    .is_some_and(|av| !av.is_null() && value_eq(rv, av, strings))
-            }) && a.iter().filter(|(_, v)| !v.is_null()).all(|(k, av)| {
-                r.get(k)
-                    .is_some_and(|rv| !rv.is_null() && value_eq(rv, av, strings))
-            })
+            if r.len() != a.len() {
+                return Ok(false);
+            }
+            for (key, value) in r {
+                let Some(other) = a.get(key) else {
+                    return Ok(false);
+                };
+                if !try_value_eq(value, other, strings)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
         }
         (Json::Array(r), Json::Array(a)) => {
-            r.len() == a.len() && r.iter().zip(a).all(|(x, y)| value_eq(x, y, strings))
+            if r.len() != a.len() {
+                return Ok(false);
+            }
+            for (r, a) in r.iter().zip(a) {
+                if !try_value_eq(r, a, strings)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
         }
         (Json::String(r), Json::String(a)) => strings(r, a),
-        (Json::Number(_), Json::Number(_)) => num_eq(rec, act),
-        (Json::Bool(r), Json::Bool(a)) => r == a,
-        (Json::Null, Json::Null) => true,
-        _ => false,
+        _ => Ok(rec == act),
     }
 }
 
-pub(crate) fn json_text(text: &str) -> Option<Json> {
-    serde_json::from_str::<Json>(text)
-        .ok()
-        .filter(|value| value.is_object() || value.is_array())
+pub(crate) fn value_eq(rec: &Json, act: &Json, strings: &impl Fn(&str, &str) -> bool) -> bool {
+    match try_value_eq::<std::convert::Infallible>(rec, act, &|r, a| Ok(strings(r, a))) {
+        Ok(equal) => equal,
+        Err(never) => match never {},
+    }
+}
+
+pub(crate) fn json_text(text: &str) -> Result<Json, serde_json::Error> {
+    serde_json::from_str(text)
 }
 
 #[must_use]
@@ -277,9 +272,8 @@ pub fn json_eq(a: &Json, b: &Json) -> bool {
     value_eq(a, b, &|x, y| x == y)
 }
 
-#[must_use]
-pub fn json_masked_eq(rec: &Json, act: &Json, masks: &Masks) -> bool {
-    value_eq(rec, act, &|r, a| masked_eq(r, a, masks))
+pub fn json_masked_eq(rec: &Json, act: &Json, masks: &Masks) -> Result<bool, regex::Error> {
+    try_value_eq(rec, act, &|r, a| masked_eq(r, a, masks))
 }
 
 #[must_use]

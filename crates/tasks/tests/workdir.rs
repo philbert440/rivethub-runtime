@@ -60,7 +60,7 @@ async fn failed(
     let _error = engine.run_one().await.expect_err("refused");
     let called = rx.try_recv().is_ok();
     let loaded = engine.load(id).await.expect("load");
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
     (loaded.status, loaded.error, called)
 }
 
@@ -84,7 +84,7 @@ async fn a_relative_working_directory_inside_the_root_is_posted() {
         engine.load(id).await.expect("load").status,
         TaskStatus::Completed
     );
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -161,7 +161,7 @@ async fn a_harness_session_without_a_files_root_fails_before_the_gateway() {
         engine.load(id).await.expect("load").status,
         TaskStatus::Failed
     );
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -188,5 +188,5 @@ async fn a_harness_session_posts_the_recorded_message_channel() {
     assert_eq!(loaded.status, TaskStatus::Completed);
     assert_eq!(loaded.harness_session_ids, Vec::<String>::new());
     quiet(&mut rx);
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }

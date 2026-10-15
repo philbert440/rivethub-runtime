@@ -18,7 +18,6 @@ use crate::http::ResponseRecord;
 use crate::http::parse_head;
 use crate::http::status_of;
 use crate::json::Masks;
-use crate::json::json_masked_eq;
 use crate::json::masked_eq;
 use crate::json::substitute;
 
@@ -250,7 +249,7 @@ fn compare_handshake(
             "recording has an answer; actual wrote nothing",
         ));
     };
-    let want = status_of(&recorded.status_line);
+    let want = status_of(&recorded.status_line)?;
     if want != actual_status {
         return Err(Mismatch::new(
             id,
@@ -281,7 +280,8 @@ fn compare_handshake_headers(
             .map(|((_, actual_value), taken)| {
                 *taken = true;
                 masked_eq(value, actual_value, masks)
-            });
+            })
+            .transpose()?;
         if matched != Some(true) {
             return Err(Mismatch::new(
                 id,
@@ -301,58 +301,16 @@ fn step_http(
     let Some(request) = build_request(&http.request, masks) else {
         return Err(Mismatch::new(&step.id, "http request unreadable"));
     };
+    let method = request.method.clone();
     match harness(WsCall::Http(request)) {
-        WsReply::Http(actual) => compare_http_response(step, &http.response, &actual, masks),
+        WsReply::Http(actual) => {
+            crate::http::compare_response(&step.id, &method, &http.response, &actual, masks)
+        }
         WsReply::Handshake(_) | WsReply::Frames(_) | WsReply::Done => Err(Mismatch::new(
             &step.id,
             "harness returned a non-http answer",
         )),
     }
-}
-
-fn compare_http_response(
-    step: &WsStep,
-    recorded: &ResponseRecord,
-    actual: &Response,
-    masks: &Masks,
-) -> Result<(), Mismatch> {
-    let want_status = status_of(&recorded.status_line);
-    if want_status != actual.status {
-        return Err(Mismatch::new(
-            &step.id,
-            format!("http status {} != recorded {want_status}", actual.status),
-        ));
-    }
-    let Some(want_body) = response_body(recorded) else {
-        return Err(Mismatch::new(&step.id, "recorded body unreadable"));
-    };
-    let want_text = String::from_utf8_lossy(&want_body);
-    let act_text = String::from_utf8_lossy(&actual.body);
-    let both_json = serde_json::from_str(&want_text)
-        .ok()
-        .zip(serde_json::from_str(&act_text).ok());
-    let equal = match both_json {
-        Some((want, got)) => json_masked_eq(&want, &got, masks),
-        None => masked_eq(&want_text, &act_text, masks),
-    };
-    if equal {
-        Ok(())
-    } else {
-        Err(Mismatch::new(
-            &step.id,
-            format!("body mismatch\n    recorded: {want_text}\n    actual:   {act_text}"),
-        ))
-    }
-}
-
-fn response_body(recorded: &ResponseRecord) -> Option<Vec<u8>> {
-    if let Some(text) = recorded.body.as_deref() {
-        return Some(text.as_bytes().to_vec());
-    }
-    recorded
-        .body_base64
-        .as_deref()
-        .and_then(|encoded| BASE64.decode(encoded).ok())
 }
 
 fn step_sent(
@@ -436,12 +394,7 @@ fn compare_frames(
         ));
     }
     for (index, (want, got)) in recorded.iter().zip(&merged).enumerate() {
-        let Some(want_frame) = recorded_frame(want) else {
-            return Err(Mismatch::new(
-                &step.id,
-                format!("client {client} frame {index}: unreadable recording"),
-            ));
-        };
+        let want_frame = recorded_frame(want)?;
         compare_frame_pair(
             &step.id,
             &format!("client {client} frame {index}"),
@@ -453,32 +406,37 @@ fn compare_frames(
     Ok(())
 }
 
-fn recorded_frame(recorded: &FrameRecord) -> Option<Frame> {
-    match recorded {
-        FrameRecord::Text { text } => Some(Frame::Text(text.clone())),
+fn recorded_frame(recorded: &FrameRecord) -> Result<Frame, Mismatch> {
+    Ok(match recorded {
+        FrameRecord::Text { text } => Frame::Text(text.clone()),
         FrameRecord::Binary {
             text,
             base64,
             replay,
         } => {
-            let data = if let Some(text) = text {
-                Some(text.as_bytes().to_vec())
-            } else {
-                base64
-                    .as_deref()
-                    .and_then(|encoded| BASE64.decode(encoded).ok())
+            let data = match (text, base64) {
+                (Some(text), None) => text.as_bytes().to_vec(),
+                (None, Some(encoded)) => BASE64
+                    .decode(encoded)
+                    .map_err(|error| Mismatch::new("binary frame", error.to_string()))?,
+                _ => {
+                    return Err(Mismatch::new(
+                        "binary frame",
+                        "expected exactly one of text and base64",
+                    ));
+                }
             };
-            data.map(|data| Frame::Binary {
+            Frame::Binary {
                 data,
                 replay: *replay,
-            })
+            }
         }
-        FrameRecord::Close { code, reason } => Some(Frame::Close {
+        FrameRecord::Close { code, reason } => Frame::Close {
             code: *code,
             reason: reason.clone(),
-        }),
-        FrameRecord::TcpClosed => Some(Frame::TcpClosed),
-    }
+        },
+        FrameRecord::TcpClosed => Frame::TcpClosed,
+    })
 }
 
 fn compare_frame_pair(
@@ -490,16 +448,7 @@ fn compare_frame_pair(
 ) -> Result<(), Mismatch> {
     match (want, got) {
         (Frame::Text(want_text), Frame::Text(actual_text)) => {
-            let both_json = serde_json::from_str(want_text)
-                .ok()
-                .zip(serde_json::from_str(actual_text).ok());
-            let equal = match both_json {
-                Some((w, a)) => json_masked_eq(&w, &a, masks),
-                None => masked_eq(want_text, actual_text, masks),
-            };
-            if !equal {
-                return Err(Mismatch::new(id, format!("{detail}: payload mismatch")));
-            }
+            crate::http::compare_text(id, want_text, actual_text, masks)?;
         }
         (
             Frame::Binary {
@@ -515,7 +464,7 @@ fn compare_frame_pair(
                 std::str::from_utf8(want_data),
                 std::str::from_utf8(actual_data),
             ) {
-                (Ok(want_text), Ok(actual_text)) => masked_eq(want_text, actual_text, masks),
+                (Ok(want_text), Ok(actual_text)) => masked_eq(want_text, actual_text, masks)?,
                 _ => want_data == actual_data,
             };
             if !equal || want_replay != actual_replay {
@@ -535,7 +484,7 @@ fn compare_frame_pair(
                 reason: actual_reason,
             },
         ) => {
-            if want_code != actual_code || !masked_eq(want_reason, actual_reason, masks) {
+            if want_code != actual_code || !masked_eq(want_reason, actual_reason, masks)? {
                 return Err(Mismatch::new(id, format!("{detail}: close mismatch")));
             }
         }

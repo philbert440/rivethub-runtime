@@ -404,7 +404,15 @@ mod tests {
 
     #[tokio::test]
     async fn identical_queries_hit_the_cache_once() {
-        let Harness { arm, provider } = harness(Vec::new(), None);
+        let Harness { arm, provider } = harness(
+            vec![
+                Script::Embed(vec![Embedding {
+                    vector: vec![1.0, 0.5]
+                }]);
+                1
+            ],
+            None,
+        );
         let first = arm.query_vector("deploy the release").await;
         let second = arm.query_vector(" deploy   the release ").await;
         let EmbedAttempt::Embedded { vector, .. } = first else {
@@ -416,7 +424,15 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn cache_entries_expire_after_ten_minutes() {
-        let Harness { arm, provider } = harness(Vec::new(), None);
+        let Harness { arm, provider } = harness(
+            vec![
+                Script::Embed(vec![Embedding {
+                    vector: vec![1.0, 0.5]
+                }]);
+                2
+            ],
+            None,
+        );
         assert!(matches!(
             arm.query_vector("deploy").await,
             EmbedAttempt::Embedded { .. }
@@ -441,7 +457,15 @@ mod tests {
 
     #[tokio::test]
     async fn different_queries_miss_the_cache() {
-        let Harness { arm, provider } = harness(Vec::new(), None);
+        let Harness { arm, provider } = harness(
+            vec![
+                Script::Embed(vec![Embedding {
+                    vector: vec![1.0, 0.5]
+                }]);
+                2
+            ],
+            None,
+        );
         assert!(matches!(
             arm.query_vector("deploy").await,
             EmbedAttempt::Embedded { .. }

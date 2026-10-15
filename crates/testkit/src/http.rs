@@ -35,17 +35,13 @@ pub struct Response {
 }
 
 impl Response {
-    #[expect(
-        clippy::expect_used,
-        reason = "the echo replies serialize typed values; a failure is a harness bug and must fail the trial, not compare an empty body"
-    )]
-    pub fn json(status: u16, body: &impl Serialize) -> Self {
-        let bytes = serde_json::to_vec(body).expect("an echo of typed JSON is always serializable");
-        Self {
+    pub fn json(status: u16, body: &impl Serialize) -> Result<Self, serde_json::Error> {
+        let bytes = serde_json::to_vec(body)?;
+        Ok(Self {
             status,
             headers: vec![("Content-Type".to_string(), "application/json".to_string())],
             body: bytes,
-        }
+        })
     }
 
     pub fn bytes(status: u16, content_type: &str, body: impl Into<Vec<u8>>) -> Self {
@@ -99,17 +95,21 @@ pub fn parse_head(head: &str) -> Option<RequestHead> {
     })
 }
 
-#[must_use]
-pub fn status_of(status_line: &str) -> u16 {
+pub fn status_of(status_line: &str) -> Result<u16, Mismatch> {
     let mut line = String::with_capacity(status_line.len() + 4);
     line.push_str(status_line);
     line.push_str("\r\n\r\n");
     let mut headers = [httparse::EMPTY_HEADER; 0];
     let mut response = httparse::Response::new(&mut headers);
-    match response.parse(line.as_bytes()) {
-        Ok(httparse::Status::Complete(_)) => response.code.unwrap_or(0),
-        _ => 0,
+    let parsed = response
+        .parse(line.as_bytes())
+        .map_err(|error| Mismatch::new("HTTP status", error.to_string()))?;
+    if parsed.is_partial() {
+        return Err(Mismatch::new("HTTP status", "incomplete status line"));
     }
+    response
+        .code
+        .ok_or_else(|| Mismatch::new("HTTP status", "missing status code"))
 }
 
 pub type HeaderPair = (String, String);
@@ -215,7 +215,7 @@ pub fn replay(
         return Err(Mismatch::new(&case.id, "recording request unreadable"));
     };
     let actual = handler(&request);
-    compare_response(&case.id, &case.response, &actual, masks)
+    compare_response(&case.id, &request.method, &case.response, &actual, masks)
 }
 
 fn build_request(recorded: &RequestRecord, masks: &Masks) -> Option<Request> {
@@ -260,7 +260,8 @@ fn compare_headers(
             .map(|((_, actual_value), taken)| {
                 *taken = true;
                 masked_eq(value, actual_value, masks)
-            });
+            })
+            .transpose()?;
         match matched {
             Some(true) => {}
             Some(false) => {
@@ -276,24 +277,31 @@ fn compare_headers(
     Ok(())
 }
 
-fn recorded_body(recorded: &ResponseRecord) -> Option<Vec<u8>> {
-    if let Some(text) = recorded.body.as_deref() {
-        return Some(text.as_bytes().to_vec());
+fn recorded_body(recorded: &ResponseRecord) -> Result<Vec<u8>, Mismatch> {
+    match (&recorded.body, &recorded.body_base64) {
+        (Some(text), None) => Ok(text.as_bytes().to_vec()),
+        (None, Some(encoded)) => BASE64
+            .decode(encoded)
+            .map_err(|error| Mismatch::new("HTTP body", error.to_string())),
+        (None, None) => Ok(Vec::new()),
+        (Some(_), Some(_)) => Err(Mismatch::new("HTTP body", "ambiguous body encoding")),
     }
-    if let Some(encoded) = recorded.body_base64.as_deref() {
-        return BASE64.decode(encoded).ok();
-    }
-    Some(Vec::new())
 }
 
-fn compare_text(id: &str, want_text: &str, act_text: &str, masks: &Masks) -> Result<(), Mismatch> {
-    let both_json = serde_json::from_str(want_text)
-        .ok()
-        .zip(serde_json::from_str(act_text).ok());
-    let equal = match both_json {
-        Some((want_json, act_json)) => json_masked_eq(&want_json, &act_json, masks),
-        None => masked_eq(want_text, act_text, masks),
-    };
+pub(crate) fn compare_text(
+    id: &str,
+    want_text: &str,
+    act_text: &str,
+    masks: &Masks,
+) -> Result<(), Mismatch> {
+    if masked_eq(want_text, act_text, masks)? {
+        return Ok(());
+    }
+    let want_json = serde_json::from_str(want_text)
+        .map_err(|error| Mismatch::new(id, format!("body mismatch: {error}")))?;
+    let act_json = serde_json::from_str(act_text)
+        .map_err(|error| Mismatch::new(id, format!("body mismatch: {error}")))?;
+    let equal = json_masked_eq(&want_json, &act_json, masks)?;
     if equal {
         Ok(())
     } else {
@@ -304,8 +312,9 @@ fn compare_text(id: &str, want_text: &str, act_text: &str, masks: &Masks) -> Res
     }
 }
 
-fn compare_response(
+pub(crate) fn compare_response(
     id: &str,
+    method: &str,
     recorded: &ResponseRecord,
     actual: &Response,
     masks: &Masks,
@@ -313,7 +322,7 @@ fn compare_response(
     if recorded.status_line.is_empty() {
         return Err(Mismatch::new(id, "recording has no response status"));
     }
-    let want = status_of(&recorded.status_line);
+    let want = status_of(&recorded.status_line)?;
     if want != actual.status {
         return Err(Mismatch::new(
             id,
@@ -321,9 +330,13 @@ fn compare_response(
         ));
     }
     compare_headers(id, &recorded.headers, &actual.headers, masks)?;
-    let Some(want_body) = recorded_body(recorded) else {
-        return Err(Mismatch::new(id, "recorded body unreadable"));
-    };
+    let want_body = recorded_body(recorded)?;
+    if method == "HEAD" || actual.status < 200 || matches!(actual.status, 204 | 205 | 304) {
+        if !want_body.is_empty() || !actual.body.is_empty() {
+            return Err(Mismatch::new(id, "response must not contain a body"));
+        }
+        return Ok(());
+    }
     if recorded.body_base64.is_some() {
         if want_body != actual.body {
             return Err(Mismatch::new(id, "binary body mismatch"));
@@ -336,7 +349,24 @@ fn compare_response(
             return Err(Mismatch::new(id, "body sha256 mismatch"));
         }
     }
-    let want_text = String::from_utf8_lossy(&want_body);
-    let act_text = String::from_utf8_lossy(&actual.body);
-    compare_text(id, &want_text, &act_text, masks)
+    let want_text =
+        std::str::from_utf8(&want_body).map_err(|error| Mismatch::new(id, error.to_string()))?;
+    let act_text =
+        std::str::from_utf8(&actual.body).map_err(|error| Mismatch::new(id, error.to_string()))?;
+    if recorded.headers.iter().any(|(name, value)| {
+        name.eq_ignore_ascii_case("content-type") && value.starts_with("application/json")
+    }) {
+        let want_json = serde_json::from_str(want_text)
+            .map_err(|error| Mismatch::new(id, error.to_string()))?;
+        let act_json =
+            serde_json::from_str(act_text).map_err(|error| Mismatch::new(id, error.to_string()))?;
+        if !json_masked_eq(&want_json, &act_json, masks)? {
+            return Err(Mismatch::new(
+                id,
+                format!("body mismatch\n    recorded: {want_text}\n    actual:   {act_text}"),
+            ));
+        }
+        return Ok(());
+    }
+    compare_text(id, want_text, act_text, masks)
 }

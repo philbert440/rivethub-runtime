@@ -40,7 +40,7 @@ async fn streams_reasoning_tools_results_and_usage_through_ports() {
     ];
     let expected_events = first.iter().chain(&second).cloned().collect::<Vec<_>>();
     let provider = Provider::new(vec![chunks(first), chunks(second)]);
-    let tool = Arc::new(testkit::FakeTool::new("echo"));
+    let tool = Arc::new(testkit::FakeTool::new("echo").expect("echo tool schema"));
     let agent = agent(provider.clone(), vec![tool], &h);
     let mut input = turn();
     input.authorized_tools = names(&["echo"]);
@@ -134,7 +134,9 @@ async fn step_limit_bounds_provider_requests_and_zero_runs_none() {
         let provider = Provider::new(vec![chunks(response)]);
         let agent = agent(
             provider.clone(),
-            vec![Arc::new(testkit::FakeTool::new("echo"))],
+            vec![Arc::new(
+                testkit::FakeTool::new("echo").expect("echo tool schema"),
+            )],
             &h,
         );
         let mut input = turn();
@@ -184,7 +186,13 @@ async fn invalid_streams_are_typed_errors_and_never_run_tools() {
     for plan in cases {
         let mut h = Harness::new().await;
         let provider = Provider::new(vec![plan]);
-        let agent = agent(provider, vec![Arc::new(testkit::FakeTool::new("echo"))], &h);
+        let agent = agent(
+            provider,
+            vec![Arc::new(
+                testkit::FakeTool::new("echo").expect("echo tool schema"),
+            )],
+            &h,
+        );
         let (sender, _receiver) = mpsc::channel(32);
         let error = agent
             .run(turn(), sender, CancellationToken::new())
@@ -219,7 +227,9 @@ async fn authorization_defaults_to_refusal_and_tool_failures_feed_back() {
         ]);
         let agent = agent(
             provider.clone(),
-            vec![Arc::new(testkit::FakeTool::new("echo"))],
+            vec![Arc::new(
+                testkit::FakeTool::new("echo").expect("echo tool schema"),
+            )],
             &h,
         );
         let mut input = turn();
@@ -268,7 +278,13 @@ async fn safety_hooks_refuse_authorized_tools_before_execution() {
             chunks([call(0, tool, args), vec![ModelChunk::Done]].concat()),
             chunks(vec![text("refusal received"), ModelChunk::Done]),
         ]);
-        let runner = agent(provider, vec![Arc::new(testkit::FakeTool::new(tool))], &h);
+        let runner = agent(
+            provider,
+            vec![Arc::new(
+                testkit::FakeTool::new(tool).expect("echo tool schema"),
+            )],
+            &h,
+        );
         let mut input = turn();
         input.authorized_tools = names(&[tool]);
         let (sender, _receiver) = mpsc::channel(16);

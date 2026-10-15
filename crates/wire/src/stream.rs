@@ -234,6 +234,7 @@ pub mod openai {
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub struct Message {
         pub role: Role,
+        #[serialize_always]
         pub content: Option<String>,
         pub reasoning_content: Option<String>,
         pub tool_calls: Option<Vec<MessageToolCall>>,

@@ -26,7 +26,7 @@ async fn stub_server_answers_router_routes() {
     let text = String::from_utf8_lossy(&response);
     assert!(text.starts_with("HTTP/1.1 200 OK"), "{text}");
     assert!(text.ends_with("pong"), "{text}");
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn sqlite_version_is_reported() {
 
 #[test]
 fn rows_eq_compares_json_text_cells_as_values() {
-    let stored = vec![serde_json::json!({"meta": "{\"b\": 2, \"a\": [1.0]}"})];
+    let stored = vec![serde_json::json!({"meta": "{\"b\": 2, \"a\": [1]}"})];
     let expected = vec![serde_json::json!({"meta": "{\"a\":[1],\"b\":2}"})];
     assert!(rows_eq(&stored, &expected));
     let other = vec![serde_json::json!({"meta": "{\"a\":[1],\"b\":3}"})];

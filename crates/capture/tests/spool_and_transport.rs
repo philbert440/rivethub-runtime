@@ -110,7 +110,7 @@ async fn http_transport_posts_and_parses() -> Result<(), Box<dyn std::error::Err
         .and_then(|message| message.get("event_id"))
         .and_then(testkit::Json::as_str);
     assert_eq!(event_id, Some("e1"));
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
     Ok(())
 }
 
@@ -133,7 +133,7 @@ async fn http_transport_maps_4xx_to_client_errors() -> Result<(), Box<dyn std::e
         error,
         capture::writer::PostError::Client { status: 400 }
     ));
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 
     let stub = testkit::stub_server(other).await?;
     let transport = capture::writer::HttpCaptureTransport::new(
@@ -144,7 +144,7 @@ async fn http_transport_maps_4xx_to_client_errors() -> Result<(), Box<dyn std::e
         return Err("expected a parse failure for a text response".into());
     };
     assert!(matches!(error, capture::writer::PostError::Network { .. }));
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
     Ok(())
 }
 

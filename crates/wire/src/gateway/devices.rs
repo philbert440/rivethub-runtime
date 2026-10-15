@@ -13,7 +13,6 @@ pub struct MeshOverview {
     pub nodes: Vec<MeshOverviewNode>,
 }
 
-#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshOverviewNode {
@@ -23,14 +22,25 @@ pub struct MeshOverviewNode {
     pub url: String,
     pub online: bool,
     pub sessions: Option<u64>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "reported_activity"
+    )]
     pub latest: Option<MeshLatest>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MeshLatest {
-    pub activity: Activity,
-    pub title: String,
+#[serde(untagged)]
+pub enum MeshLatest {
+    Activity { activity: Activity, title: String },
+    NoActivity,
+}
+
+fn reported_activity<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<MeshLatest>, D::Error> {
+    MeshLatest::deserialize(deserializer).map(Some)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

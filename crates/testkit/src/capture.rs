@@ -1,6 +1,4 @@
-use std::borrow::Cow;
 use std::path::Path;
-use std::sync::LazyLock;
 
 use regex::Captures;
 use regex::Regex;
@@ -9,7 +7,7 @@ use serde::Deserialize;
 use crate::Error;
 use crate::Mismatch;
 use crate::json::Json;
-use crate::json::json_eq;
+use crate::json::{Masks, json_masked_eq, masked_eq};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HookPost {
@@ -77,37 +75,9 @@ pub struct FileRecord {
 
 pub const ISO_TIMESTAMP: &str = "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:[.][0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})";
 
-#[expect(
-    clippy::expect_used,
-    reason = "the normalization patterns are constants; the capture replay tests match them"
-)]
-static VOLATILE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(&format!(
-        "({ISO_TIMESTAMP})|([0-9]{{13}}-[0-9a-z]{{6,}})|(<ts>)"
-    ))
-    .expect("the volatile-text pattern is a constant")
-});
-
-#[expect(
-    clippy::expect_used,
-    reason = "the escape pattern is a constant; the capture replay tests match it"
-)]
-static ESCAPE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"\\\\|\\u[0-9a-fA-F]{4}").expect("the escape pattern is a constant")
-});
-
-pub(crate) fn volatile_regex() -> &'static Regex {
-    &VOLATILE
-}
-
-pub(crate) fn escape_regex() -> &'static Regex {
-    &ESCAPE
-}
-
 pub fn entries(recording: &Path) -> Result<Vec<EntryRecord>, Error> {
     let raw = crate::read_text(recording)?;
-    let sanitized = sanitize_surrogates(&raw);
-    crate::parse_json(recording, &sanitized)
+    crate::parse_json(recording, &raw)
 }
 
 pub fn replay(
@@ -132,16 +102,18 @@ pub fn replay(
     compare_files(&id, entry, &actual)
 }
 
-pub(crate) fn normalize_capture_text(text: &str) -> String {
-    volatile_regex()
-        .replace_all(text, |caps: &Captures<'_>| {
-            if caps.get(2).is_some() {
-                "<KEY>"
-            } else {
-                "<TS>"
-            }
-        })
-        .into_owned()
+fn mask_capture_text(text: &str) -> Result<String, Mismatch> {
+    Ok(Regex::new(&format!(
+        "({ISO_TIMESTAMP})|([0-9]{{13}}-[0-9a-z]{{6,}})|(<ts>)"
+    ))?
+    .replace_all(text, |caps: &Captures<'_>| {
+        if caps.get(2).is_some() {
+            "{{KEY}}"
+        } else {
+            "<ts>"
+        }
+    })
+    .into_owned())
 }
 
 fn compare_posts(id: &str, entry: &EntryRecord, actual: &HookOutcome) -> Result<(), Mismatch> {
@@ -183,15 +155,14 @@ fn compare_post(id: &str, index: usize, want: &PostRecord, got: &HookPost) -> Re
             format!("post {index}: recorded body unreadable"),
         ));
     };
-    let Ok(mut got_body) = serde_json::from_str(&got.body) else {
+    let Ok(got_body) = serde_json::from_str(&got.body) else {
         return Err(Mismatch::new(
             id,
             format!("post {index}: actual body is not JSON"),
         ));
     };
-    normalize_value(&mut want_body);
-    normalize_value(&mut got_body);
-    if !json_eq(&want_body, &got_body) {
+    mask_value(&mut want_body)?;
+    if !json_masked_eq(&want_body, &got_body, &Masks::default())? {
         return Err(Mismatch::new(
             id,
             format!(
@@ -220,87 +191,30 @@ fn compare_files(id: &str, entry: &EntryRecord, actual: &HookOutcome) -> Result<
         if want.mode != got.mode {
             return Err(Mismatch::new(id, format!("file {index}: mode mismatch")));
         }
-        let want_content = normalize_capture_text(&want.content);
-        let got_content = normalize_capture_text(&got.content);
-        if want_content != got_content {
+        let want_content = mask_capture_text(&want.content)?;
+        if !masked_eq(&want_content, &got.content, &Masks::default())? {
             return Err(Mismatch::new(id, format!("file {index}: content mismatch")));
         }
     }
     Ok(())
 }
 
-fn normalize_value(value: &mut Json) {
+fn mask_value(value: &mut Json) -> Result<(), Mismatch> {
     match value {
         Json::Object(map) => {
             for member in map.values_mut() {
-                normalize_value(member);
+                mask_value(member)?;
             }
         }
         Json::Array(items) => {
             for item in items {
-                normalize_value(item);
+                mask_value(item)?;
             }
         }
         Json::String(text) => {
-            *text = normalize_capture_text(text);
+            *text = mask_capture_text(text)?;
         }
         Json::Null | Json::Bool(_) | Json::Number(_) => {}
     }
-}
-
-fn pair_follows(text: &str, at: usize) -> bool {
-    let Some(rest) = text.get(at..) else {
-        return false;
-    };
-    let Some(digits) = rest.strip_prefix(r"\u") else {
-        return false;
-    };
-    let Some(unit) = digits
-        .get(..4)
-        .and_then(|digits| u32::from_str_radix(digits, 16).ok())
-    else {
-        return false;
-    };
-    (0xDC00..=0xDFFF).contains(&unit)
-}
-
-pub(crate) fn sanitize_surrogates(text: &str) -> Cow<'_, str> {
-    let mut owned: Option<String> = None;
-    let mut copied = 0;
-    let mut pair_tail: Option<usize> = None;
-    for found in escape_regex().find_iter(text) {
-        if pair_tail == Some(found.start()) {
-            pair_tail = None;
-            continue;
-        }
-        let Some(digits) = found.as_str().strip_prefix(r"\u") else {
-            continue;
-        };
-        let Some(unit) = digits
-            .get(..4)
-            .and_then(|digits| u32::from_str_radix(digits, 16).ok())
-        else {
-            continue;
-        };
-        let high = (0xD800..=0xDBFF).contains(&unit);
-        let low = (0xDC00..=0xDFFF).contains(&unit);
-        if high && pair_follows(text, found.end()) {
-            pair_tail = Some(found.end());
-            continue;
-        }
-        if !high && !low {
-            continue;
-        }
-        let out = owned.get_or_insert_with(String::new);
-        out.push_str(&text[copied..found.start()]);
-        out.push_str(r"\ufffd");
-        copied = found.end();
-    }
-    match owned {
-        Some(mut out) => {
-            out.push_str(&text[copied..]);
-            Cow::Owned(out)
-        }
-        None => Cow::Borrowed(text),
-    }
+    Ok(())
 }

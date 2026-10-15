@@ -223,87 +223,88 @@ fn fake_memory_store_records_tag_read_requests() {
     });
 }
 
-#[test]
-fn fake_memory_store_records_tag_write_requests() {
-    block_on(async {
-        let store = FakeMemoryStore::default();
-        let ids = vec![
-            TagId::from_str("00000000-0000-4000-8000-000000000003").unwrap(),
-            TagId::from_str("00000000-0000-4000-8000-000000000004").unwrap(),
-        ];
-        store
-            .decide_tags(ids.clone(), TagDecision::Reject, Some("owner".to_string()))
-            .await
-            .unwrap();
-        let add = TagAdd {
-            entity_type: TagEntityType::Conversation,
-            entity: TagEntity::SessionKey("claude-code:abc".to_string()),
-            agent: Some("agent-a".to_string()),
-            tag: "project:acme".parse().unwrap(),
-            display: Some("Acme".to_string()),
-            reason: None,
-            decided_by: None,
-        };
-        let added = store.add_tag(add.clone()).await.unwrap();
-        assert_eq!(added.key, "project");
-        assert_eq!(added.value, "acme");
-        assert_eq!(added.state, TagState::Accepted);
-        let lookup = TagLookup {
-            session_keys: vec!["claude-code:abc".to_string()],
-            states: vec![TagState::Accepted],
-        };
-        store.lookup_tags(lookup.clone()).await.unwrap();
-        let upsert = TagTaxonomyUpsert {
+#[tokio::test]
+async fn fake_memory_store_records_tag_write_requests() {
+    let store = FakeMemoryStore::default();
+    let ids = vec![
+        TagId::from_str("00000000-0000-4000-8000-000000000003").unwrap(),
+        TagId::from_str("00000000-0000-4000-8000-000000000004").unwrap(),
+    ];
+    store
+        .decide_tags(ids.clone(), TagDecision::Reject, Some("owner".to_string()))
+        .await
+        .unwrap();
+    let add = TagAdd {
+        entity_type: TagEntityType::Conversation,
+        entity: TagEntity::SessionKey("claude-code:abc".to_string()),
+        agent: Some("agent-a".to_string()),
+        tag: "project:acme".parse().unwrap(),
+        display: Some("Acme".to_string()),
+        reason: None,
+        decided_by: None,
+    };
+    store
+        .script_session_entity("claude-code:abc".to_owned(), Uuid::new_v4())
+        .await;
+    let added = store.add_tag(add.clone()).await.unwrap();
+    assert_eq!(added.key, "project");
+    assert_eq!(added.value, "acme");
+    assert_eq!(added.state, TagState::Accepted);
+    let lookup = TagLookup {
+        session_keys: vec!["claude-code:abc".to_string()],
+        states: vec![TagState::Accepted],
+    };
+    store.lookup_tags(lookup.clone()).await.unwrap();
+    let upsert = TagTaxonomyUpsert {
+        key: "project".to_string(),
+        value: "acme".to_string(),
+        display: None,
+        parent_value: Some("clients".to_string()),
+        aliases: vec!["acme-corp".to_string()],
+        reason: None,
+    };
+    let entry = store.upsert_tag_taxonomy(upsert.clone()).await.unwrap();
+    assert_eq!(entry.parent_value.as_deref(), Some("clients"));
+    let decision = TagTaxonomyDecision {
+        entries: vec![TagEntryPair {
             key: "project".to_string(),
             value: "acme".to_string(),
-            display: None,
-            parent_value: Some("clients".to_string()),
-            aliases: vec!["acme-corp".to_string()],
-            reason: None,
-        };
-        let entry = store.upsert_tag_taxonomy(upsert.clone()).await.unwrap();
-        assert_eq!(entry.parent_value.as_deref(), Some("clients"));
-        let decision = TagTaxonomyDecision {
-            entries: vec![TagEntryPair {
-                key: "project".to_string(),
-                value: "acme".to_string(),
-            }],
-            decision: TagDecision::Accept,
-            decided_by: None,
-        };
-        store.decide_tag_taxonomy(decision.clone()).await.unwrap();
-        let merge = TagTaxonomyMerge {
-            key: "project".to_string(),
-            from: "acme-corp".to_string(),
-            into: "acme".to_string(),
-        };
-        let merged = store.merge_tag_taxonomy(merge.clone()).await.unwrap();
-        assert_eq!(merged.into, "acme");
-        let requests = store.requests().await;
-        assert_eq!(requests.len(), 6);
-        assert_eq!(
-            requests.first(),
-            Some(&MemoryRequest::DecideTags {
-                ids,
-                decision: TagDecision::Reject,
-                decided_by: Some("owner".to_string()),
-            })
-        );
-        assert_eq!(requests.get(1), Some(&MemoryRequest::AddTag(add)));
-        assert_eq!(requests.get(2), Some(&MemoryRequest::LookupTags(lookup)));
-        assert_eq!(
-            requests.get(3),
-            Some(&MemoryRequest::UpsertTagTaxonomy(upsert))
-        );
-        assert_eq!(
-            requests.get(4),
-            Some(&MemoryRequest::DecideTagTaxonomy(decision))
-        );
-        assert_eq!(
-            requests.get(5),
-            Some(&MemoryRequest::MergeTagTaxonomy(merge))
-        );
-    });
+        }],
+        decision: TagDecision::Accept,
+        decided_by: None,
+    };
+    store.decide_tag_taxonomy(decision.clone()).await.unwrap();
+    let merge = TagTaxonomyMerge {
+        key: "project".to_string(),
+        from: "acme-corp".to_string(),
+        into: "acme".to_string(),
+    };
+    let merged = store.merge_tag_taxonomy(merge.clone()).await.unwrap();
+    assert_eq!(merged.into, "acme");
+    let requests = store.requests().await;
+    assert_eq!(requests.len(), 6);
+    assert_eq!(
+        requests.first(),
+        Some(&MemoryRequest::DecideTags {
+            ids,
+            decision: TagDecision::Reject,
+            decided_by: Some("owner".to_string()),
+        })
+    );
+    assert_eq!(requests.get(1), Some(&MemoryRequest::AddTag(add)));
+    assert_eq!(requests.get(2), Some(&MemoryRequest::LookupTags(lookup)));
+    assert_eq!(
+        requests.get(3),
+        Some(&MemoryRequest::UpsertTagTaxonomy(upsert))
+    );
+    assert_eq!(
+        requests.get(4),
+        Some(&MemoryRequest::DecideTagTaxonomy(decision))
+    );
+    assert_eq!(
+        requests.get(5),
+        Some(&MemoryRequest::MergeTagTaxonomy(merge))
+    );
 }
 
 #[test]
@@ -358,7 +359,7 @@ fn job_queue_claims_in_order() {
 }
 
 #[test]
-fn provider_streams_scripted_then_default() {
+fn provider_streams_scripted_then_refuses_unscripted_requests() {
     block_on(async {
         let provider: Arc<dyn ModelProvider> =
             Arc::new(FakeProvider::new(vec![Script::Stream(vec![
@@ -394,25 +395,10 @@ fn provider_streams_scripted_then_default() {
             Some(Ok(ModelChunk::Done)) => {}
             other => panic!("the scripted stream ends with Done, got {other:?}"),
         }
-        let mut fallback = provider.stream(request.clone()).await.unwrap();
-        match fallback.recv().await.expect("expected the default chunk") {
-            Ok(chunk) => assert_eq!(
-                chunk,
-                ModelChunk::Text {
-                    delta: "hi".to_string()
-                }
-            ),
-            Err(error) => panic!("the default item is a chunk: {error}"),
-        }
-        let chat = provider.chat(request).await.unwrap();
-        assert_eq!(chat.content.as_deref(), Some("ok"));
-        let embeddings = provider.embed(vec!["abc".to_string()]).await.unwrap();
-        assert_eq!(
-            embeddings.first().map(|e| e.vector.clone()),
-            Some(vec![3.0_f32])
-        );
-        let models = provider.list_models().await.unwrap();
-        assert_eq!(models, vec!["fake-model".to_string()]);
+        assert!(provider.stream(request.clone()).await.is_err());
+        assert!(provider.chat(request).await.is_err());
+        assert!(provider.embed(vec!["abc".to_string()]).await.is_err());
+        assert!(provider.list_models().await.is_err());
     });
 }
 
@@ -514,7 +500,7 @@ fn mux_spawn_kill_list() {
 #[test]
 fn tool_echoes_text_argument() {
     block_on(async {
-        let tool: Arc<dyn Tool> = Arc::new(FakeTool::new("echo"));
+        let tool: Arc<dyn Tool> = Arc::new(FakeTool::new("echo").expect("echo tool schema"));
         let definition = tool.definition();
         assert_eq!(definition.name.as_ref(), "echo");
         let args = serde_json::json!({"text": "ping"});
@@ -564,7 +550,8 @@ fn reader_reads_and_tails() {
         };
         let mut turns = BTreeMap::new();
         turns.insert(session.to_string(), vec![early.clone(), late.clone()]);
-        let reader: Arc<dyn TranscriptReader> = Arc::new(FakeReader::new(turns));
+        let reader: Arc<dyn TranscriptReader> =
+            Arc::new(FakeReader::new(turns).expect("valid scripted sessions"));
         let listed = reader
             .sessions(std::path::Path::new("/work/acme/.claude"))
             .await
@@ -577,5 +564,20 @@ fn reader_reads_and_tails() {
             .with_timezone(&Utc);
         let tail = reader.tail(&session, since).await.unwrap();
         assert_eq!(tail, vec![late]);
+    });
+}
+
+#[test]
+fn fake_memory_assigns_ids_and_timestamps_when_appending() {
+    block_on(async {
+        let store = FakeMemoryStore::default();
+        let mut entry = memory_entry("claude-code:fresh", "fresh", Utc::now());
+        entry.id = None;
+        entry.created_at = None;
+        store.append(vec![entry]).await.expect("append");
+        let outcome = store.search(search_query("fresh")).await.expect("search");
+        let result = outcome.results.first().expect("inserted entry");
+        assert!(Uuid::parse_str(&result.id).is_ok());
+        assert!(result.created_at.timestamp() > 0);
     });
 }

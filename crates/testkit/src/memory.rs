@@ -82,9 +82,14 @@ pub struct FakeMemoryStore {
     wiki_redirects: Mutex<BTreeMap<String, String>>,
     wiki_error: Mutex<Option<MemoryStoreError>>,
     tag_context: Mutex<Option<TagJobContext>>,
+    tag_entities: Mutex<BTreeMap<String, Uuid>>,
 }
 
 impl FakeMemoryStore {
+    pub async fn script_session_entity(&self, session: String, entity: Uuid) {
+        self.tag_entities.lock().await.insert(session, entity);
+    }
+
     pub async fn fail_next_wiki_request(&self, error: MemoryStoreError) {
         *self.wiki_error.lock().await = Some(error);
     }
@@ -250,9 +255,14 @@ impl MemoryStore for FakeMemoryStore {
         Ok(wire::gateway::wiki::WikiGapsResponse { red_links, stalest })
     }
 
-    async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
+    async fn append(&self, mut batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
         let count = batch.len() as u64;
         self.record(MemoryRequest::Append(batch.clone())).await;
+        let now = Utc::now();
+        for entry in &mut batch {
+            entry.id.get_or_insert_with(|| Uuid::new_v4().to_string());
+            entry.created_at.get_or_insert(now);
+        }
         self.entries.lock().await.extend(batch);
         Ok(count)
     }
@@ -273,16 +283,27 @@ impl MemoryStore for FakeMemoryStore {
             .filter(|e| e.content.contains(&needle))
             .filter(|e| query.agent.as_deref().is_none_or(|a| e.agent == a))
             .take(query.limit.get() as usize)
-            .map(|e| MemorySearchResult {
-                id: e.id.clone().unwrap_or_default(),
-                source: MemoryHitSource::Message,
-                content: e.content.clone(),
-                role: Some(e.role),
-                agent: Some(e.agent.clone()),
-                relevance_score: 1.0,
-                created_at: e.created_at.unwrap_or_default(),
+            .map(|e| {
+                Ok(MemorySearchResult {
+                    id: e
+                        .id
+                        .clone()
+                        .ok_or_else(|| MemoryStoreError::InvalidRequest {
+                            message: "scripted memory entry requires an id".to_owned(),
+                        })?,
+                    source: MemoryHitSource::Message,
+                    content: e.content.clone(),
+                    role: Some(e.role),
+                    agent: Some(e.agent.clone()),
+                    relevance_score: 1.0,
+                    created_at: e
+                        .created_at
+                        .ok_or_else(|| MemoryStoreError::InvalidRequest {
+                            message: "scripted memory entry requires a timestamp".to_owned(),
+                        })?,
+                })
             })
-            .collect();
+            .collect::<Result<_, MemoryStoreError>>()?;
         drop(entries);
         Ok(kernel::memory::SearchOutcome {
             results,
@@ -405,21 +426,45 @@ impl MemoryStore for FakeMemoryStore {
 
     async fn add_tag(&self, add: TagAdd) -> Result<TagWire, MemoryStoreError> {
         self.record(MemoryRequest::AddTag(add.clone())).await;
+        #[cfg_attr(
+            dylint_lib = "rr_lints",
+            expect(
+                fallback,
+                reason = "CONTRACT B6: omitted tag display is stored as empty text"
+            )
+        )]
+        let display = add.display.as_deref().unwrap_or("").to_owned();
+        #[cfg_attr(
+            dylint_lib = "rr_lints",
+            expect(
+                fallback,
+                reason = "CONTRACT B6: omitted tag reason is stored as empty text"
+            )
+        )]
+        let reason = add.reason.as_deref().unwrap_or("").to_owned();
         Ok(TagWire {
-            id: String::new(),
+            id: Uuid::new_v4().to_string(),
             entity_type: add.entity_type,
             entity_id: match &add.entity {
                 TagEntity::Id(id) => id.to_string(),
-                TagEntity::SessionKey(_) => String::new(),
+                TagEntity::SessionKey(session) => self
+                    .tag_entities
+                    .lock()
+                    .await
+                    .get(session)
+                    .ok_or_else(|| MemoryStoreError::InvalidRequest {
+                        message: format!("no scripted entity for session {session}"),
+                    })?
+                    .to_string(),
             },
             key: add.tag.key,
             value: add.tag.value,
-            display: add.display.unwrap_or_default(),
+            display,
             source: "user".to_owned(),
             state: TagState::Accepted,
             confidence: None,
             proposed_by: String::new(),
-            reason: add.reason.unwrap_or_default(),
+            reason,
             decided_by: add.decided_by,
             decided_at: None,
             created_at: Utc::now(),
@@ -441,15 +486,31 @@ impl MemoryStore for FakeMemoryStore {
     ) -> Result<TagTaxonomyEntry, MemoryStoreError> {
         self.record(MemoryRequest::UpsertTagTaxonomy(upsert.clone()))
             .await;
+        #[cfg_attr(
+            dylint_lib = "rr_lints",
+            expect(
+                fallback,
+                reason = "CONTRACT B6: omitted tag display is stored as empty text"
+            )
+        )]
+        let display = upsert.display.as_deref().unwrap_or("").to_owned();
+        #[cfg_attr(
+            dylint_lib = "rr_lints",
+            expect(
+                fallback,
+                reason = "CONTRACT B6: omitted tag reason is stored as empty text"
+            )
+        )]
+        let reason = upsert.reason.as_deref().unwrap_or("").to_owned();
         Ok(TagTaxonomyEntry {
             key: upsert.key,
             value: upsert.value,
-            display: upsert.display.unwrap_or_default(),
+            display,
             parent_value: upsert.parent_value,
             aliases: upsert.aliases,
             state: TagState::Accepted,
             source: "user".to_owned(),
-            reason: upsert.reason.unwrap_or_default(),
+            reason,
             decided_at: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),

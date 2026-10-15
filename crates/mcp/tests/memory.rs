@@ -146,6 +146,14 @@ async fn invalid_and_unsupported_options_never_reach_store() {
 #[tokio::test]
 async fn explicitly_authorized_tag_writes_reach_port() {
     let (server, store) = setup(true);
+    store
+        .script_session_entity(
+            "s".to_owned(),
+            "00000000-0000-4000-8000-000000000002"
+                .parse()
+                .expect("entity UUID"),
+        )
+        .await;
     for args in [
         r#"{"action":"decide","ids":["00000000-0000-4000-8000-000000000001"],"state":"accepted"}"#,
         r#"{"action":"add","entity_type":"conversation","session_key":"s","tag":"project:acme"}"#,

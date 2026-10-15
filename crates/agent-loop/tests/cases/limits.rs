@@ -91,8 +91,8 @@ async fn usage_overflow_is_an_error_and_duplicate_catalog_names_are_refused() {
             "test".to_owned(),
             provider,
             vec![
-                Arc::new(testkit::FakeTool::new("same")),
-                Arc::new(testkit::FakeTool::new("same"))
+                Arc::new(testkit::FakeTool::new("same").expect("echo tool schema")),
+                Arc::new(testkit::FakeTool::new("same").expect("echo tool schema"))
             ],
             Arc::clone(&h.hooks)
         )

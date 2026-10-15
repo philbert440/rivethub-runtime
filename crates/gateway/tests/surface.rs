@@ -180,7 +180,10 @@ fn api_mesh_returns_the_same_overview_as_mesh_json() {
         .expect("local");
     assert!(local.online);
     assert_eq!(local.sessions, Some(0));
-    assert!(local.latest.is_none());
+    assert!(matches!(
+        local.latest,
+        Some(wire::gateway::devices::MeshLatest::NoActivity)
+    ));
 }
 
 #[test]
@@ -219,5 +222,8 @@ fn a_dead_local_url_is_offline() {
         .expect("local");
     assert!(!local.online);
     assert_eq!(local.sessions, Some(0));
-    assert!(local.latest.is_none());
+    assert!(matches!(
+        local.latest,
+        Some(wire::gateway::devices::MeshLatest::NoActivity)
+    ));
 }

@@ -503,9 +503,12 @@ fn masks_cover_the_healthz_body() {
     let masks = masks();
     let recorded =
         "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}";
-    assert!(testkit::masked_eq(
-        recorded,
-        "{\"ok\":true,\"sessions\":0,\"name\":\"gold-host\",\"node\":\"golden-node\"}",
-        &masks
-    ));
+    assert!(
+        testkit::masked_eq(
+            recorded,
+            "{\"ok\":true,\"sessions\":0,\"name\":\"gold-host\",\"node\":\"golden-node\"}",
+            &masks
+        )
+        .expect("recorded mask")
+    );
 }

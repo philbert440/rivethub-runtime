@@ -69,7 +69,7 @@ async fn a_chat_task_posts_the_goal_and_completes() {
         engine.run_one().await.expect("idle"),
         RunOutcome::Idle
     ));
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -97,7 +97,7 @@ async fn an_appended_system_prompt_is_posted_after_the_agent_prompt() {
         engine.load(id).await.expect("load").status,
         TaskStatus::Completed
     );
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -127,7 +127,7 @@ async fn steer_replaces_the_goal_until_the_task_is_terminal() {
             ..
         }
     ));
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -145,7 +145,7 @@ async fn a_terminal_task_cannot_be_killed() {
             ..
         }
     ));
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -211,7 +211,7 @@ async fn a_second_heartbeat_replaces_the_queued_one() {
         RunOutcome::Completed(second)
     );
     assert_eq!(engine.run_one().await.expect("idle"), RunOutcome::Idle);
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -243,7 +243,7 @@ async fn an_embed_target_job_stays_unclaimed() {
     let stored = memory.read(embed).await.expect("read").expect("job");
     assert_eq!(stored.attempts, 0);
     assert_eq!(stored.identifier, "embed-target");
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -310,7 +310,7 @@ async fn serve_finishes_a_queued_task_and_returns_when_cancelled() {
         .expect("serve joined")
         .expect("spawn")
         .expect("serve");
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -343,7 +343,7 @@ async fn a_kill_during_the_turn_stays_killed_after_the_reply() {
     let loaded = engine.load(id).await.expect("load");
     assert_eq!(loaded.status, TaskStatus::Killed);
     assert_eq!(loaded.error.as_deref(), Some("Killed by parent"));
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -366,7 +366,7 @@ async fn a_gateway_deadline_is_a_timeout() {
         engine.load(id).await.expect("load").status,
         TaskStatus::Timeout
     );
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 fn running_record(id: uuid::Uuid) -> tasks::TaskRecord {
@@ -502,7 +502,7 @@ async fn a_followed_redirect_reaches_the_health_document() {
     let health = client.healthz().await.expect("health");
     assert!(health.ok);
     assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -510,7 +510,7 @@ async fn two_hops_on_the_same_host_are_followed() {
     let (stub, _) = common::redirect_stub(RedirectKind::TwoHop).await;
     let client = tasks::GatewayClient::new(common::base_url(stub.addr), None).expect("client");
     assert!(client.healthz().await.expect("health").ok);
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -523,7 +523,7 @@ async fn the_sixth_hop_is_refused() {
         .expect_err("cap");
     assert!(matches!(error, Error::Redirect(_)));
     assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 6);
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -533,5 +533,5 @@ async fn a_cross_host_redirect_does_not_connect() {
     let error = client.healthz().await.expect_err("refused");
     assert!(matches!(error, Error::Redirect(_)));
     assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }

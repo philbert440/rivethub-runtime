@@ -60,7 +60,7 @@ async fn a_priced_reply_records_the_exact_cost() {
     let usage = engine.load(id).await.expect("load").usage.expect("usage");
     assert_eq!(usage.cost_usd, Some(3.0));
     assert_eq!(usage.total_tokens, 1_000_000);
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -86,7 +86,7 @@ async fn zero_turns_fail_before_the_gateway_is_called() {
     let result = loaded.result.expect("result");
     assert_eq!(result.verdict, TaskVerdict::BudgetExceeded);
     assert_eq!(result.error.as_deref(), Some("maxTurns (0) reached"));
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -150,7 +150,7 @@ async fn token_and_missing_price_limits_fail_closed() {
         engine.load(exact).await.expect("load").error.as_deref(),
         Some("maxTokens (20) reached")
     );
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -172,7 +172,7 @@ async fn a_named_model_without_a_rate_is_a_pricing_error() {
         engine.load(id).await.expect("load").status,
         TaskStatus::Failed
     );
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -202,5 +202,5 @@ async fn a_hung_turn_ends_as_a_timeout() {
         engine.load(id).await.expect("load").status,
         TaskStatus::Timeout
     );
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }

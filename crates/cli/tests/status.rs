@@ -46,7 +46,7 @@ async fn status_reads_health_and_optional_version_and_uptime() {
         "RivetHub is running (v1.2.3); uptime 12.5s\n"
     );
     assert_eq!(status.stderr, "");
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
     let unavailable = run(&["status"], &env).await;
     assert_eq!(unavailable.exit, Exit::Ok);
     assert!(unavailable.stdout.contains("not running"));
@@ -68,7 +68,7 @@ async fn malformed_health_falls_back_with_a_diagnostic() {
     assert_eq!(status.exit, Exit::Ok);
     assert!(status.stderr.contains("Health unavailable"));
     assert!(status.stdout.contains("not running"));
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -103,7 +103,7 @@ async fn ordinary_redirects_reach_the_health_route() {
     assert_eq!(report.exit, Exit::Ok);
     assert_eq!(report.stdout, "RivetHub is running\n");
     assert_eq!(report.stderr, "");
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }
 
 #[tokio::test]
@@ -151,5 +151,5 @@ async fn stalled_health_request_times_out_after_three_seconds() {
     assert!(report.stderr.contains("Health unavailable"));
     assert!(report.stdout.contains("not running"));
     release.cancel();
-    stub.close().await;
+    stub.close().await.expect("stub shuts down");
 }

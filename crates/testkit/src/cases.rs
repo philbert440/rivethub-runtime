@@ -22,47 +22,58 @@ pub struct DiffCase {
     pub expected: Expected,
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OutputRecord {
+    #[serde(rename = "fn")]
+    function: String,
+    #[serde(rename = "in")]
+    input: Json,
+    out: Json,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ErrorRecord {
+    #[serde(rename = "fn")]
+    function: String,
+    #[serde(rename = "in")]
+    input: Json,
+    throws: ThrownRecord,
+}
+
+#[derive(serde::Deserialize)]
+struct ThrownRecord {
+    name: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum Record {
+    Output(OutputRecord),
+    Error(ErrorRecord),
+}
+
 pub fn cases(path: &Path) -> Result<Vec<DiffCase>, Error> {
     let text = crate::read_text(path)?;
-    let mut cases = Vec::new();
-    for (index, line) in text.lines().enumerate() {
-        let number = index + 1;
-        if line.trim().is_empty() {
-            continue;
-        }
-        let record: Json = serde_json::from_str(line)
-            .map_err(|error| Error::format(path, format!("{number}: {error}")))?;
-        let Some(function) = record.get("fn").and_then(Json::as_str) else {
-            return Err(Error::format(path, format!("{number}: case has no \"fn\"")));
-        };
-        let function = function.to_owned();
-        let Some(input) = record.get("in").cloned() else {
-            return Err(Error::format(path, format!("{number}: case has no \"in\"")));
-        };
-        let out_present = record.get("out").is_some();
-        let throws = record
-            .get("throws")
-            .and_then(|thrown| thrown.get("name"))
-            .and_then(Json::as_str)
-            .map(str::to_owned);
-        let expected = match (out_present, throws) {
-            (true, None) => Expected::Out(record.get("out").cloned().unwrap_or(Json::Null)),
-            (false, Some(name)) => Expected::Throws(name),
-            _ => {
-                return Err(Error::format(
-                    path,
-                    format!("{number}: case must have exactly one of out and throws"),
-                ));
-            }
-        };
-        cases.push(DiffCase {
-            line: number,
-            function,
-            input,
-            expected,
-        });
-    }
-    Ok(cases)
+    text.lines()
+        .enumerate()
+        .filter(|(_, line)| !line.trim().is_empty())
+        .map(|(index, line)| {
+            let record: Record = serde_json::from_str(line)
+                .map_err(|error| Error::format(path, format!("{}: {error}", index + 1)))?;
+            let (function, input, expected) = match record {
+                Record::Output(row) => (row.function, row.input, Expected::Out(row.out)),
+                Record::Error(row) => (row.function, row.input, Expected::Throws(row.throws.name)),
+            };
+            Ok(DiffCase {
+                line: index + 1,
+                function,
+                input,
+                expected,
+            })
+        })
+        .collect()
 }
 
 pub fn replay(
@@ -117,7 +128,7 @@ mod tests {
         );
         let error = cases(&path).expect_err("missing in fails the load");
         let text = error.to_string();
-        assert!(text.contains("case has no \"in\""), "{text}");
+        assert!(text.contains("recording"), "{text}");
     }
 
     #[test]

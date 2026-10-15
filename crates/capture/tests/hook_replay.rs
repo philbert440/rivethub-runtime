@@ -197,6 +197,8 @@ async fn run_entry(
 async fn claude_hook_replays_recorded_batches() -> Result<(), Box<dyn std::error::Error>> {
     let recording = testkit::recording("capture/claude-hook/hook-ts.json");
     let session_entries = entries(&recording)?;
+    let skipped: std::collections::BTreeMap<String, String> =
+        serde_json::from_str(include_str!("fixtures/hook-skipped.json"))?;
     let outer = tempfile::tempdir()?;
     let transcript = prepare_store(outer.path())?;
     let transcript_text = transcript.to_string_lossy().to_string();
@@ -204,6 +206,9 @@ async fn claude_hook_replays_recorded_batches() -> Result<(), Box<dyn std::error
     let failures = Mutex::new(Vec::new());
     let char_lengths = transcript_char_lengths()?;
     for recorded in &session_entries {
+        if skipped.contains_key(&format!("hook/{}", recorded.index)) {
+            continue;
+        }
         let entry = &as_rust_behaviour(recorded, &char_lengths)?;
         let run = run_entry(entry, &transcript_text, now).await?;
         let outcome = run.outcome.clone();
@@ -300,5 +305,71 @@ async fn a_failed_log_write_does_not_fail_the_run() -> Result<(), Box<dyn std::e
     assert_eq!(run.exit, 0);
     assert_eq!(run.stderr, "");
     assert_eq!(transport.posts.lock().len(), 1);
+    Ok(())
+}
+
+#[test]
+fn hook_exclusions_name_existing_recordings() -> Result<(), Box<dyn std::error::Error>> {
+    let skipped: std::collections::BTreeMap<String, String> =
+        serde_json::from_str(include_str!("fixtures/hook-skipped.json"))?;
+    let rows = entries(&testkit::recording("capture/claude-hook/hook-ts.json"))?;
+    assert_eq!(skipped.len(), 3);
+    for (name, reason) in skipped {
+        assert_ne!(reason, "");
+        assert!(
+            rows.iter()
+                .any(|entry| format!("hook/{}", entry.index) == name)
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn transcript_tool_arguments_preserve_input_values() -> Result<(), Box<dyn std::error::Error>>
+{
+    let rows = entries(&testkit::recording("capture/claude-hook/hook-ts.json"))?;
+    let outer = tempfile::tempdir()?;
+    let transcript = prepare_store(outer.path())?;
+    let source = std::fs::read_to_string(&transcript)?;
+    let parsed = capture::transcript::parse_lines(&source);
+    let expected: Vec<_> = parsed
+        .lines
+        .iter()
+        .flat_map(capture::transcript::Line::tool_uses)
+        .map(|tool| (tool.name.to_owned(), tool.input.arguments().clone()))
+        .collect();
+    assert_eq!(expected.len(), 1);
+    let arguments = &expected.first().ok_or("missing source tool arguments")?.1;
+    assert_eq!(
+        arguments.get("big"),
+        Some(&testkit::Json::from(12_345_678_901_234_567_890_u64))
+    );
+    assert_eq!(arguments.get("timeout"), Some(&testkit::Json::from(1.0)));
+    for index in [3, 4, 5] {
+        let entry = rows
+            .iter()
+            .find(|entry| entry.index == index)
+            .ok_or("missing transcript case")?;
+        let run = run_entry(
+            entry,
+            transcript.to_str().ok_or("non-UTF-8 transcript path")?,
+            NOW_TEXT.parse()?,
+        )
+        .await?;
+        assert_eq!(run.exit, 0);
+        let mut actual = Vec::new();
+        for post in run.outcome.posts {
+            let batch: wire::capture::CaptureBatchRequest = serde_json::from_str(&post.body)?;
+            for message in batch.messages {
+                if let Some(arguments) = message.tool_args {
+                    actual.push((
+                        message.tool_name.ok_or("tool arguments require a name")?,
+                        arguments,
+                    ));
+                }
+            }
+        }
+        assert_eq!(actual, expected, "hook/{index}");
+    }
     Ok(())
 }

@@ -48,7 +48,7 @@ pub use paths::golden_path;
 pub use paths::recording;
 pub use pgdump::PgNamer;
 pub use pgdump::capture_tx;
-pub use pgdump::dump_rivetos;
+pub use pgdump::dump_rivethub;
 pub use pgdump::queue_present;
 pub use provider::B8_OMITTED_REQUEST_FIELDS;
 pub use provider::Canned;
@@ -72,7 +72,8 @@ pub use ws::WsReply;
 pub use ws::WsRequest;
 pub use ws::WsSent;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{id}: {detail}")]
 pub struct Mismatch {
     pub id: String,
     pub detail: String,
@@ -87,6 +88,12 @@ impl Mismatch {
     }
 }
 
+impl From<regex::Error> for Mismatch {
+    fn from(error: regex::Error) -> Self {
+        Self::new("recording mask", error.to_string())
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("recording {}: {source}", path.display())]
@@ -97,6 +104,16 @@ pub enum Error {
     },
     #[error("recording {}: {message}", path.display())]
     Format { path: PathBuf, message: String },
+    #[error("invalid recording pattern: {0}")]
+    Regex(#[from] regex::Error),
+    #[error("invalid UTF-8: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
+    #[error("invalid boolean: {0}")]
+    Boolean(#[from] std::str::ParseBoolError),
+    #[error("invalid number: {0}")]
+    Number(#[from] std::num::ParseIntError),
+    #[error("invalid timestamp: {0}")]
+    Timestamp(#[from] chrono::ParseError),
     #[error("sqlite: {0}")]
     Sqlite(#[from] rusqlite::Error),
 }

@@ -117,6 +117,7 @@ async fn cancellation_releases_output_backpressure_and_audit_failure_stops_provi
 }
 
 struct RendezvousTool {
+    definition: rmcp::model::Tool,
     barrier: Arc<Barrier>,
     dropped: CancellationToken,
     hang: bool,
@@ -125,7 +126,7 @@ struct RendezvousTool {
 #[async_trait]
 impl Tool for RendezvousTool {
     fn definition(&self) -> rmcp::model::Tool {
-        testkit::FakeTool::new("parallel").definition()
+        self.definition.clone()
     }
     async fn call(
         &self,
@@ -154,6 +155,9 @@ async fn independent_tools_run_concurrently_and_results_remain_in_model_order() 
         chunks(vec![text("done"), ModelChunk::Done]),
     ]);
     let tool = Arc::new(RendezvousTool {
+        definition: testkit::FakeTool::new("parallel")
+            .expect("echo tool schema")
+            .definition(),
         barrier: Arc::new(Barrier::new(2)),
         dropped: CancellationToken::new(),
         hang: false,
@@ -187,6 +191,9 @@ async fn cancellation_joins_tool_tasks_before_returning() {
     let barrier = Arc::new(Barrier::new(2));
     let dropped = CancellationToken::new();
     let tool = Arc::new(RendezvousTool {
+        definition: testkit::FakeTool::new("parallel")
+            .expect("echo tool schema")
+            .definition(),
         barrier: Arc::clone(&barrier),
         dropped: dropped.clone(),
         hang: true,

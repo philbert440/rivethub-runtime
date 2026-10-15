@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use chrono::DateTime;
 use chrono::Utc;
 use regex::Regex;
@@ -15,33 +13,8 @@ use crate::Json;
 pub(crate) const PG_TS: &str = r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?\+00$";
 pub(crate) const ISO_TS: &str = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})";
 
-#[expect(
-    clippy::expect_used,
-    reason = "the pg timestamp pattern is a constant; the pg replay tests match it"
-)]
-static PG_ONLY: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(PG_TS).expect("the pg timestamp pattern is a constant"));
-#[expect(
-    clippy::expect_used,
-    reason = "the ISO timestamp pattern is a constant; the pg replay tests match it"
-)]
-static ISO_ONLY: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(ISO_TS).expect("the ISO timestamp pattern is a constant"));
-#[expect(
-    clippy::expect_used,
-    reason = "the exact ISO pattern is a constant; the pg replay tests match it"
-)]
-static ISO_EXACT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(&format!("^{ISO_TS}$")).expect("the exact ISO pattern is a constant")
-});
-#[expect(
-    clippy::expect_used,
-    reason = "the uuid pattern is a constant; the pg replay tests match it"
-)]
-static UUID_SHAPE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-        .expect("the uuid pattern is a constant")
-});
+const UUID_PATTERN: &str =
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 
 const CONVERSATION_SELECT: &str = "SELECT id::text, session_key::text, agent::text, channel::text, channel_id::text, \
      bot_identity::text, title::text, settings::text, active::text, created_at::text, \
@@ -76,7 +49,7 @@ pub async fn capture_tx(pool: &PgPool) -> Result<Transaction<'static, Postgres>,
     Ok(tx)
 }
 
-pub async fn dump_rivetos(
+pub async fn dump_rivethub(
     pool: &PgPool,
     started: DateTime<Utc>,
     namer: &mut PgNamer,
@@ -110,7 +83,7 @@ pub async fn dump_rivetos(
             &summaries
                 .try_get::<String, _>("n")
                 .map_err(|error| dump_error(&error))?,
-        ),
+        )?,
     );
     Ok(Value::Object(rows))
 }
@@ -122,27 +95,42 @@ fn dump_error(source: &sqlx::Error) -> Error {
     }
 }
 
-fn text_cell(raw: Option<String>, started: DateTime<Utc>, namer: &mut PgNamer) -> Json {
+fn text_cell(
+    raw: Option<String>,
+    started: DateTime<Utc>,
+    namer: &mut PgNamer,
+) -> Result<Json, Error> {
     match raw {
         Some(raw) => namer.normalize(&raw, started),
-        None => Json::Null,
+        None => Ok(Json::Null),
     }
 }
 
-fn bool_cell(raw: Option<&str>) -> Json {
-    Json::Bool(raw == Some("true"))
-}
-
-fn count_cell(raw: Option<String>) -> Json {
-    raw.map_or(Json::Null, |raw| number_text(&raw))
-}
-
-fn id_cell(raw: Option<String>, kind: IdKind, started: DateTime<Utc>, namer: &mut PgNamer) -> Json {
+fn bool_cell(raw: Option<&str>) -> Result<Json, Error> {
     match raw {
-        Some(uuid) if looks_like_uuid(&uuid) => Json::String(match kind {
+        Some(raw) => Ok(Json::Bool(raw.parse::<bool>()?)),
+        None => Ok(Json::Null),
+    }
+}
+
+fn count_cell(raw: Option<String>) -> Result<Json, Error> {
+    match raw {
+        Some(raw) => number_text(&raw),
+        None => Ok(Json::Null),
+    }
+}
+
+fn id_cell(
+    raw: Option<String>,
+    kind: IdKind,
+    started: DateTime<Utc>,
+    namer: &mut PgNamer,
+) -> Result<Json, Error> {
+    match raw {
+        Some(uuid) if looks_like_uuid(&uuid) => Ok(Json::String(match kind {
             IdKind::Conversation => namer.conv(&uuid),
             IdKind::Message => namer.msg(&uuid),
-        }),
+        })),
         raw => text_cell(raw, started, namer),
     }
 }
@@ -168,19 +156,19 @@ async fn dump_conversations(
             row.try_get(index).map_err(|error| dump_error(&error))
         };
         out.push(serde_json::json!({
-            "id": id_cell(column(0)?, IdKind::Conversation, started, namer),
-            "session_key": text_cell(column(1)?, started, namer),
-            "agent": text_cell(column(2)?, started, namer),
-            "channel": text_cell(column(3)?, started, namer),
-            "channel_id": text_cell(column(4)?, started, namer),
-            "bot_identity": text_cell(column(5)?, started, namer),
-            "title": text_cell(column(6)?, started, namer),
-            "settings": text_cell(column(7)?, started, namer),
-            "active": bool_cell(column(8)?.as_deref()),
-            "created_at": text_cell(column(9)?, started, namer),
-            "updated_at": text_cell(column(10)?, started, namer),
-            "task_id": text_cell(column(11)?, started, namer),
-            "owner_user_id": text_cell(column(12)?, started, namer),
+            "id": id_cell(column(0)?, IdKind::Conversation, started, namer)?,
+            "session_key": text_cell(column(1)?, started, namer)?,
+            "agent": text_cell(column(2)?, started, namer)?,
+            "channel": text_cell(column(3)?, started, namer)?,
+            "channel_id": text_cell(column(4)?, started, namer)?,
+            "bot_identity": text_cell(column(5)?, started, namer)?,
+            "title": text_cell(column(6)?, started, namer)?,
+            "settings": text_cell(column(7)?, started, namer)?,
+            "active": bool_cell(column(8)?.as_deref())?,
+            "created_at": text_cell(column(9)?, started, namer)?,
+            "updated_at": text_cell(column(10)?, started, namer)?,
+            "task_id": text_cell(column(11)?, started, namer)?,
+            "owner_user_id": text_cell(column(12)?, started, namer)?,
         }));
     }
     Ok(Json::Array(out))
@@ -201,24 +189,24 @@ async fn dump_messages(
             row.try_get(index).map_err(|error| dump_error(&error))
         };
         out.push(serde_json::json!({
-            "id": id_cell(column(0)?, IdKind::Message, started, namer),
-            "conversation_id": id_cell(column(1)?, IdKind::Conversation, started, namer),
-            "agent": text_cell(column(2)?, started, namer),
-            "channel": text_cell(column(3)?, started, namer),
-            "role": text_cell(column(4)?, started, namer),
-            "content": text_cell(column(5)?, started, namer),
-            "tool_name": text_cell(column(6)?, started, namer),
-            "tool_args": text_cell(column(7)?, started, namer),
-            "tool_result": text_cell(column(8)?, started, namer),
-            "metadata": text_cell(column(9)?, started, namer),
-            "access_count": count_cell(column(10)?),
-            "last_accessed_at": text_cell(column(11)?, started, namer),
-            "created_at": text_cell(column(12)?, started, namer),
-            "embed_failures": count_cell(column(13)?),
-            "embed_error": text_cell(column(14)?, started, namer),
-            "embed_status": text_cell(column(15)?, started, namer),
-            "owner_user_id": text_cell(column(16)?, started, namer),
-            "content_hash": text_cell(column(17)?, started, namer),
+            "id": id_cell(column(0)?, IdKind::Message, started, namer)?,
+            "conversation_id": id_cell(column(1)?, IdKind::Conversation, started, namer)?,
+            "agent": text_cell(column(2)?, started, namer)?,
+            "channel": text_cell(column(3)?, started, namer)?,
+            "role": text_cell(column(4)?, started, namer)?,
+            "content": text_cell(column(5)?, started, namer)?,
+            "tool_name": text_cell(column(6)?, started, namer)?,
+            "tool_args": text_cell(column(7)?, started, namer)?,
+            "tool_result": text_cell(column(8)?, started, namer)?,
+            "metadata": text_cell(column(9)?, started, namer)?,
+            "access_count": count_cell(column(10)?)?,
+            "last_accessed_at": text_cell(column(11)?, started, namer)?,
+            "created_at": text_cell(column(12)?, started, namer)?,
+            "embed_failures": count_cell(column(13)?)?,
+            "embed_error": text_cell(column(14)?, started, namer)?,
+            "embed_status": text_cell(column(15)?, started, namer)?,
+            "owner_user_id": text_cell(column(16)?, started, namer)?,
+            "content_hash": text_cell(column(17)?, started, namer)?,
         }));
     }
     Ok(Json::Array(out))
@@ -259,39 +247,40 @@ async fn dump_jobs(
         jobs.push(serde_json::json!({
             "task": column("task")?,
             "queue": nullable_column("queue")?,
-            "payload": namer.rewrite_embedded(&column("payload")?, started),
-            "key": nullable_column("key")?.map(|k| namer.rewrite_embedded(&k, started)),
-            "priority": number_text(&column("priority")?),
-            "max_attempts": number_text(&column("max_attempts")?),
-            "attempts": number_text(&column("attempts")?),
+            "payload": namer.rewrite_embedded(&column("payload")?, started)?,
+            "key": nullable_column("key")?.map(|k| namer.rewrite_embedded(&k, started)).transpose()?,
+            "priority": number_text(&column("priority")?)?,
+            "max_attempts": number_text(&column("max_attempts")?)?,
+            "attempts": number_text(&column("attempts")?)?,
         }));
     }
     Ok(Json::Array(jobs))
 }
 
-fn number_text(raw: &str) -> Json {
-    raw.parse::<i64>().map_or(Json::Null, Json::from)
+fn number_text(raw: &str) -> Result<Json, Error> {
+    Ok(Json::from(raw.parse::<i64>()?))
 }
 
 fn looks_like_uuid(text: &str) -> bool {
-    UUID_SHAPE.is_match(text)
+    text.len() == 36 && uuid::Uuid::try_parse(text).is_ok()
 }
 
-fn parse_loose(text: &str, started: DateTime<Utc>) -> bool {
+fn parse_timestamp(text: &str, started: DateTime<Utc>) -> Result<bool, Error> {
     let parsed = if text.ends_with("+00") {
-        chrono::NaiveDateTime::parse_from_str(text.trim_end_matches("+00"), "%Y-%m-%d %H:%M:%S%.f")
-            .ok()
-            .map(|naive| naive.and_utc())
+        chrono::NaiveDateTime::parse_from_str(text.trim_end_matches("+00"), "%Y-%m-%d %H:%M:%S%.f")?
+            .and_utc()
     } else {
-        DateTime::parse_from_rfc3339(text)
-            .ok()
-            .map(|parsed| parsed.with_timezone(&Utc))
+        DateTime::parse_from_rfc3339(text)?.with_timezone(&Utc)
     };
-    parsed.is_some_and(|parsed| parsed >= started)
+    Ok(parsed >= started)
 }
 
-fn timestamp_text(text: &str, started: DateTime<Utc>) -> bool {
-    (PG_ONLY.is_match(text) || ISO_EXACT.is_match(text)) && parse_loose(text, started)
+fn timestamp_text(text: &str, started: DateTime<Utc>) -> Result<bool, Error> {
+    if Regex::new(PG_TS)?.is_match(text) || Regex::new(&format!("^{ISO_TS}$"))?.is_match(text) {
+        parse_timestamp(text, started)
+    } else {
+        Ok(false)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -347,32 +336,32 @@ impl PgNamer {
         format!("<now-{}>", self.now.len())
     }
 
-    pub fn normalize(&mut self, text: &str, started: DateTime<Utc>) -> Json {
-        if timestamp_text(text, started) {
-            return Json::String(self.now(text));
+    pub fn normalize(&mut self, text: &str, started: DateTime<Utc>) -> Result<Json, Error> {
+        if timestamp_text(text, started)? {
+            return Ok(Json::String(self.now(text)));
         }
         let mut replaced = text.to_string();
-        for found in ISO_ONLY.find_iter(text) {
+        for found in Regex::new(ISO_TS)?.find_iter(text) {
             let candidate = found.as_str().to_string();
-            if parse_loose(&candidate, started) {
+            if parse_timestamp(&candidate, started)? {
                 let placeholder = self.now(&candidate);
                 replaced = replaced.replace(&candidate, &placeholder);
             }
         }
-        Json::String(replaced)
+        Ok(Json::String(replaced))
     }
 
-    pub fn rewrite_embedded(&mut self, text: &str, started: DateTime<Utc>) -> Json {
-        let stamped = self.normalize(text, started);
+    pub fn rewrite_embedded(&mut self, text: &str, started: DateTime<Utc>) -> Result<Json, Error> {
+        let stamped = self.normalize(text, started)?;
         let Json::String(stamped) = stamped else {
-            return stamped;
+            return Ok(stamped);
         };
         let mut out = stamped.clone();
-        for found in UUID_SHAPE.find_iter(&stamped) {
+        for found in Regex::new(UUID_PATTERN)?.find_iter(&stamped) {
             let candidate = found.as_str().to_string();
             let placeholder = self.any(&candidate);
             out = out.replace(&candidate, &placeholder);
         }
-        Json::String(out)
+        Ok(Json::String(out))
     }
 }

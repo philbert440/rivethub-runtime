@@ -186,14 +186,7 @@ impl TaskStore for TaskMemory {
                 }
             }
             if task.status == TaskStatus::AwaitingInput {
-                #[expect(
-                    clippy::manual_unwrap_or,
-                    reason = "core-domain.md:399 awaiting-input TTL is maxWallClockMs else 24h; unwrap_or is rejected as a silent fallback"
-                )]
-                let ttl_ms = match task.budget.max_wall_clock_ms {
-                    Some(ms) => ms,
-                    None => 86_400_000,
-                };
+                let ttl_ms = task.budget.max_wall_clock_ms.unwrap_or(86_400_000);
                 let ttl_ms = i64::try_from(ttl_ms).map_err(|_| TaskError::Clock)?;
                 let deadline = now
                     .checked_sub_signed(chrono::Duration::milliseconds(ttl_ms))
