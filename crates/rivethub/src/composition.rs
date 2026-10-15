@@ -20,6 +20,8 @@ pub enum ComposeError {
     #[error(transparent)]
     Config(#[from] config::ConfigError),
     #[error(transparent)]
+    Node(#[from] crate::NodeError),
+    #[error(transparent)]
     Voice(#[from] gateway::VoiceConfigError),
     #[error(transparent)]
     Settings(#[from] gateway::SettingsError),
@@ -71,6 +73,16 @@ pub struct Composition {
     cancel: CancellationToken,
 }
 
+fn gateway_settings(config: &Config, env: &Environment) -> Result<gateway::Settings, ComposeError> {
+    let node = crate::identity::announce_resolved("gateway", config, env)?;
+    Ok(gateway::Settings::from_config_in(
+        config,
+        env,
+        node.hostname,
+        node.name,
+    )?)
+}
+
 impl Composition {
     pub async fn validate_users(config: &Config, env: &Environment) -> Result<(), ComposeError> {
         identities::load(config, env).await?;
@@ -96,13 +108,7 @@ impl Composition {
         store: Arc<dyn MemoryStore>,
         shutdown: &CancellationToken,
     ) -> Result<Self, ComposeError> {
-        let hostname = crate::service::host_name();
-        let settings = gateway::Settings::from_config_in(
-            config,
-            env,
-            hostname.clone(),
-            env.node_name(&hostname)?,
-        )?;
+        let settings = gateway_settings(config, env)?;
         let sessions = Arc::new(
             SessionRegistry::new(Duration::from_secs(300)).with_shutdown(shutdown.child_token()),
         );

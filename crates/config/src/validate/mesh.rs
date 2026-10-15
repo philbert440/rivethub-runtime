@@ -19,7 +19,11 @@ pub(super) fn validate(out: &mut ValidationResult, section: &MeshSection) {
     if !matches!(section.enabled, Some(true)) {
         return;
     }
-    if section.node_name.as_deref().is_none_or(str::is_empty) {
+    if section
+        .node_name
+        .as_deref()
+        .is_none_or(|name| name.trim().is_empty())
+    {
         out.error(
             "mesh.node_name",
             "mesh.node_name is required when mesh.enabled is true (used as CN for node cert)",

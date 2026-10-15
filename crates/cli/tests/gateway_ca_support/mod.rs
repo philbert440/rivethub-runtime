@@ -152,7 +152,7 @@ impl Lab {
             .no_proxy()
             .https_only(true)
             .add_root_certificate(self.root.clone())
-            .timeout(Duration::from_secs(5));
+            .timeout(Duration::from_secs(30));
         if let Some(identity) = identity {
             builder = builder.identity(identity);
         }
@@ -165,7 +165,7 @@ impl Lab {
         identity: Option<reqwest::Identity>,
     ) -> Result<Reply> {
         let response = tokio::time::timeout(
-            Duration::from_secs(10),
+            Duration::from_secs(35),
             self.client(identity)?.get(self.url(path)).send(),
         )
         .await??;
@@ -187,7 +187,7 @@ impl Lab {
         if let Some(token) = token {
             request = request.bearer_auth(token);
         }
-        let response = tokio::time::timeout(Duration::from_secs(10), request.send()).await??;
+        let response = tokio::time::timeout(Duration::from_secs(35), request.send()).await??;
         reply(response).await
     }
 

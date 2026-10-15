@@ -263,6 +263,7 @@ impl Environment {
     pub fn node_name(&self, hostname: &str) -> Result<String, crate::ConfigError> {
         self.setting(Alias::NodeName)
             .or_else(|| self.setting(Alias::NodeId))
+            .or_else(|| self.trimmed("HOSTNAME"))
             .or_else(|| Some(hostname.trim()).filter(|name| !name.is_empty()))
             .map(str::to_owned)
             .ok_or(crate::ConfigError::NodeName)

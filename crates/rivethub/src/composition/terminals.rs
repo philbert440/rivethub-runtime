@@ -57,7 +57,7 @@ pub(super) async fn build(
     let settings = terminal::TerminalSettings::from_config(
         config,
         env,
-        env.node_name(&crate::service::host_name())?,
+        crate::identity::resolve(config, env)?.name,
     );
     let max_ptys = settings.limits.max_ptys;
     let paths = match env.get("PATH") {

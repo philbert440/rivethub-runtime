@@ -35,10 +35,7 @@ pub(super) async fn start(
         .ok_or(gateway::mesh::ChannelError::TlsRequired)?;
     let settings = ChannelSettings::from_config(config, tls, Duration::from_secs(120))?;
     let registry = Registry::open(config::shared_dir(env), "mesh.json".into()).await?;
-    let name = mesh
-        .node_name
-        .clone()
-        .ok_or_else(|| ComposeError::Invalid("mesh.node_name is required".into()))?;
+    let name = crate::identity::resolve(config, env)?.name;
     let host = mesh
         .advertise_host
         .clone()

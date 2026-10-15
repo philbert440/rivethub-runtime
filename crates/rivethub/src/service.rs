@@ -28,6 +28,8 @@ pub enum StartupError {
     #[error(transparent)]
     Config(#[from] config::ConfigError),
     #[error(transparent)]
+    Node(#[from] crate::NodeError),
+    #[error(transparent)]
     Settings(#[from] gateway::SettingsError),
     #[error(
         "no Postgres URL for the memory database — set \"memory.postgres.connection_string\" or \"{POSTGRES_URL_VARIABLE}\""
@@ -120,9 +122,8 @@ pub fn compose(
     env: &Environment,
     store: Arc<dyn MemoryStore>,
 ) -> Result<Arc<Gateway>, StartupError> {
-    let hostname = host_name();
-    let settings =
-        Settings::from_config_in(config, env, hostname.clone(), env.node_name(&hostname)?)?;
+    let node = crate::identity::announce_resolved("gateway", config, env)?;
+    let settings = Settings::from_config_in(config, env, node.hostname, node.name)?;
     let gateway = Gateway::new(store, settings).with_uploads(uploads(env)?);
     let gateway = with_voice_and_audio(gateway, config, env)?;
     Ok(Arc::new(gateway))
@@ -212,24 +213,6 @@ fn warn_environment(env: &Environment) {
     }
     for warning in env.deprecation_warnings() {
         tracing::warn!("{warning}");
-    }
-}
-
-#[must_use]
-pub fn host_name() -> String {
-    match nix::unistd::gethostname() {
-        Ok(name) => {
-            let name = name.to_string_lossy().trim().to_owned();
-            if name.is_empty() {
-                "local".to_owned()
-            } else {
-                name
-            }
-        }
-        Err(error) => {
-            tracing::warn!("gethostname failed ({error}) — using \"local\"");
-            "local".to_owned()
-        }
     }
 }
 
@@ -355,6 +338,7 @@ async fn check_config(env: &Environment) -> Result<(), StartupError> {
     .await
     .map_err(StartupError::StateTask)??;
     crate::composition::Composition::validate_users(&config, env).await?;
+    crate::identity::announce_resolved("gateway", &config, env)?;
     Ok(())
 }
 

@@ -6,6 +6,7 @@ impl StartupError {
     pub fn exit(&self) -> Exit {
         match self {
             Self::Config(_)
+            | Self::Node(_)
             | Self::Composition(_)
             | Self::SqliteUnavailable
             | Self::Settings(_)

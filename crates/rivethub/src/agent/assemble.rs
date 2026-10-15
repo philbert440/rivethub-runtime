@@ -63,6 +63,8 @@ pub enum AgentError {
     Invalid(String),
     #[error("task watch closed")]
     WatchClosed,
+    #[error(transparent)]
+    Node(#[from] crate::NodeError),
 }
 
 impl AgentError {
@@ -87,7 +89,8 @@ impl AgentError {
             | Self::GatewayUrl
             | Self::Escape
             | Self::Invalid(_)
-            | Self::WatchClosed => crate::Exit::Failure,
+            | Self::WatchClosed
+            | Self::Node(_) => crate::Exit::Failure,
         }
     }
 }
@@ -175,15 +178,13 @@ pub(super) fn ensure_enabled(config: &Config) -> Result<(), AgentError> {
 }
 
 pub(super) fn plan(config: &Config, env: &Environment) -> Result<Plan, AgentError> {
-    let hostname = crate::service::host_name();
-    let node = env
-        .node_name(&hostname)
-        .map_err(|error| AgentError::Invalid(error.to_string()))?;
-    if node.is_empty() {
+    let identity = crate::identity::resolve(config, env)?;
+    if identity.name.is_empty() {
         return Err(AgentError::Invalid("node name is empty".into()));
     }
+    let node = identity.name;
     let worker = format!("{node}:agent");
-    let settings = gateway::Settings::from_config_in(config, env, hostname, node.clone())?;
+    let settings = gateway::Settings::from_config_in(config, env, identity.hostname, node.clone())?;
     Ok(Plan {
         node,
         worker,

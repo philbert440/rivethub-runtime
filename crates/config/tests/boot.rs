@@ -126,6 +126,102 @@ fn node_name_walks_the_recorded_chain() {
     assert!(env_from(&[]).node_name("   ").is_err());
 }
 
+fn skeleton(mesh: &str) -> String {
+    format!(
+        "runtime:\n  workspace: /tmp\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\n{mesh}"
+    )
+}
+
+fn loaded(mesh: &str) -> Result<Config, config::ConfigError> {
+    Ok(Config::from_str(&Environment::default(), &skeleton(mesh))?.config)
+}
+
+#[test]
+fn mesh_node_name_beats_env_and_both_hostnames() -> Result<(), config::ConfigError> {
+    let config = loaded("mesh:\n  node_name: \" rr-configured-node \"\n")?;
+    let env = env_from(&[
+        ("RIVETHUB_NODE_NAME", "from-env"),
+        ("RIVETHUB_NODE_ID", "from-id"),
+        ("HOSTNAME", "from-hostname-env"),
+    ]);
+    assert_eq!(
+        config::resolve_node_name(&config, &env, "os-host").expect("name"),
+        "rr-configured-node"
+    );
+    Ok(())
+}
+
+#[test]
+fn mesh_name_stands_in_when_the_hostname_argument_is_empty() -> Result<(), config::ConfigError> {
+    let config = loaded("mesh:\n  node_name: rr-configured-node\n")?;
+    assert_eq!(
+        config::resolve_node_name(&config, &env_from(&[]), "").expect("name"),
+        "rr-configured-node"
+    );
+    Ok(())
+}
+
+#[test]
+fn blank_mesh_node_name_falls_through_the_env_chain() -> Result<(), config::ConfigError> {
+    let config = loaded("mesh:\n  node_name: \"   \"\n")?;
+    let env = env_from(&[
+        ("RIVETHUB_NODE_NAME", " "),
+        ("RIVETOS_DEN_NODE_ID", "node-7"),
+        ("HOSTNAME", "from-hostname-env"),
+    ]);
+    assert_eq!(
+        config::resolve_node_name(&config, &env, "os-host").expect("name"),
+        "node-7"
+    );
+    alias_warns(&env, "RIVETHUB_NODE_ID", "RIVETOS_DEN_NODE_ID");
+    Ok(())
+}
+
+#[test]
+fn hostname_env_beats_the_operating_system_hostname() -> Result<(), config::ConfigError> {
+    let env = env_from(&[("HOSTNAME", " from-hostname-env ")]);
+    assert_eq!(env.node_name("os-host").expect("name"), "from-hostname-env");
+    assert_eq!(
+        config::resolve_node_name(&loaded("")?, &env, "os-host").expect("name"),
+        "from-hostname-env"
+    );
+    assert_eq!(env.legacy_notices(), [] as [String; 0]);
+    Ok(())
+}
+
+#[test]
+fn node_name_beats_hostname_env() {
+    let env = env_from(&[
+        ("RIVETHUB_NODE_NAME", "from-env"),
+        ("HOSTNAME", "from-hostname-env"),
+    ]);
+    assert_eq!(env.node_name("os-host").expect("name"), "from-env");
+}
+
+#[test]
+fn an_empty_hostname_with_nothing_configured_is_an_error() -> Result<(), config::ConfigError> {
+    let config = loaded("mesh:\n  node_name: \" \"\n")?;
+    let env = env_from(&[("HOSTNAME", " ")]);
+    assert!(config::resolve_node_name(&config, &env, "  ").is_err());
+    assert!(env.node_name("").is_err());
+    Ok(())
+}
+
+#[test]
+fn whitespace_mesh_name_is_rejected_when_mesh_is_enabled() {
+    let error = Config::from_str(
+        &Environment::default(),
+        &skeleton("mesh:\n  enabled: true\n  node_name: \"   \"\n"),
+    )
+    .expect_err("blank mesh name");
+    assert!(
+        error.to_string().contains(
+            "mesh.node_name is required when mesh.enabled is true (used as CN for node cert)"
+        ),
+        "{error}"
+    );
+}
+
 fn config_with_connection_string(text: &str) -> Result<Config, Box<dyn std::error::Error>> {
     let loaded = Config::from_str(&Environment::default(), text)?;
     Ok(loaded.config)

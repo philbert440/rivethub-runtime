@@ -132,6 +132,7 @@ fn report_sidecar(error: &SidecarError) {
 async fn validate(env: &Environment) -> Result<(), SidecarError> {
     let config = read_config(env).await?;
     let _selected = select(&config)?;
+    crate::identity::announce_resolved("mcp", &config, env).map_err(StartupError::from)?;
     Ok(())
 }
 
@@ -139,6 +140,7 @@ async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), Sidec
     let _guard = shutdown.clone().drop_guard();
     let config = read_config(env).await?;
     let selected = select(&config)?;
+    crate::identity::announce_resolved("mcp", &config, env).map_err(StartupError::from)?;
     let memory = Arc::new(postgres(&config, env).await?) as Arc<dyn MemoryStore>;
     let result = run_server(&config, env, Arc::clone(&memory), selected, &shutdown).await;
     shutdown.cancel();

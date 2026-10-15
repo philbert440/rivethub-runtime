@@ -88,6 +88,7 @@ async fn check_role(env: &Environment, role: ProcessRole) -> Result<(), RootErro
     let model = provider_model(&config)?;
     EmbedSettings::from_config(&config)?;
     SummarySettings::standard(model)?;
+    crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
     Ok(())
 }
 
@@ -100,6 +101,7 @@ async fn run(
     role.claim_roles()?;
     let owned = env.clone();
     let config = tokio::task::spawn_blocking(move || load(&owned)).await??;
+    crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
     let memory = Arc::new(postgres(&config, env).await?);
     let result = async {
         let queue = memory.queue().await.map_err(StartupError::from)?;

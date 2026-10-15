@@ -209,6 +209,7 @@ fn report_root(error: &RootError) {
 async fn validate(env: &Environment) -> Result<(), RootError> {
     let config = read_config(env).await?;
     assemble::ensure_enabled(&config)?;
+    crate::identity::announce_resolved("agent", &config, env).map_err(AgentError::from)?;
     drop(assemble::plan(&config, env)?);
     Ok(())
 }
@@ -217,6 +218,7 @@ async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), RootE
     let _guard = shutdown.clone().drop_guard();
     let config = read_config(env).await?;
     assemble::ensure_enabled(&config)?;
+    crate::identity::announce_resolved("agent", &config, env).map_err(AgentError::from)?;
     let connected = assemble::connect(&config, env).await?;
     let engine = connected.engine()?;
     tracing::info!("agent running");

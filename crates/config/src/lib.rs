@@ -2,6 +2,7 @@ pub mod enums;
 mod environment;
 mod load;
 pub mod model;
+mod node_name;
 pub mod paths;
 pub mod provider;
 pub mod report;
@@ -21,6 +22,7 @@ pub use environment::{
 };
 pub use load::{ConfigError, Loaded, Typed, resolve_config_path, type_document, validate_document};
 pub use model::{Config, HarnessSlot, RedactionSettings};
+pub use node_name::resolve as resolve_node_name;
 pub use paths::{
     ConfigLocation, NodeClaim, Paths, StateError, adopt_legacy_state, claim_node, normalize,
     shared_dir,
