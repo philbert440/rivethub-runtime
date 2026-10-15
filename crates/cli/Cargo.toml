@@ -8,8 +8,10 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+base64.workspace = true
 kernel.workspace = true
 pki.workspace = true
+stepca.workspace = true
 workers.workspace = true
 rcgen.workspace = true
 rustls-pki-types.workspace = true
@@ -42,6 +44,7 @@ uuid = { workspace = true }
 workers = { workspace = true }
 hyper = { workspace = true, features = ["server", "http1"] }
 hyper-util.workspace = true
+parking_lot.workspace = true
 rustls.workspace = true
 tokio-rustls.workspace = true
 axum = { workspace = true }

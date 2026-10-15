@@ -12,10 +12,8 @@ pub enum Error {
     PkiInput(&'static str),
     #[error("holder cryptography failed: {0}")]
     Crypto(#[from] rcgen::Error),
-    #[error("CA request failed")]
-    CaHttp(#[source] reqwest::Error),
-    #[error("CA returned HTTP {0}")]
-    CaStatus(reqwest::StatusCode),
+    #[error(transparent)]
+    StepCa(#[from] stepca::Error),
     #[error("No config found. Run: rh config init")]
     NoConfig,
     #[error("No config found. Run `rh config init` or use --config <path>")]

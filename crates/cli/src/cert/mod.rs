@@ -1,5 +1,6 @@
-mod state;
-mod transport;
+mod files;
+mod holder;
+mod token;
 mod validate;
 
 use crate::{Error, Report};
@@ -37,9 +38,16 @@ pub(crate) async fn run(
     shutdown: &CancellationToken,
 ) -> Result<Report, Error> {
     let CertCommand::Renew(mut args) = command;
-    let path = crate::ca::state_path(env, args.state.take(), "cert").await?;
-    renew(args, path, shutdown).await?;
+    let directory = state_directory(env, args.state.take()).await?;
+    renew(args, directory, shutdown).await?;
     Ok(Report::success(""))
+}
+
+async fn state_directory(env: &Environment, explicit: Option<PathBuf>) -> Result<PathBuf, Error> {
+    if let Some(path) = explicit {
+        return tokio::task::spawn_blocking(move || files::absolute_path(&path)).await?;
+    }
+    Ok(config::Paths::new(env)?.state_dir())
 }
 
 pub async fn renew(
@@ -50,18 +58,24 @@ pub async fn renew(
     if shutdown.is_cancelled() {
         return Err(Error::Cancelled);
     }
-    let endpoint = transport::endpoint(args.ca_url)?;
-    let principal = args.principal.spiffe_uri()?;
+    let RenewArgs {
+        principal,
+        ca_url,
+        trust_root,
+        token_file,
+        state: _,
+        once,
+    } = args;
+    let authority = connect(ca_url, &trust_root, shutdown).await?;
     let epoch = OffsetDateTime::now_utc();
     let started = tokio::time::Instant::now();
-    let mut state = tokio::task::spawn_blocking(move || {
-        state::Holder::open(
-            &std::path::absolute(directory)?,
-            &args.trust_root,
-            args.token_file.as_deref(),
-            &principal,
-            epoch,
-        )
+    let principal_uri = principal.spiffe_uri()?;
+    let enrollment = match token_file {
+        Some(path) => Some(read_enrollment(&path).await?),
+        None => None,
+    };
+    let mut material = tokio::task::spawn_blocking(move || {
+        holder::LocalHolder::open(&directory, &trust_root, enrollment, &principal_uri, epoch)
     })
     .await??;
     loop {
@@ -69,32 +83,72 @@ pub async fn renew(
             return Ok(());
         }
         let now = current_time(epoch, started)?;
-        if !args.once
-            && let Some(renew_at) = state.renew_at
+        if !once
+            && let Some(renew_at) = material.renew_at()
             && wait_for_renewal(renew_at, now.unix_timestamp(), shutdown).await
         {
             return Ok(());
         }
-        state = tokio::task::spawn_blocking(move || {
-            state.prepare()?;
-            Ok::<_, Error>(state)
-        })
-        .await??;
-        let response = tokio::select! {
-            biased;
-            () = shutdown.cancelled() => return Ok(()),
-            response = transport::sign(&endpoint, &state) => response?,
+        let Some(signed) = request(&authority, &material, shutdown).await? else {
+            return Ok(());
         };
-        let now = current_time(epoch, started)?;
-        state = tokio::task::spawn_blocking(move || {
-            state.install(response, now)?;
-            Ok::<_, Error>(state)
+        material = tokio::task::spawn_blocking(move || {
+            material.install(&signed, now)?;
+            Ok::<_, Error>(material)
         })
         .await??;
-        if args.once {
+        if once {
             return Ok(());
         }
     }
+}
+
+async fn connect(
+    ca_url: url::Url,
+    trust_root: &std::path::Path,
+    shutdown: &CancellationToken,
+) -> Result<stepca::Authority, Error> {
+    let path = trust_root.to_path_buf();
+    let root = tokio::task::spawn_blocking(move || files::read_external(&path)).await??;
+    let authority = stepca::Authority::connect(stepca::Config::new(ca_url, root)?)?;
+    Ok(authority.with_cancellation(shutdown.clone()))
+}
+
+async fn read_enrollment(path: &std::path::Path) -> Result<token::Enrollment, Error> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || token::read(&path)).await?
+}
+
+async fn request(
+    authority: &stepca::Authority,
+    material: &holder::LocalHolder,
+    shutdown: &CancellationToken,
+) -> Result<Option<stepca::SignedCertificate>, Error> {
+    let pending = exchange(authority, material);
+    tokio::pin!(pending);
+    let signed = tokio::select! {
+        biased;
+        () = shutdown.cancelled() => return Ok(None),
+        signed = &mut pending => signed,
+    };
+    match signed {
+        Ok(signed) => Ok(Some(signed)),
+        Err(Error::StepCa(stepca::Error::Cancelled)) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+async fn exchange(
+    authority: &stepca::Authority,
+    material: &holder::LocalHolder,
+) -> Result<stepca::SignedCertificate, Error> {
+    if let Some(token) = material.token().map(str::to_owned) {
+        let csr = material.csr()?;
+        return Ok(authority.sign(&csr, &token).await?);
+    }
+    let (certificate, key) = material.identity()?;
+    let holder = stepca::Holder::from_pem(certificate, key)?;
+    Ok(authority.renew(&holder).await?)
 }
 
 fn current_time(
