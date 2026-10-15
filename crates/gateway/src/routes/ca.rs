@@ -1,5 +1,5 @@
+use std::num::NonZeroU32;
 use std::sync::Arc;
-use std::time::Duration;
 
 use axum::Extension;
 use axum::Json;
@@ -14,13 +14,15 @@ use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::response::Response;
 use axum::routing;
+use governor::DefaultDirectRateLimiter;
+use governor::Quota;
+use governor::RateLimiter;
 use kernel::ca::CaError;
 use kernel::ca::CertificateAuthority;
 use kernel::ca::CrlPem;
 use kernel::ca::CsrPem;
 use kernel::ca::EnrollmentToken;
 use kernel::ca::SignAuthority;
-use parking_lot::Mutex;
 use wire::ca::SignRequest;
 use wire::gateway::GatewayError;
 
@@ -29,8 +31,7 @@ use crate::error::ApiError;
 use crate::extract::Body;
 use crate::tenancy::PeerCertificate;
 
-const SIGN_PER_WINDOW: u64 = 60;
-const SIGN_WINDOW: Duration = Duration::from_secs(60);
+const SIGN_PER_MINUTE: NonZeroU32 = NonZeroU32::new(60).expect("non-zero sign quota");
 const PEM_CONTENT_TYPE: &str = "text/plain; charset=utf-8";
 
 #[derive(Debug, thiserror::Error)]
@@ -92,45 +93,15 @@ impl IntoResponse for CaRouteError {
     }
 }
 
-#[derive(Debug)]
-struct Bucket {
-    remaining: u64,
-    reset_at: tokio::time::Instant,
-}
-
-impl Bucket {
-    fn new() -> Self {
-        Self {
-            remaining: SIGN_PER_WINDOW,
-            reset_at: tokio::time::Instant::now() + SIGN_WINDOW,
-        }
-    }
-
-    fn admit(&mut self) -> bool {
-        let now = tokio::time::Instant::now();
-        if now >= self.reset_at {
-            self.remaining = SIGN_PER_WINDOW;
-            self.reset_at = now + SIGN_WINDOW;
-        }
-        match self.remaining.checked_sub(1) {
-            Some(next) => {
-                self.remaining = next;
-                true
-            }
-            None => false,
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 struct SignBudget {
-    bucket: Arc<Mutex<Bucket>>,
+    limiter: Arc<DefaultDirectRateLimiter>,
 }
 
 impl SignBudget {
     fn new() -> Self {
         Self {
-            bucket: Arc::new(Mutex::new(Bucket::new())),
+            limiter: Arc::new(RateLimiter::direct(Quota::per_minute(SIGN_PER_MINUTE))),
         }
     }
 }
@@ -155,8 +126,7 @@ pub fn router() -> Router<Arc<Gateway>> {
 }
 
 async fn limit_sign(State(budget): State<SignBudget>, request: Request, next: Next) -> Response {
-    let admitted = budget.bucket.lock().admit();
-    if !admitted {
+    if budget.limiter.check().is_err() {
         return json_error(
             StatusCode::TOO_MANY_REQUESTS,
             "too many certificate requests",

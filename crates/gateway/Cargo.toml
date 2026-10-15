@@ -23,6 +23,7 @@ hyper-util = { workspace = true }
 kernel = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true }
+governor = { workspace = true }
 parking_lot = { workspace = true }
 percent-encoding = { workspace = true }
 regex = { workspace = true }
