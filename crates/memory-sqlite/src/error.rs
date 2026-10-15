@@ -2,7 +2,6 @@ use std::num::TryFromIntError;
 use std::path::PathBuf;
 
 use kernel::memory::MemoryStoreError;
-use kernel::memory::SearchMode;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -81,8 +80,12 @@ pub enum SqliteError {
     InvertedRange,
     #[error("stored tag entity type \"{value}\" is not conversation or summary")]
     StoredTagType { value: String },
-    #[error("search mode {mode} is not answered by the keyword index")]
-    KeywordIndex { mode: SearchMode },
+    #[error("invalid search regular expression: {0}")]
+    Regex(#[from] regex::Error),
+    #[error("memory search cancelled")]
+    SearchCancelled,
+    #[error("stored embedding is not a finite float32 vector of the query width")]
+    StoredEmbedding,
     #[error("memory synthesis requires a configured summarizer endpoint")]
     SynthesisUnconfigured,
     #[error("search hit {id} was not updated")]
@@ -107,13 +110,14 @@ impl From<SqliteError> for MemoryStoreError {
     fn from(error: SqliteError) -> Self {
         match error {
             SqliteError::InvertedRange
-            | SqliteError::KeywordIndex { .. }
+            | SqliteError::Regex(_)
             | SqliteError::SynthesisUnconfigured
             | SqliteError::Invalid { .. }
             | SqliteError::Width { .. } => Self::InvalidRequest {
                 message: error.to_string(),
             },
-            SqliteError::Query { .. }
+            SqliteError::StoredEmbedding
+            | SqliteError::Query { .. }
             | SqliteError::StoredJson { .. }
             | SqliteError::StoredTimestamp { .. }
             | SqliteError::Count(_)
@@ -133,7 +137,8 @@ impl From<SqliteError> for MemoryStoreError {
                 source: Box::new(error),
             },
             SqliteError::TagTablesMissing => Self::TagTablesMissing,
-            SqliteError::Open { .. }
+            SqliteError::SearchCancelled
+            | SqliteError::Open { .. }
             | SqliteError::NotInitialised { .. }
             | SqliteError::SchemaBehind { .. }
             | SqliteError::Pragma(_)

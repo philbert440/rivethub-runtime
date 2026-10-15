@@ -10,7 +10,7 @@ use common::fixture_copy;
 use common::instant;
 use common::read_column_types;
 use common::read_fts_rows;
-use common::read_master_entries;
+use common::read_legacy_master_entries;
 use common::read_pragmas;
 use common::read_rows;
 use common::read_table_columns;
@@ -30,14 +30,9 @@ fn recorded_upgrade_files_reach_the_migrated_state() -> TestResult<()> {
         migrate::sqlite_at(fixture.path(), instant(&migrated.clock)?)?;
         let conn = connection(fixture.path())?;
         replay_search_access(&conn, migrated)?;
+        common::assert_upgraded_pragmas(&read_pragmas(&conn)?, &migrated.pragmas);
         assert_eq!(
-            read_pragmas(&conn)?,
-            migrated.pragmas,
-            "pragmas after opening {}",
-            case.input_file
-        );
-        assert_eq!(
-            read_master_entries(&conn)?,
+            read_legacy_master_entries(&conn)?,
             migrated.sqlite_master,
             "sqlite_master after opening {}",
             case.input_file

@@ -29,6 +29,9 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         }),
         SchemaVersion::V6 => in_transaction(conn, to, add_owner_columns),
         SchemaVersion::V7 => in_transaction(conn, to, add_tag_removal_columns),
+        SchemaVersion::V8 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/search_v8.sql"))
+        }),
     }
 }
 

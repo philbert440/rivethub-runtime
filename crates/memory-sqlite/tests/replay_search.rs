@@ -3,6 +3,9 @@
     reason = "integration binaries share fixtures and use different subsets"
 )]
 mod common;
+#[path = "search_support/fts_seed.rs"]
+mod seed;
+use seed::{seed_fts, seed_tag_pool};
 
 use std::str::FromStr as _;
 
@@ -45,18 +48,12 @@ const BRANCH: &str = "Branch: staging deploys and database migration plans for A
 const TAGGED_NOTE: &str =
     "a long note that mentions the rollback only once among many other unrelated words here";
 
-const IN_SCOPE: &[&str] = &["runtime", "fts_only", "tag_pool_widening"];
+const IN_SCOPE: &[&str] = &["runtime", "fts_only", "tag_pool_widening", "hybrid"];
 
-const SKIPPED_SEARCH_SCENARIOS: &[(&str, &str)] = &[
-    (
-        "helpers",
-        "buildFtsMatchQuery, relevanceFromBm25 and resolveTaskId are TypeScript internals, not a search scenario",
-    ),
-    (
-        "hybrid",
-        "vector search, the literal arm, trigram fallback and degraded query embedding belong to the embedding slice",
-    ),
-];
+const SKIPPED_SEARCH_SCENARIOS: &[(&str, &str)] = &[(
+    "helpers",
+    "buildFtsMatchQuery, relevanceFromBm25 and resolveTaskId are TypeScript internals, not a search scenario",
+)];
 
 #[test]
 fn skipped_search_scenarios_are_named() -> TestResult {
@@ -112,7 +109,7 @@ async fn tag_pool_widening_returns_the_buried_hit() -> TestResult {
     let query = asked("rollback", MemoryScope::Messages, 2);
     let mut query = query;
     query.tag = Some("project:rare".parse()?);
-    let outcome = fresh.store.search_at(query, now).await?;
+    let outcome = fresh.store.search_at(query, now, &Utc).await?;
     let mut ids = Ids::default();
     expect_degraded(
         result.get("degraded").ok_or("degraded")?,
@@ -132,13 +129,13 @@ async fn tag_pool_widening_returns_the_buried_hit() -> TestResult {
 }
 
 #[tokio::test]
-async fn keyword_search_rejects_the_other_modes() -> TestResult {
+async fn search_modes_and_request_validation() -> TestResult {
     let fresh = fresh_store(None)?;
     let now = instant(CLOCK)?;
     for mode in [SearchMode::Fts, SearchMode::Hybrid, SearchMode::Vector] {
         let mut query = asked("deploy", MemoryScope::Both, 10);
         query.mode = mode;
-        let outcome = fresh.store.search_at(query, now).await?;
+        let outcome = fresh.store.search_at(query, now, &Utc).await?;
         assert!(outcome.results.is_empty(), "{mode}");
         assert!(outcome.degraded.is_some(), "{mode}");
         assert_eq!(outcome.expanded, []);
@@ -148,27 +145,21 @@ async fn keyword_search_rejects_the_other_modes() -> TestResult {
     fresh.store.arm_embed();
     let armed = fresh
         .store
-        .search_at(asked("deploy", MemoryScope::Both, 10), now)
+        .search_at(asked("deploy", MemoryScope::Both, 10), now, &Utc)
         .await?;
-    assert!(armed.degraded.is_none());
+    assert!(armed.degraded.is_some());
     for mode in [SearchMode::Trigram, SearchMode::Regex] {
         let mut query = asked("deploy", MemoryScope::Both, 10);
         query.mode = mode;
-        let error = fresh
-            .store
-            .search_at(query, now)
-            .await
-            .expect_err("keyword index");
-        assert_eq!(
-            error.to_string(),
-            format!("search mode {mode} is not answered by the keyword index")
-        );
+        let result = fresh.store.search_at(query, now, &Utc).await?;
+        assert_eq!(result.results, []);
+        assert!(result.degraded.is_none());
     }
     let mut synthesize = asked("deploy", MemoryScope::Both, 10);
     synthesize.synthesize = Some(true);
     let error = fresh
         .store
-        .search_at(synthesize, now)
+        .search_at(synthesize, now, &Utc)
         .await
         .expect_err("synthesis");
     assert_eq!(
@@ -181,180 +172,11 @@ async fn keyword_search_rejects_the_other_modes() -> TestResult {
     inverted.before = Some(stamp);
     let error = fresh
         .store
-        .search_at(inverted, now)
+        .search_at(inverted, now, &Utc)
         .await
         .expect_err("range");
     assert_eq!(error.to_string(), "since must precede before");
     Ok(())
-}
-
-async fn seed_fts() -> TestResult<Fresh> {
-    let fresh = fresh_store(None)?;
-    let now = instant(common::RECORDED_START)?;
-    let deployed = fresh
-        .store
-        .capture(deploy_batch("cli:sess-1", "rivet")?, now)
-        .await?;
-    let helper = fresh.store.capture(helper_batch()?, now).await?;
-    fresh.store.capture(rollback_batch()?, now).await?;
-    let sess1 = deployed.conversation_id;
-    let sess2 = helper.conversation_id;
-    fresh
-        .store
-        .with_conn(move |conn| seed_rows(conn, &sess1, &sess2))
-        .await?;
-    Ok(fresh)
-}
-
-fn helper_batch() -> TestResult<CaptureBatchRequest> {
-    let mut note = message(
-        "h-note",
-        Role::User,
-        "notes about the staging database migration on db.example.com",
-    );
-    note.created_at = Some(instant("2026-10-10T12:01:00.000Z")?);
-    let mut helper = batch("cli:sess-2", "helper", "cli");
-    helper.messages = vec![
-        note,
-        message("h-fill", Role::User, &filler_release()),
-        message("h-empty-1", Role::User, ""),
-        message("h-empty-2", Role::User, ""),
-    ];
-    Ok(helper)
-}
-
-fn filler_release() -> String {
-    let mut words: Vec<String> = (0..30).map(|index| format!("zz{index}")).collect();
-    words.push("release".to_owned());
-    words.join(" ")
-}
-
-fn rollback_batch() -> TestResult<CaptureBatchRequest> {
-    let mut user = message(
-        "rb-user",
-        Role::User,
-        "rollback rollback rollback procedure notes",
-    );
-    user.created_at = Some(instant("2026-09-01T00:00:00.000Z")?);
-    let mut assistant = message(
-        "rb-assistant",
-        Role::Assistant,
-        "the rollback switches traffic back to the previous colour",
-    );
-    assistant.created_at = Some(instant("2026-10-09T00:00:00.000Z")?);
-    let mut rollback = batch("cli:sess-3", "rivet", "cli");
-    rollback.messages = vec![user, assistant];
-    Ok(rollback)
-}
-
-fn seed_rows(conn: &rusqlite::Connection, sess1: &str, sess2: &str) -> Result<(), SqliteError> {
-    let stamp = common::RECORDED_START;
-    conn.execute(
-        "INSERT INTO ros_summaries (id, conversation_id, content, kind, created_at)
-         VALUES (?1, ?2, ?3, 'leaf', '2026-10-10T12:00:30.000Z')",
-        params![LEAF_ID, sess1, LEAF],
-    )
-    .map_err(|source| SqliteError::Query {
-        operation: "seed leaf",
-        source,
-    })?;
-    conn.execute(
-        "INSERT INTO ros_summaries (id, conversation_id, content, kind, created_at)
-         VALUES (?1, NULL, ?2, 'branch', '2026-10-10T12:00:40.000Z')",
-        params![BRANCH_ID, BRANCH],
-    )
-    .map_err(|source| SqliteError::Query {
-        operation: "seed branch",
-        source,
-    })?;
-    insert_tag(
-        conn,
-        "tag-acme",
-        "conversation",
-        sess1,
-        ("project", "acmekit"),
-        stamp,
-    )?;
-    insert_tag(
-        conn,
-        "tag-infra",
-        "conversation",
-        sess2,
-        ("project", "infra"),
-        stamp,
-    )?;
-    insert_tag(
-        conn,
-        "tag-topic",
-        "summary",
-        LEAF_ID,
-        ("topic", "deploys"),
-        stamp,
-    )?;
-    Ok(())
-}
-
-fn insert_tag(
-    conn: &rusqlite::Connection,
-    id: &str,
-    entity_type: &str,
-    entity_id: &str,
-    tag: (&str, &str),
-    stamp: &str,
-) -> Result<(), SqliteError> {
-    conn.execute(
-        "INSERT INTO ros_tags
-            (id, entity_type, entity_id, key, value, source, state, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 'user', 'accepted', ?6, ?6)",
-        params![id, entity_type, entity_id, tag.0, tag.1, stamp],
-    )
-    .map_err(|source| SqliteError::Query {
-        operation: "seed tag",
-        source,
-    })?;
-    Ok(())
-}
-
-async fn seed_tag_pool(store: &SqliteStore, now: DateTime<Utc>) -> TestResult {
-    let tagged = store
-        .capture(one_message("tagged", TAGGED_NOTE), now)
-        .await?;
-    store
-        .with_conn({
-            let conversation = tagged.conversation_id.clone();
-            move |conn| {
-                insert_tag(
-                    conn,
-                    "tag-rare",
-                    "conversation",
-                    &conversation,
-                    ("project", "rare"),
-                    POOL_CLOCK,
-                )
-            }
-        })
-        .await?;
-    for index in 0..20 {
-        store
-            .capture(one_message(&format!("short-{index}"), "rollback"), now)
-            .await?;
-    }
-    for index in 0..20 {
-        let pad = (0..9)
-            .map(|word| format!("pad{index}x{word}"))
-            .collect::<Vec<_>>()
-            .join(" ");
-        store
-            .capture(one_message(&format!("pad-{index}"), &pad), now)
-            .await?;
-    }
-    Ok(())
-}
-
-fn one_message(session_key: &str, content: &str) -> CaptureBatchRequest {
-    let mut request = batch(session_key, "rivet", "cli");
-    request.messages = vec![message(session_key, Role::User, content)];
-    request
 }
 
 async fn replay_memory(
@@ -371,6 +193,7 @@ async fn replay_memory(
             .search_at(
                 recorded_query(text, case.get("options").ok_or("options")?)?,
                 clock,
+                &Utc,
             )
             .await?;
         assert_slice(&outcome);
@@ -400,7 +223,7 @@ async fn replay_backend(
         }
         let response = case.get("response").ok_or("response")?;
         let outcome = store
-            .search_at(recorded_query(text, options)?, clock)
+            .search_at(recorded_query(text, options)?, clock, &Utc)
             .await?;
         assert_slice(&outcome);
         expect_degraded(
@@ -445,7 +268,7 @@ async fn last_seven_days_keeps_the_october_rollback(
 ) -> TestResult {
     let mut query = asked("rollback", MemoryScope::Messages, 10);
     query.window = Some(BrowseWindow::Last7d);
-    let outcome = store.search_at(query, clock).await?;
+    let outcome = store.search_at(query, clock, &Utc).await?;
     let contents: Vec<&str> = outcome
         .results
         .iter()

@@ -28,7 +28,7 @@ fn run(args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn migrating_a_v5_copy_reports_v7_and_leaves_a_byte_equal_backup() -> TestResult {
+fn migrating_a_v5_copy_reports_v8_and_leaves_a_byte_equal_backup() -> TestResult {
     let original = fs::read(recording("upgrade-v5.sqlite"))?;
     let dir = tempdir()?;
     let path = dir.path().join("memory.sqlite");
@@ -36,8 +36,8 @@ fn migrating_a_v5_copy_reports_v7_and_leaves_a_byte_equal_backup() -> TestResult
 
     let stdout = run(&["sqlite", "--path", &path.to_string_lossy()])?;
     assert!(
-        stdout.contains("current 7")
-            && stdout.contains("required 7")
+        stdout.contains("current 8")
+            && stdout.contains("required 8")
             && stdout.contains("pending 0"),
         "the applied report must name the reached state: {stdout}"
     );
@@ -55,7 +55,7 @@ fn migrating_a_v5_copy_reports_v7_and_leaves_a_byte_equal_backup() -> TestResult
 
     let conn = rusqlite::Connection::open(&path)?;
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(version, 7);
+    assert_eq!(version, 8);
     Ok(())
 }
 
@@ -68,8 +68,8 @@ fn status_reports_the_sqlite_ladder_position() -> TestResult {
     let stdout = run(&["status", "sqlite", "--path", &path.to_string_lossy()])?;
     assert!(
         stdout.contains("current 5")
-            && stdout.contains("required 7")
-            && stdout.contains("pending 2"),
+            && stdout.contains("required 8")
+            && stdout.contains("pending 3"),
         "status must report the current, required and pending steps: {stdout}"
     );
     assert!(
@@ -80,7 +80,7 @@ fn status_reports_the_sqlite_ladder_position() -> TestResult {
     let missing = dir.path().join("absent.sqlite");
     let stdout = run(&["status", "sqlite", "--path", &missing.to_string_lossy()])?;
     assert!(
-        stdout.contains("current 0") && stdout.contains("pending 7"),
+        stdout.contains("current 0") && stdout.contains("pending 8"),
         "a missing file reads as version 0 with the whole ladder pending: {stdout}"
     );
     assert!(!missing.exists(), "status must not create the file");

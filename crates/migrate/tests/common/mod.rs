@@ -59,9 +59,9 @@ pub(crate) fn read_pragmas(conn: &Connection) -> TestResult<Pragmas> {
     })
 }
 
-pub(crate) fn read_master_entries(conn: &Connection) -> TestResult<Vec<MasterEntry>> {
+pub(crate) fn read_legacy_master_entries(conn: &Connection) -> TestResult<Vec<MasterEntry>> {
     let mut statement =
-        conn.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY rowid")?;
+        conn.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master WHERE name NOT GLOB 'rh_*' ORDER BY rowid")?;
     let mut rows = statement.query([])?;
     let mut out = Vec::new();
     while let Some(row) = rows.next()? {
@@ -330,4 +330,13 @@ impl PartialEq for Cell {
             _ => false,
         }
     }
+}
+
+pub(crate) fn assert_upgraded_pragmas(actual: &Pragmas, legacy: &Pragmas) {
+    assert_eq!(actual.user_version, migrate::SchemaVersion::V8.number());
+    assert_eq!(legacy.user_version, 7);
+    assert_eq!(actual.journal_mode, legacy.journal_mode);
+    assert_eq!(actual.foreign_keys, legacy.foreign_keys);
+    assert_eq!(actual.page_size, legacy.page_size);
+    assert_eq!(actual.encoding, legacy.encoding);
 }

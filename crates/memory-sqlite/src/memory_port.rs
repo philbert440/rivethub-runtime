@@ -73,7 +73,7 @@ impl MemoryStore for SqliteStore {
 
     async fn search(&self, query: SearchQuery) -> Result<SearchOutcome, MemoryStoreError> {
         let now = self.now();
-        self.search_at(query, now)
+        self.search_at(query, now, &Utc)
             .await
             .map_err(MemoryStoreError::from)
     }

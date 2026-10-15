@@ -16,7 +16,7 @@ fn fixture(name: &str) -> std::path::PathBuf {
 
 #[test]
 fn a_missing_file_is_not_initialised_and_is_never_created() -> TestResult {
-    assert_eq!(SCHEMA_VERSION, 7);
+    assert_eq!(SCHEMA_VERSION, 8);
     let dir = tempdir()?;
     let path = dir.path().join("memory.sqlite");
     match SqliteStore::open(&path) {
@@ -41,7 +41,7 @@ fn a_behind_file_is_schema_behind_and_left_untouched() -> TestResult {
         }) => {
             assert_eq!(reported, path);
             assert_eq!(found, 5);
-            assert_eq!(required, 7);
+            assert_eq!(required, 8);
         }
         other => panic!("expected SchemaBehind, got {other:?}"),
     }

@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_ros_tags_removal_state ON ros_tags (removal_state
           WHERE removal_state = 'suggested';
 ";
 
-const CURRENT_VERSION_PRAGMA: &str = "PRAGMA user_version = 7;";
+const CURRENT_VERSION_PRAGMA: &str = "PRAGMA user_version = 8;";
 
 const CONNECTION_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
@@ -42,13 +42,14 @@ pub fn sqlite_at(path: &Path, now: DateTime<Utc>) -> Result<Status, Error> {
         return Ok(current());
     }
     match SchemaVersion::try_from(found)? {
-        SchemaVersion::V7 => Ok(current()),
+        SchemaVersion::V8 => Ok(current()),
         from @ (SchemaVersion::V1
         | SchemaVersion::V2
         | SchemaVersion::V3
         | SchemaVersion::V4
         | SchemaVersion::V5
-        | SchemaVersion::V6) => {
+        | SchemaVersion::V6
+        | SchemaVersion::V7) => {
             copy_original(path, from)?;
             let mut conn = open_writing(path)?;
             bring_through(&mut conn, from, now)?;
@@ -58,7 +59,7 @@ pub fn sqlite_at(path: &Path, now: DateTime<Utc>) -> Result<Status, Error> {
 }
 
 pub fn sqlite_status(path: &Path) -> Result<Status, Error> {
-    let required = SchemaVersion::V7.number();
+    let required = SchemaVersion::V8.number();
     if !exists(path)? {
         return Ok(Status {
             current: 0,
@@ -85,8 +86,8 @@ pub fn sqlite_status(path: &Path) -> Result<Status, Error> {
 
 fn current() -> Status {
     Status {
-        current: SchemaVersion::V7.number(),
-        required: SchemaVersion::V7.number(),
+        current: SchemaVersion::V8.number(),
+        required: SchemaVersion::V8.number(),
         pending: 0,
     }
 }
@@ -94,7 +95,7 @@ fn current() -> Status {
 fn steps(from: i64) -> usize {
     let mut count = 0usize;
     let mut current = from;
-    while current < SchemaVersion::V7.number() {
+    while current < SchemaVersion::V8.number() {
         count += 1;
         current += 1;
     }
@@ -170,6 +171,8 @@ fn backup_path(path: &Path, from: SchemaVersion) -> PathBuf {
 fn create_fresh(conn: &mut Connection) -> Result<(), Error> {
     let tx = begin(conn)?;
     apply_schema(&tx)?;
+    tx.execute_batch(include_str!("schema/search_v8.sql"))
+        .map_err(Error::SqliteCreate)?;
     apply_tail_indexes(&tx)?;
     tx.execute_batch(CURRENT_VERSION_PRAGMA)
         .map_err(Error::SqliteCreate)?;

@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr as _;
 
 use chrono::DateTime;
-use chrono::Local;
+use chrono::TimeZone;
 use chrono::Utc;
 use kernel::memory::SearchMode;
 use kernel::memory::SearchOutcome;
@@ -23,6 +23,13 @@ use crate::SqliteStore;
 use crate::error::SqliteError;
 use crate::health::EMBED_MISSING;
 use crate::time;
+
+pub(crate) mod embed;
+mod fts;
+pub(crate) mod functions;
+mod ranked;
+use fts::fts_match;
+pub(crate) use fts::fts_or;
 
 const KEYWORD_EFFECT: &str = "Keyword / FTS ranking only \u{2014} not meaning-based.";
 const SUMMARY_AGENT: &str = "summary";
@@ -64,15 +71,11 @@ const SUMMARY_BUMP: &str = "UPDATE ros_summaries \
      SET access_count = access_count + 1, last_accessed_at = ?1 \
      WHERE id = ?2";
 
-#[derive(Debug)]
-enum Ready {
-    Empty { armed: bool },
-    Run(Plan),
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Plan {
-    pattern: String,
+    pattern: Option<String>,
+    text: String,
+    mode: SearchMode,
     scope: MemoryScope,
     agent: Option<String>,
     tag: Option<TagLiteral>,
@@ -81,7 +84,6 @@ struct Plan {
     limit: i64,
     fetch_limit: i64,
     now: DateTime<Utc>,
-    armed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -113,30 +115,67 @@ struct TagIndex {
 }
 
 impl SqliteStore {
-    pub async fn search_at(
+    pub async fn search_at<Tz: TimeZone + Sync>(
         &self,
         query: SearchQuery,
         now: DateTime<Utc>,
+        zone: &Tz,
     ) -> Result<SearchOutcome, SqliteError> {
-        match Plan::prepare(query, now, self.embed_armed())? {
-            Ready::Empty { armed } => Ok(finish(Vec::new(), armed)),
-            Ready::Run(plan) => self.with_conn(move |conn| execute(conn, &plan)).await,
-        }
+        let plan = Plan::prepare(query, now, zone)?;
+        let semantic = matches!(plan.mode, SearchMode::Hybrid | SearchMode::Vector);
+        let (vector, degraded) = if semantic {
+            match &self.query_embed {
+                None => (None, Some(EMBED_MISSING.to_owned())),
+                Some(embed) => match embed.vector(&plan.text).await {
+                    Ok(vector) => (Some(vector), None),
+                    Err(embed::EmbedFailure::Cancelled) => {
+                        return Err(SqliteError::SearchCancelled);
+                    }
+                    Err(error) => {
+                        self.record_log(format!("[memory.sqlite] query embedding failed, searching without the vector arm: {error}"));
+                        (None, Some(error.to_string()))
+                    }
+                },
+            }
+        } else {
+            (
+                None,
+                (plan.mode == SearchMode::Fts && self.query_embed.is_none())
+                    .then(|| EMBED_MISSING.to_owned()),
+            )
+        };
+        let keyword = plan.mode == SearchMode::Fts || (semantic && self.query_embed.is_none());
+        self.with_conn(move |conn| {
+            if plan.mode == SearchMode::Regex {
+                functions::compile(&plan.text)?;
+            }
+            let mut outcome = if keyword {
+                execute(conn, &plan)?
+            } else {
+                ranked::execute(conn, &plan, vector.as_deref())?
+            };
+            if let Some(reason) = degraded {
+                outcome.degraded = Some(MemoryDegraded {
+                    reason,
+                    effect: KEYWORD_EFFECT.to_owned(),
+                });
+            }
+            Ok(outcome)
+        })
+        .await
     }
 }
 
 impl Plan {
-    fn prepare(query: SearchQuery, now: DateTime<Utc>, armed: bool) -> Result<Ready, SqliteError> {
-        match query.mode {
-            SearchMode::Fts | SearchMode::Hybrid | SearchMode::Vector => {}
-            SearchMode::Trigram | SearchMode::Regex => {
-                return Err(SqliteError::KeywordIndex { mode: query.mode });
-            }
-        }
+    fn prepare<Tz: TimeZone>(
+        query: SearchQuery,
+        now: DateTime<Utc>,
+        zone: &Tz,
+    ) -> Result<Self, SqliteError> {
         if query.synthesize == Some(true) {
             return Err(SqliteError::SynthesisUnconfigured);
         }
-        let range = query.time_range(now, &Local);
+        let range = query.time_range(now, zone);
         if range
             .since
             .zip(range.before)
@@ -144,17 +183,17 @@ impl Plan {
         {
             return Err(SqliteError::InvertedRange);
         }
-        let Some(pattern) = fts_match(&query.text) else {
-            return Ok(Ready::Empty { armed });
-        };
+        let pattern = fts_match(&query.text);
         let limit = i64::from(query.limit.get());
         let fetch_limit = if query.tag.is_some() {
             hybrid_pool(query.limit.get())
         } else {
             limit
         };
-        Ok(Ready::Run(Self {
+        Ok(Self {
             pattern,
+            text: query.text,
+            mode: query.mode,
             scope: query.scope,
             agent: query.agent,
             tag: query.tag,
@@ -163,39 +202,8 @@ impl Plan {
             limit,
             fetch_limit,
             now,
-            armed,
-        }))
+        })
     }
-}
-
-fn fts_match(text: &str) -> Option<String> {
-    join_tokens(text, " AND ")
-}
-
-pub(crate) fn fts_or(text: &str) -> Option<String> {
-    join_tokens(text, " OR ")
-}
-
-fn join_tokens(text: &str, separator: &str) -> Option<String> {
-    let tokens: Vec<String> = text.split_whitespace().filter_map(fts_token).collect();
-    if tokens.is_empty() {
-        None
-    } else {
-        Some(tokens.join(separator))
-    }
-}
-
-fn fts_token(raw: &str) -> Option<String> {
-    let cleaned: String = raw.chars().filter(|ch| !stripped(*ch)).collect();
-    if cleaned.is_empty() {
-        None
-    } else {
-        Some(format!("\"{cleaned}\""))
-    }
-}
-
-const fn stripped(ch: char) -> bool {
-    matches!(ch, '"' | '\'' | '^' | '~' | '*' | '(' | ')' | ':')
 }
 
 fn execute(conn: &mut Connection, plan: &Plan) -> Result<SearchOutcome, SqliteError> {
@@ -227,7 +235,10 @@ fn execute(conn: &mut Connection, plan: &Plan) -> Result<SearchOutcome, SqliteEr
     };
     bump(conn, reinforced, &time::stamp(plan.now))?;
     let results = selected.into_iter().map(Candidate::into_result).collect();
-    Ok(finish(results, plan.armed))
+    Ok(SearchOutcome {
+        results,
+        ..SearchOutcome::default()
+    })
 }
 
 fn hit_limit(limit: i64) -> Result<usize, SqliteError> {
@@ -235,6 +246,9 @@ fn hit_limit(limit: i64) -> Result<usize, SqliteError> {
 }
 
 fn fetch(conn: &Connection, plan: &Plan) -> Result<Vec<Candidate>, SqliteError> {
+    if plan.pattern.is_none() {
+        return Ok(Vec::new());
+    }
     let mut found = Vec::new();
     if matches!(plan.scope, MemoryScope::Messages | MemoryScope::Both) {
         found.extend(fetch_messages(conn, plan)?);
@@ -525,44 +539,5 @@ fn bump_one(tx: &rusqlite::Transaction<'_>, row: &Candidate, at: &str) -> Result
         Ok(())
     } else {
         Err(SqliteError::MissingHit { id: row.id.clone() })
-    }
-}
-
-fn finish(results: Vec<MemorySearchResult>, armed: bool) -> SearchOutcome {
-    SearchOutcome {
-        results,
-        degraded: (!armed).then(|| MemoryDegraded {
-            reason: EMBED_MISSING.to_owned(),
-            effect: KEYWORD_EFFECT.to_owned(),
-        }),
-        fallback: None,
-        expanded: Vec::new(),
-        synthesis: None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::fts_match;
-
-    #[test]
-    fn recorded_fts_match_strings() {
-        assert_eq!(fts_match("deploy").as_deref(), Some("\"deploy\""));
-        assert_eq!(
-            fts_match("deploy release").as_deref(),
-            Some("\"deploy\" AND \"release\"")
-        );
-        assert_eq!(
-            fts_match("\"unbalanced AND (").as_deref(),
-            Some("\"unbalanced\" AND \"AND\"")
-        );
-        assert_eq!(fts_match("*** ^~ ()::''"), None);
-        assert_eq!(
-            fts_match("api.example.com:8443").as_deref(),
-            Some("\"api.example.com8443\"")
-        );
-        assert_eq!(fts_match("zzzzqqq").as_deref(), Some("\"zzzzqqq\""));
-        assert_eq!(fts_match("staging").as_deref(), Some("\"staging\""));
-        assert_eq!(fts_match("rollback").as_deref(), Some("\"rollback\""));
     }
 }

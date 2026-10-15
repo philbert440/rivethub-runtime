@@ -283,7 +283,9 @@ fn claim_message(error: &SqliteError) -> Option<String> {
         | SqliteError::InsertRejected
         | SqliteError::InvertedRange
         | SqliteError::StoredTagType { .. }
-        | SqliteError::KeywordIndex { .. }
+        | SqliteError::Regex(_)
+        | SqliteError::StoredEmbedding
+        | SqliteError::SearchCancelled
         | SqliteError::SynthesisUnconfigured
         | SqliteError::MissingHit { .. }
         | SqliteError::MissingTable { .. }

@@ -10,7 +10,7 @@ use common::TestResult;
 use common::connection;
 use common::fixture_copy;
 use common::read_column_types;
-use common::read_master_entries;
+use common::read_legacy_master_entries;
 use common::read_pragmas;
 use common::read_row_count;
 use common::read_table_columns;
@@ -34,15 +34,15 @@ fn the_shipped_schema_text_is_the_recorded_text() -> TestResult<()> {
 }
 
 #[test]
-fn a_fresh_file_matches_the_recorded_schema() -> TestResult<()> {
+fn a_fresh_file_preserves_the_recorded_legacy_schema() -> TestResult<()> {
     let recording = schema_recording()?;
     let dir = tempdir()?;
     let path = dir.path().join("memory.sqlite");
     migrate::sqlite(&path)?;
     let conn = connection(&path)?;
-    assert_eq!(read_pragmas(&conn)?, recording.fresh.pragmas);
+    common::assert_upgraded_pragmas(&read_pragmas(&conn)?, &recording.fresh.pragmas);
     assert_eq!(
-        read_master_entries(&conn)?,
+        read_legacy_master_entries(&conn)?,
         recording.fresh.sqlite_master,
         "sqlite_master of a fresh file"
     );
@@ -57,12 +57,12 @@ fn a_fresh_file_matches_the_recorded_schema() -> TestResult<()> {
 }
 
 #[test]
-fn the_recorded_v7_fixture_opens_unchanged() -> TestResult<()> {
+fn the_v7_fixture_preserves_legacy_schema_and_rows() -> TestResult<()> {
     let recording = schema_recording()?;
     let fixture = fixture_copy("fixture-v7.sqlite")?;
     migrate::sqlite(fixture.path())?;
     let conn = connection(fixture.path())?;
-    assert_eq!(read_pragmas(&conn)?, recording.fixture.pragmas);
+    common::assert_upgraded_pragmas(&read_pragmas(&conn)?, &recording.fixture.pragmas);
     assert!(
         recording
             .fixture
@@ -72,7 +72,7 @@ fn the_recorded_v7_fixture_opens_unchanged() -> TestResult<()> {
         "the recording covers the same tables in row counts and typeof"
     );
     assert_eq!(
-        read_master_entries(&conn)?,
+        read_legacy_master_entries(&conn)?,
         recording.fresh.sqlite_master,
         "sqlite_master of the fixture equals the fresh schema"
     );
@@ -90,8 +90,9 @@ fn the_recorded_v7_fixture_opens_unchanged() -> TestResult<()> {
 }
 
 #[test]
-fn opening_a_v7_file_writes_nothing() -> TestResult<()> {
+fn opening_a_current_file_writes_nothing() -> TestResult<()> {
     let fixture = fixture_copy("fixture-v7.sqlite")?;
+    migrate::sqlite(fixture.path())?;
     let before = fs::read(fixture.path())?;
     migrate::sqlite(fixture.path())?;
     let after = fs::read(fixture.path())?;
@@ -105,7 +106,7 @@ fn a_delete_mode_v5_backup_is_the_original_file() -> TestResult<()> {
     let path = delete_mode_v5(dir.path())?;
     let original = fs::read(&path)?;
     let status = migrate::sqlite(&path)?;
-    assert_eq!(status.current, 7);
+    assert_eq!(status.current, 8);
     let backup = dir.path().join("memory.sqlite.v5.bak");
     assert_eq!(
         fs::read(&backup)?,

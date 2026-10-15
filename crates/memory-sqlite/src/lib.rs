@@ -12,6 +12,7 @@ mod port;
 mod queue;
 mod read;
 mod search;
+pub use search::embed::QueryEmbed;
 mod stats;
 mod summary_port;
 mod tags;
@@ -71,7 +72,7 @@ impl SharedClock {
     }
 }
 
-pub const SCHEMA_VERSION: i64 = 7;
+pub const SCHEMA_VERSION: i64 = 8;
 
 const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
@@ -90,6 +91,7 @@ pub struct SqliteStore {
     embed: Arc<AtomicBool>,
     claims: Arc<ClaimIds>,
     clock: SharedClock,
+    query_embed: Option<QueryEmbed>,
     notifications: tokio::sync::watch::Sender<()>,
 }
 
@@ -109,7 +111,14 @@ impl SqliteStore {
         })?;
         conn.execute_batch(FILE_PRAGMAS)
             .map_err(SqliteError::Pragma)?;
+        search::functions::register(&conn)?;
         Ok(from_conn(conn, SharedClock::new(Utc::now)))
+    }
+
+    #[must_use]
+    pub fn with_query_embed(mut self, embed: QueryEmbed) -> Self {
+        self.query_embed = Some(embed);
+        self
     }
 
     #[must_use]
@@ -221,6 +230,7 @@ fn from_conn(conn: Connection, clock: SharedClock) -> SqliteStore {
         embed: Arc::new(AtomicBool::new(false)),
         claims: Arc::new(ClaimIds::default()),
         clock,
+        query_embed: None,
         notifications: tokio::sync::watch::channel(()).0,
     }
 }
@@ -296,7 +306,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(state, (7, 32));
+        assert_eq!(state, (8, 44));
     }
 
     #[tokio::test]
