@@ -20,6 +20,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 parking_lot.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "process", "rt", "sync", "time"] }
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
 url.workspace = true
 wire.workspace = true
 

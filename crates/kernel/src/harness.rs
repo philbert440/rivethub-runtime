@@ -91,6 +91,7 @@ pub enum SessionEvent {
     UserMessageChunk { text: String },
     AgentMessageChunk { text: String },
     AgentThoughtChunk { text: String },
+    Usage { usage: wire::stream::LlmUsage },
     ToolCall(ToolCallInfo),
     ToolCallUpdate(ToolCallUpdate),
     Plan(Vec<PlanEntry>),

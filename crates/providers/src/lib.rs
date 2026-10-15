@@ -1,4 +1,5 @@
 pub mod body;
+pub mod cli;
 pub mod embed;
 pub mod error;
 pub mod sse;
@@ -146,59 +147,10 @@ pub(crate) async fn check_status(
 impl ModelProvider for OpenAiCompatible {
     async fn chat(&self, request: ModelRequest) -> Result<LlmResponse, ModelProviderError> {
         let finish = Arc::new(AtomicU8::new(0));
-        let mut rx = self.send_chat(&request, Some(Arc::clone(&finish))).await?;
-        let mut content = String::new();
-        let mut calls: Vec<PartialToolCall> = Vec::new();
-        let mut usage: Option<LlmUsage> = None;
-        let mut done = false;
-        while let Some(item) = rx.recv().await {
-            match item? {
-                ModelChunk::Text { delta } => content.push_str(&delta),
-                ModelChunk::Reasoning { delta: _ } => {}
-                ModelChunk::ToolCallStart { index, id, name } => {
-                    if calls.iter().any(|call| call.index == index) {
-                        return Err(StreamFault::RestartedToolCall { index }.into());
-                    }
-                    calls.push(PartialToolCall {
-                        index,
-                        id,
-                        name,
-                        arguments: String::new(),
-                    });
-                }
-                ModelChunk::ToolCallDelta {
-                    index,
-                    arguments_delta,
-                } => {
-                    let Some(call) = calls.iter_mut().find(|call| call.index == index) else {
-                        return Err(StreamFault::UnknownToolCall { index }.into());
-                    };
-                    call.arguments.push_str(&arguments_delta);
-                }
-                ModelChunk::Usage { usage: received } => usage = Some(received),
-                ModelChunk::Done => done = true,
-            }
-        }
-        if !done {
-            return Err(StreamFault::EndedBeforeDone.into());
-        }
-        let tool_calls = assemble_tool_calls(&calls)?;
-        let r#type = if tool_calls.is_some() {
-            LlmResponseKind::ToolCalls
-        } else {
-            LlmResponseKind::Text
-        };
-        Ok(LlmResponse {
-            r#type,
-            content: if content.is_empty() {
-                None
-            } else {
-                Some(content)
-            },
-            tool_calls,
-            usage,
-            finish_reason: sse::decode_finish(finish.load(Ordering::Relaxed)),
-        })
+        let rx = self.send_chat(&request, Some(Arc::clone(&finish))).await?;
+        let mut response = collect_response(rx).await?;
+        response.finish_reason = sse::decode_finish(finish.load(Ordering::Relaxed));
+        Ok(response)
     }
 
     async fn stream(
@@ -221,6 +173,63 @@ impl ModelProvider for OpenAiCompatible {
         let list: wire::stream::openai::ModelList = response.json().await.map_err(request_error)?;
         Ok(list.data.into_iter().map(|model| model.id).collect())
     }
+}
+
+pub(crate) async fn collect_response(
+    mut rx: Receiver<ModelStreamItem>,
+) -> Result<LlmResponse, ModelProviderError> {
+    let mut content = String::new();
+    let mut calls: Vec<PartialToolCall> = Vec::new();
+    let mut usage: Option<LlmUsage> = None;
+    let mut done = false;
+    while let Some(item) = rx.recv().await {
+        match item? {
+            ModelChunk::Text { delta } => content.push_str(&delta),
+            ModelChunk::Reasoning { delta: _ } => {}
+            ModelChunk::ToolCallStart { index, id, name } => {
+                if calls.iter().any(|call| call.index == index) {
+                    return Err(StreamFault::RestartedToolCall { index }.into());
+                }
+                calls.push(PartialToolCall {
+                    index,
+                    id,
+                    name,
+                    arguments: String::new(),
+                });
+            }
+            ModelChunk::ToolCallDelta {
+                index,
+                arguments_delta,
+            } => {
+                let Some(call) = calls.iter_mut().find(|call| call.index == index) else {
+                    return Err(StreamFault::UnknownToolCall { index }.into());
+                };
+                call.arguments.push_str(&arguments_delta);
+            }
+            ModelChunk::Usage { usage: received } => usage = Some(received),
+            ModelChunk::Done => done = true,
+        }
+    }
+    if !done {
+        return Err(StreamFault::EndedBeforeDone.into());
+    }
+    let tool_calls = assemble_tool_calls(&calls)?;
+    let r#type = if tool_calls.is_some() {
+        LlmResponseKind::ToolCalls
+    } else {
+        LlmResponseKind::Text
+    };
+    Ok(LlmResponse {
+        r#type,
+        content: if content.is_empty() {
+            None
+        } else {
+            Some(content)
+        },
+        tool_calls,
+        usage,
+        finish_reason: None,
+    })
 }
 
 struct PartialToolCall {

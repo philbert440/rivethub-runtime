@@ -98,6 +98,12 @@ fn token_command(out: &mut ValidationResult, name: &str, provider: &OpenaiProvid
 
 fn cli(out: &mut ValidationResult, name: &str, kind: Option<ProviderType>, provider: &CliProvider) {
     let path = format!("providers.{name}");
+    positive(
+        out,
+        &format!("{path}.timeout_ms"),
+        provider.timeout_ms,
+        &format!("Provider \"{name}\" timeout_ms must be a positive number"),
+    );
     if kind != Some(ProviderType::ClaudeCli) {
         return;
     }
