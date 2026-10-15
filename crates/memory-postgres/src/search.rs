@@ -222,7 +222,7 @@ impl crate::PostgresMemory {
                     .vector_arm_rows(options, tag_filter, &vector, ef_search)
                     .await?;
                 let hits = finish_rows(rows, options.limit)?;
-                self.bump_access(&hits).await?;
+                self.record_access(&hits)?;
                 Ok(SearchOutcome {
                     hits,
                     degraded: None,
@@ -256,7 +256,7 @@ impl crate::PostgresMemory {
             };
             let rows = self.arm_rows(options, kind, tag_filter, None).await?;
             let hits = finish_rows(rows, options.limit)?;
-            self.bump_access(&hits).await?;
+            self.record_access(&hits)?;
             return Ok(SearchOutcome {
                 hits,
                 degraded: None,
@@ -305,7 +305,7 @@ impl crate::PostgresMemory {
         } else {
             finish_rows(rows, options.limit)?
         };
-        self.bump_access(&hits).await?;
+        self.record_access(&hits)?;
         Ok(SearchOutcome {
             hits,
             degraded,
@@ -378,7 +378,7 @@ impl crate::PostgresMemory {
             .map(|entry| entry.hit)
             .collect();
         hits.truncate(usize::try_from(options.limit.max(1))?);
-        self.bump_access(&hits).await?;
+        self.record_access(&hits)?;
         Ok(SearchOutcome {
             hits,
             degraded,
@@ -386,29 +386,10 @@ impl crate::PostgresMemory {
         })
     }
 
-    async fn bump_access(&self, hits: &[MemorySearchHit]) -> Result<(), Error> {
-        let messages: Vec<Uuid> = hit_uuids(hits, MemoryHitSource::Message)?;
-        let summaries: Vec<Uuid> = hit_uuids(hits, MemoryHitSource::Summary)?;
-        if !messages.is_empty() {
-            sqlx::query!(
-                "update rh_messages set access_count = access_count + 1,
-                        last_accessed_at = now() where id = any($1)",
-                &messages
-            )
-            .execute(&self.pool)
-            .await
-            .map_err(|source| Error::operation("access bump", source))?;
-        }
-        if !summaries.is_empty() {
-            sqlx::query!(
-                "update rh_summaries set access_count = access_count + 1,
-                        last_accessed_at = now() where id = any($1)",
-                &summaries
-            )
-            .execute(&self.pool)
-            .await
-            .map_err(|source| Error::operation("access bump", source))?;
-        }
+    fn record_access(&self, hits: &[MemorySearchHit]) -> Result<(), Error> {
+        let messages = hit_uuids(hits, MemoryHitSource::Message)?;
+        let summaries = hit_uuids(hits, MemoryHitSource::Summary)?;
+        self.access.record(&self.pool, messages, summaries);
         Ok(())
     }
 }

@@ -1,3 +1,4 @@
+mod access;
 pub mod capture;
 mod conversation;
 pub mod embed;
@@ -50,6 +51,7 @@ pub struct PostgresMemory {
     pool: PgPool,
     embed: Option<embed::EmbedArm>,
     synthesis: Option<SearchSynthesis>,
+    access: std::sync::Arc<access::AccessLog>,
 }
 
 impl PostgresMemory {
@@ -59,6 +61,7 @@ impl PostgresMemory {
             pool,
             embed: None,
             synthesis: None,
+            access: std::sync::Arc::default(),
         }
     }
 

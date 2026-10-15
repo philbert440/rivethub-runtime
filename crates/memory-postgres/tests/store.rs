@@ -267,13 +267,23 @@ async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
     let unbalanced = memory.search(query("\"unbalanced AND (", 5)).await?;
     assert!(unbalanced.results.is_empty(), "fts operators stay quoted");
 
-    let bumped =
-        sqlx::query("SELECT count(*)::bigint AS n FROM rh_messages WHERE access_count > 0")
-            .fetch_one(&pool)
-            .await?;
+    let bumped = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let row =
+                sqlx::query("SELECT count(*)::bigint AS n FROM rh_messages WHERE access_count > 0")
+                    .fetch_one(&pool)
+                    .await?;
+            let count: i64 = row.try_get("n")?;
+            if count > 0 {
+                return Ok::<i64, sqlx::Error>(count);
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await??;
     assert!(
-        bumped.try_get::<i64, _>("n").unwrap() > 0,
-        "search bumps access counts"
+        bumped > 0,
+        "search records access counts off the request path"
     );
     Ok(())
 }
