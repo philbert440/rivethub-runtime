@@ -1,16 +1,25 @@
 mod append;
 pub mod capture;
+mod context;
 mod conversation;
+mod embed_store;
 pub mod error;
 mod health;
 mod insert;
+mod memory_port;
 mod message;
 mod port;
 mod queue;
 mod read;
 mod search;
 mod stats;
+mod summary_port;
+mod tags;
+mod tags_suggest;
+mod tags_write;
+mod taxonomy;
 mod time;
+mod wiki_read;
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -19,6 +28,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::Ordering;
 
+use chrono::DateTime;
+use chrono::Utc;
 use kernel::queue::JobId;
 use parking_lot::Mutex;
 use rusqlite::Connection;
@@ -34,6 +45,32 @@ pub use queue::JobInsert;
 pub use queue::JobPayload;
 pub use queue::JobState;
 pub use queue::retry_delay_ms;
+
+#[derive(Clone)]
+struct SharedClock(Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>);
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        manualderive,
+        reason = "derive(Debug) cannot format a function object; the impl names the clock and skips the closure"
+    )
+)]
+impl std::fmt::Debug for SharedClock {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_tuple("SharedClock").finish_non_exhaustive()
+    }
+}
+
+impl SharedClock {
+    fn new(clock: impl Fn() -> DateTime<Utc> + Send + Sync + 'static) -> Self {
+        Self(Arc::new(clock))
+    }
+
+    fn now(&self) -> DateTime<Utc> {
+        (self.0)()
+    }
+}
 
 pub const SCHEMA_VERSION: i64 = 7;
 
@@ -52,6 +89,7 @@ pub struct SqliteStore {
     logs: Arc<Mutex<Vec<String>>>,
     embed: Arc<AtomicBool>,
     claims: Arc<ClaimIds>,
+    clock: SharedClock,
 }
 
 impl SqliteStore {
@@ -70,7 +108,15 @@ impl SqliteStore {
         })?;
         conn.execute_batch(FILE_PRAGMAS)
             .map_err(SqliteError::Pragma)?;
-        Ok(from_conn(conn))
+        Ok(from_conn(conn, SharedClock::new(Utc::now)))
+    }
+
+    #[must_use]
+    pub fn with_clock(self, clock: impl Fn() -> DateTime<Utc> + Send + Sync + 'static) -> Self {
+        Self {
+            clock: SharedClock::new(clock),
+            ..self
+        }
     }
 
     #[must_use]
@@ -117,6 +163,10 @@ impl SqliteStore {
         self.embed.load(Ordering::Acquire)
     }
 
+    pub(crate) fn now(&self) -> DateTime<Utc> {
+        self.clock.now()
+    }
+
     pub(crate) fn remember_claim(&self, text_id: &str) -> Result<JobId, SqliteError> {
         self.claims.issue(text_id)
     }
@@ -157,13 +207,14 @@ impl ClaimIds {
     }
 }
 
-fn from_conn(conn: Connection) -> SqliteStore {
+fn from_conn(conn: Connection, clock: SharedClock) -> SqliteStore {
     SqliteStore {
         conn: Arc::new(Mutex::new(conn)),
         owner: None,
         logs: Arc::new(Mutex::new(Vec::new())),
         embed: Arc::new(AtomicBool::new(false)),
         claims: Arc::new(ClaimIds::default()),
+        clock,
     }
 }
 

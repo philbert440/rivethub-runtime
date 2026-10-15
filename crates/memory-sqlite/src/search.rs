@@ -169,11 +169,19 @@ impl Plan {
 }
 
 fn fts_match(text: &str) -> Option<String> {
+    join_tokens(text, " AND ")
+}
+
+pub(crate) fn fts_or(text: &str) -> Option<String> {
+    join_tokens(text, " OR ")
+}
+
+fn join_tokens(text: &str, separator: &str) -> Option<String> {
     let tokens: Vec<String> = text.split_whitespace().filter_map(fts_token).collect();
     if tokens.is_empty() {
         None
     } else {
-        Some(tokens.join(" AND "))
+        Some(tokens.join(separator))
     }
 }
 

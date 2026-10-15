@@ -75,6 +75,10 @@ impl SqliteStore {
     }
 
     pub async fn get_full(&self, id: &str) -> Result<Option<MemoryEntry>, SqliteError> {
+        self.message_entry(id).await
+    }
+
+    pub(crate) async fn message_entry(&self, id: &str) -> Result<Option<MemoryEntry>, SqliteError> {
         let id = id.to_owned();
         self.with_conn(move |conn| {
             conn.query_row(

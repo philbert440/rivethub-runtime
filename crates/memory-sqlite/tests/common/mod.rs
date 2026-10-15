@@ -4,6 +4,7 @@ use std::fs;
 
 use chrono::DateTime;
 use chrono::Utc;
+use memory_sqlite::SqliteError;
 use memory_sqlite::SqliteStore;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -84,6 +85,13 @@ pub(crate) async fn table(store: &SqliteStore, name: &str) -> TestResult<Vec<Jso
         .with_conn(move |conn| Ok(testkit::query_json(conn, &sql, &[])))
         .await??;
     Ok(rows)
+}
+
+pub(crate) fn seed(source: rusqlite::Error) -> SqliteError {
+    SqliteError::Query {
+        operation: "seed",
+        source,
+    }
 }
 
 pub(crate) async fn execute(store: &SqliteStore, sql: &str) -> TestResult {

@@ -100,6 +100,14 @@ pub enum SqliteError {
     SynthesisUnconfigured,
     #[error("search hit {id} was not updated")]
     MissingHit { id: String },
+    #[error("schema v7 has no {table} table")]
+    MissingTable { table: &'static str },
+    #[error("tag tables are missing")]
+    TagTablesMissing,
+    #[error("{message}")]
+    Invalid { message: String },
+    #[error("embedding width is {got}, the column is {expected}")]
+    Width { got: usize, expected: usize },
 }
 
 impl SqliteError {
@@ -114,7 +122,9 @@ impl From<SqliteError> for MemoryStoreError {
             SqliteError::InvalidTimestamp { .. }
             | SqliteError::InvertedRange
             | SqliteError::KeywordIndex { .. }
-            | SqliteError::SynthesisUnconfigured => Self::InvalidRequest {
+            | SqliteError::SynthesisUnconfigured
+            | SqliteError::Invalid { .. }
+            | SqliteError::Width { .. } => Self::InvalidRequest {
                 message: error.to_string(),
             },
             SqliteError::Query { .. }
@@ -131,10 +141,12 @@ impl From<SqliteError> for MemoryStoreError {
             | SqliteError::InsertRejected
             | SqliteError::StoredPayload { .. }
             | SqliteError::StoredTagType { .. }
-            | SqliteError::MissingHit { .. } => Self::Query {
+            | SqliteError::MissingHit { .. }
+            | SqliteError::MissingTable { .. } => Self::Query {
                 message: error.to_string(),
                 source: Box::new(error),
             },
+            SqliteError::TagTablesMissing => Self::TagTablesMissing,
             SqliteError::Open { .. }
             | SqliteError::NotInitialised { .. }
             | SqliteError::SchemaBehind { .. }

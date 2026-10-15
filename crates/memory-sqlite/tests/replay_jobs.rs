@@ -25,7 +25,7 @@ use serde::Serialize;
 use testkit::Json;
 
 const QUEUE: &str = "queue: enqueue/claim/fail/dead/revive/requeue/recover";
-const WORKERS: &str = "the workers crate runs the job runner and the embedder handler; memory-sqlite implements JobQueue only";
+const WORKERS: &str = "the workers crate runs the job runner and the embedder handler; the store tests cover EmbeddingStore without the job loop";
 
 const SKIPPED: &[(&str, &str)] = &[
     ("runner: tick, handlers, sweeps, failures", WORKERS),

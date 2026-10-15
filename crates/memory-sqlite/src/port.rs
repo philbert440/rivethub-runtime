@@ -153,7 +153,11 @@ fn claim_message(error: &SqliteError) -> Option<String> {
         | SqliteError::StoredTagType { .. }
         | SqliteError::KeywordIndex { .. }
         | SqliteError::SynthesisUnconfigured
-        | SqliteError::MissingHit { .. } => None,
+        | SqliteError::MissingHit { .. }
+        | SqliteError::MissingTable { .. }
+        | SqliteError::TagTablesMissing
+        | SqliteError::Invalid { .. }
+        | SqliteError::Width { .. } => None,
     }
 }
 

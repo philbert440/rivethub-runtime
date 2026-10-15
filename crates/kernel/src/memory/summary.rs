@@ -9,7 +9,7 @@ use crate::BoxError;
 
 pub const HEARTBEAT_SESSION_PREFIX: &str = "heartbeat:";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "snake_case")]
 pub enum SummaryKind {
     Leaf,

@@ -32,14 +32,17 @@ lints in `lints/` (run by `cargo dylint`, pinned nightly), everything that is a 
 - New Dylint lint: write it in `lints/src/`, register it in `register_lints`, add the UI test (`lints/ui/<name>/` with one
   firing and one passing case), add it to `xtask/src/patterns.rs` and give it a `docs/PATTERNS.md` entry.
 
-## memory-sqlite: write and read slice (2026-10-13)
+## memory-sqlite: kernel memory ports (2026-10-14)
 
-Built on the v7 file `rivethub-migrate sqlite` creates: `SqliteStore::capture(batch, now)`, `append_entries(entries, now)`,
-`browse_at(filter, now)`, `get_full(id)`, `stats_for(agent)`, `with_owner(..)` — inherent methods only. `impl MemoryStore`
-waits until search, context and tags exist (never implement a trait partially). Every SQLite call runs in `with_conn`
-(spawn_blocking); time is an argument. No `unwrap_or` defaults: an absent channel, settings or metadata column is left out
-of the INSERT so the v7 schema default applies (messages take their conversation's stored channel), and an absent source
-timestamp is the typed `Stamp::CaptureTime`.
+`SqliteStore` implements `MemoryStore`, `EmbeddingStore`, and `SummaryStore` on the v7 file `rivethub-migrate sqlite`
+creates, plus the existing `JobQueue`. Inherent methods remain: `capture`, `append_entries`, `browse_at`, `get_full` /
+`message_entry`, `stats_for`, `search_at`, `with_owner`. Every SQLite call runs in `with_conn` (spawn_blocking). The trait
+`context` uses the `now` argument; tag and taxonomy writes stamp with the clock chosen when the store is built (`Utc::now`, or `with_clock`). No `unwrap_or`
+defaults: an absent channel, settings or metadata column is left out of the INSERT so the v7 schema default applies
+(messages take their conversation's stored channel), and an absent source timestamp is the typed `Stamp::CaptureTime`.
+
+Schema v7 has no `ros_message_chunks` table and no `content_hash` column on messages, summaries, or wiki topics.
+`EmbeddingStore` refuses chunk targets and non-empty chunk lists, and ignores `content_hash`. See the crate README.
 
 Capture rules replayed from `capture.json`: dedupe by `metadata.event_id` within (session_key, agent); a stored
 `pending_result: true` row is filled in place by the same event with a result; a `cowork-transcript` message claims an
@@ -49,7 +52,9 @@ result cap at 16000 chars with `truncated`/`full_*_length` metadata; bad timesta
 Append: no dedupe, title `Session <key>` / `Heartbeat <agent>`, task id from `task:<uuid>` keys or `metadata.taskId`.
 
 Deviations (in the replay tests as data): `title: null` cannot clear a title (wire `Option<String>`, and B3 rejects null);
-lengths are chars, not UTF-16 units. Skipped: project-rule tagging, embedding jobs, health, history/settings reads,
-search, tags, summaries in get_full, and the MCP tool layer (text rendering, argument checks, event-id hashing).
+lengths are chars, not UTF-16 units. `decide_tags` returns a count where the recording returns ids. Taxonomy list order
+is key then value. Context has no `maxTokens` argument. Chunk storage and `content_hash` are absent from schema v7.
+Still skipped, with a reason a test checks: project-rule tagging, health, history/settings reads, the hybrid search
+scenario, summarizer/wiki/tagger/embedder job loops, `get_full` of summaries, and the MCP tool layer.
 Gotcha: the recordings do not carry inputs; the replay tests rebuild them from labels and the recorded rows, and match
 generated ids by role (a bijection), never by text.
