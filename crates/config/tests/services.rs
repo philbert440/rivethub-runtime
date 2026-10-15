@@ -194,3 +194,33 @@ fn an_explicit_config_path_wins_before_the_home_candidates()
     std::fs::remove_dir_all(home)?;
     Ok(())
 }
+
+#[test]
+fn sqlite_selection_is_the_single_rule_for_every_memory_configuration() {
+    for (backend, sqlite, postgres, embedded, expected) in [
+        (None, false, false, false, false),
+        (None, true, false, false, true),
+        (None, false, true, false, false),
+        (None, true, true, false, false),
+        (None, false, true, true, true),
+        (Some(MemoryBackend::Postgres), true, false, false, false),
+        (Some(MemoryBackend::Postgres), false, true, true, true),
+        (Some(MemoryBackend::Sqlite), false, true, false, true),
+        (Some(MemoryBackend::Sqlite), false, false, false, true),
+    ] {
+        let config = config_with(
+            Some(MemorySection {
+                backend,
+                sqlite: sqlite.then(SqliteSection::default),
+                postgres: postgres.then(|| PostgresSection {
+                    embedded: embedded.then(EmbeddedSection::default),
+                    ..PostgresSection::default()
+                }),
+                ..MemorySection::default()
+            }),
+            None,
+        );
+        assert_eq!(config.sqlite_selected(), expected, "{config:?}");
+    }
+    assert!(!Config::default().sqlite_selected());
+}

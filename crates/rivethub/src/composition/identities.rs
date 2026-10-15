@@ -20,10 +20,9 @@ pub(super) async fn load(
             .and_then(|gateway| gateway.users_file.as_deref())
     });
     let Some(path) = path else {
-        let owner = UserId::new("owner".into())?;
-        return Ok(Identity {
-            tenancy: Tenancy::local(owner.clone()).with_unmapped_device_owner(owner.clone()),
-            owner,
+        return registry(UsersRegistry {
+            unmapped_is_owner: true,
+            ..UsersRegistry::default()
         });
     };
     let users: UsersRegistry = serde_json::from_slice(&tokio::fs::read(path).await?)?;

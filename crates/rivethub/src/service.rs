@@ -35,6 +35,8 @@ pub enum StartupError {
     Url,
     #[error(transparent)]
     Memory(#[from] memory_postgres::Error),
+    #[error(transparent)]
+    Close(#[from] kernel::memory::MemoryStoreError),
     #[error("memory.postgres.embed_model is required when embed_endpoint is set")]
     EmbedModel,
     #[error(transparent)]
@@ -65,8 +67,9 @@ pub(crate) async fn postgres(
     env: &Environment,
 ) -> Result<PostgresMemory, StartupError> {
     let url = postgres_url(config, env)?;
+    let embed = query_embed(config)?;
     let memory = PostgresMemory::connect(&url).await?;
-    Ok(match query_embed(config)? {
+    Ok(match embed {
         Some(embed) => memory.with_query_embed(embed),
         None => memory,
     })
@@ -243,15 +246,40 @@ async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), Start
         () = shutdown.cancelled() => return Ok(()),
         memory = postgres(&config, env) => Arc::new(memory?),
     };
-    let store: Arc<dyn MemoryStore> = memory.clone();
+    let result = run_gateway(&config, env, memory.clone(), &shutdown).await;
+    shutdown.cancel();
+    let closed = memory.close().await;
+    closed?;
+    result?;
+    tracing::info!("gateway stopped");
+    Ok(())
+}
+
+async fn run_gateway(
+    config: &Config,
+    env: &Environment,
+    store: Arc<dyn MemoryStore>,
+    shutdown: &CancellationToken,
+) -> Result<(), StartupError> {
     let mut composition =
-        crate::composition::Composition::build(&config, env, store, &shutdown).await?;
-    let (listener, tls) = listen(&config).await?;
-    let addr = listener.local_addr()?;
-    tracing::info!(
-        "gateway listening on {addr}{}",
-        if tls.is_some() { " (tls)" } else { " (plain)" }
-    );
+        crate::composition::Composition::build(config, env, store, shutdown).await?;
+    let listening = async {
+        let (listener, tls) = listen(config).await?;
+        let addr = listener.local_addr()?;
+        tracing::info!(
+            "gateway listening on {addr}{}",
+            if tls.is_some() { " (tls)" } else { " (plain)" }
+        );
+        Ok::<_, StartupError>((listener, tls))
+    }
+    .await;
+    let (listener, tls) = match listening {
+        Ok(bound) => bound,
+        Err(error) => {
+            composition.close().await?;
+            return Err(error);
+        }
+    };
     let serving = gateway::server::serve_router_with(
         listener,
         composition.router(tls.is_some()),
@@ -260,15 +288,23 @@ async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), Start
         gateway::server::ServeOptions::default(),
     );
     tokio::pin!(serving);
-    let result = tokio::select! {
+    let (served, failed) = tokio::select! {
         biased;
-        () = shutdown.cancelled() => { composition.close().await?; serving.await },
-        result = &mut serving => { shutdown.cancel(); composition.close().await?; result },
-        result = composition.failed() => { shutdown.cancel(); composition.close().await?; result?; serving.await },
+        () = shutdown.cancelled() => (None, None),
+        result = &mut serving => (Some(result), None),
+        result = composition.failed() => (None, Some(result)),
     };
-    memory.flush_access().await;
-    result?;
-    tracing::info!("gateway stopped");
+    shutdown.cancel();
+    let closed = composition.close().await;
+    let served = match served {
+        Some(result) => result,
+        None => serving.await,
+    };
+    closed?;
+    if let Some(result) = failed {
+        result?;
+    }
+    served?;
     Ok(())
 }
 

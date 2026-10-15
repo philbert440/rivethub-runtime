@@ -15,7 +15,7 @@ impl StartupError {
             | Self::Voice(_)
             | Self::EmbedModel
             | Self::EmbedProvider(_) => Exit::Failure,
-            Self::Memory(_) => Exit::Memory,
+            Self::Memory(_) | Self::Close(_) => Exit::Memory,
             Self::Bind(_) => Exit::Bind,
             Self::Serve(_) | Self::Io(_) => Exit::Serve,
         }

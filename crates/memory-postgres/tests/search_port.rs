@@ -355,3 +355,67 @@ async fn synthesis_without_text_is_an_error_not_a_silent_default(pool: PgPool) -
     );
     Ok(())
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn close_waits_for_access_writes_and_wakes_every_waiter(pool: PgPool) -> TestResult {
+    use std::future::{Future as _, poll_fn};
+    use std::task::Poll;
+    use std::time::Duration;
+
+    seed(&pool).await?;
+    let store: Arc<dyn MemoryStore> = Arc::new(PostgresMemory::new(pool.clone()));
+    let mut blocker = pool.begin().await?;
+    sqlx::query("LOCK TABLE rh_messages, rh_summaries IN SHARE MODE")
+        .execute(&mut *blocker)
+        .await?;
+    let mut search = query(SearchMode::Fts);
+    search.text = "release".into();
+    search.limit = Limit::clamped(Some(10), 10, 1..=50);
+    let outcome = store.search(search).await?;
+    assert_eq!(outcome.results.len(), 6);
+    let closing = store.close();
+    tokio::pin!(closing);
+    poll_fn(|cx| {
+        assert!(closing.as_mut().poll(cx).is_pending());
+        Poll::Ready(())
+    })
+    .await;
+    blocker.commit().await?;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let (first, second, third) = tokio::join!(closing, store.close(), store.close());
+        first?;
+        second?;
+        third
+    })
+    .await??;
+    let counts: Vec<i32> = sqlx::query_scalar(
+        "SELECT access_count FROM rh_messages UNION ALL SELECT access_count FROM rh_summaries",
+    )
+    .fetch_all(&pool)
+    .await?;
+    assert_eq!(counts, vec![1; 6]);
+    store.close().await?;
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn close_reports_background_write_failure(pool: PgPool) -> TestResult {
+    use std::time::Duration;
+
+    seed(&pool).await?;
+    sqlx::query("ALTER TABLE rh_messages ADD CONSTRAINT refuse_access CHECK (access_count = 0)")
+        .execute(&pool)
+        .await?;
+    let store = PostgresMemory::new(pool);
+    let mut search = query(SearchMode::Fts);
+    search.scope = MemoryScope::Messages;
+    search.text = "release".into();
+    assert_eq!(store.search(search).await?.results.len(), 1);
+    let result = tokio::time::timeout(Duration::from_secs(10), store.close()).await?;
+    assert!(matches!(
+        result,
+        Err(kernel::memory::MemoryStoreError::Unavailable(_))
+    ));
+    assert!(store.close().await.is_err());
+    Ok(())
+}

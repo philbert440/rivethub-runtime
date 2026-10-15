@@ -65,10 +65,6 @@ impl PostgresMemory {
         }
     }
 
-    pub async fn flush_access(&self) {
-        self.access.settled().await;
-    }
-
     #[must_use]
     pub fn with_query_embed(mut self, embed: QueryEmbed) -> Self {
         self.embed = Some(embed::EmbedArm::new(embed));

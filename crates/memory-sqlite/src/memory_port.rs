@@ -41,6 +41,12 @@ use crate::error::SqliteError;
 
 #[async_trait]
 impl MemoryStore for SqliteStore {
+    async fn close(&self) -> Result<(), MemoryStoreError> {
+        self.pending.close();
+        self.pending.wait().await;
+        Ok(())
+    }
+
     async fn wiki_topics(&self, filter: WikiFilter) -> Result<WikiTopicList, MemoryStoreError> {
         self.read_wiki_topics(filter).await
     }

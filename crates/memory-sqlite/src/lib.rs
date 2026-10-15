@@ -85,6 +85,7 @@ struct ClaimIds {
 #[derive(Debug, Clone)]
 pub struct SqliteStore {
     conn: Arc<Mutex<Connection>>,
+    pending: tokio_util::task::TaskTracker,
     owner: Option<String>,
     logs: Arc<Mutex<Vec<String>>>,
     embed: Arc<AtomicBool>,
@@ -138,7 +139,11 @@ impl SqliteStore {
         F: FnOnce(&mut Connection) -> Result<T, SqliteError> + Send + 'static,
     {
         let conn = Arc::clone(&self.conn);
-        match tokio::task::spawn_blocking(move || f(&mut conn.lock())).await {
+        match self
+            .pending
+            .spawn_blocking(move || f(&mut conn.lock()))
+            .await
+        {
             Ok(result) => result,
             Err(source) => Err(SqliteError::Join(source)),
         }
@@ -211,6 +216,7 @@ impl ClaimIds {
 fn from_conn(conn: Connection, clock: SharedClock) -> SqliteStore {
     SqliteStore {
         conn: Arc::new(Mutex::new(conn)),
+        pending: tokio_util::task::TaskTracker::new(),
         owner: None,
         logs: Arc::new(Mutex::new(Vec::new())),
         embed: Arc::new(AtomicBool::new(false)),

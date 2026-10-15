@@ -420,21 +420,6 @@ impl Config {
             .is_some_and(|terminal| terminal.enabled == Some(true))
     }
 
-    pub fn memory_backend(&self) -> MemoryBackend {
-        if let Some(backend) = self.memory.as_ref().and_then(|memory| memory.backend) {
-            return backend;
-        }
-        if self.pglite_import_pending() {
-            return MemoryBackend::Sqlite;
-        }
-        match self.memory.as_ref() {
-            Some(memory) if memory.postgres.is_some() && memory.sqlite.is_none() => {
-                MemoryBackend::Postgres
-            }
-            _ => MemoryBackend::Sqlite,
-        }
-    }
-
     #[must_use]
     pub fn memory_postgres_url(&self, env: &Environment) -> Option<String> {
         self.memory

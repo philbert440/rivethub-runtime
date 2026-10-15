@@ -221,6 +221,13 @@ fn append_event_id(entry: &MemoryEntry) -> Result<String, Error> {
 
 #[async_trait]
 impl MemoryStore for crate::PostgresMemory {
+    async fn close(&self) -> Result<(), MemoryStoreError> {
+        self.access
+            .settled()
+            .await
+            .map_err(|error| MemoryStoreError::Unavailable(Box::new(error)))
+    }
+
     async fn wiki_topics(
         &self,
         filter: kernel::wiki::WikiFilter,

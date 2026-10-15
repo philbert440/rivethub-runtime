@@ -136,6 +136,10 @@ fn unavailable<T>() -> Result<T, MemoryStoreError> {
 
 #[async_trait::async_trait]
 impl MemoryStore for FailingStore {
+    async fn close(&self) -> Result<(), MemoryStoreError> {
+        Ok(())
+    }
+
     async fn wiki_topics(
         &self,
         _filter: kernel::wiki::WikiFilter,
@@ -314,6 +318,10 @@ impl Default for GatedStore {
 
 #[async_trait::async_trait]
 impl MemoryStore for GatedStore {
+    async fn close(&self) -> Result<(), MemoryStoreError> {
+        Ok(())
+    }
+
     async fn wiki_topics(
         &self,
         filter: kernel::wiki::WikiFilter,

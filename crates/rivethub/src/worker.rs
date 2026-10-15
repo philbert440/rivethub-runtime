@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use config::provider::ProviderBody;
 use config::{Config, Environment};
+use kernel::memory::MemoryStore as _;
 use kernel::memory::{EmbeddingStore, SummaryStore};
 use kernel::model::ModelProvider;
 use memory_postgres::PostgresMemory;
@@ -100,12 +101,18 @@ async fn run(
     let owned = env.clone();
     let config = tokio::task::spawn_blocking(move || load(&owned)).await??;
     let memory = Arc::new(postgres(&config, env).await?);
-    let queue = memory.queue().await.map_err(StartupError::from)?;
-
-    let model = provider_model(&config)?;
-    let runner = build_runner(role, memory, queue, &config, model)?;
-    tracing::info!("worker running {role}");
-    drive(runner, shutdown).await?;
+    let result = async {
+        let queue = memory.queue().await.map_err(StartupError::from)?;
+        let model = provider_model(&config)?;
+        let runner = build_runner(role, Arc::clone(&memory), queue, &config, model)?;
+        tracing::info!("worker running {role}");
+        drive(runner, shutdown.clone()).await
+    }
+    .await;
+    shutdown.cancel();
+    let closed = memory.close().await.map_err(StartupError::from);
+    closed?;
+    result?;
     tracing::info!("worker stopped");
     Ok(())
 }

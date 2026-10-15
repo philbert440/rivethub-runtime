@@ -102,3 +102,17 @@ async fn registry_environment_precedence_and_deprecated_alias_fail_closed() -> T
     Composition::validate_users(&config, &env).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn local_identity_uses_the_wire_registry_default() -> TestResult {
+    let users = UsersRegistry::default();
+    assert_eq!(users.owner_user_id, wire::gateway::users::DEFAULT_OWNER_ID);
+    assert_eq!(users.owner_user_id, "owner");
+    assert!(!users.unmapped_is_owner);
+    Composition::validate_users(&config::Config::default(), &config::Environment::default())
+        .await?;
+    assert!(
+        serde_json::from_str::<UsersRegistry>(r#"{"unmappedIsOwner":false,"users":{}}"#).is_err()
+    );
+    Ok(())
+}

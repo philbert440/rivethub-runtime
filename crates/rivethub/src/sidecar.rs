@@ -140,16 +140,33 @@ async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), Sidec
     let config = read_config(env).await?;
     let selected = select(&config)?;
     let memory = Arc::new(postgres(&config, env).await?) as Arc<dyn MemoryStore>;
-    let delegation = crate::agent::open_delegation(&config, env, &shutdown).await?;
-    let server = mcp::Server::builder(memory, false, shutdown.child_token())
-        .delegation(Arc::clone(&delegation.port), surface(&selected))
-        .build()?;
-    let ran = serve(server, selected, shutdown).await;
-    let stopped = delegation.shutdown().await;
-    ran?;
-    stopped?;
+    let result = run_server(&config, env, Arc::clone(&memory), selected, &shutdown).await;
+    shutdown.cancel();
+    let closed = memory.close().await.map_err(StartupError::from);
+    closed?;
+    result?;
     tracing::info!("mcp stopped");
     Ok(())
+}
+
+async fn run_server(
+    config: &Config,
+    env: &Environment,
+    memory: Arc<dyn MemoryStore>,
+    selected: Selected,
+    shutdown: &CancellationToken,
+) -> Result<(), SidecarError> {
+    let delegation = crate::agent::open_delegation(config, env, shutdown).await?;
+    let ran = async {
+        let server = mcp::Server::builder(memory, false, shutdown.child_token())
+            .delegation(Arc::clone(&delegation.port), surface(&selected))
+            .build()?;
+        serve(server, selected, shutdown.clone()).await
+    }
+    .await;
+    let stopped = delegation.shutdown().await;
+    stopped?;
+    ran
 }
 
 fn surface(selected: &Selected) -> mcp::Surface {

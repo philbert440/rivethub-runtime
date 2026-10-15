@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use kernel::memory::Limit;
+use kernel::memory::MemoryStore as _;
 use kernel::memory::SearchMode;
 use kernel::memory::SearchQuery;
 use kernel::model::Embedding;
@@ -470,7 +471,7 @@ async fn observe_recency(
     let outcome = memory
         .search_outcome_for(&query("deploy", SearchMode::Fts))
         .await?;
-    memory.flush_access().await;
+    memory.close().await?;
     let score = outcome
         .hits
         .iter()

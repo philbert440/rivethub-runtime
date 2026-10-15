@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use config::{Config, ConfigError, Environment, MemoryBackend};
+use config::{Config, ConfigError, Environment};
 
 fn env_from(pairs: &[(&str, &str)]) -> Environment {
     Environment::from_vars(
@@ -96,27 +96,27 @@ fn decision_9_memory_backend_resolves() -> Result<(), Box<dyn std::error::Error>
         "",
         "memory:\n  postgres:\n    connection_string: postgres://example.com/db\n",
     ))?;
-    assert_eq!(config.memory_backend(), MemoryBackend::Postgres);
+    assert!(!config.sqlite_selected());
     assert!(!config.pglite_import_pending());
 
     let config = expect_loaded(&config_yaml(
         "",
         "memory:\n  postgres:\n    embedded:\n      data_dir: /home/user/.rivetos/pg\n",
     ))?;
-    assert_eq!(config.memory_backend(), MemoryBackend::Sqlite);
+    assert!(config.sqlite_selected());
     assert!(config.pglite_import_pending());
 
     let config = expect_loaded(&config_yaml("", ""))?;
-    assert_eq!(config.memory_backend(), MemoryBackend::Sqlite);
+    assert!(!config.sqlite_selected());
 
     let config = expect_loaded(&config_yaml("", "memory:\n  backend: postgres\n"))?;
-    assert_eq!(config.memory_backend(), MemoryBackend::Postgres);
+    assert!(!config.sqlite_selected());
 
     let config = expect_loaded(&config_yaml(
         "",
         "memory:\n  backend: sqlite\n  postgres:\n    connection_string: postgres://example.com/db\n",
     ))?;
-    assert_eq!(config.memory_backend(), MemoryBackend::Sqlite);
+    assert!(config.sqlite_selected());
 
     let formatted = expect_validation_error(&config_yaml("", "memory:\n  backend: pglite\n"))?;
     assert!(

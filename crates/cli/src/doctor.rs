@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
-use config::{Config, Environment, MemoryBackend, Paths};
+use config::{Config, Environment, Paths};
 use nix::sys::statvfs::statvfs;
 use nix::unistd::{AccessFlags, access};
 use serde::{Deserialize, Serialize};
@@ -248,20 +248,17 @@ async fn schema_check(config: &Config, env: &Environment) -> Check {
 }
 
 async fn schema_status(config: &Config, env: &Environment) -> Result<migrate::Status, Error> {
-    match config.memory_backend() {
-        MemoryBackend::Postgres => {
-            let url = config.memory_postgres_url(env).ok_or(Error::PostgresUrl)?;
-            Ok(migrate::postgres_status(&url).await?)
-        }
-        MemoryBackend::Sqlite => {
-            let path = config
-                .memory
-                .as_ref()
-                .and_then(|memory| memory.sqlite.as_ref())
-                .and_then(|sqlite| sqlite.path.clone())
-                .ok_or(Error::SqlitePath)?;
-            Ok(tokio::task::spawn_blocking(move || migrate::sqlite_status(&path)).await??)
-        }
+    if config.sqlite_selected() {
+        let path = config
+            .memory
+            .as_ref()
+            .and_then(|memory| memory.sqlite.as_ref())
+            .and_then(|sqlite| sqlite.path.clone())
+            .ok_or(Error::SqlitePath)?;
+        Ok(tokio::task::spawn_blocking(move || migrate::sqlite_status(&path)).await??)
+    } else {
+        let url = config.memory_postgres_url(env).ok_or(Error::PostgresUrl)?;
+        Ok(migrate::postgres_status(&url).await?)
     }
 }
 

@@ -210,3 +210,26 @@ async fn deprecated_alias_notice_is_reported_once_on_success_and_failure() {
         assert_eq!(report.exit, if corrupt { Exit::Failure } else { Exit::Ok });
     }
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn absent_memory_section_uses_the_environment_postgres_url(pool: sqlx::PgPool) {
+    let (home, _) = setup("");
+    let url = pool.connect_options().to_url_lossy().to_string();
+    let env = Environment::from_vars([
+        ("HOME".as_ref(), home.path().as_os_str()),
+        (config::POSTGRES_URL_VARIABLE.as_ref(), url.as_ref()),
+    ]);
+    let (_, report) = doctor(&env).await;
+    assert_eq!(memory(&report).status, CheckStatus::Pass);
+    assert_eq!(memory(&report).message, "Schema 21 is current.");
+}
+
+#[tokio::test]
+async fn pending_import_overrides_explicit_postgres_in_doctor() {
+    let (_home, env) = setup(
+        "memory:\n  backend: postgres\n  postgres:\n    embedded:\n      data_dir: /home/user/import\n",
+    );
+    let (_, report) = doctor(&env).await;
+    assert_eq!(memory(&report).status, CheckStatus::Fail);
+    assert_eq!(memory(&report).message, cli::Error::SqlitePath.to_string());
+}

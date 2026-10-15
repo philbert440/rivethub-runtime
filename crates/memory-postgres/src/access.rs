@@ -21,6 +21,7 @@ struct Pending {
     summaries: BTreeSet<Uuid>,
     dropped: u64,
     writing: bool,
+    failure: Option<Arc<Error>>,
 }
 
 impl AccessLog {
@@ -49,13 +50,16 @@ impl AccessLog {
         }
     }
 
-    pub(crate) async fn settled(&self) {
+    pub(crate) async fn settled(&self) -> Result<(), Arc<Error>> {
         loop {
             let idle = self.idle.notified();
             {
                 let pending = self.state.lock();
                 if !pending.writing && pending.is_empty() {
-                    return;
+                    return match &pending.failure {
+                        Some(error) => Err(Arc::clone(error)),
+                        None => Ok(()),
+                    };
                 }
             }
             idle.await;
@@ -85,6 +89,10 @@ impl AccessLog {
             }
             if let Err(error) = write(&pool, &messages, &summaries).await {
                 tracing::warn!("search access counts not recorded: {error}");
+                self.state
+                    .lock()
+                    .failure
+                    .get_or_insert_with(|| Arc::new(error));
             }
         }
     }
