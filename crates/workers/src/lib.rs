@@ -54,3 +54,5 @@ pub use summarize::handle_enqueue_stale;
 pub use summarize::handle_reap;
 pub use summarize::handle_summarize;
 pub use summarize::summary_health;
+
+pub mod wiki_builder;

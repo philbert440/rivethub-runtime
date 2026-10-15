@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT topics_touched FROM rh_wiki_extractions WHERE summary_id = $1\n         AND status IN ('done', 'skipped') AND pipeline_version >= $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "topics_touched",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "rh_wiki_extractions",
+            "name": "topics_touched"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "73bf159e045a0656c8faca93baf66ef2dd65b272e6d6f2e1b853833e08fbcdb9"
+}

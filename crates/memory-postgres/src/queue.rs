@@ -69,9 +69,6 @@ impl PostgresQueue {
             WorkerRole::WikiBuilder => &[
                 JobName::Fixed(FixedJob::ExtractWiki),
                 JobName::Fixed(FixedJob::EnqueueWikiBackfill),
-                JobName::Fixed(FixedJob::ConsolidateWiki),
-                JobName::Fixed(FixedJob::RecompileWiki),
-                JobName::Fixed(FixedJob::EnqueueStaleWiki),
             ],
         }
     }
@@ -109,18 +106,11 @@ impl PostgresQueue {
                 ),
             ],
             WorkerRole::Categorizer => vec![],
-            WorkerRole::WikiBuilder => vec![
-                cron(
-                    "wiki-backfill",
-                    JobName::Fixed(FixedJob::EnqueueWikiBackfill),
-                    "*/10 * * * *",
-                ),
-                cron(
-                    "stale-wiki-sweep",
-                    JobName::Fixed(FixedJob::EnqueueStaleWiki),
-                    "*/15 * * * *",
-                ),
-            ],
+            WorkerRole::WikiBuilder => vec![cron(
+                "wiki-backfill",
+                JobName::Fixed(FixedJob::EnqueueWikiBackfill),
+                "*/10 * * * *",
+            )],
         }
     }
 

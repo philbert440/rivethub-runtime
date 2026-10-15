@@ -12,6 +12,12 @@ pub(crate) const PERMANENT_NULL_EMBED_ERROR: &str = "Embedding returned null (pe
 
 #[derive(Debug, Error)]
 pub enum WorkerError {
+    #[error("wiki store failed: {0}")]
+    WikiStore(#[from] kernel::wiki::builder::WikiStoreError),
+    #[error("invalid wiki JSON: {0}")]
+    WikiJson(#[source] serde_json::Error),
+    #[error("wiki model failed: {0}")]
+    WikiModel(#[source] kernel::model::ModelProviderError),
     #[error("unknown worker role: {text}; expected {expected}")]
     UnknownRole { text: String, expected: String },
     #[error("{role} has no handler in this build")]

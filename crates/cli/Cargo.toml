@@ -34,6 +34,11 @@ url = { workspace = true }
 wire = { workspace = true }
 
 [dev-dependencies]
+async-trait = { workspace = true }
+memory-postgres = { workspace = true }
+sqlx = { workspace = true, features = ["macros"] }
+uuid = { workspace = true }
+workers = { workspace = true }
 hyper = { workspace = true, features = ["server", "http1"] }
 hyper-util.workspace = true
 rustls.workspace = true

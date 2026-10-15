@@ -15,6 +15,7 @@ pub struct WikiPageQuery {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
+#[derive(schemars::JsonSchema)]
 pub struct WikiSlug(String);
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -51,6 +52,7 @@ impl From<WikiSlug> for String {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(schemars::JsonSchema)]
 pub struct WikiHistoryEntry {
     pub date: String,
     pub title: String,

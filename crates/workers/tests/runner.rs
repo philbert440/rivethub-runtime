@@ -64,9 +64,6 @@ fn roles_match_the_kernel_task_lists() {
         vec![
             "extract-wiki".to_owned(),
             "enqueue-wiki-backfill".to_owned(),
-            "consolidate-wiki".to_owned(),
-            "recompile-wiki".to_owned(),
-            "enqueue-stale-wiki".to_owned(),
         ]
     );
     assert!(accepts(&fixed(FixedJob::EmbedTarget), WorkerRole::Embedder));
@@ -186,14 +183,14 @@ async fn an_unhandled_claim_is_failed() {
     let rig = rig(ProcessRole::Embedder, 1, fnv_provider());
     let id = rig
         .queue
-        .push_any(fixed(FixedJob::ExtractWiki), JsonObject::default(), 1)
+        .push_any(fixed(FixedJob::RecompileWiki), JsonObject::default(), 1)
         .await;
     let (cancel, run) = spawn(&rig);
     rig.queue.wait_phase(id, Phase::Dead).await;
     let job = rig.queue.view(id).await;
     assert_eq!(
         job.error.as_deref(),
-        Some("no handler for job extract-wiki")
+        Some("no handler for job recompile-wiki")
     );
     assert_ne!(job.phase, Phase::Done);
     finish(cancel, run).await;

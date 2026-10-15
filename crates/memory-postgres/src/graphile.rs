@@ -17,6 +17,11 @@ struct QueuedJob {
 }
 
 #[derive(Debug, sqlx::FromRow)]
+struct RemovedJobs {
+    removed: i64,
+}
+
+#[derive(Debug, sqlx::FromRow)]
 struct DeadJob {
     id: i64,
 }
@@ -48,7 +53,7 @@ struct ClaimedRow {
     id: i64,
     identifier: String,
     payload: sqlx::types::Json<JsonObject>,
-    attempts: i16,
+    attempts: i32,
 }
 
 #[derive(Debug)]
@@ -117,7 +122,7 @@ impl GraphileQueue {
                     updated_at = now()
                from selected s, graphile_worker._private_tasks t
               where j.id = s.id and t.id = j.task_id
-              returning j.id, t.identifier, j.payload, j.attempts",
+              returning j.id, t.identifier, j.payload, j.attempts::integer",
         )
         .bind(&tasks)
         .bind(&locked_by)
@@ -133,23 +138,28 @@ impl GraphileQueue {
                 row.identifier
             ))
         })?;
-        let attempt = u16::try_from(row.attempts.max(0))
-            .map_err(|source| Error::protocol(source.to_string()))?;
+        let attempt =
+            u32::try_from(row.attempts).map_err(|source| Error::protocol(source.to_string()))?;
         Ok(Some(ClaimedJob {
             id: JobId::new(row.id),
             name,
             payload: row.payload.0,
-            attempt: u32::from(attempt),
+            attempt,
         }))
     }
 
     pub(crate) async fn complete(&self, id: JobId) -> Result<u64, Error> {
-        let removed = sqlx::query("delete from graphile_worker._private_jobs where id = $1")
-            .bind(i64::from(id))
-            .execute(&self.pool)
-            .await
-            .map_err(|source| Error::operation("complete", source))?;
-        Ok(removed.rows_affected())
+        let removed: RemovedJobs = sqlx::query_as(
+            "with removed as (delete from graphile_worker._private_jobs
+             where id = $1 and starts_with(locked_by, $2) returning id)
+             select count(*)::bigint as removed from removed",
+        )
+        .bind(i64::from(id))
+        .bind(format!("{}-", self.worker))
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|source| Error::operation("complete", source))?;
+        count(removed.removed)
     }
 
     pub(crate) async fn fail(&self, id: JobId, error: &str) -> Result<(), Error> {
@@ -348,13 +358,13 @@ fn key_mode(mode: JobKeyMode) -> &'static str {
     }
 }
 
-fn max_attempts(name: &JobName) -> Option<i32> {
+fn max_attempts(name: &JobName) -> i32 {
     match name {
         JobName::Fixed(fixed) => match fixed {
-            FixedJob::EmbedTarget => Some(5),
-            FixedJob::CompactConversation | FixedJob::SynthesizeToolCall => Some(3),
-            FixedJob::SuggestTags | FixedJob::ExtractWiki => Some(2),
-            FixedJob::RunTask => Some(1),
+            FixedJob::EmbedTarget => 5,
+            FixedJob::CompactConversation | FixedJob::SynthesizeToolCall => 3,
+            FixedJob::SuggestTags | FixedJob::ExtractWiki => 2,
+            FixedJob::RunTask => 1,
             FixedJob::EnqueueUnembedded
             | FixedJob::EnqueueUnchunked
             | FixedJob::EnqueueIdle
@@ -363,8 +373,8 @@ fn max_attempts(name: &JobName) -> Option<i32> {
             | FixedJob::RecompileWiki
             | FixedJob::EnqueueStaleWiki
             | FixedJob::EnqueueStaleCompaction
-            | FixedJob::ReapDeadJobs => None,
+            | FixedJob::ReapDeadJobs => 25,
         },
-        JobName::RunTaskOn { .. } | JobName::Heartbeat { .. } => Some(1),
+        JobName::RunTaskOn { .. } | JobName::Heartbeat { .. } => 1,
     }
 }

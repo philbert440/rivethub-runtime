@@ -18,6 +18,7 @@ mod task_db;
 mod task_jobs;
 mod task_rows;
 mod wiki;
+mod wiki_builder;
 
 pub use task_db::PostgresTasks;
 

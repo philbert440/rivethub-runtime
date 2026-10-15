@@ -68,9 +68,6 @@ pub fn jobs_for(role: WorkerRole) -> Vec<JobName> {
         WorkerRole::WikiBuilder => vec![
             fixed(FixedJob::ExtractWiki),
             fixed(FixedJob::EnqueueWikiBackfill),
-            fixed(FixedJob::ConsolidateWiki),
-            fixed(FixedJob::RecompileWiki),
-            fixed(FixedJob::EnqueueStaleWiki),
         ],
     }
 }
@@ -97,6 +94,8 @@ pub(crate) fn handler_ready(name: &JobName) -> bool {
                 | FixedJob::EnqueueStaleCompaction
                 | FixedJob::ReapDeadJobs
                 | FixedJob::SuggestTags
+                | FixedJob::ExtractWiki
+                | FixedJob::EnqueueWikiBackfill
         )
     )
 }

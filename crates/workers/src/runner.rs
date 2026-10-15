@@ -35,6 +35,9 @@ use crate::summarize::handle_enqueue_idle;
 use crate::summarize::handle_enqueue_stale;
 use crate::summarize::handle_reap;
 use crate::summarize::handle_summarize;
+use crate::wiki_builder::{
+    WikiBuilderDeps, WikiBuilderEnv, handle_extract_wiki, handle_wiki_backfill,
+};
 
 pub const EMBED_CONCURRENCY: u32 = 4;
 pub const POLL_INTERVAL: Duration = Duration::from_secs(60);
@@ -87,6 +90,7 @@ pub struct WorkerDeps {
     reason = "the model provider and the summary and embedding stores are trait objects"
 )]
 pub struct Runner<Q> {
+    wiki: Option<WikiBuilderDeps>,
     queue: Arc<Q>,
     targets: Arc<dyn EmbeddingStore>,
     summaries: Arc<dyn SummaryStore>,
@@ -110,6 +114,7 @@ where
     pub fn new(queue: Arc<Q>, config: RunnerConfig, deps: WorkerDeps) -> Self {
         let (idle, _) = watch::channel(false);
         Self {
+            wiki: None,
             queue,
             targets: deps.targets,
             summaries: deps.summaries,
@@ -131,12 +136,26 @@ where
     }
 
     #[must_use]
+    pub fn with_wiki_builder(mut self, deps: WikiBuilderDeps) -> Self {
+        self.wiki = Some(deps);
+        self
+    }
+
+    #[must_use]
     pub fn idle(&self) -> watch::Receiver<bool> {
         self.idle.subscribe()
     }
 
     pub async fn run(&self, cancel: CancellationToken) -> Result<(), WorkerError> {
-        let roles = self.config.role.claim_roles()?;
+        let mut roles = self.config.role.claim_roles()?;
+        if self.wiki.is_none() {
+            roles.retain(|role| *role != WorkerRole::WikiBuilder);
+        }
+        if roles.is_empty() {
+            return Err(WorkerError::RoleUnavailable {
+                role: self.config.role,
+            });
+        }
         let permits =
             usize::try_from(self.config.concurrency).map_err(|_| WorkerError::Concurrency)?;
         let semaphore = Arc::new(Semaphore::new(permits));
@@ -216,6 +235,7 @@ where
         self.publish_idle(false);
         let queue = Arc::clone(&self.queue);
         let env = JobEnv {
+            wiki: self.wiki.clone(),
             targets: Arc::clone(&self.targets),
             summaries: Arc::clone(&self.summaries),
             memory: Arc::clone(&self.memory),
@@ -315,6 +335,7 @@ where
 }
 
 struct JobEnv {
+    wiki: Option<WikiBuilderDeps>,
     targets: Arc<dyn EmbeddingStore>,
     summaries: Arc<dyn SummaryStore>,
     memory: Arc<dyn MemoryStore>,
@@ -368,6 +389,26 @@ async fn dispatch<Q: JobQueue>(
         cancel,
     };
     match &job.name {
+        JobName::Fixed(FixedJob::ExtractWiki | FixedJob::EnqueueWikiBackfill) => {
+            let wiki = env.wiki.as_ref().ok_or(WorkerError::RoleUnavailable {
+                role: ProcessRole::WikiBuilder,
+            })?;
+            let wiki_env = WikiBuilderEnv {
+                store: wiki.store.as_ref(),
+                provider: env.provider.as_ref(),
+                queue,
+                model: &wiki.model,
+                now: Utc::now(),
+                cancel,
+            };
+            if job.name == JobName::Fixed(FixedJob::ExtractWiki) {
+                handle_extract_wiki(&wiki_env, &job.payload)
+                    .await
+                    .map(|_| ())
+            } else {
+                handle_wiki_backfill(&wiki_env).await.map(|_| ())
+            }
+        }
         JobName::Fixed(FixedJob::EmbedTarget) => {
             handle_embed(
                 env.targets.as_ref(),
@@ -401,8 +442,6 @@ async fn dispatch<Q: JobQueue>(
             FixedJob::EnqueueUnembedded
             | FixedJob::EnqueueUnchunked
             | FixedJob::SynthesizeToolCall
-            | FixedJob::ExtractWiki
-            | FixedJob::EnqueueWikiBackfill
             | FixedJob::ConsolidateWiki
             | FixedJob::RecompileWiki
             | FixedJob::EnqueueStaleWiki
