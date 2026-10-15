@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use gateway::server::ServeOptions;
 use gateway::tls::TlsPaths;
+mod issuer;
+
 use kernel::ca::CertificateAuthority;
-use pki::Pki;
 use rcgen::{
     CertificateParams, ExtendedKeyUsagePurpose, Issuer, KeyPair, KeyUsagePurpose, SanType,
 };
@@ -21,7 +22,7 @@ pub(crate) type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Erro
 
 pub(crate) struct Material {
     directory: tempfile::TempDir,
-    pub(crate) pki: Arc<Pki>,
+    pub(crate) pki: Arc<issuer::TestAuthority>,
     state: PathBuf,
     pub(crate) intermediate: String,
     intermediate_key: String,
@@ -31,7 +32,7 @@ pub(crate) struct Material {
 
 pub(crate) struct Lab {
     _directory: tempfile::TempDir,
-    pub(crate) pki: Arc<Pki>,
+    pub(crate) pki: Arc<issuer::TestAuthority>,
     pub(crate) intermediate: String,
     root: reqwest::Certificate,
     base: String,
@@ -46,27 +47,28 @@ pub(crate) struct Reply {
 }
 
 impl Material {
-    pub(crate) async fn open() -> Result<Self> {
+    pub(crate) fn open() -> Result<Self> {
         let directory = tempfile::tempdir()?;
         let state = directory.path().join("state");
-        let export = directory.path().join("offline-root.pem");
-        let pki = Arc::new(Pki::initialize(state.clone(), export, CancellationToken::new()).await?);
-        let root_pem = std::fs::read_to_string(state.join("root.cert.pem"))?;
-        let intermediate = std::fs::read_to_string(state.join("intermediate.cert.pem"))?;
-        let intermediate_key = std::fs::read_to_string(state.join("intermediate.key.pem"))?;
+        std::fs::create_dir(&state)?;
+        let generated = issuer::generate()?;
         Ok(Self {
             directory,
-            pki,
+            pki: Arc::new(generated.issuer),
             state,
-            intermediate,
-            intermediate_key,
-            root_pem,
+            intermediate: generated.intermediate,
+            intermediate_key: generated.intermediate_key,
+            root_pem: generated.root,
             crl: None,
         })
     }
 
-    pub(crate) fn enable_crl(&mut self) {
-        self.crl = Some(self.state.join("intermediate.crl.pem"));
+    pub(crate) fn enable_crl(&mut self) -> Result {
+        let pem = self.pki.crl_pem().map_err(|error| error.to_string())?;
+        let path = self.state.join("intermediate.crl.pem");
+        std::fs::write(&path, pem)?;
+        self.crl = Some(path);
+        Ok(())
     }
 
     pub(crate) async fn serve(self) -> Result<Lab> {

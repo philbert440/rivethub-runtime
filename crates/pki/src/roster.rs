@@ -6,15 +6,15 @@ use kernel::ca::Principal;
 use crate::Error;
 
 #[derive(Debug)]
-pub(super) struct Roster {
+pub struct Roster {
     nodes: Vec<Node>,
 }
 
 #[derive(Debug)]
-pub(super) struct Node {
-    pub(super) name: String,
-    pub(super) address: IpAddr,
-    pub(super) agent: Option<String>,
+pub(crate) struct Node {
+    pub(crate) name: String,
+    pub(crate) address: IpAddr,
+    pub(crate) agent: Option<String>,
 }
 
 struct Fields<'a> {
@@ -23,7 +23,7 @@ struct Fields<'a> {
     agent: &'a str,
 }
 
-pub(super) fn parse(text: &str) -> Result<Roster, Error> {
+pub fn parse_roster(text: &str) -> Result<Roster, Error> {
     let mut nodes = Vec::new();
     let mut seen_nodes = BTreeSet::new();
     let mut seen_agents = BTreeSet::new();
@@ -63,14 +63,14 @@ pub(super) fn parse(text: &str) -> Result<Roster, Error> {
 }
 
 impl Roster {
-    pub(super) fn node(&self, name: &str) -> Result<&Node, Error> {
+    pub(crate) fn node(&self, name: &str) -> Result<&Node, Error> {
         self.nodes
             .iter()
             .find(|node| node.name == name)
             .ok_or_else(|| Error::UnknownNode(name.to_owned()))
     }
 
-    pub(super) fn agent<'a>(&'a self, name: &str) -> Result<(&'a Node, &'a str), Error> {
+    pub(crate) fn agent<'a>(&'a self, name: &str) -> Result<(&'a Node, &'a str), Error> {
         for node in &self.nodes {
             if let Some(agent) = &node.agent
                 && agent == name
@@ -99,14 +99,12 @@ fn fields(line: &str, number: usize) -> Result<Fields<'_>, Error> {
 }
 
 fn label(value: &str, number: usize) -> Result<String, Error> {
-    let principal = Principal::Node {
+    Principal::Node {
         node: value.to_owned(),
-    };
-    if principal.spiffe_uri().is_err() {
-        Err(Error::RosterLine { line: number })
-    } else {
-        Ok(value.to_owned())
     }
+    .spiffe_uri()
+    .map(|_| value.to_owned())
+    .map_err(|_| Error::RosterLine { line: number })
 }
 
 fn address(value: &str, number: usize) -> Result<IpAddr, Error> {

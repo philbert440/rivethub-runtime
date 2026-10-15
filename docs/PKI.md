@@ -1,8 +1,10 @@
 # RivetHub PKI: holder-generated keys, CSR signing, short-lived certificates
 
-Approved 2026-10-14.
-This supersedes the CA parts of DESIGN-2026-10-12 ("certificate authority commands over rcgen" in cli) and CONTRACT B14's
-"CA layout under the legacy shared CA directory" as the target. rivet-ca.sh's on-disk layout is read once, at import.
+Approved 2026-10-14. Addendum 2026-10-15b: the running certificate authority is step-ca.
+
+The kernel `CertificateAuthority` port is a step-ca HTTP client in the `pki` crate. `rh ca token` and gateway issuance share one `step ca token` minter. Sign forwards a one-time token to `POST /1.0/sign`. Verified-principal renewal and device pairing mint a token for that principal and then sign; they do not call holder mTLS `/1.0/renew`. Chain is the intermediate captured from a sign response followed by step-ca's roots. The CRL is step-ca's. Revoke looks up serials this process issued and runs `step ca revoke`. Node and agent SANs come from the operator roster path in gateway config, never mesh.json. Gateway config names the step-ca URL, the root PEM, and the provisioner password file. The password itself is not stored in `/rivet-shared`. step-ca is bootstrapped outside this runtime with the existing intermediate. This crate does not import, initialize, or sign locally. If step-ca cannot be reached, the port returns `CaError::Unavailable`.
+
+The 2026-10-14 notes below describe holder identity and the gateway routes. Where they describe a local intermediate key, sqlite serials, a local CRL builder, or `rh ca import`, the 2026-10-15b addendum replaces that implementation.
 
 ## What is wrong today
 - 21 private keys, 3 .p12 bundles and the intermediate's key sit on NFS (`the legacy shared CA directory/issued`, `intermediate/`),
@@ -23,9 +25,8 @@ This supersedes the CA parts of DESIGN-2026-10-12 ("certificate authority comman
 3. **Short-lived certificates with automatic renewal.** Nodes and agents get 7 days and devices 30 days. Holders renew at
    two-thirds of lifetime with a new CSR signed by their current certificate (mTLS to the CA). There is no manual
    90-day cycle.
-4. **The CA is a service on the datahub, and its keys never leave it.** The intermediate key lives only in the CA
-   service's state dir (0600, not on NFS). The root key is offline: it is imported once, used to sign the intermediate,
-   then exported to the operator and deleted from the host.
+4. **The CA is step-ca.** Its intermediate key stays in step-ca's own store, outside this runtime. The gateway
+   and `rh ca token` / `rh ca revoke` are clients of that service.
    HTTP, TLS, on the gateway's listener under `/ca/v1/`:
    - `POST /ca/v1/sign`: accepts a CSR plus either a one-time enrollment token (first issue) or the caller's current
      valid cert (renewal). Requested SANs must match what the token or current identity allows; anything else is refused.
@@ -36,18 +37,17 @@ This supersedes the CA parts of DESIGN-2026-10-12 ("certificate authority comman
      time. Issuing and signing are rate-limited.
 5. **Revocation:** `rh ca revoke <principal|serial>` updates the CRL, and every TLS verifier checks it. Short lifetimes
    bound the exposure if a check is missed.
-6. **Crates:** a new `pki` crate (adapter layer, depends on kernel and wire only) for CSR validation, SAN policy,
-   signing, the CRL, the import of rivet-ca.sh's index.txt/serial, and lifetimes. It uses `rcgen`, `rustls-webpki`,
-   `x509-parser` and `rustls-pemfile`; no hand-rolled ASN.1 or PEM. A kernel port `CertificateAuthority` (sign, chain, crl,
-   revoke, issue_token) is implemented by `pki` and injected by the composition root. The gateway serves `/ca/v1/*`
-   and the device enrollment routes through that port. `rh ca …` commands (init/import, token, revoke, crl, status) and
-   `rh cert renew` (the holder side: keygen, CSR, renewal loop) live in cli.
+6. **Crates:** `pki` implements `CertificateAuthority` over the `stepca` client and owns the one token minter.
+   `stepca` cannot depend on kernel, so the port lives in `pki` rather than in `stepca`. The composition root injects
+   it when `den.certificate_authority` is set. The gateway serves `/ca/v1/*` and device enrollment through that port.
+   `rh ca token` and `rh ca revoke` call the shared minter. `rh ca crl`, `rh ca status`, and `rh cert renew` stay on the
+   `stepca` client. There is no local signer and no `rh ca import` in this runtime.
 
 The CA takes node names from the operator roster and never from `/mesh.json`, because that registry is self-registered.
 
 ## Migration (no flag day)
-1. `rh ca import` reads rivet-ca.sh's root/intermediate and index.txt once. Existing certificates stay valid until
-   they expire (same chain).
+1. step-ca is bootstrapped outside this runtime with the existing intermediate. Existing certificates stay valid until
+   they expire (same chain). This crate does not read index.txt or a local CA directory.
 2. Nodes switch to `rh cert renew` and hold SPIFFE certs within one renewal period.
 3. Devices re-enroll with a token: the desktop and Android apps must generate a key and CSR. That is an app change in
    the RivetHub apps, outside this runtime. Until it ships, legacy device certs keep working through the legacy mapping.

@@ -63,21 +63,6 @@ fn stderr(output: &std::process::Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
-async fn init_authority(home: &Path) -> TestResult {
-    let hub = home.join(".rivethub");
-    std::fs::create_dir_all(&hub)?;
-    let offline = home.join("offline");
-    std::fs::create_dir_all(&offline)?;
-    let authority = pki::Pki::initialize(
-        hub.join("ca"),
-        offline.join("root.key.pem"),
-        tokio_util::sync::CancellationToken::new(),
-    )
-    .await?;
-    drop(authority);
-    Ok(())
-}
-
 fn terminate(pid: u32) -> TestResult {
     let pid = i32::try_from(pid)?;
     nix::sys::signal::kill(

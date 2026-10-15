@@ -5,6 +5,7 @@ use gateway::Gateway;
 use gateway::routes::devices::{DeviceRuntime, PhoneIssuer};
 use gateway::tenancy::UserId;
 use kernel::ca::CertificateAuthority;
+use pki::Settings;
 use tokio_util::sync::CancellationToken;
 
 use super::ComposeError;
@@ -18,8 +19,8 @@ pub(super) async fn attach(
 ) -> Result<Gateway, ComposeError> {
     let devices = phone_devices(config, env, owner)?;
     let gateway = gateway.with_devices(devices);
-    let Some(authority) = open_authority(env, shutdown).await? else {
-        tracing::info!("no certificate authority on this node (rh ca init creates one)");
+    let Some(authority) = open_authority(config, env, shutdown).await? else {
+        tracing::info!("no certificate authority configured");
         return Ok(gateway);
     };
     Ok(gateway.with_certificate_authority(authority))
@@ -46,13 +47,41 @@ fn gateway_url(config: &Config) -> Option<String> {
 }
 
 async fn open_authority(
+    config: &Config,
     env: &Environment,
     shutdown: &CancellationToken,
 ) -> Result<Option<Arc<dyn CertificateAuthority>>, ComposeError> {
-    let directory = Paths::new(env)?.ca_dir();
-    if !tokio::fs::try_exists(&directory).await? {
+    let Some(section) = config
+        .gateway
+        .as_ref()
+        .and_then(|gateway| gateway.certificate_authority.clone())
+    else {
         return Ok(None);
-    }
-    let opened = pki::Pki::open(directory, shutdown.child_token()).await?;
-    Ok(Some(Arc::new(opened)))
+    };
+    let url = section
+        .url
+        .ok_or_else(|| ComposeError::Invalid("certificate authority url is required".to_owned()))?;
+    let root = section.root.ok_or_else(|| {
+        ComposeError::Invalid("certificate authority root is required".to_owned())
+    })?;
+    let password_file = section.provisioner_password_file.ok_or_else(|| {
+        ComposeError::Invalid(
+            "certificate authority provisioner password file is required".to_owned(),
+        )
+    })?;
+    let url = url::Url::parse(&url).map_err(|error| ComposeError::Invalid(error.to_string()))?;
+    let authority = pki::Authority::connect(
+        Settings {
+            url,
+            root,
+            password_file,
+            roster: section.roster,
+            environment: pki::ProcessEnv::from_pairs(
+                env.iter().map(|(key, value)| (key.clone(), value.clone())),
+            ),
+        },
+        shutdown.child_token(),
+    )
+    .await?;
+    Ok(Some(Arc::new(authority)))
 }

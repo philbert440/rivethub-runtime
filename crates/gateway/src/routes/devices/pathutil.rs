@@ -11,9 +11,12 @@ use super::SetupError;
 
 pub(super) fn component_ok(name: &str) -> bool {
     !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains(['/', '\\', '\0'])
         && name
             .chars()
-            .all(|ch| matches!(ch, 'A'..='Z' | 'a'..='z' | '0'..='9' | '_' | '-'))
+            .all(|ch| matches!(ch, 'A'..='Z' | 'a'..='z' | '0'..='9' | '_' | '-' | '.'))
 }
 
 pub(super) fn absolute_without_parents(path: &Path) -> Result<(), SetupError> {

@@ -294,6 +294,7 @@ pub struct GatewaySection {
     pub files_root: Option<PathBuf>,
     pub files_open: bool,
     pub devices: DevicesSection,
+    pub certificate_authority: Option<CertificateAuthoritySection>,
     pub advertise_mdns: Option<bool>,
     pub allowed_origins: Vec<String>,
     pub allowed_hosts: Vec<String>,
@@ -302,6 +303,15 @@ pub struct GatewaySection {
 
 fn default_gateway_port() -> u16 {
     5174
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+#[serde(default)]
+pub struct CertificateAuthoritySection {
+    pub url: Option<String>,
+    pub root: Option<PathBuf>,
+    pub provisioner_password_file: Option<PathBuf>,
+    pub roster: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserialize)]

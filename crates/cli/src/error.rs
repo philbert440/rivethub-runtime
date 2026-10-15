@@ -26,38 +26,8 @@ pub enum Error {
     CaEncoding,
     #[error("the operator roster cannot be mesh.json, because that registry is self-registered")]
     MeshRegistry,
-    #[error("operator roster line {line} is malformed")]
-    RosterLine { line: usize },
-    #[error("operator roster line {line} repeats node `{name}`")]
-    RosterNode { line: usize, name: String },
-    #[error("operator roster line {line} repeats agent `{name}`")]
-    RosterAgent { line: usize, name: String },
-    #[error("operator roster line {line} repeats address {address}")]
-    RosterAddress {
-        line: usize,
-        address: std::net::IpAddr,
-    },
-    #[error("node `{0}` is not in the operator roster")]
-    UnknownNode(String),
-    #[error("agent `{0}` is not in the operator roster")]
-    UnknownAgent(String),
-    #[error("device name is not a single unreserved name")]
-    DeviceName,
-    #[error("certificate serial is not a canonical decimal integer")]
-    Serial,
-    #[error("step ca {action} failed: {detail}")]
-    StepFailed {
-        action: &'static str,
-        detail: String,
-    },
-    #[error("step ca returned an empty or invalid one-time token")]
-    StepToken,
-    #[error("step ca output is not valid UTF-8")]
-    StepEncoding,
-    #[error("step ca output exceeds 1 MiB")]
-    StepOutput,
-    #[error("step ca did not provide pipes")]
-    StepPipe,
+    #[error(transparent)]
+    Pki(#[from] pki::Error),
     #[error("certificate authority root is not an X.509 certificate")]
     CaCertificate,
     #[error("holder cryptography failed: {0}")]

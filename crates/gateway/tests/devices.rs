@@ -228,7 +228,7 @@ async fn rejects_bad_enrollment_input() {
         "unknown device",
     );
     expect_error(
-        &call(&app, "DELETE", "/api/devices/has.dot", "").await,
+        &call(&app, "DELETE", "/api/devices/has@dot", "").await,
         404,
         "not found",
     );

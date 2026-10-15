@@ -1,18 +1,78 @@
 [
   {
-    "name": "gateway_ca_v1_sign_chain_crl_routes",
-    "reason": "Gateway HTTP route wiring is a later slice; this slice implements the complete kernel port."
+    "name": "renew-mtls",
+    "reason": "Holder mTLS POST /1.0/renew is rh cert renew through the stepca client. This port mints a token and calls /1.0/sign."
   },
   {
-    "name": "gateway_verified_principal_and_legacy_device_mapping",
-    "reason": "TLS Principal verification and users-registry migration belong to the later gateway slice."
+    "name": "renew-without-certificate",
+    "reason": "A renew call without a client certificate is the holder mTLS path, which this certificate-authority port does not expose."
   },
   {
-    "name": "rh_ca_commands_and_offline_root_ceremony",
-    "reason": "CLI init, import, token, revoke, status and offline root export are a later operations slice; this adapter imports an existing intermediate."
+    "name": "revoke-own-mtls",
+    "reason": "step-ca holder revoke needs the certificate's private key and serial. This port revokes by principal with step ca revoke."
   },
   {
-    "name": "rh_cert_renew_holder_loop",
-    "reason": "Holder key generation and two-thirds-lifetime renewal scheduling belong to the later CLI and app slices."
+    "name": "renew-revoked",
+    "reason": "Renewal of a revoked holder certificate is the mTLS /1.0/renew path in rh cert renew, not this port's token sign."
+  },
+  {
+    "name": "node_valid",
+    "reason": "step-ca enforces SAN policy from the one-time token. This adapter forwards the CSR and does not reimplement local SAN rules."
+  },
+  {
+    "name": "agent_valid",
+    "reason": "step-ca enforces SAN policy from the one-time token. This adapter forwards the CSR and does not reimplement local SAN rules."
+  },
+  {
+    "name": "device_valid",
+    "reason": "step-ca enforces SAN policy from the one-time token. This adapter forwards the CSR and does not reimplement local SAN rules."
+  },
+  {
+    "name": "node_impersonation",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "kind_escalation",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "agent_cross_node",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "agent_cross_agent",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "device_cross_user",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "device_cross_device",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "foreign_trust_domain",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "additional_identity",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "duplicate_san",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "encoded_separator",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "uri_query",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
+  },
+  {
+    "name": "empty_san",
+    "reason": "step-ca refuses a SAN the token did not grant. This adapter does not keep a second local SAN policy engine."
   }
 ]

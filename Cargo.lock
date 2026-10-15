@@ -2427,27 +2427,26 @@ name = "pki"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "base64 0.22.1",
- "chrono",
- "getrandom 0.4.3",
- "hex",
+ "axum",
+ "hyper",
+ "hyper-util",
  "kernel",
  "nix 0.30.1",
  "num-bigint",
+ "parking_lot",
  "rcgen",
- "rusqlite",
+ "rustls",
  "rustls-pki-types",
- "rustls-webpki",
  "serde",
  "serde_json",
- "sha2 0.10.9",
- "subtle",
+ "stepca",
  "tempfile",
  "testkit",
  "thiserror 2.0.21",
- "time",
  "tokio",
+ "tokio-rustls",
  "tokio-util",
+ "url",
  "x509-parser",
 ]
 
@@ -2740,7 +2739,6 @@ dependencies = [
  "time",
  "x509-parser",
  "yasna",
- "zeroize",
 ]
 
 [[package]]

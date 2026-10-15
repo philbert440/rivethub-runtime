@@ -10,9 +10,10 @@ rust-version.workspace = true
 [dependencies]
 base64.workspace = true
 kernel.workspace = true
+pki.workspace = true
 stepca.workspace = true
 workers.workspace = true
-rcgen.workspace = true
+rcgen = { workspace = true, features = ["x509-parser"] }
 rustls-pki-types.workspace = true
 webpki.workspace = true
 x509-parser.workspace = true
@@ -37,7 +38,6 @@ wire = { workspace = true }
 
 [dev-dependencies]
 async-trait = { workspace = true }
-pki.workspace = true
 memory-postgres = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
 uuid = { workspace = true }

@@ -19,7 +19,7 @@ type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + 
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn token_sign_needs_no_client_certificate_and_publishes_chain_and_crl() -> Result {
-    let lab = Material::open().await?.serve().await?;
+    let lab = Material::open()?.serve().await?;
     let principal = Principal::Node {
         node: "node-a".to_owned(),
     };
@@ -51,7 +51,7 @@ async fn token_sign_needs_no_client_certificate_and_publishes_chain_and_crl() ->
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn renewal_uses_the_verified_principal_and_ignores_a_token() -> Result {
-    let lab = Material::open().await?.serve().await?;
+    let lab = Material::open()?.serve().await?;
     let node = Principal::Node {
         node: "node-a".to_owned(),
     };
@@ -100,7 +100,7 @@ async fn renewal_uses_the_verified_principal_and_ignores_a_token() -> Result {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn legacy_and_untrusted_certificates_cannot_renew() -> Result {
-    let material = Material::open().await?;
+    let material = Material::open()?;
     let legacy_plain = material.legacy_identity()?;
     let legacy_with_token = material.legacy_identity()?;
     let lab = material.serve().await?;
@@ -127,7 +127,7 @@ async fn legacy_and_untrusted_certificates_cannot_renew() -> Result {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn revoked_principal_fails_tls_and_a_token_can_still_sign() -> Result {
-    let mut material = Material::open().await?;
+    let mut material = Material::open()?;
     let revoked = Principal::Device {
         user: "alice".to_owned(),
         device: "laptop".to_owned(),
@@ -143,7 +143,7 @@ async fn revoked_principal_fails_tls_and_a_token_can_still_sign() -> Result {
         )
         .await?;
     material.pki.revoke(revoked).await?;
-    material.enable_crl();
+    material.enable_crl()?;
     let identity = identity_pem(&signed.leaf, &material.intermediate, &key)?;
     let leaf_serial = serial(&signed.leaf)?;
     let (renew_csr, _) = csr(&uri)?;

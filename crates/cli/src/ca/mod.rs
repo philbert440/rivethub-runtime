@@ -1,6 +1,5 @@
 mod paths;
 mod publish;
-mod roster;
 mod status;
 mod step;
 

@@ -8,7 +8,7 @@ Design artifact (visual, authoritative): https://claude.ai/artifact/L7cAvh16cYEZ
 |---|---|---|
 | foundation | `wire` (serde types for every boundary payload), `config` (config.yaml + env → `Config`) | external crates only; `config` also uses `wire` for the shared closed sets (`HarnessId`, `ThinkingLevel`, effort) |
 | kernel | `kernel` (ports = traits, domain types; no I/O), `testkit` (dev-only: replayers, fakes, stubs) | wire, config |
-| adapters | `memory-postgres`, `memory-sqlite`, `providers`, `harness-acp`, `terminal`, `mcp`, `capture`, `pki` | kernel, wire, config, externals — NEVER another adapter or a service; `pki` uses kernel/wire and externals only |
+| adapters | `memory-postgres`, `memory-sqlite`, `providers`, `harness-acp`, `terminal`, `mcp`, `capture`, `pki`, `stepca` | kernel, wire, config, externals — NEVER another adapter or a service, except `pki` → `stepca`: `stepca` cannot depend on kernel, so the certificate-authority port is implemented in `pki` |
 | services | `gateway` (with the session registry and mesh), `agent-loop`, `workers`, `tasks` (sessions over the gateway API) | kernel, wire, config — NEVER an adapter |
 | operations | `migrate` (every Postgres and SQLite schema change; the `rivethub-migrate` binary) | wire, config, externals (sqlx, rusqlite); depended on only by `cli` as a normal dependency and by tests as a dev-dependency — NEVER directly by a runtime crate (`rivethub` is checked transitively by the xtask MANIFEST rule, except for the direct `cli` → `migrate` edge used for schema verification) |
 | composition | `cli`, `rivethub` (binary; one composition root per service process) | everything |
@@ -27,7 +27,7 @@ The gate (`cargo xtask check`) fails any Cargo.toml that breaks this.
 | `TerminalMux` | spawn(session, argv, cwd, size) · attach(id) → byte stream · input(id, bytes) · resize · kill · list | terminal (herdr over a PTY; the only multiplexer) | gateway |
 | `Tool` | definition() → `rmcp::Tool` · call(args, ctx) → `rmcp::CallToolResult` (the MCP tool shape, no translation) | RivetHub's own capabilities (memory, wiki, delegation, skills) in mcp; remote MCP servers' tools via the mcp client | agent-loop, mcp server |
 | `TranscriptReader` | sessions(store) · read(session) → turns · tail(session, since) | capture's store readers (one per harness) | capture (incremental + backfill), gateway (transcript route) via the binary's wiring |
-| `CertificateAuthority` | issue_token(principal) · sign(CSR, token or verified renewal principal) · chain · crl · revoke(principal) | pki: holder-generated P-256 keys, SPIFFE SAN policy, short-lived certificates, one-time enrollment, standard X.509 CRLs, one-time legacy CA import | gateway `/ca/v1/`, cli `rh ca` and `rh cert renew` |
+| `CertificateAuthority` | issue_token(principal) · sign(CSR, token or verified renewal principal) · chain · crl · revoke(principal) | pki over the stepca HTTP client: one `step ca token` minter shared with `rh ca token`, roster SANs, step-ca chain and CRL, revoke by principal via `step ca revoke`; no local signer | gateway `/ca/v1/`, cli `rh ca` and `rh cert renew` |
 
 A port exists only where several implementations exist or where it is the boundary to an external system. Dropped:
 `SessionRegistry` (one implementer, one in-process caller — the registry is a `gateway` module; the agent and task processes
@@ -102,24 +102,24 @@ No runtime plugin loading: extension points are adapter crates behind ports, the
 `channels.*` are accepted-and-ignored compatibility keys.
 
 
-## Certificate authority (approved 2026-10-14)
+## Certificate authority (step-ca, 2026-10-15b)
 
-The CA service keeps its intermediate key only in its private state directory, mode 0600. Holders generate their own
-ECDSA P-256 keys and submit CSRs. Identity is exactly one SPIFFE URI SAN: `spiffe://rivet.mesh/node/<node>`,
-`spiffe://rivet.mesh/agent/<node>/<agent>`, or `spiffe://rivet.mesh/device/<user>/<device>`. Node/agent certificates live
-seven days; device certificates live thirty. First issuance requires a CSPRNG enrollment token bound to one principal,
-valid fifteen minutes, stored hashed and consumed once. Renewal requires the caller's verified current principal and a
-matching CSR. Holders schedule renewal at two-thirds of lifetime with a new key/CSR.
+step-ca holds the intermediate. This runtime is a client. Gateway config (`den.certificate_authority`) names the HTTPS
+URL, the root PEM, the provisioner password file, and the optional operator roster. The composition root connects
+`pki::Authority` when that section is present and leaves the gateway without a certificate authority when it is absent.
+An empty `~/.rivethub/ca` directory does not start or refuse a local signer.
 
-The gateway serves `POST /ca/v1/sign`, `GET /ca/v1/chain` and `GET /ca/v1/crl` through the port. Its verifier checks the
-chain, validity, SAN and revocation before producing a typed principal; authorization defaults to refusal. During migration,
-legacy device CN/OU certificates map through the users registry with a deprecation log. `routes::ca::router()` is the gateway slice: the composition root mounts it, verification reuses `Principal`'s SPIFFE parse, and the CLI commands stay in the cli crate. The offline root ceremony belongs to CLI init; import of an
-existing CA requires only root/intermediate certificates, the intermediate key and index/serial state, never the root key.
+Holders generate their own ECDSA P-256 keys and submit CSRs. Identity is a SPIFFE URI SAN:
+`spiffe://rivet.mesh/node/<node>`, `spiffe://rivet.mesh/agent/<node>/<agent>`, or
+`spiffe://rivet.mesh/device/<user>/<device>`. Node and agent names and IP SANs come from the operator roster. Device
+pairing uses the device SPIFFE URI as the token subject. `rh ca token device <name>` still uses that operator name as
+the subject and only SAN. Both paths call one minter.
 
-The adapter reads the legacy layout once at import, then operates independently from its state directory. It persists serials,
-hashed tokens and revocations in component-owned SQLite state, performs blocking I/O and crypto on Tokio blocking tasks,
-and writes a standard CRL signed by the intermediate. The composition root configures the existing compatibility CRL path for atomic public-file publication; private keys never go to that path. Revocation by principal covers every certificate issued to it; imported serials
-can be revoked explicitly without inventing a principal from a legacy CN.
+`POST /ca/v1/sign` forwards a bearer token, or mints one for the verified principal on renewal. `GET /ca/v1/chain` is
+the intermediate from the last sign plus step-ca roots. `GET /ca/v1/crl` is step-ca's CRL. Revoke records the decimal
+serial of each leaf this process signed and runs `step ca revoke`. Certificates issued before the process started are
+revoked by serial with `rh ca revoke`. step-ca unreachable is `CaError::Unavailable`. There is no local fallback signer,
+no sqlite serial store, and no import of a CA directory.
 
 ## RivetHub operator and terminal names
 

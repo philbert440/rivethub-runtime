@@ -434,6 +434,9 @@ fn gateway_message(rest: &[Segment]) -> Option<String> {
             match parent {
                 "terminal" => Some(format!("Unknown den.terminal key \"{key}\"")),
                 "devices" => Some(format!("Unknown den.devices key \"{key}\"")),
+                "certificate_authority" => {
+                    Some(format!("Unknown den.certificate_authority key \"{key}\""))
+                }
                 _ => None,
             }
         }

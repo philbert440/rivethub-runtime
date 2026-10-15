@@ -1,5 +1,7 @@
+use std::path::Path;
+
 use crate::enums::{HarnessId, listed};
-use crate::model::{GatewaySection, HarnessSlot};
+use crate::model::{CertificateAuthoritySection, GatewaySection, HarnessSlot};
 use crate::report::ValidationResult;
 
 fn is_loopback(host: &str) -> bool {
@@ -44,6 +46,7 @@ pub(super) fn validate(out: &mut ValidationResult, section: &GatewaySection) {
     }
     allowed_harnesses(out, section);
     exposed_terminal_gate(section, out);
+    certificate_authority(out, section.certificate_authority.as_ref());
 }
 
 fn allowed_harnesses(out: &mut ValidationResult, section: &GatewaySection) {
@@ -70,6 +73,69 @@ fn allowed_harnesses(out: &mut ValidationResult, section: &GatewaySection) {
             "\"den.allowed_harnesses\" must be a list of non-empty harness ids (omit the key to allow all)",
         );
     }
+}
+
+fn certificate_authority(
+    out: &mut ValidationResult,
+    section: Option<&CertificateAuthoritySection>,
+) {
+    let Some(section) = section else {
+        return;
+    };
+    match section.url.as_deref() {
+        Some(url) if https_origin(url) => {}
+        Some(_) => out.error(
+            "den.certificate_authority.url",
+            "\"den.certificate_authority.url\" must be an https origin with no userinfo, path, query, or fragment",
+        ),
+        None => out.error(
+            "den.certificate_authority.url",
+            "\"den.certificate_authority.url\" is required when den.certificate_authority is set",
+        ),
+    }
+    required_path(
+        out,
+        "den.certificate_authority.root",
+        section.root.as_deref(),
+    );
+    required_path(
+        out,
+        "den.certificate_authority.provisioner_password_file",
+        section.provisioner_password_file.as_deref(),
+    );
+    if let Some(roster) = section.roster.as_deref() {
+        if roster.as_os_str().is_empty() {
+            out.error(
+                "den.certificate_authority.roster",
+                "\"den.certificate_authority.roster\" must be a non-empty path",
+            );
+        } else if roster.file_name().is_some_and(|name| name == "mesh.json") {
+            out.error(
+                "den.certificate_authority.roster",
+                "\"den.certificate_authority.roster\" cannot be mesh.json, because that registry is self-registered",
+            );
+        }
+    }
+}
+
+fn required_path(out: &mut ValidationResult, path: &str, value: Option<&Path>) {
+    if value.is_none_or(|value| value.as_os_str().is_empty()) {
+        out.error(
+            path,
+            format!("\"{path}\" is required when den.certificate_authority is set"),
+        );
+    }
+}
+
+fn https_origin(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("https://") else {
+        return false;
+    };
+    let rest = match rest.strip_suffix('/') {
+        Some(stripped) => stripped,
+        None => rest,
+    };
+    !rest.is_empty() && !rest.contains(['/', '?', '#', '@', ' ', '\\'])
 }
 
 fn exposed_terminal_gate(section: &GatewaySection, out: &mut ValidationResult) {

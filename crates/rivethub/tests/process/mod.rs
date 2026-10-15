@@ -14,18 +14,8 @@ pub struct Running {
     pub address: SocketAddr,
 }
 
-pub async fn init_authority(home: &std::path::Path) -> TestResult {
-    let hub = home.join(".rivethub");
-    std::fs::create_dir_all(&hub)?;
-    let offline = home.join("offline");
-    std::fs::create_dir_all(&offline)?;
-    let authority = pki::Pki::initialize(
-        hub.join("ca"),
-        offline.join("root.key.pem"),
-        tokio_util::sync::CancellationToken::new(),
-    )
-    .await?;
-    drop(authority);
+pub fn prepare_home(home: &std::path::Path) -> TestResult {
+    std::fs::create_dir_all(home.join(".rivethub"))?;
     Ok(())
 }
 
@@ -38,7 +28,7 @@ impl Running {
         home: &std::path::Path,
         environment: &[(&str, &str)],
     ) -> TestResult<Self> {
-        init_authority(home).await?;
+        prepare_home(home)?;
         let mut child = Command::new(env!("CARGO_BIN_EXE_rh"))
             .arg("gateway")
             .env_clear()

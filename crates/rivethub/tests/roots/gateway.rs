@@ -13,31 +13,39 @@ use wire::gateway::catalog::OutcomesResponse;
 use wire::gateway::devices::PhonePairingAvailability;
 use wire::task::TasksListResponse;
 
-use super::{TestResult, init_authority, provider_config, run_rh, stderr, terminate, write_state};
+use super::{TestResult, provider_config, run_rh, stderr, terminate, write_state};
 
 const GATEWAY_URL: &str = "http://127.0.0.1:9";
 
 #[sqlx::test(migrations = false)]
-async fn gateway_with_an_unusable_authority_directory_refuses_to_start(pool: PgPool) -> TestResult {
+async fn gateway_with_a_missing_certificate_authority_root_refuses_to_start(
+    pool: PgPool,
+) -> TestResult {
     migrate::postgres_pool(&pool).await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
     let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
     let port = probe.local_addr()?.port();
     drop(probe);
+    let root = home.path().join("missing-root.pem");
+    let password = home.path().join("provisioner.password");
+    std::fs::write(&password, "secret\n")?;
     write_state(
         home.path(),
         &provider_config(
             home.path(),
             &url,
-            &format!("den:\n  host: 127.0.0.1\n  port: {port}\n"),
+            &format!(
+                "den:\n  host: 127.0.0.1\n  port: {port}\n  certificate_authority:\n    url: https://ca.example.test\n    root: {}\n    provisioner_password_file: {}\n",
+                root.display(),
+                password.display()
+            ),
         ),
     )?;
-    std::fs::create_dir_all(home.path().join(".rivethub").join("ca"))?;
     let output = run_rh(home.path(), &["gateway"]).await?;
     let text = stderr(&output);
     assert_eq!(output.status.code(), Some(1), "{text}");
-    assert!(text.contains("CA state directory"), "{text}");
+    assert!(text.contains("certificate authority"), "{text}");
     Ok(())
 }
 
@@ -86,7 +94,7 @@ async fn start_gateway(home: &std::path::Path) -> TestResult<Started> {
 }
 
 #[sqlx::test(migrations = false)]
-async fn phone_pairing_uses_the_authority_and_agents_stay_on_the_file_store(
+async fn phone_pairing_without_an_authority_stays_unavailable_and_agents_stay_on_the_file_store(
     pool: PgPool,
 ) -> TestResult {
     migrate::postgres_pool(&pool).await?;
@@ -105,7 +113,6 @@ async fn phone_pairing_uses_the_authority_and_agents_stay_on_the_file_store(
             ),
         ),
     )?;
-    init_authority(home.path()).await?;
     let Started { mut child, logs } = start_gateway(home.path()).await?;
     let client = reqwest::Client::builder().no_proxy().build()?;
     let base = format!("http://127.0.0.1:{port}");
@@ -116,8 +123,12 @@ async fn phone_pairing_uses_the_authority_and_agents_stay_on_the_file_store(
         .error_for_status()?
         .json::<PhonePairingAvailability>()
         .await?;
-    assert!(pairing.available, "{pairing:?}");
-    assert_eq!(pairing.gateway.as_deref(), Some(GATEWAY_URL));
+    assert!(!pairing.available, "{pairing:?}");
+    assert_eq!(
+        pairing.reason.as_deref(),
+        Some("device certificate authority is not usable")
+    );
+    assert_eq!(pairing.gateway, None);
     let agents = client
         .get(format!("{base}/api/agents"))
         .send()

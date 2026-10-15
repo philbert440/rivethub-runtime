@@ -34,7 +34,7 @@ Without `--once`, the process waits until two thirds of the certificate's actual
 
 `ca` tests mint tokens through a fake `step` on `PATH`, refuse roster and path escapes, and replay the recorded roots and CRL. `cert` tests use a local TLS server that signs the submitted CSR and returns the recorded `/1.0/sign` and `/1.0/renew` document shape, including the recorded refusal text. They cover token-SAN enrollment, mTLS renewal, key locality, same-origin and foreign redirects, a wrong key, a wrong principal, an extra name, a reused token, a revoked renewal, cancellation, and unsafe paths. Paused-clock tests cover the renewal timer. `stepca_scope` requires every case in the step-ca recording, plus the recorded CRL, to be exercised or skipped with a reason. This command skips `sign-san-not-granted`, `renew-without-certificate`, `revoke-own-mtls`, `roots`, and `crl`: it never builds an ungranted CSR, never renews without a certificate, and it does not revoke, fetch roots, or read the CRL. `pki_scope` still requires an empty `tests/fixtures/pki/skipped.json`.
 
-The production gateway routes and the pki adapter remain separate slices. The test server is an acceptance fixture.
+`rh ca token` and `rh ca revoke` call the shared minter in `pki`. The gateway's production certificate authority is that same adapter when `den.certificate_authority` is set. The test server is an acceptance fixture.
 
 # RivetHub systemd commands
 
