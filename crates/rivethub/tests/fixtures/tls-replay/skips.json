@@ -1,31 +1,138 @@
 [
-  {"id":"tls-main/tls-api-no-cert","reason":"Composed authorization returns 401 JSON without the recorded CORS headers.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-root-no-cert-html","reason":"Composed authorization returns 401 application/json instead of the recorded HTML certificate guidance.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-root-no-cert-json","reason":"Composed authorization returns 401 JSON without the recorded CORS headers.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-api-path-html-accept","reason":"Composed authorization returns 401 JSON without the recorded CORS headers.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-aliased-api-path-html-accept","reason":"Composed authorization returns 401 application/json instead of the recorded HTML certificate guidance.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-head-no-cert-html","reason":"Composed authorization returns application/json instead of the recorded text/html content type for HEAD.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-post-no-cert-html","reason":"Composed authorization returns 401 JSON without the recorded CORS headers.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-api-device-cert","reason":"Without a users registry the verified device is refused with 401; the recording implicitly treated it as owner and returned sessions.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-static-device-cert","reason":"Without a users registry the verified device is refused with 401 before static serving; the recording returned index.html.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-api-wrong-ca","reason":"The TLS listener rejects an untrusted client issuer before HTTP; the recording completed TLS and returned 401.","expected":{"kind":"tls","alert":"unknown-ca"}},
-  {"id":"tls-main/tls-api-node-leaf","reason":"The node certificate is refused with the recorded 401 JSON, but composed authorization omits the recorded CORS headers.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-api-cn-only-device","reason":"Without a users registry the CN-only device is refused with 401; the recording implicitly treated it as owner.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-api-ou-client","reason":"Without a users registry the OU client is refused with 401; the recording implicitly treated it as owner.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-api-serverauth-only","reason":"The TLS listener rejects a leaf lacking clientAuth before HTTP; the recording completed TLS and returned 401.","expected":{"kind":"tls","alert":"unsupported-certificate"}},
-  {"id":"tls-main/tls-enroll-no-cert","reason":"Composed authorization returns 401 JSON without the recorded CORS headers.","expected":{"kind":"http","status":401}},
-  {"id":"tls-main/tls-same-origin-https","reason":"Without a users registry the verified device is refused with 401 even for a same-origin request; the recording returned sessions.","expected":{"kind":"http","status":401}},
-  {"id":"tls-optional/tls-optional-api-no-cert","reason":"Omitting tls_ca does not disable composed HTTP authorization: remote anonymous requests receive 401 instead of the recorded 200.","expected":{"kind":"http","status":401}},
-  {"id":"tls-optional/tls-optional-root-html","reason":"Omitting tls_ca does not disable composed HTTP authorization: remote static requests receive 401 instead of the recorded 200.","expected":{"kind":"http","status":401}},
-  {"id":"tls-optional/tls-optional-wrong-ca","reason":"Without tls_ca no client certificate is requested; composed HTTP authorization refuses the anonymous remote request with 401 instead of 200.","expected":{"kind":"http","status":401}},
-  {"id":"tls-tenancy/tt-alice-sessions","reason":"The composed gateway does not load session-owners.json; both loopback-seeded sessions belong to owner and Alice receives an empty session list.","expected":{"kind":"http","status":200}},
-  {"id":"tls-tenancy/tt-alice-state-own","reason":"The composed gateway does not load session-owners.json; Alice receives 403 for her recorded session instead of its state.","expected":{"kind":"http","status":403}},
-  {"id":"tls-tenancy/tt-alice-state-unknown","reason":"An unknown session returns 404 unknown session instead of the recorded 403 ownership refusal.","expected":{"kind":"http","status":404}},
-  {"id":"tls-tenancy/tt-alice-phone-pairing","reason":"The phone-pairing route reports availability with 200 for Alice instead of enforcing the recorded owner-only 403.","expected":{"kind":"http","status":200}},
-  {"id":"tls-tenancy/tt-alice-token-remote","reason":"The recorded legacy user-token header is ignored; the valid device receives 200 sessions instead of the recorded remote-token 403.","expected":{"kind":"http","status":200}},
-  {"id":"tls-tenancy/tt-bob-no-db","reason":"A mapped device without a per-user database receives 200 sessions; the composition uses its injected store rather than enforcing the recorded missing-database 403. The vendored registry names this user user-b while the response text says bob.","expected":{"kind":"http","status":200}},
-  {"id":"tls-tenancy/tt-stranger","reason":"An unmapped device is refused with 401 unauthorized instead of the recorded 403 unroutable identity and registry detail.","expected":{"kind":"http","status":401}},
-  {"id":"tls-tenancy/tt-ou-client-unmapped","reason":"An unmapped OU client is refused with 401 unauthorized instead of the recorded 403 unroutable identity and registry detail.","expected":{"kind":"http","status":401}},
-  {"id":"tls-tenancy/tt-no-cert","reason":"Composed authorization returns 401 JSON without the recorded CORS headers.","expected":{"kind":"http","status":401}},
-  {"id":"tls-tenancy/tt-owner-loopback-sessions","reason":"The composed gateway does not load session-owners.json; owner sees both loopback-seeded sessions instead of only owner-session.","expected":{"kind":"http","status":200}}
+  {
+    "id": "tls-main/tls-root-no-cert-html",
+    "reason": "Composed authorization returns 401 application/json instead of the recorded HTML certificate guidance.",
+    "expected": {
+      "kind": "http",
+      "status": 401
+    }
+  },
+  {
+    "id": "tls-main/tls-aliased-api-path-html-accept",
+    "reason": "Composed authorization returns 401 application/json instead of the recorded HTML certificate guidance.",
+    "expected": {
+      "kind": "http",
+      "status": 401
+    }
+  },
+  {
+    "id": "tls-main/tls-head-no-cert-html",
+    "reason": "Composed authorization returns application/json instead of the recorded text/html content type for HEAD.",
+    "expected": {
+      "kind": "http",
+      "status": 401
+    }
+  },
+  {
+    "id": "tls-main/tls-api-wrong-ca",
+    "reason": "The TLS listener rejects an untrusted client issuer before HTTP; the recording completed TLS and returned 401.",
+    "expected": {
+      "kind": "tls",
+      "alert": "unknown-ca"
+    }
+  },
+  {
+    "id": "tls-main/tls-api-serverauth-only",
+    "reason": "The TLS listener rejects a leaf lacking clientAuth before HTTP; the recording completed TLS and returned 401.",
+    "expected": {
+      "kind": "tls",
+      "alert": "unsupported-certificate"
+    }
+  },
+  {
+    "id": "tls-optional/tls-optional-api-no-cert",
+    "reason": "Omitting tls_ca does not disable composed HTTP authorization: remote anonymous requests receive 401 instead of the recorded 200.",
+    "expected": {
+      "kind": "http",
+      "status": 401
+    }
+  },
+  {
+    "id": "tls-optional/tls-optional-root-html",
+    "reason": "Omitting tls_ca does not disable composed HTTP authorization: remote static requests receive 401 instead of the recorded 200.",
+    "expected": {
+      "kind": "http",
+      "status": 401
+    }
+  },
+  {
+    "id": "tls-optional/tls-optional-wrong-ca",
+    "reason": "Without tls_ca no client certificate is requested; composed HTTP authorization refuses the anonymous remote request with 401 instead of 200.",
+    "expected": {
+      "kind": "http",
+      "status": 401
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-alice-sessions",
+    "reason": "The composed gateway does not load session-owners.json; both loopback-seeded sessions belong to owner and Alice receives an empty session list.",
+    "expected": {
+      "kind": "http",
+      "status": 200
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-alice-state-own",
+    "reason": "The composed gateway does not load session-owners.json; Alice receives 403 for her recorded session instead of its state.",
+    "expected": {
+      "kind": "http",
+      "status": 403
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-alice-state-unknown",
+    "reason": "An unknown session returns 404 unknown session instead of the recorded 403 ownership refusal.",
+    "expected": {
+      "kind": "http",
+      "status": 404
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-alice-phone-pairing",
+    "reason": "The phone-pairing route reports availability with 200 for Alice instead of enforcing the recorded owner-only 403.",
+    "expected": {
+      "kind": "http",
+      "status": 200
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-alice-token-remote",
+    "reason": "The recorded legacy user-token header is ignored; the valid device receives 200 sessions instead of the recorded remote-token 403.",
+    "expected": {
+      "kind": "http",
+      "status": 200
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-bob-no-db",
+    "reason": "A mapped device without a per-user database receives 200 sessions; the composition uses its injected store rather than enforcing the recorded missing-database 403. The vendored registry names this user user-b while the response text says bob.",
+    "expected": {
+      "kind": "http",
+      "status": 200
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-stranger",
+    "reason": "An unmapped device is refused with 401 unauthorized instead of the recorded 403 unroutable identity and registry detail.",
+    "expected": {
+      "kind": "http",
+      "status": 401
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-ou-client-unmapped",
+    "reason": "An unmapped OU client is refused with 401 unauthorized instead of the recorded 403 unroutable identity and registry detail.",
+    "expected": {
+      "kind": "http",
+      "status": 401
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-owner-loopback-sessions",
+    "reason": "The composed gateway does not load session-owners.json; owner sees both loopback-seeded sessions instead of only owner-session.",
+    "expected": {
+      "kind": "http",
+      "status": 200
+    }
+  }
 ]
