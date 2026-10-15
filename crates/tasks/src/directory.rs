@@ -121,16 +121,42 @@ impl Directory {
         if input.executor == TaskExecutorKind::Mesh {
             return mesh_node_name(input);
         }
+        if let Some(node) = input.node_affinity.as_deref() {
+            return if node.is_empty() {
+                Err(Error::MeshAddress)
+            } else {
+                Ok(node.to_owned())
+            };
+        }
         if let Some(preset) = self.presets.get(&input.agent_id)
             && let Some(node) = preset.node.as_ref()
             && node != &self.local_node
         {
             return Ok(node.clone());
         }
-        match input.node_affinity.as_ref() {
-            Some(node) if node != &self.local_node => Ok(node.clone()),
-            Some(_) | None => Ok(self.local_node.clone()),
-        }
+        Ok(self.local_node.clone())
+    }
+
+    pub(crate) fn local_node(&self) -> &str {
+        &self.local_node
+    }
+
+    pub(crate) fn has_local_agent(&self, name: &str) -> bool {
+        self.local_agents.contains_key(name)
+    }
+
+    pub(crate) fn local_agent_names(&self) -> impl Iterator<Item = &str> {
+        self.local_agents.keys().map(String::as_str)
+    }
+
+    pub(crate) fn presets(&self) -> impl Iterator<Item = &AgentPreset> {
+        self.presets.values()
+    }
+
+    pub(crate) fn online_nodes(&self) -> impl Iterator<Item = &MeshNode> {
+        self.nodes
+            .values()
+            .filter(|node| node.status == MeshNodeStatus::Online)
     }
 
     fn resolve_local(&self, input: &TargetInput, node: &str) -> Result<ResolvedTarget, Error> {

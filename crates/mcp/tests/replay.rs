@@ -1,5 +1,12 @@
 #![cfg(test)]
 
+use kernel::tasks::AgentDirectory;
+use kernel::tasks::DelegateOutcome;
+use kernel::tasks::DelegateRequest;
+use kernel::tasks::Delegation;
+use kernel::tasks::DelegationError;
+use mcp::Server;
+use mcp::Surface;
 use testkit::translate_recorded_product_names;
 
 use rmcp::{
@@ -41,8 +48,6 @@ enum Outcome {
 }
 
 const SKIPPED: &[(&str, &str)] = &[
-    ("delegate_task", "B7: no kernel delegation port"),
-    ("list_agents", "B7: no kernel agent registry port"),
     (
         "internet_search",
         "B7: harness owns web tools; removed by design",
@@ -58,6 +63,37 @@ const SKIPPED: &[(&str, &str)] = &[
         "Product decision: skills are not sidecar tools",
     ),
 ];
+
+struct IdleDelegation;
+
+#[async_trait::async_trait]
+impl Delegation for IdleDelegation {
+    async fn agents(&self) -> Result<AgentDirectory, DelegationError> {
+        Ok(AgentDirectory {
+            presets: Vec::new(),
+            runtime: Vec::new(),
+        })
+    }
+
+    async fn delegate(
+        &self,
+        _request: DelegateRequest,
+        _cancel: CancellationToken,
+    ) -> Result<DelegateOutcome, DelegationError> {
+        Err(DelegationError::Rejected("idle".into()))
+    }
+}
+
+fn recording_server() -> Server {
+    Server::builder(
+        std::sync::Arc::new(testkit::FakeMemoryStore::default()),
+        false,
+        CancellationToken::new(),
+    )
+    .delegation(std::sync::Arc::new(IdleDelegation), Surface::Stdio)
+    .build()
+    .expect("recording server")
+}
 
 fn load<T: serde::de::DeserializeOwned>(name: &str) -> T {
     serde_json::from_str(
@@ -78,7 +114,7 @@ fn translate_schema_descriptions(schema: &mut schemars::Schema) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn recordings_over_stdio_framing() {
     tokio::time::timeout(Duration::from_secs(10), async {
-        let server = support::server();
+        let server = recording_server();
         let expected: Catalog = load("tools-list");
         let calls: Calls = load("calls");
         let metadata: Metadata = load("meta");

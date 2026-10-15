@@ -1,13 +1,16 @@
 pub mod catalog;
 pub mod client;
+mod delegate;
 pub mod error;
 pub mod memory;
 pub mod tags;
 pub mod transport;
 pub mod wiki;
 
+pub use catalog::Surface;
 pub use error::Error;
 use kernel::memory::MemoryStore;
+use kernel::tasks::Delegation;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, ContentBlock, Implementation, ListToolsResult,
     PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
@@ -21,22 +24,47 @@ use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
 pub struct Server {
     memory: Arc<dyn MemoryStore>,
+    delegation: Option<Arc<dyn Delegation>>,
     tools: Arc<Vec<Tool>>,
     memory_write: bool,
     shutdown: CancellationToken,
+}
+
+pub struct Builder {
+    memory: Arc<dyn MemoryStore>,
+    memory_write: bool,
+    shutdown: CancellationToken,
+    delegation: Option<(Arc<dyn Delegation>, Surface)>,
 }
 
 #[cfg_attr(
     dylint_lib = "rr_lints",
     expect(
         manualderive,
-        reason = "MemoryStore is a kernel trait object without Debug; the formatter deliberately omits it and the tool catalog"
+        reason = "MemoryStore and Delegation are kernel trait objects without Debug; the formatter reports whether a delegation port is set and omits the trait objects and the tool catalog"
     )
 )]
 impl std::fmt::Debug for Server {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Server")
             .field("memory_write", &self.memory_write)
+            .field("delegation", &self.delegation.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        manualderive,
+        reason = "MemoryStore and Delegation are kernel trait objects without Debug; the formatter reports whether a delegation port is set and omits the trait objects"
+    )
+)]
+impl std::fmt::Debug for Builder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Builder")
+            .field("memory_write", &self.memory_write)
+            .field("delegation", &self.delegation.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -57,6 +85,10 @@ enum Operation {
     WikiSearch,
     #[strum(serialize = "wiki_read")]
     WikiRead,
+    #[strum(serialize = "delegate_task")]
+    Delegate,
+    #[strum(serialize = "list_agents")]
+    Agents,
 }
 
 impl Server {
@@ -65,27 +97,20 @@ impl Server {
         memory_write: bool,
         shutdown: CancellationToken,
     ) -> Result<Self, Error> {
-        let mut tools = catalog::definitions()?;
-        if memory_write {
-            let tags = tools
-                .iter_mut()
-                .find(|tool| tool.name == "memory_tags")
-                .ok_or_else(|| Error::Invalid("memory_tags is missing from catalog".into()))?;
-            tags.description = Some("Read and manage memory tags. Writes are enabled. taxonomy_upsert fully replaces aliases, parent_value, display and reason; aliases is required and omitted parent_value clears the parent.".into());
-            tags.annotations = Some(rmcp::model::ToolAnnotations::from_raw(
-                None,
-                Some(false),
-                Some(true),
-                Some(false),
-                Some(false),
-            ));
-        }
-        Ok(Self {
+        Self::builder(memory, memory_write, shutdown).build()
+    }
+
+    pub fn builder(
+        memory: Arc<dyn MemoryStore>,
+        memory_write: bool,
+        shutdown: CancellationToken,
+    ) -> Builder {
+        Builder {
             memory,
-            tools: Arc::new(tools),
             memory_write,
             shutdown,
-        })
+            delegation: None,
+        }
     }
 
     pub fn tools(&self) -> &[Tool] {
@@ -97,17 +122,43 @@ impl Server {
     }
 
     pub async fn call(&self, request: CallToolRequestParams) -> Result<CallToolResult, ErrorData> {
-        let operation: Operation = request.name.parse().map_err(|_| {
+        self.dispatch(request, self.shutdown.clone()).await
+    }
+
+    async fn dispatch(
+        &self,
+        request: CallToolRequestParams,
+        cancel: CancellationToken,
+    ) -> Result<CallToolResult, ErrorData> {
+        if !self.tools.iter().any(|tool| tool.name == request.name) {
+            return Err(ErrorData::invalid_params(
+                format!("Tool {} not found", request.name),
+                None,
+            ));
+        }
+        let operation = request.name.parse::<Operation>().map_err(|_| {
             ErrorData::invalid_params(format!("Tool {} not found", request.name), None)
         })?;
         let arguments = match request.arguments {
             Some(arguments) => arguments,
             None => rmcp::model::JsonObject::new(),
         };
-        let result = tokio::select! {
-            biased;
-            () = self.shutdown.cancelled() => Err(Error::Cancelled),
-            result = self.execute(operation, arguments) => result,
+        let result = match operation {
+            Operation::Delegate => self.execute(operation, arguments, cancel).await,
+            Operation::Search
+            | Operation::Browse
+            | Operation::Stats
+            | Operation::GetFull
+            | Operation::Tags
+            | Operation::WikiSearch
+            | Operation::WikiRead
+            | Operation::Agents => {
+                tokio::select! {
+                    biased;
+                    () = cancel.cancelled() => Err(Error::Cancelled),
+                    result = self.execute(operation, arguments, cancel.clone()) => result,
+                }
+            }
         };
         match result {
             Ok(result) => Ok(result),
@@ -121,6 +172,7 @@ impl Server {
         &self,
         operation: Operation,
         arguments: rmcp::model::JsonObject,
+        cancel: CancellationToken,
     ) -> Result<CallToolResult, Error> {
         match operation {
             Operation::Search => memory::search(self.memory.as_ref(), decode(arguments)?).await,
@@ -132,7 +184,55 @@ impl Server {
             }
             Operation::WikiSearch => wiki::search(self.memory.as_ref(), decode(arguments)?).await,
             Operation::WikiRead => wiki::read(self.memory.as_ref(), decode(arguments)?).await,
+            Operation::Delegate => {
+                delegate::task(self.port()?.as_ref(), decode(arguments)?, cancel).await
+            }
+            Operation::Agents => delegate::agents(self.port()?.as_ref(), decode(arguments)?).await,
         }
+    }
+
+    fn port(&self) -> Result<&Arc<dyn Delegation>, Error> {
+        self.delegation
+            .as_ref()
+            .ok_or_else(|| Error::Invalid("delegation port is not configured".into()))
+    }
+}
+
+impl Builder {
+    #[must_use]
+    pub fn delegation(mut self, port: Arc<dyn Delegation>, surface: Surface) -> Self {
+        self.delegation = Some((port, surface));
+        self
+    }
+
+    pub fn build(self) -> Result<Server, Error> {
+        let mut tools = catalog::definitions()?;
+        if self.memory_write {
+            let tags = tools
+                .iter_mut()
+                .find(|tool| tool.name == "memory_tags")
+                .ok_or_else(|| Error::Invalid("memory_tags is missing from catalog".into()))?;
+            tags.description = Some("Read and manage memory tags. Writes are enabled. taxonomy_upsert fully replaces aliases, parent_value, display and reason; aliases is required and omitted parent_value clears the parent.".into());
+            tags.annotations = Some(rmcp::model::ToolAnnotations::from_raw(
+                None,
+                Some(false),
+                Some(true),
+                Some(false),
+                Some(false),
+            ));
+        }
+        if let Some((_, surface)) = &self.delegation {
+            let mut prefixed = catalog::delegation(*surface)?;
+            prefixed.append(&mut tools);
+            tools = prefixed;
+        }
+        Ok(Server {
+            memory: self.memory,
+            delegation: self.delegation.map(|(port, _surface)| port),
+            tools: Arc::new(tools),
+            memory_write: self.memory_write,
+            shutdown: self.shutdown,
+        })
     }
 }
 
@@ -166,10 +266,20 @@ impl ServerHandler for Server {
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<rmcp::model::CallToolResponse, ErrorData> {
+        let cancel = self.shutdown.child_token();
+        let pending = self.dispatch(request, cancel.clone());
+        tokio::pin!(pending);
         tokio::select! {
-            () = context.ct.cancelled() => Err(ErrorData::internal_error("request cancelled", None)),
-            result = self.call(request) => result.map(Into::into),
+            biased;
+            () = context.ct.cancelled() => {}
+            result = &mut pending => return result.map(Into::into),
         }
+        cancel.cancel();
+        match pending.await {
+            Ok(result) => drop(result),
+            Err(error) => drop(error),
+        }
+        Err(ErrorData::internal_error("request cancelled", None))
     }
 }
 

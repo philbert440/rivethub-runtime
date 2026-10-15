@@ -116,6 +116,14 @@ pub enum Error {
     Clock,
     #[error("node name is empty")]
     NodeRequired,
+    #[error("delegation target {target} names node {embedded} and node {explicit}")]
+    ConflictingNode {
+        target: String,
+        embedded: String,
+        explicit: String,
+    },
+    #[error("timeout is out of range")]
+    TimeoutRange,
 }
 
 impl From<TaskError> for Error {

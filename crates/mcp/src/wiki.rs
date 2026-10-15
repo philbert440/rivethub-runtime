@@ -23,8 +23,14 @@ impl crate::catalog::ToolInput for Search {
     const NAME: &'static str = "wiki_search";
     const DESCRIPTION: &'static str = "Search the RivetHub memory wiki — curated topic pages distilled from conversation memory (\"what is currently true about X\"). Higher signal than memory_search for standing facts about projects, hosts, and services; use memory_search when you need what was actually said. Returns slugs — read the page (dated history + provenance) with wiki_read.";
 
-    fn annotations() -> ToolAnnotations {
-        ToolAnnotations::from_raw(None, Some(true), None, Some(true), None)
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            None,
+            Some(true),
+            None,
+        ))
     }
 }
 
@@ -42,8 +48,14 @@ impl crate::catalog::ToolInput for Read {
     const NAME: &'static str = "wiki_read";
     const DESCRIPTION: &'static str = "Read one RivetHub wiki topic page: Wikipedia-style Summary (lead), Article body, See also crosslinks, dated History, and Citations (summary UUIDs usable with memory tools for drill-down). Use the slug from wiki_search. Small pages are returned verbatim. Pages larger than 24,000 characters (hub topics with thousands of YAML aliases) return a bounded encyclopedia view so MCP/capture truncation cannot hide Summary behind the alias dump. Pass section=summary|article|history|aliases|citations for a slice; section=full is refused on oversized pages.";
 
-    fn annotations() -> ToolAnnotations {
-        ToolAnnotations::from_raw(None, Some(true), None, Some(true), None)
+    fn annotations() -> Option<ToolAnnotations> {
+        Some(ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            None,
+            Some(true),
+            None,
+        ))
     }
 }
 

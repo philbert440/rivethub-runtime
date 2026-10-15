@@ -1,5 +1,6 @@
 mod auth;
 mod client;
+mod delegate;
 mod directory;
 mod engine;
 mod error;

@@ -38,8 +38,14 @@ pub struct Search {
 impl crate::catalog::ToolInput for Search {
     const NAME: &'static str = "memory_search";
     const DESCRIPTION: &'static str = "Search RivetHub persistent memory (conversation history + summaries). Hybrid FTS + semantic + temporal scoring with auto-expansion of summary hits to their source messages. Use this to find past decisions, prior context, or \"what did we say about X\" before asking the user. Mirrors the in-process `memory_search` tool exposed to local agents. Truncated hits include a `memory_get_full id=` handle — call that tool to recover the full capture payload.";
-    fn annotations() -> rmcp::model::ToolAnnotations {
-        rmcp::model::ToolAnnotations::from_raw(None, Some(true), None, Some(true), None)
+    fn annotations() -> Option<rmcp::model::ToolAnnotations> {
+        Some(rmcp::model::ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            None,
+            Some(true),
+            None,
+        ))
     }
 }
 
@@ -76,8 +82,14 @@ pub struct Browse {
 impl crate::catalog::ToolInput for Browse {
     const NAME: &'static str = "memory_browse";
     const DESCRIPTION: &'static str = "Browse RivetHub conversation messages chronologically. Unlike memory_search (which ranks by relevance), this returns messages in time order. By default excludes role=tool rows (pass include_tools=true to see tool calls/results). Use to review what happened in a session, catch up on recent activity, or read a specific conversation by ID. For time-bounded questions (\"today\", \"yesterday\", \"this morning\"), prefer window= over raw since/before so local midnights convert correctly to UTC. Capture-truncated rows append `→ memory_get_full id=` — use that tool for the full payload.";
-    fn annotations() -> rmcp::model::ToolAnnotations {
-        rmcp::model::ToolAnnotations::from_raw(None, Some(true), None, Some(true), None)
+    fn annotations() -> Option<rmcp::model::ToolAnnotations> {
+        Some(rmcp::model::ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            None,
+            Some(true),
+            None,
+        ))
     }
 }
 
@@ -92,8 +104,14 @@ pub struct Stats {
 impl crate::catalog::ToolInput for Stats {
     const NAME: &'static str = "memory_stats";
     const DESCRIPTION: &'static str = "RivetHub memory system health check — message/summary counts, embedding queue depth, unsummarized messages, compaction status, missing summaries, and breakdowns by agent/role/kind. Use to diagnose memory issues or check if background jobs are keeping up.";
-    fn annotations() -> rmcp::model::ToolAnnotations {
-        rmcp::model::ToolAnnotations::from_raw(None, Some(true), None, Some(true), None)
+    fn annotations() -> Option<rmcp::model::ToolAnnotations> {
+        Some(rmcp::model::ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            None,
+            Some(true),
+            None,
+        ))
     }
 }
 
@@ -111,8 +129,14 @@ pub struct GetFull {
 impl crate::catalog::ToolInput for GetFull {
     const NAME: &'static str = "memory_get_full";
     const DESCRIPTION: &'static str = "Fetch the complete, untruncated payload for a memory row whose content or tool_result was elided at capture time (rows marked \"…[truncated]\" / \"⚠ truncated at capture\" by memory_search or memory_browse). Pass the row id from that hint. Re-reads the original capture JSONL line from disk — not a generic file reader. Mirrors the in-process `memory_get_full` tool.";
-    fn annotations() -> rmcp::model::ToolAnnotations {
-        rmcp::model::ToolAnnotations::from_raw(None, Some(true), None, Some(true), None)
+    fn annotations() -> Option<rmcp::model::ToolAnnotations> {
+        Some(rmcp::model::ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            None,
+            Some(true),
+            None,
+        ))
     }
 }
 

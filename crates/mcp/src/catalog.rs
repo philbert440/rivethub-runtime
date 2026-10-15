@@ -1,11 +1,17 @@
-use crate::{memory, tags, wiki};
+use crate::{delegate, memory, tags, wiki};
 use rmcp::model::{Tool, ToolAnnotations};
 use schemars::{JsonSchema, Schema, generate::SchemaSettings};
 
 pub(crate) trait ToolInput: JsonSchema {
     const NAME: &'static str;
     const DESCRIPTION: &'static str;
-    fn annotations() -> ToolAnnotations;
+    fn annotations() -> Option<ToolAnnotations>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Surface {
+    Stdio,
+    Remote,
 }
 
 fn definition<T: ToolInput>() -> Result<Tool, serde_json::Error> {
@@ -19,8 +25,17 @@ fn definition<T: ToolInput>() -> Result<Tool, serde_json::Error> {
         T::DESCRIPTION,
         serde_json::from_value::<rmcp::model::JsonObject>(serde_json::to_value(schema)?)?,
     );
-    tool.annotations = Some(T::annotations());
+    tool.annotations = T::annotations();
     Ok(tool)
+}
+
+pub(crate) fn delegation(surface: Surface) -> Result<Vec<Tool>, serde_json::Error> {
+    let mut tools = Vec::new();
+    if surface == Surface::Stdio {
+        tools.push(definition::<delegate::DelegateTask>()?);
+    }
+    tools.push(definition::<delegate::ListAgents>()?);
+    Ok(tools)
 }
 
 pub fn definitions() -> Result<Vec<Tool>, serde_json::Error> {
@@ -40,6 +55,13 @@ pub fn recorded_schema_metadata(schema: &mut Schema) {
     schema.remove("format");
     schema.remove("default");
     schemars::transform::transform_subschemas(&mut recorded_schema_metadata, schema);
+}
+
+pub fn object_properties(schema: &mut Schema) {
+    if schema.get("properties").is_none() {
+        let empty: rmcp::model::JsonObject = rmcp::model::JsonObject::default();
+        schema.insert("properties".into(), empty.into());
+    }
 }
 
 pub fn optional_non_null(schema: &mut Schema) {

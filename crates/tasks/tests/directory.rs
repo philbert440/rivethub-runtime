@@ -193,6 +193,39 @@ fn an_offline_or_unlisted_mesh_agent_is_refused() {
 }
 
 #[test]
+fn an_explicit_node_wins_over_the_preset_node() {
+    let mut directory = fresh();
+    directory.preset(preset("worker", Some("edge"), "low", None));
+    mesh(
+        &mut directory,
+        "edge",
+        "203.0.113.9",
+        MeshNodeStatus::Online,
+    );
+    mesh(
+        &mut directory,
+        "other",
+        "203.0.113.10",
+        MeshNodeStatus::Online,
+    );
+    let mut pinned = input(TaskExecutorKind::ChatLoop, "worker");
+    pinned.node_affinity = Some("other".to_string());
+    let prepared = directory.prepare(&pinned).expect("pinned");
+    assert_eq!(prepared.node, "other");
+    assert!(prepared.remote);
+    let prepared = directory
+        .prepare(&input(TaskExecutorKind::ChatLoop, "worker"))
+        .expect("preset node");
+    assert_eq!(prepared.node, "edge");
+    let mut empty = input(TaskExecutorKind::ChatLoop, "worker");
+    empty.node_affinity = Some(String::new());
+    assert!(matches!(
+        directory.prepare(&empty).expect_err("empty node"),
+        Error::MeshAddress
+    ));
+}
+
+#[test]
 fn an_empty_mesh_secret_is_refused() {
     let mut directory = fresh();
     directory.preset(preset("worker", Some("edge"), "low", None));

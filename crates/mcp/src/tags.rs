@@ -74,8 +74,14 @@ pub struct Args {
 impl crate::catalog::ToolInput for Args {
     const NAME: &'static str = "memory_tags";
     const DESCRIPTION: &'static str = "Read key:value tags on sessions and summaries (session tagging). Actions: pending (suggestions awaiting review; the default), list (tags on an entity or by key+value), counts (accepted usage per tag), lookup (tags for session_keys), taxonomy (the vocabulary). This surface is READ-ONLY: decide, add and the taxonomy edits are refused (set RIVETOS_MCP_ENABLE_MEMORY_WRITE=1, or review in the hub under Memory → Tags). Rejecting keeps the row so the tagger never re-proposes it. Use tag=key:value on memory_search / memory_browse to filter by an accepted tag.";
-    fn annotations() -> rmcp::model::ToolAnnotations {
-        rmcp::model::ToolAnnotations::from_raw(None, Some(true), None, Some(true), None)
+    fn annotations() -> Option<rmcp::model::ToolAnnotations> {
+        Some(rmcp::model::ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            None,
+            Some(true),
+            None,
+        ))
     }
 }
 

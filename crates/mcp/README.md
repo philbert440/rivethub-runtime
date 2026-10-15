@@ -5,9 +5,11 @@ and a `CancellationToken`. It serves `memory_search`, `memory_browse`, `memory_g
 `memory_stats`, `memory_tags`, `wiki_search`, and `wiki_read`. Memory responses are JSON text
 serialized directly from kernel result types. No concrete memory adapter is linked.
 
-The sidecar product scope is nine tools. `delegate_task` is waiting for a delegation port;
-`list_agents` is waiting for an agent registry port. These two tools have no handlers or catalog
-entries yet.
+`Server::builder` injects an `Arc<dyn kernel::tasks::Delegation>` and a transport surface.
+`delegate_task` and `list_agents` call that port. `delegate_task` is registered only on
+`Surface::Stdio`. `Surface::Remote` (streamable HTTP and Unix) registers `list_agents` and
+not `delegate_task`. `Server::new` registers neither. The composition root wires the port.
+
 `echo`, `skill_list`, and `skill_manage` are excluded by the product decision. The skills
 implementation is removed. `internet_search` and `web_fetch` remain absent because harnesses
 own web tools.
@@ -49,8 +51,9 @@ Three named, tested schema transforms preserve other recorded presentation detai
 whose recorded null means clear; `search_mode_order` moves the derived vector variant last.
 These transforms do not change argument decoding or validation.
 
-`tests/replay.rs` compares derived `tools/list` against the recording filtered to the seven served
-tools, as parsed rmcp values. Only the recording's product names are translated by
+`tests/replay.rs` compares derived `tools/list` against the recording filtered to the stdio
+catalog (every recorded tool except the five product-removed tools), as parsed rmcp values.
+Only the recording's product names are translated by
 `translate_recorded_product_names`: `RivetOS` to `RivetHub`, `rivetos` to `rh`, and `~/.rivetos`
 to `~/.rivethub`. Other recorded description prose stays intact. The checked `SKIPPED` list
 names every omitted tool and its reason; calls to omitted tools have no handlers. The recorded

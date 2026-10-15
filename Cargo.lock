@@ -3814,6 +3814,7 @@ dependencies = [
 name = "tasks"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "chrono",
  "kernel",

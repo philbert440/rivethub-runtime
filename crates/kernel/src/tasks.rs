@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
@@ -6,6 +8,7 @@ use serde::Serialize;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+use wire::harness::HarnessId;
 use wire::task::AcceptanceCriterion;
 use wire::task::ContextRef;
 use wire::task::TaskBudget;
@@ -226,4 +229,74 @@ pub trait TaskJobs: std::fmt::Debug + Send + Sync {
     async fn read(&self, id: i64) -> Result<Option<StoredJob>, TaskError>;
 
     async fn await_notification(&self, cancel: CancellationToken) -> Result<bool, TaskError>;
+}
+
+#[derive(Debug, Error)]
+pub enum DelegationError {
+    #[error("operation cancelled")]
+    Cancelled,
+    #[error("{0}")]
+    Rejected(String),
+    #[error(transparent)]
+    Failed(BoxError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentDirectory {
+    pub presets: Vec<PresetAgent>,
+    pub runtime: Vec<RuntimeAgent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PresetAgent {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub harness: Option<HarnessId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeAgent {
+    pub id: String,
+    pub nodes: Vec<AgentNode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentNode {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DelegateRequest {
+    pub target: String,
+    pub prompt: String,
+    pub model: Option<String>,
+    pub node: Option<String>,
+    pub timeout: Duration,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DelegateOutcome {
+    pub id: Uuid,
+    pub status: TaskStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<TaskResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub timed_out: bool,
+}
+
+#[async_trait]
+pub trait Delegation: Send + Sync {
+    async fn agents(&self) -> Result<AgentDirectory, DelegationError>;
+
+    async fn delegate(
+        &self,
+        request: DelegateRequest,
+        cancel: CancellationToken,
+    ) -> Result<DelegateOutcome, DelegationError>;
 }
