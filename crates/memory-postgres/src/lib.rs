@@ -11,6 +11,8 @@ pub mod queue;
 pub mod read;
 pub mod search;
 mod search_complete;
+#[cfg(test)]
+mod search_explain;
 mod search_sql;
 pub use search_complete::SearchSynthesis;
 mod store_impl;
@@ -44,7 +46,7 @@ pub use queue::PostgresQueue;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-pub const SCHEMA_VERSION: i64 = 21;
+pub const SCHEMA_VERSION: i64 = 22;
 
 #[derive(Debug)]
 pub struct PostgresMemory {

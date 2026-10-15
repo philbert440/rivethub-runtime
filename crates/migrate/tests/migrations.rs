@@ -11,12 +11,12 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 21);
+    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 22);
 
     let applied = sqlx::query("SELECT count(*)::bigint AS n FROM _sqlx_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 21);
+    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 22);
 
     migrate::postgres_pool(&pool).await?;
 
@@ -69,6 +69,8 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
         "ux_ros_conversations_session_agent",
         "idx_ros_messages_fts",
         "idx_ros_messages_trgm",
+        "idx_ros_messages_tool_result_trgm",
+        "idx_ros_summaries_trgm",
         "ros_messages_embedding_hnsw",
         "ros_summaries_embedding_hnsw",
         "ux_ros_tags_entity_kv",
@@ -182,8 +184,17 @@ async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
         .await?;
     assert_eq!(
         tracked.try_get::<i64, _>("n").unwrap(),
-        21,
-        "only 0021 must be appended"
+        22,
+        "0021 renames the tables and 0022 adds the summaries trigram index"
+    );
+    let summaries_trgm =
+        sqlx::query("SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_ros_summaries_trgm'")
+            .fetch_one(&pool)
+            .await?;
+    let indexdef: String = summaries_trgm.try_get("indexdef").unwrap();
+    assert!(
+        indexdef.contains("gin") && indexdef.contains("gin_trgm_ops"),
+        "summaries trigram index must be a gin_trgm index: {indexdef}"
     );
 
     let legacy =
