@@ -1,7 +1,6 @@
 use axum::extract::Request;
 use kernel::tasks::TaskError;
 use serde::de::DeserializeOwned;
-use serde_json::error::Category;
 use wire::task::TaskStatus;
 
 use crate::error::ApiError;
@@ -11,23 +10,7 @@ use super::error::TaskHttpError;
 
 pub(super) async fn read_json<T: DeserializeOwned>(request: Request) -> Result<T, TaskHttpError> {
     let bytes = limited_bytes(request, &()).await.map_err(body_error)?;
-    let text = std::str::from_utf8(&bytes).map_err(|_| invalid_json())?;
-    let trimmed = text.trim_start();
-    if trimmed.is_empty() {
-        return Err(invalid_json());
-    }
-    if !trimmed.starts_with('{') {
-        return Err(TaskHttpError::BadRequest(
-            "body must be a JSON object".to_owned(),
-        ));
-    }
-    match serde_json::from_slice::<T>(&bytes) {
-        Ok(value) => Ok(value),
-        Err(error) if error.classify() == Category::Data => Err(TaskHttpError::BadRequest(
-            strip_location(&error.to_string()),
-        )),
-        Err(_) => Err(invalid_json()),
-    }
+    crate::extract::decode_json_object(&bytes).map_err(body_error)
 }
 
 pub(super) fn required(value: Option<String>, label: &str) -> Result<String, TaskHttpError> {
@@ -75,24 +58,15 @@ pub(super) fn terminal(status: TaskStatus) -> TaskHttpError {
     TaskHttpError::Conflict(format!("task is terminal ({status})"))
 }
 
-fn invalid_json() -> TaskHttpError {
-    TaskHttpError::BadRequest("invalid JSON".to_owned())
-}
-
-fn strip_location(message: &str) -> String {
-    match message.split_once(" at line ") {
-        Some((head, _)) => head.to_owned(),
-        None => message.to_owned(),
-    }
-}
-
 fn body_error(error: ApiError) -> TaskHttpError {
     match error {
         ApiError::BodyMustBeObject => {
             TaskHttpError::BadRequest("body must be a JSON object".to_owned())
         }
         ApiError::BodyTooLarge => TaskHttpError::PayloadTooLarge,
-        ApiError::BadRequest(message) => TaskHttpError::BadRequest(strip_location(&message)),
+        ApiError::BadRequest(message) | ApiError::Unprocessable(message) => {
+            TaskHttpError::BadRequest(message)
+        }
         ApiError::RequestTimeout => TaskHttpError::BadRequest("request timeout".to_owned()),
         ApiError::NotFound(message) => TaskHttpError::NotFound(message.to_owned()),
         ApiError::MethodNotAllowed => TaskHttpError::MethodNotAllowed,

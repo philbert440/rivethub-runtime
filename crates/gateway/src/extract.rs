@@ -74,7 +74,7 @@ where
     }
 }
 
-fn decode_json_object<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, ApiError> {
+pub(crate) fn decode_json_object<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, ApiError> {
     if let Err(error) = serde_json::from_slice::<JsonObject>(bytes) {
         return Err(object_shape_error(&error));
     }
