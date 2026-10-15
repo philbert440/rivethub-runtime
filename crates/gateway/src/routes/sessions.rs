@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
-use axum::extract::{State, WebSocketUpgrade};
+use axum::extract::{RawQuery, State, WebSocketUpgrade};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
@@ -16,6 +16,38 @@ use crate::tenancy::UserId;
 #[derive(Debug, Deserialize)]
 pub(crate) struct Selection {
     pub(crate) session: Option<String>,
+}
+
+fn requested_session(query: Option<&str>) -> Result<String, ApiError> {
+    let Some(query) = query else {
+        return Err(ApiError::NotFound("unknown session"));
+    };
+    let mut found = None;
+    for pair in query.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let (key, value) = match pair.split_once('=') {
+            Some((key, value)) => (key, value),
+            None => (pair, ""),
+        };
+        if form_text(key)? == "session" {
+            found = Some(form_text(value)?);
+            break;
+        }
+    }
+    match found {
+        Some(session) if !session.is_empty() => Ok(session),
+        Some(_) | None => Err(ApiError::NotFound("unknown session")),
+    }
+}
+
+fn form_text(raw: &str) -> Result<String, ApiError> {
+    let spaced = raw.replace('+', " ");
+    match percent_encoding::percent_decode_str(&spaced).decode_utf8() {
+        Ok(text) => Ok(text.into_owned()),
+        Err(error) => Err(ApiError::BadRequest(format!("invalid query: {error}"))),
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -72,7 +104,11 @@ async fn ingest(gateway: &Gateway, user: &UserId, events: Vec<AgentEvent>) -> Re
         .filter(|event| matches!(event.kind, wire::events::AgentEventKind::TurnEnd { .. }))
         .map(|event| event.session.clone())
         .collect();
-    gateway.sessions.ingest(user, events)?;
+    if gateway.tenancy.local_user() == Some(user) {
+        gateway.sessions.ingest_as_local(user, events)?;
+    } else {
+        gateway.sessions.ingest(user, events)?;
+    }
     if let Some(terminal) = &gateway.terminal {
         for session in ended {
             terminal.terminal_turn_end(user, &session).await?;
@@ -94,22 +130,18 @@ async fn list(
 async fn state(
     State(gateway): State<Arc<Gateway>>,
     user: UserId,
-    Query(query): Query<Selection>,
+    RawQuery(query): RawQuery,
 ) -> Result<Json<StateResponse>, ApiError> {
-    let session = query
-        .session
-        .ok_or_else(|| ApiError::BadRequest("session required".into()))?;
+    let session = requested_session(query.as_deref())?;
     Ok(Json(gateway.sessions.state(&user, &session)?))
 }
 
 async fn remove(
     State(gateway): State<Arc<Gateway>>,
     user: UserId,
-    Query(query): Query<Selection>,
+    RawQuery(query): RawQuery,
 ) -> Result<Json<Accepted>, ApiError> {
-    let session = query
-        .session
-        .ok_or_else(|| ApiError::BadRequest("session required".into()))?;
+    let session = requested_session(query.as_deref())?;
     gateway.sessions.authorize(&user, &session)?;
     if let Some(terminal) = &gateway.terminal {
         terminal.remove_session(&user, &session).await?;

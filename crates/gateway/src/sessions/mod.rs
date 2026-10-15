@@ -19,6 +19,11 @@ use crate::error::ApiError;
 use crate::tenancy::UserId;
 use view::Projection;
 
+struct Applied {
+    revision: u64,
+    ended: bool,
+}
+
 #[derive(Debug)]
 struct Tenant {
     views: Mutex<BTreeMap<String, Projection>>,
@@ -99,10 +104,44 @@ impl SessionRegistry {
             .clone()
     }
 
+    pub fn seed_owner(&self, user: &UserId, session: &str) -> Result<(), ApiError> {
+        let key = session_key(session)?;
+        let mut owners = self.owners.write();
+        let same = owners.get(&key).map(|owner| owner == user);
+        if let Some(same) = same {
+            drop(owners);
+            return if same {
+                Ok(())
+            } else {
+                Err(ApiError::SessionForbidden)
+            };
+        }
+        owners.insert(key, user.clone());
+        drop(owners);
+        Ok(())
+    }
+
     pub fn ingest(
         self: &Arc<Self>,
         user: &UserId,
         events: Vec<AgentEvent>,
+    ) -> Result<(), ApiError> {
+        self.ingest_inner(user, events, false)
+    }
+
+    pub fn ingest_as_local(
+        self: &Arc<Self>,
+        user: &UserId,
+        events: Vec<AgentEvent>,
+    ) -> Result<(), ApiError> {
+        self.ingest_inner(user, events, true)
+    }
+
+    fn ingest_inner(
+        self: &Arc<Self>,
+        user: &UserId,
+        events: Vec<AgentEvent>,
+        keep_foreign: bool,
     ) -> Result<(), ApiError> {
         if events.len() > 100 {
             return Err(ApiError::BadRequest("at most 100 events".into()));
@@ -111,41 +150,80 @@ impl SessionRegistry {
             .iter()
             .map(|event| session_key(&event.session))
             .collect::<Result<Vec<_>, _>>()?;
-        {
+        let targets = {
             let mut owners = self.owners.write();
+            let mut targets = Vec::with_capacity(keys.len());
             for key in &keys {
-                if owners.get(key).is_some_and(|owner| owner != user) {
-                    return Err(ApiError::SessionForbidden);
+                match owners.get(key) {
+                    Some(owner) if owner == user || keep_foreign => targets.push(owner.clone()),
+                    Some(_) => return Err(ApiError::SessionForbidden),
+                    None => targets.push(user.clone()),
                 }
             }
-            for key in &keys {
-                owners.insert(key.clone(), user.clone());
+            for (key, target) in keys.iter().zip(&targets) {
+                owners.entry(key.clone()).or_insert_with(|| target.clone());
             }
+            targets
+        };
+        if targets.iter().all(|target| target == user) {
+            self.apply_batch(user, events, keys);
+            return Ok(());
         }
+        for ((event, key), target) in events.into_iter().zip(keys).zip(targets) {
+            self.apply_one(&target, event, key);
+        }
+        Ok(())
+    }
+
+    fn apply_batch(self: &Arc<Self>, user: &UserId, events: Vec<AgentEvent>, keys: Vec<String>) {
         let tenant = self.tenant(user);
         let mut views = tenant.views.lock();
-        for (mut event, key) in events.into_iter().zip(keys) {
-            event.session.clone_from(&key);
-            let projection = views
-                .entry(key.clone())
-                .or_insert_with(|| Projection::new(key.clone()));
-            projection.apply(&event.kind, Utc::now());
-            let revision = projection.revision;
-            let ended = matches!(event.kind, AgentEventKind::SessionEnd { .. });
-            tenant.publish(SessionBroadcast::Event(event));
-            if ended {
-                let registry = self.clone();
-                let user = user.clone();
-                self.tasks.spawn(async move {
-                    tokio::select! {
-                        () = registry.shutdown.cancelled() => {},
-                        () = tokio::time::sleep(registry.eviction) => registry.evict(&user, &key, revision),
-                    }
-                });
+        for (event, key) in events.into_iter().zip(keys) {
+            let ended = Self::project(&tenant, &mut views, event, &key);
+            if ended.ended {
+                self.schedule_eviction(user.clone(), key, ended.revision);
             }
         }
         drop(views);
-        Ok(())
+    }
+
+    fn apply_one(self: &Arc<Self>, user: &UserId, event: AgentEvent, key: String) {
+        let tenant = self.tenant(user);
+        let mut views = tenant.views.lock();
+        let ended = Self::project(&tenant, &mut views, event, &key);
+        drop(views);
+        if ended.ended {
+            self.schedule_eviction(user.clone(), key, ended.revision);
+        }
+    }
+
+    fn project(
+        tenant: &Tenant,
+        views: &mut BTreeMap<String, Projection>,
+        mut event: AgentEvent,
+        key: &str,
+    ) -> Applied {
+        key.clone_into(&mut event.session);
+        let projection = views
+            .entry(key.to_owned())
+            .or_insert_with(|| Projection::new(key.to_owned()));
+        projection.apply(&event.kind, Utc::now());
+        let applied = Applied {
+            revision: projection.revision,
+            ended: matches!(event.kind, AgentEventKind::SessionEnd { .. }),
+        };
+        tenant.publish(SessionBroadcast::Event(event));
+        applied
+    }
+
+    fn schedule_eviction(self: &Arc<Self>, user: UserId, key: String, revision: u64) {
+        let registry = Arc::clone(self);
+        self.tasks.spawn(async move {
+            tokio::select! {
+                () = registry.shutdown.cancelled() => {},
+                () = tokio::time::sleep(registry.eviction) => registry.evict(&user, &key, revision),
+            }
+        });
     }
 
     fn evict(&self, user: &UserId, key: &str, revision: u64) {
@@ -168,7 +246,10 @@ impl SessionRegistry {
         let key = self.authorize(user, session)?;
         let tenant = self.tenant(user);
         let mut views = tenant.views.lock();
-        views.remove(&key);
+        if views.remove(&key).is_none() {
+            drop(views);
+            return Err(ApiError::NotFound("unknown session"));
+        }
         tenant.publish(SessionBroadcast::Removed(SessionRemoved {
             v: ProtocolVersion::V1,
             session: key,
@@ -188,7 +269,7 @@ impl SessionRegistry {
             .clone();
         drop(views);
         Ok(StateResponse {
-            session: key,
+            session: session.to_owned(),
             state,
         })
     }

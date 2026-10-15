@@ -16,14 +16,6 @@
     "reason": "B1 hardening: explicit credentials and trusted certificate fingerprints replace implicit identity mapping; tested separately"
   },
   {
-    "id": "plain-main/alias-api-events-sessions",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
-    "id": "plain-main/alias-api-events-state",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
     "id": "plain-main/alias-api-events-ws-http",
     "reason": "A plain GET of a websocket path is handled by the upgrade route; the recording returns the SPA document or another status."
   },
@@ -72,14 +64,6 @@
     "reason": "The body cap does not return the recorded 413; the typed extractor rejects the payload, or the body recipe is JavaScript padding."
   },
   {
-    "id": "plain-main/delete-session-again",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
-    "id": "plain-main/delete-session-missing-param",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
     "id": "plain-main/event-bad-ts",
     "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
   },
@@ -118,10 +102,6 @@
   {
     "id": "plain-main/events-not-array",
     "reason": "Typed JSON rejection does not reproduce the legacy status or error sentence."
-  },
-  {
-    "id": "plain-main/healthz-after-ingest",
-    "reason": "The session projection or list does not match the recorded view after the same events."
   },
   {
     "id": "plain-main/healthz-double-slash",
@@ -164,40 +144,8 @@
     "reason": "The method is rejected by the typed route table; the recording uses a not-found status."
   },
   {
-    "id": "plain-main/sessions-after-delete",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
-    "id": "plain-main/sessions-list",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
-    "id": "plain-main/state-canonical-id",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
-    "id": "plain-main/state-duplicate-param",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
-    "id": "plain-main/state-empty-param",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
-    "id": "plain-main/state-known",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
-    "id": "plain-main/state-missing-param",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
     "id": "plain-main/state-post",
     "reason": "The method is rejected by the typed route table; the recording uses a not-found status."
-  },
-  {
-    "id": "plain-main/state-reserialized",
-    "reason": "The session projection or list does not match the recorded view after the same events."
   },
   {
     "id": "plain-main/static-dotdot",
@@ -238,14 +186,6 @@
   {
     "id": "plain-tenancy/tenancy-empty-user-token",
     "reason": "Certificate and users.json tenancy is not applied by the loopback owner, so isolation and database refusals differ from the recording."
-  },
-  {
-    "id": "plain-tenancy/tenancy-healthz",
-    "reason": "The session projection or list does not match the recorded view after the same events."
-  },
-  {
-    "id": "plain-tenancy/tenancy-sessions-owner",
-    "reason": "The session projection or list does not match the recorded view after the same events."
   },
   {
     "id": "plain-tenancy/tenancy-spoofed-user-header",
@@ -1270,10 +1210,6 @@
   {
     "id": "tls-tenancy/tt-ou-client-unmapped",
     "reason": "The in-process router does not present the recorded client certificate, so the device or tenant identity is not established."
-  },
-  {
-    "id": "tls-tenancy/tt-owner-loopback-sessions",
-    "reason": "The session projection or list does not match the recorded view after the same events."
   },
   {
     "id": "tls-tenancy/tt-stranger",

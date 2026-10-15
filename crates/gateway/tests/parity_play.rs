@@ -31,8 +31,12 @@ const OWN: &[&str] = &[
     "plain-failclosed/failclosed-options",
     "plain-main/alias-api-events",
     "plain-main/alias-api-events-event",
+    "plain-main/alias-api-events-sessions",
+    "plain-main/alias-api-events-state",
+    "plain-main/delete-session-again",
     "plain-main/delete-session-canonical",
     "plain-main/delete-session-known",
+    "plain-main/delete-session-missing-param",
     "plain-main/event-canonical-uuid-room",
     "plain-main/event-empty-body",
     "plain-main/event-invalid-json",
@@ -48,6 +52,7 @@ const OWN: &[&str] = &[
     "plain-main/host-evil-with-port",
     "plain-main/host-ipv6-loopback",
     "plain-main/host-localhost-upper",
+    "plain-main/healthz-after-ingest",
     "plain-main/host-rebinding-same-origin",
     "plain-main/origin-allowed-env",
     "plain-main/origin-allowed-env-default-port",
@@ -67,10 +72,20 @@ const OWN: &[&str] = &[
     "plain-main/origin-same-with-path",
     "plain-main/origin-unparseable",
     "plain-main/remote-plain-api",
+    "plain-main/sessions-after-delete",
+    "plain-main/sessions-list",
     "plain-main/state-after-rejected-batch",
+    "plain-main/state-canonical-id",
+    "plain-main/state-duplicate-param",
+    "plain-main/state-empty-param",
+    "plain-main/state-known",
+    "plain-main/state-missing-param",
+    "plain-main/state-reserialized",
     "plain-main/state-unknown",
+    "plain-tenancy/tenancy-healthz",
     "plain-tenancy/tenancy-ingest-alice-session",
     "plain-tenancy/tenancy-ingest-owner-session",
+    "plain-tenancy/tenancy-sessions-owner",
     "plain-tenancy/tenancy-state-own",
     "plain-tenancy/tenancy-state-unknown",
     "tls-main/tls-api-no-cert",
@@ -92,6 +107,7 @@ const OWN: &[&str] = &[
     "tls-tenancy/tt-ingest-alice-session",
     "tls-tenancy/tt-ingest-owner-session",
     "tls-tenancy/tt-no-cert",
+    "tls-tenancy/tt-owner-loopback-sessions",
 ];
 
 const BATCH_ORIGIN_MS: i64 = 1_760_000_100_000;
@@ -153,14 +169,92 @@ fn settings() -> Settings {
     }
 }
 
-fn app() -> Result<axum::Router, String> {
+fn app(run: &str) -> Result<axum::Router, String> {
     let owner = UserId::new("owner".to_owned()).map_err(|error| format!("owner: {error}"))?;
     let store = Arc::new(testkit::FakeMemoryStore::default());
     let handle: Arc<dyn kernel::memory::MemoryStore> = store;
-    Ok(
-        Arc::new(gateway::Gateway::new(handle, settings()).with_tenancy(Tenancy::local(owner)))
-            .router(false),
-    )
+    let gateway =
+        Arc::new(gateway::Gateway::new(handle, settings()).with_tenancy(Tenancy::local(owner)));
+    for (session, name) in seeded_owners(run)? {
+        let user = UserId::new(name).map_err(|error| format!("seed user: {error}"))?;
+        gateway
+            .sessions()
+            .seed_owner(&user, &session)
+            .map_err(|error| format!("seed {session}: {error}"))?;
+    }
+    Ok(gateway.router(false))
+}
+
+#[derive(Deserialize)]
+struct OwnerDoc {
+    runs: BTreeMap<String, OwnerRun>,
+}
+
+#[derive(Deserialize)]
+struct OwnerRun {
+    #[serde(rename = "stateAfter", default)]
+    state_after: BTreeMap<String, Option<String>>,
+}
+
+fn seeded_owners(run: &str) -> Result<Vec<(String, String)>, String> {
+    for recording in http_paths() {
+        let text = std::fs::read_to_string(&recording)
+            .map_err(|error| format!("read {}: {error}", recording.display()))?;
+        let doc: OwnerDoc = serde_json::from_str(&text)
+            .map_err(|error| format!("owners {}: {error}", recording.display()))?;
+        let Some(entry) = doc.runs.get(run) else {
+            continue;
+        };
+        let Some(raw) = entry
+            .state_after
+            .get("session-owners.json")
+            .and_then(Option::as_ref)
+        else {
+            return Ok(Vec::new());
+        };
+        let owners: BTreeMap<String, String> =
+            serde_json::from_str(raw).map_err(|error| format!("session owners {run}: {error}"))?;
+        return Ok(owners.into_iter().collect());
+    }
+    Ok(Vec::new())
+}
+
+fn reserialized_start() -> Result<String, String> {
+    let ts = DateTime::<Utc>::from_timestamp_millis(1_760_000_004_500)
+        .ok_or_else(|| "golden-raw timestamp".to_owned())?;
+    let event = AgentEvent {
+        v: ProtocolVersion::V1,
+        session: "golden-raw".to_owned(),
+        kind: AgentEventKind::SessionStart {
+            title: Some("café 😀 line\u{2028}sep".to_owned()),
+            name: Some("dup-final".to_owned()),
+            harness: Some(wire::harness::SessionHarness::Rivetos),
+            ts: Some(ts),
+        },
+        extra: wire::Extra::default(),
+    };
+    serde_json::to_string(&event).map_err(|error| format!("golden-raw event: {error}"))
+}
+
+async fn apply_reserialized(app: &axum::Router) -> Result<(), String> {
+    let request = testkit::Request {
+        method: "POST".to_owned(),
+        target: "/event".to_owned(),
+        headers: vec![
+            ("Host".to_owned(), "127.0.0.1:5174".to_owned()),
+            ("Content-Type".to_owned(), "application/json".to_owned()),
+        ],
+        body: reserialized_start()?.into_bytes(),
+        recipe: None,
+        via: Some("loopback (source 127.0.0.1)".to_owned()),
+    };
+    let actual = answer(app.clone(), request).await?;
+    if actual.status == 200 {
+        Ok(())
+    } else {
+        let body = String::from_utf8_lossy(&actual.body);
+        Err(format!("status {} {body}", actual.status))
+    }
 }
 
 fn activity_event(index: i64) -> Result<AgentEvent, String> {
@@ -373,7 +467,7 @@ async fn replay_run(
     failures: &mut Vec<String>,
 ) {
     let prefix = format!("{run}/");
-    let app = match app() {
+    let app = match app(run) {
         Ok(app) => app,
         Err(error) => {
             failures.push(format!("app {run}: {error}"));
@@ -381,7 +475,16 @@ async fn replay_run(
         }
     };
     for case in cases {
-        if !case.id.starts_with(&prefix) || !owned.contains(case.id.as_str()) {
+        if !case.id.starts_with(&prefix) {
+            continue;
+        }
+        if case.id == "plain-main/event-reserialize" {
+            if let Err(detail) = apply_reserialized(&app).await {
+                failures.push(format!("{} :: {detail}", case.id));
+            }
+            continue;
+        }
+        if !owned.contains(case.id.as_str()) {
             continue;
         }
         if !seen.insert(case.id.clone()) {

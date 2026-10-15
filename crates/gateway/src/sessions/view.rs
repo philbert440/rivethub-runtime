@@ -62,7 +62,6 @@ impl Projection {
                 ts
             }
             AgentEventKind::MessageUser { text, ts } => {
-                self.view.activity = Activity::Thinking;
                 self.view.thought.clear();
                 self.view.tool = None;
                 self.log("user", text);
@@ -92,7 +91,7 @@ impl Projection {
             }
             AgentEventKind::ToolStart { tool, ts, .. } => {
                 self.view.tool = Some(tool.clone());
-                self.view.activity = Activity::Toolbox;
+                self.view.activity = Activity::EditingCode;
                 ts
             }
             AgentEventKind::TaskPlan { tasks, ts } => {
