@@ -198,10 +198,11 @@ async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), Start
     let config = tokio::task::spawn_blocking(move || load(&owned_env))
         .await
         .map_err(StartupError::StateTask)??;
-    let store = tokio::select! {
+    let memory = tokio::select! {
         () = shutdown.cancelled() => return Ok(()),
-        store = connect(&config, env) => store?,
+        memory = postgres(&config, env) => Arc::new(memory?),
     };
+    let store: Arc<dyn MemoryStore> = memory.clone();
     let mut composition =
         crate::composition::Composition::build(&config, env, store, &shutdown).await?;
     let (listener, tls) = listen(&config).await?;
@@ -224,6 +225,7 @@ async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), Start
         result = &mut serving => { shutdown.cancel(); composition.close().await?; result },
         result = composition.failed() => { shutdown.cancel(); composition.close().await?; result?; serving.await },
     };
+    memory.flush_access().await;
     result?;
     tracing::info!("gateway stopped");
     Ok(())

@@ -470,6 +470,7 @@ async fn observe_recency(
     let outcome = memory
         .search_outcome_for(&query("deploy", SearchMode::Fts))
         .await?;
+    memory.flush_access().await;
     let score = outcome
         .hits
         .iter()

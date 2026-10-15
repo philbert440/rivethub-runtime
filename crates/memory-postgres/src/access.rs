@@ -12,6 +12,7 @@ const PENDING_LIMIT: usize = 10_000;
 #[derive(Debug, Default)]
 pub(crate) struct AccessLog {
     state: Mutex<Pending>,
+    idle: tokio::sync::Notify,
 }
 
 #[derive(Debug, Default)]
@@ -48,12 +49,27 @@ impl AccessLog {
         }
     }
 
+    pub(crate) async fn settled(&self) {
+        loop {
+            let idle = self.idle.notified();
+            {
+                let pending = self.state.lock();
+                if !pending.writing && pending.is_empty() {
+                    return;
+                }
+            }
+            idle.await;
+        }
+    }
+
     async fn drain(self: Arc<Self>, pool: PgPool) {
         loop {
             let (messages, summaries, dropped) = {
                 let mut pending = self.state.lock();
                 if pending.is_empty() {
                     pending.writing = false;
+                    drop(pending);
+                    self.idle.notify_waiters();
                     return;
                 }
                 (
