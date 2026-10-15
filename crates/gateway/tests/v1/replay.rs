@@ -6,11 +6,7 @@ use wire::gateway::GatewayError;
 
 use super::common;
 
-const REPLAYED: [&str; 3] = [
-    "plain-main/options-api",
-    "plain-main/options-api-disallowed-origin",
-    "plain-main/not-found-api",
-];
+const REPLAYED: &[&str] = &[];
 
 #[derive(Debug, Deserialize)]
 struct Skip {
@@ -71,7 +67,7 @@ fn every_recorded_scenario_is_replayed_or_named_with_a_reason() {
     }
     let mut accounted = BTreeSet::new();
     for id in REPLAYED {
-        assert!(accounted.insert(("http-plain.json".to_owned(), id.to_owned())));
+        assert!(accounted.insert(("http-plain.json".to_owned(), (*id).to_owned())));
     }
     for skip in skips {
         assert_ne!(skip.reason.trim(), "");

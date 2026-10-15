@@ -298,5 +298,8 @@
 {"recording":"ws.json","id":"tls-tenancy/tt-ws-alice-attach-owner-room","reason":"WebSocket sessions are outside the headless HTTP surface."},
 {"recording":"ws.json","id":"tls-tenancy/tt-ws-stranger","reason":"WebSocket sessions are outside the headless HTTP surface."},
 {"recording":"ws.json","id":"tls-tenancy/tt-ws-alice-live-own","reason":"WebSocket sessions are outside the headless HTTP surface."},
-{"recording":"ws.json","id":"tls-tenancy/tt-ws-alice-live-owner-withheld","reason":"WebSocket sessions are outside the headless HTTP surface."}
+{"recording":"ws.json","id":"tls-tenancy/tt-ws-alice-live-owner-withheld","reason":"WebSocket sessions are outside the headless HTTP surface."},
+{"recording":"http-plain.json","id":"plain-main/options-api","reason":"Replayed by the gateway HTTP recording, not the v1 mount."},
+{"recording":"http-plain.json","id":"plain-main/options-api-disallowed-origin","reason":"Replayed by the gateway HTTP recording, not the v1 mount."},
+{"recording":"http-plain.json","id":"plain-main/not-found-api","reason":"Replayed by the gateway HTTP recording, not the v1 mount."}
 ]
