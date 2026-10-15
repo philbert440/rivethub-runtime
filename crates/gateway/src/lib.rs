@@ -225,6 +225,7 @@ pub struct Gateway {
     policy: auth::OriginPolicy,
     denials: DenialLog,
     tenancy: tenancy::Tenancy,
+    identity_required: bool,
     sessions: Arc<sessions::SessionRegistry>,
     terminal: Option<Arc<term::TerminalService>>,
     transcript: Option<Arc<dyn kernel::transcript::TranscriptReader>>,
@@ -253,6 +254,7 @@ impl Gateway {
             policy,
             denials: DenialLog::default(),
             tenancy: tenancy::Tenancy::default(),
+            identity_required: false,
             sessions: Arc::new(sessions::SessionRegistry::new(
                 std::time::Duration::from_secs(300),
             )),
@@ -299,6 +301,12 @@ impl Gateway {
     #[must_use]
     pub fn with_embed_provider(mut self) -> Self {
         self.embed_provider = true;
+        self
+    }
+
+    #[must_use]
+    pub fn with_identity_required(mut self) -> Self {
+        self.identity_required = true;
         self
     }
 
@@ -413,11 +421,6 @@ impl Gateway {
 
     pub(crate) fn mesh_cache(&self) -> &routes::MeshCache {
         &self.mesh_cache
-    }
-
-    #[must_use]
-    pub fn admits_without_client_auth(&self, method: &axum::http::Method, path: &str) -> bool {
-        auth::admits_without_client_auth(method, path, self.devices().enrollment_on())
     }
 
     pub fn router(self: &Arc<Self>, secure: bool) -> Router {

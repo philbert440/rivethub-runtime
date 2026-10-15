@@ -108,6 +108,7 @@ impl Composition {
         let mut gateway = Gateway::new(store, settings)
             .with_uploads(crate::service::uploads(env)?)
             .with_tenancy(identity.tenancy.clone())
+            .with_identity_required()
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
         let home = env
@@ -157,14 +158,10 @@ impl Composition {
     }
 
     pub fn router(&self, secure: bool) -> axum::Router {
-        let router = match &self.v1 {
+        match &self.v1 {
             Some(service) => service.router(&self.gateway, secure),
             None => self.gateway.router(secure),
-        };
-        router.layer(axum::middleware::from_fn_with_state(
-            self.gateway.clone(),
-            identities::authorize,
-        ))
+        }
     }
 
     pub async fn close(mut self) -> Result<(), ComposeError> {

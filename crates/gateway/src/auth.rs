@@ -242,13 +242,18 @@ pub(crate) async fn guard(
     }
     let authenticated = caller_loopback
         || (state.secure && request.extensions().get::<PeerCertificate>().is_some());
-    if !authenticated
-        && !admits_without_client_auth(
-            request.method(),
-            &path,
-            state.gateway.devices().enrollment_on(),
-        )
-    {
+    let open = admits_without_client_auth(
+        request.method(),
+        &path,
+        state.gateway.devices().enrollment_on(),
+    );
+    let identified = open || !state.gateway.identity_required || {
+        let (parts, body) = request.into_parts();
+        let resolved = state.gateway.tenancy.resolve(&parts).is_ok();
+        request = Request::from_parts(parts, body);
+        resolved
+    };
+    if !(open || authenticated && identified) {
         let mut unauthorized = unauthorized(&request, &path);
         if header_text(unauthorized.headers(), &header::CONTENT_TYPE) == Some("application/json") {
             append_cors(&mut unauthorized, echo.as_deref());
@@ -260,7 +265,7 @@ pub(crate) async fn guard(
     response
 }
 
-pub(crate) fn admits_without_client_auth(method: &Method, path: &str, enrollment_on: bool) -> bool {
+fn admits_without_client_auth(method: &Method, path: &str, enrollment_on: bool) -> bool {
     matches!(
         path,
         "/healthz" | "/ca/v1/chain" | "/ca/v1/crl" | "/ca/v1/sign"

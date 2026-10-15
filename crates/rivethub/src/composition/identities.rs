@@ -1,8 +1,3 @@
-use std::sync::Arc;
-
-use axum::extract::FromRequestParts;
-use axum::response::IntoResponse;
-use gateway::Gateway;
 use gateway::tenancy::{Tenancy, UserId};
 use wire::gateway::users::UsersRegistry;
 
@@ -27,7 +22,7 @@ pub(super) async fn load(
     let Some(path) = path else {
         let owner = UserId::new("owner".into())?;
         return Ok(Identity {
-            tenancy: Tenancy::local(owner.clone()),
+            tenancy: Tenancy::local(owner.clone()).with_unmapped_device_owner(owner.clone()),
             owner,
         });
     };
@@ -50,24 +45,4 @@ fn registry(users: UsersRegistry) -> Result<Identity, ComposeError> {
         }
     }
     Ok(Identity { tenancy, owner })
-}
-
-pub(super) async fn authorize(
-    axum::extract::State(gateway): axum::extract::State<Arc<Gateway>>,
-    request: axum::extract::Request,
-    next: axum::middleware::Next,
-) -> axum::response::Response {
-    if request.method() == axum::http::Method::OPTIONS
-        || gateway.admits_without_client_auth(request.method(), request.uri().path())
-    {
-        return next.run(request).await;
-    }
-    let (mut parts, body) = request.into_parts();
-    match UserId::from_request_parts(&mut parts, &gateway).await {
-        Ok(_) => {
-            next.run(axum::extract::Request::from_parts(parts, body))
-                .await
-        }
-        Err(error) => error.into_response(),
-    }
 }
