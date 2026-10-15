@@ -91,7 +91,7 @@ fn write_target(conn: &rusqlite::Connection, stored: &StoredEmbedding) -> Result
         return Err(SqliteError::MissingTable { table: CHUNKS });
     }
     require_width(conn, stored.vector.len())?;
-    let bytes = pack(&stored.vector);
+    let bytes = crate::vector::pack(&stored.vector);
     let updated = match stored.target.table {
         EmbedTable::Messages | EmbedTable::Summaries => exec_id(
             conn,
@@ -319,14 +319,6 @@ fn blob_value(bytes: Option<Vec<u8>>) -> Value {
         Some(bytes) => Value::Blob(bytes),
         None => Value::Null,
     }
-}
-
-fn pack(values: &[f32]) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    for value in values {
-        bytes.extend(value.to_le_bytes());
-    }
-    bytes
 }
 
 fn embed_err(error: SqliteError) -> EmbeddingStoreError {

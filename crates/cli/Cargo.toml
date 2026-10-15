@@ -8,6 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+memory-sqlite.workspace = true
 base64.workspace = true
 kernel.workspace = true
 pki.workspace = true
@@ -37,6 +38,7 @@ url = { workspace = true }
 wire = { workspace = true }
 
 [dev-dependencies]
+rusqlite.workspace = true
 async-trait = { workspace = true }
 memory-postgres = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
@@ -50,6 +52,10 @@ tokio-rustls.workspace = true
 axum = { workspace = true }
 testkit = { workspace = true }
 tokio = { workspace = true, features = ["process", "rt-multi-thread", "test-util"] }
+
+[[bin]]
+name = "rivethub-migrate"
+path = "src/bin/rivethub-migrate.rs"
 
 [lints]
 workspace = true

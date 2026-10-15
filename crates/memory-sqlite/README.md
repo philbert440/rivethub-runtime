@@ -25,3 +25,29 @@ Explicit trigram mode uses word-padded, case-insensitive set similarity with the
 REGEXP uses the Rust regex crate with a 1 MiB compiled-expression limit and bounded DFA cache, case folding, and newline matching. Invalid or oversized expressions are typed errors. PostgreSQL-specific regex extensions outside the regex crate's syntax are rejected; Unicode case folding follows the regex crate rather than the database server's locale.
 
 `search_at` receives its calendar zone explicitly. The `MemoryStore` port uses UTC. The composition root can wire the query embedder through the builder without coupling store adapters.
+
+## One-time Postgres import
+
+`rivethub-migrate sqlite --path memory.sqlite --import-pg-dump memory.pg.sql`
+creates a new target schema, or opens an existing v8 target, then imports a data-only, plain pg_dump from
+Postgres 16 or 18. The command prints a JSON report with row counts for every memory
+table. Import refuses non-empty targets and rolls back all data, index entries and
+the completion receipt on any error. Dump SQL is never executed. Only supported
+COPY blocks and the pg_dump envelope are accepted.
+
+For an existing embedded Postgres configuration, set `memory.import_pg_dump` to the
+dump path. The existing `rh local` preparation provisions the schema through
+`migrate`; a pending PGlite configuration without an explicit SQLite path uses
+`~/.rivethub/memory.sqlite`. The local composition imports before binding listeners
+or starting workers and sidecars, and
+records completion in the same transaction as the rows. Subsequent starts use that
+receipt even if the dump has been removed. An absent dump produces an error with the
+exact pg_dump table-selection arguments. A failed import remains pending and can be
+retried after correcting the dump. Use the existing install's Postgres connection at
+cutover; the Rust runtime does not launch PGlite.
+
+The import API is `SqliteStore::import_pg_dump(path, cancellation)`. It runs blocking
+file and database work under the store's task tracker and checks cancellation before
+commit. Timestamps use the store's parser; vector normalization and byte packing are
+shared with the adapter's existing embedding paths. Foreign keys are deferred until
+commit so pg_dump table order and summary parent order do not matter.

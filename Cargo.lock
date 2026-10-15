@@ -609,12 +609,14 @@ dependencies = [
  "hyper-util",
  "kernel",
  "memory-postgres",
+ "memory-sqlite",
  "migrate",
  "nix 0.30.1",
  "parking_lot",
  "pki",
  "rcgen",
  "reqwest",
+ "rusqlite",
  "rustls",
  "rustls-pki-types",
  "rustls-webpki",
@@ -2128,8 +2130,6 @@ name = "migrate"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "clap",
- "config",
  "hex",
  "memory-postgres",
  "memory-sqlite",

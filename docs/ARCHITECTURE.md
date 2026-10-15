@@ -10,7 +10,7 @@ Design artifact (visual, authoritative): https://claude.ai/artifact/L7cAvh16cYEZ
 | kernel | `kernel` (ports = traits, domain types; no I/O), `testkit` (dev-only: replayers, fakes, stubs) | wire, config |
 | adapters | `memory-postgres`, `memory-sqlite`, `providers`, `harness-acp`, `terminal`, `mcp`, `capture`, `pki`, `stepca` | kernel, wire, config, externals — NEVER another adapter or a service, except `pki` → `stepca`: `stepca` cannot depend on kernel, so the certificate-authority port is implemented in `pki` |
 | services | `gateway` (with the session registry and mesh), `agent-loop`, `workers`, `tasks` (sessions over the gateway API) | kernel, wire, config — NEVER an adapter |
-| operations | `migrate` (every Postgres and SQLite schema change; the `rivethub-migrate` binary) | wire, config, externals (sqlx, rusqlite); depended on only by `cli` as a normal dependency and by tests as a dev-dependency — NEVER directly by a runtime crate (`rivethub` is checked transitively by the xtask MANIFEST rule, except for the direct `cli` → `migrate` edge used for schema verification) |
+| operations | `migrate` (every Postgres and SQLite schema change; `cli` owns the `rivethub-migrate` operator binary) | wire, config, externals (sqlx, rusqlite); depended on only by `cli` as a normal dependency and by tests as a dev-dependency — NEVER directly by a runtime crate (`rivethub` is checked transitively by the xtask MANIFEST rule, except for the direct `cli` → `migrate` edge used for schema verification) |
 | composition | `cli`, `rivethub` (binary; one composition root per service process) | everything |
 
 The gate (`cargo xtask check`) fails any Cargo.toml that breaks this.
@@ -95,9 +95,12 @@ Schema changes never run inside the runtime: `rivethub-migrate postgres|sqlite` 
 `migrate` crate's `sqlx::migrate!` chain, SQLite through the v7 creation and the v1→v7 upgrade ladder with a
 `<file>.v<N>.bak` copy of the original file before any read-write connection), and the stores verify one schema version each
 (`memory_postgres::SCHEMA_VERSION`, `memory_sqlite::SCHEMA_VERSION`) and refuse to start behind it.
-`migrate`'s line budget is 1,000, not the 600-line file ceiling: the crate now holds the moved ladder and the
-`rivethub-migrate` binary. Measured `crates/migrate/src` is 874 lines (schema 215, the binary 210, postgres 155,
-upgrade 128, version 91, error 50, lib 25); 1,000 leaves headroom. Every file stays under the 600-line file cap.
+`cli` owns the `rivethub-migrate` operator binary. Its Postgres-dump import composes
+`migrate` for schema provisioning with `memory-sqlite` for transactional data import;
+keeping the binary in the composition crate avoids an adapter-to-adapter dependency.
+The `migrate` library still owns all schema creation, upgrade ladders and version
+checks. Its existing 1,000-line crate budget is unchanged; every file stays under
+the 600-line file cap.
 No runtime plugin loading: extension points are adapter crates behind ports, the public API, and MCP. `plugins:` and
 `channels.*` are accepted-and-ignored compatibility keys.
 

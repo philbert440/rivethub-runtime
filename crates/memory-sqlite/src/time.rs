@@ -34,6 +34,7 @@ impl Stamp {
 
 pub(crate) fn stored(text: &str, column: &'static str) -> Result<DateTime<Utc>, SqliteError> {
     DateTime::parse_from_rfc3339(text)
+        .or_else(|_| DateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S%.f%#z"))
         .map(|parsed| parsed.with_timezone(&Utc))
         .map_err(|source| SqliteError::StoredTimestamp {
             column,

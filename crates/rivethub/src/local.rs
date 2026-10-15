@@ -1,3 +1,5 @@
+mod import;
+
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::SocketAddr;
@@ -25,6 +27,8 @@ use crate::worker::{self, RootError, WorkerPorts};
 #[derive(Debug, Error)]
 enum LocalError {
     #[error(transparent)]
+    Import(#[from] import::Error),
+    #[error(transparent)]
     Startup(#[from] StartupError),
     #[error(transparent)]
     Worker(#[from] RootError),
@@ -50,7 +54,8 @@ impl LocalError {
             Self::Startup(error) => error.exit(),
             Self::Worker(error) => error.exit(),
             Self::Mcp(error) => error.exit(),
-            Self::Store(_)
+            Self::Import(_)
+            | Self::Store(_)
             | Self::Join(_)
             | Self::Tasks(_)
             | Self::Agent(_)
@@ -109,7 +114,8 @@ fn report_local(error: &LocalError) {
         LocalError::Startup(error) => report(error),
         LocalError::Worker(error) => worker::report_root(error),
         LocalError::Mcp(error) => sidecar::report_error(error),
-        LocalError::Store(_)
+        LocalError::Import(_)
+        | LocalError::Store(_)
         | LocalError::Join(_)
         | LocalError::Tasks(_)
         | LocalError::Agent(_)
@@ -135,6 +141,7 @@ async fn run(
 ) -> Result<(), LocalError> {
     let _guard = shutdown.clone().drop_guard();
     let store = open_store(database).await?;
+    import::pending(&store, config, &shutdown).await?;
     let switches = config.service_switches(env);
     let node = bind_node(&store, &switches, config, env, &shutdown).await?;
     supervise(node, &switches, config, env, store, shutdown).await

@@ -31,7 +31,7 @@ struct ForeignMarker {
 }
 
 fn directory() -> std::io::Result<tempfile::TempDir> {
-    tempfile::Builder::new().prefix("").tempdir()
+    tempfile::Builder::new().prefix("").rand_bytes(1).tempdir()
 }
 
 fn settings() -> TerminalSettings {

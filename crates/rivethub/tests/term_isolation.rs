@@ -85,7 +85,7 @@ fn plant_owned(
 async fn gateway_startup_adopts_only_its_namespace() -> TestResult {
     let home = tempfile::Builder::new()
         .prefix("")
-        .rand_bytes(4)
+        .rand_bytes(1)
         .tempdir()?;
     let work = home.path().join("work");
     let bin = home.path().join("bin");

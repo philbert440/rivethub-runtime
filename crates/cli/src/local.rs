@@ -125,7 +125,11 @@ fn sqlite_file(config: &Config, env: &Environment) -> Result<PathBuf, Error> {
         .and_then(|memory| memory.sqlite.as_ref())
         .and_then(|sqlite| sqlite.path.clone())
     else {
-        return Err(Error::LocalDatabase);
+        return if config.pglite_import_pending() {
+            Ok(config::Paths::new(env)?.state_dir().join("memory.sqlite"))
+        } else {
+            Err(Error::LocalDatabase)
+        };
     };
     if path.as_os_str().is_empty() || path == Path::new(":memory:") {
         return Err(Error::LocalDatabase);

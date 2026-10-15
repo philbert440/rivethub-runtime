@@ -1,3 +1,6 @@
+#[path = "local/import.rs"]
+mod import;
+
 use std::net::SocketAddr;
 use std::path::Path;
 use std::process::Stdio;

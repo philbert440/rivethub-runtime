@@ -29,6 +29,8 @@ enum Command {
     Sqlite {
         #[arg(long)]
         path: Option<PathBuf>,
+        #[arg(long, value_name = "FILE")]
+        import_pg_dump: Option<PathBuf>,
     },
     Status {
         #[command(subcommand)]
@@ -50,6 +52,14 @@ enum Backend {
 
 #[derive(Debug, Error)]
 enum Failure {
+    #[error("cannot inspect SQLite target: {0}")]
+    Target(#[from] std::io::Error),
+    #[error(transparent)]
+    Import(#[from] memory_sqlite::import::ImportError),
+    #[error(transparent)]
+    Store(#[from] memory_sqlite::SqliteError),
+    #[error("cannot encode import report: {0}")]
+    Json(#[from] serde_json::Error),
     #[error("the tokio runtime failed to start")]
     Runtime(#[source] std::io::Error),
     #[error(transparent)]
@@ -118,8 +128,22 @@ fn run(cli: &Cli, runtime: &tokio::runtime::Runtime) -> Result<(), Failure> {
             );
             Ok(())
         }
-        Command::Sqlite { path } => {
+        Command::Sqlite {
+            path,
+            import_pg_dump,
+        } => {
             let path = sqlite_path(cli, path.clone())?;
+            if let Some(dump) = import_pg_dump {
+                if !path.try_exists()? {
+                    migrate::sqlite(&path)?;
+                }
+                let store = memory_sqlite::SqliteStore::open(&path)?;
+                let report = runtime.block_on(
+                    store.import_pg_dump(dump.clone(), tokio_util::sync::CancellationToken::new()),
+                )?;
+                println!("{}", serde_json::to_string(&report)?);
+                return Ok(());
+            }
             let status = migrate::sqlite(&path)?;
             println!(
                 "sqlite {}: applied; current {}, required {}, pending {}",

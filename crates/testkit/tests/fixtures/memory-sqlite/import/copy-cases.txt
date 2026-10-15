@@ -1,0 +1,58 @@
+-- Handwritten COPY edge fixture, PostgreSQL 18.3 envelope
+\restrict ImportFixture
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+COPY public.ros_summary_sources (summary_id, message_id, ordinal) FROM stdin;
+s1	m1	2
+\.
+COPY public.ros_summaries (id, conversation_id, parent_id, content, kind, embedding, created_at, access_count) FROM stdin;
+s1	c1	s2	quartz leaf	leaf	[3,4]	2026-10-10 12:02:00+00	4
+s2	c1	\N	quartz root	root	\N	2026-10-10 12:03:00+00	8
+\.
+COPY "public"."ros_conversations" ("id", "session_key", "agent", "channel", "settings", "active", "created_at", "updated_at", "owner_user_id") FROM stdin;
+c1	import-session	main	cli	{"nested":{"flag":true},"count":2}	f	2026-10-10 12:00:00+00	2026-10-10 13:00:00.123456+01	alice
+\.
+COPY public.ros_messages (id, conversation_id, agent, channel, role, content, tool_name, tool_args, tool_result, metadata, embedding, access_count, last_accessed_at, created_at, embed_status, owner_user_id, content_hash) FROM stdin;
+m1	c1	main	cli	tool	Café 🚀\nline\ttab\\slash	read	{"path":"a\\\\b","flags":[true,3]}	quartz result\rreturn	{"source":"import"}	[0,5]	7	2026-10-10 12:03:00+00	2026-10-10 12:01:00+00	done	alice	\N
+\.
+COPY public.ros_tags (id, entity_type, entity_id, key, value, display, source, state, confidence, proposed_by, reason, decided_by, decided_at, created_at, updated_at) FROM stdin;
+t1	conversation	c1	project	acmekit	AcmeKit	user	accepted	0.75	alice	imported	alice	2026-10-10 12:02:00+00	2026-10-10 12:02:00+00	2026-10-10 12:02:00+00
+\.
+COPY public.ros_tag_taxonomy (key, value, display, aliases, created_at, updated_at) FROM stdin;
+project	acmekit	AcmeKit	{"Acme, Kit","\\"quoted\\"","back\\\\slash","","NULL",雪}	2026-10-10 12:02:00+00	2026-10-10 12:02:00+00
+\.
+COPY public.ros_wiki_topics (slug, title, aliases, tags, entities, related, current_state, article, search_text, embedding, embed_status, history_count, git_sha, last_verified_at, created_at, updated_at) FROM stdin;
+acmekit	AcmeKit	{old-acme}	{deploy}	{project:acmekit}	{release}	ready	# Deploy\nquartz	quartz deploy	[3,4]	done	2	0123456789abcdef	2026-10-10 12:03:00+00	2026-10-10 12:02:00+00	2026-10-10 12:03:00+00
+\.
+COPY public.ros_wiki_provenance (topic_slug, source_kind, source_id, conversation_id, git_sha, created_at) FROM stdin;
+acmekit	summary	s1	c1	0123456789abcdef	2026-10-10 12:03:00+00
+\.
+COPY public.ros_wiki_extractions (summary_id, status, pipeline_version, topics_touched, git_sha, error, extracted_at) FROM stdin;
+s1	done	5	{acmekit}	0123456789abcdef	\N	2026-10-10 12:03:00+00
+\.
+COPY public.ros_wiki_citations (topic_slug, summary_id, kind, note, cited_at) FROM stdin;
+acmekit	s1	leaf	quote\tline	2026-10-10 12:03:00+00
+\.
+COPY public.ros_wiki_redirects (from_slug, to_slug, created_at) FROM stdin;
+old-acme	acmekit	2026-10-10 12:03:00+00
+\.
+COPY public.ros_jobs (id, task, payload, run_at, created_at, updated_at) FROM stdin;
+j1	embed-target	{"targetTable":"ros_messages","targetId":"m1"}	2026-10-10 12:03:00+00	2026-10-10 12:03:00+00	2026-10-10 12:03:00+00
+\.
+COPY public.ros_embed_queue (id, message_id, enqueued_at) FROM stdin;
+e1	m1	2026-10-10 12:03:00+00
+\.
+COPY public.ros_meta (key, value) FROM stdin;
+embed_model	fixture-model
+\.
+-- PostgreSQL database dump complete
+\unrestrict ImportFixture
