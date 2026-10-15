@@ -57,7 +57,7 @@ pub(super) async fn build(
     let settings = terminal::TerminalSettings::from_config(
         config,
         env,
-        env.node_name(&crate::service::host_name()),
+        env.node_name(&crate::service::host_name())?,
     );
     let max_ptys = settings.limits.max_ptys;
     let paths = match env.get("PATH") {
@@ -71,7 +71,7 @@ pub(super) async fn build(
         },
         &paths,
         env.home().map(std::path::Path::new),
-        &config::Paths::new(env).state_dir(),
+        &config::Paths::new(env)?.state_dir(),
         gateway.port,
     )
     .await;
@@ -80,7 +80,7 @@ pub(super) async fn build(
     }
     let mux = Arc::new(terminal::TerminalManager::new(settings, plan));
     mux.run_tracked(shutdown.child_token(), tasks);
-    let state_dir = config::Paths::new(env).state_dir();
+    let state_dir = config::Paths::new(env)?.state_dir();
     let mut adopted = mux.adopt_namespace(&state_dir, owner.as_str()).await?;
     let commands = launch_commands(roster.commands);
     let service = Arc::new(

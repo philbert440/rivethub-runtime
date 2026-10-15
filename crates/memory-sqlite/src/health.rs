@@ -284,7 +284,10 @@ mod tests {
 
     #[tokio::test]
     async fn queue_health_counts_each_bucket() {
-        let store = SqliteStore::open_in_memory().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("memory.sqlite");
+        migrate::sqlite(&path).unwrap();
+        let store = SqliteStore::open(&path).unwrap();
         let now = at();
         store
             .enqueue_job(

@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use config::Config;
 use config::Environment;
-use config::Paths;
 use harness_acp::AcpHarnessAdapter;
 use harness_acp::AcpLaunch;
 use harness_acp::LaunchTable;
@@ -102,7 +101,7 @@ fn user_local_binary(program: &Path) -> Option<PathBuf> {
         return None;
     }
     let environment = Environment::from_process();
-    let home = Paths::new(&environment).home()?.to_path_buf();
+    let home = environment.home().map(PathBuf::from)?;
     let candidate = home.join(".local").join("bin").join(name);
     std::fs::metadata(&candidate).is_ok().then_some(candidate)
 }

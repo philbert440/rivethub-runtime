@@ -100,8 +100,8 @@ impl Scope {
         env: &Environment,
         shutdown: &CancellationToken,
     ) -> Result<Report, ServiceError> {
-        let paths = Paths::new(env);
-        let home = paths.home().ok_or(ServiceError::Home)?.to_path_buf();
+        let paths = Paths::new(env).map_err(|_| ServiceError::Home)?;
+        let home = paths.home().to_path_buf();
         let executable = tokio::task::spawn_blocking(std::env::current_exe).await??;
         let unit = Unit::new(&executable, &paths.env_file(), self)?;
         let path = unit.install(home).await?;

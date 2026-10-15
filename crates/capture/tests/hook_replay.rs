@@ -51,7 +51,10 @@ impl capture::writer::CaptureTransport for FakeTransport {
 
 const NOW_TEXT: &str = "2026-10-10T18:17:23.937Z";
 
-fn hook_in(home: &Path, transport: &FakeTransport) -> capture::hook::ClaudeHook<FakeTransport> {
+fn hook_in(
+    home: &Path,
+    transport: &FakeTransport,
+) -> Result<capture::hook::ClaudeHook<FakeTransport>, config::ConfigError> {
     let env = config::Environment::from_vars([("HOME".to_owned(), home.display().to_string())]);
     let spool = capture::spool::CaptureSpool::new(home.join("spool"));
     let writer = capture::writer::CaptureWriter::new(
@@ -60,7 +63,10 @@ fn hook_in(home: &Path, transport: &FakeTransport) -> capture::hook::ClaudeHook<
         std::num::NonZeroUsize::new(768 * 1024),
         None,
     );
-    capture::hook::ClaudeHook::new(writer, &config::Paths::new(&env))
+    Ok(capture::hook::ClaudeHook::new(
+        writer,
+        &config::Paths::new(&env)?,
+    ))
 }
 
 fn transcript_char_lengths() -> Result<Vec<(String, usize)>, Box<dyn std::error::Error>> {
@@ -157,7 +163,7 @@ async fn run_entry(
 ) -> Result<EntryRun, Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
     let transport = FakeTransport::new();
-    let hook = hook_in(inner.path(), &transport);
+    let hook = hook_in(inner.path(), &transport)?;
     let stdin = entry.stdin.replace("__TRANSCRIPT__", transcript_text);
     let run = hook.run(&stdin, now, "1791656243919-30e4c5d70").await;
     let posts = transport
@@ -256,7 +262,7 @@ async fn claude_hook_replays_recorded_batches() -> Result<(), Box<dyn std::error
 async fn malformed_payloads_exit_cleanly() -> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
     let transport = FakeTransport::new();
-    let hook = hook_in(inner.path(), &transport);
+    let hook = hook_in(inner.path(), &transport)?;
     let now: DateTime<Utc> = NOW_TEXT.parse()?;
     for stdin in ["{", "{}", "", "{\"hook_event_name\":\"UserPromptSubmit\"}"] {
         let run = hook.run(stdin, now, "1791656243919-30e4c5d70").await;
@@ -271,7 +277,7 @@ async fn malformed_payloads_exit_cleanly() -> Result<(), Box<dyn std::error::Err
 async fn missing_prompt_records_the_fallback_title() -> Result<(), Box<dyn std::error::Error>> {
     let inner = tempfile::tempdir()?;
     let transport = FakeTransport::new();
-    let hook = hook_in(inner.path(), &transport);
+    let hook = hook_in(inner.path(), &transport)?;
     let now: DateTime<Utc> = NOW_TEXT.parse()?;
     let stdin = r#"{"session_id":"33333333-3333-3333-3333-333333333333","hook_event_name":"UserPromptSubmit"}"#;
     let run = hook.run(stdin, now, "1791656243919-30e4c5d70").await;
@@ -298,7 +304,7 @@ async fn a_failed_log_write_does_not_fail_the_run() -> Result<(), Box<dyn std::e
     let inner = tempfile::tempdir()?;
     std::fs::write(inner.path().join(".rivethub"), b"not a directory")?;
     let transport = FakeTransport::new();
-    let hook = hook_in(inner.path(), &transport);
+    let hook = hook_in(inner.path(), &transport)?;
     let now: DateTime<Utc> = NOW_TEXT.parse()?;
     let stdin = r#"{"session_id":"33333333-3333-3333-3333-333333333333","hook_event_name":"UserPromptSubmit","prompt":"list the files"}"#;
     let run = hook.run(stdin, now, "1791656243919-30e4c5d70").await;

@@ -30,7 +30,7 @@ pub fn sqlite(path: &Path) -> Result<Status, Error> {
 }
 
 pub fn sqlite_at(path: &Path, now: DateTime<Utc>) -> Result<Status, Error> {
-    if !path.exists() {
+    if !exists(path)? {
         let mut conn = open_writing(path)?;
         create_fresh(&mut conn)?;
         return Ok(current());
@@ -59,7 +59,7 @@ pub fn sqlite_at(path: &Path, now: DateTime<Utc>) -> Result<Status, Error> {
 
 pub fn sqlite_status(path: &Path) -> Result<Status, Error> {
     let required = SchemaVersion::V7.number();
-    if !path.exists() {
+    if !exists(path)? {
         return Ok(Status {
             current: 0,
             required,
@@ -80,14 +80,6 @@ pub fn sqlite_status(path: &Path) -> Result<Status, Error> {
                 pending: steps(from.number()),
             })
         }
-    }
-}
-
-pub fn sqlite_connection(conn: &mut Connection, now: DateTime<Utc>) -> Result<(), Error> {
-    match user_version(conn)? {
-        0 => create_fresh(conn),
-        7 => Ok(()),
-        found => bring_through(conn, SchemaVersion::try_from(found)?, now),
     }
 }
 
@@ -130,15 +122,43 @@ fn user_version_read_only(path: &Path) -> Result<i64, Error> {
 
 fn copy_original(path: &Path, from: SchemaVersion) -> Result<(), Error> {
     let backup = backup_path(path, from);
-    if backup.exists() {
-        return Err(Error::BackupExists { path: backup });
-    }
-    std::fs::copy(path, &backup).map_err(|source| Error::Backup {
+    let mut output = match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&backup)
+    {
+        Ok(output) => output,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(Error::BackupExists { path: backup });
+        }
+        Err(source) => {
+            return Err(Error::Backup {
+                path: path.to_owned(),
+                backup,
+                source,
+            });
+        }
+    };
+    copy_to_backup(path, &mut output).map_err(|source| Error::Backup {
         path: path.to_path_buf(),
         backup,
         source,
     })?;
     Ok(())
+}
+
+fn copy_to_backup(path: &Path, output: &mut std::fs::File) -> Result<(), std::io::Error> {
+    let mut input = std::fs::File::open(path)?;
+    output.set_permissions(input.metadata()?.permissions())?;
+    std::io::copy(&mut input, output)?;
+    output.sync_all()
+}
+
+fn exists(path: &Path) -> Result<bool, Error> {
+    path.try_exists().map_err(|source| Error::Inspect {
+        path: path.to_owned(),
+        source,
+    })
 }
 
 fn backup_path(path: &Path, from: SchemaVersion) -> PathBuf {

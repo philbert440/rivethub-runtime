@@ -29,7 +29,7 @@ fn resolve_env_vars_replay() -> Result<(), Box<dyn std::error::Error>> {
         let env = config::Environment::from_vars(case.input.env.clone());
         aliases::assert_deprecated_aliases(&env);
         let mut actual = case.input.value.clone();
-        config::resolve_env_vars_with(&env, &mut actual);
+        config::resolve_env_vars_with(&env, &mut actual)?;
         if actual != case.out {
             failures.push(common::case_failure(
                 &common::case_id("resolve_env_vars", index),

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::time::Duration;
 
 use capture::batch::parse_batch;
@@ -185,7 +186,11 @@ async fn post_recorded_batches(
 async fn recorded_batches_land_and_read_back_through_the_memory_api(pool: PgPool) -> TestResult {
     let url = pool.connect_options().to_url_lossy().to_string();
     migrate::postgres_pool(&pool).await?;
-    let env = Environment::from_vars([(config::POSTGRES_URL_VARIABLE.to_owned(), url)]);
+    let home = tempdir()?;
+    let env = Environment::from_vars([
+        (OsStr::new(config::POSTGRES_URL_VARIABLE), OsStr::new(&url)),
+        (OsStr::new("HOME"), home.path().as_os_str()),
+    ]);
     let config: Config = serde_yaml_ng::from_str("den:\n  host: 127.0.0.1\n  port: 0\n")?;
     let store = rivethub::service::connect(&config, &env).await?;
     let gateway = rivethub::service::compose(&config, &env, store)?;

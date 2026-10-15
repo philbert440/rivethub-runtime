@@ -82,8 +82,8 @@ pub fn compose(
 ) -> Result<Arc<Gateway>, StartupError> {
     let hostname = host_name();
     let settings =
-        Settings::from_config_in(config, env, hostname.clone(), env.node_name(&hostname))?;
-    let gateway = Gateway::new(store, settings).with_uploads(uploads(env));
+        Settings::from_config_in(config, env, hostname.clone(), env.node_name(&hostname)?)?;
+    let gateway = Gateway::new(store, settings).with_uploads(uploads(env)?);
     let gateway = with_voice_and_audio(gateway, config, env)?;
     Ok(Arc::new(gateway))
 }
@@ -92,33 +92,37 @@ pub(crate) fn with_voice_and_audio(
     mut gateway: Gateway,
     config: &Config,
     env: &Environment,
-) -> Result<Gateway, gateway::VoiceConfigError> {
+) -> Result<Gateway, crate::composition::ComposeError> {
     let audio = env.audio_switch();
     if let Some(ignored) = &audio.ignored {
         tracing::warn!("{ignored}");
     }
     if config.terminal_enabled() || audio.enabled {
-        let directory = config::Paths::new(env).state_dir().join("audio");
+        let directory = config::Paths::new(env)?.state_dir().join("audio");
         gateway = gateway.with_audio(gateway::AudioConfig::new(directory));
     }
     let voice = env.voice_endpoints();
-    gateway.with_voice(gateway::VoiceSettings::new(
+    Ok(gateway.with_voice(gateway::VoiceSettings::new(
         voice.stt_url,
         voice.tts_url,
         voice.instructions,
-    ))
+    ))?)
 }
 
-pub(crate) fn uploads(env: &Environment) -> gateway::uploads::UploadService {
+pub(crate) fn uploads(
+    env: &Environment,
+) -> Result<gateway::uploads::UploadService, config::ConfigError> {
     let uploads = env.upload_settings();
     for ignored in &uploads.ignored {
         tracing::warn!("ignored upload limit {ignored}");
     }
-    gateway::uploads::UploadService::new(gateway::uploads::UploadOptions {
-        root: config::Paths::new(env).state_dir().join("uploads"),
-        max_bytes: uploads.max_bytes,
-        ttl: uploads.ttl,
-    })
+    Ok(gateway::uploads::UploadService::new(
+        gateway::uploads::UploadOptions {
+            root: config::Paths::new(env)?.state_dir().join("uploads"),
+            max_bytes: uploads.max_bytes,
+            ttl: uploads.ttl,
+        },
+    ))
 }
 
 pub async fn listen(config: &Config) -> Result<(TcpListener, Option<TlsPaths>), StartupError> {
@@ -147,7 +151,7 @@ pub async fn serve(
 }
 
 pub fn load(env: &Environment) -> Result<Config, StartupError> {
-    if let Some(location) = config::resolve_config_path(env) {
+    if let Some(location) = config::resolve_config_path(env)? {
         let loaded = Config::load(env, &location)?;
         for finding in &loaded.warnings {
             tracing::warn!("{}", finding_line(finding));

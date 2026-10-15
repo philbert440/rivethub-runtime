@@ -33,7 +33,7 @@ fn phone_devices(
     let Some(url) = gateway_url(config) else {
         return Ok(DeviceRuntime::unconfigured());
     };
-    let pairing = Paths::new(env).state_dir().join("phone-pairing");
+    let pairing = Paths::new(env)?.state_dir().join("phone-pairing");
     let issuer = PhoneIssuer::try_new(pairing, url, owner.as_str().to_owned())?;
     Ok(DeviceRuntime::unconfigured().enable_phone_issuer(issuer))
 }
@@ -49,7 +49,7 @@ async fn open_authority(
     env: &Environment,
     shutdown: &CancellationToken,
 ) -> Result<Option<Arc<dyn CertificateAuthority>>, ComposeError> {
-    let directory = Paths::new(env).ca_dir();
+    let directory = Paths::new(env)?.ca_dir();
     if !tokio::fs::try_exists(&directory).await? {
         return Ok(None);
     }

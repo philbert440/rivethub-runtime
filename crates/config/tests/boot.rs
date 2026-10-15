@@ -74,25 +74,25 @@ fn unknown_log_level_keeps_the_default_and_names_the_value() {
 #[test]
 fn node_name_walks_the_recorded_chain() {
     let current = env_from(&[("RIVETHUB_NODE_NAME", " golden-node ")]);
-    assert_eq!(current.node_name("box"), "golden-node");
+    assert_eq!(current.node_name("box").unwrap(), "golden-node");
     assert_eq!(current.legacy_notices(), [] as [String; 0]);
 
     let legacy = env_from(&[("RIVETOS_DEN_NODE_NAME", " golden-node ")]);
-    assert_eq!(legacy.node_name("box"), "golden-node");
+    assert_eq!(legacy.node_name("box").unwrap(), "golden-node");
     alias_warns(&legacy, "RIVETHUB_NODE_NAME", "RIVETOS_DEN_NODE_NAME");
 
     let env = env_from(&[
         ("RIVETHUB_NODE_NAME", "   "),
         ("RIVETOS_DEN_NODE_ID", "node-7"),
     ]);
-    assert_eq!(env.node_name("box"), "node-7");
+    assert_eq!(env.node_name("box").unwrap(), "node-7");
     alias_warns(&env, "RIVETHUB_NODE_ID", "RIVETOS_DEN_NODE_ID");
 
     let env = env_from(&[
         ("RIVETOS_DEN_NODE_NAME", "   "),
         ("RIVETHUB_NODE_ID", "node-7"),
     ]);
-    assert_eq!(env.node_name("box"), "node-7");
+    assert_eq!(env.node_name("box").unwrap(), "node-7");
     alias_warns(&env, "RIVETHUB_NODE_NAME", "RIVETOS_DEN_NODE_NAME");
     assert!(
         env.legacy_notices()
@@ -103,7 +103,7 @@ fn node_name_walks_the_recorded_chain() {
     );
 
     let env = env_from(&[("RIVETOS_DEN_NODE_ID", "node-7")]);
-    assert_eq!(env.node_name("box"), "node-7");
+    assert_eq!(env.node_name("box").unwrap(), "node-7");
     alias_warns(&env, "RIVETHUB_NODE_ID", "RIVETOS_DEN_NODE_ID");
 
     let both = env_from(&[
@@ -111,7 +111,7 @@ fn node_name_walks_the_recorded_chain() {
         ("RIVETOS_DEN_NODE_NAME", "legacy"),
         ("RIVETOS_DEN_NODE_ID", "node-7"),
     ]);
-    assert_eq!(both.node_name("box"), "primary");
+    assert_eq!(both.node_name("box").unwrap(), "primary");
     alias_warns(&both, "RIVETHUB_NODE_ID", "RIVETOS_DEN_NODE_ID");
     assert!(
         both.legacy_notices()
@@ -121,9 +121,9 @@ fn node_name_walks_the_recorded_chain() {
         both.legacy_notices()
     );
 
-    assert_eq!(env_from(&[]).node_name(" box "), "box");
-    assert_eq!(env_from(&[]).node_name(""), "local");
-    assert_eq!(env_from(&[]).node_name("   "), "local");
+    assert_eq!(env_from(&[]).node_name(" box ").unwrap(), "box");
+    assert!(env_from(&[]).node_name("").is_err());
+    assert!(env_from(&[]).node_name("   ").is_err());
 }
 
 fn config_with_connection_string(text: &str) -> Result<Config, Box<dyn std::error::Error>> {

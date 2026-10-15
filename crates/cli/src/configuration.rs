@@ -9,7 +9,7 @@ use crate::{Error, Exit, Report};
 pub(crate) async fn load(env: &Environment) -> Result<(ConfigLocation, Loaded), Error> {
     let env = env.clone();
     tokio::task::spawn_blocking(move || {
-        let location = config::resolve_config_path(&env).ok_or(Error::NoConfig)?;
+        let location = config::resolve_config_path(&env)?.ok_or(Error::NoConfig)?;
         let loaded = Config::load(&env, &location)?;
         Ok((location, loaded))
     })
@@ -21,7 +21,7 @@ pub(crate) async fn run(command: ConfigCommand, env: &Environment) -> Result<Rep
         ConfigCommand::Path => {
             let env = env.clone();
             let location = tokio::task::spawn_blocking(move || config::resolve_config_path(&env))
-                .await?
+                .await??
                 .ok_or(Error::NoConfig)?;
             Ok(Report::success(format!("{}\n", location.path().display())))
         }
@@ -38,10 +38,10 @@ pub(crate) async fn run(command: ConfigCommand, env: &Environment) -> Result<Rep
 async fn validate(path: Option<PathBuf>, env: &Environment) -> Result<Report, Error> {
     let env = env.clone();
     let loaded = tokio::task::spawn_blocking(move || {
-        let location = path
-            .map(ConfigLocation::Current)
-            .or_else(|| config::resolve_config_path(&env))
-            .ok_or(Error::NoConfig)?;
+        let location = match path {
+            Some(path) => ConfigLocation::Current(path),
+            None => config::resolve_config_path(&env)?.ok_or(Error::NoConfig)?,
+        };
         Ok::<_, Error>(Config::load(&env, &location))
     })
     .await??;

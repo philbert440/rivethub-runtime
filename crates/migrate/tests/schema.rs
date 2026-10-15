@@ -146,3 +146,42 @@ fn delete_mode_v5(dir: &std::path::Path) -> TestResult<std::path::PathBuf> {
     assert_eq!(version, 5);
     Ok(path)
 }
+
+#[test]
+fn backup_symlinks_never_overwrite_their_targets() -> TestResult<()> {
+    for target_exists in [false, true] {
+        let dir = tempfile::tempdir()?;
+        let path = delete_mode_v5(dir.path())?;
+        let original = std::fs::read(&path)?;
+        let target = dir.path().join("outside.sqlite");
+        if target_exists {
+            std::fs::write(&target, "keep this file")?;
+        }
+        let backup = dir.path().join("memory.sqlite.v5.bak");
+        std::os::unix::fs::symlink(&target, &backup)?;
+        assert!(
+            matches!(migrate::sqlite(&path), Err(migrate::Error::BackupExists { path }) if path == backup)
+        );
+        assert_eq!(std::fs::read(&path)?, original);
+        if target_exists {
+            assert_eq!(std::fs::read_to_string(target)?, "keep this file");
+        } else {
+            assert!(!target.try_exists()?);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn inspection_errors_do_not_become_an_empty_schema() -> TestResult<()> {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("loop.sqlite");
+    std::os::unix::fs::symlink(&path, &path)?;
+    assert!(
+        matches!(migrate::sqlite_status(&path), Err(migrate::Error::Inspect { path: failed, .. }) if failed == path)
+    );
+    assert!(
+        matches!(migrate::sqlite(&path), Err(migrate::Error::Inspect { path: failed, .. }) if failed == path)
+    );
+    Ok(())
+}

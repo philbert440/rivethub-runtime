@@ -106,36 +106,24 @@ fn shared_dir(env: &config::Environment, _segments: &[String]) -> PathBuf {
     config::shared_dir(env)
 }
 
-fn install_root(env: &config::Environment, _segments: &[String]) -> PathBuf {
-    config::install_root(env)
-}
-
-fn shared_path(env: &config::Environment, segments: &[String]) -> PathBuf {
-    let refs: Vec<&str> = segments.iter().map(String::as_str).collect();
-    config::shared_path(env, &refs)
-}
-
-fn install_path(env: &config::Environment, segments: &[String]) -> PathBuf {
-    let refs: Vec<&str> = segments.iter().map(String::as_str).collect();
-    config::install_path(env, &refs)
-}
-
 #[test]
 fn shared_dir_replay() -> Result<(), Box<dyn std::error::Error>> {
     replay_paths("shared_dir", shared_dir)
 }
 
 #[test]
-fn install_root_replay() -> Result<(), Box<dyn std::error::Error>> {
-    replay_paths("install_root", install_root)
-}
-
-#[test]
-fn shared_path_replay() -> Result<(), Box<dyn std::error::Error>> {
-    replay_paths("shared_path", shared_path)
-}
-
-#[test]
-fn install_path_replay() -> Result<(), Box<dyn std::error::Error>> {
-    replay_paths("install_path", install_path)
+fn removed_path_helpers_have_named_recording_skips() -> Result<(), Box<dyn std::error::Error>> {
+    let skipped = [
+        ("shared_path", "unused path concatenation API removed"),
+        ("install_path", "unused installation path API removed"),
+        (
+            "install_root",
+            "unused legacy installation root API removed",
+        ),
+    ];
+    for (name, reason) in skipped {
+        assert_ne!(reason, "");
+        assert!(!common::read_cases(name)?.is_empty(), "{name}");
+    }
+    Ok(())
 }

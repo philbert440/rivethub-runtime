@@ -227,6 +227,13 @@ impl Environment {
 
     #[must_use]
     pub fn log_level(&self) -> LogLevelSetting {
+        #[cfg_attr(
+            dylint_lib = "rr_lints",
+            expect(
+                fallback,
+                reason = "CONTRACT B10: unknown log levels use info and report the ignored setting"
+            )
+        )]
         match self.setting(Alias::LogLevel) {
             None => LogLevelSetting {
                 level: LogLevel::Info,
@@ -245,11 +252,12 @@ impl Environment {
         }
     }
 
-    #[must_use]
-    pub fn node_name(&self, hostname: &str) -> String {
+    pub fn node_name(&self, hostname: &str) -> Result<String, crate::ConfigError> {
         self.setting(Alias::NodeName)
             .or_else(|| self.setting(Alias::NodeId))
-            .map_or_else(|| local_node_name(hostname), str::to_owned)
+            .or_else(|| Some(hostname.trim()).filter(|name| !name.is_empty()))
+            .map(str::to_owned)
+            .ok_or(crate::ConfigError::NodeName)
     }
 
     pub(crate) fn postgres_url(&self) -> Option<String> {
@@ -258,10 +266,6 @@ impl Environment {
 
     pub(crate) fn configured_shared_dir(&self) -> Option<&str> {
         self.setting(Alias::SharedDir)
-    }
-
-    pub(crate) fn configured_install_root(&self) -> Option<&str> {
-        self.setting(Alias::InstallRoot)
     }
 
     fn setting(&self, alias: Alias) -> Option<&str> {
@@ -489,15 +493,5 @@ fn explicit_flag(value: &str) -> Option<bool> {
         Some(false)
     } else {
         None
-    }
-}
-
-#[must_use]
-fn local_node_name(hostname: &str) -> String {
-    let trimmed = hostname.trim();
-    if trimmed.is_empty() {
-        "local".to_owned()
-    } else {
-        trimmed.to_owned()
     }
 }

@@ -13,7 +13,6 @@ pub use postgres::postgres_status_pool;
 pub use postgres::required;
 pub use schema::sqlite;
 pub use schema::sqlite_at;
-pub use schema::sqlite_connection;
 pub use schema::sqlite_status;
 pub use version::SchemaVersion;
 

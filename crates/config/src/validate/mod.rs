@@ -1,3 +1,10 @@
+mod checks;
+
+use checks::{
+    hardcoded_key_warning, looks_like_api_key, non_empty_entries, positive, required_path,
+    required_string,
+};
+
 mod agents;
 mod channels;
 mod deployment;
@@ -8,8 +15,7 @@ mod providers;
 mod runtime;
 mod tasks;
 
-use std::path::Path;
-use std::str::FromStr;
+use strum::IntoEnumIterator as _;
 
 use crate::model::{AgentEntry, Config};
 use crate::report::{Finding, ValidationResult};
@@ -31,10 +37,7 @@ impl IgnoredPath {
         let mut segments: Vec<Segment> = prefix
             .split('.')
             .filter(|part| !part.is_empty())
-            .map(|part| match part.parse::<usize>() {
-                Ok(index) => Segment::Index(index),
-                Err(_) => Segment::Key(part.to_owned()),
-            })
+            .map(|part| Segment::Key(part.to_owned()))
             .collect();
         segments.extend(collected);
         Self(segments)
@@ -113,7 +116,7 @@ enum RemovedKey {
     )]
     AgentFallbacks,
     #[strum(
-        serialize = "The background review loop was removed — compaction is the single consolidation path. Remove \"review_endpoint\"; for delegation-event persistence set \"delegation_tracking: true\"."
+        serialize = "The background review loop was removed — the summarizer is the single consolidation path. Remove \"review_endpoint\"; for delegation-event persistence set \"delegation_tracking: true\"."
     )]
     PostgresReviewEndpoint,
     #[strum(
@@ -154,7 +157,7 @@ impl RemovedKey {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumIter)]
 #[strum(serialize_all = "snake_case")]
 enum RemovedProviderKey {
     Temperature,
@@ -179,7 +182,7 @@ enum RemovedProviderKey {
     KeepAlive,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumIter)]
 enum RemovedEmbedKey {
     #[strum(serialize = "embed_token_command")]
     TokenCommand,
@@ -205,7 +208,7 @@ fn removed_key_finding(
 ) -> Option<Finding> {
     match segments {
         [Segment::Key(head), Segment::Key(id), Segment::Key(key)] if head == "providers" => {
-            let key = RemovedProviderKey::from_str(key).ok()?;
+            let key = RemovedProviderKey::iter().find(|candidate| candidate.to_string() == *key)?;
             let slot = config.providers.as_ref()?.get(id)?;
             slot.kind?;
             Some(removed_key_warning(path.to_string(), &key))
@@ -215,7 +218,7 @@ fn removed_key_finding(
         {
             Some(removed_key_warning(
                 path.to_string(),
-                &RemovedEmbedKey::from_str(key).ok()?,
+                &RemovedEmbedKey::iter().find(|candidate| candidate.to_string() == *key)?,
             ))
         }
         [
@@ -238,9 +241,12 @@ fn removed_key_finding(
             Segment::Key(grand),
             Segment::Key(parent),
             Segment::Key(key),
-        ] if head == "memory" && grand == "postgres" && parent == "embedded" => Some(
-            removed_key_warning(path.to_string(), &RemovedEmbedKey::from_str(key).ok()?),
-        ),
+        ] if head == "memory" && grand == "postgres" && parent == "embedded" => {
+            Some(removed_key_warning(
+                path.to_string(),
+                &RemovedEmbedKey::iter().find(|candidate| candidate.to_string() == *key)?,
+            ))
+        }
         _ => None,
     }
 }
@@ -534,82 +540,4 @@ fn available_list(names: &[&str]) -> String {
     } else {
         names.join(", ")
     }
-}
-
-pub(super) fn required_string(
-    out: &mut ValidationResult,
-    path: &str,
-    value: Option<&str>,
-    message: &str,
-) {
-    if value.is_none_or(str::is_empty) {
-        out.error(path, message);
-    }
-}
-
-pub(super) fn required_path(
-    out: &mut ValidationResult,
-    path: &str,
-    value: Option<&Path>,
-    message: &str,
-) {
-    if value.is_none_or(|value| value.as_os_str().is_empty()) {
-        out.error(path, message);
-    }
-}
-
-pub(super) fn positive<T: Copy + Default + PartialEq>(
-    out: &mut ValidationResult,
-    path: &str,
-    value: Option<T>,
-    message: &str,
-) {
-    if value == Some(T::default()) {
-        out.error(path, message);
-    }
-}
-
-pub(super) fn non_empty_entries(
-    out: &mut ValidationResult,
-    path: impl Into<String>,
-    entries: Option<&Vec<String>>,
-    message: impl Into<String>,
-) {
-    if let Some(entries) = entries
-        && entries.iter().any(String::is_empty)
-    {
-        out.error(path, message);
-    }
-}
-
-pub(super) fn hardcoded_key_warning(out: &mut ValidationResult, path: &str, name: &str, key: &str) {
-    if key.contains("${") || !looks_like_api_key(key) {
-        return;
-    }
-    let env_name = name.to_uppercase().replace('-', "_");
-    out.warning(
-        path,
-        format!(
-            "Provider \"{name}\" appears to have a hardcoded API key — use environment variables instead (e.g., ${{{env_name}_API_KEY}})"
-        ),
-    );
-}
-
-pub(super) fn looks_like_api_key(key: &str) -> bool {
-    key.strip_prefix("sk-").is_some_and(|rest| {
-        rest.len() >= 20
-            && rest
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-    }) || key.strip_prefix("xai-").is_some_and(|rest| {
-        rest.len() >= 20 && rest.bytes().all(|byte| byte.is_ascii_alphanumeric())
-    }) || key.strip_prefix("AIza").is_some_and(|rest| {
-        rest.len() >= 30
-            && rest
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
-    }) || (key.len() >= 64
-        && key
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
 }

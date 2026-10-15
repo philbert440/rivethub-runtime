@@ -44,10 +44,7 @@ pub(crate) async fn state_path(
     if let Some(path) = explicit {
         return Ok(tokio::task::spawn_blocking(move || std::path::absolute(path)).await??);
     }
-    let paths = Paths::new(env);
-    if paths.home().is_none() {
-        return Err(Error::PkiInput("HOME is required for PKI state"));
-    }
+    let paths = Paths::new(env)?;
     let leaf = if name == "ca" {
         paths.ca_dir()
     } else {

@@ -228,3 +228,30 @@ async fn column_listing(pool: &PgPool) -> Result<Vec<String>, sqlx::Error> {
     }
     Ok(lines)
 }
+
+#[test]
+fn config_validation_errors_name_the_key_and_rule() -> TestResult {
+    let directory = tempdir()?;
+    let path = directory.path().join("config.yaml");
+    for (text, key, rule) in [
+        (
+            "runtime: {}\nagents: {}\nproviders: {}\n",
+            "runtime.workspace",
+            "required",
+        ),
+        (
+            "runtime:\n  workspace: 42\n",
+            "runtime.workspace",
+            "wrong type",
+        ),
+    ] {
+        fs::write(&path, text)?;
+        let output = invoke(&["sqlite", "--config", &path.to_string_lossy()], &[])?;
+        assert!(!output.status.success());
+        let stderr = String::from_utf8(output.stderr)?;
+        assert!(stderr.contains(key), "{stderr}");
+        assert!(stderr.contains(rule), "{stderr}");
+        assert!(!directory.path().join("memory.sqlite").exists());
+    }
+    Ok(())
+}

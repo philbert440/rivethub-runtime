@@ -46,7 +46,7 @@ pub(super) async fn build(
         .workspace
         .clone()
         .ok_or_else(|| ComposeError::Invalid("runtime.workspace is required".into()))?;
-    let state = config::Paths::new(env).state_dir();
+    let state = config::Paths::new(env)?.state_dir();
     let hooks = hooks(workspace, &state, tasks, cancel).await?;
     let mut bindings = BTreeMap::new();
     let mut selected = None;

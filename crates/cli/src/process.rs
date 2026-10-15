@@ -12,7 +12,7 @@ use nix::unistd::Pid;
 use crate::{Error, Report};
 
 async fn read_pid(env: &Environment) -> Result<Option<Pid>, Error> {
-    let paths = Paths::new(env);
+    let paths = Paths::new(env)?;
     let root = paths.state_dir();
     let path = paths.pid_file();
     tokio::task::spawn_blocking(move || read_file(&root, &path)).await?

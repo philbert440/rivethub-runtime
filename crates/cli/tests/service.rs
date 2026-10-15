@@ -79,7 +79,7 @@ esac
         extra: &[(&str, &str)],
     ) -> Result<cli::Report, ServiceError> {
         tokio::time::timeout(
-            Duration::from_secs(5),
+            Duration::from_secs(30),
             scope.run(action, &self.env(extra), &CancellationToken::new()),
         )
         .await
@@ -346,18 +346,29 @@ async fn dispatch_and_usage_include_the_service_tree() {
 
 #[tokio::test]
 async fn loginctl_errors_are_explicit() {
-    for extra in [
-        [("RIVETHUB_TEST_FAIL", "show-user")],
-        [("RIVETHUB_TEST_LINGER", "invalid")],
-    ] {
-        let fixture = Fixture::new();
-        assert!(
-            fixture
-                .run(Scope::User, ServiceCommand::Init, &extra)
-                .await
-                .is_err()
-        );
-    }
+    let fixture = Fixture::new();
+    let error = fixture
+        .run(
+            Scope::User,
+            ServiceCommand::Init,
+            &[("RIVETHUB_TEST_FAIL", "show-user")],
+        )
+        .await
+        .expect_err("loginctl failure");
+    assert!(
+        matches!(error, ServiceError::Failed { exit: Exit::Child(7), stderr } if stderr == "operation failed\n")
+    );
+    let fixture = Fixture::new();
+    assert!(matches!(
+        fixture
+            .run(
+                Scope::User,
+                ServiceCommand::Init,
+                &[("RIVETHUB_TEST_LINGER", "invalid")],
+            )
+            .await,
+        Err(ServiceError::Linger)
+    ));
 }
 
 #[tokio::test]

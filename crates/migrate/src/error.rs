@@ -4,6 +4,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("inspecting memory file {path} failed: {source}")]
+    Inspect {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("connecting to postgres failed")]
     PostgresConnect(#[source] sqlx::Error),
     #[error("applying the postgres migrations failed")]

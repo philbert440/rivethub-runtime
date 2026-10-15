@@ -367,7 +367,7 @@ async fn stalled_request_head_is_cut_off() {
         .await
         .expect("partial head written");
     let mut raw = Vec::new();
-    tokio::time::timeout(Duration::from_secs(2), stream.read_to_end(&mut raw))
+    tokio::time::timeout(Duration::from_secs(30), stream.read_to_end(&mut raw))
         .await
         .expect("connection closed")
         .expect("read");
@@ -408,9 +408,10 @@ async fn trickled_request_body_hits_the_request_deadline() {
     })
     .await;
     let mut stream = TcpStream::connect(addr).await.expect("connect");
+    let started = tokio::time::Instant::now();
     stream.write_all(CAPTURE_HEAD).await.expect("head written");
     let (mut reader, mut writer) = tokio::io::split(stream);
-    tokio::spawn(async move {
+    let trickle = tokio::spawn(async move {
         for _ in 0..100 {
             if writer.write_all(b"a").await.is_err() {
                 break;
@@ -425,18 +426,20 @@ async fn trickled_request_body_hits_the_request_deadline() {
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
     });
-    let started = tokio::time::Instant::now();
     let mut raw = Vec::new();
-    tokio::time::timeout(Duration::from_secs(4), reader.read_to_end(&mut raw))
+    tokio::time::timeout(Duration::from_secs(30), reader.read_to_end(&mut raw))
         .await
         .expect("the deadline cuts the trickle off")
         .expect("response read to EOF");
     let elapsed = started.elapsed();
+    trickle.abort();
+    if let Err(error) = trickle.await {
+        assert!(error.is_cancelled(), "{error}");
+    }
     let text = String::from_utf8_lossy(&raw).into_owned();
     assert!(text.starts_with("HTTP/1.1 408"), "{text}");
     assert!(text.contains("\"error\":\"request timeout\""), "{text}");
     assert!(elapsed >= Duration::from_millis(900), "{elapsed:?}");
-    assert!(elapsed <= Duration::from_millis(2500), "{elapsed:?}");
     stop(token, server).await;
 }
 

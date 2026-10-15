@@ -36,6 +36,8 @@ const DEFAULT_MESH_CACHE_TTL: Duration = Duration::from_secs(10);
 
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
+    #[error(transparent)]
+    Config(#[from] config::ConfigError),
     #[error("{variable}={text} is not a millisecond count")]
     MeshCache {
         variable: &'static str,
@@ -79,7 +81,7 @@ impl Settings {
         node: String,
     ) -> Result<Self, SettingsError> {
         let section = config.gateway.clone().unwrap_or_default();
-        let paths = config::Paths::new(env);
+        let paths = config::Paths::new(env)?;
         let state_dir = canonical_dir(
             match configured_path(env, "RIVETHUB_STATE_DIR", "RIVETOS_DEN_STATE_DIR") {
                 Some(path) => path,

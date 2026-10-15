@@ -52,7 +52,7 @@ fn legacy_state_moves(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let again = config::adopt_legacy_state(&env_for(home)?)?;
     assert!(again.is_none(), "the move happens once: {again:?}");
 
-    let location = config::resolve_config_path(&env_for(home)?).ok_or("config")?;
+    let location = config::resolve_config_path(&env_for(home)?)?.ok_or("config")?;
     assert!(location.path().ends_with(".rivethub/config.yaml"));
     assert!(!location.is_legacy());
     Ok(())
@@ -191,6 +191,21 @@ fn owner_file_symlinks_cannot_escape_the_state_directory() -> Result<(), Box<dyn
     assert!(legacy.is_dir());
     assert!(!home.join(".rivethub").exists());
     assert_eq!(fs::read_to_string(sibling)?, "1");
+    fs::remove_dir_all(home)?;
+    Ok(())
+}
+
+#[test]
+fn legacy_state_symlinks_are_refused() -> Result<(), Box<dyn std::error::Error>> {
+    let home = temp_home("state-link")?;
+    let sibling = home.join("outside");
+    fs::create_dir(&sibling)?;
+    fs::write(sibling.join("marker"), "untouched")?;
+    std::os::unix::fs::symlink(&sibling, home.join(".rivetos"))?;
+    let result = config::adopt_legacy_state(&env_for(&home)?);
+    assert!(matches!(result, Err(config::StateError::Symlink { .. })));
+    assert!(!home.join(".rivethub").exists());
+    assert_eq!(fs::read_to_string(sibling.join("marker"))?, "untouched");
     fs::remove_dir_all(home)?;
     Ok(())
 }

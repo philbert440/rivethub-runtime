@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::str::FromStr;
+use strum::IntoEnumIterator as _;
 
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -37,8 +37,16 @@ pub enum ConfigError {
     Yaml(#[from] serde_yaml_ng::Error),
     #[error("\"{path}\" has the wrong type: {message}")]
     Type { path: String, message: String },
-    #[error("Config validation failed")]
+    #[error("Config validation failed:\n{result}")]
     Validation { result: ValidationResult },
+    #[error("HOME must be an absolute directory path without '..' components for RivetHub state")]
+    Home,
+    #[error("RIVETHUB_NODE_NAME must be set when the hostname is empty")]
+    NodeName,
+    #[error("environment substitution pattern is invalid: {0}")]
+    Substitution(#[from] regress::Error),
+    #[error("environment variable {name} must contain valid UTF-8 text")]
+    EnvironmentText { name: String },
 }
 
 #[derive(Debug)]
@@ -47,11 +55,21 @@ pub struct Typed {
     pub ignored: Vec<IgnoredPath>,
 }
 
-pub fn resolve_config_path(env: &Environment) -> Option<ConfigLocation> {
-    Paths::new(env)
-        .config_candidates()
-        .into_iter()
-        .find(|location| location.path().is_file())
+pub fn resolve_config_path(env: &Environment) -> Result<Option<ConfigLocation>, ConfigError> {
+    for location in Paths::new(env)?.config_candidates() {
+        match std::fs::metadata(location.path()) {
+            Ok(metadata) if metadata.is_file() => return Ok(Some(location)),
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(source) => {
+                return Err(ConfigError::Io {
+                    path: location.path().to_owned(),
+                    source,
+                });
+            }
+        }
+    }
+    Ok(None)
 }
 
 pub fn validate_document(document: &serde_yaml_ng::Value) -> ValidationResult {
@@ -124,16 +142,16 @@ fn provider_map(
     for (id, raw) in &entries {
         let prefix = format!("providers.{id}");
         let declared = declared_type(raw, &prefix)?;
-        let name = declared.as_deref().unwrap_or(id);
-        let kind = ProviderType::from_str(name).ok();
+        let name = declared.as_deref().map_or(id.as_str(), |name| name);
+        let kind = ProviderType::iter().find(|kind| kind.to_string() == name);
         let body = match kind {
             Some(kind) if kind.is_openai_family() => {
                 ProviderBody::Openai(Box::new(tracked::<OpenaiProvider>(raw, &prefix, ignored)?))
             }
             Some(_) => ProviderBody::Cli(Box::new(tracked::<CliProvider>(raw, &prefix, ignored)?)),
-            None => match RemovedProviderType::from_str(name) {
-                Ok(removed) => ProviderBody::Removed(removed),
-                Err(_) => ProviderBody::Unknown(tracked::<UnknownProvider>(raw, &prefix, ignored)?),
+            None => match RemovedProviderType::iter().find(|kind| kind.to_string() == name) {
+                Some(removed) => ProviderBody::Removed(removed),
+                None => ProviderBody::Unknown(tracked::<UnknownProvider>(raw, &prefix, ignored)?),
             },
         };
         map.insert(id.clone(), ProviderSlot { kind, body });
@@ -185,7 +203,7 @@ impl Config {
                 format!(
                     "Using legacy config path {} — move it to {} so both runtimes agree.",
                     path.display(),
-                    Paths::new(env).hub_home().display()
+                    Paths::new(env)?.hub_home().display()
                 ),
             );
         }
@@ -198,7 +216,16 @@ impl Config {
         if !result.valid() {
             return Err(ConfigError::Validation { result });
         }
-        resolve_env_vars_with(env, &mut document);
+        resolve_env_vars_with(env, &mut document)?;
+        let resolved = validate_document(&document);
+        if !resolved.valid() {
+            return Err(ConfigError::Validation {
+                result: ValidationResult {
+                    warnings: result.warnings,
+                    ..resolved
+                },
+            });
+        }
         let typed = type_document(&document)?;
         let notices = notices(env, &document, &typed.config);
         Ok(Loaded {

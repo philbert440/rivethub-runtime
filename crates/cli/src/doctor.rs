@@ -110,7 +110,7 @@ impl DoctorReport {
 }
 
 pub(crate) async fn run(env: &Environment, json: bool) -> Result<Report, Error> {
-    let state = Paths::new(env).state_dir();
+    let state = Paths::new(env)?.state_dir();
     let loaded = configuration::load(env);
     let directories = tokio::task::spawn_blocking(move || state_checks(&state));
     let (loaded, directories) = tokio::join!(loaded, directories);

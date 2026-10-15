@@ -39,9 +39,6 @@ pub const SCHEMA_VERSION: i64 = 7;
 
 const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
-#[cfg(test)]
-const MEMORY_PRAGMAS: &str = "PRAGMA foreign_keys = ON;";
-
 #[derive(Debug, Default)]
 struct ClaimIds {
     next: AtomicI64,
@@ -198,31 +195,16 @@ fn verify(path: &Path, found: i64) -> Result<(), SqliteError> {
 }
 
 #[cfg(test)]
-use std::path::PathBuf;
-
-#[cfg(test)]
-impl SqliteStore {
-    fn open_in_memory() -> Result<Self, migrate::Error> {
-        let mut conn =
-            Connection::open_in_memory().map_err(|source| migrate::Error::SqliteOpen {
-                path: PathBuf::from(":memory:"),
-                source,
-            })?;
-        conn.execute_batch(MEMORY_PRAGMAS)
-            .map_err(migrate::Error::SqlitePragma)?;
-        migrate::sqlite_connection(&mut conn, chrono::Utc::now())?;
-        Ok(from_conn(conn))
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::SqliteStore;
     use crate::error::SqliteError;
 
     #[tokio::test]
     async fn with_conn_runs_off_the_async_worker() {
-        let store = SqliteStore::open_in_memory().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("memory.sqlite");
+        migrate::sqlite(&path).unwrap();
+        let store = SqliteStore::open(&path).unwrap();
         let awaited_on = std::thread::current().id();
         let ran_on = store
             .with_conn(move |_conn| {
@@ -235,8 +217,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn in_memory_store_applies_the_current_schema() {
-        let store = SqliteStore::open_in_memory().unwrap();
+    async fn migrated_store_opens_the_current_schema() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("memory.sqlite");
+        migrate::sqlite(&path).unwrap();
+        let store = SqliteStore::open(&path).unwrap();
         let state = store
             .with_conn(move |conn| {
                 let version: i64 = conn
@@ -258,7 +243,10 @@ mod tests {
 
     #[tokio::test]
     async fn with_conn_propagates_the_closure_error() {
-        let store = SqliteStore::open_in_memory().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("memory.sqlite");
+        migrate::sqlite(&path).unwrap();
+        let store = SqliteStore::open(&path).unwrap();
         let outcome = store
             .with_conn(move |_conn| Err::<i64, _>(SqliteError::UnsupportedSchema { found: 9 }))
             .await;

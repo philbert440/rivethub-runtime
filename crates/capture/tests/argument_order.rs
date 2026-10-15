@@ -83,7 +83,7 @@ async fn occurrence_count_spans_hook_and_transcript_spellings()
     );
     let env =
         config::Environment::from_vars([("HOME".to_owned(), inner.path().display().to_string())]);
-    let hook = ClaudeHook::new(writer, &config::Paths::new(&env));
+    let hook = ClaudeHook::new(writer, &config::Paths::new(&env)?);
     let stdin = format!(
         r#"{{"session_id":"{SESSION}","transcript_path":"{}","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{{"z":1,"a":2}}}}"#,
         transcript_path.display()

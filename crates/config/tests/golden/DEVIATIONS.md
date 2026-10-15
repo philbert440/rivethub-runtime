@@ -1,5 +1,9 @@
 # Golden deviations — crates/config
 
+The final naming sweep changes the `memory.postgres.review_endpoint` removal
+message from "compaction" to "the summarizer". The replay applies that contract
+change to the expected finding only; fixture bytes remain unchanged.
+
 The replay in `tests/validate/` drives every recorded case in
 `tests/golden/fixtures/validate_config*.jsonl` through `config::validate_document`,
 one test per recording file (a failing file lists every failing case with its
@@ -15,8 +19,11 @@ diff). Proof frame:
   finding at serde's path, message `"<path>" has the wrong type: <serde
   message>`. The replay asserts only that the recorded outcome also had at
   least one error.
-- `format_validation_result`, `resolve_env_vars`, `shared_dir`, `shared_path`,
-  `install_root` and `install_path` replays are exact and carry no deviations.
+- `format_validation_result`, `resolve_env_vars` and `shared_dir` replays are
+  exact and carry no deviations. The unused `shared_path`, `install_root` and
+  `install_path` APIs were removed in the final fix round. Their recordings
+  are named with reasons in `removed_path_helpers_have_named_recording_skips`,
+  which checks that every named recording exists and contains cases.
 
 The deviations below are the cases where the recording's expected findings are
 not reproduced verbatim. They are pinned as data in

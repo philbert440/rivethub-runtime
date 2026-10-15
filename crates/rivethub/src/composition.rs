@@ -18,6 +18,8 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Error)]
 pub enum ComposeError {
     #[error(transparent)]
+    Config(#[from] config::ConfigError),
+    #[error(transparent)]
     Voice(#[from] gateway::VoiceConfigError),
     #[error(transparent)]
     Settings(#[from] gateway::SettingsError),
@@ -97,14 +99,14 @@ impl Composition {
             config,
             env,
             hostname.clone(),
-            env.node_name(&hostname),
+            env.node_name(&hostname)?,
         )?;
         let sessions = Arc::new(
             SessionRegistry::new(Duration::from_secs(300)).with_shutdown(shutdown.child_token()),
         );
         let identity = identities::load(config, env).await?;
         let mut gateway = Gateway::new(store, settings)
-            .with_uploads(crate::service::uploads(env))
+            .with_uploads(crate::service::uploads(env)?)
             .with_tenancy(identity.tenancy.clone())
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;

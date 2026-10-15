@@ -71,7 +71,12 @@ fn absent_options_remain_absent_and_invalid_timeouts_are_rejected() {
                     assert!(message.contains("has the wrong type"));
                 }
             }
-            other @ (ConfigError::Io { .. } | ConfigError::Yaml(_)) => {
+            other @ (ConfigError::Io { .. }
+            | ConfigError::Yaml(_)
+            | ConfigError::Home
+            | ConfigError::NodeName
+            | ConfigError::Substitution(_)
+            | ConfigError::EnvironmentText { .. }) => {
                 panic!("unexpected error {other}")
             }
         }

@@ -20,10 +20,7 @@ pub use environment::{
 };
 pub use load::{ConfigError, Loaded, Typed, resolve_config_path, type_document, validate_document};
 pub use model::{Config, HarnessSlot, RedactionSettings};
-pub use paths::{
-    ConfigLocation, Paths, StateError, adopt_legacy_state, install_path, install_root, normalize,
-    shared_dir, shared_path,
-};
+pub use paths::{ConfigLocation, Paths, StateError, adopt_legacy_state, normalize, shared_dir};
 pub use provider::{ProviderType, RemovedProviderType};
 pub use report::{Finding, Severity, ValidationResult};
 pub use resolve::resolve_env_vars_with;

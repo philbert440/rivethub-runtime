@@ -417,8 +417,7 @@ impl Config {
         self.gateway
             .as_ref()
             .and_then(|gateway| gateway.terminal.as_ref())
-            .and_then(|terminal| terminal.enabled)
-            .unwrap_or(false)
+            .is_some_and(|terminal| terminal.enabled == Some(true))
     }
 
     pub fn memory_backend(&self) -> MemoryBackend {
@@ -463,8 +462,8 @@ impl Config {
                 memory.capture.redaction.clone()
             });
         RedactionSettings {
-            enabled: redaction.enabled.unwrap_or_default(),
-            builtins: redaction.builtins.unwrap_or(true),
+            enabled: redaction.enabled == Some(true),
+            builtins: redaction.builtins != Some(false),
             patterns: redaction.patterns,
         }
     }

@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::enums::Effort;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString, strum::EnumIter)]
 #[strum(serialize_all = "kebab-case")]
 pub enum ProviderType {
     OpenaiCompatible,
@@ -35,7 +35,7 @@ impl ProviderType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString, strum::EnumIter)]
 #[strum(serialize_all = "kebab-case")]
 pub enum RemovedProviderType {
     Ollama,

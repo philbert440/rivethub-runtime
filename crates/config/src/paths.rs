@@ -4,7 +4,6 @@ use std::path::{Component, Path, PathBuf};
 use crate::environment::Environment;
 
 const DEFAULT_SHARED_DIR: &str = "/rivet-shared";
-const DEFAULT_INSTALL_ROOT: &str = "/opt/rivetos";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigLocation {
@@ -29,32 +28,6 @@ pub fn shared_dir(env: &Environment) -> PathBuf {
         env.configured_shared_dir()
             .map_or_else(|| DEFAULT_SHARED_DIR.to_owned(), str::to_owned),
     )
-}
-
-pub fn shared_path(env: &Environment, segments: &[&str]) -> PathBuf {
-    join(&shared_dir(env), segments)
-}
-
-pub fn install_root(env: &Environment) -> PathBuf {
-    PathBuf::from(
-        env.configured_install_root()
-            .map_or_else(|| DEFAULT_INSTALL_ROOT.to_owned(), str::to_owned),
-    )
-}
-
-pub fn install_path(env: &Environment, segments: &[&str]) -> PathBuf {
-    join(&install_root(env), segments)
-}
-
-fn join(root: &Path, segments: &[&str]) -> PathBuf {
-    if segments.is_empty() {
-        return root.to_path_buf();
-    }
-    let mut path = root.to_path_buf();
-    for segment in segments {
-        path.push(segment);
-    }
-    normalize(&path)
 }
 
 #[must_use]
@@ -91,30 +64,37 @@ pub fn normalize(path: &Path) -> PathBuf {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Paths {
-    home: Option<PathBuf>,
+    home: PathBuf,
 }
 
 impl Paths {
-    pub fn new(env: &Environment) -> Self {
-        Self {
-            home: env.home().map(PathBuf::from),
+    pub fn new(env: &Environment) -> Result<Self, crate::ConfigError> {
+        let home = env
+            .get("HOME")
+            .map(PathBuf::from)
+            .ok_or(crate::ConfigError::Home)?;
+        if !home.is_absolute()
+            || home
+                .components()
+                .any(|component| component == Component::ParentDir)
+        {
+            return Err(crate::ConfigError::Home);
         }
+        Ok(Self {
+            home: normalize(&home),
+        })
     }
 
-    fn base(&self) -> &Path {
-        self.home.as_deref().unwrap_or_else(|| Path::new("."))
-    }
-
-    pub fn home(&self) -> Option<&Path> {
-        self.home.as_deref()
+    pub fn home(&self) -> &Path {
+        &self.home
     }
 
     pub fn hub_home(&self) -> PathBuf {
-        self.base().join(".rivethub")
+        self.home.join(".rivethub")
     }
 
     pub fn legacy_home(&self) -> PathBuf {
-        self.base().join(".rivetos")
+        self.home.join(".rivetos")
     }
 
     pub fn state_dir(&self) -> PathBuf {
@@ -142,7 +122,7 @@ impl Paths {
     }
 
     pub fn config_candidates(&self) -> Vec<ConfigLocation> {
-        let base = self.base();
+        let base = &self.home;
         vec![
             ConfigLocation::Current(base.join(".rivethub").join("config.yaml")),
             ConfigLocation::Current(base.join(".rivethub").join("config.yml")),
@@ -155,6 +135,10 @@ impl Paths {
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
+    #[error(transparent)]
+    Config(#[from] crate::ConfigError),
+    #[error("refusing to move legacy state: {path} must be a directory, not a symlink")]
+    Symlink { path: PathBuf },
     #[error("refusing to move legacy state: live process {pid} owns {path}")]
     LiveOwner { path: PathBuf, pid: u32 },
     #[error("refusing to move legacy state: owner lock is held at {path}")]
@@ -177,7 +161,7 @@ pub enum StateError {
 }
 
 pub fn adopt_legacy_state(env: &Environment) -> Result<Option<String>, StateError> {
-    let paths = Paths::new(env);
+    let paths = Paths::new(env)?;
     let hub = paths.hub_home();
     let legacy = paths.legacy_home();
     if metadata(&hub)?.is_some() {
@@ -186,7 +170,10 @@ pub fn adopt_legacy_state(env: &Environment) -> Result<Option<String>, StateErro
     let Some(legacy_meta) = metadata(&legacy)? else {
         return Ok(None);
     };
-    if !is_state_directory(&legacy, &legacy_meta) {
+    if legacy_meta.file_type().is_symlink() {
+        return Err(StateError::Symlink { path: legacy });
+    }
+    if !legacy_meta.is_dir() {
         return Ok(None);
     }
     let _locks = state_owner::check(&legacy)?;
@@ -196,14 +183,6 @@ pub fn adopt_legacy_state(env: &Environment) -> Result<Option<String>, StateErro
             legacy.display(),
             hub.display()
         ))),
-        Err(source)
-            if matches!(
-                source.kind(),
-                std::io::ErrorKind::AlreadyExists | std::io::ErrorKind::NotFound
-            ) =>
-        {
-            Ok(None)
-        }
         Err(source) => Err(StateError::Move {
             from: legacy,
             to: hub,
@@ -223,7 +202,4 @@ fn metadata(path: &Path) -> Result<Option<std::fs::Metadata>, StateError> {
     }
 }
 
-fn is_state_directory(path: &Path, metadata: &std::fs::Metadata) -> bool {
-    metadata.is_dir() || (metadata.file_type().is_symlink() && path.is_dir())
-}
 mod state_owner;
