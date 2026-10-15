@@ -19,6 +19,7 @@ use url::Url;
 
 use crate::GuardState;
 use crate::error::ApiError;
+use crate::tenancy::PeerCertificate;
 
 const CORS_METHODS: &str = "GET, POST, PATCH, DELETE, OPTIONS";
 const CORS_HEADERS: &str = "content-type, authorization, x-rivet-conversation, x-rivet-title";
@@ -239,9 +240,10 @@ pub(crate) async fn guard(
         append_cors(&mut response, echo.as_deref());
         return response;
     }
-    if path != "/healthz"
-        && !(state.secure || caller_loopback)
-        && !crate::routes::devices::admits_remote_without_client_auth(
+    let authenticated = caller_loopback
+        || (state.secure && request.extensions().get::<PeerCertificate>().is_some());
+    if !authenticated
+        && !admits_without_client_auth(
             request.method(),
             &path,
             state.gateway.devices().enrollment_on(),
@@ -256,6 +258,13 @@ pub(crate) async fn guard(
     let mut response = next.run(request).await;
     append_cors(&mut response, echo.as_deref());
     response
+}
+
+fn admits_without_client_auth(method: &Method, path: &str, enrollment_on: bool) -> bool {
+    matches!(
+        path,
+        "/healthz" | "/ca/v1/chain" | "/ca/v1/crl" | "/ca/v1/sign"
+    ) || crate::routes::devices::admits_remote_without_client_auth(method, path, enrollment_on)
 }
 
 fn unauthorized(request: &Request, path: &str) -> Response {
