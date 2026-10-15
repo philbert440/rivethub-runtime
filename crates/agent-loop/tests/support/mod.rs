@@ -75,11 +75,7 @@ pub fn names(names: &[&str]) -> BTreeSet<String> {
 }
 
 pub fn scratch() -> TempDir {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(2)
-        .expect("repository root");
-    tempfile::tempdir_in(root.join("target")).expect("temporary workspace")
+    tempfile::tempdir().expect("temporary workspace")
 }
 
 pub fn base() -> HookContextBase {

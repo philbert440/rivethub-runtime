@@ -1,14 +1,12 @@
 use cli::{Cli, Dispatch, Report};
 use config::Environment;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tokio_util::sync::CancellationToken;
 
 pub(crate) type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub(crate) fn directory() -> Result<tempfile::TempDir> {
-    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/cli-pki-tests");
-    std::fs::create_dir_all(&base)?;
-    Ok(tempfile::tempdir_in(std::fs::canonicalize(base)?)?)
+    Ok(tempfile::tempdir()?)
 }
 
 pub(crate) async fn run(home: &Path, args: &[&str]) -> Result<Report> {

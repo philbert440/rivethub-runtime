@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -36,12 +35,7 @@ impl Harness {
     }
 
     pub(super) async fn provider(provider: Arc<dyn ModelProvider>) -> Self {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .expect("repository root")
-            .join("target");
-        let dir = tempfile::tempdir_in(root).expect("scratch directory");
+        let dir = tempfile::tempdir().expect("scratch directory");
         let runner = Arc::new(super::runner::FakeRunner::new(Arc::clone(&provider)));
         let service = Service::open(
             "test-provider".to_owned(),
@@ -62,11 +56,11 @@ impl Harness {
                     files_root: None,
                     static_dir: None,
                     root_redirect: None,
-                    state_dir: PathBuf::from("/tmp/rr-gateway-unused-agents/state"),
-                    directory_root: PathBuf::from("/tmp/rr-gateway-unused-agents/agents"),
-                    mesh_file: Some(PathBuf::from("/no-such-gateway-mesh/mesh.json")),
-                    shared_dir: PathBuf::from("/tmp/rr-gateway-unused-agents/shared"),
-                    legacy_mesh_dir: PathBuf::from("/no-such-gateway-legacy"),
+                    state_dir: dir.path().join("state"),
+                    directory_root: dir.path().join("agents"),
+                    mesh_file: Some(dir.path().join("mesh.json")),
+                    shared_dir: dir.path().join("shared"),
+                    legacy_mesh_dir: dir.path().join("legacy"),
                     allowed_harnesses: None,
                     devices_enabled: false,
                     probe_timeout: Duration::from_millis(200),

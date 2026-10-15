@@ -47,10 +47,7 @@ pub(crate) struct Reply {
 
 impl Material {
     pub(crate) async fn open() -> Result<Self> {
-        let base =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/cli-gateway-ca-tests");
-        std::fs::create_dir_all(&base)?;
-        let directory = tempfile::tempdir_in(std::fs::canonicalize(&base)?)?;
+        let directory = tempfile::tempdir()?;
         let state = directory.path().join("state");
         let export = directory.path().join("offline-root.pem");
         let pki = Arc::new(Pki::initialize(state.clone(), export, CancellationToken::new()).await?);

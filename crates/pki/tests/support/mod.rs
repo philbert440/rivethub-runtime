@@ -23,9 +23,7 @@ pub(crate) struct Fixture {
 
 impl Fixture {
     pub(crate) fn new() -> Result<Self> {
-        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/pki-tests");
-        fs::create_dir_all(&base)?;
-        let directory = tempfile::tempdir_in(fs::canonicalize(base)?)?;
+        let directory = tempfile::tempdir()?;
         let source = directory.path().join("legacy");
         let state = directory.path().join("state");
         fs::create_dir_all(source.join("root/certs"))?;

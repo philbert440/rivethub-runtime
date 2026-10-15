@@ -112,14 +112,25 @@ async fn the_cap_evicts_the_lru_idle_viewerless_terminal() -> Result<(), Failed>
     let a = start(&manager, work.path(), "a", "printf 'ready\\n'; exec cat").await?;
     printed(&manager, &a).await?;
     advance(&manager, 3).await;
-    let b = start(&manager, work.path(), "b", "exec cat").await?;
+    let b = start(
+        &manager,
+        work.path(),
+        "b",
+        "read line; printf 'ready\\n'; exec cat",
+    )
+    .await?;
     exited(&manager, &a).await?;
     let error = start(&manager, work.path(), "c", "exec cat")
         .await
         .expect_err("silent B is not evictable");
     assert!(matches!(error, Error::PtyLimit { max: 1 }));
-    manager.close();
+    manager.input(&b, b"go\n".to_vec()).await?;
+    printed(&manager, &b).await?;
+    advance(&manager, 3).await;
+    let c = start(&manager, work.path(), "c", "exec cat").await?;
     exited(&manager, &b).await?;
+    manager.close();
+    exited(&manager, &c).await?;
     Ok(())
 }
 

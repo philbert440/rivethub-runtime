@@ -21,7 +21,9 @@ async fn a_real_pty_runs_spawn_attach_input_resize_and_kill()
     let stream = manager.attach_stream(&id)?;
     assert_eq!(stream.record.state, TerminalState::Running);
 
-    manager.input(&id, b"echo hello\r".to_vec()).await?;
+    manager
+        .input(&id, b"printf 'hel%s\\n' lo\r".to_vec())
+        .await?;
     let echoed = String::from_utf8(common::until_output(stream, b"hello\r\n").await?)?;
     assert!(
         echoed.contains("hello"),
@@ -99,6 +101,7 @@ async fn a_missing_binary_is_a_live_record_that_prints_the_recorded_line()
         )?)
         .await?;
 
+    common::wait_for_exit(&manager, &id).await?;
     let late = manager.attach_stream(&id)?;
     assert_eq!(
         late.record.state,
@@ -154,6 +157,7 @@ async fn spawn_or_get_returns_the_live_record_for_the_same_session()
     assert_eq!(first, second, "spawn-or-get is keyed on the session only");
     assert_eq!(manager.list().len(), 1);
     manager.close();
+    common::wait_for_exit(&manager, &first).await?;
     Ok(())
 }
 

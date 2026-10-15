@@ -15,23 +15,6 @@ use tokio_util::sync::CancellationToken;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-struct DeleteOnDrop(Option<PathBuf>);
-
-impl Drop for DeleteOnDrop {
-    fn drop(&mut self) {
-        let Some(path) = self.0.take() else {
-            return;
-        };
-        match std::fs::remove_dir_all(&path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => {
-                tracing::warn!(%error, path = %path.display(), "test cleanup failed");
-            }
-        }
-    }
-}
-
 fn herdr_script(dir: &Path) -> TestResult {
     let binary = dir.join("herdr");
     std::fs::write(&binary, "#!/bin/sh\necho 0.8.2\n")?;
@@ -57,24 +40,22 @@ fn write_config(home: &Path, work: &Path, state: &Path) -> TestResult {
     Ok(())
 }
 
-fn plant_host_socket(config_home: &Path) -> TestResult<(DeleteOnDrop, PathBuf)> {
-    let host_name = config_home
-        .file_name()
-        .ok_or("config home name")?
-        .to_os_string();
-    let host_root = Path::new("/tmp").join(&host_name);
-    if host_root.exists() {
-        return Err("host fixture already exists".into());
-    }
-    let cleanup = DeleteOnDrop(Some(host_root.clone()));
-    let host_socket = host_root
+fn plant_foreign_socket(
+    home: &Path,
+    config_home: &Path,
+) -> TestResult<(tempfile::TempDir, PathBuf)> {
+    let directory = tempfile::tempdir_in(home)?;
+    let namespace_name = config_home.file_name().ok_or("config home name")?;
+    let socket = directory
+        .path()
+        .join(namespace_name)
         .join("herdr")
         .join("sessions")
         .join("dhostforeign1")
         .join("herdr.sock");
-    std::fs::create_dir_all(host_socket.parent().ok_or("host session")?)?;
-    std::fs::write(&host_socket, b"foreign")?;
-    Ok((cleanup, host_socket))
+    std::fs::create_dir_all(socket.parent().ok_or("foreign session")?)?;
+    std::fs::write(&socket, b"foreign")?;
+    Ok((directory, socket))
 }
 
 fn plant_owned(
@@ -102,7 +83,10 @@ fn plant_owned(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn gateway_startup_adopts_only_its_namespace() -> TestResult {
-    let home = tempfile::tempdir()?;
+    let home = tempfile::Builder::new()
+        .prefix("")
+        .rand_bytes(4)
+        .tempdir()?;
     let work = home.path().join("work");
     let bin = home.path().join("bin");
     let state = home.path().join(".rivethub");
@@ -124,8 +108,7 @@ async fn gateway_startup_adopts_only_its_namespace() -> TestResult {
     let namespace_id = namespace::namespace_id(&config_home)?;
     let owned_dir = plant_owned(&config_home, &namespace_id, "owned-session", "owner")?;
     let foreign_user = plant_owned(&config_home, &namespace_id, "coco-session", "coco")?;
-    let (cleanup, host_socket) = plant_host_socket(&config_home)?;
-    let _cleanup = cleanup;
+    let (_foreign, foreign_socket) = plant_foreign_socket(home.path(), &config_home)?;
     let shutdown = CancellationToken::new();
     let store: Arc<dyn MemoryStore> = Arc::new(testkit::FakeMemoryStore::default());
     let composition = tokio::time::timeout(
@@ -152,7 +135,7 @@ async fn gateway_startup_adopts_only_its_namespace() -> TestResult {
     assert_eq!(forbidden.to_string(), "session is owned by another user");
     assert!(owned_dir.join("herdr.sock").is_file());
     assert!(foreign_user.join("herdr.sock").is_file());
-    assert_eq!(std::fs::read(&host_socket)?, b"foreign");
+    assert_eq!(std::fs::read(&foreign_socket)?, b"foreign");
     let claim = composition
         .gateway()
         .sessions()

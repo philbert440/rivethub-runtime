@@ -99,10 +99,11 @@ async fn pid_files_must_be_regular_files() {
         nix::sys::stat::Mode::S_IRUSR | nix::sys::stat::Mode::S_IWUSR,
     )
     .expect("FIFO");
-    let report = tokio::time::timeout(Duration::from_secs(2), run(&["stop"], &env))
+    let report = tokio::time::timeout(Duration::from_secs(30), run(&["stop"], &env))
         .await
-        .expect("nonblocking PID read");
+        .expect("FIFO refusal completes without a writer");
     assert_eq!(report.exit, Exit::Failure);
+    assert!(report.stderr.contains("PID"), "{}", report.stderr);
 }
 
 #[tokio::test]

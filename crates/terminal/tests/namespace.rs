@@ -30,6 +30,10 @@ struct ForeignMarker {
     agent_pane: String,
 }
 
+fn directory() -> std::io::Result<tempfile::TempDir> {
+    tempfile::Builder::new().prefix("").tempdir()
+}
+
 fn settings() -> TerminalSettings {
     TerminalSettings::from_config(
         &config::Config::default(),
@@ -162,7 +166,7 @@ fn containment_refuses_sibling_prefix_parent_and_keeps_a_real_child() {
 
 #[test]
 fn foreign_sessions_are_skipped_once_and_own_sessions_are_adopted() {
-    let tmp = tempfile::tempdir().expect("tempdir");
+    let tmp = directory().expect("tempdir");
     let state = tmp.path().join("state");
     std::fs::create_dir_all(&state).expect("state");
     let config_home = paths::resolve_config_home(&state, 5974);
@@ -223,7 +227,7 @@ fn foreign_sessions_are_skipped_once_and_own_sessions_are_adopted() {
 
 #[test]
 fn a_corrupt_own_stamp_fails_closed_and_leaves_the_directory() {
-    let tmp = tempfile::tempdir().expect("tempdir");
+    let tmp = directory().expect("tempdir");
     let state = tmp.path().join("state");
     let config_home = paths::resolve_config_home(&state, 5974);
     let dir = paths::sessions_dir(&config_home).join("dcorruptstamp1");
@@ -249,7 +253,7 @@ fn a_corrupt_own_stamp_fails_closed_and_leaves_the_directory() {
 
 #[tokio::test]
 async fn the_manager_adopts_only_its_namespace_and_a_foreign_socket_survives_kill() {
-    let tmp = tempfile::tempdir().expect("tempdir");
+    let tmp = directory().expect("tempdir");
     let state = tmp.path().join("state");
     std::fs::create_dir_all(&state).expect("state");
     let config_home = paths::resolve_config_home(&state, 5974);
@@ -322,7 +326,7 @@ async fn the_manager_adopts_only_its_namespace_and_a_foreign_socket_survives_kil
 #[test]
 fn an_ancestor_symlink_cannot_redirect_the_namespace_outside_state()
 -> Result<(), Box<dyn std::error::Error>> {
-    let temp = tempfile::tempdir()?;
+    let temp = directory()?;
     let state = temp.path().join("state");
     let outside = temp.path().join("outside");
     std::fs::create_dir_all(&state)?;
@@ -348,7 +352,7 @@ fn an_ancestor_symlink_cannot_redirect_the_namespace_outside_state()
 
 #[test]
 fn a_stamp_symlink_is_neither_read_nor_overwritten() -> Result<(), Box<dyn std::error::Error>> {
-    let temp = tempfile::tempdir()?;
+    let temp = directory()?;
     let state = temp.path().join("state");
     let home = paths::resolve_config_home(&state, 5174);
     let namespace_id = namespace::namespace_id(&home)?;
