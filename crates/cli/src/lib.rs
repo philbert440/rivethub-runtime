@@ -5,8 +5,10 @@ pub mod doctor;
 mod error;
 mod exit;
 mod process;
+mod roots;
 pub mod service;
 mod status;
+pub mod supervise;
 pub mod tree;
 
 use config::Environment;
@@ -14,6 +16,7 @@ use tokio_util::sync::CancellationToken;
 
 pub use error::Error;
 pub use exit::Exit;
+pub use roots::ServiceRoot;
 pub use tree::{Cli, Command, ConfigCommand};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,17 +55,20 @@ impl Report {
 pub enum Dispatch {
     Gateway {
         check: bool,
+        config: Option<std::path::PathBuf>,
     },
-    Start,
     Worker {
         role: workers::ProcessRole,
         check: bool,
+        config: Option<std::path::PathBuf>,
     },
     Mcp {
         check: bool,
+        config: Option<std::path::PathBuf>,
     },
     Agent {
         check: bool,
+        config: Option<std::path::PathBuf>,
     },
     Complete(Report),
 }
@@ -73,15 +79,32 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
     };
     let structured_shutdown = matches!(
         command,
-        Command::Ca(_) | Command::Cert { .. } | Command::Service { .. }
+        Command::Ca(_) | Command::Cert { .. } | Command::Service { .. } | Command::Start { .. }
     );
     let operation = async {
         match command {
-            Command::Start => return Ok(Dispatch::Start),
-            Command::Gateway { check } => return Ok(Dispatch::Gateway { check }),
-            Command::Worker { role, check } => return Ok(Dispatch::Worker { role, check }),
-            Command::Mcp { check } => return Ok(Dispatch::Mcp { check }),
-            Command::Agent { check } => return Ok(Dispatch::Agent { check }),
+            Command::Start { config } => {
+                return supervise::Supervision::production()
+                    .run(env, config, shutdown)
+                    .await
+                    .map(Dispatch::Complete);
+            }
+            Command::Gateway { check, config } => {
+                return Ok(Dispatch::Gateway { check, config });
+            }
+            Command::Worker {
+                role,
+                check,
+                config,
+            } => {
+                return Ok(Dispatch::Worker {
+                    role,
+                    check,
+                    config,
+                });
+            }
+            Command::Mcp { check, config } => return Ok(Dispatch::Mcp { check, config }),
+            Command::Agent { check, config } => return Ok(Dispatch::Agent { check, config }),
             Command::Version => Ok(Report::success(version())),
             Command::Config { command } => configuration::run(command, env).await,
             Command::Doctor { json } => doctor::run(env, json).await,

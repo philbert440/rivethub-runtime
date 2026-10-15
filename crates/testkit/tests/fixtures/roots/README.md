@@ -1,7 +1,7 @@
 # Service root recordings
 
 `rh gateway`, `rh agent`, `rh worker`, and `rh mcp` are separate composition roots in the `rh` binary.
-`rh start` still launches the gateway. Supervising those processes is a later slice.
+`rh start` supervises those processes and stays hidden from help.
 
 The MCP catalog recording is `mcp/tools-list.json` (14 tools, protocol notes in `mcp/README.md`).
 The binary test starts `rh mcp` on stdio, calls tools/list, and compares the tool names with that

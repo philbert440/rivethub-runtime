@@ -18,6 +18,10 @@ pub enum Error {
     CaStatus(reqwest::StatusCode),
     #[error("No config found. Run: rh config init")]
     NoConfig,
+    #[error("No config found. Run `rh config init` or use --config <path>")]
+    StartConfig,
+    #[error(transparent)]
+    State(#[from] config::StateError),
     #[error("Failed to parse config: {0}")]
     Config(#[from] config::ConfigError),
     #[error(transparent)]

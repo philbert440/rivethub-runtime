@@ -60,5 +60,8 @@ fake `systemctl`, `journalctl` and `loginctl` executables in a temporary PATH. T
 check both scopes, unit serialization, overwrite refusal, path containment, quoting,
 status codes, subprocess errors and event-driven cancellation. No service scenario is
 skipped; the existing checked deferred list covers the remaining CLI commands in
-that same fixture README. Process supervision (`rh start`) remains the existing
-implementation and is outside this service-management slice.
+that same fixture README. `rh start` supervises `rh gateway`, `rh agent` when
+Postgres memory would start, `rh worker --role`, and `rh mcp` when its network
+transport is configured. It holds the state-directory pid lock, restarts children
+with backoff, and forwards SIGTERM. `rh local` is deferred until its own slice
+lands; the SQLite store implements the kernel memory ports.

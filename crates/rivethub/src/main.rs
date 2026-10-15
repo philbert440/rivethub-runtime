@@ -32,6 +32,9 @@ fn build_runtime() -> std::io::Result<tokio::runtime::Runtime> {
 }
 
 async fn dispatch(command: cli::Cli, env: &Environment) -> Exit {
+    if matches!(command.command, Some(cli::Command::Start { .. })) {
+        rivethub::logging::init(env);
+    }
     let shutdown = tokio_util::sync::CancellationToken::new();
     let mut sigterm = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
     {
@@ -53,27 +56,40 @@ async fn dispatch(command: cli::Cli, env: &Environment) -> Exit {
         }
     };
     match dispatch {
-        cli::Dispatch::Gateway { check } => {
+        cli::Dispatch::Gateway { check, config } => {
             rivethub::logging::init(env);
-            rivethub::service::start_with_check(env, check).await
+            let env = overlay(env, config);
+            rivethub::service::start_with_check(&env, check).await
         }
-        cli::Dispatch::Start => {
+        cli::Dispatch::Worker {
+            role,
+            check,
+            config,
+        } => {
             rivethub::logging::init(env);
-            rivethub::service::start(env).await
+            let env = overlay(env, config);
+            rivethub::worker::start(&env, role, check).await
         }
-        cli::Dispatch::Worker { role, check } => {
+        cli::Dispatch::Mcp { check, config } => {
             rivethub::logging::init(env);
-            rivethub::worker::start(env, role, check).await
+            let env = overlay(env, config);
+            rivethub::sidecar::start(&env, check).await
         }
-        cli::Dispatch::Mcp { check } => {
+        cli::Dispatch::Agent { check, config } => {
             rivethub::logging::init(env);
-            rivethub::sidecar::start(env, check).await
-        }
-        cli::Dispatch::Agent { check } => {
-            rivethub::logging::init(env);
-            rivethub::agent::start(env, check).await
+            let env = overlay(env, config);
+            rivethub::agent::start(&env, check).await
         }
         cli::Dispatch::Complete(report) => write(report),
+    }
+}
+
+fn overlay(env: &Environment, config: Option<std::path::PathBuf>) -> Environment {
+    match config {
+        Some(path) => env
+            .clone()
+            .with_override(config::CONFIG_PATH_VARIABLE, path),
+        None => env.clone(),
     }
 }
 

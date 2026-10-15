@@ -452,7 +452,7 @@ async fn first_start_moves_legacy_state_and_the_alias_names_the_new_variable() -
     let output = tokio::time::timeout(
         Duration::from_secs(30),
         Command::new(env!("CARGO_BIN_EXE_rh"))
-            .arg("start")
+            .arg("gateway")
             .env_clear()
             .env("HOME", home.path())
             .output(),
@@ -482,7 +482,7 @@ async fn first_start_moves_legacy_state_and_the_alias_names_the_new_variable() -
     let again = tokio::time::timeout(
         Duration::from_secs(30),
         Command::new(env!("CARGO_BIN_EXE_rivetos"))
-            .arg("start")
+            .arg("gateway")
             .env_clear()
             .env("HOME", home.path())
             .env("RIVETOS_PG_URL", "postgres://127.0.0.1:1/none")

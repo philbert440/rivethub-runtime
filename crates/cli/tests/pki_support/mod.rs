@@ -22,8 +22,7 @@ pub(crate) async fn run(home: &Path, args: &[&str]) -> Result<Report> {
     };
     match cli::dispatch(command, &env, &CancellationToken::new()).await {
         Dispatch::Complete(report) => Ok(report),
-        Dispatch::Start
-        | Dispatch::Gateway { .. }
+        Dispatch::Gateway { .. }
         | Dispatch::Worker { .. }
         | Dispatch::Mcp { .. }
         | Dispatch::Agent { .. } => Err("unexpected service launch".into()),

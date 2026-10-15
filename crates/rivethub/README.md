@@ -3,8 +3,8 @@
 `rh gateway`, `rh agent`, `rh worker`, and `rh mcp` are the composition roots. Each one
 runs on the multithreaded Tokio runtime built in `rh`'s `main`, with one
 cancellation tree and a task tracker, and stops on SIGTERM or SIGINT.
-`rh start` remains the gateway launcher. Supervising the roots as separate
-processes is a later slice. Invoking `rh` without arguments prints help.
+`rh start` supervises those roots as children of this binary and stays hidden
+from help. Invoking `rh` without arguments prints help.
 
 `rh gateway --check`, `rh agent --check`, `rh worker --role <role> --check`, and `rh mcp --check`
 validate configuration without connecting the memory database, binding
@@ -55,9 +55,9 @@ retain the locks through rename. `--check` never performs the move.
 
 ## Current checkout limits
 
-The SQLite crate does not implement the complete kernel `MemoryStore` port.
-Explicit SQLite/PGlite selections therefore fail with a typed startup error;
-they are never redirected to Postgres.
+The SQLite store implements the kernel memory ports. The gateway, worker, agent,
+and MCP roots still open Postgres. An explicit SQLite or PGlite selection fails
+with a typed startup error and is never redirected to Postgres.
 
 `rh gateway` opens the certificate authority at the state directory's `ca`
 path, the same directory `rh ca` uses, after the memory database connects.
@@ -68,11 +68,17 @@ URL. CRL publication stays on `rh ca --crl-out`. Agent presets use the file
 store the gateway already opens. The users file remains a composition
 configuration boundary.
 
-`rh worker --role` runs the workers runner for roles that have handlers
-(embedder, summarizer, and `all`, which keeps those two). Categorizer and
-wiki-builder fail closed. The runner uses the Postgres job queue, embedding
-store, and summary store, plus the default agent's OpenAI-compatible provider.
-An absent queue fails closed.
+`rh worker --role` runs the workers runner for embedder, summarizer,
+categorizer, wiki-builder, and `all`. The runner uses the Postgres job queue,
+embedding store, summary store, and wiki store, plus the default agent's
+OpenAI-compatible provider. An absent queue fails closed.
+
+`rh start` is the supervisor. It spawns `rh gateway` unless `den.enabled` is
+false, `rh agent` when Postgres memory would start, `rh worker --role` for
+sqlite `workers`, `tagging`, and `wiki_dir`, and `rh mcp` when `transports.mcp`
+sets `host` or `socket`. Postgres has no worker-role list, so those roles are
+not inferred. Stdio MCP is not a child. `rh local` is deferred until its own
+slice lands.
 
 `rh agent` runs the task engine: it claims `run-task` jobs, executes each
 session through the gateway HTTP API, and finishes under the process shutdown

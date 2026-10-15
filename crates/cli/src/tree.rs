@@ -22,6 +22,8 @@ pub enum Command {
     Gateway {
         #[arg(long)]
         check: bool,
+        #[arg(short = 'c', long = "config")]
+        config: Option<PathBuf>,
     },
     #[command(about = "Run a memory worker for one role")]
     Worker {
@@ -29,16 +31,22 @@ pub enum Command {
         role: workers::ProcessRole,
         #[arg(long)]
         check: bool,
+        #[arg(short = 'c', long = "config")]
+        config: Option<PathBuf>,
     },
     #[command(about = "Run the MCP sidecar")]
     Mcp {
         #[arg(long)]
         check: bool,
+        #[arg(short = 'c', long = "config")]
+        config: Option<PathBuf>,
     },
     #[command(about = "Run the task engine")]
     Agent {
         #[arg(long)]
         check: bool,
+        #[arg(short = 'c', long = "config")]
+        config: Option<PathBuf>,
     },
     #[command(about = "Manage the systemd service")]
     Service {
@@ -68,8 +76,11 @@ pub enum Command {
     Status,
     #[command(about = "Signal the running instance to stop")]
     Stop,
-    #[command(hide = true, about = "Run the existing gateway service")]
-    Start,
+    #[command(hide = true, about = "Supervise the configured service roots")]
+    Start {
+        #[arg(short = 'c', long = "config")]
+        config: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]

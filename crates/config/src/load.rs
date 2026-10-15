@@ -56,7 +56,11 @@ pub struct Typed {
 }
 
 pub fn resolve_config_path(env: &Environment) -> Result<Option<ConfigLocation>, ConfigError> {
-    for location in Paths::new(env)?.config_candidates() {
+    let paths = Paths::new(env)?;
+    if let Some(path) = env.get(crate::CONFIG_PATH_VARIABLE) {
+        return Ok(Some(ConfigLocation::Current(PathBuf::from(path))));
+    }
+    for location in paths.config_candidates() {
         match std::fs::metadata(location.path()) {
             Ok(metadata) if metadata.is_file() => return Ok(Some(location)),
             Ok(_) => {}

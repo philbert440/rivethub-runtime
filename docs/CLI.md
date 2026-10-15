@@ -2,12 +2,13 @@
 
 `rh` dispatches through the `cli` composition crate. Bare invocation and help print the derived clap command list.
 The implemented commands include `version`, `config path`, `config show`, `config validate [path]`, `doctor [--json]`,
-`status`, `stop`, `gateway`, `worker`, and `mcp`. One typed `cli::Exit` owns exit codes, including the existing service startup codes.
+`status`, `stop`, `gateway`, `agent`, `worker`, and `mcp`. One typed `cli::Exit` owns exit codes, including the existing service startup codes.
 
-`rh gateway` serves the gateway. `rh worker --role <role>` runs one worker role. `rh mcp` runs the MCP sidecar.
-`rh start` remains the gateway launcher and stays hidden from help. Process supervision of those separate roots is a
-later slice. Deployments previously invoking bare `rh` to launch the gateway must use `rh start`. The one-release
-compatibility binary dispatches through the same entry point.
+`rh gateway` serves the gateway. `rh agent` runs the task engine. `rh worker --role <role>` runs one worker role. `rh mcp` runs the MCP sidecar.
+`rh start` stays hidden from help and is the systemd unit's `ExecStart`. It supervises one child of this binary per
+configured service root (`gateway`, `agent` when Postgres memory would start, each sqlite worker role, and `mcp` when that transport has a host or socket),
+restarts an unexpected exit with backoff, and forwards SIGTERM. Deployments previously invoking bare `rh` to launch the gateway must use `rh gateway`. The
+one-release compatibility binary dispatches through the same entry point.
 
 Doctor calls `migrate`'s read-only schema status library APIs in-process. Postgres uses the async status API;
 SQLite runs on a blocking task. The typed status stays in `migrate`. Doctor never runs migrations or opens a store

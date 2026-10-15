@@ -7,10 +7,13 @@ use support::{config, environment, home, run};
 const DEFERRED: [(&str, &str); 14] = [
     (
         "start",
-        "Existing service launch only; supervision is a later slice.",
+        "The third slice of this contract supervises the service roots.",
     ),
     ("update --mesh", "Fleet updates are a later slice."),
-    ("local", "Standalone composition is a later slice."),
+    (
+        "local",
+        "rh local returns as its own slice; the SQLite store implements the kernel memory ports.",
+    ),
     ("init", "Interactive setup is a later slice."),
     ("mesh", "Mesh administration is a later slice."),
     ("pair", "Device pairing CLI is a later slice."),

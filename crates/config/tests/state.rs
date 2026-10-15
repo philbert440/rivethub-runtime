@@ -209,3 +209,85 @@ fn legacy_state_symlinks_are_refused() -> Result<(), Box<dyn std::error::Error>>
     fs::remove_dir_all(home)?;
     Ok(())
 }
+
+#[test]
+fn claim_node_writes_the_pid_and_a_second_claim_is_refused()
+-> Result<(), Box<dyn std::error::Error>> {
+    let home = temp_home("claim")?;
+    let outcome = claim_round_trip(&home);
+    fs::remove_dir_all(&home)?;
+    outcome
+}
+
+fn claim_round_trip(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let directory = home.join("state");
+    let first = config::claim_node(&directory, std::process::id())?;
+    let pid_path = directory.join("rivethub.pid");
+    assert_eq!(
+        fs::read_to_string(&pid_path)?,
+        format!("{}\n", std::process::id())
+    );
+    assert!(matches!(
+        config::claim_node(&directory, std::process::id()),
+        Err(config::StateError::Locked { .. })
+    ));
+    first.release()?;
+    assert!(!pid_path.exists());
+    Ok(())
+}
+
+#[test]
+fn a_live_pid_file_refuses_the_claim() -> Result<(), Box<dyn std::error::Error>> {
+    let home = temp_home("claim-live")?;
+    let directory = home.join("state");
+    fs::create_dir_all(&directory)?;
+    let pid = std::process::id();
+    fs::write(directory.join("rivethub.pid"), format!("{pid}\n"))?;
+    let result = config::claim_node(&directory, pid.wrapping_add(1).max(2));
+    assert!(matches!(
+        result,
+        Err(config::StateError::LiveOwner { pid: found, .. }) if found == pid
+    ));
+    fs::remove_dir_all(home)?;
+    Ok(())
+}
+
+#[test]
+fn a_stale_pid_is_replaced_and_a_symlink_is_refused() -> Result<(), Box<dyn std::error::Error>> {
+    let home = temp_home("claim-stale")?;
+    let outcome = stale_and_linked(&home);
+    fs::remove_dir_all(&home)?;
+    outcome
+}
+
+fn stale_and_linked(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let directory = home.join("state");
+    fs::create_dir_all(&directory)?;
+    let mut child = std::process::Command::new("/bin/sleep").arg("60").spawn()?;
+    let stale = child.id();
+    child.kill()?;
+    child.wait()?;
+    fs::write(directory.join("rivethub.pid"), format!("{stale}\n"))?;
+    let claim = config::claim_node(&directory, std::process::id())?;
+    assert_eq!(
+        fs::read_to_string(directory.join("rivethub.pid"))?,
+        format!("{}\n", std::process::id())
+    );
+    claim.release()?;
+
+    let linked = home.join("linked");
+    std::os::unix::fs::symlink(&directory, &linked)?;
+    assert!(matches!(
+        config::claim_node(&linked, std::process::id()),
+        Err(config::StateError::Symlink { .. })
+    ));
+    let outside = home.join("outside");
+    fs::write(&outside, "kept")?;
+    std::os::unix::fs::symlink(&outside, directory.join("rivethub.pid"))?;
+    assert!(matches!(
+        config::claim_node(&directory, std::process::id()),
+        Err(config::StateError::Inspect { .. })
+    ));
+    assert_eq!(fs::read_to_string(outside)?, "kept");
+    Ok(())
+}

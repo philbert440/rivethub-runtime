@@ -66,6 +66,7 @@ impl TermSettings {
     }
 }
 
+pub const CONFIG_PATH_VARIABLE: &str = "RIVETHUB_CONFIG";
 pub const LOG_LEVEL_VARIABLE: &str = "RIVETHUB_LOG_LEVEL";
 pub const NODE_NAME_VARIABLE: &str = "RIVETHUB_NODE_NAME";
 pub const NODE_ID_VARIABLE: &str = "RIVETHUB_NODE_ID";
@@ -206,6 +207,13 @@ impl Environment {
 
     pub fn get(&self, name: &str) -> Option<&OsStr> {
         self.vars.get(OsStr::new(name)).map(OsString::as_os_str)
+    }
+
+    #[must_use]
+    pub fn with_override(mut self, name: &str, value: impl AsRef<OsStr>) -> Self {
+        self.vars
+            .insert(OsString::from(name), value.as_ref().to_owned());
+        self
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&OsString, &OsString)> {

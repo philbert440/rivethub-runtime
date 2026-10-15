@@ -114,7 +114,7 @@ impl Paths {
     }
 
     pub fn pid_file(&self) -> PathBuf {
-        self.state_dir().join("rivethub.pid")
+        self.state_dir().join(PID_FILE_NAME)
     }
 
     pub fn owner_lock(&self, data_dir: &Path) -> PathBuf {
@@ -133,11 +133,13 @@ impl Paths {
     }
 }
 
+pub const PID_FILE_NAME: &str = "rivethub.pid";
+
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
     #[error(transparent)]
     Config(#[from] crate::ConfigError),
-    #[error("refusing to move legacy state: {path} must be a directory, not a symlink")]
+    #[error("refusing to use state directory {path}: it is a symlink")]
     Symlink { path: PathBuf },
     #[error("refusing to move legacy state: live process {pid} owns {path}")]
     LiveOwner { path: PathBuf, pid: u32 },
@@ -158,6 +160,33 @@ pub enum StateError {
         #[source]
         source: std::io::Error,
     },
+}
+
+#[derive(Debug)]
+pub struct NodeClaim {
+    file: std::fs::File,
+    path: PathBuf,
+}
+
+impl NodeClaim {
+    pub(super) fn hold(file: std::fs::File, path: PathBuf) -> Self {
+        Self { file, path }
+    }
+
+    pub fn release(self) -> Result<(), StateError> {
+        let path = self.path;
+        let removed = std::fs::remove_file(&path);
+        drop(self.file);
+        match removed {
+            Ok(()) => Ok(()),
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(source) => Err(StateError::Inspect { path, source }),
+        }
+    }
+}
+
+pub fn claim_node(directory: &Path, pid: u32) -> Result<NodeClaim, StateError> {
+    state_owner::claim(directory, pid)
 }
 
 pub fn adopt_legacy_state(env: &Environment) -> Result<Option<String>, StateError> {
