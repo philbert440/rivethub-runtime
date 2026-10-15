@@ -8,9 +8,12 @@ use chrono::Utc;
 use kernel::queue::JobKeyMode;
 use parking_lot::Mutex;
 use std::sync::Arc;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use wire::task::TaskStatus;
+
+mod query;
 
 use kernel::tasks::ClaimSelector;
 use kernel::tasks::ClaimedJob;
@@ -50,6 +53,8 @@ struct MemJob {
 pub struct TaskMemory {
     inner: Arc<Mutex<MemoryInner>>,
     fail_enqueue: Arc<AtomicBool>,
+    fail_list: Arc<AtomicBool>,
+    generation: Arc<watch::Sender<u64>>,
 }
 
 impl TaskMemory {
@@ -61,11 +66,23 @@ impl TaskMemory {
                 next_job: 1,
             })),
             fail_enqueue: Arc::new(AtomicBool::new(false)),
+            fail_list: Arc::new(AtomicBool::new(false)),
+            generation: Arc::new(watch::channel(0).0),
         }
     }
 
     pub fn fail_next_enqueue(&self) {
         self.fail_enqueue.store(true, Ordering::SeqCst);
+    }
+
+    pub fn fail_next_list(&self) {
+        self.fail_list.store(true, Ordering::SeqCst);
+    }
+
+    fn touch(&self) {
+        self.generation.send_modify(|value| {
+            *value = value.wrapping_add(1);
+        });
     }
 }
 
@@ -92,6 +109,7 @@ impl TaskStore for TaskMemory {
         }
         inner.tasks.insert(task.id, task.clone());
         drop(inner);
+        self.touch();
         Ok(())
     }
 
@@ -140,6 +158,7 @@ impl TaskStore for TaskMemory {
         let mut running = task.clone();
         running.pending_message = pending;
         drop(inner);
+        self.touch();
         Ok(running)
     }
 
@@ -158,6 +177,7 @@ impl TaskStore for TaskMemory {
         task.duration_ms = finish.duration_ms;
         task.pending_message = None;
         drop(inner);
+        self.touch();
         Ok(true)
     }
 
@@ -203,6 +223,7 @@ impl TaskStore for TaskMemory {
             }
         }
         drop(inner);
+        self.touch();
         Ok(())
     }
 
@@ -221,6 +242,7 @@ impl TaskStore for TaskMemory {
             }
         }
         drop(inner);
+        self.touch();
         Ok(())
     }
 
@@ -242,6 +264,7 @@ impl TaskStore for TaskMemory {
             task.error = Some("Killed by parent".to_string());
         }
         drop(inner);
+        self.touch();
         Ok(prior)
     }
 
@@ -263,6 +286,7 @@ impl TaskStore for TaskMemory {
         }
         task.pending_message = Some(message.to_string());
         drop(inner);
+        self.touch();
         Ok(())
     }
 
@@ -271,6 +295,7 @@ impl TaskStore for TaskMemory {
         let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
         task.harness_session_ids.push(session.to_string());
         drop(inner);
+        self.touch();
         Ok(())
     }
 }

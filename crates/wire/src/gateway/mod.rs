@@ -27,12 +27,19 @@ pub struct HealthzResponse {
 #[serde(rename_all = "camelCase")]
 pub struct GatewayError {
     pub error: String,
+    #[serde(default)]
     pub detail: Option<String>,
+    #[serde(default)]
     pub hint: Option<String>,
+    #[serde(default)]
     pub code: Option<String>,
+    #[serde(default)]
     pub harness_id: Option<HarnessId>,
+    #[serde(default)]
     pub node: Option<String>,
+    #[serde(default)]
     pub retryable: Option<bool>,
+    #[serde(default)]
     pub reason: Option<String>,
 }
 

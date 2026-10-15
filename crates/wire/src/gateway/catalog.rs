@@ -12,10 +12,15 @@ pub struct CatalogPreset {
     pub name: String,
     pub node: String,
     pub local: bool,
+    #[serde(default)]
     pub harness_id: Option<HarnessId>,
+    #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
     pub directory: Option<String>,
+    #[serde(default)]
     pub implemented: Option<bool>,
+    #[serde(default)]
     pub gap: Option<String>,
 }
 
@@ -26,7 +31,9 @@ pub struct CatalogNode {
     pub id: String,
     pub node: String,
     pub local: bool,
+    #[serde(default)]
     pub provider: Option<String>,
+    #[serde(default)]
     pub model: Option<String>,
 }
 
@@ -43,6 +50,7 @@ pub enum CatalogAgent {
 pub struct CatalogCommand {
     pub name: String,
     pub description: String,
+    #[serde(default)]
     pub arg_hint: Option<String>,
     pub source: String,
 }
@@ -54,7 +62,9 @@ pub struct CatalogExecutorEntry {
     pub key: String,
     pub capabilities: HarnessExecutorCapabilities,
     pub commands: Vec<CatalogCommand>,
+    #[serde(default)]
     pub harness_id: Option<HarnessId>,
+    #[serde(default)]
     pub implemented: Option<bool>,
 }
 
@@ -93,13 +103,15 @@ pub struct OutcomeBucket {
     pub escalated: u64,
     pub diverged: u64,
     pub divergence_rate: f64,
+    #[serde(default)]
     pub total_cost_usd: Option<f64>,
+    #[serde(default)]
     pub avg_duration_ms: Option<u64>,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
 pub struct OutcomesFilter {
     pub since: Option<DateTime<Utc>>,
     pub until: Option<DateTime<Utc>>,

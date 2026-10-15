@@ -10,6 +10,7 @@ pub mod harnesses;
 pub mod memory;
 pub mod sessions;
 pub mod tags;
+pub mod tasks;
 pub mod terminal;
 pub mod v1;
 pub mod wiki;

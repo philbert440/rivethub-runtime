@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -5,12 +6,20 @@ use chrono::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
+use strum::Display;
+use strum::EnumString;
 use thiserror::Error;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+use wire::gateway::catalog::CatalogAgent;
+use wire::gateway::catalog::CatalogCommand;
+use wire::gateway::catalog::CatalogExecutorEntry;
+use wire::gateway::catalog::CatalogSkillEntry;
 use wire::harness::HarnessId;
 use wire::task::AcceptanceCriterion;
 use wire::task::ContextRef;
+use wire::task::TaskApprovalRequest;
 use wire::task::TaskBudget;
 use wire::task::TaskExecutorKind;
 use wire::task::TaskResult;
@@ -76,8 +85,9 @@ pub enum TaskError {
     Clock,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum TaskOrigin {
     Heartbeat,
     Chat,
@@ -299,4 +309,64 @@ pub trait Delegation: Send + Sync {
         request: DelegateRequest,
         cancel: CancellationToken,
     ) -> Result<DelegateOutcome, DelegationError>;
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TaskListFilter {
+    pub status: Option<TaskStatus>,
+    pub agent_id: Option<String>,
+    pub limit: Option<u32>,
+}
+
+#[async_trait]
+pub trait TaskQuery: Debug + Send + Sync {
+    async fn list(&self, filter: &TaskListFilter) -> Result<Vec<TaskRecord>, TaskError>;
+}
+
+pub trait TaskWatch: Debug + Send + Sync {
+    fn subscribe(&self) -> watch::Receiver<u64>;
+}
+
+#[async_trait]
+pub trait CatalogSource: Debug + Send + Sync {
+    async fn agents(&self) -> Result<Vec<CatalogAgent>, TaskError>;
+
+    async fn executors(&self) -> Result<Vec<CatalogExecutorEntry>, TaskError>;
+
+    async fn tools(&self) -> Result<Vec<String>, TaskError>;
+
+    async fn skills(&self) -> Result<Vec<CatalogSkillEntry>, TaskError>;
+
+    async fn commands(&self, executor: &str) -> Result<Vec<CatalogCommand>, TaskError>;
+}
+
+#[async_trait]
+pub trait TaskAgents: Debug + Send + Sync {
+    async fn contains(&self, agent_id: &str) -> Result<bool, TaskError>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalDecision {
+    Allow,
+    Deny,
+}
+
+#[derive(Debug, Error)]
+pub enum ApprovalError {
+    #[error("unknown approval")]
+    Unknown,
+}
+
+#[async_trait]
+pub trait ApprovalBroker: Debug + Send + Sync {
+    async fn pending(&self, task: Uuid) -> Result<Vec<TaskApprovalRequest>, ApprovalError>;
+
+    async fn resolve(
+        &self,
+        task: Uuid,
+        request_id: &str,
+        decision: ApprovalDecision,
+    ) -> Result<(), ApprovalError>;
+
+    async fn deny_pending(&self, task: Uuid, reason: &str) -> Result<(), ApprovalError>;
 }

@@ -6,16 +6,18 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use strum::{Display, EnumIter, EnumString};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum TaskExecutorKind {
     ChatLoop,
     HarnessSession,
     Mesh,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum TaskStatus {
     Queued,
     Running,
@@ -53,6 +55,7 @@ pub enum ContextRefKind {
 pub struct ContextRef {
     pub kind: ContextRefKind,
     pub r#ref: String,
+    #[serde(default)]
     pub note: Option<String>,
 }
 
@@ -70,12 +73,13 @@ pub struct AcceptanceCriterion {
     pub id: String,
     pub description: String,
     pub kind: CriterionKind,
+    #[serde(default)]
     pub check: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct TaskBudget {
     pub max_usd: Option<f64>,
     pub max_tokens: Option<u64>,
@@ -90,6 +94,7 @@ pub struct TaskUsage {
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub total_tokens: u64,
+    #[serde(default)]
     pub cost_usd: Option<f64>,
     pub turns: u32,
     pub wall_clock_ms: u64,
@@ -129,17 +134,28 @@ pub struct TaskSpec {
     pub goal: String,
     pub resolved_context: Vec<ContextRef>,
     pub acceptance_criteria: Vec<AcceptanceCriterion>,
+    #[serde(default)]
     pub budget: TaskBudget,
+    #[serde(default)]
     pub tools: Option<Vec<String>>,
+    #[serde(default)]
     pub working_dir: Option<String>,
+    #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
     pub effort: Option<Effort>,
+    #[serde(default)]
     pub system_prompt_append: Option<String>,
+    #[serde(default)]
     pub isolation: Option<TaskIsolation>,
+    #[serde(default)]
     pub prompt_mode: Option<TaskPromptMode>,
+    #[serde(default)]
     pub exclude_tools: Option<Vec<String>>,
+    #[serde(default)]
     pub resume_message: Option<String>,
     pub session: String,
+    #[serde(default)]
     pub permission_decisions: Option<Vec<TaskPermissionDecision>>,
 }
 
@@ -161,6 +177,7 @@ pub struct TaskPermissionDecision {
     pub decision: TaskPermissionOutcome,
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
     pub at: DateTime<Utc>,
+    #[serde(default)]
     pub message: Option<String>,
 }
 
@@ -179,6 +196,7 @@ pub enum ArtifactKind {
 pub struct TaskArtifact {
     pub kind: ArtifactKind,
     pub r#ref: String,
+    #[serde(default)]
     pub note: Option<String>,
 }
 
@@ -196,10 +214,13 @@ pub struct CriterionReport {
 pub struct TaskResult {
     pub verdict: TaskVerdict,
     pub summary: String,
+    #[serde(default)]
     pub output: Option<String>,
     pub artifacts: Vec<TaskArtifact>,
+    #[serde(default)]
     pub criteria_self_report: Option<Vec<CriterionReport>>,
     pub usage: TaskUsage,
+    #[serde(default)]
     pub error: Option<String>,
 }
 
@@ -217,6 +238,7 @@ pub struct VerifierResult {
     pub verdict: VerifierVerdict,
     pub summary: String,
     pub criteria_report: Vec<CriterionReport>,
+    #[serde(default)]
     pub refutation: Option<String>,
 }
 
@@ -291,6 +313,7 @@ pub struct TaskApprovalRequest {
     pub request_id: String,
     pub name: String,
     pub input: JsonObject,
+    #[serde(default)]
     pub tool_call_id: Option<String>,
 }
 
@@ -382,25 +405,37 @@ pub struct TaskWire {
     pub acceptance_criteria: Vec<AcceptanceCriterion>,
     pub spec: TaskSpec,
     pub executor: TaskExecutorKind,
+    #[serde(default)]
     pub executor_target: Option<String>,
     pub agent_id: String,
+    #[serde(default)]
     pub requested_by: Option<String>,
     pub origin: String,
+    #[serde(default)]
     pub parent_task_id: Option<String>,
     pub chain_depth: u32,
+    #[serde(default)]
     pub node_affinity: Option<String>,
+    #[serde(default)]
     pub claimed_by: Option<String>,
     pub budget: TaskBudget,
+    #[serde(default)]
     pub usage: Option<TaskUsage>,
     pub status: TaskStatus,
     pub attempt: u32,
     pub max_attempts: u32,
+    #[serde(default)]
     pub pending_message: Option<String>,
+    #[serde(default)]
     pub error: Option<String>,
+    #[serde(default)]
     pub result: Option<TaskResult>,
+    #[serde(default)]
     pub conversation_id: Option<String>,
+    #[serde(default)]
     pub session_key: Option<String>,
     pub harness_session_ids: Vec<String>,
+    #[serde(default)]
     pub eval: Option<VerifierResult>,
     pub eval_attempt: u32,
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
@@ -414,7 +449,9 @@ pub struct TaskWire {
     #[serde(default)]
     #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
     pub completed_at: Option<DateTime<Utc>>,
+    #[serde(default)]
     pub duration_ms: Option<u64>,
+    #[serde(default)]
     pub pending_approvals: Option<Vec<TaskApprovalRequest>>,
 }
 
@@ -479,5 +516,6 @@ pub struct TaskApprovalWaitResponse {
 #[serde(rename_all = "camelCase")]
 pub struct TaskWaitTimeoutResponse {
     pub error: String,
+    #[serde(default)]
     pub task: Option<TaskWire>,
 }
