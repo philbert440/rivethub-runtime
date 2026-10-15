@@ -12,7 +12,9 @@ impl StartupError {
             | Self::Url
             | Self::State(_)
             | Self::StateTask(_)
-            | Self::Voice(_) => Exit::Failure,
+            | Self::Voice(_)
+            | Self::EmbedModel
+            | Self::EmbedProvider(_) => Exit::Failure,
             Self::Memory(_) => Exit::Memory,
             Self::Bind(_) => Exit::Bind,
             Self::Serve(_) | Self::Io(_) => Exit::Serve,

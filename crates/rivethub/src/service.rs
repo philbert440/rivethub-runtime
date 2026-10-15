@@ -35,6 +35,10 @@ pub enum StartupError {
     Url,
     #[error(transparent)]
     Memory(#[from] memory_postgres::Error),
+    #[error("memory.postgres.embed_model is required when embed_endpoint is set")]
+    EmbedModel,
+    #[error(transparent)]
+    EmbedProvider(#[from] providers::BuildError),
     #[error(transparent)]
     Bind(#[from] BindError),
     #[error(transparent)]
@@ -61,7 +65,44 @@ pub(crate) async fn postgres(
     env: &Environment,
 ) -> Result<PostgresMemory, StartupError> {
     let url = postgres_url(config, env)?;
-    Ok(PostgresMemory::connect(&url).await?)
+    let memory = PostgresMemory::connect(&url).await?;
+    Ok(match query_embed(config)? {
+        Some(embed) => memory.with_query_embed(embed),
+        None => memory,
+    })
+}
+
+fn query_embed(config: &Config) -> Result<Option<memory_postgres::QueryEmbed>, StartupError> {
+    let Some(section) = config
+        .memory
+        .as_ref()
+        .and_then(|memory| memory.postgres.as_ref())
+    else {
+        return Ok(None);
+    };
+    let Some(endpoint) = section.embed_endpoint.clone() else {
+        return Ok(None);
+    };
+    let model = section
+        .embed_model
+        .clone()
+        .ok_or(StartupError::EmbedModel)?;
+    let provider = providers::OpenAiCompatible::build(
+        config::ProviderType::OpenaiCompatible,
+        &config::provider::OpenaiProvider {
+            base_url: Some(endpoint),
+            model: Some(model),
+            api_key: section.embed_api_key.clone(),
+            probe_models: Some(false),
+            ..config::provider::OpenaiProvider::default()
+        },
+    )?;
+    Ok(Some(memory_postgres::QueryEmbed::new(
+        Arc::new(provider),
+        section.embed_query_instruction.clone(),
+        section.embed_timeout_ms,
+        section.hnsw_ef_search,
+    )))
 }
 
 pub async fn connect(
@@ -304,5 +345,40 @@ fn finding_line(finding: &Finding) -> String {
         finding.message.clone()
     } else {
         format!("[{}] {}", finding.path, finding.message)
+    }
+}
+
+#[cfg(test)]
+mod embed_tests {
+    use super::*;
+
+    fn config(memory: &str) -> Result<Config, Box<dyn std::error::Error>> {
+        let text = format!(
+            "runtime:\n  workspace: /tmp\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\nmemory:\n  backend: postgres\n  postgres:\n    connection_string: postgres://u@127.0.0.1:9/db\n{memory}"
+        );
+        Ok(Config::from_str(&Environment::default(), &text)?.config)
+    }
+
+    #[test]
+    fn without_an_endpoint_search_stays_keyword_only() -> Result<(), Box<dyn std::error::Error>> {
+        assert!(query_embed(&config("")?)?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn an_endpoint_without_a_model_is_refused() -> Result<(), Box<dyn std::error::Error>> {
+        let refused = query_embed(&config("    embed_endpoint: http://127.0.0.1:9\n")?);
+        assert!(matches!(refused, Err(StartupError::EmbedModel)));
+        Ok(())
+    }
+
+    #[test]
+    fn an_endpoint_and_model_give_search_a_query_embedder() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let embed = query_embed(&config(
+            "    embed_endpoint: http://127.0.0.1:9\n    embed_model: text-embedding-3-small\n",
+        )?)?;
+        assert!(embed.is_some());
+        Ok(())
     }
 }
