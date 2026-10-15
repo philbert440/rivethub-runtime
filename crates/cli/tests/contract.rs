@@ -4,16 +4,12 @@ use cli::{ConfigCommand, Exit};
 use std::collections::BTreeSet;
 use support::{config, environment, home, run};
 
-const DEFERRED: [(&str, &str); 14] = [
+const DEFERRED: [(&str, &str); 13] = [
     (
         "start",
         "The third slice of this contract supervises the service roots.",
     ),
     ("update --mesh", "Fleet updates are a later slice."),
-    (
-        "local",
-        "rh local returns as its own slice; the SQLite store implements the kernel memory ports.",
-    ),
     ("init", "Interactive setup is a later slice."),
     ("mesh", "Mesh administration is a later slice."),
     ("pair", "Device pairing CLI is a later slice."),
@@ -155,10 +151,12 @@ async fn config_path_show_and_validate_use_config_ownership() {
     std::fs::write(&path, "runtime: {}\n").expect("invalid configuration");
     let invalid = run(&["config", "validate"], &env).await;
     assert_eq!(invalid.exit, Exit::Failure);
-    let config::ConfigError::Validation { result } =
-        config::Config::load(&env, &config::ConfigLocation::Current(path.clone()))
-            .expect_err("invalid")
-    else {
+    let config::ConfigError::Validation { result } = config::Config::load(
+        &env,
+        &config::ConfigLocation::Current(path.clone()),
+        config::Profile::Node,
+    )
+    .expect_err("invalid") else {
         panic!("wrong error")
     };
     assert_eq!(invalid.stdout, format!("{result}\n"));

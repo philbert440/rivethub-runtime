@@ -63,5 +63,9 @@ skipped; the existing checked deferred list covers the remaining CLI commands in
 that same fixture README. `rh start` supervises `rh gateway`, `rh agent` when
 Postgres memory would start, `rh worker --role`, and `rh mcp` when its network
 transport is configured. It holds the state-directory pid lock, restarts children
-with backoff, and forwards SIGTERM. `rh local` is deferred until its own slice
-lands; the SQLite store implements the kernel memory ports.
+with backoff, and forwards SIGTERM. `Config::load` with `Profile::Node` and
+`rh config validate` still require `runtime`, `agents`, and `providers`. `rh local`
+does not invent those values. With no resolved file it writes the SQLite path and
+the gateway bind, loads that file through `Config::load` with `Profile::Standalone`,
+migrates it, and claims the state directory. The task engine is not part of that
+process.

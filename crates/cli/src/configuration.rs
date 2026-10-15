@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use config::provider::ProviderBody;
-use config::{Config, ConfigLocation, Environment, Loaded, ValidationResult};
+use config::{Config, ConfigLocation, Environment, Loaded, Profile, ValidationResult};
 
 use crate::tree::ConfigCommand;
 use crate::{Error, Exit, Report};
@@ -10,7 +10,7 @@ pub(crate) async fn load(env: &Environment) -> Result<(ConfigLocation, Loaded), 
     let env = env.clone();
     tokio::task::spawn_blocking(move || {
         let location = config::resolve_config_path(&env)?.ok_or(Error::NoConfig)?;
-        let loaded = Config::load(&env, &location)?;
+        let loaded = Config::load(&env, &location, Profile::Node)?;
         Ok((location, loaded))
     })
     .await?
@@ -42,7 +42,7 @@ async fn validate(path: Option<PathBuf>, env: &Environment) -> Result<Report, Er
             Some(path) => ConfigLocation::Current(path),
             None => config::resolve_config_path(&env)?.ok_or(Error::NoConfig)?,
         };
-        Ok::<_, Error>(Config::load(&env, &location))
+        Ok::<_, Error>(Config::load(&env, &location, Profile::Node))
     })
     .await??;
     let (result, stderr) = match loaded {

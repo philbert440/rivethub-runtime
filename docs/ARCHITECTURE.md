@@ -47,7 +47,7 @@ One process per service, each with one tokio multi-thread runtime built in its o
 `rh gateway` (gateway with its session registry, terminal, devices, and the certificate authority),
 `rh agent` (the task engine), `rh worker --role <embedder|summarizer|categorizer|wiki-builder|all>`, and `rh mcp` (sidecar).
 In this checkout `rh start` supervises those roots as children of the same binary and stays hidden from help.
-`rh stop` signals that supervisor. `rh agent` is a composition root. `rh local` is deferred until its own slice lands.
+`rh stop` signals that supervisor. `rh agent` is a composition root. `rh local` composes the gateway, the SQLite worker roles, and network MCP in one process on one SQLite store.
 Processes communicate only through contract boundaries (HTTP API B1,
 Postgres queue B4/B13). Inside a process: supervised tasks under one `CancellationToken` tree; `parking_lot` for short state,
 `tokio::sync` across awaits, `spawn_blocking` for blocking work; `tracing` for logs.
@@ -89,7 +89,7 @@ B12) → Wave 3 agent (providers, agent-loop, mcp; B7 B8 B15) → Wave 4 platfor
 mesh, memory-sqlite; B5 B13 B14) → Wave 5 operations (cli incl. CA, standalone on SQLite, update/doctor/service; B9 B10 B11
 B16) → cutover. Each wave's gate is a boundary working end to end against the recordings.
 
-Standalone: `rh local` is deferred until its own slice lands. The SQLite store implements the kernel memory ports, and `rh local` will compose every service into one process on that store (one composition root, same crates).
+Standalone: `rh local` composes the gateway, the SQLite worker roles, and network MCP into one process on the SQLite store (one composition root, same crates). It does not start the Postgres task engine, and it refuses the wiki builder because that port is not implemented for SQLite. `Config::load` with `Profile::Node` still requires runtime, agents, and providers; `rh local` loads with `Profile::Standalone` and does not invent them.
 Mesh (registry, heartbeat, agent channel) is a gateway module; ssh helpers are in cli; mesh.json types in wire. 19 crates.
 Schema changes never run inside the runtime: `rivethub-migrate postgres|sqlite` applies them (Postgres from the
 `migrate` crate's `sqlx::migrate!` chain, SQLite through the v7 creation and the v1→v7 upgrade ladder with a

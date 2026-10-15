@@ -443,6 +443,11 @@ impl Config {
     }
 
     #[must_use]
+    pub fn postgres_selected(&self, env: &Environment) -> bool {
+        !self.sqlite_selected() && self.memory_postgres_url(env).is_some()
+    }
+
+    #[must_use]
     pub fn sqlite_selected(&self) -> bool {
         self.memory.as_ref().is_some_and(|memory| {
             memory.backend == Some(MemoryBackend::Sqlite)

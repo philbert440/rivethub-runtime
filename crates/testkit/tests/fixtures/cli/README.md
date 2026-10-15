@@ -23,7 +23,7 @@ alias), state in `~/.rivethub`, environment `RIVETHUB_*` (the `RIVETOS_*` aliase
 
 The CA and holder commands are now implemented; their approved new B14 contract and acceptance coverage are documented in `crates/cli/README.md`. They have no historical recordings.
 
-Out of this slice (later slices): `start`, `update --mesh`, `local`, `init`, `mesh`, `pair`,
+Out of this slice (later slices): `start`, `update --mesh`, `init`, `mesh`, `pair`,
 `user`, `memory`, `logs`, `test`, `agent`, `model`, `keys`, `gateway token`.
 
 ## `rh service` (second slice)
@@ -45,7 +45,7 @@ They never touch the real systemd.
 
 ## `rh start` and `rh stop` (third slice)
 
-`local` is deferred: the SQLite store implements the kernel memory ports, and `rh local` returns as its own slice.
+`rh local` runs the node in one process. It is not a supervised child of `rh start`. Its contract is below.
 
 `rh start` is the node's supervisor. It runs in the foreground and is what the systemd unit's `ExecStart` calls.
 
@@ -55,3 +55,16 @@ They never touch the real systemd.
 | `rh stop` | as in the first slice: SIGTERM to the supervisor's pid, which shuts its children down | as above |
 
 Tests drive `rh start` with fake roots: a test binary that sleeps, crashes or ignores SIGTERM. They check restart and backoff with tokio's paused clock, the forwarded shutdown, the SIGKILL after the grace period, pid-file cleanup and the ownership refusal.
+
+## `rh local`
+
+`Config::load` with `Profile::Node`, and `rh config validate`, still require `runtime`, `agents`, and `providers`. `rh local` does not invent those values. When no config exists it writes `memory.backend`, `memory.sqlite.path`, and the gateway bind, then loads that file through `Config::load` with `Profile::Standalone`, which does not require those sections.
+
+`rh local [--port <n>] [--no-lan]` runs one process: the gateway, the SQLite worker roles, and MCP when `transports.mcp` has a host or socket. It claims the state directory, runs `migrate::sqlite` once, and opens one SQLite store. SIGTERM and SIGINT drain that process and exit 0. A config or migrate error exits 1. `--port` defaults to 5174. `--no-lan` binds `127.0.0.1`; otherwise the written bind is `0.0.0.0`. Flags on an existing file apply in memory and do not rewrite it.
+
+`rh agent` is not part of `rh local` because the task engine needs Postgres.
+
+Skipped scenarios:
+
+- `wiki-builder` — SQLite does not implement the wiki builder port, so memory.sqlite.wiki_dir refuses startup.
+- `task-engine` — rh agent needs Postgres and is not part of rh local.

@@ -183,7 +183,7 @@ fn load(cli: &Cli, env: &Environment) -> Result<config::Config, Failure> {
     let Some(location) = cli.config.clone().map(ConfigLocation::Current) else {
         return Err(Failure::NoConfig);
     };
-    let loaded = config::Config::load(env, &location)?;
+    let loaded = config::Config::load(env, &location, config::Profile::Node)?;
     report_loaded(&loaded);
     Ok(loaded.config)
 }

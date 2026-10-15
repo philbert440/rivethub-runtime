@@ -2,6 +2,7 @@ pub mod agent;
 pub mod composition;
 pub mod exit;
 mod identity;
+pub mod local;
 pub mod logging;
 pub mod service;
 pub mod sidecar;

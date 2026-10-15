@@ -53,7 +53,7 @@ impl Config {
 }
 
 fn agent_root(config: &Config, env: &Environment) -> bool {
-    !config.sqlite_selected() && config.memory_postgres_url(env).is_some()
+    config.postgres_selected(env)
 }
 
 fn mcp_enabled(section: &TransportSection) -> bool {

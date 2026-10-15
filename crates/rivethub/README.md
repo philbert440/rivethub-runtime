@@ -1,5 +1,7 @@
 # Service composition
 
+`Config::load` with `Profile::Node`, and `rh config validate`, still require the `runtime`, `agents`, and `providers` sections. `rh local` does not invent an agent, a provider, or an endpoint. When no config file resolves it writes only the SQLite database path and the gateway bind, then loads that file with `Profile::Standalone`, which does not require those sections. A present section is still validated. `rh agent` is not part of `rh local`: the task engine needs Postgres. `memory.sqlite.wiki_dir` refuses startup because SQLite does not implement the wiki builder port.
+
 `rh gateway`, `rh agent`, `rh worker`, and `rh mcp` are the composition roots. Each one
 runs on the multithreaded Tokio runtime built in `rh`'s `main`, with one
 cancellation tree and a task tracker, and stops on SIGTERM or SIGINT.
@@ -77,8 +79,17 @@ OpenAI-compatible provider. An absent queue fails closed.
 false, `rh agent` when Postgres memory would start, `rh worker --role` for
 sqlite `workers`, `tagging`, and `wiki_dir`, and `rh mcp` when `transports.mcp`
 sets `host` or `socket`. Postgres has no worker-role list, so those roles are
-not inferred. Stdio MCP is not a child. `rh local` is deferred until its own
-slice lands.
+not inferred. Stdio MCP is not a child. `rh local` is one process on one
+`SqliteStore`: the gateway (always, including when `den.enabled` is false), the
+embedder and summarizer when `memory.sqlite.workers` is true, the categorizer
+when `memory.sqlite.tagging` is true, and MCP when `transports.mcp` sets a host
+or a socket. It does not start the task engine and it does not attach stdio MCP.
+SQLite embeddings run with chunking disabled. A config or migrate error exits 1.
+SIGTERM and SIGINT drain the process tracker and exit 0. The default bind is
+`0.0.0.0:5174`; pass `--no-lan` for `127.0.0.1`. An off-loopback bind still
+requires TLS. `--port` and `--no-lan` override an existing file in memory and
+do not rewrite it. Migrate runs in the CLI before the store opens, because the
+runtime does not depend on the migrate crate.
 
 `rh agent` runs the task engine: it claims `run-task` jobs, executes each
 session through the gateway HTTP API, and finishes under the process shutdown

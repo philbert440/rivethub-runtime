@@ -1,0 +1,360 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use config::{Config, Environment, ServiceSwitch};
+use gateway::server::ServeOptions;
+use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
+use memory_sqlite::SqliteStore;
+use thiserror::Error;
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
+use workers::{ProcessRole, Runner};
+
+use crate::Exit;
+use crate::service::{StartupError, listen, report};
+use crate::sidecar::{self, SidecarError};
+use crate::worker::{self, RootError, WorkerPorts};
+
+#[derive(Debug, Error)]
+enum LocalError {
+    #[error(transparent)]
+    Startup(#[from] StartupError),
+    #[error(transparent)]
+    Worker(#[from] RootError),
+    #[error(transparent)]
+    Mcp(#[from] SidecarError),
+    #[error(transparent)]
+    Store(#[from] memory_sqlite::SqliteError),
+    #[error(transparent)]
+    Join(#[from] tokio::task::JoinError),
+    #[error("rh local cannot run the wiki builder: SQLite does not implement that port")]
+    Wiki,
+}
+
+impl LocalError {
+    fn exit(&self) -> Exit {
+        match self {
+            Self::Startup(error) => error.exit(),
+            Self::Worker(error) => error.exit(),
+            Self::Mcp(error) => error.exit(),
+            Self::Store(_) | Self::Join(_) | Self::Wiki => Exit::Failure,
+        }
+    }
+}
+
+pub async fn start(env: &Environment, prepared: cli::Prepared) -> Exit {
+    let cli::Prepared {
+        config,
+        claim,
+        database,
+    } = prepared;
+    let mut held = HeldClaim { claim: Some(claim) };
+    let signals = match crate::signals::install() {
+        Ok(signals) => signals,
+        Err(exit) => return exit,
+    };
+    let result = run(env, &config, database, signals.token()).await;
+    let finished = signals.finish().await;
+    let released = held.release();
+    finish(result, finished, released)
+}
+
+fn finish(
+    result: Result<(), LocalError>,
+    finished: Result<(), Exit>,
+    released: Result<(), config::StateError>,
+) -> Exit {
+    match (result, finished, released) {
+        (Ok(()), Ok(()), Ok(())) => Exit::Ok,
+        (Err(error), _, released) => {
+            if let Err(release) = released {
+                tracing::error!("pid file removal failed: {release}");
+            }
+            report_local(&error);
+            error.exit()
+        }
+        (Ok(()), Err(exit), released) => {
+            if let Err(release) = released {
+                tracing::error!("pid file removal failed: {release}");
+            }
+            exit
+        }
+        (Ok(()), Ok(()), Err(error)) => {
+            tracing::error!("pid file removal failed: {error}");
+            Exit::Failure
+        }
+    }
+}
+
+fn report_local(error: &LocalError) {
+    match error {
+        LocalError::Startup(error) => report(error),
+        LocalError::Worker(error) => worker::report_root(error),
+        LocalError::Mcp(error) => sidecar::report_error(error),
+        LocalError::Store(_) | LocalError::Join(_) | LocalError::Wiki => {
+            tracing::error!("{error}");
+        }
+    }
+}
+
+struct GatewayNode {
+    composition: crate::composition::Composition,
+    listener: tokio::net::TcpListener,
+    tls: Option<gateway::tls::TlsPaths>,
+    runners: Vec<(ProcessRole, Runner<SqliteStore>)>,
+}
+
+async fn run(
+    env: &Environment,
+    config: &Config,
+    database: PathBuf,
+    shutdown: CancellationToken,
+) -> Result<(), LocalError> {
+    let _guard = shutdown.clone().drop_guard();
+    let store = open_store(database).await?;
+    let switches = config.service_switches(env);
+    if switches.contains(&ServiceSwitch::Wiki) {
+        return Err(LocalError::Wiki);
+    }
+    let node = bind_node(&store, &switches, config, env, &shutdown).await?;
+    supervise(node, &switches, config, store, shutdown).await
+}
+
+async fn bind_node(
+    store: &Arc<SqliteStore>,
+    switches: &[ServiceSwitch],
+    config: &Config,
+    env: &Environment,
+    shutdown: &CancellationToken,
+) -> Result<GatewayNode, LocalError> {
+    let runners = build_runners(store, worker_roles(switches), config)?;
+    let composition = crate::composition::Composition::build(
+        config,
+        env,
+        Arc::clone(store) as Arc<dyn MemoryStore>,
+        shutdown,
+    )
+    .await
+    .map_err(StartupError::from)?;
+    let (listener, tls) = match listen(config).await {
+        Ok(bound) => bound,
+        Err(error) => {
+            if let Err(close) = composition.close().await {
+                tracing::error!("composition close failed: {close}");
+            }
+            return Err(error.into());
+        }
+    };
+    Ok(GatewayNode {
+        composition,
+        listener,
+        tls,
+        runners,
+    })
+}
+
+async fn supervise(
+    node: GatewayNode,
+    switches: &[ServiceSwitch],
+    config: &Config,
+    store: Arc<SqliteStore>,
+    shutdown: CancellationToken,
+) -> Result<(), LocalError> {
+    let GatewayNode {
+        composition,
+        listener,
+        tls,
+        runners,
+    } = node;
+    let addr = listener.local_addr().map_err(StartupError::from)?;
+    let secure = tls.is_some();
+    tracing::info!(
+        "gateway listening on {addr}{}",
+        if secure { " (tls)" } else { " (plain)" }
+    );
+    let tracker = TaskTracker::new();
+    let (failed_tx, mut failed_rx) = mpsc::unbounded_channel();
+    spawn_workers(&tracker, &failed_tx, &shutdown, runners);
+    if let Err(error) = spawn_mcp(&tracker, &failed_tx, switches, config, store, &shutdown) {
+        shutdown.cancel();
+        note_close(composition.close().await.map_err(StartupError::from));
+        drop(failed_tx);
+        tracker.close();
+        tracker.wait().await;
+        return Err(error);
+    }
+    let serving = gateway::server::serve_router_with(
+        listener,
+        composition.router(secure),
+        tls,
+        shutdown.clone(),
+        ServeOptions::default(),
+    );
+    tokio::pin!(serving);
+    let outcome = await_node(composition, &mut failed_rx, &mut serving, &shutdown).await;
+    drop(failed_tx);
+    tracker.close();
+    tracker.wait().await;
+    outcome?;
+    tracing::info!("gateway stopped");
+    Ok(())
+}
+
+fn spawn_mcp(
+    tracker: &TaskTracker,
+    failed_tx: &mpsc::UnboundedSender<LocalError>,
+    switches: &[ServiceSwitch],
+    config: &Config,
+    store: Arc<SqliteStore>,
+    shutdown: &CancellationToken,
+) -> Result<(), LocalError> {
+    if !switches.contains(&ServiceSwitch::Mcp) {
+        return Ok(());
+    }
+    let task = sidecar::memory_future(config, store, shutdown.clone())?;
+    let failed = failed_tx.clone();
+    tracker.spawn(async move {
+        if let Err(error) = task.await {
+            deliver(&failed, LocalError::Mcp(error));
+        }
+    });
+    Ok(())
+}
+
+async fn await_node(
+    mut composition: crate::composition::Composition,
+    failed_rx: &mut mpsc::UnboundedReceiver<LocalError>,
+    serving: &mut std::pin::Pin<
+        &mut impl std::future::Future<Output = Result<(), gateway::server::ServeError>>,
+    >,
+    shutdown: &CancellationToken,
+) -> Result<(), LocalError> {
+    tokio::select! {
+        biased;
+        () = shutdown.cancelled() => {
+            composition.close().await.map_err(StartupError::from)?;
+            serving.await.map_err(StartupError::from).map_err(LocalError::from)
+        }
+        Some(error) = failed_rx.recv() => {
+            shutdown.cancel();
+            note_close(composition.close().await.map_err(StartupError::from));
+            note_serve(serving.await.map_err(StartupError::from));
+            Err(error)
+        }
+        result = composition.failed() => {
+            shutdown.cancel();
+            composition.close().await.map_err(StartupError::from)?;
+            result.map_err(StartupError::from)?;
+            serving.await.map_err(StartupError::from).map_err(LocalError::from)
+        }
+        result = &mut *serving => {
+            shutdown.cancel();
+            composition.close().await.map_err(StartupError::from)?;
+            result.map_err(StartupError::from).map_err(LocalError::from)
+        }
+    }
+}
+
+fn note_close(result: Result<(), StartupError>) {
+    if let Err(error) = result {
+        tracing::error!("composition close failed: {error}");
+    }
+}
+
+fn note_serve(result: Result<(), StartupError>) {
+    if let Err(error) = result {
+        tracing::error!("gateway serve ended during shutdown: {error}");
+    }
+}
+
+async fn open_store(path: PathBuf) -> Result<Arc<SqliteStore>, LocalError> {
+    let store = tokio::task::spawn_blocking(move || SqliteStore::open(path)).await??;
+    Ok(Arc::new(store))
+}
+
+fn build_runners(
+    store: &Arc<SqliteStore>,
+    roles: Vec<ProcessRole>,
+    config: &Config,
+) -> Result<Vec<(ProcessRole, Runner<SqliteStore>)>, LocalError> {
+    let mut built = Vec::new();
+    for role in roles {
+        let ports = WorkerPorts {
+            queue: Arc::clone(store),
+            targets: Arc::clone(store) as Arc<dyn EmbeddingStore>,
+            summaries: Arc::clone(store) as Arc<dyn SummaryStore>,
+            memory: Arc::clone(store) as Arc<dyn MemoryStore>,
+            wiki: None,
+        };
+        built.push((role, worker::build_runner(role, ports, config)?));
+    }
+    Ok(built)
+}
+
+fn worker_roles(switches: &[ServiceSwitch]) -> Vec<ProcessRole> {
+    let mut roles = Vec::new();
+    for switch in switches {
+        match switch {
+            ServiceSwitch::Workers => {
+                roles.push(ProcessRole::Embedder);
+                roles.push(ProcessRole::Summarizer);
+            }
+            ServiceSwitch::Tagging => roles.push(ProcessRole::Categorizer),
+            ServiceSwitch::Gateway
+            | ServiceSwitch::Agent
+            | ServiceSwitch::Wiki
+            | ServiceSwitch::Mcp => {}
+        }
+    }
+    roles
+}
+
+fn spawn_workers(
+    tracker: &TaskTracker,
+    failed: &mpsc::UnboundedSender<LocalError>,
+    shutdown: &CancellationToken,
+    runners: Vec<(ProcessRole, Runner<SqliteStore>)>,
+) {
+    for (role, runner) in runners {
+        let failed = failed.clone();
+        let token = shutdown.clone();
+        tracker.spawn(async move {
+            tracing::info!("worker running {role}");
+            if let Err(error) = runner.run(token).await {
+                deliver(&failed, LocalError::Worker(RootError::Worker(error)));
+            }
+        });
+    }
+}
+
+fn deliver(failed: &mpsc::UnboundedSender<LocalError>, error: LocalError) {
+    match failed.send(error) {
+        Ok(()) => {}
+        Err(send) => tracing::error!("component failure was not delivered: {}", send.0),
+    }
+}
+
+struct HeldClaim {
+    claim: Option<config::NodeClaim>,
+}
+
+impl HeldClaim {
+    fn release(&mut self) -> Result<(), config::StateError> {
+        match self.claim.take() {
+            Some(claim) => claim.release(),
+            None => Ok(()),
+        }
+    }
+}
+
+impl Drop for HeldClaim {
+    fn drop(&mut self) {
+        if let Some(claim) = self.claim.take() {
+            match claim.release() {
+                Ok(()) => {}
+                Err(error) => tracing::error!("pid file removal failed: {error}"),
+            }
+        }
+    }
+}

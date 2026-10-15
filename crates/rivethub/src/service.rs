@@ -5,6 +5,7 @@ use config::Config;
 use config::Environment;
 use config::Finding;
 use config::POSTGRES_URL_VARIABLE;
+use config::Profile;
 use gateway::Gateway;
 use gateway::Settings;
 use gateway::server::BindError;
@@ -193,7 +194,7 @@ pub async fn serve(
 
 pub fn load(env: &Environment) -> Result<Config, StartupError> {
     if let Some(location) = config::resolve_config_path(env)? {
-        let loaded = Config::load(env, &location)?;
+        let loaded = Config::load(env, &location, Profile::Node)?;
         for finding in &loaded.warnings {
             tracing::warn!("{}", finding_line(finding));
         }

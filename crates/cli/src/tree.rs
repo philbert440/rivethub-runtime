@@ -76,6 +76,13 @@ pub enum Command {
     Status,
     #[command(about = "Signal the running instance to stop")]
     Stop,
+    #[command(about = "Run a standalone node on SQLite")]
+    Local {
+        #[arg(long)]
+        port: Option<u16>,
+        #[arg(long)]
+        no_lan: bool,
+    },
     #[command(hide = true, about = "Supervise the configured service roots")]
     Start {
         #[arg(short = 'c', long = "config")]

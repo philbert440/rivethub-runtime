@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use config::provider::ProviderBody;
 use config::{Config, Environment};
-use kernel::memory::MemoryStore as _;
-use kernel::memory::{EmbeddingStore, SummaryStore};
+use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::model::ModelProvider;
-use memory_postgres::PostgresMemory;
+use kernel::queue::{JobQueue, WorkerRole};
+use kernel::wiki::builder::WikiBuilderStore;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -18,7 +18,7 @@ use crate::Exit;
 use crate::service::{StartupError, load, postgres, postgres_url, report};
 
 #[derive(Debug, Error)]
-enum RootError {
+pub(crate) enum RootError {
     #[error(transparent)]
     Startup(#[from] StartupError),
     #[error(transparent)]
@@ -32,7 +32,7 @@ enum RootError {
 }
 
 impl RootError {
-    fn exit(&self) -> Exit {
+    pub(crate) fn exit(&self) -> Exit {
         match self {
             Self::Startup(error) => error.exit(),
             Self::Worker(_) | Self::Provider(_) | Self::Join(_) | Self::Invalid(_) => Exit::Failure,
@@ -70,7 +70,7 @@ fn finish(result: Result<(), RootError>, ready: &str) -> Exit {
     }
 }
 
-fn report_root(error: &RootError) {
+pub(crate) fn report_root(error: &RootError) {
     match error {
         RootError::Startup(error) => report(error),
         RootError::Worker(_)
@@ -105,8 +105,21 @@ async fn run(
     let memory = Arc::new(postgres(&config, env).await?);
     let result = async {
         let queue = memory.queue().await.map_err(StartupError::from)?;
-        let model = provider_model(&config)?;
-        let runner = build_runner(role, Arc::clone(&memory), queue, &config, model)?;
+        let targets: Arc<dyn EmbeddingStore> = memory.clone();
+        let summaries: Arc<dyn SummaryStore> = memory.clone();
+        let wiki: Arc<dyn WikiBuilderStore> = memory.clone();
+        let store: Arc<dyn MemoryStore> = memory.clone();
+        let runner = build_runner(
+            role,
+            WorkerPorts {
+                queue: Arc::new(queue),
+                targets,
+                summaries,
+                memory: store,
+                wiki: Some(wiki),
+            },
+            &config,
+        )?;
         tracing::info!("worker running {role}");
         drive(runner, shutdown.clone()).await
     }
@@ -119,38 +132,53 @@ async fn run(
     Ok(())
 }
 
-fn build_runner(
+pub(crate) struct WorkerPorts<Q> {
+    pub queue: Arc<Q>,
+    pub targets: Arc<dyn EmbeddingStore>,
+    pub summaries: Arc<dyn SummaryStore>,
+    pub memory: Arc<dyn MemoryStore>,
+    pub wiki: Option<Arc<dyn WikiBuilderStore>>,
+}
+
+pub(crate) fn build_runner<Q: JobQueue + 'static>(
     role: ProcessRole,
-    memory: Arc<PostgresMemory>,
-    queue: memory_postgres::PostgresQueue,
+    ports: WorkerPorts<Q>,
     config: &Config,
-    model: String,
-) -> Result<Runner<memory_postgres::PostgresQueue>, RootError> {
+) -> Result<Runner<Q>, RootError> {
+    let roles = role.claim_roles()?;
+    if ports.wiki.is_none() && roles.contains(&WorkerRole::WikiBuilder) {
+        return Err(RootError::Invalid(
+            "the wiki builder port was not supplied".into(),
+        ));
+    }
+    let model = provider_model(config)?;
     let concrete = open_provider(config)?;
     let provider: Arc<dyn ModelProvider> = Arc::new(concrete);
-    let targets: Arc<dyn EmbeddingStore> = memory.clone();
-    let summaries: Arc<dyn SummaryStore> = memory.clone();
-    let wiki: Arc<dyn kernel::wiki::builder::WikiBuilderStore> = memory.clone();
-    let store: Arc<dyn kernel::memory::MemoryStore> = memory;
     let deps = WorkerDeps {
-        targets,
-        summaries,
+        targets: ports.targets,
+        summaries: ports.summaries,
         provider,
         embed: EmbedSettings::from_config(config)?,
         summary: SummarySettings::standard(model.clone())?,
-        memory: store,
+        memory: ports.memory,
         tags: workers::TagSettings::new(model.clone(), false)?,
     };
-    Ok(Runner::new(
-        Arc::new(queue),
+    let runner = Runner::new(
+        ports.queue,
         RunnerConfig::new(role, EMBED_CONCURRENCY)?,
         deps,
-    )
-    .with_wiki_builder(workers::wiki_builder::WikiBuilderDeps { store: wiki, model }))
+    );
+    let runner = match ports.wiki {
+        Some(store) => {
+            runner.with_wiki_builder(workers::wiki_builder::WikiBuilderDeps { store, model })
+        }
+        None => runner,
+    };
+    Ok(runner)
 }
 
-async fn drive(
-    runner: Runner<memory_postgres::PostgresQueue>,
+async fn drive<Q: JobQueue + 'static>(
+    runner: Runner<Q>,
     shutdown: CancellationToken,
 ) -> Result<(), RootError> {
     let tracker = TaskTracker::new();

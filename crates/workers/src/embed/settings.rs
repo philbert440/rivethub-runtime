@@ -41,6 +41,9 @@ impl EmbedSettings {
             }
             settings.width = width;
         }
+        if config.sqlite_selected() {
+            settings.chunks_enabled = false;
+        }
         Ok(settings)
     }
 

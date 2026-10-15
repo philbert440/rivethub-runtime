@@ -455,7 +455,7 @@ fn replay_well_typed(
 }
 
 fn replay_case(case: &Replay) -> Result<(), String> {
-    let actual = config::validate_document(&case.input);
+    let actual = config::validate_document(&case.input, config::Profile::Node);
     if config::type_document(&case.input).is_err() {
         return replay_type_confused(case, &actual);
     }

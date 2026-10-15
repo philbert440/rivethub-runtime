@@ -27,7 +27,8 @@ pub(crate) async fn run(home: &Path, args: &[&str]) -> Result<Report> {
         Dispatch::Gateway { .. }
         | Dispatch::Worker { .. }
         | Dispatch::Mcp { .. }
-        | Dispatch::Agent { .. } => Err("unexpected service launch".into()),
+        | Dispatch::Agent { .. }
+        | Dispatch::Local(_) => Err("unexpected service launch".into()),
     }
 }
 

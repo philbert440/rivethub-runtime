@@ -102,6 +102,7 @@ async fn gateway_startup_adopts_only_its_namespace() -> TestResult {
     let loaded = config::Config::load(
         &env,
         &config::ConfigLocation::Current(state.join("config.yaml")),
+        config::Profile::Node,
     )?;
     let config_home = paths::resolve_config_home(&state, 5974);
     assert!(config_home.starts_with(&state));

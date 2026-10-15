@@ -66,6 +66,18 @@ pub enum Error {
         "schema verifier failed: rivethub-migrate: no sqlite path — pass --path <file> or --config <file>"
     )]
     SqlitePath,
+    #[error("{0}")]
+    Migrate(migrate::Error),
+    #[error("rh local runs on SQLite; this config selects Postgres")]
+    PostgresBackend,
+    #[error("rh local needs memory.sqlite.path set to a database file")]
+    LocalDatabase,
+    #[error("rh local --port must be between 1 and 65535")]
+    GatewayPort,
+    #[error("refusing to replace the config at {}", path.display())]
+    ConfigPresent { path: std::path::PathBuf },
+    #[error("the node claim was already released")]
+    ClaimMissing,
     #[error("JSON output failed: {0}")]
     Json(#[from] serde_json::Error),
     #[error("command cancelled")]

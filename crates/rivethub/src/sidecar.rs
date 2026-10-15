@@ -13,7 +13,7 @@ use crate::Exit;
 use crate::service::{StartupError, load, postgres, report};
 
 #[derive(Debug, Error)]
-enum SidecarError {
+pub(crate) enum SidecarError {
     #[error(transparent)]
     Startup(#[from] StartupError),
     #[error(transparent)]
@@ -27,7 +27,7 @@ enum SidecarError {
 }
 
 impl SidecarError {
-    fn exit(&self) -> Exit {
+    pub(crate) fn exit(&self) -> Exit {
         match self {
             Self::Startup(error) => error.exit(),
             Self::Mcp(error) => mcp_exit(error),
@@ -111,13 +111,13 @@ fn finish(result: Result<(), SidecarError>, ready: &str) -> Exit {
             Exit::Ok
         }
         Err(error) => {
-            report_sidecar(&error);
+            report_error(&error);
             error.exit()
         }
     }
 }
 
-fn report_sidecar(error: &SidecarError) {
+pub(crate) fn report_error(error: &SidecarError) {
     match error {
         SidecarError::Startup(error) => report(error),
         SidecarError::Mcp(_)
@@ -169,6 +169,26 @@ async fn run_server(
     let stopped = delegation.shutdown().await;
     stopped?;
     ran
+}
+
+pub(crate) fn memory_future(
+    config: &Config,
+    memory: Arc<dyn MemoryStore>,
+    shutdown: CancellationToken,
+) -> Result<impl std::future::Future<Output = Result<(), SidecarError>> + Send + use<>, SidecarError>
+{
+    let selected = select(config)?;
+    if matches!(selected, Selected::Stdio) {
+        return Err(SidecarError::Invalid(
+            "rh local serves MCP only when a host or socket is configured".into(),
+        ));
+    }
+    let server = mcp::Server::builder(memory, false, shutdown.child_token()).build()?;
+    Ok(async move {
+        serve(server, selected, shutdown).await?;
+        tracing::info!("mcp stopped");
+        Ok(())
+    })
 }
 
 fn surface(selected: &Selected) -> mcp::Surface {

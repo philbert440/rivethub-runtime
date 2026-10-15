@@ -32,7 +32,10 @@ fn build_runtime() -> std::io::Result<tokio::runtime::Runtime> {
 }
 
 async fn dispatch(command: cli::Cli, env: &Environment) -> Exit {
-    if matches!(command.command, Some(cli::Command::Start { .. })) {
+    if matches!(
+        command.command,
+        Some(cli::Command::Start { .. } | cli::Command::Local { .. })
+    ) {
         rivethub::logging::init(env);
     }
     let shutdown = tokio_util::sync::CancellationToken::new();
@@ -80,6 +83,7 @@ async fn dispatch(command: cli::Cli, env: &Environment) -> Exit {
             let env = overlay(env, config);
             rivethub::agent::start(&env, check).await
         }
+        cli::Dispatch::Local(prepared) => rivethub::local::start(env, *prepared).await,
         cli::Dispatch::Complete(report) => write(report),
     }
 }

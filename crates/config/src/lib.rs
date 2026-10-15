@@ -20,7 +20,10 @@ pub use environment::{
     POSTGRES_URL_VARIABLE, TermMuxChoice, TermMuxSetting, TermSettings, UPLOAD_MAX_BYTES_VARIABLE,
     UPLOAD_TTL_MS_VARIABLE, UploadSettings, VoiceEndpoints, deprecated_alias_names,
 };
-pub use load::{ConfigError, Loaded, Typed, resolve_config_path, type_document, validate_document};
+pub use load::{
+    ConfigError, Loaded, Typed, resolve_config_path, standalone_config_yaml, type_document,
+    validate_document,
+};
 pub use model::{Config, HarnessSlot, RedactionSettings};
 pub use node_name::resolve as resolve_node_name;
 pub use paths::{
@@ -31,4 +34,4 @@ pub use provider::{ProviderType, RemovedProviderType};
 pub use report::{Finding, Severity, ValidationResult};
 pub use resolve::resolve_env_vars_with;
 pub use services::ServiceSwitch;
-pub use validate::{IgnoredPath, PLUGINS_IGNORED, WORKFLOWS_IGNORED};
+pub use validate::{IgnoredPath, PLUGINS_IGNORED, Profile, WORKFLOWS_IGNORED};

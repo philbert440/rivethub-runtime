@@ -4,6 +4,7 @@ mod configuration;
 pub mod doctor;
 mod error;
 mod exit;
+mod local;
 mod process;
 mod roots;
 pub mod service;
@@ -16,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 
 pub use error::Error;
 pub use exit::Exit;
+pub use local::Prepared;
 pub use roots::ServiceRoot;
 pub use tree::{Cli, Command, ConfigCommand};
 
@@ -70,6 +72,7 @@ pub enum Dispatch {
         check: bool,
         config: Option<std::path::PathBuf>,
     },
+    Local(Box<Prepared>),
     Complete(Report),
 }
 
@@ -79,7 +82,11 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
     };
     let structured_shutdown = matches!(
         command,
-        Command::Ca(_) | Command::Cert { .. } | Command::Service { .. } | Command::Start { .. }
+        Command::Ca(_)
+            | Command::Cert { .. }
+            | Command::Service { .. }
+            | Command::Start { .. }
+            | Command::Local { .. }
     );
     let operation = async {
         match command {
@@ -88,6 +95,14 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
                     .run(env, config, shutdown)
                     .await
                     .map(Dispatch::Complete);
+            }
+            Command::Local { port, no_lan } => {
+                let prepared = local::prepare(env, port, no_lan).await?;
+                if shutdown.is_cancelled() {
+                    prepared.release()?;
+                    return Ok(Dispatch::Complete(Report::success("")));
+                }
+                return Ok(Dispatch::Local(Box::new(prepared)));
             }
             Command::Gateway { check, config } => {
                 return Ok(Dispatch::Gateway { check, config });

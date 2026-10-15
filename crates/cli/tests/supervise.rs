@@ -57,10 +57,10 @@ async fn start_refuses_a_missing_config_with_the_contract_text() {
     );
     let help = run(&["--help"], &env).await;
     assert_eq!(help.exit, Exit::Ok);
-    assert!(!help.stdout.contains("local"));
-    let absent = run(&["local"], &env).await;
-    assert_eq!(absent.exit, Exit::Failure);
-    assert!(absent.stderr.starts_with("Unknown command: local\n"));
+    assert!(help.stdout.contains("local"));
+    let unknown = run(&["local", "--yes"], &env).await;
+    assert_eq!(unknown.exit, Exit::Failure);
+    assert!(!unknown.stderr.starts_with("Unknown command:"));
     assert!(
         !help
             .stdout
@@ -588,6 +588,7 @@ fn require_gateway(dispatch: Dispatch) -> Result<PathBuf, String> {
         } => Err(format!("worker {role} check={check} config={config:?}")),
         Dispatch::Mcp { check, config } => Err(format!("mcp check={check} config={config:?}")),
         Dispatch::Agent { check, config } => Err(format!("agent check={check} config={config:?}")),
+        Dispatch::Local(_) => Err("local".to_owned()),
         Dispatch::Complete(report) => Err(format!("{}{}", report.stdout, report.stderr)),
     }
 }
@@ -608,6 +609,7 @@ fn require_agent(dispatch: Dispatch) -> Result<PathBuf, String> {
             config,
         } => Err(format!("worker {role} check={check} config={config:?}")),
         Dispatch::Mcp { check, config } => Err(format!("mcp check={check} config={config:?}")),
+        Dispatch::Local(_) => Err("local".to_owned()),
         Dispatch::Complete(report) => Err(format!("{}{}", report.stdout, report.stderr)),
     }
 }
@@ -629,6 +631,7 @@ fn require_worker(dispatch: Dispatch) -> Result<(workers::ProcessRole, PathBuf),
         }
         Dispatch::Mcp { check, config } => Err(format!("mcp check={check} config={config:?}")),
         Dispatch::Agent { check, config } => Err(format!("agent check={check} config={config:?}")),
+        Dispatch::Local(_) => Err("local".to_owned()),
         Dispatch::Complete(report) => Err(format!("{}{}", report.stdout, report.stderr)),
     }
 }
