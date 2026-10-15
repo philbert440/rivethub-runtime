@@ -50,11 +50,7 @@ pub enum StartupError {
 }
 
 pub(crate) fn postgres_url(config: &Config, env: &Environment) -> Result<String, StartupError> {
-    if config.memory.as_ref().is_some_and(|memory| {
-        memory.backend == Some(config::MemoryBackend::Sqlite)
-            || (memory.backend.is_none() && memory.sqlite.is_some() && memory.postgres.is_none())
-    }) || config.pglite_import_pending()
-    {
+    if config.sqlite_selected() {
         return Err(StartupError::SqliteUnavailable);
     }
     config.memory_postgres_url(env).ok_or(StartupError::Url)

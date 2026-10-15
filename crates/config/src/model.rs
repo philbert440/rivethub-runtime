@@ -447,6 +447,16 @@ impl Config {
             .or_else(|| env.postgres_url())
     }
 
+    #[must_use]
+    pub fn sqlite_selected(&self) -> bool {
+        self.memory.as_ref().is_some_and(|memory| {
+            memory.backend == Some(MemoryBackend::Sqlite)
+                || (memory.backend.is_none()
+                    && memory.sqlite.is_some()
+                    && memory.postgres.is_none())
+        }) || self.pglite_import_pending()
+    }
+
     pub fn pglite_import_pending(&self) -> bool {
         self.memory
             .as_ref()

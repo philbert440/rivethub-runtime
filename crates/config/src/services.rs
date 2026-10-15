@@ -1,5 +1,4 @@
 use crate::Environment;
-use crate::MemoryBackend;
 use crate::model::{Config, TransportSection};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,11 +53,7 @@ impl Config {
 }
 
 fn agent_root(config: &Config, env: &Environment) -> bool {
-    let sqlite = config.memory.as_ref().is_some_and(|memory| {
-        memory.backend == Some(MemoryBackend::Sqlite)
-            || (memory.backend.is_none() && memory.sqlite.is_some() && memory.postgres.is_none())
-    });
-    !sqlite && !config.pglite_import_pending() && config.memory_postgres_url(env).is_some()
+    !config.sqlite_selected() && config.memory_postgres_url(env).is_some()
 }
 
 fn mcp_enabled(section: &TransportSection) -> bool {
