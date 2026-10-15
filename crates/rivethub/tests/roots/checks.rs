@@ -27,12 +27,14 @@ async fn roles_without_handlers_fail_check() -> TestResult {
         home.path(),
         &provider_config(home.path(), DEAD_POSTGRES, ""),
     )?;
-    for role in ["categorizer", "wiki-builder"] {
-        let output = run_rh(home.path(), &["worker", "--role", role, "--check"]).await?;
-        let text = stderr(&output);
-        assert!(!output.status.success(), "{role} succeeded: {text}");
-        assert!(text.contains("has no handler"), "{role}: {text}");
-    }
+    let output = run_rh(
+        home.path(),
+        &["worker", "--role", "wiki-builder", "--check"],
+    )
+    .await?;
+    let text = stderr(&output);
+    assert!(!output.status.success(), "wiki-builder succeeded: {text}");
+    assert!(text.contains("has no handler"), "wiki-builder: {text}");
     Ok(())
 }
 

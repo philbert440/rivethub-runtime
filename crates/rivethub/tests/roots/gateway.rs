@@ -14,7 +14,7 @@ use super::{TestResult, init_authority, provider_config, run_rh, stderr, termina
 const GATEWAY_URL: &str = "http://127.0.0.1:9";
 
 #[sqlx::test(migrations = false)]
-async fn gateway_without_an_authority_exits_with_a_pki_error(pool: PgPool) -> TestResult {
+async fn gateway_with_an_unusable_authority_directory_refuses_to_start(pool: PgPool) -> TestResult {
     migrate::postgres_pool(&pool).await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
@@ -29,10 +29,11 @@ async fn gateway_without_an_authority_exits_with_a_pki_error(pool: PgPool) -> Te
             &format!("den:\n  host: 127.0.0.1\n  port: {port}\n"),
         ),
     )?;
+    std::fs::create_dir_all(home.path().join(".rivethub").join("ca"))?;
     let output = run_rh(home.path(), &["gateway"]).await?;
     let text = stderr(&output);
     assert_eq!(output.status.code(), Some(1), "{text}");
-    assert!(text.contains("PKI"), "{text}");
+    assert!(text.contains("CA state directory"), "{text}");
     Ok(())
 }
 

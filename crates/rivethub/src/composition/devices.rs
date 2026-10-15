@@ -17,10 +17,12 @@ pub(super) async fn attach(
     shutdown: &CancellationToken,
 ) -> Result<Gateway, ComposeError> {
     let devices = phone_devices(config, env, owner)?;
-    let authority = open_authority(env, shutdown).await?;
-    Ok(gateway
-        .with_devices(devices)
-        .with_certificate_authority(authority))
+    let gateway = gateway.with_devices(devices);
+    let Some(authority) = open_authority(env, shutdown).await? else {
+        tracing::info!("no certificate authority on this node (rh ca init creates one)");
+        return Ok(gateway);
+    };
+    Ok(gateway.with_certificate_authority(authority))
 }
 
 fn phone_devices(
@@ -46,7 +48,11 @@ fn gateway_url(config: &Config) -> Option<String> {
 async fn open_authority(
     env: &Environment,
     shutdown: &CancellationToken,
-) -> Result<Arc<dyn CertificateAuthority>, ComposeError> {
-    let opened = pki::Pki::open(Paths::new(env).ca_dir(), shutdown.child_token()).await?;
-    Ok(Arc::new(opened))
+) -> Result<Option<Arc<dyn CertificateAuthority>>, ComposeError> {
+    let directory = Paths::new(env).ca_dir();
+    if !tokio::fs::try_exists(&directory).await? {
+        return Ok(None);
+    }
+    let opened = pki::Pki::open(directory, shutdown.child_token()).await?;
+    Ok(Some(Arc::new(opened)))
 }

@@ -122,13 +122,16 @@ fn build_runner(
     let concrete = open_provider(config)?;
     let provider: Arc<dyn ModelProvider> = Arc::new(concrete);
     let targets: Arc<dyn EmbeddingStore> = memory.clone();
-    let summaries: Arc<dyn SummaryStore> = memory;
+    let summaries: Arc<dyn SummaryStore> = memory.clone();
+    let store: Arc<dyn kernel::memory::MemoryStore> = memory;
     let deps = WorkerDeps {
         targets,
         summaries,
         provider,
         embed: EmbedSettings::from_config(config)?,
-        summary: SummarySettings::standard(model)?,
+        summary: SummarySettings::standard(model.clone())?,
+        memory: store,
+        tags: workers::TagSettings::new(model, false)?,
     };
     Ok(Runner::new(
         Arc::new(queue),

@@ -119,7 +119,7 @@ impl Composition {
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let background = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {
-            let owner = tenancy.local_user().cloned().ok_or_else(|| {
+            let owner = identity.tenancy.local_user().cloned().ok_or_else(|| {
                 ComposeError::Invalid("a local user is required for terminals".into())
             })?;
             gateway = gateway.with_terminal(
