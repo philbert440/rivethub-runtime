@@ -123,6 +123,7 @@ fn build_runner(
     let provider: Arc<dyn ModelProvider> = Arc::new(concrete);
     let targets: Arc<dyn EmbeddingStore> = memory.clone();
     let summaries: Arc<dyn SummaryStore> = memory.clone();
+    let wiki: Arc<dyn kernel::wiki::builder::WikiBuilderStore> = memory.clone();
     let store: Arc<dyn kernel::memory::MemoryStore> = memory;
     let deps = WorkerDeps {
         targets,
@@ -131,13 +132,14 @@ fn build_runner(
         embed: EmbedSettings::from_config(config)?,
         summary: SummarySettings::standard(model.clone())?,
         memory: store,
-        tags: workers::TagSettings::new(model, false)?,
+        tags: workers::TagSettings::new(model.clone(), false)?,
     };
     Ok(Runner::new(
         Arc::new(queue),
         RunnerConfig::new(role, EMBED_CONCURRENCY)?,
         deps,
-    ))
+    )
+    .with_wiki_builder(workers::wiki_builder::WikiBuilderDeps { store: wiki, model }))
 }
 
 async fn drive(

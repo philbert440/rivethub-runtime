@@ -21,7 +21,7 @@ async fn worker_check_accepts_an_unreachable_postgres_url() -> TestResult {
 }
 
 #[tokio::test]
-async fn roles_without_handlers_fail_check() -> TestResult {
+async fn the_wiki_builder_role_has_a_handler() -> TestResult {
     let home = tempfile::tempdir()?;
     write_state(
         home.path(),
@@ -33,8 +33,7 @@ async fn roles_without_handlers_fail_check() -> TestResult {
     )
     .await?;
     let text = stderr(&output);
-    assert!(!output.status.success(), "wiki-builder succeeded: {text}");
-    assert!(text.contains("has no handler"), "wiki-builder: {text}");
+    assert!(output.status.success(), "wiki-builder: {text}");
     Ok(())
 }
 
