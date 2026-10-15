@@ -49,10 +49,27 @@ impl std::fmt::Display for ConflictAction {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CatalogList {
+    Skills,
+    Commands,
+}
+
+impl std::fmt::Display for CatalogList {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Skills => "skills",
+            Self::Commands => "harness commands",
+        })
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum TaskError {
     #[error("database connection failed")]
     Unavailable(#[source] BoxError),
+    #[error("{0} are unavailable")]
+    UnavailableCatalog(CatalogList),
     #[error("database operation failed: {operation}")]
     Operation {
         operation: &'static str,

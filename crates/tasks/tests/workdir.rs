@@ -129,6 +129,7 @@ fn harness_directory(base: url::Url) -> tasks::Directory {
         LocalAgent {
             harness: Some(HarnessId::ClaudeCode),
             model: Some("demo".to_string()),
+            provider: None,
             effort: Some(Effort::Low),
             system_prompt: Some("base".to_string()),
             working_dir: None,

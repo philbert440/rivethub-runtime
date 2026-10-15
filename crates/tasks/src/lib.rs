@@ -1,9 +1,11 @@
 mod auth;
+mod catalog;
 mod client;
 mod delegate;
 mod directory;
 mod engine;
 mod error;
+mod executors;
 mod paths;
 mod payload;
 mod price;
@@ -12,6 +14,7 @@ mod run;
 mod serve;
 mod submit;
 
+pub use catalog::Catalog;
 pub use client::GatewayClient;
 pub use directory::Directory;
 pub use directory::LocalAgent;

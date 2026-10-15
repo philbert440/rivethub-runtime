@@ -19,6 +19,7 @@ pub(super) struct ModelServices {
     pub(super) runner: Arc<dyn TurnRunner>,
     pub(super) service: Arc<gateway::routes::v1::Service>,
     pub(super) agents: BTreeMap<String, AgentBinding>,
+    pub(super) tools: Vec<String>,
 }
 
 pub(super) async fn build(
@@ -50,6 +51,7 @@ pub(super) async fn build(
     let hooks = hooks(workspace, &state, tasks, cancel).await?;
     let mut bindings = BTreeMap::new();
     let mut selected = None;
+    let mut tool_names = BTreeSet::new();
     for (id, agent) in agents {
         let provider_id = agent
             .provider
@@ -72,12 +74,14 @@ pub(super) async fn build(
             None => concrete.model().to_owned(),
         };
         let provider: Arc<dyn ModelProvider> = Arc::new(concrete);
-        let runner: Arc<dyn TurnRunner> = Arc::new(agent_loop::AgentLoop::new(
+        let built = agent_loop::AgentLoop::new(
             provider_id.clone(),
             provider.clone(),
             Vec::new(),
             hooks.clone(),
-        )?);
+        )?;
+        tool_names.extend(built.tool_names());
+        let runner: Arc<dyn TurnRunner> = Arc::new(built);
         if id == default_agent {
             selected = Some((provider_id.clone(), provider, runner.clone()));
         }
@@ -96,6 +100,7 @@ pub(super) async fn build(
         runner,
         service,
         agents: bindings,
+        tools: tool_names.into_iter().collect(),
     }))
 }
 

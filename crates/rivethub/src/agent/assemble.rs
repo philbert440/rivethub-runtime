@@ -176,7 +176,9 @@ pub(super) fn ensure_enabled(config: &Config) -> Result<(), AgentError> {
 
 pub(super) fn plan(config: &Config, env: &Environment) -> Result<Plan, AgentError> {
     let hostname = crate::service::host_name();
-    let node = env.node_name(&hostname);
+    let node = env
+        .node_name(&hostname)
+        .map_err(|error| AgentError::Invalid(error.to_string()))?;
     if node.is_empty() {
         return Err(AgentError::Invalid("node name is empty".into()));
     }

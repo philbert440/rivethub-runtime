@@ -88,6 +88,7 @@ pub(crate) async fn attach(
     config: &Config,
     env: &Environment,
     shutdown: &CancellationToken,
+    tools: Vec<String>,
 ) -> Result<Attached, AgentError> {
     match crate::service::postgres_url(config, env) {
         Ok(_) => {}
@@ -102,8 +103,11 @@ pub(crate) async fn attach(
         Err(error) => return Err(AgentError::Invalid(error.to_string())),
     }
     let connected = assemble::connect(config, env).await?;
+    let directory = connected.roster.directory(&connected.plan)?;
+    let catalog = Arc::new(tasks::Catalog::new(&directory, connected.plan.mesh, tools));
     let api = ports::api(
         Arc::clone(&connected.roster),
+        catalog,
         connected.plan.allowed.clone(),
         &connected.tasks,
     );

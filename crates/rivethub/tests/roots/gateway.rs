@@ -5,9 +5,10 @@ use sqlx::ConnectOptions as _;
 use sqlx::PgPool;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use wire::gateway::GatewayError;
 use wire::gateway::agents::AgentListResponse;
 use wire::gateway::agents::AgentStoreBackend;
-use wire::gateway::catalog::CatalogSheet;
+use wire::gateway::catalog::CatalogAgentsResponse;
 use wire::gateway::catalog::OutcomesResponse;
 use wire::gateway::devices::PhonePairingAvailability;
 use wire::task::TasksListResponse;
@@ -125,38 +126,23 @@ async fn phone_pairing_uses_the_authority_and_agents_stay_on_the_file_store(
         .json::<AgentListResponse>()
         .await?;
     assert_eq!(agents.backend, Some(AgentStoreBackend::File));
-    let catalog = client
-        .get(format!("{base}/api/catalog"))
+    let catalog = client.get(format!("{base}/api/catalog")).send().await?;
+    assert_eq!(catalog.status(), reqwest::StatusCode::INTERNAL_SERVER_ERROR);
+    let catalog_error = catalog.json::<GatewayError>().await?;
+    assert_eq!(catalog_error.error, "harness commands are unavailable");
+    let agents = client
+        .get(format!("{base}/api/catalog/agents"))
         .send()
         .await?
         .error_for_status()?
-        .json::<CatalogSheet>()
+        .json::<CatalogAgentsResponse>()
         .await?;
     assert!(
-        catalog
-            .executors
-            .iter()
-            .any(|entry| entry.key == "chat-loop" && entry.implemented == Some(true)),
-        "{catalog:?}"
-    );
-    assert!(
-        catalog
-            .executors
-            .iter()
-            .any(|entry| entry.key == "harness-session" && entry.implemented == Some(true)),
-        "{catalog:?}"
-    );
-    assert!(
-        catalog.executors.iter().all(|entry| entry.key != "mesh"),
-        "{catalog:?}"
-    );
-    assert!(catalog.tools.is_empty(), "{catalog:?}");
-    assert!(
-        catalog.agents.iter().any(|agent| matches!(
+        agents.agents.iter().any(|agent| matches!(
             agent,
             wire::gateway::catalog::CatalogAgent::Node(node) if node.id == "main" && node.local
         )),
-        "{catalog:?}"
+        "{agents:?}"
     );
     let tasks = client
         .get(format!("{base}/api/tasks"))

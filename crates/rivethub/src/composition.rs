@@ -135,7 +135,9 @@ impl Composition {
         let mut audit_tasks = JoinSet::new();
         let configured = models::build(config, env, &audit_cancel, &mut audit_tasks).await?;
         let mut agents = std::collections::BTreeMap::new();
+        let mut tool_names = Vec::new();
         let v1 = if let Some(configured) = configured {
+            tool_names = configured.tools;
             agents = configured.agents;
             gateway = gateway.with_turn_runner(configured.runner);
             Some(configured.service)
@@ -144,7 +146,7 @@ impl Composition {
         };
         let mut tasks = mesh::start(config, env, agents, identity.tenancy, shutdown).await?;
         let crate::agent::Attached { gateway, watch } =
-            crate::agent::attach(gateway, config, env, shutdown).await?;
+            crate::agent::attach(gateway, config, env, shutdown, tool_names).await?;
         if let Some(watch) = watch {
             tasks.spawn(async move {
                 match watch.await {

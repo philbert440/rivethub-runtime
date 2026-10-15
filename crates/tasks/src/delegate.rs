@@ -457,6 +457,7 @@ fn classify(error: Error) -> DelegationError {
         | Error::Response
         | Error::Http(_)
         | Error::Timeout
-        | Error::Clock) => DelegationError::Failed(Box::new(failed)),
+        | Error::Clock
+        | Error::Catalog(_)) => DelegationError::Failed(Box::new(failed)),
     }
 }

@@ -28,6 +28,7 @@ pub(super) fn store_error(error: &TaskError) -> TaskHttpError {
         TaskError::Missing { id } => TaskHttpError::NotFound(format!("no task {id}")),
         TaskError::Conflict { status, .. } => terminal(*status),
         TaskError::Unavailable(_)
+        | TaskError::UnavailableCatalog(_)
         | TaskError::Operation { .. }
         | TaskError::QueueAbsent
         | TaskError::Cleanup { .. }
@@ -42,6 +43,7 @@ pub(super) fn catalog_error(error: &TaskError) -> TaskHttpError {
     let message = error.to_string();
     match error {
         TaskError::Unavailable(_)
+        | TaskError::UnavailableCatalog(_)
         | TaskError::Operation { .. }
         | TaskError::QueueAbsent
         | TaskError::Cleanup { .. }

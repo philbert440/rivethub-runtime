@@ -79,6 +79,9 @@ session through the gateway HTTP API, and finishes under the process shutdown
 token. `rh agent --check` validates the node, worker, pricing, gateway URL, and
 Postgres URL without connecting. `tasks.enabled: false` refuses the process.
 The gateway still serves `/api/tasks`, `/api/catalog`, and `/api/outcomes`.
+`GET /api/catalog` fails closed while harness commands and skills have no source.
+`GET /api/catalog/agents` lists the agent directory. Tool names are the agent-loop
+registry the gateway built. Approvals stay unavailable until a broker exists.
 
 `rh mcp` serves the memory and wiki tools on stdio, or on streamable HTTP and
 a Unix socket when `transports.mcp` selects them. Stdio also serves

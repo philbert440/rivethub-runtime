@@ -77,6 +77,7 @@ pub(crate) fn base_url(addr: std::net::SocketAddr) -> Url {
 pub(crate) fn plain_agent() -> LocalAgent {
     LocalAgent {
         model: None,
+        provider: None,
         effort: None,
         harness: None,
         system_prompt: None,

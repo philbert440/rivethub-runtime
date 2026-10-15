@@ -15,6 +15,7 @@ use crate::error::Error;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalAgent {
     pub model: Option<String>,
+    pub provider: Option<String>,
     pub effort: Option<Effort>,
     pub harness: Option<HarnessId>,
     pub system_prompt: Option<String>,
@@ -147,6 +148,12 @@ impl Directory {
 
     pub(crate) fn local_agent_names(&self) -> impl Iterator<Item = &str> {
         self.local_agents.keys().map(String::as_str)
+    }
+
+    pub(crate) fn local_entries(&self) -> impl Iterator<Item = (&str, &LocalAgent)> {
+        self.local_agents
+            .iter()
+            .map(|(id, agent)| (id.as_str(), agent))
     }
 
     pub(crate) fn presets(&self) -> impl Iterator<Item = &AgentPreset> {

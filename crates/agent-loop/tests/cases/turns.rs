@@ -11,6 +11,16 @@ use wire::stream::LlmUsage;
 use crate::support::provider::{Plan, Provider, chunks, failure};
 use crate::support::{Harness, agent, call, names, text, turn};
 
+#[tokio::test]
+async fn reports_registered_tool_names() {
+    let mut harness = Harness::new().await;
+    let provider = Provider::new(Vec::new());
+    let tool = Arc::new(testkit::FakeTool::new("echo").expect("echo tool schema"));
+    let agent = agent(provider, vec![tool], &harness);
+    assert_eq!(agent.tool_names(), vec!["echo".to_owned()]);
+    harness.close().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn streams_reasoning_tools_results_and_usage_through_ports() {
     let mut h = Harness::new().await;

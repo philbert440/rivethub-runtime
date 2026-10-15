@@ -65,6 +65,11 @@ impl AgentLoop {
         })
     }
 
+    #[must_use]
+    pub fn tool_names(&self) -> Vec<String> {
+        self.tools.keys().cloned().collect()
+    }
+
     pub async fn run(
         &self,
         mut turn: Turn,

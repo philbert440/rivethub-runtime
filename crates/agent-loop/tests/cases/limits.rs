@@ -17,6 +17,7 @@ async fn response_budget_and_disconnected_consumer_fail_the_turn() {
         let mut h = Harness::new().await;
         let provider = Provider::new(vec![chunks(vec![text("🦀"), ModelChunk::Done])]);
         let runner = agent(provider, Vec::new(), &h);
+        assert_eq!(runner.tool_names(), Vec::<String>::new());
         let mut input = turn();
         input.limits.response_bytes = if disconnected { 1024 } else { 3 };
         let (sender, receiver) = mpsc::channel(8);

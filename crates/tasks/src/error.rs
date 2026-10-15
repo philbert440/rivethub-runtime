@@ -116,6 +116,8 @@ pub enum Error {
     Clock,
     #[error("node name is empty")]
     NodeRequired,
+    #[error("{0} are unavailable")]
+    Catalog(kernel::tasks::CatalogList),
     #[error("delegation target {target} names node {embedded} and node {explicit}")]
     ConflictingNode {
         target: String,
@@ -130,6 +132,7 @@ impl From<TaskError> for Error {
     fn from(value: TaskError) -> Self {
         match value {
             TaskError::Unavailable(source) => Self::Connection(source),
+            TaskError::UnavailableCatalog(list) => Self::Catalog(list),
             TaskError::Operation { operation, source } => Self::Operation { operation, source },
             TaskError::QueueAbsent => Self::QueueAbsent,
             TaskError::Cleanup {

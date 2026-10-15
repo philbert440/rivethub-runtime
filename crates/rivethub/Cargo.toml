@@ -34,7 +34,6 @@ serde_json.workspace = true
 tasks.workspace = true
 terminal.workspace = true
 url.workspace = true
-uuid.workspace = true
 wire.workspace = true
 config = { workspace = true }
 gateway = { workspace = true }
