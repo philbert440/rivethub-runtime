@@ -3,6 +3,10 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
+    Update(#[from] crate::update::UpdateError),
+    #[error("no memory backend configured")]
+    MemoryBackend,
+    #[error(transparent)]
     Service(#[from] crate::service::ServiceError),
     #[error(transparent)]
     Ca(#[from] kernel::ca::CaError),

@@ -224,6 +224,10 @@ impl Environment {
         self.get(name).and_then(OsStr::to_str)
     }
 
+    pub fn install_root(&self) -> Option<&str> {
+        self.setting(Alias::InstallRoot)
+    }
+
     pub fn users_file(&self) -> Option<&OsStr> {
         let (current, legacy) = Alias::UsersFile.names();
         self.get(current).or_else(|| self.get(legacy))

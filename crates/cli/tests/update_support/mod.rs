@@ -1,0 +1,256 @@
+#![cfg(test)]
+
+use std::ffi::OsStr;
+use std::os::unix::fs::PermissionsExt as _;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse as _, Redirect, Response};
+use axum::routing::get;
+use cli::service::Scope;
+use cli::update::{Channel, UpdateArgs, Updater};
+use config::Environment;
+use serde::Serialize;
+use sha2::{Digest as _, Sha256};
+use tempfile::TempDir;
+use tokio_util::sync::CancellationToken;
+use wire::mesh::{MeshFile, MeshNode, MeshNodeStatus};
+
+pub(crate) const BINARY: &[u8] = b"#!/bin/sh\nprintf 'new binary\\n'\n";
+pub(crate) const MIGRATION: &[u8] = br#"#!/bin/sh
+printf 'migrate' >> "$RIVETHUB_TEST_CALLS"
+for arg do printf '|%s' "$arg" >> "$RIVETHUB_TEST_CALLS"; done
+printf '\n' >> "$RIVETHUB_TEST_CALLS"
+if [ "$RIVETHUB_TEST_FAIL" = migration ]; then
+    printf 'migration failed\n' >&2
+    exit 1
+fi
+printf 'schema ready\n'
+"#;
+
+pub(crate) type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+pub(crate) struct Fixture {
+    pub(crate) home: TempDir,
+    pub(crate) binary: PathBuf,
+    pub(crate) bin: PathBuf,
+    pub(crate) calls: PathBuf,
+}
+
+impl Fixture {
+    pub(crate) fn new() -> Result<Self> {
+        let home = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR"))?;
+        let install = home.path().join("install 'quoted' $(literal)");
+        std::fs::create_dir(&install)?;
+        let binary = install.join("rh");
+        std::fs::write(&binary, "old runtime")?;
+        std::fs::write(install.join("rivethub-migrate"), "old migration")?;
+        let bin = home.path().join("bin");
+        std::fs::create_dir(&bin)?;
+        let state = home.path().join(".rivethub");
+        std::fs::create_dir(&state)?;
+        let database = home.path().join("memory.sqlite");
+        std::fs::write(
+            state.join("config.yaml"),
+            format!(
+                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\nmesh:\n  node_name: local\n",
+                database.display()
+            ),
+        )?;
+        let unit = home.path().join(".config/systemd/user");
+        std::fs::create_dir_all(&unit)?;
+        std::fs::write(
+            unit.join("rivethub.service"),
+            "[Service]\nExecStart=rh start\n",
+        )?;
+        let calls = home.path().join("calls");
+        std::fs::write(&calls, "")?;
+        let fixture = Self {
+            home,
+            binary,
+            bin,
+            calls,
+        };
+        fixture.script(
+            "systemctl",
+            r#"#!/bin/sh
+printf 'systemctl' >> "$RIVETHUB_TEST_CALLS"
+for arg do printf '|%s' "$arg" >> "$RIVETHUB_TEST_CALLS"; done
+printf '\n' >> "$RIVETHUB_TEST_CALLS"
+if [ "$2" = "$RIVETHUB_TEST_FAIL" ]; then exit 1; fi
+"#,
+        )?;
+        fixture.script(
+            "ssh",
+            r#"#!/bin/sh
+call=ssh
+for arg do call="$call|$arg"; done
+printf '%s\n' "$call" >> "$RIVETHUB_TEST_CALLS"
+for arg do
+    case "$arg" in
+        unreachable.example.com) exit 255 ;;
+        failed.example.com) failed=yes ;;
+    esac
+    last="$arg"
+done
+if [ "$failed" = yes ] && [ "$last" != true ]; then exit 1; fi
+"#,
+        )?;
+        Ok(fixture)
+    }
+
+    pub(crate) fn script(&self, name: &str, script: &str) -> Result {
+        let path = self.bin.join(name);
+        std::fs::write(&path, script)?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))?;
+        Ok(())
+    }
+
+    pub(crate) fn env(&self) -> Environment {
+        Environment::from_vars([
+            (OsStr::new("HOME"), self.home.path().as_os_str()),
+            (OsStr::new("PATH"), self.bin.as_os_str()),
+            (OsStr::new("RIVETHUB_TEST_CALLS"), self.calls.as_os_str()),
+            (
+                OsStr::new("RIVETHUB_SHARED_DIR"),
+                self.home.path().as_os_str(),
+            ),
+        ])
+    }
+
+    pub(crate) async fn run(
+        &self,
+        args: &UpdateArgs,
+        env: &Environment,
+        corrupt: bool,
+    ) -> Result<cli::Report> {
+        let server = server(corrupt).await?;
+        let updater = Updater::new(
+            self.binary.clone(),
+            format!("http://{}/releases/", server.addr).parse()?,
+            Scope::User,
+        );
+        let report = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            updater.run(args, env, &CancellationToken::new()),
+        )
+        .await?;
+        server.close().await?;
+        Ok(report)
+    }
+
+    pub(crate) fn mesh(&self, hosts: &[&str]) -> Result {
+        let now = chrono::Utc::now();
+        let mut mesh = MeshFile::empty(now);
+        for (index, host) in hosts.iter().enumerate() {
+            let id = if index == 0 {
+                "local".to_owned()
+            } else {
+                format!("node-{index}")
+            };
+            mesh.nodes.insert(
+                id.clone(),
+                MeshNode {
+                    id: id.clone(),
+                    name: id,
+                    host: (*host).to_owned(),
+                    port: 5174,
+                    role: None,
+                    agents: Vec::new(),
+                    providers: Vec::new(),
+                    models: Vec::new(),
+                    capabilities: Vec::new(),
+                    status: MeshNodeStatus::Online,
+                    last_seen: now,
+                    registered_at: now,
+                    version: "1".to_owned(),
+                    metadata: None,
+                    ssh_user: Some("operator".to_owned()),
+                    install_root: None,
+                    platform: None,
+                    extra: wire::Extra::default(),
+                },
+            );
+        }
+        std::fs::write(
+            self.home.path().join("mesh.json"),
+            serde_json::to_vec(&mesh)?,
+        )?;
+        Ok(())
+    }
+}
+
+pub(crate) fn args() -> UpdateArgs {
+    UpdateArgs {
+        channel: Channel::Stable,
+        version: None,
+        no_restart: false,
+        mesh: false,
+        ssh_user: None,
+    }
+}
+
+#[derive(Serialize)]
+struct Release {
+    tag_name: &'static str,
+    draft: bool,
+    prerelease: bool,
+    assets: Vec<Asset>,
+}
+
+#[derive(Serialize)]
+struct Asset {
+    name: String,
+    browser_download_url: String,
+}
+
+pub(crate) async fn server(corrupt: bool) -> Result<testkit::Stub> {
+    let manifest = format!(
+        "{}  rh-linux-x86_64\n{}  rivethub-migrate-linux-x86_64\n",
+        hex::encode(Sha256::digest(if corrupt { b"wrong" } else { BINARY })),
+        hex::encode(Sha256::digest(MIGRATION))
+    );
+    let routes = axum::Router::new()
+        .route("/releases/latest", get(metadata))
+        .route("/releases/tags/v9", get(metadata))
+        .route("/assets/{name}", get(download))
+        .with_state(Arc::new(manifest));
+    Ok(testkit::stub_server(routes).await?)
+}
+
+async fn metadata(headers: HeaderMap) -> Response {
+    let host = headers
+        .get("host")
+        .expect("host")
+        .to_str()
+        .expect("host text");
+    axum::Json(Release {
+        tag_name: "v9",
+        draft: false,
+        prerelease: false,
+        assets: [
+            "rh-linux-x86_64",
+            "rivethub-migrate-linux-x86_64",
+            "SHA256SUMS",
+        ]
+        .into_iter()
+        .map(|name| Asset {
+            name: name.to_owned(),
+            browser_download_url: format!("http://{host}/assets/{name}"),
+        })
+        .collect(),
+    })
+    .into_response()
+}
+
+async fn download(Path(name): Path<String>, State(manifest): State<Arc<String>>) -> Response {
+    match name.as_str() {
+        "SHA256SUMS" => manifest.as_str().to_owned().into_response(),
+        "rh-linux-x86_64" => Redirect::temporary("/assets/runtime").into_response(),
+        "runtime" => BINARY.into_response(),
+        "rivethub-migrate-linux-x86_64" => MIGRATION.into_response(),
+        _ => StatusCode::NOT_FOUND.into_response(),
+    }
+}

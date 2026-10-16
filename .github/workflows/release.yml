@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SQLX_OFFLINE: 'true'
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Check version tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          release_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "cli") | .version')
+          test "$RELEASE_TAG" = "v$release_version"
+      - name: Build Linux x86_64 binaries
+        run: cargo build --release --locked --target x86_64-unknown-linux-gnu --bin rh --bin rivethub-migrate
+      - name: Prepare release assets
+        run: |
+          mkdir release
+          cp target/x86_64-unknown-linux-gnu/release/rh release/rh-linux-x86_64
+          cp target/x86_64-unknown-linux-gnu/release/rivethub-migrate release/rivethub-migrate-linux-x86_64
+          cd release
+          sha256sum rh-linux-x86_64 rivethub-migrate-linux-x86_64 > SHA256SUMS
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          release_args=(--verify-tag --generate-notes --title "$RELEASE_TAG")
+          if [[ "${RELEASE_TAG%%+*}" == *-* ]]; then
+            release_args+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" "${release_args[@]}" release/rh-linux-x86_64 release/rivethub-migrate-linux-x86_64 release/SHA256SUMS

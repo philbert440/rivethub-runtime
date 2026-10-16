@@ -76,10 +76,7 @@ fn refused_delete_mode(user_version: i64) -> TestResult {
     let message = error.to_string();
     if user_version == 0 || user_version == 5 {
         assert!(
-            message.contains(&format!(
-                "rivethub-migrate sqlite --path {}",
-                path.display()
-            )),
+            message.contains(&format!("rh db migrate --path {}", path.display())),
             "the hint must name the real path: {message}"
         );
         assert!(

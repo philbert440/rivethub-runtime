@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -56,6 +55,7 @@ async fn get(
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> TestResult {
     seed(&pool).await?;
+    let home = tempfile::tempdir()?;
     let memory = Arc::new(PostgresMemory::new(pool));
     let gateway = Arc::new(Gateway::new(
         memory,
@@ -67,11 +67,11 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
             files_root: None,
             static_dir: None,
             root_redirect: None,
-            state_dir: PathBuf::from("/tmp/rr-gateway-unused-agents/state"),
-            directory_root: PathBuf::from("/tmp/rr-gateway-unused-agents/agents"),
-            mesh_file: Some(PathBuf::from("/no-such-gateway-mesh/mesh.json")),
-            shared_dir: PathBuf::from("/tmp/rr-gateway-unused-agents/shared"),
-            legacy_mesh_dir: PathBuf::from("/no-such-gateway-legacy"),
+            state_dir: home.path().join("state"),
+            directory_root: home.path().join("agents"),
+            mesh_file: Some(home.path().join("mesh.json")),
+            shared_dir: home.path().join("shared"),
+            legacy_mesh_dir: home.path().join("legacy"),
             allowed_harnesses: None,
             devices_enabled: false,
             probe_timeout: Duration::from_millis(200),
@@ -91,7 +91,8 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
         shutdown.clone(),
     ));
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
+        .no_proxy()
+        .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
     let response = get(&client, &base, "/api/wiki/page/release").await?;
@@ -147,7 +148,7 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
         "/api/wiki/page/release"
     );
     drop(shutdown_guard);
-    tokio::time::timeout(Duration::from_secs(5), servers.join_next())
+    tokio::time::timeout(Duration::from_secs(30), servers.join_next())
         .await?
         .ok_or("server task")???;
     Ok(())

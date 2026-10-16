@@ -27,3 +27,44 @@ check fails if transcripts are added, requiring their integration instead of sil
 real binary dispatch, the compatibility alias, the existing gateway's health route and graceful shutdown, invalid
 PID files and symlink boundaries, real signal delivery, and read-only doctor checks against both backends. Schema
 tests assert unchanged database state. Timing tests await events with deadlines.
+
+`rh update [--channel stable|beta|nightly] [--version TAG] [--no-restart] [--mesh] [--ssh-user USER]`
+updates Linux x86_64 installations. Stable is the default and resolves the latest published stable GitHub release,
+or the exact tag supplied with `--version`. Both `rh-linux-x86_64` and `rivethub-migrate-linux-x86_64` must match
+`SHA256SUMS` before either is executed. HTTPS redirects are supported; HTTPS downloads cannot downgrade to HTTP.
+Version tags are URL path components, never shell expressions. The release workflow builds both binaries when a
+version tag is pushed. Releases use the workspace package version and require a matching `v<version>` tag.
+
+Beta and nightly require `RIVETHUB_INSTALL_ROOT` to name an absolute, clean source checkout on `beta` and `main`,
+respectively. The deprecated install-root alias remains in `config` and emits its existing warning. The updater runs
+`git pull --ff-only origin <branch>` then `cargo build --release --locked` for both binaries into an isolated staging
+directory. With a source channel, `--version` asserts that the updated checkout resolves to that commit or tag;
+a different revision is refused before building. The updater never changes the checkout's branch or discards edits.
+
+Updates require a configured memory backend. The staged migration binary applies that backend's migrations before
+replacement or restart, including with `--no-restart`. A download, checksum, build, or migration failure leaves the
+installed executables untouched. A lock serializes updates to the installation. Each replacement uses a rename on
+the installation filesystem; `rh.previous` and `rivethub-migrate.previous` retain the previous executables for manual
+rollback. If the second rename fails, the first is restored. Schema changes remain forward-compatible: binary rollback
+does not undo migrations. Restart uses the installed system or user systemd service through the existing service CLI
+implementation. A restart failure exits 1 and retains both backups; it does not undo the database migration.
+
+Mesh mode reads the existing typed registry at `<RIVETHUB_SHARED_DIR>/mesh.json` through the gateway's registry reader.
+It resolves the local node name with the same config, environment, and operating-system hostname precedence as the runtime. It validates every SSH destination and concurrently preflights SSH
+before updating locally, then visits every reachable peer in registry order. Each peer executes its own `rh update`;
+`--mesh` is never forwarded. Stable peers receive the exact release tag installed locally. The explicit SSH user overrides the registry user; absent both, SSH selects its normal user.
+Batch mode and strict host-key checking use the operator's existing SSH trust. Paths and secrets are not interpolated
+into a remote shell. Unreachable peers and failed peer updates are reported, other reachable peers continue, and the
+aggregate exit is 1 if any peer failed. Local failure stops the rollout. Success exits 0; cancellation exits 1.
+
+`rh db migrate|status [--config FILE] [--url URL | --path FILE]` uses the migration library for the selected Postgres
+or SQLite backend. Without an explicit database, it resolves the normal config, including minimal standalone configs.
+Status is read-only and reports `current`, `required`, and `pending`; migration reports the resulting status and is
+idempotent. SQLite operations run on blocking workers. Cancellation drains an in-flight migration before reporting cancellation. Migration is an explicit operator action, never runtime startup
+behavior introduced by these commands. Store errors direct operators to `rh db migrate`.
+
+No update/db transcripts or their referenced inventory sections were supplied in the repository's CLI fixture directory.
+The new tests cover the behavior above using isolated databases, a local HTTP release server, and fake process executables.
+The update/db skip list is empty and checked; the fixture inventory check fails when new recordings arrive. Existing
+README contract tests remain unchanged. Historical update/db wording and exit-code parity cannot be established without
+those recordings; no transcript or TypeScript artifact was invented to fill that gap.

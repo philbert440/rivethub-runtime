@@ -1,4 +1,4 @@
-mod command;
+pub(crate) mod command;
 mod unit;
 
 use std::path::{Path, PathBuf};
@@ -154,6 +154,8 @@ impl Scope {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServiceError {
+    #[error("child process id is outside the platform range: {0}")]
+    Pid(#[from] std::num::TryFromIntError),
     #[error("Service file already exists: {}\nDelete it first if you want to regenerate.", .0.display())]
     Exists(PathBuf),
     #[error("invalid service path: {}", .0.display())]

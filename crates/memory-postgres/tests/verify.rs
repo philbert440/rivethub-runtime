@@ -19,7 +19,7 @@ async fn a_fresh_database_is_not_adopted_and_left_untouched(pool: PgPool) -> Tes
     match PostgresMemory::connect(&url(&pool)).await {
         Err(error @ Error::NotAdopted) => assert_eq!(
             error.to_string(),
-            "this database has no RivetHub migration history — run rivethub-migrate postgres once to adopt it"
+            "this database has no RivetHub migration history — run rh db migrate once to adopt it"
         ),
         other => panic!("expected NotAdopted, got {other:?}"),
     }

@@ -12,12 +12,10 @@ pub enum SqliteError {
         #[source]
         source: rusqlite::Error,
     },
-    #[error(
-        "the memory file at {path} is not initialised — run rivethub-migrate sqlite --path {path}"
-    )]
+    #[error("the memory file at {path} is not initialised — run rh db migrate --path {path}")]
     NotInitialised { path: PathBuf },
     #[error(
-        "the memory schema is behind: the file reports version {found}, this build requires {required} — run rivethub-migrate sqlite --path {path}"
+        "the memory schema is behind: the file reports version {found}, this build requires {required} — run rh db migrate --path {path}"
     )]
     SchemaBehind {
         path: PathBuf,

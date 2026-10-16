@@ -18,6 +18,10 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    #[command(about = "Update this node or the mesh")]
+    Update(crate::update::UpdateArgs),
+    #[command(about = "Apply or inspect database migrations")]
+    Db(crate::db::DbArgs),
     #[command(about = "Run the composed gateway service")]
     Gateway {
         #[arg(long)]

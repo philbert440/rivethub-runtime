@@ -29,12 +29,10 @@ pub enum Error {
     #[error("connection to the memory database failed")]
     Connection(#[source] sqlx::Error),
     #[error(
-        "the memory schema is behind: the database reports version {found}, this build requires {required} — run rivethub-migrate postgres"
+        "the memory schema is behind: the database reports version {found}, this build requires {required} — run rh db migrate"
     )]
     SchemaBehind { found: i64, required: i64 },
-    #[error(
-        "this database has no RivetHub migration history — run rivethub-migrate postgres once to adopt it"
-    )]
+    #[error("this database has no RivetHub migration history — run rh db migrate once to adopt it")]
     NotAdopted,
     #[error("the graphile_worker schema is absent on this database")]
     QueueAbsent,

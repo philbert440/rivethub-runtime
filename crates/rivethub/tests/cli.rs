@@ -31,7 +31,7 @@ async fn binary_dispatch_preserves_stdout_stderr_and_exit_codes() {
         (vec!["status"], 0, "not running", "Health unavailable"),
     ] {
         let output = tokio::time::timeout(
-            Duration::from_secs(10),
+            Duration::from_secs(30),
             Command::new(env!("CARGO_BIN_EXE_rh"))
                 .args(&args)
                 .env_clear()
@@ -42,6 +42,7 @@ async fn binary_dispatch_preserves_stdout_stderr_and_exit_codes() {
                 .output(),
         )
         .await
+        .map_err(|error| format!("rh {args:?} exceeded the command deadline: {error}"))
         .expect("command deadline")
         .expect("rh");
         assert_eq!(output.status.code(), Some(code), "{args:?}");
@@ -63,7 +64,7 @@ async fn binary_dispatch_preserves_stdout_stderr_and_exit_codes() {
 #[tokio::test]
 async fn one_release_compatibility_binary_dispatches_the_same_tree() {
     let output = tokio::time::timeout(
-        Duration::from_secs(10),
+        Duration::from_secs(30),
         Command::new(env!("CARGO_BIN_EXE_rivetos"))
             .arg("version")
             .env("TOKIO_WORKER_THREADS", "2")

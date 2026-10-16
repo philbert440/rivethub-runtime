@@ -8,13 +8,13 @@ use tokio_util::sync::CancellationToken;
 use super::ServiceError;
 use crate::{Exit, Report};
 
-pub(super) fn command(program: &'static str, env: &Environment) -> Command {
+pub(crate) fn command(program: &'static str, env: &Environment) -> Command {
     let mut command = Command::new(program);
     command.env_clear().envs(env.iter()).kill_on_drop(true);
     command
 }
 
-pub(super) async fn capture(
+pub(crate) async fn capture(
     mut command: Command,
     program: &'static str,
     shutdown: &CancellationToken,
@@ -22,10 +22,15 @@ pub(super) async fn capture(
     if shutdown.is_cancelled() {
         return Err(ServiceError::Cancelled);
     }
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0);
     let mut child = command
         .spawn()
         .map_err(|source| ServiceError::Process { program, source })?;
+    let pid = child.id().ok_or(ServiceError::Pipe)?;
+    let group = nix::unistd::Pid::from_raw(i32::try_from(pid)?);
     let stdout = child.stdout.take().ok_or(ServiceError::Pipe)?;
     let stderr = child.stderr.take().ok_or(ServiceError::Pipe)?;
     let output = async {
@@ -47,7 +52,11 @@ pub(super) async fn capture(
     tokio::select! {
         biased;
         () = shutdown.cancelled() => {
-            child.kill().await.map_err(|source| ServiceError::Process { program, source })?;
+            match nix::sys::signal::killpg(group, nix::sys::signal::Signal::SIGKILL) {
+                Ok(()) | Err(nix::errno::Errno::ESRCH) => {}
+                Err(error) => return Err(error.into()),
+            }
+            child.wait().await.map_err(|source| ServiceError::Process { program, source })?;
             Err(ServiceError::Cancelled)
         }
         result = output => {
@@ -62,7 +71,7 @@ pub(super) async fn capture(
     }
 }
 
-pub(super) fn require_success(report: Report) -> Result<Report, ServiceError> {
+pub(crate) fn require_success(report: Report) -> Result<Report, ServiceError> {
     if report.exit == Exit::Ok {
         Ok(report)
     } else {
@@ -73,7 +82,7 @@ pub(super) fn require_success(report: Report) -> Result<Report, ServiceError> {
     }
 }
 
-pub(super) async fn follow(
+pub(crate) async fn follow(
     mut command: Command,
     shutdown: &CancellationToken,
 ) -> Result<Report, ServiceError> {
