@@ -1,32 +1,12 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use config::{Config, Environment};
 use gateway::sessions::SessionRegistry;
 use gateway::term::{LaunchCommand, TerminalOptions, TerminalService};
 use kernel::terminal::TerminalMux;
-use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 
 use super::ComposeError;
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Roster {
-    default: String,
-    commands: Vec<Command>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Command {
-    id: String,
-    label: String,
-    argv: Vec<String>,
-    cwd: PathBuf,
-    harness: Option<wire::harness::HarnessId>,
-    session: bool,
-}
 
 pub(super) async fn build(
     config: &Config,
@@ -49,11 +29,10 @@ pub(super) async fn build(
                 .and_then(|runtime| runtime.workspace.clone())
         })
         .ok_or_else(|| ComposeError::Invalid("terminal filesystem root is required".into()))?;
-    let path = gateway
-        .commands_file
-        .as_ref()
-        .ok_or_else(|| ComposeError::Invalid("commands_file is required for terminals".into()))?;
-    let roster: Roster = serde_json::from_slice(&tokio::fs::read(path).await?)?;
+    let state_dir = config::Paths::new(env)?.state_dir();
+    let roster_path =
+        terminal::resolve_roster_path(gateway.commands_file.as_deref(), env, &state_dir);
+    let roster = terminal::load_roster(&roster_path, &root).await?;
     let settings = terminal::TerminalSettings::from_config(
         config,
         env,
@@ -71,7 +50,7 @@ pub(super) async fn build(
         },
         &paths,
         env.home().map(std::path::Path::new),
-        &config::Paths::new(env)?.state_dir(),
+        &state_dir,
         gateway.port,
     )
     .await;
@@ -80,7 +59,6 @@ pub(super) async fn build(
     }
     let mux = Arc::new(terminal::TerminalManager::new(settings, plan));
     mux.run_tracked(shutdown.child_token(), tasks);
-    let state_dir = config::Paths::new(env)?.state_dir();
     let mut adopted = mux.adopt_namespace(&state_dir, owner.as_str()).await?;
     let commands = launch_commands(roster.commands);
     let service = Arc::new(
@@ -89,7 +67,7 @@ pub(super) async fn build(
             sessions,
             TerminalOptions {
                 root,
-                default: roster.default,
+                default: roster.default_id,
                 commands,
                 max_ptys,
             },
@@ -102,7 +80,7 @@ pub(super) async fn build(
     Ok(service)
 }
 
-fn launch_commands(commands: Vec<Command>) -> Vec<LaunchCommand> {
+fn launch_commands(commands: Vec<terminal::ResolvedCommand>) -> Vec<LaunchCommand> {
     commands
         .into_iter()
         .map(|command| LaunchCommand {
@@ -112,6 +90,7 @@ fn launch_commands(commands: Vec<Command>) -> Vec<LaunchCommand> {
             cwd: command.cwd,
             harness: command.harness,
             session: command.session,
+            env: command.env,
         })
         .collect()
 }

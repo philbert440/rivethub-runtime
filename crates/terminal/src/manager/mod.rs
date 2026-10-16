@@ -196,6 +196,7 @@ impl kernel::terminal::TerminalMux for TerminalManager {
         session: &wire::session_id::SessionId,
         argv: Vec<String>,
         cwd: &Path,
+        env: &BTreeMap<String, String>,
         size: TermSize,
     ) -> Result<TerminalId, kernel::terminal::TerminalMuxError> {
         let session =
@@ -208,7 +209,7 @@ impl kernel::terminal::TerminalMux for TerminalManager {
             argv,
             cwd: cwd.to_path_buf(),
             size,
-            entry_env: BTreeMap::new(),
+            entry_env: env.clone(),
         };
         self.port_spawn(spec)
             .await

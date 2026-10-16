@@ -194,7 +194,13 @@ impl TerminalActor {
         let id = self
             .service
             .mux
-            .spawn(&port_session, argv, &launch.command.cwd, launch.size)
+            .spawn(
+                &port_session,
+                argv,
+                &launch.command.cwd,
+                &launch.command.env,
+                launch.size,
+            )
             .await?;
         let details = match self.service.mux.inspect(&id).await {
             Ok(details) => details,

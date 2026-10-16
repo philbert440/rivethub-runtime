@@ -484,6 +484,7 @@ fn mux_spawn_kill_list() {
                 &session,
                 vec!["bash".to_string()],
                 std::path::Path::new("/work/acme"),
+                &BTreeMap::new(),
                 TermSize { cols: 80, rows: 24 },
             )
             .await

@@ -284,6 +284,7 @@ async fn directory_containment_refuses_parent_sibling_and_symlink_escape() {
                     cwd,
                     harness: None,
                     session: false,
+                    env: std::collections::BTreeMap::new(),
                 }],
             },
         )

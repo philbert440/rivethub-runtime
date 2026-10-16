@@ -1,0 +1,19 @@
+{
+  "default": "pi",
+  "cwd": "/home/rivet",
+  "commands": {
+    "pi": {
+      "label": "Pi",
+      "cmd": ["/home/rivet/.local/bin/pi"],
+      "room": true
+    },
+    "shell": {
+      "label": "Shell",
+      "cmd": ["bash", "-l"],
+      "room": false
+    }
+  },
+  "env": {
+    "PATH": "/usr/bin:/home/rivet/.local/bin"
+  }
+}

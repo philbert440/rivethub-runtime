@@ -27,7 +27,7 @@ fn write_config(home: &Path, work: &Path, state: &Path) -> TestResult {
     std::fs::write(
         &commands,
         format!(
-            r#"{{"default":"shell","commands":[{{"id":"shell","label":"Shell","argv":["/bin/true"],"cwd":"{}","session":false}}]}}"#,
+            r#"{{"default":"shell","cwd":"{}","commands":{{"shell":{{"label":"Shell","cmd":["/bin/true"],"room":false}}}}}}"#,
             work.display()
         ),
     )?;
@@ -131,6 +131,13 @@ async fn gateway_startup_adopts_only_its_namespace() -> TestResult {
     assert_eq!(info.command, "shell");
     assert_eq!(info.state, wire::gateway::term::PtyState::Running);
     assert_eq!(info.mux, Some(wire::gateway::term::Mux::Herdr));
+    let listed_config = service.config(&owner);
+    assert!(listed_config.enabled);
+    assert_eq!(listed_config.default, "shell");
+    let listed_command = listed_config.commands.first().ok_or("roster command")?;
+    assert_eq!(listed_command.id, "shell");
+    assert_eq!(listed_command.label, "Shell");
+    assert!(!listed_command.session);
     assert_eq!(service.list(&other).len(), 0);
     let forbidden = service.kill(&other, &info.id).await.expect_err("forbidden");
     assert_eq!(forbidden.to_string(), "session is owned by another user");

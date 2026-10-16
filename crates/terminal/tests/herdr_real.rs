@@ -80,6 +80,7 @@ async fn kill_by_returned_id(binary: PathBuf) -> Result<Completion, Failed> {
         &session,
         vec!["/bin/cat".to_owned()],
         &work,
+        &BTreeMap::new(),
         kernel::terminal::TermSize { cols: 80, rows: 24 },
     )
     .await

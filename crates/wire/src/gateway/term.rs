@@ -116,35 +116,20 @@ pub struct TermConfig {
 impl TermConfig {
     #[must_use]
     pub fn disabled(max_ptys: u64) -> Self {
-        let default = command("claude", "Claude Code", true);
-        let id = default.id.clone();
-        let mut commands = vec![default];
-        commands.extend([
-            command("grok", "Grok Build", true),
-            command("hermes", "Hermes", true),
-            command("kimi", "Kimi Code", true),
-            command("codex", "Codex", true),
-            command("opencode", "OpenCode", true),
-            command("pi", "Pi", true),
-            command("qwen", "Qwen Code", true),
-            command("cursor", "Cursor", true),
-            command("shell", "Shell", false),
-        ]);
         Self {
             enabled: false,
-            default: id,
+            default: super::roster::BUILTIN_DEFAULT_ID.to_owned(),
             max_ptys,
             active: 0,
-            commands,
+            commands: super::roster::builtin_commands()
+                .iter()
+                .map(|command| TermCommand {
+                    id: command.id.to_owned(),
+                    label: command.label.to_owned(),
+                    session: command.session,
+                })
+                .collect(),
         }
-    }
-}
-
-fn command(id: &str, label: &str, session: bool) -> TermCommand {
-    TermCommand {
-        id: id.to_owned(),
-        label: label.to_owned(),
-        session,
     }
 }
 

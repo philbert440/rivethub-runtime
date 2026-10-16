@@ -101,6 +101,8 @@ pub enum Error {
     OwnerUnset,
     #[error("herdr session stamp is invalid: {0}")]
     SessionStamp(#[source] serde_json::Error),
+    #[error(transparent)]
+    Roster(#[from] crate::roster::RosterError),
 }
 
 impl From<Error> for kernel::terminal::TerminalMuxError {
@@ -141,7 +143,8 @@ impl From<Error> for kernel::terminal::TerminalMuxError {
             | Error::Io(_)
             | Error::NamespaceEscape { .. }
             | Error::OwnerUnset
-            | Error::SessionStamp(_)) => Self::Unavailable(Box::new(other)),
+            | Error::SessionStamp(_)
+            | Error::Roster(_)) => Self::Unavailable(Box::new(other)),
         }
     }
 }

@@ -102,6 +102,7 @@ impl TerminalMux for Mux {
         session: &SessionId,
         argv: Vec<String>,
         _cwd: &Path,
+        _env: &BTreeMap<String, String>,
         size: TermSize,
     ) -> Result<TerminalId, TerminalMuxError> {
         let mut terminals = self.terminals.lock();
@@ -242,6 +243,24 @@ pub(crate) struct Fixture {
     pub(crate) directory: tempfile::TempDir,
 }
 
+fn launch(
+    root: &Path,
+    id: &str,
+    label: &str,
+    session: bool,
+    harness: Option<HarnessId>,
+) -> LaunchCommand {
+    LaunchCommand {
+        id: id.into(),
+        label: label.into(),
+        argv: vec![id.into()],
+        cwd: root.to_path_buf(),
+        harness,
+        session,
+        env: BTreeMap::new(),
+    }
+}
+
 impl Fixture {
     pub(crate) async fn new() -> Self {
         Self::with_harness(None).await
@@ -266,14 +285,7 @@ impl Fixture {
             ("missing", "Missing Binary", false, None),
         ]
         .into_iter()
-        .map(|(id, label, session, harness)| LaunchCommand {
-            id: id.into(),
-            label: label.into(),
-            argv: vec![id.into()],
-            cwd: root.clone(),
-            harness,
-            session,
-        })
+        .map(|(id, label, session, harness)| launch(&root, id, label, session, harness))
         .collect();
         let service = TerminalService::new(
             mux.clone(),

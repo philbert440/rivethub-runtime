@@ -30,6 +30,7 @@ pub struct LaunchCommand {
     pub cwd: PathBuf,
     pub harness: Option<HarnessId>,
     pub session: bool,
+    pub env: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

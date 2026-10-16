@@ -153,6 +153,7 @@ impl TerminalMux for FakeMux {
         session: &SessionId,
         _argv: Vec<String>,
         _cwd: &std::path::Path,
+        _env: &BTreeMap<String, String>,
         _size: TermSize,
     ) -> Result<TerminalId, TerminalMuxError> {
         let id = TerminalId::new(format!(

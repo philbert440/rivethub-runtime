@@ -2,6 +2,7 @@ use crate::BoxError;
 use async_trait::async_trait;
 use serde::Deserialize;
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::fmt;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
@@ -91,6 +92,7 @@ pub trait TerminalMux: Send + Sync {
         session: &SessionId,
         argv: Vec<String>,
         cwd: &std::path::Path,
+        env: &BTreeMap<String, String>,
         size: TermSize,
     ) -> Result<TerminalId, TerminalMuxError>;
 

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
+use std::path::PathBuf;
 
 use crate::enums::LogLevel;
 
@@ -112,6 +113,7 @@ enum Alias {
     TermIdleTtl,
     TermExitLinger,
     TermSessionGc,
+    TermConfig,
     UploadMax,
     UploadTtl,
     Audio,
@@ -121,7 +123,7 @@ enum Alias {
 }
 
 impl Alias {
-    const ALL: [Self; 22] = [
+    const ALL: [Self; 23] = [
         Self::LogLevel,
         Self::NodeName,
         Self::NodeId,
@@ -138,6 +140,7 @@ impl Alias {
         Self::TermIdleTtl,
         Self::TermExitLinger,
         Self::TermSessionGc,
+        Self::TermConfig,
         Self::UploadMax,
         Self::UploadTtl,
         Self::Audio,
@@ -173,6 +176,7 @@ impl Alias {
                 "RIVETHUB_TERM_SESSION_GC_MS",
                 "RIVETOS_DEN_TERM_SESSION_GC_MS",
             ),
+            Self::TermConfig => ("RIVETHUB_TERM_CONFIG", "RIVETOS_DEN_TERM_CONFIG"),
             Self::UploadMax => (UPLOAD_MAX_BYTES_VARIABLE, "RIVETOS_DEN_UPLOAD_MAX_BYTES"),
             Self::UploadTtl => (UPLOAD_TTL_MS_VARIABLE, "RIVETOS_DEN_UPLOAD_TTL"),
             Self::Audio => ("RIVETHUB_AUDIO", "RIVETOS_DEN_AUDIO"),
@@ -237,6 +241,11 @@ impl Environment {
     pub fn users_file(&self) -> Option<&OsStr> {
         let (current, legacy) = Alias::UsersFile.names();
         self.get(current).or_else(|| self.get(legacy))
+    }
+
+    #[must_use]
+    pub fn term_roster_path(&self) -> Option<PathBuf> {
+        self.setting(Alias::TermConfig).map(PathBuf::from)
     }
 
     pub fn home(&self) -> Option<&str> {

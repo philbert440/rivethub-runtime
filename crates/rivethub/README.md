@@ -37,11 +37,16 @@ Under the compatibility-pinned `den` configuration section:
   device leaves use the registry mapping and emit a deprecation warning. An
   explicit missing or invalid file refuses startup. Without a registry, the local
   identity is `owner` and no device identities are accepted.
-- `terminal.enabled: true` enables the herdr-backed terminal service. It requires
-  `commands_file` and a filesystem root (`files_root` or `runtime.workspace`).
-  The command file contains `default` and `commands`; each command has `id`,
-  `label`, `argv`, `cwd`, optional `harness`, and `session`. Direct PTY fallback
-  is not selected by the composition. Missing herdr refuses terminal startup.
+- `terminal.enabled: true` enables the herdr-backed terminal service. It needs a
+  filesystem root (`files_root` or `runtime.workspace`). The roster path is
+  `commands_file` when set, otherwise `RIVETHUB_TERM_CONFIG`, otherwise the
+  deprecated `RIVETOS_DEN_TERM_CONFIG` alias (one warning while the new name is
+  unset), otherwise `<state dir>/den-term.json`. The file maps command ids to
+  `label`, `cmd`, and `room`, with optional top-level and per-command `cwd` and
+  `env`. `room` is the session flag. A missing file starts the built-in roster.
+  Malformed JSON, an empty argv, a relative cwd, an invalid key, or a default
+  that names no command refuses startup. Direct PTY fallback is not selected by
+  the composition. Missing herdr refuses terminal startup.
 
 Mesh requires `enabled`, `node_name`, `advertise_host`, `agent_channel_port`,
 and TLS with a client CA. It writes `mesh.json` beneath the configured shared

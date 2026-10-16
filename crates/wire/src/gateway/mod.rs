@@ -3,6 +3,7 @@ pub mod catalog;
 pub mod devices;
 pub mod files;
 pub mod memory;
+pub mod roster;
 pub mod sessions;
 pub mod term;
 pub mod uploads;
