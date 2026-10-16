@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+#[path = "v1/agents.rs"]
+mod agents;
 #[path = "common/mod.rs"]
 #[expect(
     dead_code,

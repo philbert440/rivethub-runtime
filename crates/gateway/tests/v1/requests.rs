@@ -1,4 +1,8 @@
+use std::sync::Arc;
+
 use axum::http::StatusCode;
+use gateway::routes::v1::Service;
+use tokio_util::sync::CancellationToken;
 use wire::gateway::v1::{
     Completion, CompletionChunk, Conversation, Conversations, ErrorResponse, Models,
 };
@@ -10,12 +14,21 @@ use super::support::{Harness, REQUEST, bytes, chunks, json, request};
 #[tokio::test]
 async fn missing_turn_runner_refuses_before_creating_a_conversation() {
     let harness = Harness::new(chunks()).await;
-    let gateway = std::sync::Arc::new(gateway::Gateway::new(
-        std::sync::Arc::new(testkit::FakeMemoryStore::default()),
+    let dir = tempfile::tempdir().expect("scratch directory");
+    let service = Service::open(
+        "test-model".to_owned(),
+        &dir.path().join("conversations"),
+        CancellationToken::new(),
+        std::collections::BTreeMap::new(),
+    )
+    .await
+    .expect("empty roster opens");
+    let gateway = Arc::new(gateway::Gateway::new(
+        Arc::new(testkit::FakeMemoryStore::default()),
         harness.gateway.settings().clone(),
     ));
     let response = request(
-        harness.service.router(&gateway, false),
+        service.router(&gateway, false),
         "POST",
         "/v1/chat/completions",
         REQUEST,
@@ -24,9 +37,19 @@ async fn missing_turn_runner_refuses_before_creating_a_conversation() {
     .await;
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert!(harness.runner.turns.lock().is_empty());
-    let records: Conversations =
-        json(request(harness.app(), "GET", "/api/conversations", "", &[]).await).await;
+    let records: Conversations = json(
+        request(
+            service.router(&gateway, false),
+            "GET",
+            "/api/conversations",
+            "",
+            &[],
+        )
+        .await,
+    )
+    .await;
     assert_eq!(records.conversations, Vec::new());
+    service.shutdown().await;
     harness.close().await;
 }
 
@@ -99,6 +122,8 @@ async fn completion_runs_one_injected_turn_and_persists_it() {
             turn.context.session_id.as_deref(),
             Some(conversation.as_str())
         );
+        assert_eq!(turn.context.agent_id.as_deref(), Some("test-model"));
+        assert_eq!(turn.tool_context.agent_id.as_deref(), Some("test-model"));
         assert_eq!(turn.limits.steps, 1);
         assert!(turn.authorized_tools.is_empty());
         assert_eq!(turn.request.tools, Vec::new());
@@ -161,7 +186,7 @@ async fn streaming_emits_role_deltas_finish_usage_and_done() {
 }
 
 #[tokio::test]
-async fn models_use_the_provider_catalog_and_invalid_requests_are_typed_errors() {
+async fn models_list_configured_agents_and_invalid_requests_are_typed_errors() {
     let harness = Harness::new(chunks()).await;
     let response = request(harness.app(), "GET", "/v1/models", "", &[]).await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -170,7 +195,8 @@ async fn models_use_the_provider_catalog_and_invalid_requests_are_typed_errors()
         panic!("one model")
     };
     assert_eq!(model.id, "test-model");
-    assert_eq!(model.owned_by, "test-provider");
+    assert_eq!(model.created, 0);
+    assert_eq!(model.owned_by, "rivetos");
     for body in [
         "{",
         "[]",

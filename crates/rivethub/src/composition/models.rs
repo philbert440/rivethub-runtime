@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use config::{Config, Environment};
+use gateway::routes::v1::BoundAgent;
 use kernel::agent::TurnRunner;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -49,6 +50,7 @@ pub(super) async fn build(
     let state = config::Paths::new(env)?.state_dir();
     let hooks = hooks(workspace, &state, tasks, cancel).await?;
     let mut bindings = BTreeMap::new();
+    let mut roster = BTreeMap::new();
     let mut selected = None;
     let mut tool_names = BTreeSet::new();
     for (id, agent) in agents {
@@ -59,27 +61,29 @@ pub(super) async fn build(
         let crate::models::ModelBinding {
             provider, model, ..
         } = factory.build(config, provider_id, agent.model.as_deref(), cancel)?;
-        let built = agent_loop::AgentLoop::new(
-            provider_id.clone(),
-            provider.clone(),
-            Vec::new(),
-            hooks.clone(),
-        )?;
+        let built =
+            agent_loop::AgentLoop::new(provider_id.clone(), provider, Vec::new(), hooks.clone())?;
         tool_names.extend(built.tool_names());
         let runner: Arc<dyn TurnRunner> = Arc::new(built);
         if id == default_agent {
-            selected = Some((provider_id.clone(), provider, runner.clone(), model.clone()));
+            selected = Some((Arc::clone(&runner), model.clone()));
         }
+        roster.insert(
+            id.clone(),
+            BoundAgent {
+                runner: Arc::clone(&runner),
+                model: model.clone(),
+            },
+        );
         bindings.insert(id.clone(), AgentBinding { runner, model });
     }
-    let (provider_id, provider, runner, model) =
+    let (runner, model) =
         selected.ok_or_else(|| ComposeError::Invalid("default agent is missing".into()))?;
     let service = gateway::routes::v1::Service::open(
-        provider_id,
-        provider,
         model,
         &state.join("conversations"),
         cancel.child_token(),
+        roster,
     )
     .await?;
     Ok(Some(ModelServices {

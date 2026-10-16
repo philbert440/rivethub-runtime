@@ -73,7 +73,7 @@ impl Provider {
 
 pub async fn turns(client: &reqwest::Client, address: SocketAddr, channel_port: u16) -> TestResult {
     let request = ChatRequest {
-        model: "test".into(),
+        model: "main".into(),
         messages: vec![Message {
             role: Role::User,
             content: Some("hello".into()),
@@ -93,6 +93,7 @@ pub async fn turns(client: &reqwest::Client, address: SocketAddr, channel_port: 
         .error_for_status()?
         .json()
         .await?;
+    assert_eq!(response.model, "main");
     assert_eq!(
         response
             .choices

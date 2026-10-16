@@ -135,6 +135,7 @@ async fn each_cli_provider_starts_gateway_and_replays_chat_and_task_turn() -> Te
             .error_for_status()?
             .json()
             .await?;
+        assert_eq!(reply.model, "main");
         assert_eq!(
             reply
                 .choices
@@ -215,7 +216,7 @@ async fn unavailable_launcher_is_a_named_startup_error() -> TestResult {
 
 fn chat_request() -> ChatRequest {
     ChatRequest {
-        model: "agent-model".into(),
+        model: "main".into(),
         messages: vec![wire::stream::openai::Message {
             role: wire::message::Role::User,
             content: Some("Say hi.".into()),

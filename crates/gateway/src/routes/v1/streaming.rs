@@ -50,6 +50,7 @@ pub(super) fn response(running: Running, include_usage: bool) -> Response {
                 Ok(()) => {}
                 Err(error) => {
                     state.finished = true;
+                    error.record();
                     match Event::default().json_data(error.payload().1) {
                         Ok(event) => state.pending.push_back(event),
                         Err(error) => {

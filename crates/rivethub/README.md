@@ -51,7 +51,7 @@ Under the compatibility-pinned `den` configuration section:
 Mesh requires `enabled`, `node_name`, `advertise_host`, `agent_channel_port`,
 and TLS with a client CA. It writes `mesh.json` beneath the configured shared
 root. Every configured agent receives a bounded mailbox and independent turns.
-The default agent provides `/v1`; all agents use the common audit pipeline.
+Every configured agent is reachable at `/v1` by its id, and the default agent's runner serves the session wait path. All agents use the common audit pipeline.
 Registry heartbeats, listeners, turns and terminal maintenance belong to the
 shutdown tree. SIGTERM/SIGINT cancel and join these services.
 

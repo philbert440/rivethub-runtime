@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use axum::extract::State;
 use axum::extract::rejection::JsonRejection;
 use axum::http::{HeaderMap, HeaderValue};
 use axum::response::{IntoResponse, Response};
@@ -22,6 +21,13 @@ use wire::stream::openai::{self, FinishReason, Usage};
 use super::storage::Lease;
 use super::{Error, Service, conversations, service, streaming};
 
+struct Resolved {
+    runner: Arc<dyn TurnRunner>,
+    configured: String,
+    agent_id: String,
+    max_tokens: Option<u32>,
+}
+
 pub(super) struct Running {
     pub(super) events: mpsc::Receiver<ModelChunk>,
     pub(super) result: oneshot::Receiver<Result<Completion, Error>>,
@@ -32,15 +38,20 @@ pub(super) struct Running {
 }
 
 pub(super) async fn complete(
-    State(gateway): State<Arc<crate::Gateway>>,
     extension: Option<Extension<Arc<Service>>>,
     headers: HeaderMap,
     body: Result<Json<ChatRequest>, JsonRejection>,
 ) -> Result<Response, Error> {
     let service = service(extension)?;
-    let runner = Arc::clone(gateway.turn_runner.as_ref().ok_or(Error::Unavailable)?);
     let request = super::body(body)?;
     let messages = validate(&request)?;
+    let (runner, configured) = service.resolve(&request.model)?;
+    let resolved = Resolved {
+        runner,
+        configured,
+        agent_id: request.model.clone(),
+        max_tokens: request.max_tokens,
+    };
     let streaming = request.stream == Some(true);
     let include_usage = request
         .stream_options
@@ -49,7 +60,7 @@ pub(super) async fn complete(
     let (conversation, lease) = conversation(&service, &headers, &messages).await?;
     let header =
         HeaderValue::from_str(&conversation).map_err(|error| Error::Invalid(error.to_string()))?;
-    let running = start(&service, runner, request, messages, conversation, lease);
+    let running = start(&service, resolved, messages, conversation, lease);
     let mut response = if streaming {
         streaming::response(running, include_usage)
     } else {
@@ -156,23 +167,34 @@ async fn conversation(
 
 fn start(
     service: &Service,
-    runner: Arc<dyn TurnRunner>,
-    request: ChatRequest,
+    resolved: Resolved,
     messages: Vec<Message>,
     conversation: String,
     lease: Lease,
 ) -> Running {
+    let Resolved {
+        runner,
+        configured,
+        agent_id,
+        max_tokens,
+    } = resolved;
     let cancel = service.cancel.child_token();
     let guard = cancel.clone().drop_guard();
     let (sender, events) = mpsc::channel(32);
     let (reply, result) = oneshot::channel();
     let id = format!("chatcmpl-{}", Uuid::new_v4());
     let created = Utc::now().timestamp();
-    let model = request.model.clone();
     let completion_id = id.clone();
     let tasks = service.tasks.clone();
-    let turn = turn(request, messages, conversation, service.limits);
-    let result_model = model.clone();
+    let turn = turn(
+        configured,
+        agent_id.clone(),
+        max_tokens,
+        messages,
+        conversation,
+        service.limits,
+    );
+    let result_model = agent_id.clone();
     tasks.spawn(async move {
         let outcome = runner.run(turn, sender, cancel).await;
         let outcome = match outcome {
@@ -191,32 +213,34 @@ fn start(
         guard,
         id,
         created,
-        model,
+        model: agent_id,
     }
 }
 
 fn turn(
-    request: ChatRequest,
+    model: String,
+    agent_id: String,
+    max_tokens: Option<u32>,
     messages: Vec<Message>,
     conversation: String,
     limits: TurnLimits,
 ) -> Turn {
     Turn {
         request: ModelRequest {
-            model: request.model,
+            model,
             messages,
             tools: Vec::new(),
             thinking: None,
-            max_tokens: request.max_tokens,
+            max_tokens,
         },
         context: HookContextBase {
-            agent_id: None,
+            agent_id: Some(agent_id.clone()),
             session_id: Some(conversation),
             timestamp: Utc::now(),
             metadata: JsonObject::default(),
         },
         tool_context: ToolContext {
-            agent_id: None,
+            agent_id: Some(agent_id),
             working_dir: None,
             session: None,
         },

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,8 +8,9 @@ use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::Request;
 use axum::response::Response;
-use gateway::routes::v1::Service;
+use gateway::routes::v1::{BoundAgent, Service};
 use gateway::{Gateway, Settings};
+use kernel::agent::TurnRunner;
 use kernel::model::{ModelChunk, ModelProvider};
 use serde::de::DeserializeOwned;
 use tempfile::TempDir;
@@ -22,61 +24,28 @@ pub(super) struct Harness {
     pub(super) gateway: Arc<Gateway>,
     pub(super) dir: TempDir,
     pub(super) runner: Arc<super::runner::FakeRunner>,
-    pub(super) provider: Arc<dyn ModelProvider>,
 }
 
 impl Harness {
     pub(super) async fn new(chunks: Vec<ModelChunk>) -> Self {
-        Self::provider(Arc::new(FakeProvider::new(vec![
-            Script::Stream(chunks),
-            Script::Models(vec!["test-model".to_owned()]),
-        ])))
-        .await
+        Self::provider(Arc::new(FakeProvider::new(vec![Script::Stream(chunks)]))).await
     }
 
     pub(super) async fn provider(provider: Arc<dyn ModelProvider>) -> Self {
         let dir = tempfile::tempdir().expect("scratch directory");
-        let runner = Arc::new(super::runner::FakeRunner::new(Arc::clone(&provider)));
-        let service = Service::open(
-            "test-provider".to_owned(),
-            Arc::clone(&provider),
-            "test-model".to_owned(),
-            &dir.path().join("conversations"),
-            CancellationToken::new(),
-        )
-        .await
-        .expect("service opens");
+        let runner = Arc::new(super::runner::FakeRunner::new(provider));
+        let service = open_service(dir.path(), roster(&runner)).await;
+        let cloned = Arc::clone(&runner);
+        let shared: Arc<dyn TurnRunner> = cloned;
         let gateway = Arc::new(
-            Gateway::new(
-                Arc::new(FakeMemoryStore::default()),
-                Settings {
-                    hostname: "example.test".to_owned(),
-                    node: "test-node".to_owned(),
-                    allowed_origins: Vec::new(),
-                    allowed_hosts: Vec::new(),
-                    files_root: None,
-                    static_dir: None,
-                    root_redirect: None,
-                    state_dir: dir.path().join("state"),
-                    directory_root: dir.path().join("agents"),
-                    mesh_file: Some(dir.path().join("mesh.json")),
-                    shared_dir: dir.path().join("shared"),
-                    legacy_mesh_dir: dir.path().join("legacy"),
-                    allowed_harnesses: None,
-                    devices_enabled: false,
-                    probe_timeout: Duration::from_millis(200),
-                    mesh_cache_ttl: Duration::ZERO,
-                    mesh_ca: None,
-                },
-            )
-            .with_turn_runner(runner.clone()),
+            Gateway::new(Arc::new(FakeMemoryStore::default()), settings(dir.path()))
+                .with_turn_runner(shared),
         );
         Self {
             service,
             gateway,
             dir,
             runner,
-            provider,
         }
     }
 
@@ -86,15 +55,7 @@ impl Harness {
 
     pub(super) async fn restart(&mut self) {
         self.service.shutdown().await;
-        self.service = Service::open(
-            "test-provider".to_owned(),
-            Arc::clone(&self.provider),
-            "test-model".to_owned(),
-            &self.dir.path().join("conversations"),
-            CancellationToken::new(),
-        )
-        .await
-        .expect("reopen");
+        self.service = open_service(self.dir.path(), roster(&self.runner)).await;
     }
 
     pub(super) async fn close(self) {
@@ -102,6 +63,56 @@ impl Harness {
             .await
             .expect("service joins");
     }
+}
+
+pub(super) fn settings(root: &std::path::Path) -> Settings {
+    Settings {
+        hostname: "example.test".to_owned(),
+        node: "test-node".to_owned(),
+        allowed_origins: Vec::new(),
+        allowed_hosts: Vec::new(),
+        files_root: None,
+        static_dir: None,
+        root_redirect: None,
+        state_dir: root.join("state"),
+        directory_root: root.join("agents"),
+        mesh_file: Some(root.join("mesh.json")),
+        shared_dir: root.join("shared"),
+        legacy_mesh_dir: root.join("legacy"),
+        allowed_harnesses: None,
+        devices_enabled: false,
+        probe_timeout: Duration::from_millis(200),
+        mesh_cache_ttl: Duration::ZERO,
+        mesh_ca: None,
+    }
+}
+
+fn roster(runner: &Arc<super::runner::FakeRunner>) -> BTreeMap<String, BoundAgent> {
+    let mut roster = BTreeMap::new();
+    let cloned = Arc::clone(runner);
+    let bound: Arc<dyn TurnRunner> = cloned;
+    roster.insert(
+        "test-model".to_owned(),
+        BoundAgent {
+            runner: bound,
+            model: "test-model".to_owned(),
+        },
+    );
+    roster
+}
+
+async fn open_service(
+    root: &std::path::Path,
+    roster: BTreeMap<String, BoundAgent>,
+) -> Arc<Service> {
+    Service::open(
+        "test-model".to_owned(),
+        &root.join("conversations"),
+        CancellationToken::new(),
+        roster,
+    )
+    .await
+    .expect("service opens")
 }
 
 pub(super) fn chunks() -> Vec<ModelChunk> {

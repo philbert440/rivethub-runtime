@@ -81,12 +81,33 @@ impl Error {
             },
         )
     }
+
+    pub(super) fn record(&self) {
+        match self {
+            Self::Provider(_) | Self::Turn(_) => {
+                tracing::error!(error = %self, "agent turn failed");
+            }
+            Self::Invalid(_)
+            | Self::NotFound
+            | Self::Unavailable
+            | Self::Cancelled
+            | Self::Busy
+            | Self::BodyTooLarge
+            | Self::Io(_)
+            | Self::Json(_)
+            | Self::Stream(_)
+            | Self::Task(_)
+            | Self::UsageOverflow => {
+                tracing::debug!(error = %self, "v1 request failed");
+            }
+        }
+    }
 }
 
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
+        self.record();
         let (status, body) = self.payload();
-        tracing::debug!(error = %self, "v1 request failed");
         (status, Json(body)).into_response()
     }
 }

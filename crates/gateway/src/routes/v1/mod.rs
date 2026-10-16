@@ -6,14 +6,14 @@ mod streaming;
 
 pub use error::Error;
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
-use kernel::agent::TurnLimits;
-use kernel::model::ModelProvider;
+use kernel::agent::{TurnLimits, TurnRunner};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use wire::gateway::v1::{Model, Models};
@@ -23,12 +23,20 @@ use crate::error::ApiError;
 
 #[expect(
     missing_debug_implementations,
-    reason = "the provider port does not implement Debug"
+    reason = "the turn runner port does not implement Debug"
+)]
+pub struct BoundAgent {
+    pub runner: Arc<dyn TurnRunner>,
+    pub model: String,
+}
+
+#[expect(
+    missing_debug_implementations,
+    reason = "the turn runner port does not implement Debug"
 )]
 pub struct Service {
-    provider: Arc<dyn ModelProvider>,
-    provider_id: String,
     model: String,
+    roster: BTreeMap<String, BoundAgent>,
     conversations: storage::Store,
     limits: TurnLimits,
     cancel: CancellationToken,
@@ -37,18 +45,16 @@ pub struct Service {
 
 impl Service {
     pub async fn open(
-        provider_id: String,
-        provider: Arc<dyn ModelProvider>,
         model: String,
         directory: &Path,
         cancel: CancellationToken,
+        roster: BTreeMap<String, BoundAgent>,
     ) -> Result<Arc<Self>, Error> {
         let tasks = TaskTracker::new();
         let conversations = storage::Store::open(directory, &tasks, &cancel).await?;
         Ok(Arc::new(Self {
-            provider,
-            provider_id,
             model,
+            roster,
             conversations,
             limits: TurnLimits {
                 steps: 1,
@@ -59,6 +65,24 @@ impl Service {
             cancel,
             tasks,
         }))
+    }
+
+    fn resolve(&self, id: &str) -> Result<(Arc<dyn TurnRunner>, String), Error> {
+        if self.roster.is_empty() {
+            return Err(Error::Unavailable);
+        }
+        let Some(agent) = self.roster.get(id) else {
+            let registered = self
+                .roster
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(",");
+            return Err(Error::Invalid(format!(
+                "Unknown agent: \"{id}\". Registered: [{registered}]"
+            )));
+        };
+        Ok((Arc::clone(&agent.runner), agent.model.clone()))
     }
 
     pub(crate) fn model(&self) -> &str {
@@ -133,19 +157,14 @@ fn service(extension: Option<Extension<Arc<Service>>>) -> Result<Arc<Service>, E
 
 async fn models(extension: Option<Extension<Arc<Service>>>) -> Result<Json<Models>, Error> {
     let service = service(extension)?;
-    let names = tokio::select! {
-        () = service.cancel.cancelled() => return Err(Error::Cancelled),
-        result = tokio::time::timeout(service.limits.timeout, service.provider.list_models()) => {
-            result.map_err(|_| Error::Unavailable)??
-        }
-    };
     Ok(Json(Models {
-        data: names
-            .into_iter()
+        data: service
+            .roster
+            .keys()
             .map(|id| Model {
-                id,
+                id: id.clone(),
                 created: 0,
-                owned_by: service.provider_id.clone(),
+                owned_by: "rivetos".to_owned(),
             })
             .collect(),
     }))
