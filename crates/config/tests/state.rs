@@ -291,3 +291,47 @@ fn stale_and_linked(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(fs::read_to_string(outside)?, "kept");
     Ok(())
 }
+
+#[test]
+fn a_stale_lock_directory_does_not_block_the_move() -> Result<(), Box<dyn std::error::Error>> {
+    let home = temp_home("stale-lock-dir")?;
+    let outcome = stale_lock_directory(&home);
+    fs::remove_dir_all(&home)?;
+    outcome
+}
+
+fn stale_lock_directory(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let legacy = home.join(".rivetos");
+    let lock = legacy.join("pi-capture-state.json.lock");
+    fs::create_dir_all(&lock)?;
+    let stale = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+    fs::File::open(&lock)?.set_modified(stale)?;
+    let moved = config::adopt_legacy_state(&env_for(home)?)?;
+    assert!(
+        moved.is_some(),
+        "a stale proper-lockfile directory is not an owner"
+    );
+    assert!(home.join(".rivethub/pi-capture-state.json.lock").is_dir());
+    Ok(())
+}
+
+#[test]
+fn a_fresh_lock_directory_blocks_the_move() -> Result<(), Box<dyn std::error::Error>> {
+    let home = temp_home("fresh-lock-dir")?;
+    let outcome = fresh_lock_directory(&home);
+    fs::remove_dir_all(&home)?;
+    outcome
+}
+
+fn fresh_lock_directory(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let legacy = home.join(".rivetos");
+    fs::create_dir_all(legacy.join("capture-state.json.lock"))?;
+    let refused = config::adopt_legacy_state(&env_for(home)?);
+    assert!(
+        matches!(refused, Err(config::StateError::Locked { .. })),
+        "{refused:?}"
+    );
+    assert!(legacy.is_dir());
+    assert!(!home.join(".rivethub").exists());
+    Ok(())
+}

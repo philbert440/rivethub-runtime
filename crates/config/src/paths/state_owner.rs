@@ -86,6 +86,9 @@ pub(super) fn check(directory: &Path) -> Result<Vec<(PathBuf, File)>, StateError
         if !matches!(extension, Some("pid" | "lock")) {
             continue;
         }
+        if directory_lock_is_stale(&entry, &path)? {
+            continue;
+        }
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -214,4 +217,32 @@ fn inspect(path: &Path, source: std::io::Error) -> StateError {
         path: path.to_owned(),
         source,
     }
+}
+
+const DIRECTORY_LOCK_STALE: std::time::Duration = std::time::Duration::from_secs(10);
+
+fn directory_lock_is_stale(entry: &std::fs::DirEntry, path: &Path) -> Result<bool, StateError> {
+    let inspect = |source| StateError::Inspect {
+        path: path.to_owned(),
+        source,
+    };
+    let kind = entry.file_type().map_err(inspect)?;
+    if !kind.is_dir() {
+        return Ok(false);
+    }
+    let modified = entry
+        .metadata()
+        .map_err(inspect)?
+        .modified()
+        .map_err(inspect)?;
+    let held = match std::time::SystemTime::now().duration_since(modified) {
+        Ok(age) => age < DIRECTORY_LOCK_STALE,
+        Err(_future) => true,
+    };
+    if held {
+        return Err(StateError::Locked {
+            path: path.to_owned(),
+        });
+    }
+    Ok(true)
 }
