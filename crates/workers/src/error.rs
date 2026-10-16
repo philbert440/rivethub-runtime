@@ -64,6 +64,8 @@ pub enum WorkerError {
     Summary(#[source] SummaryStoreError),
     #[error("{message}")]
     Llm { message: String },
+    #[error("the model provider is unreachable")]
+    ProviderUnreachable,
     #[error("conversation {id} is not in the summary store")]
     ConversationMissing { id: Uuid },
     #[error("a truncated leaf batch cannot shrink further")]

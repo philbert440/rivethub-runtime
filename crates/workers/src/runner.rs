@@ -29,6 +29,8 @@ use crate::categorize::handle_suggest;
 use crate::embed::EmbedSettings;
 use crate::embed::handle_embed;
 use crate::error::WorkerError;
+use crate::outage::Hold;
+use crate::outage::OutageGate;
 use crate::role::ProcessRole;
 use crate::summarize::SummarizeEnv;
 use crate::summarize::SummarySettings;
@@ -102,6 +104,7 @@ pub struct Runner<Q> {
     summary: SummarySettings,
     tags: TagSettings,
     wake: Arc<Notify>,
+    outage: Arc<OutageGate>,
     idle: watch::Sender<bool>,
     cursor: Arc<AtomicUsize>,
     open: Arc<Mutex<Vec<JobId>>>,
@@ -126,6 +129,7 @@ where
             summary: deps.summary,
             tags: deps.tags,
             wake: Arc::new(Notify::new()),
+            outage: Arc::new(OutageGate::new()),
             idle,
             cursor: Arc::new(AtomicUsize::new(0)),
             open: Arc::new(Mutex::new(Vec::new())),
@@ -187,9 +191,24 @@ where
                 return Ok(());
             }
             self.reap(tasks, false).await?;
+            if self.outage.is_down() {
+                self.publish_idle(tasks.is_empty());
+                if !self.outage.wait_until_ready(cancel).await? {
+                    return Ok(());
+                }
+                continue;
+            }
             let Some(permit) = self.acquire(semaphore, cancel).await? else {
                 return Ok(());
             };
+            if self.outage.is_down() {
+                drop(permit);
+                self.publish_idle(tasks.is_empty());
+                if !self.outage.wait_until_ready(cancel).await? {
+                    return Ok(());
+                }
+                continue;
+            }
             let Some(job) = self.claim_one(roles).await? else {
                 drop(permit);
                 self.publish_idle(tasks.is_empty());
@@ -257,9 +276,10 @@ where
         };
         let wake = Arc::clone(&self.wake);
         let open = Arc::clone(&self.open);
+        let gate = Arc::clone(&self.outage);
         let id = job.id;
         tasks.spawn(async move {
-            let result = settle(queue.as_ref(), &env, job, &cancel).await;
+            let result = settle(gate.as_ref(), queue.as_ref(), &env, job, &cancel).await;
             {
                 let mut running = open.lock().await;
                 running.retain(|seen| *seen != id);
@@ -361,7 +381,13 @@ struct JobEnv {
     tags: TagSettings,
 }
 
+struct Attempt<'a> {
+    delay: Duration,
+    hold: Hold<'a>,
+}
+
 async fn settle<Q>(
+    gate: &OutageGate,
     queue: &Q,
     env: &JobEnv,
     job: ClaimedJob,
@@ -370,12 +396,59 @@ async fn settle<Q>(
 where
     Q: JobQueue,
 {
-    let id = job.id;
-    let handled = dispatch(queue, env, &job, cancel).await;
-    match handled {
-        Ok(()) => queue.complete(id).await.map_err(WorkerError::queue),
-        Err(error) => fail_job(queue, id, &error).await,
+    let mut attempt = Attempt {
+        delay: crate::outage::FLOOR,
+        hold: Hold::new(gate),
+    };
+    loop {
+        if cancel.is_cancelled() {
+            return cancelled(queue, job.id, attempt).await;
+        }
+        match dispatch(queue, env, &job, cancel).await {
+            Ok(()) => return finish_ok(queue, job.id, attempt).await,
+            Err(WorkerError::ProviderUnreachable) => {
+                if !pause(&mut attempt, cancel).await {
+                    return cancelled(queue, job.id, attempt).await;
+                }
+            }
+            Err(error) => return finish_err(queue, job.id, attempt, &error).await,
+        }
     }
+}
+
+async fn pause(attempt: &mut Attempt<'_>, cancel: &CancellationToken) -> bool {
+    attempt.hold.enter();
+    let waited = crate::outage::wait(attempt.delay, cancel).await;
+    attempt.delay = crate::outage::next_delay(attempt.delay);
+    waited
+}
+
+async fn finish_ok<Q: JobQueue>(
+    queue: &Q,
+    id: JobId,
+    mut attempt: Attempt<'_>,
+) -> Result<(), WorkerError> {
+    attempt.hold.release(true);
+    queue.complete(id).await.map_err(WorkerError::queue)
+}
+
+async fn finish_err<Q: JobQueue>(
+    queue: &Q,
+    id: JobId,
+    mut attempt: Attempt<'_>,
+    error: &WorkerError,
+) -> Result<(), WorkerError> {
+    attempt.hold.release(true);
+    fail_job(queue, id, error).await
+}
+
+async fn cancelled<Q: JobQueue>(
+    queue: &Q,
+    id: JobId,
+    mut attempt: Attempt<'_>,
+) -> Result<(), WorkerError> {
+    attempt.hold.release(false);
+    fail_job(queue, id, &WorkerError::Cancelled).await
 }
 
 async fn fail_job<Q: JobQueue>(

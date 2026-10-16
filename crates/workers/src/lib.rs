@@ -1,6 +1,7 @@
 mod categorize;
 mod embed;
 mod error;
+mod outage;
 mod role;
 mod runner;
 mod summarize;

@@ -23,9 +23,10 @@ pub const DEAD_REST: TimeDelta = TimeDelta::minutes(60);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SummaryTrigger {
+    Threshold,
     SessionIdle,
-    Stale,
-    Window,
+    SessionStale,
+    Explicit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use kernel::memory::{EmbedTable, EmbedTarget};
-use kernel::model::{ModelProvider, ModelRequest};
+use kernel::model::{ModelProvider, ModelProviderError, ModelRequest};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::wiki::builder::{
     ExtractWiki, WikiBuilderStore, WikiPatch, WikiSummary, WikiWork, extraction_schema,
@@ -139,13 +139,21 @@ async fn extract(env: &WikiBuilderEnv<'_>, user: String) -> Result<Vec<WikiPatch
     let response = tokio::select! {
         biased;
         () = env.cancel.cancelled() => return Err(WorkerError::Cancelled),
-        result = env.provider.chat(request) => result.map_err(WorkerError::WikiModel)?,
+        result = env.provider.chat(request) => result.map_err(wiki_chat_error)?,
     };
     if response.finish_reason == Some(FinishReason::Length) {
         return Err(WorkerError::Truncated);
     }
     let text = response.content.ok_or(WorkerError::EmptySummary)?;
     serde_json::from_str(&text).map_err(WorkerError::WikiJson)
+}
+
+fn wiki_chat_error(error: ModelProviderError) -> WorkerError {
+    if crate::outage::provider_unreachable(&error) {
+        WorkerError::ProviderUnreachable
+    } else {
+        WorkerError::WikiModel(error)
+    }
 }
 
 fn message(role: Role, text: String) -> Message {

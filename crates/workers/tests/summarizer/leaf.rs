@@ -73,7 +73,9 @@ async fn a_full_window_summarizes_once() {
     assert_eq!(job.key.as_deref(), Some(format!("compact-{id}").as_str()));
     assert_eq!(job.key_mode, JobKeyMode::Replace);
     assert_eq!(job.priority, 0);
-    assert_eq!(read_trigger(&job.payload), SummaryTrigger::Window);
+    assert_eq!(read_trigger(&job.payload), SummaryTrigger::SessionIdle);
+    assert_eq!(job.priority, 0);
+    assert_eq!(job.max_attempts, Some(3));
     let outcome = handle_summarize(&env, &job.payload)
         .await
         .expect("summarize");
@@ -120,7 +122,7 @@ async fn small_batches_roll_one_branch_then_the_root_on_the_next_job() {
         at("2026-10-10T12:20:00Z"),
         &token,
     );
-    let first_payload = payload_of(id, SummaryTrigger::Window);
+    let first_payload = payload_of(id, SummaryTrigger::Threshold);
     let first = handle_summarize(&env, &first_payload)
         .await
         .expect("pass 1");
@@ -132,6 +134,7 @@ async fn small_batches_roll_one_branch_then_the_root_on_the_next_job() {
         }
     );
     let second_job = jobs.only().await;
+    assert_eq!(read_trigger(&second_job.payload), SummaryTrigger::Threshold);
     let second = handle_summarize(&env, &second_job.payload)
         .await
         .expect("pass 2");
@@ -186,7 +189,7 @@ async fn a_truncated_leaf_shrinks_the_batch_and_sticks() {
         at("2026-10-10T12:10:00Z"),
         &token,
     );
-    let outcome = handle_summarize(&env, &payload_of(id, SummaryTrigger::Window))
+    let outcome = handle_summarize(&env, &payload_of(id, SummaryTrigger::Threshold))
         .await
         .expect("summarize");
     assert_eq!(
@@ -234,9 +237,9 @@ async fn a_failing_model_fails_the_job_and_skips_heartbeats() {
         at("2026-10-04T12:22:00Z"),
         &token,
     );
-    let error = handle_summarize(&env, &payload_of(id, SummaryTrigger::SessionIdle))
-        .await
-        .expect_err("503");
+    let object = recorded_payload(recorded);
+    assert_eq!(read_trigger(&object), SummaryTrigger::SessionIdle);
+    let error = handle_summarize(&env, &object).await.expect_err("503");
     assert_eq!(error.to_string(), "LLM HTTP 503");
     let job = recorded.tables.jobs.first().expect("job");
     assert_eq!(job.last_error, "LLM HTTP 503");
@@ -255,13 +258,29 @@ async fn a_failing_model_fails_the_job_and_skips_heartbeats() {
         .expect("heartbeat")
         .conversation
         .id;
-    let skipped = handle_summarize(&env, &payload_of(heartbeat, SummaryTrigger::Window))
+    let skipped = handle_summarize(&env, &payload_of(heartbeat, SummaryTrigger::SessionIdle))
         .await
         .expect("heartbeat");
     assert_eq!(skipped.summaries, 0);
     assert_eq!(script.calls.lock().await.len(), 1);
     assert_eq!(store.pending().await.expect("pending").len(), 1);
 
+    assert_backoff(id).await;
+}
+
+fn recorded_payload(recorded: &Scenario) -> wire::JsonObject {
+    let payload = recorded
+        .tables
+        .jobs
+        .first()
+        .expect("job")
+        .payload
+        .clone()
+        .expect("recorded payload");
+    serde_json::from_str(&payload).expect("payload")
+}
+
+async fn assert_backoff(id: Uuid) {
     let queue = Queue::new();
     let queued = queue
         .push(

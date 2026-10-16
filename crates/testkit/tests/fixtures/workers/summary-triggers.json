@@ -1,0 +1,56 @@
+{
+  "accepted": [
+    {
+      "name": "threshold",
+      "payload": {
+        "conversationId": "00000000-0000-4000-8000-0000000000a1",
+        "triggerType": "threshold"
+      }
+    },
+    {
+      "name": "session_idle",
+      "payload": {
+        "conversationId": "00000000-0000-4000-8000-0000000000a1",
+        "triggerType": "session_idle"
+      }
+    },
+    {
+      "name": "session_stale",
+      "payload": {
+        "conversationId": "00000000-0000-4000-8000-0000000000a1",
+        "triggerType": "session_stale"
+      }
+    },
+    {
+      "name": "explicit",
+      "payload": {
+        "conversationId": "00000000-0000-4000-8000-0000000000a1",
+        "triggerType": "explicit"
+      }
+    },
+    {
+      "name": "absent",
+      "payload": {
+        "conversationId": "00000000-0000-4000-8000-0000000000a1"
+      }
+    }
+  ],
+  "rejected": [
+    {
+      "name": "window",
+      "reason": "not a trigger the TypeScript queue writes; serde rejects the old Rust spelling",
+      "payload": {
+        "conversationId": "00000000-0000-4000-8000-0000000000a1",
+        "triggerType": "window"
+      }
+    },
+    {
+      "name": "stale",
+      "reason": "not a trigger the TypeScript queue writes; serde rejects the old Rust spelling",
+      "payload": {
+        "conversationId": "00000000-0000-4000-8000-0000000000a1",
+        "triggerType": "stale"
+      }
+    }
+  ]
+}

@@ -201,6 +201,8 @@ struct JobRow {
     max_attempts: u32,
     state: String,
     last_error: String,
+    #[serde(default)]
+    payload: Option<String>,
 }
 
 #[derive(Debug)]
@@ -390,5 +392,7 @@ mod leaf;
 mod support;
 #[path = "summarizer/sweeps.rs"]
 mod sweeps;
+#[path = "summarizer/triggers.rs"]
+mod triggers;
 
 use support::*;

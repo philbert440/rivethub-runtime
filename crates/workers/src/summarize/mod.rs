@@ -56,6 +56,7 @@ pub async fn handle_summarize(
 ) -> Result<SummarizeOutcome, WorkerError> {
     llm::cancelled(env)?;
     let request = sweep::read_summarize(payload)?;
+    let trigger = sweep::effective_trigger(request.trigger_type);
     let Some(mut window) = env.store.conversation(request.conversation_id).await? else {
         return Err(WorkerError::ConversationMissing {
             id: request.conversation_id,
@@ -72,8 +73,8 @@ pub async fn handle_summarize(
             reenqueued: false,
         });
     }
-    let written = fold_levels(env, &mut window, request.trigger_type).await?;
-    let reenqueued = reenqueue(env, &window, request.trigger_type, written).await?;
+    let written = fold_levels(env, &mut window, trigger).await?;
+    let reenqueued = reenqueue(env, &window, trigger, written).await?;
     if written > 0 {
         tracing::info!(
             "summarized {}: {written} summaries",

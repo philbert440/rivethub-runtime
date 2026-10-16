@@ -18,6 +18,10 @@ use super::settings::DEAD_REST;
 use super::settings::SummaryTrigger;
 use crate::error::WorkerError;
 
+const IDLE_PRIORITY: i16 = 0;
+const STALE_PRIORITY: i16 = 10;
+const SUMMARIZE_ATTEMPTS: i32 = 3;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SummaryHealth {
     pub eligible: u64,
@@ -29,7 +33,14 @@ pub struct SummaryHealth {
 #[serde(rename_all = "camelCase")]
 pub(super) struct SummarizePayload {
     pub(super) conversation_id: Uuid,
-    pub(super) trigger_type: SummaryTrigger,
+    pub(super) trigger_type: Option<SummaryTrigger>,
+}
+
+pub(super) fn effective_trigger(trigger: Option<SummaryTrigger>) -> SummaryTrigger {
+    match trigger {
+        Some(trigger) => trigger,
+        None => SummaryTrigger::Threshold,
+    }
 }
 
 pub(super) fn read_summarize(payload: &JsonObject) -> Result<SummarizePayload, WorkerError> {
@@ -95,7 +106,7 @@ pub async fn handle_enqueue_stale(env: &SummarizeEnv<'_>) -> Result<u64, WorkerE
     let mut enqueued = 0u64;
     for window in windows {
         if stale_due(&window, env)? {
-            enqueue(env, window.conversation.id, SummaryTrigger::Stale).await?;
+            enqueue(env, window.conversation.id, SummaryTrigger::SessionStale).await?;
             enqueued = enqueued.checked_add(1).ok_or(WorkerError::Count)?;
         }
     }
@@ -147,15 +158,15 @@ pub(super) fn partial_allowed(
     if count == 0 || count >= batch {
         return false;
     }
-    let Some(age) = message_age(window.latest_message_at, env.now) else {
-        return false;
-    };
     match trigger {
-        SummaryTrigger::Window => false,
+        SummaryTrigger::Threshold => false,
+        SummaryTrigger::Explicit => true,
         SummaryTrigger::SessionIdle => {
-            age >= env.settings.idle && count >= env.settings.idle_floor()
+            aged(window, env.now, env.settings.idle) && count >= env.settings.idle_floor()
         }
-        SummaryTrigger::Stale => age >= env.settings.stale && count >= env.settings.stale_min_batch,
+        SummaryTrigger::SessionStale => {
+            aged(window, env.now, env.settings.stale) && count >= env.settings.stale_min_batch
+        }
     }
 }
 
@@ -164,16 +175,10 @@ fn idle_trigger(
     env: &SummarizeEnv<'_>,
 ) -> Result<Option<SummaryTrigger>, WorkerError> {
     let count = count_of(window.messages.len())?;
-    if count >= env.settings.leaf_batch {
-        return Ok(Some(SummaryTrigger::Window));
-    }
-    if partial_allowed(
-        SummaryTrigger::SessionIdle,
-        window,
-        count,
-        env.settings.leaf_batch,
-        env,
-    ) {
+    let batch = env.settings.leaf_batch;
+    let full = count >= batch;
+    let partial = partial_allowed(SummaryTrigger::SessionIdle, window, count, batch, env);
+    if full || partial {
         Ok(Some(SummaryTrigger::SessionIdle))
     } else {
         Ok(None)
@@ -210,17 +215,33 @@ fn summarize_job(
 ) -> Result<Job, WorkerError> {
     let payload = SummarizePayload {
         conversation_id: id,
-        trigger_type: trigger,
+        trigger_type: Some(trigger),
     };
     Ok(Job {
         name: JobName::Fixed(FixedJob::SummarizeConversation),
         payload: JsonObject::from_serialize(&payload).map_err(WorkerError::summary_payload)?,
         key: Some(format!("compact-{id}")),
         key_mode: JobKeyMode::Replace,
-        priority: 0,
+        priority: priority_of(trigger),
         run_at: Some(now),
-        max_attempts: None,
+        max_attempts: Some(SUMMARIZE_ATTEMPTS),
     })
+}
+
+fn priority_of(trigger: SummaryTrigger) -> i16 {
+    match trigger {
+        SummaryTrigger::SessionStale => STALE_PRIORITY,
+        SummaryTrigger::Threshold | SummaryTrigger::SessionIdle | SummaryTrigger::Explicit => {
+            IDLE_PRIORITY
+        }
+    }
+}
+
+fn aged(window: &ConversationWindow, now: DateTime<Utc>, minimum: TimeDelta) -> bool {
+    match message_age(window.latest_message_at, now) {
+        Some(age) => age >= minimum,
+        None => false,
+    }
 }
 
 fn message_age(latest: Option<DateTime<Utc>>, now: DateTime<Utc>) -> Option<TimeDelta> {

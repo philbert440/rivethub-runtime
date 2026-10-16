@@ -24,7 +24,7 @@ async fn a_permanent_status_still_retries_until_the_rest_revives_it() {
     ]));
     let settings = settings();
     let token = cancel();
-    let payload = payload_of(row.conversation_id, SummaryTrigger::Window);
+    let payload = payload_of(row.conversation_id, SummaryTrigger::Threshold);
     for _ in 0..3 {
         let env = bind(
             &store,
@@ -135,6 +135,8 @@ async fn idle_and_stale_floors_follow_the_recording() {
     assert_eq!(handle_enqueue_idle(&idle).await.expect("idle"), 1);
     let job = jobs.only().await;
     assert_eq!(read_trigger(&job.payload), SummaryTrigger::SessionIdle);
+    assert_eq!(job.priority, 0);
+    assert_eq!(job.max_attempts, Some(3));
     let outcome = handle_summarize(&idle, &job.payload)
         .await
         .expect("idle summarize");
@@ -150,7 +152,10 @@ async fn idle_and_stale_floors_follow_the_recording() {
     assert_eq!(handle_enqueue_idle(&stale).await.expect("later idle"), 0);
     assert_eq!(handle_enqueue_stale(&stale).await.expect("stale"), 1);
     let job = jobs.only().await;
-    assert_eq!(read_trigger(&job.payload), SummaryTrigger::Stale);
+    assert_eq!(read_trigger(&job.payload), SummaryTrigger::SessionStale);
+    assert_eq!(job.priority, 10);
+    assert_eq!(job.max_attempts, Some(3));
+    assert_eq!(job.key_mode, JobKeyMode::Replace);
     let outcome = handle_summarize(&stale, &job.payload)
         .await
         .expect("stale summarize");
@@ -208,7 +213,7 @@ async fn a_leaf_enqueues_suggest_tags_when_tagging_is_on() {
         at("2026-10-10T12:10:00Z"),
         &token,
     );
-    let outcome = handle_summarize(&env, &payload_of(id, SummaryTrigger::Window))
+    let outcome = handle_summarize(&env, &payload_of(id, SummaryTrigger::Threshold))
         .await
         .expect("summarize");
     assert_eq!(outcome.summaries, 1);

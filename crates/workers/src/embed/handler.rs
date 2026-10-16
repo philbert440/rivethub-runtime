@@ -176,7 +176,11 @@ fn chunk_rows(
 }
 
 fn embed_error(error: &ModelProviderError) -> WorkerError {
-    WorkerError::Embed(error.to_string())
+    if crate::outage::provider_unreachable(error) {
+        WorkerError::ProviderUnreachable
+    } else {
+        WorkerError::Embed(error.to_string())
+    }
 }
 
 fn cancelled(cancel: &CancellationToken) -> Result<(), WorkerError> {
