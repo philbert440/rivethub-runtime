@@ -9,20 +9,21 @@ use wire::gateway::sessions::SessionPostReply;
 use wire::gateway::sessions::SessionPostRequest;
 
 use crate::error::Error;
+use crate::identity::MeshIdentity;
 use crate::redirect::redirect_action;
 
 #[derive(Clone)]
 pub struct GatewayClient {
     http: reqwest::Client,
     base: Url,
-    token: Option<String>,
+    mesh: bool,
 }
 
 #[cfg_attr(
     dylint_lib = "rr_lints",
     expect(
         manualderive,
-        reason = "Debug names the base url and whether a token is set; it must not print the token"
+        reason = "Debug names the base url and whether mesh identity is set; it must not print the client key"
     )
 )]
 impl std::fmt::Debug for GatewayClient {
@@ -30,21 +31,41 @@ impl std::fmt::Debug for GatewayClient {
         formatter
             .debug_struct("GatewayClient")
             .field("base", &self.base)
-            .field("has_token", &self.token.is_some())
+            .field("mesh", &self.mesh)
             .finish_non_exhaustive()
     }
 }
 
 impl GatewayClient {
-    pub fn new(base: Url, token: Option<String>) -> Result<Self, Error> {
+    pub fn new(base: Url) -> Result<Self, Error> {
+        Self::open(base, None)
+    }
+
+    pub fn with_mesh(base: Url, identity: &MeshIdentity) -> Result<Self, Error> {
+        Self::open(base, Some(identity))
+    }
+
+    fn open(base: Url, identity: Option<&MeshIdentity>) -> Result<Self, Error> {
         if base.host_str().is_none() {
             return Err(Error::BaseUrl);
         }
-        let http = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::custom(redirect_action))
+        let mut builder =
+            reqwest::Client::builder().redirect(reqwest::redirect::Policy::custom(redirect_action));
+        if let Some(identity) = identity {
+            builder = builder
+                .https_only(true)
+                .no_proxy()
+                .tls_certs_only(identity.trust())
+                .identity(identity.client());
+        }
+        let http = builder
             .build()
             .map_err(|source| Error::Http(Box::new(source)))?;
-        Ok(Self { http, base, token })
+        Ok(Self {
+            http,
+            base,
+            mesh: identity.is_some(),
+        })
     }
 
     pub async fn healthz(&self) -> Result<HealthzResponse, Error> {
@@ -128,9 +149,6 @@ impl GatewayClient {
         timeout: Option<Duration>,
         cancel: &CancellationToken,
     ) -> Result<reqwest::Response, Error> {
-        if let Some(token) = &self.token {
-            request = request.bearer_auth(token);
-        }
         if let Some(limit) = timeout {
             request = request.timeout(limit);
         }
@@ -139,7 +157,9 @@ impl GatewayClient {
             .map_err(|source| Error::Http(Box::new(source)))?;
         tokio::select! {
             () = cancel.cancelled() => Err(Error::Cancelled),
-            result = self.http.execute(built) => result.map_err(classify_transport),
+            result = self.http.execute(built) => {
+                result.map_err(|source| classify_transport(self.mesh, source))
+            }
         }
     }
 }
@@ -156,11 +176,13 @@ pub(crate) fn check_segment(segment: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn classify_transport(source: reqwest::Error) -> Error {
+fn classify_transport(mesh: bool, source: reqwest::Error) -> Error {
     if source.is_timeout() {
         Error::Timeout
     } else if source.is_redirect() {
         Error::Redirect(Box::new(source))
+    } else if mesh {
+        Error::MeshPeer(Box::new(source))
     } else {
         Error::Http(Box::new(source))
     }

@@ -8,6 +8,16 @@
 )]
 mod common;
 
+#[expect(
+    dead_code,
+    reason = "each test binary includes the certificate mint and uses a different subset"
+)]
+#[expect(
+    clippy::expect_used,
+    reason = "certificate minting failure is a broken fixture"
+)]
+mod mesh_support;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -259,7 +269,7 @@ async fn a_remote_job_is_left_for_the_other_node() {
         &["worker"],
         MeshNodeStatus::Online,
     ));
-    directory.set_mesh_secret(Some("mesh-secret".to_string()));
+    directory.set_mesh_identity(Some(mesh_support::sample()));
     let (engine, memory) =
         engine_with(directory, settings(None, std::collections::BTreeMap::new()));
     let mut created = request("ship it");
@@ -502,7 +512,7 @@ async fn the_api_token_refuses_a_missing_or_empty_secret() {
 #[tokio::test]
 async fn a_followed_redirect_reaches_the_health_document() {
     let (stub, hits) = common::redirect_stub(RedirectKind::OneHop).await;
-    let client = tasks::GatewayClient::new(common::base_url(stub.addr), None).expect("client");
+    let client = tasks::GatewayClient::new(common::base_url(stub.addr)).expect("client");
     let health = client.healthz().await.expect("health");
     assert!(health.ok);
     assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
@@ -512,7 +522,7 @@ async fn a_followed_redirect_reaches_the_health_document() {
 #[tokio::test]
 async fn two_hops_on_the_same_host_are_followed() {
     let (stub, _) = common::redirect_stub(RedirectKind::TwoHop).await;
-    let client = tasks::GatewayClient::new(common::base_url(stub.addr), None).expect("client");
+    let client = tasks::GatewayClient::new(common::base_url(stub.addr)).expect("client");
     assert!(client.healthz().await.expect("health").ok);
     stub.close().await.expect("stub shuts down");
 }
@@ -520,7 +530,7 @@ async fn two_hops_on_the_same_host_are_followed() {
 #[tokio::test]
 async fn the_sixth_hop_is_refused() {
     let (stub, hits) = common::redirect_stub(RedirectKind::SixHop).await;
-    let client = tasks::GatewayClient::new(common::base_url(stub.addr), None).expect("client");
+    let client = tasks::GatewayClient::new(common::base_url(stub.addr)).expect("client");
     let error = tokio::time::timeout(deadline(), client.healthz())
         .await
         .expect("deadline")
@@ -533,7 +543,7 @@ async fn the_sixth_hop_is_refused() {
 #[tokio::test]
 async fn a_cross_host_redirect_does_not_connect() {
     let (stub, hits) = common::redirect_stub(RedirectKind::CrossHost).await;
-    let client = tasks::GatewayClient::new(common::base_url(stub.addr), None).expect("client");
+    let client = tasks::GatewayClient::new(common::base_url(stub.addr)).expect("client");
     let error = client.healthz().await.expect_err("refused");
     assert!(matches!(error, Error::Redirect(_)));
     assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);

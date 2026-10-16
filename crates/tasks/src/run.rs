@@ -125,7 +125,10 @@ where
         let mut target = self.directory.resolve(&target_input(task))?;
         apply_spec(&mut target, &task.spec)?;
         drop(self.working_dir(&target).await?);
-        let client = GatewayClient::new(target.base.clone(), target.bearer.clone())?;
+        let client = match target.mesh.as_ref() {
+            Some(identity) => GatewayClient::with_mesh(target.base.clone(), identity)?,
+            None => GatewayClient::new(target.base.clone())?,
+        };
         client.healthz_at(cancel).await?;
         check_segment(&task.spec.session)?;
         let body = SessionPostRequest {

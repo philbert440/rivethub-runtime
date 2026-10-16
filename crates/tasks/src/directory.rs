@@ -11,6 +11,7 @@ use wire::task::TaskExecutorKind;
 use wire::task::TaskSpec;
 
 use crate::error::Error;
+use crate::identity::MeshIdentity;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalAgent {
@@ -29,7 +30,7 @@ pub struct Directory {
     local_agents: BTreeMap<String, LocalAgent>,
     presets: BTreeMap<String, AgentPreset>,
     nodes: BTreeMap<String, MeshNode>,
-    mesh_secret: Option<String>,
+    mesh: Option<MeshIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,7 +53,7 @@ pub struct ResolvedTarget {
     pub executor: TaskExecutorKind,
     pub node: String,
     pub base: Url,
-    pub bearer: Option<String>,
+    pub mesh: Option<MeshIdentity>,
     pub harness: Option<HarnessId>,
     pub model: Option<String>,
     pub effort: Option<Effort>,
@@ -73,7 +74,7 @@ impl Directory {
             local_agents: BTreeMap::new(),
             presets: BTreeMap::new(),
             nodes: BTreeMap::new(),
-            mesh_secret: None,
+            mesh: None,
         })
     }
 
@@ -89,17 +90,17 @@ impl Directory {
         self.nodes.insert(node.id.clone(), node);
     }
 
-    pub fn set_mesh_secret(&mut self, secret: Option<String>) {
-        self.mesh_secret = secret;
+    pub fn set_mesh_identity(&mut self, identity: Option<MeshIdentity>) {
+        self.mesh = identity;
     }
 
     pub fn prepare(&self, input: &TargetInput) -> Result<Prepared, Error> {
         let node = self.target_node(input)?;
         let remote = node != self.local_node;
         if remote {
-            let mesh = self.roster(&node, &input.agent_id)?;
-            let base = mesh_base(mesh, self.preset_base(&input.agent_id))?;
-            drop(mesh_bearer_for(&base, self.mesh_secret.as_deref())?);
+            let roster = self.roster(&node, &input.agent_id)?;
+            let base = mesh_base(roster, self.preset_base(&input.agent_id))?;
+            drop(mesh_transport(&base, self.mesh.as_ref())?);
         } else {
             drop(self.resolve(input)?);
         }
@@ -187,18 +188,18 @@ impl Directory {
             input,
             node,
             base: self.gateway.clone(),
-            bearer: None,
+            mesh: None,
             remote: false,
             fields,
         }))
     }
 
     fn resolve_mesh(&self, input: &TargetInput, node: &str) -> Result<ResolvedTarget, Error> {
-        let mesh = self.roster(node, &input.agent_id)?;
+        let roster = self.roster(node, &input.agent_id)?;
         let preset = self.presets.get(&input.agent_id);
         let local = self.local_agents.get(&input.agent_id);
         let base_override = preset.and_then(|item| item.node_base_url.as_deref());
-        let base = mesh_base(mesh, base_override)?;
+        let base = mesh_base(roster, base_override)?;
         let fields = if let Some(preset) = preset {
             fields_from_preset(preset)?
         } else if let Some(agent) = local {
@@ -206,12 +207,12 @@ impl Directory {
         } else {
             AgentFields::default()
         };
-        let bearer = mesh_bearer_for(&base, self.mesh_secret.as_deref())?;
+        let transport = mesh_transport(&base, self.mesh.as_ref())?;
         Ok(resolved(ResolvedParts {
             input,
             node,
             base,
-            bearer,
+            mesh: transport,
             remote: true,
             fields,
         }))
@@ -246,7 +247,7 @@ struct ResolvedParts<'a> {
     input: &'a TargetInput,
     node: &'a str,
     base: Url,
-    bearer: Option<String>,
+    mesh: Option<MeshIdentity>,
     remote: bool,
     fields: AgentFields,
 }
@@ -256,7 +257,7 @@ fn resolved(parts: ResolvedParts<'_>) -> ResolvedTarget {
         executor: parts.input.executor,
         node: parts.node.to_string(),
         base: parts.base,
-        bearer: parts.bearer,
+        mesh: parts.mesh,
         harness: parts.fields.harness,
         model: parts.fields.model,
         effort: parts.fields.effort,
@@ -365,17 +366,17 @@ fn mesh_base(node: &MeshNode, preset_base: Option<&str>) -> Result<Url, Error> {
     Ok(url)
 }
 
-fn mesh_bearer_for(base: &Url, secret: Option<&str>) -> Result<Option<String>, Error> {
+fn mesh_transport(
+    base: &Url,
+    identity: Option<&MeshIdentity>,
+) -> Result<Option<MeshIdentity>, Error> {
     if base.scheme() == "http" {
         return Ok(None);
     }
     if base.scheme() != "https" {
         return Err(Error::MeshAddress);
     }
-    match secret {
-        Some(secret) if !secret.is_empty() => Ok(Some(secret.to_string())),
-        Some(_) | None => Err(Error::MeshUnauthorized),
-    }
+    Ok(Some(identity.cloned().ok_or(Error::MeshTlsRequired)?))
 }
 
 fn parse_base(base: &str) -> Result<Url, Error> {

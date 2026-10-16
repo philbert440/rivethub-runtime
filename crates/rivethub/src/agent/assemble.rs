@@ -101,7 +101,7 @@ pub(super) struct Plan {
     pub allowed: Option<Vec<wire::harness::HarnessId>>,
     pricing: BTreeMap<String, tasks::TokenRate>,
     pub api_token: Option<String>,
-    pub mesh_secret: Option<String>,
+    pub mesh_identity: Option<tasks::MeshIdentity>,
     pub mesh: bool,
     state_dir: PathBuf,
 }
@@ -110,7 +110,7 @@ pub(super) struct Plan {
     dylint_lib = "rr_lints",
     expect(
         manualderive,
-        reason = "Debug omits the postgres url, gateway token, and mesh secret"
+        reason = "Debug omits the postgres url, gateway token, and mesh client key"
     )
 )]
 impl std::fmt::Debug for Plan {
@@ -125,7 +125,7 @@ impl std::fmt::Debug for Plan {
             .field("pricing_models", &self.pricing.len())
             .field("has_postgres_url", &!self.postgres.is_empty())
             .field("has_api_token", &self.api_token.is_some())
-            .field("has_mesh_secret", &self.mesh_secret.is_some())
+            .field("has_mesh_identity", &self.mesh_identity.is_some())
             .field("mesh", &self.mesh)
             .field("state_dir", &self.state_dir)
             .finish()
@@ -193,14 +193,15 @@ pub(super) fn plan(config: &Config, env: &Environment) -> Result<Plan, AgentErro
         allowed: settings.allowed_harnesses,
         pricing: pricing(config)?,
         api_token: api_token(config)?,
-        mesh_secret: mesh_secret(config),
+        mesh_identity: None,
         mesh: mesh_enabled(config),
         state_dir: settings.state_dir,
     })
 }
 
 pub(super) async fn connect(config: &Config, env: &Environment) -> Result<Connected, AgentError> {
-    let plan = plan(config, env)?;
+    let mut plan = plan(config, env)?;
+    plan.mesh_identity = load_mesh_identity(config).await?;
     let presets = load_presets(plan.state_dir.clone()).await?;
     let nodes = load_nodes(config, env).await?;
     let roster = Arc::new(Roster {
@@ -294,11 +295,59 @@ fn mesh_enabled(config: &Config) -> bool {
         .is_some_and(|mesh| mesh.enabled == Some(true))
 }
 
-fn mesh_secret(config: &Config) -> Option<String> {
-    if mesh_enabled(config) {
-        config.mesh.as_ref().and_then(|mesh| mesh.secret.clone())
-    } else {
-        None
+struct MeshTlsFiles {
+    cert: PathBuf,
+    key: PathBuf,
+    ca: PathBuf,
+}
+
+fn mesh_tls_files(config: &Config) -> Result<Option<MeshTlsFiles>, AgentError> {
+    let Some(mesh) = config.mesh.as_ref() else {
+        return Ok(None);
+    };
+    if mesh.enabled != Some(true) {
+        return Ok(None);
+    }
+    match &mesh.tls {
+        config::model::MeshTls::Enabled(true) => Ok(Some(gateway_mesh_files(config)?)),
+        config::model::MeshTls::Enabled(false) => Err(tasks::Error::MeshTlsRequired.into()),
+        config::model::MeshTls::Paths(paths) => Ok(Some(explicit_mesh_files(paths)?)),
+    }
+}
+
+fn gateway_mesh_files(config: &Config) -> Result<MeshTlsFiles, AgentError> {
+    let source = BindSource::from_config(config);
+    Ok(MeshTlsFiles {
+        cert: require_path(source.tls_cert)?,
+        key: require_path(source.tls_key)?,
+        ca: require_path(source.tls_ca)?,
+    })
+}
+
+fn explicit_mesh_files(paths: &config::model::MeshTlsPaths) -> Result<MeshTlsFiles, AgentError> {
+    Ok(MeshTlsFiles {
+        cert: require_path(paths.cert_path.clone())?,
+        key: require_path(paths.key_path.clone())?,
+        ca: require_path(paths.ca_path.clone())?,
+    })
+}
+
+fn require_path(path: Option<PathBuf>) -> Result<PathBuf, AgentError> {
+    path.filter(|item| !item.as_os_str().is_empty())
+        .ok_or_else(|| tasks::Error::MeshTlsRequired.into())
+}
+
+async fn load_mesh_identity(config: &Config) -> Result<Option<tasks::MeshIdentity>, AgentError> {
+    let Some(files) = mesh_tls_files(config)? else {
+        return Ok(None);
+    };
+    match tokio::task::spawn_blocking(move || {
+        tasks::MeshIdentity::from_files(&files.cert, &files.key, &files.ca)
+    })
+    .await
+    {
+        Ok(result) => Ok(Some(result?)),
+        Err(error) => Err(AgentError::Join(error)),
     }
 }
 

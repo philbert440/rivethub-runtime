@@ -424,7 +424,7 @@ fn classify(error: Error) -> DelegationError {
         | Error::AmbiguousTarget { .. }
         | Error::MeshUnavailable { .. }
         | Error::MeshAgent { .. }
-        | Error::MeshUnauthorized
+        | Error::MeshTlsRequired
         | Error::MeshAddress
         | Error::HarnessRequired
         | Error::PathEscape
@@ -456,6 +456,9 @@ fn classify(error: Error) -> DelegationError {
         | Error::Rejected { .. }
         | Error::Response
         | Error::Http(_)
+        | Error::MeshTls(_)
+        | Error::MeshTlsIo(_)
+        | Error::MeshPeer(_)
         | Error::Timeout
         | Error::Clock
         | Error::Catalog(_)) => DelegationError::Failed(Box::new(failed)),

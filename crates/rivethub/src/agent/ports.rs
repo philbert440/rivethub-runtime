@@ -49,7 +49,7 @@ impl Roster {
         for node in &self.nodes {
             directory.mesh_node(node.clone());
         }
-        directory.set_mesh_secret(plan.mesh_secret.clone());
+        directory.set_mesh_identity(plan.mesh_identity.clone());
         Ok(directory)
     }
 

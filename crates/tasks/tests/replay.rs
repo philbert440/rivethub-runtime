@@ -172,7 +172,7 @@ async fn replay_gateway_health_and_session_documents() {
 )]
 async fn replay_exchange(exchange: &Exchange) {
     let stub = recorded_stub(exchange).await;
-    let client = GatewayClient::new(common::base_url(stub.addr), None).expect("client");
+    let client = GatewayClient::new(common::base_url(stub.addr)).expect("client");
     let bytes = exchange.body.as_bytes();
     if exchange.status < 400 && exchange.target == "/healthz" {
         let expected: HealthzResponse = serde_json::from_slice(bytes).expect("health document");

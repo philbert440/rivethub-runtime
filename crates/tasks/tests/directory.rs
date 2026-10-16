@@ -8,6 +8,16 @@
 )]
 mod common;
 
+#[expect(
+    dead_code,
+    reason = "each test binary includes the certificate mint and uses a different subset"
+)]
+#[expect(
+    clippy::expect_used,
+    reason = "certificate minting failure is a broken fixture"
+)]
+mod mesh_support;
+
 use chrono::DateTime;
 use chrono::Utc;
 use common::node;
@@ -69,7 +79,7 @@ fn fresh() -> Directory {
 
 fn mesh(directory: &mut Directory, id: &str, host: &str, status: MeshNodeStatus) {
     directory.mesh_node(node(id, host, 9, &["worker"], status));
-    directory.set_mesh_secret(Some("mesh-secret".to_string()));
+    directory.set_mesh_identity(Some(mesh_support::sample()));
 }
 
 #[test]
@@ -90,7 +100,7 @@ fn a_local_agent_stays_on_this_node() {
     let resolved = directory
         .resolve(&input(TaskExecutorKind::ChatLoop, "worker"))
         .expect("resolve");
-    assert!(resolved.bearer.is_none());
+    assert!(resolved.mesh.is_none());
     assert!(!resolved.remote);
 }
 
@@ -116,7 +126,7 @@ fn a_preset_on_another_node_is_a_remote_job() {
     let resolved = directory
         .resolve(&input(TaskExecutorKind::ChatLoop, "worker"))
         .expect("resolve");
-    assert_eq!(resolved.bearer.as_deref(), Some("mesh-secret"));
+    assert_eq!(resolved.mesh, Some(mesh_support::sample()));
     assert_eq!(resolved.base.as_str(), "https://203.0.113.9:9/");
     assert_eq!(resolved.effort, Some(Effort::Low));
     assert_eq!(resolved.system_prompt.as_deref(), Some("be brief"));
@@ -167,7 +177,6 @@ fn an_offline_or_unlisted_mesh_agent_is_refused() {
         &["other"],
         MeshNodeStatus::Degraded,
     ));
-    directory.set_mesh_secret(Some("mesh-secret".to_string()));
     assert!(matches!(
         directory
             .prepare(&input(TaskExecutorKind::ChatLoop, "worker"))
@@ -183,7 +192,6 @@ fn an_offline_or_unlisted_mesh_agent_is_refused() {
         &["other"],
         MeshNodeStatus::Online,
     ));
-    directory.set_mesh_secret(Some("mesh-secret".to_string()));
     assert!(matches!(
         directory
             .prepare(&input(TaskExecutorKind::ChatLoop, "worker"))
@@ -226,7 +234,7 @@ fn an_explicit_node_wins_over_the_preset_node() {
 }
 
 #[test]
-fn an_empty_mesh_secret_is_refused() {
+fn https_without_a_mesh_identity_is_refused() {
     let mut directory = fresh();
     directory.preset(preset("worker", Some("edge"), "low", None));
     directory.mesh_node(node(
@@ -236,12 +244,11 @@ fn an_empty_mesh_secret_is_refused() {
         &["worker"],
         MeshNodeStatus::Online,
     ));
-    directory.set_mesh_secret(Some(String::new()));
     assert!(matches!(
         directory
             .prepare(&input(TaskExecutorKind::ChatLoop, "worker"))
-            .expect_err("secret"),
-        Error::MeshUnauthorized
+            .expect_err("identity"),
+        Error::MeshTlsRequired
     ));
 }
 
@@ -304,12 +311,12 @@ fn a_mesh_executor_needs_a_node_and_a_local_node_stays_a_local_job() {
     let prepared = directory.prepare(&mesh_input).expect("prepare");
     assert_eq!(prepared.job_name, JobName::Fixed(FixedJob::RunTask));
     let resolved = directory.resolve(&mesh_input).expect("resolve");
-    assert_eq!(resolved.bearer.as_deref(), Some("mesh-secret"));
+    assert_eq!(resolved.mesh, Some(mesh_support::sample()));
     assert_eq!(resolved.base.as_str(), "https://127.0.0.1:9/");
 }
 
 #[test]
-fn an_http_preset_base_does_not_receive_the_mesh_secret() {
+fn an_http_preset_base_stays_anonymous() {
     let mut directory = fresh();
     directory.preset(preset(
         "worker",
@@ -327,13 +334,13 @@ fn an_http_preset_base_does_not_receive_the_mesh_secret() {
     let resolved = directory
         .resolve(&input(TaskExecutorKind::ChatLoop, "worker"))
         .expect("http base");
-    assert_eq!(resolved.bearer, None);
+    assert_eq!(resolved.mesh, None);
     assert_eq!(resolved.base.as_str(), "http://203.0.113.9:9/");
-    directory.set_mesh_secret(Some("mesh-secret".to_string()));
+    directory.set_mesh_identity(Some(mesh_support::sample()));
     let resolved = directory
         .resolve(&input(TaskExecutorKind::ChatLoop, "worker"))
-        .expect("http base with secret");
-    assert_eq!(resolved.bearer, None);
+        .expect("http base with identity");
+    assert_eq!(resolved.mesh, None);
 }
 
 #[test]

@@ -141,7 +141,6 @@ fn host(directory: &mut Directory, id: &str, agents: &[&str], seen: i64, status:
     let mut node = common::node(id, "203.0.113.9", 9, agents, status);
     node.last_seen = DateTime::<Utc>::from_timestamp_millis(seen).expect("seen");
     directory.mesh_node(node);
-    directory.set_mesh_secret(Some("mesh-secret".to_owned()));
 }
 
 fn request(target: &str, timeout: Duration) -> DelegateRequest {

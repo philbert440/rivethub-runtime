@@ -67,8 +67,14 @@ pub enum Error {
     MeshUnavailable { node: String },
     #[error("agent {agent} is not on mesh node {node}")]
     MeshAgent { node: String, agent: String },
-    #[error("mesh secret is not configured")]
-    MeshUnauthorized,
+    #[error("mesh client certificate is not configured")]
+    MeshTlsRequired,
+    #[error(transparent)]
+    MeshTls(MeshMaterialError),
+    #[error("mesh tls material is unreadable")]
+    MeshTlsIo(#[source] std::io::Error),
+    #[error("mesh peer authentication failed")]
+    MeshPeer(#[source] Box<reqwest::Error>),
     #[error("mesh address is invalid")]
     MeshAddress,
     #[error("harness is required to open a harness session")]
@@ -126,6 +132,14 @@ pub enum Error {
     },
     #[error("timeout is out of range")]
     TimeoutRange,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum MeshMaterialError {
+    #[error("mesh tls material is empty")]
+    Empty,
+    #[error("mesh tls material is invalid")]
+    Invalid(#[source] Box<reqwest::Error>),
 }
 
 impl From<kernel::queue::JobQueueError> for Error {
