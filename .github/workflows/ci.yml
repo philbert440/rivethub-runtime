@@ -56,6 +56,28 @@ jobs:
           args: --no-wip
           commits: "origin/${{ github.base_ref }}..HEAD"
 
+  macos:
+    name: macOS (rh build, cli tests)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Postgres with pgvector
+        run: |
+          brew install postgresql@17 pgvector
+          echo "$(brew --prefix postgresql@17)/bin" >> "$GITHUB_PATH"
+          brew services start postgresql@17
+          for _ in $(seq 1 30); do "$(brew --prefix postgresql@17)/bin/pg_isready" -h 127.0.0.1 && break; sleep 1; done
+          echo "DATABASE_URL=postgres://$(whoami)@127.0.0.1:5432/postgres" >> "$GITHUB_ENV"
+      - name: Build rh
+        run: cargo build --release --locked -p rivethub --bin rh
+      - name: cli tests
+        run: cargo nextest run --locked -p cli --all-features
+
   rust:
     name: Tests (coverage) and build
     runs-on: ubuntu-latest

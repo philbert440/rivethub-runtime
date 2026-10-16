@@ -12,6 +12,11 @@ configured service root (`gateway`, `agent` when Postgres memory would start, ea
 restarts an unexpected exit with backoff, and forwards SIGTERM. Deployments previously invoking bare `rh` to launch the gateway must use `rh gateway`. The
 one-release compatibility binary dispatches through the same entry point.
 
+Platforms: `rh` targets Linux and macOS (Apple Silicon). CI builds `rh` and runs the
+`cli` tests on `macos-latest`. `rh service` and the restart step of `rh update` manage systemd units only. On macOS
+running `rh start` under launchd (a LaunchAgent or LaunchDaemon plist) is the operator's job, and `rh update` refuses
+any platform other than Linux x86_64 because that is the only published release asset.
+
 Doctor calls `migrate`'s read-only schema status library APIs in-process. Postgres uses the async status API;
 SQLite runs on a blocking task. The typed status stays in `migrate`. Doctor never runs migrations or opens a store
 for writing. An unreachable backend and an old or unsupported schema fail the memory check explicitly.
