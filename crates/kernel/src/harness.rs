@@ -111,6 +111,7 @@ pub enum TurnInput {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionOption {
+    Mode(String),
     Model(String),
     Effort(ThinkingLevel),
 }

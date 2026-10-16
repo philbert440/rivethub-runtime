@@ -168,6 +168,38 @@ async fn permissions_are_refused_without_blocking_prompt_events() -> TestResult 
     Ok(())
 }
 
+#[tokio::test(start_paused = true)]
+async fn permission_timeout_cancels_and_releases_a_stalled_answer() -> TestResult {
+    let (mut harness, actions) = Harness::new(vec![Plan {
+        events: vec![SessionEvent::Permission(PermissionRequest {
+            request_id: "stalled".into(),
+            tool_call_id: None,
+            name: "shell".into(),
+            input: wire::JsonObject::default(),
+            reason: None,
+        })],
+        finish: false,
+    }]);
+    harness.fault = Some(Fault::PermissionHang);
+    let harness = Arc::new(harness);
+    let provider = provider(
+        Arc::clone(&harness),
+        CliProvider {
+            permission_timeout_ms: Some(100),
+            ..CliProvider::default()
+        },
+        &CancellationToken::new(),
+    );
+    let error = tokio::time::timeout(Duration::from_secs(1), provider.chat(request()))
+        .await?
+        .expect_err("permission deadline");
+    assert!(error.to_string().contains("timed out"));
+    provider.shutdown().await;
+    assert!(harness.is_empty());
+    drop(actions);
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn dropped_consumer_cancels_only_its_session() -> TestResult {
     let (harness, mut actions) = Harness::new(vec![

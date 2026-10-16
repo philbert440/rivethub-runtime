@@ -79,6 +79,20 @@ pub struct AcpHarnessAdapter {
 }
 
 impl AcpHarnessAdapter {
+    pub async fn for_provider(
+        config: &Config,
+        harness: HarnessId,
+        provider: &config::provider::CliProvider,
+        search_paths: Vec<PathBuf>,
+    ) -> Result<Self, AcpError> {
+        let (launch, advertisement) =
+            crate::headless::launch(config, harness, provider, search_paths.clone()).await?;
+        let mut adapter = Self::new(config).with_search_paths(search_paths);
+        adapter.launch = launch;
+        adapter.advertised.get_mut().insert(harness, advertisement);
+        Ok(adapter)
+    }
+
     #[must_use]
     pub fn new(config: &Config) -> Self {
         Self {
@@ -476,22 +490,30 @@ fn probe(
 }
 
 fn program_installed(program: &Path, search: &[PathBuf]) -> Result<bool, std::io::Error> {
+    Ok(resolve_program(program, search)?.is_some())
+}
+
+pub(crate) fn resolve_program(
+    program: &Path,
+    search: &[PathBuf],
+) -> Result<Option<PathBuf>, std::io::Error> {
     if program.as_os_str().is_empty()
         || program
             .components()
             .any(|component| component == Component::ParentDir)
     {
-        return Ok(false);
+        return Ok(None);
     }
     if program.is_absolute() {
-        return is_file(program);
+        return Ok(is_file(program)?.then(|| program.to_owned()));
     }
     for directory in search {
-        if is_file(&directory.join(program))? {
-            return Ok(true);
+        let candidate = directory.join(program);
+        if is_file(&candidate)? {
+            return Ok(Some(candidate));
         }
     }
-    Ok(false)
+    Ok(None)
 }
 
 fn is_file(path: &Path) -> Result<bool, std::io::Error> {

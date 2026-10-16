@@ -36,7 +36,7 @@ pub enum ComposeError {
     #[error(transparent)]
     Terminal(#[from] terminal::Error),
     #[error(transparent)]
-    Provider(#[from] providers::BuildError),
+    Provider(#[from] crate::models::ModelError),
     #[error(transparent)]
     Agent(#[from] agent_loop::Error),
     #[error(transparent)]
@@ -70,6 +70,7 @@ pub struct Composition {
     audit_cancel: CancellationToken,
     tasks: JoinSet<Result<(), ComposeError>>,
     background: tokio_util::task::TaskTracker,
+    model_tasks: tokio_util::task::TaskTracker,
     cancel: CancellationToken,
 }
 
@@ -108,6 +109,17 @@ impl Composition {
         store: Arc<dyn MemoryStore>,
         shutdown: &CancellationToken,
     ) -> Result<Self, ComposeError> {
+        let factory = crate::models::ModelFactory::from_config(config, env).await?;
+        Self::with_models(config, env, store, shutdown, &factory).await
+    }
+
+    pub async fn with_models(
+        config: &Config,
+        env: &Environment,
+        store: Arc<dyn MemoryStore>,
+        shutdown: &CancellationToken,
+        factory: &crate::models::ModelFactory,
+    ) -> Result<Self, ComposeError> {
         let settings = gateway_settings(config, env)?;
         let sessions = Arc::new(
             SessionRegistry::new(Duration::from_secs(300)).with_shutdown(shutdown.child_token()),
@@ -139,7 +151,8 @@ impl Composition {
         }
         let audit_cancel = shutdown.child_token();
         let mut audit_tasks = JoinSet::new();
-        let configured = models::build(config, env, &audit_cancel, &mut audit_tasks).await?;
+        let configured =
+            models::build(config, env, factory, &audit_cancel, &mut audit_tasks).await?;
         let mut agents = std::collections::BTreeMap::new();
         let mut tool_names = Vec::new();
         let v1 = if let Some(configured) = configured {
@@ -168,6 +181,7 @@ impl Composition {
             audit_cancel,
             tasks,
             background,
+            model_tasks: factory.tasks(),
             cancel: shutdown.clone(),
         })
     }
@@ -199,6 +213,8 @@ impl Composition {
         }
         self.background.close();
         self.background.wait().await;
+        self.model_tasks.close();
+        self.model_tasks.wait().await;
         Ok(())
     }
 }

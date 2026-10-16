@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-use config::provider::ProviderBody;
 use config::{Config, Environment};
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
-use kernel::model::ModelProvider;
 use kernel::queue::JobQueue;
 use kernel::wiki::builder::WikiBuilderStore;
 use thiserror::Error;
@@ -18,13 +16,13 @@ use crate::Exit;
 use crate::service::{StartupError, load, postgres, postgres_url, report};
 
 #[derive(Debug, Error)]
-pub(crate) enum RootError {
+pub enum RootError {
     #[error(transparent)]
     Startup(#[from] StartupError),
     #[error(transparent)]
     Worker(#[from] workers::WorkerError),
     #[error(transparent)]
-    Provider(#[from] providers::BuildError),
+    Provider(#[from] crate::models::ModelError),
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
     #[error("{0}")]
@@ -85,7 +83,11 @@ async fn check_role(env: &Environment, role: ProcessRole) -> Result<(), RootErro
     let owned = env.clone();
     let config = tokio::task::spawn_blocking(move || load(&owned)).await??;
     postgres_url(&config, env)?;
-    let model = provider_model(&config)?;
+    let shutdown = CancellationToken::new();
+    let factory = model_factory(&config, env).await?;
+    let binding = model_binding(&config, &factory, &shutdown)?;
+    check_embeddings(role, &binding)?;
+    let model = binding.model;
     EmbedSettings::from_config(&config)?;
     SummarySettings::standard(model)?;
     crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
@@ -119,7 +121,10 @@ async fn run(
                 wiki,
             },
             &config,
-        )?;
+            env,
+            &shutdown,
+        )
+        .await?;
         tracing::info!("worker running {role}");
         drive(runner, shutdown.clone()).await
     }
@@ -132,7 +137,11 @@ async fn run(
     Ok(())
 }
 
-pub(crate) struct WorkerPorts<Q> {
+#[expect(
+    missing_debug_implementations,
+    reason = "worker dependencies are kernel ports without Debug"
+)]
+pub struct WorkerPorts<Q> {
     pub queue: Arc<Q>,
     pub targets: Arc<dyn EmbeddingStore>,
     pub summaries: Arc<dyn SummaryStore>,
@@ -140,15 +149,31 @@ pub(crate) struct WorkerPorts<Q> {
     pub wiki: Arc<dyn WikiBuilderStore>,
 }
 
-pub(crate) fn build_runner<Q: JobQueue + 'static>(
+pub async fn build_runner<Q: JobQueue + 'static>(
     role: ProcessRole,
     ports: WorkerPorts<Q>,
     config: &Config,
-) -> Result<Runner<Q>, RootError> {
+    env: &Environment,
+    shutdown: &CancellationToken,
+) -> Result<ComposedRunner<Q>, RootError> {
+    let factory = model_factory(config, env).await?;
+    with_models(role, ports, config, &factory, shutdown)
+}
+
+pub fn with_models<Q: JobQueue + 'static>(
+    role: ProcessRole,
+    ports: WorkerPorts<Q>,
+    config: &Config,
+    factory: &crate::models::ModelFactory,
+    shutdown: &CancellationToken,
+) -> Result<ComposedRunner<Q>, RootError> {
     role.claim_roles()?;
-    let model = provider_model(config)?;
-    let concrete = open_provider(config)?;
-    let provider: Arc<dyn ModelProvider> = Arc::new(concrete);
+    let cancel = shutdown.child_token();
+    let binding = model_binding(config, factory, &cancel)?;
+    check_embeddings(role, &binding)?;
+    let crate::models::ModelBinding {
+        provider, model, ..
+    } = binding;
     let deps = WorkerDeps {
         targets: ports.targets,
         summaries: ports.summaries,
@@ -158,7 +183,7 @@ pub(crate) fn build_runner<Q: JobQueue + 'static>(
         memory: ports.memory,
         tags: workers::TagSettings::new(model.clone(), false)?,
     };
-    Ok(Runner::new(
+    let runner = Runner::new(
         ports.queue,
         RunnerConfig::new(role, EMBED_CONCURRENCY)?,
         deps,
@@ -166,11 +191,36 @@ pub(crate) fn build_runner<Q: JobQueue + 'static>(
     .with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
         store: ports.wiki,
         model,
-    }))
+    });
+    Ok(ComposedRunner {
+        runner,
+        tasks: factory.tasks(),
+        cancel,
+    })
+}
+
+#[expect(
+    missing_debug_implementations,
+    reason = "worker runner holds kernel ports without Debug"
+)]
+pub struct ComposedRunner<Q> {
+    pub runner: Runner<Q>,
+    tasks: TaskTracker,
+    cancel: CancellationToken,
+}
+
+impl<Q: JobQueue + 'static> ComposedRunner<Q> {
+    pub async fn run(&self, shutdown: CancellationToken) -> Result<(), workers::WorkerError> {
+        let result = self.runner.run(shutdown.clone()).await;
+        self.cancel.cancel();
+        self.tasks.close();
+        self.tasks.wait().await;
+        result
+    }
 }
 
 async fn drive<Q: JobQueue + 'static>(
-    runner: Runner<Q>,
+    runner: ComposedRunner<Q>,
     shutdown: CancellationToken,
 ) -> Result<(), RootError> {
     let tracker = TaskTracker::new();
@@ -188,44 +238,43 @@ async fn drive<Q: JobQueue + 'static>(
     Ok(())
 }
 
-fn provider_model(config: &Config) -> Result<String, RootError> {
-    let concrete = open_provider(config)?;
-    let model = agent_model(config, concrete.model())?;
-    if model.is_empty() {
-        return Err(RootError::Invalid("summary model is empty".into()));
+fn check_embeddings(
+    role: ProcessRole,
+    binding: &crate::models::ModelBinding,
+) -> Result<(), RootError> {
+    if matches!(role, ProcessRole::Embedder | ProcessRole::All) && !binding.embeddings {
+        return Err(
+            crate::models::ModelError::Cli(providers::cli::CliError::MissingEmbedder).into(),
+        );
     }
-    Ok(model)
+    Ok(())
 }
 
-fn agent_model(config: &Config, provider_model: &str) -> Result<String, RootError> {
-    let agent = default_agent(config)?;
-    match &agent.model {
-        Some(model) => Ok(model.clone()),
-        None => Ok(provider_model.to_owned()),
-    }
+async fn model_factory(
+    config: &Config,
+    env: &Environment,
+) -> Result<crate::models::ModelFactory, RootError> {
+    Ok(crate::models::ModelFactory::for_provider(config, env, provider_id(config)?).await?)
 }
 
-fn open_provider(config: &Config) -> Result<providers::OpenAiCompatible, RootError> {
-    let id = default_agent(config)?
+fn model_binding(
+    config: &Config,
+    factory: &crate::models::ModelFactory,
+    shutdown: &CancellationToken,
+) -> Result<crate::models::ModelBinding, RootError> {
+    Ok(factory.build(
+        config,
+        provider_id(config)?,
+        default_agent(config)?.model.as_deref(),
+        shutdown,
+    )?)
+}
+
+fn provider_id(config: &Config) -> Result<&str, RootError> {
+    default_agent(config)?
         .provider
-        .as_ref()
-        .ok_or_else(|| RootError::Invalid("the default agent requires a provider".into()))?;
-    let providers = config
-        .providers
-        .as_ref()
-        .ok_or_else(|| RootError::Invalid("providers are required".into()))?;
-    let slot = providers
-        .get(id)
-        .ok_or_else(|| RootError::Invalid(format!("provider {id} is missing")))?;
-    let ProviderBody::Openai(body) = &slot.body else {
-        return Err(RootError::Invalid(format!(
-            "provider {id} must be OpenAI compatible"
-        )));
-    };
-    let kind = slot
-        .kind
-        .ok_or_else(|| RootError::Invalid("provider type is required".into()))?;
-    Ok(providers::OpenAiCompatible::build(kind, body)?)
+        .as_deref()
+        .ok_or_else(|| RootError::Invalid("the default agent requires a provider".into()))
 }
 
 fn default_agent(config: &Config) -> Result<&config::model::AgentEntry, RootError> {

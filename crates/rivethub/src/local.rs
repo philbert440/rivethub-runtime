@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::worker::ComposedRunner;
 use config::{Config, Environment, ServiceSwitch};
 use gateway::server::ServeOptions;
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
@@ -17,7 +18,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use workers::{ProcessRole, Runner};
+use workers::ProcessRole;
 
 use crate::Exit;
 use crate::service::{StartupError, listen, report};
@@ -130,7 +131,7 @@ struct GatewayNode {
     composition: crate::composition::Composition,
     listener: tokio::net::TcpListener,
     tls: Option<gateway::tls::TlsPaths>,
-    runners: Vec<(ProcessRole, Runner<SqliteStore>)>,
+    runners: Vec<(ProcessRole, ComposedRunner<SqliteStore>)>,
 }
 
 async fn run(
@@ -154,7 +155,7 @@ async fn bind_node(
     env: &Environment,
     shutdown: &CancellationToken,
 ) -> Result<GatewayNode, LocalError> {
-    let runners = build_runners(store, worker_roles(switches), config)?;
+    let runners = build_runners(store, worker_roles(switches), config, env, shutdown).await?;
     let composition = crate::composition::Composition::build(
         config,
         env,
@@ -251,7 +252,7 @@ struct NodeBoot<'a> {
 impl NodeBoot<'_> {
     async fn start(
         &self,
-        runners: Vec<(ProcessRole, Runner<SqliteStore>)>,
+        runners: Vec<(ProcessRole, ComposedRunner<SqliteStore>)>,
         gateway: url::Url,
     ) -> Result<(), LocalError> {
         if self.switches.contains(&ServiceSwitch::Wiki) {
@@ -401,11 +402,13 @@ async fn open_store(path: PathBuf) -> Result<Arc<SqliteStore>, LocalError> {
     Ok(Arc::new(store))
 }
 
-fn build_runners(
+async fn build_runners(
     store: &Arc<SqliteStore>,
     roles: Vec<ProcessRole>,
     config: &Config,
-) -> Result<Vec<(ProcessRole, Runner<SqliteStore>)>, LocalError> {
+    env: &Environment,
+    shutdown: &CancellationToken,
+) -> Result<Vec<(ProcessRole, ComposedRunner<SqliteStore>)>, LocalError> {
     let mut built = Vec::new();
     for role in roles {
         let ports = WorkerPorts {
@@ -415,7 +418,10 @@ fn build_runners(
             memory: Arc::clone(store) as Arc<dyn MemoryStore>,
             wiki: Arc::clone(store) as Arc<dyn WikiBuilderStore>,
         };
-        built.push((role, worker::build_runner(role, ports, config)?));
+        built.push((
+            role,
+            worker::build_runner(role, ports, config, env, shutdown).await?,
+        ));
     }
     Ok(built)
 }
@@ -440,7 +446,7 @@ fn spawn_workers(
     tracker: &TaskTracker,
     failed: &mpsc::UnboundedSender<LocalError>,
     shutdown: &CancellationToken,
-    runners: Vec<(ProcessRole, Runner<SqliteStore>)>,
+    runners: Vec<(ProcessRole, ComposedRunner<SqliteStore>)>,
 ) {
     for (role, runner) in runners {
         let failed = failed.clone();

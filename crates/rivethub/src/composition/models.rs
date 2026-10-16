@@ -1,10 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use config::provider::ProviderBody;
 use config::{Config, Environment};
 use kernel::agent::TurnRunner;
-use kernel::model::ModelProvider;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
@@ -25,12 +23,13 @@ pub(super) struct ModelServices {
 pub(super) async fn build(
     config: &Config,
     env: &Environment,
+    factory: &crate::models::ModelFactory,
     cancel: &CancellationToken,
     tasks: &mut JoinSet<Result<(), agent_loop::hooks::HookError>>,
 ) -> Result<Option<ModelServices>, ComposeError> {
-    let Some(providers) = &config.providers else {
+    if config.providers.is_none() {
         return Ok(None);
-    };
+    }
     let runtime = config
         .runtime
         .as_ref()
@@ -57,23 +56,9 @@ pub(super) async fn build(
             .provider
             .as_ref()
             .ok_or_else(|| ComposeError::Invalid(format!("agent {id} requires a provider")))?;
-        let slot = providers
-            .get(provider_id)
-            .ok_or_else(|| ComposeError::Invalid(format!("provider {provider_id} is missing")))?;
-        let ProviderBody::Openai(body) = &slot.body else {
-            return Err(ComposeError::Invalid(format!(
-                "provider {provider_id} must be OpenAI compatible"
-            )));
-        };
-        let kind = slot
-            .kind
-            .ok_or_else(|| ComposeError::Invalid("provider type is required".into()))?;
-        let concrete = providers::OpenAiCompatible::build(kind, body)?;
-        let model = match &agent.model {
-            Some(model) => model.clone(),
-            None => concrete.model().to_owned(),
-        };
-        let provider: Arc<dyn ModelProvider> = Arc::new(concrete);
+        let crate::models::ModelBinding {
+            provider, model, ..
+        } = factory.build(config, provider_id, agent.model.as_deref(), cancel)?;
         let built = agent_loop::AgentLoop::new(
             provider_id.clone(),
             provider.clone(),

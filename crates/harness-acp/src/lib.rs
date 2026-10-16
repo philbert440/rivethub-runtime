@@ -4,6 +4,7 @@ pub mod connection;
 mod discovery;
 pub mod error;
 pub mod events;
+mod headless;
 pub mod identity;
 pub mod launch;
 mod options;

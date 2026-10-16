@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use kernel::harness::{HarnessAdapter, SessionEvent, SessionSpec, TurnInput};
+use kernel::harness::{HarnessAdapter, SessionEvent, SessionOption, SessionSpec, TurnInput};
 use kernel::model::{ModelChunk, ModelStreamItem};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_util::sync::CancellationToken;
@@ -16,6 +16,8 @@ pub(super) struct Turn {
     pub spec: SessionSpec,
     pub input: TurnInput,
     pub timeout: Option<Duration>,
+    pub permission_mode: Option<String>,
+    pub permission_timeout: Option<Duration>,
     pub cancel: CancellationToken,
     pub output: Sender<ModelStreamItem>,
 }
@@ -62,6 +64,11 @@ impl Turn {
     }
 
     async fn exchange(&self, session: &SessionId) -> Result<(), CliError> {
+        if let Some(mode) = &self.permission_mode {
+            self.harness
+                .set_option(session, SessionOption::Mode(mode.clone()))
+                .await?;
+        }
         let mut events = self.harness.events(session).await?;
         let prompt = self.harness.prompt(session, self.input.clone());
         tokio::pin!(prompt);
@@ -112,9 +119,10 @@ impl Turn {
             SessionEvent::Exited { code } => return Err(CliError::Exited { code }),
             SessionEvent::TurnEnded => return Ok(true),
             SessionEvent::Permission(request) => {
-                self.harness
-                    .answer_permission(session, &request.request_id, ApprovalDecision::Deny)
-                    .await?;
+                tokio::select! {
+                    result = self.harness.answer_permission(session, &request.request_id, ApprovalDecision::Deny) => result?,
+                    () = deadline(self.permission_timeout) => return Err(CliError::Timeout),
+                }
                 return Ok(false);
             }
             SessionEvent::UserMessageChunk { .. }

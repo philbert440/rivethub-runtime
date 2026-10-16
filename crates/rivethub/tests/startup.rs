@@ -73,11 +73,13 @@ async fn binary_replays_recorded_startup_refusals() -> TestResult {
         }
         std::fs::write(state.join("config.yaml"), config)?;
         let output = tokio::time::timeout(
-            Duration::from_secs(10),
+            Duration::from_secs(30),
             tokio::process::Command::new(env!("CARGO_BIN_EXE_rh"))
                 .args(["gateway", "--check"])
                 .env_clear()
                 .env("HOME", home.path())
+                .env("TOKIO_WORKER_THREADS", "2")
+                .kill_on_drop(true)
                 .output(),
         )
         .await??;

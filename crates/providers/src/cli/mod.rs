@@ -25,7 +25,7 @@ pub struct CliBacked {
     harness: Arc<dyn HarnessAdapter>,
     harness_id: HarnessId,
     config: CliProvider,
-    embedder: crate::embed::Embedder,
+    embedder: Option<crate::embed::Embedder>,
     cancel: CancellationToken,
     tasks: Mutex<TaskTracker>,
 }
@@ -47,11 +47,17 @@ impl std::fmt::Debug for CliBacked {
 }
 
 impl CliBacked {
+    #[must_use]
+    pub fn with_task_tracker(mut self, tracker: TaskTracker) -> Self {
+        self.tasks = Mutex::new(tracker);
+        self
+    }
+
     pub fn build(
         kind: ProviderType,
         config: CliProvider,
         harness: Arc<dyn HarnessAdapter>,
-        embedder: crate::embed::Embedder,
+        embedder: impl Into<Option<crate::embed::Embedder>>,
         shutdown: &CancellationToken,
     ) -> Result<Self, CliError> {
         if config.timeout_ms == Some(0) {
@@ -61,7 +67,7 @@ impl CliBacked {
             harness,
             harness_id: harness_id(kind)?,
             config,
-            embedder,
+            embedder: embedder.into(),
             cancel: shutdown.child_token(),
             tasks: Mutex::new(TaskTracker::new()),
         })
@@ -125,6 +131,8 @@ impl ModelProvider for CliBacked {
                 spec,
                 input,
                 timeout: self.config.timeout_ms.map(Duration::from_millis),
+                permission_mode: self.config.permission_mode.clone(),
+                permission_timeout: self.config.permission_timeout_ms.map(Duration::from_millis),
                 cancel: self.cancel.child_token(),
                 output,
             }
@@ -135,10 +143,11 @@ impl ModelProvider for CliBacked {
     }
 
     async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
+        let embedder = self.embedder.as_ref().ok_or(CliError::MissingEmbedder)?;
         tokio::select! {
             biased;
             () = self.cancel.cancelled() => Err(CliError::Closed.into()),
-            result = self.embedder.embed(texts) => result.map_err(Into::into),
+            result = embedder.embed(texts) => result.map_err(Into::into),
         }
     }
 
@@ -172,7 +181,7 @@ struct HeadlessInput<'a> {
     max_tokens: Option<u32>,
 }
 
-const fn harness_id(kind: ProviderType) -> Result<HarnessId, CliError> {
+pub const fn harness_id(kind: ProviderType) -> Result<HarnessId, CliError> {
     match kind {
         ProviderType::ClaudeCli => Ok(HarnessId::ClaudeCode),
         ProviderType::CodexCli => Ok(HarnessId::Codex),

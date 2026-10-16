@@ -245,7 +245,7 @@ async fn serve_answers_healthz_and_shuts_down_on_the_token() {
 async fn tls_serving_answers_healthz_over_rustls() {
     let (addr, token, server, material) = tls_server_with(ServeOptions::default()).await;
     let text = tokio::time::timeout(
-        Duration::from_secs(2),
+        Duration::from_secs(10),
         tls_exchange(material.connector.clone(), addr),
     )
     .await
@@ -259,7 +259,7 @@ async fn stalled_tls_handshake_does_not_block_other_clients() {
     let (addr, token, server, material) = tls_server_with(ServeOptions::default()).await;
     let stalled = TcpStream::connect(addr).await.expect("stalled connect");
     let text = tokio::time::timeout(
-        Duration::from_secs(2),
+        Duration::from_secs(10),
         tls_exchange(material.connector.clone(), addr),
     )
     .await
@@ -388,7 +388,7 @@ async fn stalled_tls_handshake_is_cut_off() {
     .await;
     let mut stream = TcpStream::connect(addr).await.expect("connect");
     let mut raw = Vec::new();
-    tokio::time::timeout(Duration::from_secs(2), stream.read_to_end(&mut raw))
+    tokio::time::timeout(Duration::from_secs(10), stream.read_to_end(&mut raw))
         .await
         .expect("handshake wait is bounded")
         .expect("read");

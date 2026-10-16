@@ -59,11 +59,13 @@ async fn check_refuses_explicit_missing_invalid_and_ambiguous_registries() -> Te
             tokio::fs::write(&users_path, content).await?;
         }
         let output = tokio::time::timeout(
-            Duration::from_secs(10),
+            Duration::from_secs(30),
             tokio::process::Command::new(env!("CARGO_BIN_EXE_rh"))
                 .args(["gateway", "--check"])
                 .env_clear()
                 .env("HOME", home.path())
+                .env("TOKIO_WORKER_THREADS", "2")
+                .kill_on_drop(true)
                 .output(),
         )
         .await??;

@@ -25,6 +25,7 @@ pub(crate) enum Fault {
     Cancel,
     Release,
     Permission,
+    PermissionHang,
     Offerings,
 }
 
@@ -44,6 +45,7 @@ pub(crate) struct Plan {
 
 struct Session {
     spec: SessionSpec,
+    mode: Option<String>,
     events: Option<mpsc::Receiver<SessionEvent>>,
     output: mpsc::Sender<SessionEvent>,
     permission: Arc<Notify>,
@@ -114,6 +116,7 @@ impl HarnessAdapter for Harness {
             session.clone(),
             Session {
                 spec: spec.clone(),
+                mode: None,
                 events: Some(events),
                 output,
                 permission: Arc::new(Notify::new()),
@@ -209,6 +212,9 @@ impl HarnessAdapter for Harness {
         decision: ApprovalDecision,
     ) -> Result<(), HarnessAdapterError> {
         self.check(Fault::Permission)?;
+        if self.fault == Some(Fault::PermissionHang) {
+            return std::future::pending().await;
+        }
         let sessions = self.sessions.lock();
         let entry = sessions
             .get(session)
@@ -229,6 +235,7 @@ impl HarnessAdapter for Harness {
             .get_mut(session)
             .ok_or_else(|| HarnessAdapterError::UnknownSession(session.clone()))?;
         match option {
+            SessionOption::Mode(mode) => entry.mode = Some(mode),
             SessionOption::Model(model) => entry.spec.model = Some(model),
             SessionOption::Effort(effort) => entry.spec.effort = Some(effort),
         }

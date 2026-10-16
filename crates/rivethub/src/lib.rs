@@ -4,6 +4,7 @@ pub mod exit;
 mod identity;
 pub mod local;
 pub mod logging;
+pub mod models;
 pub mod service;
 pub mod sidecar;
 mod signals;

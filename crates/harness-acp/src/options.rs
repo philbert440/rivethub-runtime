@@ -74,6 +74,7 @@ fn select(
     option: &SessionOption,
 ) -> Result<ConfigSelection, AcpError> {
     let (category, value, label) = match option {
+        SessionOption::Mode(mode) => (acp::SessionConfigOptionCategory::Mode, mode.clone(), "mode"),
         SessionOption::Model(model) => (
             acp::SessionConfigOptionCategory::Model,
             model.clone(),
@@ -203,6 +204,36 @@ mod tests {
                 category: "model",
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn permission_modes_require_an_advertised_mode_and_value() {
+        let options = vec![
+            acp::SessionConfigOption::select(
+                "permission_mode",
+                "Permissions",
+                "plan",
+                vec![acp::SessionConfigSelectOption::new("plan", "Plan")],
+            )
+            .category(acp::SessionConfigOptionCategory::Mode),
+        ];
+        let selected = select(&options, &SessionOption::Mode("plan".into())).expect("mode");
+        assert_eq!(selected.config_id.0.as_ref(), "permission_mode");
+        assert_eq!(
+            selected.value,
+            acp::SessionConfigOptionValue::value_id("plan")
+        );
+        assert!(matches!(
+            select(&options, &SessionOption::Mode("missing".into())),
+            Err(AcpError::ConfigValueRejected {
+                category: "mode",
+                ..
+            })
+        ));
+        assert!(matches!(
+            select(&[], &SessionOption::Mode("plan".into())),
+            Err(AcpError::ConfigOptionUnavailable { category: "mode" })
         ));
     }
 

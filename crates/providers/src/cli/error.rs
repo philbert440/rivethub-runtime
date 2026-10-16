@@ -4,6 +4,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CliError {
+    #[error(
+        "CLI provider embeddings require embed_endpoint and embed_model on the selected memory backend"
+    )]
+    MissingEmbedder,
     #[error("provider type does not select a CLI harness")]
     ProviderType,
     #[error("CLI provider timeout_ms must be positive")]

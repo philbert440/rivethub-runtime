@@ -37,6 +37,8 @@ impl fmt::Display for UnverifiedReason {
 
 #[derive(Debug, Error)]
 pub enum AcpError {
+    #[error("headless launcher probe failed: {0}")]
+    ProbeTask(tokio::task::JoinError),
     #[error("{harness} does not support chat over ACP: {reason}")]
     ChatUnsupported {
         harness: HarnessId,
