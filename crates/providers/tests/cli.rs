@@ -168,6 +168,44 @@ async fn permissions_are_refused_without_blocking_prompt_events() -> TestResult 
     Ok(())
 }
 
+#[tokio::test]
+async fn bypass_permissions_without_a_mode_option_allows_the_request() -> TestResult {
+    let (mut harness, mut actions) = Harness::new(vec![Plan {
+        events: vec![
+            SessionEvent::Permission(PermissionRequest {
+                request_id: "permission-1".into(),
+                tool_call_id: None,
+                name: "shell".into(),
+                input: serde_json::from_str(r#"{"command":"true"}"#)?,
+                reason: None,
+            }),
+            text("Allowed"),
+        ],
+        finish: true,
+    }]);
+    harness.fault = Some(Fault::NoModeOption);
+    let harness = Arc::new(harness);
+    let provider = provider(
+        Arc::clone(&harness),
+        CliProvider {
+            permission_mode: Some("bypassPermissions".into()),
+            ..CliProvider::default()
+        },
+        &CancellationToken::new(),
+    );
+    let response = tokio::time::timeout(Duration::from_secs(5), provider.chat(request())).await??;
+    assert_eq!(response.content.as_deref(), Some("Allowed"));
+    assert!(matches!(action(&mut actions).await, Action::New(..)));
+    assert!(matches!(action(&mut actions).await, Action::Prompt(..)));
+    assert!(matches!(
+        action(&mut actions).await,
+        Action::Permission(ApprovalDecision::Allow)
+    ));
+    assert!(matches!(action(&mut actions).await, Action::Release(_)));
+    provider.shutdown().await;
+    Ok(())
+}
+
 #[tokio::test(start_paused = true)]
 async fn permission_timeout_cancels_and_releases_a_stalled_answer() -> TestResult {
     let (mut harness, actions) = Harness::new(vec![Plan {

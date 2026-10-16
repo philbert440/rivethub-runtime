@@ -101,6 +101,11 @@ pub enum AcpError {
 
 pub(crate) fn port(error: impl Into<AcpError>) -> kernel::harness::HarnessAdapterError {
     let error: AcpError = error.into();
+    if let AcpError::ConfigOptionUnavailable { category } = &error {
+        return kernel::harness::HarnessAdapterError::OptionUnavailable {
+            option: (*category).to_owned(),
+        };
+    }
     kernel::harness::HarnessAdapterError::Failed {
         message: error.to_string(),
         source: Box::new(error),

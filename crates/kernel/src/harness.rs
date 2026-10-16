@@ -20,6 +20,8 @@ pub enum HarnessAdapterError {
     TurnInFlight(SessionId),
     #[error("harness event stream was already taken: {0}")]
     EventStreamTaken(SessionId),
+    #[error("the harness does not offer a {option} option")]
+    OptionUnavailable { option: String },
     #[error("harness failed: {message}")]
     Failed {
         message: String,

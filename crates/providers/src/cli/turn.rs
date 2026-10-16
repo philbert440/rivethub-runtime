@@ -2,7 +2,9 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use kernel::harness::{HarnessAdapter, SessionEvent, SessionOption, SessionSpec, TurnInput};
+use kernel::harness::{
+    HarnessAdapter, HarnessAdapterError, SessionEvent, SessionOption, SessionSpec, TurnInput,
+};
 use kernel::model::{ModelChunk, ModelStreamItem};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_util::sync::CancellationToken;
@@ -23,6 +25,14 @@ pub(super) struct Turn {
 }
 
 impl Turn {
+    fn permission_decision(&self) -> ApprovalDecision {
+        if self.permission_mode.as_deref() == Some(BYPASS_PERMISSIONS) {
+            ApprovalDecision::Allow
+        } else {
+            ApprovalDecision::Deny
+        }
+    }
+
     pub(super) async fn run(self) {
         let result = self.execute().await;
         if let Err(error) = &result {
@@ -65,9 +75,17 @@ impl Turn {
 
     async fn exchange(&self, session: &SessionId) -> Result<(), CliError> {
         if let Some(mode) = &self.permission_mode {
-            self.harness
+            match self
+                .harness
                 .set_option(session, SessionOption::Mode(mode.clone()))
-                .await?;
+                .await
+            {
+                Ok(()) => {}
+                Err(HarnessAdapterError::OptionUnavailable { .. }) => {
+                    tracing::debug!(%mode, "agent has no mode option; permission_mode applies client-side");
+                }
+                Err(error) => return Err(error.into()),
+            }
         }
         let mut events = self.harness.events(session).await?;
         let prompt = self.harness.prompt(session, self.input.clone());
@@ -120,7 +138,7 @@ impl Turn {
             SessionEvent::TurnEnded => return Ok(true),
             SessionEvent::Permission(request) => {
                 tokio::select! {
-                    result = self.harness.answer_permission(session, &request.request_id, ApprovalDecision::Deny) => result?,
+                    result = self.harness.answer_permission(session, &request.request_id, self.permission_decision()) => result?,
                     () = deadline(self.permission_timeout) => return Err(CliError::Timeout),
                 }
                 return Ok(false);
@@ -165,3 +183,5 @@ fn combine(result: Result<(), CliError>, cleanup: Result<(), CliError>) -> Resul
         }),
     }
 }
+
+const BYPASS_PERMISSIONS: &str = "bypassPermissions";

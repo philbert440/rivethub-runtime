@@ -17,6 +17,7 @@ pub(crate) type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Fault {
+    NoModeOption,
     New,
     Events,
     EventsClosed,
@@ -230,6 +231,13 @@ impl HarnessAdapter for Harness {
         session: &SessionId,
         option: SessionOption,
     ) -> Result<(), HarnessAdapterError> {
+        if matches!(self.fault, Some(Fault::NoModeOption))
+            && matches!(option, SessionOption::Mode(_))
+        {
+            return Err(HarnessAdapterError::OptionUnavailable {
+                option: "mode".into(),
+            });
+        }
         let mut sessions = self.sessions.lock();
         let entry = sessions
             .get_mut(session)
