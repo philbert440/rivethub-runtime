@@ -4,14 +4,13 @@ use cli::{ConfigCommand, Exit};
 use std::collections::BTreeSet;
 use support::{config, environment, home, run};
 
-const DEFERRED: [(&str, &str); 13] = [
+const DEFERRED: [(&str, &str); 12] = [
     (
         "start",
         "The third slice of this contract supervises the service roots.",
     ),
     ("update --mesh", "Fleet updates are a later slice."),
     ("init", "Interactive setup is a later slice."),
-    ("mesh", "Mesh administration is a later slice."),
     ("pair", "Device pairing CLI is a later slice."),
     ("user", "User administration is a later slice."),
     ("memory", "Memory administration is a later slice."),

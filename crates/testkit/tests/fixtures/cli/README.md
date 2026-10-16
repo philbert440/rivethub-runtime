@@ -23,7 +23,7 @@ alias), state in `~/.rivethub`, environment `RIVETHUB_*` (the `RIVETOS_*` aliase
 
 The CA and holder commands are now implemented; their approved new B14 contract and acceptance coverage are documented in `crates/cli/README.md`. They have no historical recordings.
 
-Out of this slice (later slices): `start`, `update --mesh`, `init`, `mesh`, `pair`,
+Out of this slice (later slices): `start`, `update --mesh`, `init`, `pair`,
 `user`, `memory`, `logs`, `test`, `agent`, `model`, `keys`, `gateway token`.
 
 ## `rh service` (second slice)
@@ -63,3 +63,7 @@ Tests drive `rh start` with fake roots: a test binary that sleeps, crashes or ig
 `rh local [--port <n>] [--no-lan]` runs one process: the gateway, the SQLite worker roles, and MCP when `transports.mcp` has a host or socket. It claims the state directory, runs `migrate::sqlite` once, and opens one SQLite store. SIGTERM and SIGINT drain that process and exit 0. A config or migrate error exits 1. `--port` defaults to 5174. `--no-lan` binds `127.0.0.1`; otherwise the written bind is `0.0.0.0`. Flags on an existing file apply in memory and do not rewrite it.
 
 `rh local` runs the wiki builder when `memory.sqlite.wiki_dir` is set, and its MCP server exposes `delegate_task` on the SQLite task queue. The supervised `rh agent` process remains the Postgres task service.
+
+## `rh mesh`
+
+`rh mesh` registers and inspects mesh nodes through `gateway::mesh::Registry` and the typed `mesh.json` document. `enroll` mints a roster token with the same `pki` minter as `rh ca token`, writes the holder key under the state directory, and records the node. `renew` calls `rh cert renew` over step-ca mTLS and does not rewrite `mesh.json`. `sync` reads `http://<hub>:<port>/mesh.json` and merges it. `join --manual` reads that same document from the seed and posts `/api/mesh/join`. SSH to `rivethub-hub`, `rivet-ca.sh`, and the legacy YAML seed are not implemented. The roster is `/rivet-shared/rivet-ca/mesh-nodes.conf`, never `mesh.json`. Private keys are not written under `/rivet-shared`.

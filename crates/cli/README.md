@@ -69,3 +69,7 @@ does not invent those values. With no resolved file it writes the SQLite path an
 the gateway bind, loads that file through `Config::load` with `Profile::Standalone`,
 migrates it, and claims the state directory. The task engine is not part of that
 process.
+
+# RivetHub mesh commands
+
+`rh mesh` lists, probes, enrolls, renews, syncs, joins, and forgets mesh nodes. The registry is the gateway mesh file. Enrollment and renewal use step-ca: enroll mints a one-time token from the operator roster and posts `/1.0/sign`; renew uses holder mTLS. The hub address on enroll, renew, and sync is checked and is not an SSH target. `rivethub-hub` and `rivet-ca.sh` are retired. `join` without `--manual` points at enroll. `join --manual` fetches `/mesh.json` and posts `/api/mesh/join`.

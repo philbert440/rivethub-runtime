@@ -24,7 +24,7 @@ clap = { workspace = true }
 config = { workspace = true }
 gateway = { workspace = true }
 migrate = { workspace = true }
-nix = { workspace = true }
+nix = { workspace = true, features = ["hostname"] }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

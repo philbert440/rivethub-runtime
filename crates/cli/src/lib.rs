@@ -5,6 +5,7 @@ pub mod doctor;
 mod error;
 mod exit;
 mod local;
+pub mod mesh;
 mod process;
 mod roots;
 pub mod service;
@@ -84,6 +85,7 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
         command,
         Command::Ca(_)
             | Command::Cert { .. }
+            | Command::Mesh(_)
             | Command::Service { .. }
             | Command::Start { .. }
             | Command::Local { .. }
@@ -133,6 +135,7 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
             }
             Command::Ca(args) => ca::run(args, env, shutdown).await,
             Command::Cert { command } => cert::run(command, env, shutdown).await,
+            Command::Mesh(args) => mesh::run(args, env, shutdown).await,
         }
         .map(Dispatch::Complete)
     };

@@ -63,6 +63,10 @@ pub fn parse_roster(text: &str) -> Result<Roster, Error> {
 }
 
 impl Roster {
+    pub fn agent_for_node(&self, name: &str) -> Result<Option<&str>, Error> {
+        Ok(self.node(name)?.agent.as_deref())
+    }
+
     pub(crate) fn node(&self, name: &str) -> Result<&Node, Error> {
         self.nodes
             .iter()
