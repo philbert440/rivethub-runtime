@@ -57,6 +57,14 @@ pub enum AgentError {
     Pricing(String),
     #[error("gateway url is invalid")]
     GatewayUrl,
+    #[error("gateway certificate has no dialable name")]
+    GatewayName,
+    #[error("mesh advertise host is not a name on the gateway certificate")]
+    AdvertiseHost,
+    #[error("gateway CA is not configured")]
+    GatewayCa,
+    #[error("gateway certificate is invalid")]
+    GatewayCertificate,
     #[error("agents.json escapes the state directory")]
     Escape,
     #[error("{0}")]
@@ -87,6 +95,10 @@ impl AgentError {
             | Self::DuplicatePresetId(_)
             | Self::Pricing(_)
             | Self::GatewayUrl
+            | Self::GatewayName
+            | Self::AdvertiseHost
+            | Self::GatewayCa
+            | Self::GatewayCertificate
             | Self::Escape
             | Self::Invalid(_)
             | Self::WatchClosed
@@ -105,6 +117,7 @@ pub(super) struct Plan {
     pricing: BTreeMap<String, tasks::TokenRate>,
     pub api_token: Option<String>,
     pub mesh_identity: Option<tasks::MeshIdentity>,
+    pub gateway_trust: Option<tasks::MeshIdentity>,
     pub mesh: bool,
     state_dir: PathBuf,
 }
@@ -129,6 +142,7 @@ impl std::fmt::Debug for Plan {
             .field("has_postgres_url", &!self.postgres.is_empty())
             .field("has_api_token", &self.api_token.is_some())
             .field("has_mesh_identity", &self.mesh_identity.is_some())
+            .field("has_gateway_trust", &self.gateway_trust.is_some())
             .field("mesh", &self.mesh)
             .field("state_dir", &self.state_dir)
             .finish()
@@ -177,7 +191,7 @@ pub(super) fn ensure_enabled(config: &Config) -> Result<(), AgentError> {
     }
 }
 
-pub(super) fn plan(config: &Config, env: &Environment) -> Result<Plan, AgentError> {
+pub(super) async fn plan(config: &Config, env: &Environment) -> Result<Plan, AgentError> {
     let identity = crate::identity::resolve(config, env)?;
     if identity.name.is_empty() {
         return Err(AgentError::Invalid("node name is empty".into()));
@@ -185,16 +199,18 @@ pub(super) fn plan(config: &Config, env: &Environment) -> Result<Plan, AgentErro
     let node = identity.name;
     let worker = format!("{node}:agent");
     let settings = gateway::Settings::from_config_in(config, env, identity.hostname, node.clone())?;
+    let endpoint = super::dial::endpoint(config).await?;
     Ok(Plan {
         node,
         worker,
         postgres: require_postgres(config, env)?,
-        gateway: gateway_url(config)?,
+        gateway: endpoint.url,
         files_root: settings.files_root,
         allowed: settings.allowed_harnesses,
         pricing: pricing(config)?,
         api_token: api_token(config)?,
         mesh_identity: None,
+        gateway_trust: endpoint.trust,
         mesh: mesh_enabled(config),
         state_dir: settings.state_dir,
     })
@@ -250,7 +266,7 @@ fn install_local(directory: &mut tasks::Directory, config: &Config) -> Result<()
 }
 
 pub(super) async fn connect(config: &Config, env: &Environment) -> Result<Connected, AgentError> {
-    let mut plan = plan(config, env)?;
+    let mut plan = plan(config, env).await?;
     plan.mesh_identity = load_mesh_identity(config).await?;
     let presets = load_presets(plan.state_dir.clone()).await?;
     let nodes = load_nodes(config, env).await?;
@@ -275,34 +291,6 @@ fn require_postgres(config: &Config, env: &Environment) -> Result<String, AgentE
         Err(StartupError::Url) => Err(AgentError::Url),
         Err(StartupError::SqliteUnavailable) => Err(AgentError::SqliteUnavailable),
         Err(error) => Err(AgentError::Invalid(error.to_string())),
-    }
-}
-
-fn gateway_url(config: &Config) -> Result<url::Url, AgentError> {
-    let source = BindSource::from_config(config);
-    let mut url = url::Url::parse("http://127.0.0.1/").map_err(|_| AgentError::GatewayUrl)?;
-    if source.tls_cert.is_some() {
-        url.set_scheme("https")
-            .map_err(|()| AgentError::GatewayUrl)?;
-    }
-    url.set_host(Some(bare_host(&source.host)))
-        .map_err(|_| AgentError::GatewayUrl)?;
-    url.set_port(Some(source.port))
-        .map_err(|()| AgentError::GatewayUrl)?;
-    url.set_path("/");
-    if url.host_str().is_none() {
-        return Err(AgentError::GatewayUrl);
-    }
-    Ok(url)
-}
-
-fn bare_host(host: &str) -> &str {
-    match host.strip_prefix('[') {
-        Some(rest) => match rest.strip_suffix(']') {
-            Some(bare) => bare,
-            None => host,
-        },
-        None => host,
     }
 }
 

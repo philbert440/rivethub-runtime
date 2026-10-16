@@ -31,6 +31,7 @@ pub struct Directory {
     presets: BTreeMap<String, AgentPreset>,
     nodes: BTreeMap<String, MeshNode>,
     mesh: Option<MeshIdentity>,
+    gateway_trust: Option<MeshIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,6 +76,7 @@ impl Directory {
             presets: BTreeMap::new(),
             nodes: BTreeMap::new(),
             mesh: None,
+            gateway_trust: None,
         })
     }
 
@@ -92,6 +94,10 @@ impl Directory {
 
     pub fn set_mesh_identity(&mut self, identity: Option<MeshIdentity>) {
         self.mesh = identity;
+    }
+
+    pub fn set_gateway_trust(&mut self, identity: Option<MeshIdentity>) {
+        self.gateway_trust = identity;
     }
 
     pub fn prepare(&self, input: &TargetInput) -> Result<Prepared, Error> {
@@ -188,7 +194,7 @@ impl Directory {
             input,
             node,
             base: self.gateway.clone(),
-            mesh: None,
+            mesh: local_trust(&self.gateway, self.gateway_trust.as_ref())?,
             remote: false,
             fields,
         }))
@@ -364,6 +370,14 @@ fn mesh_base(node: &MeshNode, preset_base: Option<&str>) -> Result<Url, Error> {
         return Err(Error::MeshAddress);
     }
     Ok(url)
+}
+
+fn local_trust(gateway: &Url, trust: Option<&MeshIdentity>) -> Result<Option<MeshIdentity>, Error> {
+    match gateway.scheme() {
+        "http" => Ok(None),
+        "https" => Ok(Some(trust.cloned().ok_or(Error::GatewayTrustRequired)?)),
+        _ => Err(Error::BaseUrl),
+    }
 }
 
 fn mesh_transport(

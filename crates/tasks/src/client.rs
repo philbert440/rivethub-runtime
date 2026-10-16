@@ -12,18 +12,24 @@ use crate::error::Error;
 use crate::identity::MeshIdentity;
 use crate::redirect::redirect_action;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClientRole {
+    Plain,
+    Peer,
+    Gateway,
+}
+
 pub struct GatewayClient {
     http: reqwest::Client,
     base: Url,
-    mesh: bool,
+    role: ClientRole,
 }
 
 #[cfg_attr(
     dylint_lib = "rr_lints",
     expect(
         manualderive,
-        reason = "Debug names the base url and whether mesh identity is set; it must not print the client key"
+        reason = "Debug names the base url and the trust role; it must not print the client key"
     )
 )]
 impl std::fmt::Debug for GatewayClient {
@@ -31,21 +37,25 @@ impl std::fmt::Debug for GatewayClient {
         formatter
             .debug_struct("GatewayClient")
             .field("base", &self.base)
-            .field("mesh", &self.mesh)
+            .field("role", &self.role)
             .finish_non_exhaustive()
     }
 }
 
 impl GatewayClient {
     pub fn new(base: Url) -> Result<Self, Error> {
-        Self::open(base, None)
+        Self::open(base, None, ClientRole::Plain)
     }
 
     pub fn with_mesh(base: Url, identity: &MeshIdentity) -> Result<Self, Error> {
-        Self::open(base, Some(identity))
+        Self::open(base, Some(identity), ClientRole::Peer)
     }
 
-    fn open(base: Url, identity: Option<&MeshIdentity>) -> Result<Self, Error> {
+    pub fn with_gateway(base: Url, identity: &MeshIdentity) -> Result<Self, Error> {
+        Self::open(base, Some(identity), ClientRole::Gateway)
+    }
+
+    fn open(base: Url, identity: Option<&MeshIdentity>, role: ClientRole) -> Result<Self, Error> {
         if base.host_str().is_none() {
             return Err(Error::BaseUrl);
         }
@@ -55,17 +65,15 @@ impl GatewayClient {
             builder = builder
                 .https_only(true)
                 .no_proxy()
-                .tls_certs_only(identity.trust())
-                .identity(identity.client());
+                .tls_certs_only(identity.trust());
+            if let Some(presented) = identity.presented() {
+                builder = builder.identity(presented);
+            }
         }
         let http = builder
             .build()
             .map_err(|source| Error::Http(Box::new(source)))?;
-        Ok(Self {
-            http,
-            base,
-            mesh: identity.is_some(),
-        })
+        Ok(Self { http, base, role })
     }
 
     pub async fn healthz(&self) -> Result<HealthzResponse, Error> {
@@ -158,7 +166,7 @@ impl GatewayClient {
         tokio::select! {
             () = cancel.cancelled() => Err(Error::Cancelled),
             result = self.http.execute(built) => {
-                result.map_err(|source| classify_transport(self.mesh, source))
+                result.map_err(|source| classify_transport(self.role, source))
             }
         }
     }
@@ -176,16 +184,30 @@ pub(crate) fn check_segment(segment: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn classify_transport(mesh: bool, source: reqwest::Error) -> Error {
+fn classify_transport(role: ClientRole, source: reqwest::Error) -> Error {
     if source.is_timeout() {
-        Error::Timeout
-    } else if source.is_redirect() {
-        Error::Redirect(Box::new(source))
-    } else if mesh {
-        Error::MeshPeer(Box::new(source))
-    } else {
-        Error::Http(Box::new(source))
+        return Error::Timeout;
     }
+    if source.is_redirect() {
+        return Error::Redirect(Box::new(source));
+    }
+    match role {
+        ClientRole::Peer => Error::MeshPeer(Box::new(source)),
+        ClientRole::Gateway if certificate_failure(&source) => Error::GatewayTls(Box::new(source)),
+        ClientRole::Plain | ClientRole::Gateway => Error::Http(Box::new(source)),
+    }
+}
+
+fn certificate_failure(error: &reqwest::Error) -> bool {
+    let mut current: Option<&dyn std::error::Error> = Some(error);
+    while let Some(item) = current {
+        let text = item.to_string();
+        if text.contains("invalid peer certificate") || text.contains("invalid certificate") {
+            return true;
+        }
+        current = std::error::Error::source(item);
+    }
+    false
 }
 
 async fn body_bytes(response: reqwest::Response) -> Result<Vec<u8>, Error> {

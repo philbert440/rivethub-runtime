@@ -2,6 +2,8 @@ use std::sync::OnceLock;
 
 use rcgen::BasicConstraints;
 use rcgen::CertificateParams;
+use rcgen::DistinguishedName;
+use rcgen::DnType;
 use rcgen::ExtendedKeyUsagePurpose;
 use rcgen::IsCa;
 use rcgen::Issuer;
@@ -56,6 +58,9 @@ fn signed(ca: &Authority, name: &str) -> (Leaf, Leaf) {
 fn authority(name: &str) -> Authority {
     let key = KeyPair::generate().expect("mesh ca key");
     let mut params = CertificateParams::new(vec![name.to_owned()]).expect("mesh ca name");
+    let mut name_dn = DistinguishedName::new();
+    name_dn.push(DnType::CommonName, name);
+    params.distinguished_name = name_dn;
     params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     params.key_usages = vec![
         KeyUsagePurpose::KeyCertSign,

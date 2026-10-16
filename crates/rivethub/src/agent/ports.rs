@@ -50,6 +50,7 @@ impl Roster {
             directory.mesh_node(node.clone());
         }
         directory.set_mesh_identity(plan.mesh_identity.clone());
+        directory.set_gateway_trust(plan.gateway_trust.clone());
         Ok(directory)
     }
 

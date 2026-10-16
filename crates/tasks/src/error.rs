@@ -75,6 +75,10 @@ pub enum Error {
     MeshTlsIo(#[source] std::io::Error),
     #[error("mesh peer authentication failed")]
     MeshPeer(#[source] Box<reqwest::Error>),
+    #[error("gateway trust is not configured")]
+    GatewayTrustRequired,
+    #[error("gateway tls verification failed")]
+    GatewayTls(#[source] Box<reqwest::Error>),
     #[error("mesh address is invalid")]
     MeshAddress,
     #[error("harness is required to open a harness session")]

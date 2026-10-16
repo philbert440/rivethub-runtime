@@ -1,4 +1,5 @@
 mod assemble;
+mod dial;
 mod ports;
 
 use std::sync::Arc;
@@ -218,7 +219,7 @@ async fn validate(env: &Environment) -> Result<(), RootError> {
     let config = read_config(env).await?;
     assemble::ensure_enabled(&config)?;
     crate::identity::announce_resolved("agent", &config, env).map_err(AgentError::from)?;
-    drop(assemble::plan(&config, env)?);
+    drop(assemble::plan(&config, env).await?);
     Ok(())
 }
 
