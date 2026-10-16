@@ -132,8 +132,9 @@ impl Publisher {
     }
 
     fn publish(&self, discovery: Discovery) {
-        self.status.send_replace(discovery.status());
+        let status = discovery.status();
         self.discovery.send_replace(discovery);
+        self.status.send_replace(status);
     }
 }
 
