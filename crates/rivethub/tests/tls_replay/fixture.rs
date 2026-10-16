@@ -45,10 +45,13 @@ fn prepare_files(remote: IpAddr, url: &str, kind: RunKind) -> Result<Fixture, Er
         state = state.display(),
         static_dir = static_dir.display(),
     );
-    if kind != RunKind::Optional {
+    {
         use std::fmt::Write;
 
         writeln!(config, "  tls_ca: {}/ca.pem", state.display())?;
+        if kind == RunKind::Optional {
+            writeln!(config, "  tls_require_client: false")?;
+        }
     }
     if kind == RunKind::Tenancy {
         use std::fmt::Write;

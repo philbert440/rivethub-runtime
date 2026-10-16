@@ -119,6 +119,8 @@ async fn tls_server_with(
         tls_key: Some(material.key.clone()),
         tls_ca: None,
         tls_crl: None,
+        require_client: true,
+        notices: Vec::new(),
     })
     .expect("tls resolves")
     .expect("tls paths present");

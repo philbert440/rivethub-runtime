@@ -21,6 +21,7 @@ pub struct TlsPaths {
     pub key: PathBuf,
     pub ca: Option<PathBuf>,
     pub crl: Option<PathBuf>,
+    pub require_client: bool,
 }
 
 #[derive(Debug, Error)]
@@ -70,6 +71,7 @@ pub fn resolve_tls(source: &BindSource) -> Result<Option<TlsPaths>, BindError> {
         key: key.to_path_buf(),
         ca: source.tls_ca.clone(),
         crl: source.tls_crl.clone(),
+        require_client: source.require_client,
     }))
 }
 
@@ -77,6 +79,7 @@ pub fn resolve_tls(source: &BindSource) -> Result<Option<TlsPaths>, BindError> {
 enum ClientCertificateMode {
     Required,
     Optional,
+    Off,
 }
 
 pub(crate) fn tls_config(paths: &TlsPaths) -> Result<ServerConfig, TlsError> {
@@ -84,11 +87,16 @@ pub(crate) fn tls_config(paths: &TlsPaths) -> Result<ServerConfig, TlsError> {
 }
 
 pub(crate) fn listener_tls_config(paths: &TlsPaths) -> Result<ServerConfig, TlsError> {
-    build_tls(paths, ClientCertificateMode::Optional)
+    let mode = if paths.require_client {
+        ClientCertificateMode::Optional
+    } else {
+        ClientCertificateMode::Off
+    };
+    build_tls(paths, mode)
 }
 
 fn build_tls(paths: &TlsPaths, mode: ClientCertificateMode) -> Result<ServerConfig, TlsError> {
-    if paths.crl.is_some() && paths.ca.is_none() {
+    if mode != ClientCertificateMode::Off && paths.crl.is_some() && paths.ca.is_none() {
         return Err(TlsError::CrlWithoutCa);
     }
     let certs = load_certs(&paths.cert)?;
@@ -97,25 +105,29 @@ fn build_tls(paths: &TlsPaths, mode: ClientCertificateMode) -> Result<ServerConf
     let builder = ServerConfig::builder_with_provider(provider.clone())
         .with_safe_default_protocol_versions()
         .map_err(TlsError::Rustls)?;
-    let with_certs = match &paths.ca {
-        Some(ca) => {
-            let mut roots = RootCertStore::empty();
-            for cert in load_certs(ca)? {
-                roots.add(cert).map_err(TlsError::Rustls)?;
+    let with_certs = if mode == ClientCertificateMode::Off {
+        builder.with_no_client_auth()
+    } else {
+        match &paths.ca {
+            Some(ca) => {
+                let mut roots = RootCertStore::empty();
+                for cert in load_certs(ca)? {
+                    roots.add(cert).map_err(TlsError::Rustls)?;
+                }
+                let mut verifier =
+                    WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider);
+                if mode == ClientCertificateMode::Optional {
+                    verifier = verifier.allow_unauthenticated();
+                }
+                if let Some(crl) = &paths.crl {
+                    let lists = load_crls(crl)?;
+                    verifier = verifier.with_crls(lists).enforce_revocation_expiration();
+                }
+                let verifier = verifier.build().map_err(TlsError::Verifier)?;
+                builder.with_client_cert_verifier(verifier)
             }
-            let mut verifier =
-                WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider);
-            if mode == ClientCertificateMode::Optional {
-                verifier = verifier.allow_unauthenticated();
-            }
-            if let Some(crl) = &paths.crl {
-                let lists = load_crls(crl)?;
-                verifier = verifier.with_crls(lists).enforce_revocation_expiration();
-            }
-            let verifier = verifier.build().map_err(TlsError::Verifier)?;
-            builder.with_client_cert_verifier(verifier)
+            None => builder.with_no_client_auth(),
         }
-        None => builder.with_no_client_auth(),
     };
     with_certs
         .with_single_cert(certs, key)
@@ -140,7 +152,11 @@ fn load_crls(crl: &PathBuf) -> Result<Vec<CertificateRevocationListDer<'static>>
 }
 
 pub fn validate(paths: &TlsPaths) -> Result<(), TlsError> {
-    tls_config(paths)?;
+    if paths.require_client {
+        tls_config(paths)?;
+    } else {
+        listener_tls_config(paths)?;
+    }
     Ok(())
 }
 

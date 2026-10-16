@@ -40,30 +40,6 @@
     }
   },
   {
-    "id": "tls-optional/tls-optional-api-no-cert",
-    "reason": "Omitting tls_ca does not disable composed HTTP authorization: remote anonymous requests receive 401 instead of the recorded 200.",
-    "expected": {
-      "kind": "http",
-      "status": 401
-    }
-  },
-  {
-    "id": "tls-optional/tls-optional-root-html",
-    "reason": "Omitting tls_ca does not disable composed HTTP authorization: remote static requests receive 401 instead of the recorded 200.",
-    "expected": {
-      "kind": "http",
-      "status": 401
-    }
-  },
-  {
-    "id": "tls-optional/tls-optional-wrong-ca",
-    "reason": "Without tls_ca no client certificate is requested; composed HTTP authorization refuses the anonymous remote request with 401 instead of 200.",
-    "expected": {
-      "kind": "http",
-      "status": 401
-    }
-  },
-  {
     "id": "tls-tenancy/tt-alice-sessions",
     "reason": "The composed gateway does not load session-owners.json; both loopback-seeded sessions belong to owner and Alice receives an empty session list.",
     "expected": {

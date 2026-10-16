@@ -164,7 +164,7 @@ async fn bind_node(
     )
     .await
     .map_err(StartupError::from)?;
-    let (listener, tls) = match listen(config).await {
+    let (listener, tls) = match listen(config, env).await {
         Ok(bound) => bound,
         Err(error) => {
             if let Err(close) = composition.close().await {

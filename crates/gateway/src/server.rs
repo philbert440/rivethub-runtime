@@ -50,33 +50,8 @@ pub struct BindSource {
     pub tls_key: Option<PathBuf>,
     pub tls_ca: Option<PathBuf>,
     pub tls_crl: Option<PathBuf>,
-}
-
-impl BindSource {
-    #[must_use]
-    pub fn from_config(config: &config::Config) -> Self {
-        match &config.gateway {
-            Some(section) => Self {
-                host: section
-                    .host
-                    .clone()
-                    .unwrap_or_else(|| "127.0.0.1".to_string()),
-                port: section.port,
-                tls_cert: section.tls_cert.clone().map(PathBuf::from),
-                tls_key: section.tls_key.clone().map(PathBuf::from),
-                tls_ca: section.tls_ca.clone(),
-                tls_crl: section.tls_crl.clone(),
-            },
-            None => Self {
-                host: "127.0.0.1".to_string(),
-                port: 5174,
-                tls_cert: None,
-                tls_key: None,
-                tls_ca: None,
-                tls_crl: None,
-            },
-        }
-    }
+    pub require_client: bool,
+    pub notices: Vec<String>,
 }
 
 #[derive(Debug, Error)]

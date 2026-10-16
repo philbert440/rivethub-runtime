@@ -53,6 +53,7 @@ impl Material {
             cert: write("node.crt", server.pem())?,
             key: write("node.key", server_key.serialize_pem())?,
             ca: Some(write("ca.crt", root.pem())?),
+            require_client: true,
         };
         Ok(Self {
             _directory: directory,

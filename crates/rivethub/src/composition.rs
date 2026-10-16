@@ -121,6 +121,19 @@ impl Composition {
         factory: &crate::models::ModelFactory,
     ) -> Result<Self, ComposeError> {
         let settings = gateway_settings(config, env)?;
+        let node_name = settings.node.clone();
+        let section = config.gateway.clone();
+        let tls_env = env.clone();
+        let shared = config::shared_dir(env);
+        let bind = tokio::task::spawn_blocking(move || {
+            gateway::server::BindSource::resolve_section(
+                section.as_ref(),
+                &tls_env,
+                &node_name,
+                &shared,
+            )
+        })
+        .await?;
         let sessions = Arc::new(
             SessionRegistry::new(Duration::from_secs(300)).with_shutdown(shutdown.child_token()),
         );
@@ -129,6 +142,7 @@ impl Composition {
             .with_uploads(crate::service::uploads(env)?)
             .with_tenancy(identity.tenancy.clone())
             .with_identity_required()
+            .with_client_certificate_required(bind.require_client)
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
         let home = env

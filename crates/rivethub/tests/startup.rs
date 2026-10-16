@@ -78,6 +78,7 @@ async fn binary_replays_recorded_startup_refusals() -> TestResult {
                 .args(["gateway", "--check"])
                 .env_clear()
                 .env("HOME", home.path())
+                .env("RIVETHUB_SHARED_DIR", home.path())
                 .env("TOKIO_WORKER_THREADS", "2")
                 .kill_on_drop(true)
                 .output(),

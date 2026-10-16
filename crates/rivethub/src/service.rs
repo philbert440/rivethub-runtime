@@ -167,20 +167,27 @@ pub(crate) fn uploads(
     ))
 }
 
-pub async fn listen(config: &Config) -> Result<(TcpListener, Option<TlsPaths>), StartupError> {
-    let source = BindSource::from_config(config);
-    let tls_source = source.clone();
-    let tls = tokio::task::spawn_blocking(move || {
-        let tls = gateway::tls::resolve_tls(&tls_source)?;
+pub async fn listen(
+    config: &Config,
+    env: &Environment,
+) -> Result<(TcpListener, Option<TlsPaths>), StartupError> {
+    let node = crate::identity::resolve(config, env)?;
+    let section = config.gateway.clone();
+    let env = env.clone();
+    let shared = config::shared_dir(&env);
+    let node_name = node.name;
+    let prepared = tokio::task::spawn_blocking(move || {
+        let source = BindSource::resolve_section(section.as_ref(), &env, &node_name, &shared);
+        let tls = gateway::tls::resolve_tls(&source)?;
         if let Some(paths) = &tls {
             gateway::tls::validate(paths).map_err(ServeError::Tls)?;
         }
-        Ok::<_, StartupError>(tls)
+        Ok::<_, StartupError>((source, tls))
     })
     .await
     .map_err(StartupError::StateTask)??;
-    let listener = gateway::server::bind(&source).await?;
-    Ok((listener, tls))
+    let listener = gateway::server::bind(&prepared.0).await?;
+    Ok((listener, prepared.1))
 }
 
 pub async fn serve(
@@ -248,7 +255,7 @@ async fn run_gateway(
     let mut composition =
         crate::composition::Composition::build(config, env, store, shutdown).await?;
     let listening = async {
-        let (listener, tls) = listen(config).await?;
+        let (listener, tls) = listen(config, env).await?;
         let addr = listener.local_addr()?;
         tracing::info!(
             "gateway listening on {addr}{}",
@@ -330,7 +337,13 @@ async fn check_config(env: &Environment) -> Result<(), StartupError> {
     let loading_env = env.clone();
     let config = tokio::task::spawn_blocking(move || {
         let config = load(&loading_env)?;
-        let source = BindSource::from_config(&config);
+        let node = crate::identity::resolve(&config, &loading_env)?;
+        let source = BindSource::resolve(
+            &config,
+            &loading_env,
+            &node.name,
+            &config::shared_dir(&loading_env),
+        );
         if let Some(tls) = gateway::tls::resolve_tls(&source)? {
             gateway::tls::validate(&tls).map_err(ServeError::Tls)?;
         }

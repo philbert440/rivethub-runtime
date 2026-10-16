@@ -35,7 +35,15 @@ pub(crate) async fn run(env: &Environment) -> Report {
 
 async fn health(env: &Environment) -> Result<Report, Error> {
     let (_, loaded) = configuration::load(env).await?;
-    let source = BindSource::from_config(&loaded.config);
+    let hostname = host_name()?;
+    let node = config::resolve_node_name(&loaded.config, env, &hostname)?;
+    let section = loaded.config.gateway.clone();
+    let tls_env = env.clone();
+    let shared = config::shared_dir(&tls_env);
+    let source = tokio::task::spawn_blocking(move || {
+        BindSource::resolve_section(section.as_ref(), &tls_env, &node, &shared)
+    })
+    .await?;
     let mut url = url::Url::parse(if source.tls_cert.is_some() {
         "https://localhost/healthz"
     } else {
@@ -85,4 +93,15 @@ async fn health(env: &Environment) -> Result<Report, Error> {
     let mut report = Report::success(format!("{}\n", parts.join("")));
     report.stderr = configuration::notices(&loaded);
     Ok(report)
+}
+
+fn host_name() -> Result<String, Error> {
+    let raw = nix::unistd::gethostname().map_err(|_| Error::HostName)?;
+    let text = raw.into_string().map_err(|_| Error::HostName)?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        Ok(String::new())
+    } else {
+        Ok(trimmed.to_owned())
+    }
 }

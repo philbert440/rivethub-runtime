@@ -218,6 +218,9 @@ async fn settings_use_mesh_port_and_gateway_tls_and_refuse_missing_security() ->
     )?;
     let settings = ChannelSettings::from_config(
         &config,
+        &config::Environment::default(),
+        "local",
+        std::path::Path::new("unused-shared"),
         material.settings.tls.clone(),
         Duration::from_secs(30),
     )?;
@@ -239,7 +242,14 @@ async fn settings_use_mesh_port_and_gateway_tls_and_refuse_missing_security() ->
         "mesh:\n  enabled: true\n  tls: false\n  agent_channel_port: 5800\n",
     )?;
     assert!(matches!(
-        ChannelSettings::from_config(&disabled, material.settings.tls, Duration::from_secs(30)),
+        ChannelSettings::from_config(
+            &disabled,
+            &config::Environment::default(),
+            "local",
+            std::path::Path::new("unused-shared"),
+            material.settings.tls,
+            Duration::from_secs(30),
+        ),
         Err(ChannelError::TlsRequired)
     ));
     Ok(())

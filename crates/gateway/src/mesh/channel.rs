@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -50,6 +51,9 @@ pub struct ChannelSettings {
 impl ChannelSettings {
     pub fn from_config(
         config: &config::Config,
+        env: &config::Environment,
+        node_name: &str,
+        shared_dir: &Path,
         gateway_tls: TlsPaths,
         request_timeout: Duration,
     ) -> Result<Self, ChannelError> {
@@ -65,10 +69,11 @@ impl ChannelSettings {
                 key: paths.key_path.clone().ok_or(ChannelError::TlsRequired)?,
                 ca: Some(paths.ca_path.clone().ok_or(ChannelError::TlsRequired)?),
                 crl: paths.crl_path.clone(),
+                require_client: true,
             },
         };
         let settings = Self {
-            host: BindSource::from_config(config).host,
+            host: BindSource::resolve(config, env, node_name, shared_dir).host,
             agent_channel_port: mesh.agent_channel_port.ok_or(ChannelError::PortRequired)?,
             tls,
             request_timeout,

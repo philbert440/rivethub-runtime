@@ -151,7 +151,7 @@ fn mesh_paths(advertise: &str, cert: &Path, key: &Path, ca: &Path) -> String {
 async fn open_plan(text: &str) -> Result<Plan, AgentError> {
     let home = tempfile::tempdir().expect("home");
     let home_text = home.path().to_str().expect("home path");
-    let env = Environment::from_vars([("HOME", home_text)]);
+    let env = Environment::from_vars([("HOME", home_text), ("RIVETHUB_SHARED_DIR", home_text)]);
     let loaded = Config::from_str(&env, text).expect("config");
     let planned = super::super::assemble::plan(&loaded.config, &env).await;
     drop(home);

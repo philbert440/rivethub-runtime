@@ -8,6 +8,7 @@ pub mod sessions;
 pub mod tenancy;
 pub mod term;
 pub mod tls;
+mod tls_resolve;
 pub mod uploads;
 
 use std::path::PathBuf;
@@ -228,6 +229,7 @@ pub struct Gateway {
     denials: DenialLog,
     tenancy: tenancy::Tenancy,
     identity_required: bool,
+    client_certificate_required: bool,
     sessions: Arc<sessions::SessionRegistry>,
     terminal: Option<Arc<term::TerminalService>>,
     transcript: Option<Arc<dyn kernel::transcript::TranscriptReader>>,
@@ -258,6 +260,7 @@ impl Gateway {
             denials: DenialLog::default(),
             tenancy: tenancy::Tenancy::default(),
             identity_required: false,
+            client_certificate_required: true,
             sessions: Arc::new(sessions::SessionRegistry::new(
                 std::time::Duration::from_secs(300),
             )),
@@ -318,6 +321,17 @@ impl Gateway {
     pub fn with_identity_required(mut self) -> Self {
         self.identity_required = true;
         self
+    }
+
+    #[must_use]
+    pub fn with_client_certificate_required(mut self, required: bool) -> Self {
+        self.client_certificate_required = required;
+        self
+    }
+
+    #[must_use]
+    pub(crate) fn client_certificate_required(&self) -> bool {
+        self.client_certificate_required
     }
 
     #[must_use]

@@ -190,11 +190,12 @@ async fn recorded_batches_land_and_read_back_through_the_memory_api(pool: PgPool
     let env = Environment::from_vars([
         (OsStr::new(config::POSTGRES_URL_VARIABLE), OsStr::new(&url)),
         (OsStr::new("HOME"), home.path().as_os_str()),
+        (OsStr::new("RIVETHUB_SHARED_DIR"), home.path().as_os_str()),
     ]);
     let config: Config = serde_yaml_ng::from_str("den:\n  host: 127.0.0.1\n  port: 0\n")?;
     let store = rivethub::service::connect(&config, &env).await?;
     let gateway = rivethub::service::compose(&config, &env, store)?;
-    let (listener, tls) = rivethub::service::listen(&config).await?;
+    let (listener, tls) = rivethub::service::listen(&config, &env).await?;
     assert!(tls.is_none(), "loopback binds resolve without tls");
     let port = listener.local_addr()?.port();
     let shutdown = CancellationToken::new();

@@ -62,6 +62,8 @@ fn recorded_startup_refusals_reproduce_the_error_lines() {
             tls_key: material(&run.env.tls_key),
             tls_ca: material(&run.env.tls_ca),
             tls_crl: None,
+            require_client: true,
+            notices: Vec::new(),
         };
         let outcome = resolve_tls(&source);
         let expected = testkit::substitute(
@@ -92,6 +94,8 @@ fn tls_paths_resolve_when_the_files_exist() {
         tls_key: Some(key),
         tls_ca: None,
         tls_crl: None,
+        require_client: true,
+        notices: Vec::new(),
     };
     let paths = resolve_tls(&source)
         .expect("tls resolves")
@@ -107,6 +111,8 @@ fn missing_cert_file_refuses_before_listen() {
         tls_key: Some(std::path::PathBuf::from("/nonexistent/no-such-key.pem")),
         tls_ca: None,
         tls_crl: None,
+        require_client: true,
+        notices: Vec::new(),
     };
     let error = resolve_tls(&source).expect_err("missing cert refuses");
     assert!(matches!(error, BindError::Io(_)));
@@ -134,6 +140,8 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
         tls_key: None,
         tls_ca: None,
         tls_crl: None,
+        require_client: true,
+        notices: Vec::new(),
     };
     assert!(gateway::server::bind(&source).await.is_ok());
     let source = BindSource {
@@ -143,6 +151,8 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
         tls_key: None,
         tls_ca: None,
         tls_crl: None,
+        require_client: true,
+        notices: Vec::new(),
     };
     assert!(gateway::server::bind(&source).await.is_ok());
 
@@ -157,6 +167,8 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
         tls_key: None,
         tls_ca: None,
         tls_crl: None,
+        require_client: true,
+        notices: Vec::new(),
     };
     let error = gateway::server::bind(&source)
         .await
@@ -169,11 +181,11 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
 fn settings_come_from_the_config_gateway_section() {
     let document = "den:\n  host: 0.0.0.0\n  port: 6001\n  allowed_origins:\n    - https://hub.example.test\n  allowed_hosts:\n    - gateway.example.test\n";
     let config: config::Config = serde_yaml_ng::from_str(document).expect("config");
-    let bind = BindSource::from_config(&config);
-    assert_eq!(bind.host, "0.0.0.0");
-    assert_eq!(bind.port, 6001);
     let home = tempdir().expect("home");
     let env = config::Environment::from_vars([("HOME", home.path().to_str().expect("utf-8 home"))]);
+    let bind = BindSource::resolve(&config, &env, "golden-node", home.path());
+    assert_eq!(bind.host, "0.0.0.0");
+    assert_eq!(bind.port, 6001);
     let settings = gateway::Settings::from_config_in(
         &config,
         &env,
@@ -185,7 +197,7 @@ fn settings_come_from_the_config_gateway_section() {
     assert_eq!(settings.allowed_hosts, vec!["gateway.example.test"]);
 
     let empty: config::Config = serde_yaml_ng::from_str("").expect("empty config");
-    let bind = BindSource::from_config(&empty);
+    let bind = BindSource::resolve(&empty, &env, "golden-node", home.path());
     assert_eq!(bind.host, "127.0.0.1");
     assert_eq!(bind.port, 5174);
 }

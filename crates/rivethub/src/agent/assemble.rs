@@ -200,7 +200,7 @@ pub(super) async fn plan(config: &Config, env: &Environment) -> Result<Plan, Age
     let node = identity.name;
     let worker = format!("{node}:agent");
     let settings = gateway::Settings::from_config_in(config, env, identity.hostname, node.clone())?;
-    let endpoint = super::dial::endpoint(config).await?;
+    let endpoint = super::dial::endpoint(config, env, &node).await?;
     Ok(Plan {
         node,
         worker,
@@ -268,7 +268,7 @@ fn install_local(directory: &mut tasks::Directory, config: &Config) -> Result<()
 
 pub(super) async fn connect(config: &Config, env: &Environment) -> Result<Connected, AgentError> {
     let mut plan = plan(config, env).await?;
-    plan.mesh_identity = load_mesh_identity(config).await?;
+    plan.mesh_identity = load_mesh_identity(config, env).await?;
     let presets = load_presets(plan.state_dir.clone()).await?;
     let nodes = load_nodes(config, env).await?;
     let roster = Arc::new(Roster {
@@ -340,7 +340,12 @@ struct MeshTlsFiles {
     ca: PathBuf,
 }
 
-fn mesh_tls_files(config: &Config) -> Result<Option<MeshTlsFiles>, AgentError> {
+enum MeshChoice {
+    Gateway,
+    Explicit(config::model::MeshTlsPaths),
+}
+
+fn mesh_choice(config: &Config) -> Result<Option<MeshChoice>, AgentError> {
     let Some(mesh) = config.mesh.as_ref() else {
         return Ok(None);
     };
@@ -348,14 +353,19 @@ fn mesh_tls_files(config: &Config) -> Result<Option<MeshTlsFiles>, AgentError> {
         return Ok(None);
     }
     match &mesh.tls {
-        config::model::MeshTls::Enabled(true) => Ok(Some(gateway_mesh_files(config)?)),
+        config::model::MeshTls::Enabled(true) => Ok(Some(MeshChoice::Gateway)),
         config::model::MeshTls::Enabled(false) => Err(tasks::Error::MeshTlsRequired.into()),
-        config::model::MeshTls::Paths(paths) => Ok(Some(explicit_mesh_files(paths)?)),
+        config::model::MeshTls::Paths(paths) => Ok(Some(MeshChoice::Explicit(paths.clone()))),
     }
 }
 
-fn gateway_mesh_files(config: &Config) -> Result<MeshTlsFiles, AgentError> {
-    let source = BindSource::from_config(config);
+fn gateway_mesh_files(
+    section: Option<&config::model::GatewaySection>,
+    env: &Environment,
+    node_name: &str,
+    shared: &std::path::Path,
+) -> Result<MeshTlsFiles, AgentError> {
+    let source = BindSource::resolve_section(section, env, node_name, shared);
     Ok(MeshTlsFiles {
         cert: require_path(source.tls_cert)?,
         key: require_path(source.tls_key)?,
@@ -376,12 +386,24 @@ fn require_path(path: Option<PathBuf>) -> Result<PathBuf, AgentError> {
         .ok_or_else(|| tasks::Error::MeshTlsRequired.into())
 }
 
-async fn load_mesh_identity(config: &Config) -> Result<Option<tasks::MeshIdentity>, AgentError> {
-    let Some(files) = mesh_tls_files(config)? else {
+async fn load_mesh_identity(
+    config: &Config,
+    env: &Environment,
+) -> Result<Option<tasks::MeshIdentity>, AgentError> {
+    let Some(choice) = mesh_choice(config)? else {
         return Ok(None);
     };
+    let node = crate::identity::resolve(config, env)?;
+    let section = config.gateway.clone();
+    let env = env.clone();
+    let shared = config::shared_dir(&env);
     match tokio::task::spawn_blocking(move || {
+        let files = match choice {
+            MeshChoice::Gateway => gateway_mesh_files(section.as_ref(), &env, &node.name, &shared)?,
+            MeshChoice::Explicit(paths) => explicit_mesh_files(&paths)?,
+        };
         tasks::MeshIdentity::from_files(&files.cert, &files.key, &files.ca)
+            .map_err(AgentError::from)
     })
     .await
     {

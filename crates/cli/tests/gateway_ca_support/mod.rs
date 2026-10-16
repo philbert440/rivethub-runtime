@@ -96,6 +96,7 @@ impl Material {
             key: key_path,
             ca: Some(root_path),
             crl: self.crl,
+            require_client: true,
         };
         let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
         let port = listener.local_addr()?.port();

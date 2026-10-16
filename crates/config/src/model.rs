@@ -287,6 +287,7 @@ pub struct GatewaySection {
     pub tls_key: Option<String>,
     pub tls_ca: Option<PathBuf>,
     pub tls_crl: Option<PathBuf>,
+    pub tls_require_client: Option<bool>,
     pub users_file: Option<PathBuf>,
     pub commands_file: Option<PathBuf>,
     pub terminal: Option<TerminalSection>,

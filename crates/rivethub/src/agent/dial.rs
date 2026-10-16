@@ -41,24 +41,39 @@ enum Class {
     WildV6,
 }
 
-pub(super) async fn endpoint(config: &Config) -> Result<GatewayEndpoint, AgentError> {
-    let source = BindSource::from_config(config);
-    let Some(cert) = present(source.tls_cert.clone()) else {
-        return Ok(GatewayEndpoint {
-            url: http_url(&source)?,
-            trust: None,
-        });
-    };
-    let files = Files {
-        cert,
-        bind: source.host,
-        port: source.port,
-        ca: present(source.tls_ca),
-    };
-    match tokio::task::spawn_blocking(move || load(&files)).await {
+pub(super) async fn endpoint(
+    config: &Config,
+    env: &config::Environment,
+    node_name: &str,
+) -> Result<GatewayEndpoint, AgentError> {
+    let section = config.gateway.clone();
+    let env = env.clone();
+    let node_name = node_name.to_owned();
+    let shared = config::shared_dir(&env);
+    match tokio::task::spawn_blocking(move || {
+        let source = BindSource::resolve_section(section.as_ref(), &env, &node_name, &shared);
+        dial(&source)
+    })
+    .await
+    {
         Ok(result) => result,
         Err(error) => Err(AgentError::Join(error)),
     }
+}
+
+fn dial(source: &BindSource) -> Result<GatewayEndpoint, AgentError> {
+    let Some(cert) = present(source.tls_cert.clone()) else {
+        return Ok(GatewayEndpoint {
+            url: http_url(source)?,
+            trust: None,
+        });
+    };
+    load(&Files {
+        cert,
+        bind: source.host.clone(),
+        port: source.port,
+        ca: present(source.tls_ca.clone()),
+    })
 }
 
 pub(super) fn choose(pem: &str, bind: &str) -> Result<String, AgentError> {
@@ -134,7 +149,7 @@ fn plain_host(bind: &str) -> Result<String, AgentError> {
 }
 
 fn present(path: Option<PathBuf>) -> Option<PathBuf> {
-    path.filter(|item| !item.as_os_str().is_empty())
+    path.filter(|item| !item.as_os_str().is_empty() && item.is_file())
 }
 
 fn find_ip(names: &Names, ip: IpAddr) -> Option<String> {

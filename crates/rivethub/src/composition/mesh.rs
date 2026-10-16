@@ -28,14 +28,8 @@ pub(super) async fn start(
     else {
         return Ok(tasks);
     };
-    let source = gateway::server::BindSource::from_config(config);
-    let port = source.port;
-    let tls = tokio::task::spawn_blocking(move || gateway::tls::resolve_tls(&source))
-        .await??
-        .ok_or(gateway::mesh::ChannelError::TlsRequired)?;
-    let settings = ChannelSettings::from_config(config, tls, Duration::from_secs(120))?;
+    let (port, settings, name) = channel_settings(config, env).await?;
     let registry = Registry::open(config::shared_dir(env), "mesh.json".into()).await?;
-    let name = crate::identity::resolve(config, env)?.name;
     let host = mesh
         .advertise_host
         .clone()
@@ -74,6 +68,40 @@ pub(super) async fn start(
         Ok(())
     });
     Ok(tasks)
+}
+
+async fn channel_settings(
+    config: &Config,
+    env: &Environment,
+) -> Result<(u16, ChannelSettings, String), ComposeError> {
+    let identity = crate::identity::resolve(config, env)?;
+    let shared = config::shared_dir(env);
+    let section = config.gateway.clone();
+    let tls_env = env.clone();
+    let node_name = identity.name.clone();
+    let shared_for_tls = shared.clone();
+    let resolved = tokio::task::spawn_blocking(move || {
+        let source = gateway::server::BindSource::resolve_section(
+            section.as_ref(),
+            &tls_env,
+            &node_name,
+            &shared_for_tls,
+        );
+        let port = source.port;
+        let tls = gateway::tls::resolve_tls(&source)?;
+        Ok::<_, gateway::server::BindError>((port, tls))
+    })
+    .await??;
+    let tls = resolved.1.ok_or(gateway::mesh::ChannelError::TlsRequired)?;
+    let settings = ChannelSettings::from_config(
+        config,
+        env,
+        &identity.name,
+        &shared,
+        tls,
+        Duration::from_secs(120),
+    )?;
+    Ok((resolved.0, settings, identity.name))
 }
 
 const GATEWAY_CAPABILITY: &str = "den";

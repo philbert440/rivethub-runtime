@@ -172,7 +172,28 @@ impl FromRequestParts<std::sync::Arc<crate::Gateway>> for UserId {
         parts: &mut Parts,
         gateway: &std::sync::Arc<crate::Gateway>,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
-        std::future::ready(gateway.tenancy.resolve(parts))
+        std::future::ready(caller(gateway, parts))
+    }
+}
+
+fn caller(gateway: &crate::Gateway, parts: &Parts) -> Result<UserId, ApiError> {
+    if gateway.client_certificate_required()
+        || parts
+            .headers
+            .contains_key(axum::http::header::AUTHORIZATION)
+    {
+        return gateway.tenancy.resolve(parts);
+    }
+    match gateway.tenancy.resolve(parts) {
+        Ok(user) => Ok(user),
+        Err(error) => anonymous_owner(&gateway.tenancy, error),
+    }
+}
+
+fn anonymous_owner(tenancy: &Tenancy, error: ApiError) -> Result<UserId, ApiError> {
+    match tenancy.local_user() {
+        Some(user) => Ok(user.clone()),
+        None => Err(error),
     }
 }
 
