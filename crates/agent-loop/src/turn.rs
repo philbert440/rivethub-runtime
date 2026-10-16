@@ -196,6 +196,7 @@ impl AgentLoop {
         .await?;
         let started = Instant::now();
         let request = ModelRequest {
+            options: kernel::model::ModelOptions::default(),
             model: turn.request.model.clone(),
             messages: messages.to_vec(),
             tools: self

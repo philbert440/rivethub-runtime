@@ -121,7 +121,9 @@ pub fn chat_body(
     let tools = tools(&request.tools)?;
     Ok(ChatCompletionRequest {
         model: request.model.clone(),
-        max_tokens: configured_max_tokens.map(u64::from),
+        max_tokens: request.max_tokens.or(configured_max_tokens).map(u64::from),
+        temperature: request.options.temperature,
+        enable_thinking: request.options.enable_thinking,
         messages: wire_messages,
         tools,
         tool_choice: None,
@@ -129,12 +131,18 @@ pub fn chat_body(
         stream_options: Some(StreamOptions {
             include_usage: true,
         }),
-        chat_template_kwargs: match (variant, request.thinking) {
-            (Variant::Vllm, Some(wire::stream::ThinkingLevel::Off)) => Some(ChatTemplateKwargs {
-                enable_thinking: false,
+        chat_template_kwargs: request
+            .options
+            .enable_thinking
+            .map(|enable_thinking| ChatTemplateKwargs { enable_thinking })
+            .or(match (variant, request.thinking) {
+                (Variant::Vllm, Some(wire::stream::ThinkingLevel::Off)) => {
+                    Some(ChatTemplateKwargs {
+                        enable_thinking: false,
+                    })
+                }
+                _ => None,
             }),
-            _ => None,
-        },
         think: None,
     })
 }

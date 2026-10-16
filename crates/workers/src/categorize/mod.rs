@@ -120,6 +120,7 @@ async fn finish(
 async fn ask(env: &CategorizeEnv<'_>, context: &TagJobContext) -> Result<String, WorkerError> {
     cancelled(env)?;
     let request = ModelRequest {
+        options: kernel::model::ModelOptions::default(),
         model: env.settings.model.clone(),
         messages: vec![
             text_message(Role::System, TAG_SYSTEM_PROMPT),

@@ -33,21 +33,7 @@ pub struct FakeJobQueue {
 #[async_trait]
 impl JobQueue for FakeJobQueue {
     fn task_names(&self, role: WorkerRole) -> Vec<JobName> {
-        match role {
-            WorkerRole::Embedder => vec![fixed(FixedJob::EmbedTarget)],
-            WorkerRole::Summarizer => vec![
-                fixed(FixedJob::SummarizeConversation),
-                fixed(FixedJob::SynthesizeToolCall),
-                fixed(FixedJob::EnqueueIdle),
-                fixed(FixedJob::EnqueueStaleSummaries),
-                fixed(FixedJob::ReapDeadJobs),
-            ],
-            WorkerRole::Categorizer => vec![fixed(FixedJob::SuggestTags)],
-            WorkerRole::WikiBuilder => vec![
-                fixed(FixedJob::ExtractWiki),
-                fixed(FixedJob::EnqueueWikiBackfill),
-            ],
-        }
+        role.task_list().to_vec()
     }
 
     async fn subscribe(&self) -> Result<Box<dyn kernel::queue::JobNotifications>, JobQueueError> {
@@ -225,8 +211,4 @@ fn ceiling(name: &JobName) -> i32 {
         },
         JobName::RunTaskOn { .. } | JobName::Heartbeat { .. } => 1,
     }
-}
-
-fn fixed(job: FixedJob) -> JobName {
-    JobName::Fixed(job)
 }

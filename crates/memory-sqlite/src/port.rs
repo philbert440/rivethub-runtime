@@ -349,8 +349,6 @@ fn tasks_for(role: WorkerRole) -> Vec<JobName> {
         WorkerRole::WikiBuilder => vec![
             fixed(FixedJob::ExtractWiki),
             fixed(FixedJob::EnqueueWikiBackfill),
-            fixed(FixedJob::ConsolidateWiki),
-            fixed(FixedJob::RecompileWiki),
             fixed(FixedJob::EnqueueStaleWiki),
         ],
     }

@@ -21,6 +21,7 @@ pub use split::TextChunk;
 pub use split::split_embed_text;
 pub use target::ParsedTarget;
 pub use target::embed_key;
+pub(crate) use target::embed_payload;
 pub use target::read_target;
 pub use text::compose_message;
 pub use text::content_hash;

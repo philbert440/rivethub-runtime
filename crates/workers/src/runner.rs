@@ -3,15 +3,12 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use chrono::Utc;
 use kernel::memory::EmbeddingStore;
 use kernel::memory::MemoryStore;
 use kernel::memory::SummaryStore;
 use kernel::model::ModelProvider;
 use kernel::queue::ClaimedJob;
-use kernel::queue::FixedJob;
 use kernel::queue::JobId;
-use kernel::queue::JobName;
 use kernel::queue::JobNotifications;
 use kernel::queue::JobQueue;
 use kernel::queue::WorkerRole;
@@ -24,24 +21,15 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
-use crate::categorize::CategorizeEnv;
 use crate::categorize::TagSettings;
-use crate::categorize::handle_suggest;
+use crate::dispatch::{JobEnv, dispatch};
 use crate::embed::EmbedSettings;
-use crate::embed::handle_embed;
 use crate::error::WorkerError;
 use crate::outage::Hold;
 use crate::outage::OutageGate;
 use crate::role::ProcessRole;
-use crate::summarize::SummarizeEnv;
 use crate::summarize::SummarySettings;
-use crate::summarize::handle_enqueue_idle;
-use crate::summarize::handle_enqueue_stale;
-use crate::summarize::handle_reap;
-use crate::summarize::handle_summarize;
-use crate::wiki_builder::{
-    WikiBuilderDeps, WikiBuilderEnv, handle_extract_wiki, handle_wiki_backfill,
-};
+use crate::wiki_builder::WikiBuilderDeps;
 
 pub const EMBED_CONCURRENCY: u32 = 4;
 pub const POLL_INTERVAL: Duration = Duration::from_secs(60);
@@ -94,6 +82,10 @@ pub struct WorkerDeps {
     reason = "the model provider and the summary and embedding stores are trait objects"
 )]
 pub struct Runner<Q> {
+    job_settings: crate::MemoryJobSettings,
+    schedules: bool,
+    wiki_enabled: bool,
+    memory_jobs: Option<Arc<dyn kernel::memory::jobs::MemoryJobStore>>,
     wiki: Option<WikiBuilderDeps>,
     queue: Arc<Q>,
     targets: Arc<dyn EmbeddingStore>,
@@ -120,6 +112,10 @@ where
     pub fn new(queue: Arc<Q>, config: RunnerConfig, deps: WorkerDeps) -> Self {
         let (idle, _) = watch::channel(false);
         Self {
+            job_settings: crate::MemoryJobSettings::standard(),
+            schedules: false,
+            wiki_enabled: true,
+            memory_jobs: None,
             wiki: None,
             queue,
             targets: deps.targets,
@@ -142,6 +138,28 @@ where
     #[must_use]
     pub fn with_activities(mut self, activities: Activities) -> Self {
         self.activities = activities;
+        self
+    }
+
+    #[must_use]
+    pub fn with_job_settings(mut self, settings: crate::MemoryJobSettings) -> Self {
+        self.job_settings = settings;
+        self
+    }
+
+    #[must_use]
+    pub fn with_schedules(mut self, wiki_enabled: bool) -> Self {
+        self.schedules = true;
+        self.wiki_enabled = wiki_enabled;
+        self
+    }
+
+    #[must_use]
+    pub fn with_memory_jobs(
+        mut self,
+        store: Arc<dyn kernel::memory::jobs::MemoryJobStore>,
+    ) -> Self {
+        self.memory_jobs = Some(store);
         self
     }
 
@@ -174,15 +192,10 @@ where
             () = cancel.cancelled() => return Ok(()),
             result = self.queue.subscribe() => result.map_err(WorkerError::queue)?,
         };
-        let outcome = self
-            .claim_loop(
-                &roles,
-                &semaphore,
-                &mut tasks,
-                notifications.as_mut(),
-                &cancel,
-            )
-            .await;
+        let outcome = tokio::select! {
+            result = self.claim_loop(&roles, &semaphore, &mut tasks, notifications.as_mut(), &cancel) => result,
+            result = crate::schedule::run(self.queue.as_ref(), &roles, self.wiki_enabled, &cancel), if self.schedules => result,
+        };
         drop(notifications);
         drop(listening);
         cancel.cancel();
@@ -295,6 +308,9 @@ where
         self.publish_idle(false);
         let queue = Arc::clone(&self.queue);
         let env = JobEnv {
+            settings: self.job_settings,
+            wiki_enabled: self.wiki_enabled,
+            memory_jobs: self.memory_jobs.clone(),
             wiki: self.wiki.clone(),
             targets: Arc::clone(&self.targets),
             summaries: Arc::clone(&self.summaries),
@@ -427,17 +443,6 @@ async fn wait_outage(
     }
 }
 
-struct JobEnv {
-    wiki: Option<WikiBuilderDeps>,
-    targets: Arc<dyn EmbeddingStore>,
-    summaries: Arc<dyn SummaryStore>,
-    memory: Arc<dyn MemoryStore>,
-    provider: Arc<dyn ModelProvider>,
-    embed: EmbedSettings,
-    summary: SummarySettings,
-    tags: TagSettings,
-}
-
 struct Attempt<'a> {
     delay: Duration,
     hold: Hold<'a>,
@@ -526,84 +531,4 @@ async fn fail_job<Q: JobQueue>(
         .fail(id, &error.to_string())
         .await
         .map_err(WorkerError::queue)
-}
-
-async fn dispatch<Q: JobQueue>(
-    queue: &Q,
-    env: &JobEnv,
-    job: &ClaimedJob,
-    cancel: &CancellationToken,
-) -> Result<(), WorkerError> {
-    let summarize = SummarizeEnv {
-        store: env.summaries.as_ref(),
-        provider: env.provider.as_ref(),
-        queue,
-        settings: &env.summary,
-        now: Utc::now(),
-        cancel,
-    };
-    match &job.name {
-        JobName::Fixed(FixedJob::ExtractWiki | FixedJob::EnqueueWikiBackfill) => {
-            let wiki = env.wiki.as_ref().ok_or(WorkerError::MissingDependencies {
-                role: ProcessRole::WikiBuilder,
-            })?;
-            let wiki_env = WikiBuilderEnv {
-                store: wiki.store.as_ref(),
-                provider: env.provider.as_ref(),
-                queue,
-                model: &wiki.model,
-                now: Utc::now(),
-                cancel,
-            };
-            if job.name == JobName::Fixed(FixedJob::ExtractWiki) {
-                handle_extract_wiki(&wiki_env, &job.payload)
-                    .await
-                    .map(|_| ())
-            } else {
-                handle_wiki_backfill(&wiki_env).await.map(|_| ())
-            }
-        }
-        JobName::Fixed(FixedJob::EmbedTarget) => {
-            handle_embed(
-                env.targets.as_ref(),
-                env.provider.as_ref(),
-                env.embed,
-                &job.payload,
-                cancel,
-            )
-            .await
-        }
-        JobName::Fixed(FixedJob::SummarizeConversation) => {
-            handle_summarize(&summarize, &job.payload).await.map(|_| ())
-        }
-        JobName::Fixed(FixedJob::EnqueueIdle) => handle_enqueue_idle(&summarize).await.map(|_| ()),
-        JobName::Fixed(FixedJob::EnqueueStaleSummaries) => {
-            handle_enqueue_stale(&summarize).await.map(|_| ())
-        }
-        JobName::Fixed(FixedJob::ReapDeadJobs) => handle_reap(&summarize).await.map(|_| ()),
-        JobName::Fixed(FixedJob::SuggestTags) => {
-            let categorize = CategorizeEnv {
-                store: env.memory.as_ref(),
-                provider: env.provider.as_ref(),
-                settings: &env.tags,
-                now: Utc::now(),
-                cancel,
-                attempt: job.attempt,
-            };
-            handle_suggest(&categorize, &job.payload).await.map(|_| ())
-        }
-        JobName::Fixed(
-            FixedJob::EnqueueUnembedded
-            | FixedJob::EnqueueUnchunked
-            | FixedJob::SynthesizeToolCall
-            | FixedJob::ConsolidateWiki
-            | FixedJob::RecompileWiki
-            | FixedJob::EnqueueStaleWiki
-            | FixedJob::RunTask,
-        )
-        | JobName::Heartbeat { .. }
-        | JobName::RunTaskOn { .. } => Err(WorkerError::Unhandled {
-            name: job.name.to_string(),
-        }),
-    }
 }

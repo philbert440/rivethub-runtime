@@ -252,8 +252,10 @@ pub mod openai {
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct ChatCompletionRequest {
+        pub temperature: Option<f64>,
+        pub enable_thinking: Option<bool>,
         pub model: String,
         pub max_tokens: Option<u64>,
         pub messages: Vec<Message>,

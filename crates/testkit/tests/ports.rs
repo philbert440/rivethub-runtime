@@ -380,6 +380,7 @@ fn provider_streams_scripted_then_refuses_unscripted_requests() {
                 ModelChunk::Done,
             ])]));
         let request = ModelRequest {
+            options: kernel::model::ModelOptions::default(),
             model: "fake-model".to_string(),
             messages: vec![wire::message::Message {
                 role: Role::User,

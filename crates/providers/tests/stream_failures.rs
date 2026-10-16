@@ -18,6 +18,7 @@ const TEXT: &str = "data: {\"id\":\"c\",\"object\":\"chat.completion.chunk\",\"c
 
 fn request() -> kernel::model::ModelRequest {
     kernel::model::ModelRequest {
+        options: kernel::model::ModelOptions::default(),
         model: "m".to_owned(),
         messages: Vec::new(),
         tools: Vec::new(),
@@ -82,8 +83,14 @@ async fn transport_failure_preserves_the_source_and_terminates_the_stream() {
         .expect("error arrives")
         .expect("error item")
         .expect_err("broken body");
+    assert!(error.retryable_transport());
     let ModelProviderError::Stream { source, message } = error else {
         panic!("body transport is a stream error");
+    };
+    let Some(kernel::model::ModelCallFailure::Transport { source }) =
+        source.downcast_ref::<kernel::model::ModelCallFailure>()
+    else {
+        panic!("transport classification retains its source");
     };
     assert!(matches!(
         source.downcast_ref::<eventsource_stream::EventStreamError<reqwest::Error>>(),

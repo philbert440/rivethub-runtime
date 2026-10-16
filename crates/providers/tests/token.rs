@@ -98,6 +98,7 @@ fn lines(path: &Path) -> usize {
 
 fn hi_request() -> ModelRequest {
     ModelRequest {
+        options: kernel::model::ModelOptions::default(),
         model: "test-model".to_owned(),
         messages: vec![Message {
             role: Role::User,

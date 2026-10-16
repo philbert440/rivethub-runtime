@@ -340,7 +340,11 @@ fn crontab_and_task_lists_follow_the_roles() {
 
     assert_eq!(
         PostgresQueue::task_list(WorkerRole::Embedder),
-        &[JobName::Fixed(FixedJob::EmbedTarget)]
+        &[
+            JobName::Fixed(FixedJob::EmbedTarget),
+            JobName::Fixed(FixedJob::EnqueueUnembedded),
+            JobName::Fixed(FixedJob::EnqueueUnchunked)
+        ]
     );
     assert!(
         PostgresQueue::task_list(WorkerRole::Summarizer)

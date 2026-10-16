@@ -91,6 +91,7 @@ pub fn base() -> HookContextBase {
 pub fn turn() -> Turn {
     Turn {
         request: ModelRequest {
+            options: kernel::model::ModelOptions::default(),
             model: "test-model".to_owned(),
             messages: vec![Message {
                 role: Role::User,

@@ -173,6 +173,7 @@ async fn run_call(id: String, model: String, runner: Arc<dyn TurnRunner>, call: 
     let session = call.message.session_key;
     let turn = Turn {
         request: kernel::model::ModelRequest {
+            options: kernel::model::ModelOptions::default(),
             model,
             messages: vec![wire::message::Message {
                 role: wire::message::Role::User,

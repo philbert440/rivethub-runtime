@@ -12,6 +12,19 @@ pub(crate) const PERMANENT_NULL_EMBED_ERROR: &str = "Embedding returned null (pe
 
 #[derive(Debug, Error)]
 pub enum WorkerError {
+    #[error("{name} must be a positive 32-bit integer")]
+    JobSetting { name: String },
+    #[error("Empty synth response")]
+    EmptySynth,
+    #[error("invalid synthesis payload: {source}")]
+    SynthPayload {
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error(transparent)]
+    MemoryJob(#[from] kernel::memory::jobs::MemoryJobError),
+    #[error("memory job dependencies were not supplied")]
+    MissingMemoryJobs,
     #[error("wiki store failed: {0}")]
     WikiStore(#[from] kernel::wiki::builder::WikiStoreError),
     #[error("invalid wiki JSON: {0}")]
@@ -98,6 +111,10 @@ pub enum WorkerError {
 }
 
 impl WorkerError {
+    pub(crate) fn synth_payload(source: serde_json::Error) -> Self {
+        Self::SynthPayload { source }
+    }
+
     pub(crate) fn queue(source: JobQueueError) -> Self {
         Self::Queue(source)
     }

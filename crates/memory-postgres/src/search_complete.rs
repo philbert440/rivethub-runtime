@@ -74,6 +74,7 @@ impl SearchSynthesis {
     async fn answer(&self, text: &str, outcome: &SearchOutcome) -> Result<String, SynthesisError> {
         let evidence = serde_json::to_string(outcome)?;
         let request = ModelRequest {
+            options: kernel::model::ModelOptions::default(),
             model: self.model.clone(),
             messages: vec![
                 Message {

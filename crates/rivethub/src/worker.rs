@@ -88,6 +88,7 @@ async fn check_role(env: &Environment, role: ProcessRole) -> Result<(), RootErro
     check_embeddings(role, &binding)?;
     let model = binding.model;
     EmbedSettings::from_config(&config)?;
+    workers::MemoryJobSettings::from_environment(env)?;
     SummarySettings::standard(model)?;
     crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
     Ok(())
@@ -111,7 +112,7 @@ async fn run(
         let summaries: Arc<dyn SummaryStore> = memory.clone();
         let wiki: Arc<dyn WikiBuilderStore> = memory.clone();
         let store: Arc<dyn MemoryStore> = memory.clone();
-        let runner = build_runner(
+        let mut runner = build_runner(
             role,
             WorkerPorts {
                 queue: Arc::new(queue),
@@ -126,6 +127,11 @@ async fn run(
             activities,
         )
         .await?;
+        runner.runner = runner
+            .runner
+            .with_memory_jobs(memory.clone())
+            .with_job_settings(workers::MemoryJobSettings::from_environment(env)?)
+            .with_schedules(env.text("RIVETHUB_WIKI_EXTRACTION") == Some("1"));
         tracing::info!("worker running {role}");
         drive(runner, shutdown.clone()).await
     }

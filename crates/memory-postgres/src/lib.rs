@@ -10,6 +10,7 @@ mod graphile;
 mod graphile_sql;
 mod listen;
 mod loss;
+mod memory_jobs;
 pub mod project;
 pub mod queue;
 pub mod read;

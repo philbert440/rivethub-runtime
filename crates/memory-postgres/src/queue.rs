@@ -5,7 +5,6 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::queue::ClaimSelector;
 use kernel::queue::ClaimedJob;
-use kernel::queue::FixedJob;
 use kernel::queue::Job;
 use kernel::queue::JobId;
 use kernel::queue::JobName;
@@ -21,14 +20,7 @@ pub struct PostgresQueue {
     inner: GraphileQueue,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CronEntry {
-    pub identifier: String,
-    pub task: JobName,
-    pub schedule: String,
-    pub backfill_seconds: u64,
-    pub max_attempts: u32,
-}
+pub use kernel::memory::schedule::CronEntry;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueHealth {
@@ -55,62 +47,12 @@ impl PostgresQueue {
 
     #[must_use]
     pub fn task_list(role: WorkerRole) -> &'static [JobName] {
-        match role {
-            WorkerRole::Embedder => &[JobName::Fixed(FixedJob::EmbedTarget)],
-            WorkerRole::Summarizer => &[
-                JobName::Fixed(FixedJob::SummarizeConversation),
-                JobName::Fixed(FixedJob::SynthesizeToolCall),
-                JobName::Fixed(FixedJob::EnqueueIdle),
-                JobName::Fixed(FixedJob::EnqueueStaleSummaries),
-                JobName::Fixed(FixedJob::ReapDeadJobs),
-            ],
-            WorkerRole::Categorizer => &[JobName::Fixed(FixedJob::SuggestTags)],
-            WorkerRole::WikiBuilder => &[
-                JobName::Fixed(FixedJob::ExtractWiki),
-                JobName::Fixed(FixedJob::EnqueueWikiBackfill),
-            ],
-        }
+        role.task_list()
     }
 
     #[must_use]
     pub fn crontab(role: WorkerRole) -> Vec<CronEntry> {
-        match role {
-            WorkerRole::Embedder => vec![
-                cron(
-                    "unembedded-sweep",
-                    JobName::Fixed(FixedJob::EnqueueUnembedded),
-                    "*/10 * * * *",
-                ),
-                cron(
-                    "unchunked-sweep",
-                    JobName::Fixed(FixedJob::EnqueueUnchunked),
-                    "*/15 * * * *",
-                ),
-            ],
-            WorkerRole::Summarizer => vec![
-                cron(
-                    "idle-enqueue",
-                    JobName::Fixed(FixedJob::EnqueueIdle),
-                    "*/5 * * * *",
-                ),
-                cron(
-                    "stale-compaction-sweep",
-                    JobName::Fixed(FixedJob::EnqueueStaleSummaries),
-                    "*/15 * * * *",
-                ),
-                cron(
-                    "reap-dead-jobs",
-                    JobName::Fixed(FixedJob::ReapDeadJobs),
-                    "0 * * * *",
-                ),
-            ],
-            WorkerRole::Categorizer => vec![],
-            WorkerRole::WikiBuilder => vec![cron(
-                "wiki-backfill",
-                JobName::Fixed(FixedJob::EnqueueWikiBackfill),
-                "*/10 * * * *",
-            )],
-        }
+        role.crontab(false)
     }
 
     pub async fn dead_job_ids(&self, task: &JobName, limit: u32) -> Result<Vec<JobId>, Error> {
@@ -195,15 +137,5 @@ impl JobQueue for PostgresQueue {
 
     async fn read(&self, id: JobId) -> Result<Option<kernel::queue::StoredJob>, JobQueueError> {
         self.inner.read(id).await
-    }
-}
-
-fn cron(identifier: &str, task: JobName, schedule: &str) -> CronEntry {
-    CronEntry {
-        identifier: identifier.to_string(),
-        task,
-        schedule: schedule.to_string(),
-        backfill_seconds: 0,
-        max_attempts: 25,
     }
 }

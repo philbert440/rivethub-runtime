@@ -66,6 +66,7 @@ fn recorded_chunk(chunk: &ModelChunk) -> Json {
 
 pub(crate) fn model_request(scenario: &str, body: &Json) -> ModelRequest {
     ModelRequest {
+        options: kernel::model::ModelOptions::default(),
         model: demand_some(body.get("model").and_then(Json::as_str), "recorded model").to_owned(),
         messages: decode_messages(body.get("messages")),
         tools: decode_tools(body.get("tools")),

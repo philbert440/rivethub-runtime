@@ -31,6 +31,7 @@ const A_TEXT_SSE: &str = concat!(
 
 fn request() -> ModelRequest {
     ModelRequest {
+        options: kernel::model::ModelOptions::default(),
         model: "test-model".to_owned(),
         messages: vec![
             Message {

@@ -7,6 +7,7 @@ use testkit::{FakeProvider, FakeReader, FakeTool, Json, Masks, Response};
 
 fn request() -> ModelRequest {
     ModelRequest {
+        options: kernel::model::ModelOptions::default(),
         model: "test".to_owned(),
         messages: Vec::new(),
         tools: Vec::new(),

@@ -28,6 +28,7 @@ pub enum ModelProviderError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModelRequest {
+    pub options: ModelOptions,
     pub model: String,
     pub messages: Vec<Message>,
     pub tools: Vec<rmcp::model::Tool>,
@@ -98,4 +99,42 @@ pub struct Degradation {
 pub struct ProviderHealth {
     pub id: String,
     pub status: watch::Receiver<ProviderStatus>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct ModelOptions {
+    pub temperature: Option<f64>,
+    pub enable_thinking: Option<bool>,
+}
+
+#[derive(Debug, Error)]
+pub enum ModelCallFailure {
+    #[error("model server returned {status}: {source}")]
+    Http {
+        status: u16,
+        #[source]
+        source: BoxError,
+    },
+    #[error("model transport failed: {source}")]
+    Transport {
+        #[source]
+        source: BoxError,
+    },
+}
+
+impl ModelProviderError {
+    #[must_use]
+    pub fn retryable_transport(&self) -> bool {
+        let mut source = std::error::Error::source(self);
+        while let Some(error) = source {
+            if let Some(failure) = error.downcast_ref::<ModelCallFailure>() {
+                return match failure {
+                    ModelCallFailure::Http { status, .. } => *status >= 500,
+                    ModelCallFailure::Transport { .. } => true,
+                };
+            }
+            source = error.source();
+        }
+        false
+    }
 }

@@ -6,7 +6,6 @@ use kernel::queue::FixedJob;
 use kernel::queue::Job;
 use kernel::queue::JobKeyMode;
 use kernel::queue::JobName;
-use serde::Serialize;
 use uuid::Uuid;
 use wire::JsonObject;
 
@@ -143,7 +142,9 @@ fn empty_health(task: JobName) -> QueueHealth {
 fn tool_job(id: Uuid) -> Result<Job, Error> {
     Ok(Job {
         name: JobName::Fixed(FixedJob::SynthesizeToolCall),
-        payload: JsonObject::from_serialize(&ToolSynthBody { message_id: id })?,
+        payload: JsonObject::from_serialize(&kernel::memory::jobs::SynthesizeToolCall {
+            message_id: id,
+        })?,
         key: Some(format!("tool-synth-{id}")),
         key_mode: JobKeyMode::KeepRunAt,
         priority: 0,
@@ -229,12 +230,6 @@ async fn insert_rule(pool: &sqlx::PgPool, id: Uuid, tag: &ProjectTag) -> Result<
         .await
         .map_err(|source| Error::operation("project rule", source))?;
     Ok(result.rows_affected())
-}
-
-#[derive(Debug, Serialize)]
-struct ToolSynthBody {
-    #[serde(rename = "messageId")]
-    message_id: Uuid,
 }
 
 #[derive(Debug, sqlx::FromRow)]

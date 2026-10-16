@@ -1,10 +1,16 @@
 mod categorize;
+mod dispatch;
 mod embed;
+pub mod embedding_sweep;
 mod error;
+mod job_settings;
+pub use job_settings::MemoryJobSettings;
 mod outage;
 mod role;
 mod runner;
+pub mod schedule;
 mod summarize;
+pub mod tool_synthesis;
 
 pub use categorize::CategorizeEnv;
 pub use categorize::SuggestOutcome;

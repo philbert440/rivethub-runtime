@@ -211,6 +211,7 @@ fn headless_turn(
 ) -> Result<Turn, ApiError> {
     Ok(Turn {
         request: ModelRequest {
+            options: kernel::model::ModelOptions::default(),
             model: model.to_owned(),
             messages: turn_messages(request)?,
             tools: Vec::new(),

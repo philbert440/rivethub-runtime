@@ -1,6 +1,6 @@
 use kernel::memory::EmbedTable;
 use kernel::memory::EmbedTarget;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use wire::JsonObject;
 
 use crate::error::WorkerError;
@@ -12,7 +12,7 @@ pub enum ParsedTarget {
     EmptyId,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RawTarget {
     #[serde(rename = "targetTable")]
     target_table: String,
@@ -49,4 +49,12 @@ fn known_table(name: &str) -> Option<EmbedTable> {
         "ros_message_chunks" => Some(EmbedTable::MessageChunks),
         _ => None,
     }
+}
+
+pub(crate) fn embed_payload(target: &EmbedTarget) -> Result<JsonObject, WorkerError> {
+    JsonObject::from_serialize(&RawTarget {
+        target_table: target.table.to_string(),
+        target_id: target.id.clone(),
+    })
+    .map_err(WorkerError::payload)
 }

@@ -7,7 +7,6 @@ use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::wiki::builder::{
     ExtractWiki, WikiBuilderStore, WikiPatch, WikiSummary, WikiWork, extraction_schema,
 };
-use serde::Serialize;
 use tokio_util::sync::CancellationToken;
 use wire::JsonObject;
 use wire::message::{Message, MessageContent, Role};
@@ -45,10 +44,10 @@ pub fn extract_wiki_job(job: &ExtractWiki) -> Result<Job, WorkerError> {
         name: JobName::Fixed(FixedJob::ExtractWiki),
         payload: JsonObject::from_serialize(job).map_err(WorkerError::WikiJson)?,
         key: Some(format!("wiki-ext-{}", job.summary_id)),
-        key_mode: JobKeyMode::Replace,
-        priority: 8,
+        key_mode: JobKeyMode::KeepRunAt,
+        priority: 10,
         run_at: None,
-        max_attempts: None,
+        max_attempts: Some(2),
     })
 }
 
@@ -124,6 +123,7 @@ async fn extract_and_apply(
 async fn extract(env: &WikiBuilderEnv<'_>, user: String) -> Result<Vec<WikiPatch>, WorkerError> {
     let schema = serde_json::to_string(&extraction_schema()).map_err(WorkerError::WikiJson)?;
     let request = ModelRequest {
+        options: kernel::model::ModelOptions::default(),
         model: env.model.to_owned(),
         messages: vec![
             message(
@@ -167,23 +167,13 @@ fn message(role: Role, text: String) -> Message {
 }
 
 fn embed_job(slug: &str) -> Result<Job, WorkerError> {
-    #[derive(Serialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Payload<'a> {
-        target_table: String,
-        target_id: &'a str,
-    }
     let target = EmbedTarget {
         table: EmbedTable::WikiTopics,
         id: slug.to_owned(),
     };
     Ok(Job {
         name: JobName::Fixed(FixedJob::EmbedTarget),
-        payload: JsonObject::from_serialize(&Payload {
-            target_table: target.table.to_string(),
-            target_id: slug,
-        })
-        .map_err(WorkerError::WikiJson)?,
+        payload: crate::embed::embed_payload(&target)?,
         key: Some(embed_key(&target)),
         key_mode: JobKeyMode::Replace,
         priority: 10,

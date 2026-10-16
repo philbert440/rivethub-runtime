@@ -46,12 +46,20 @@ use workers::jobs_for;
 
 #[test]
 fn roles_match_the_kernel_task_lists() {
-    assert_eq!(names(WorkerRole::Embedder), vec!["embed-target".to_owned()]);
+    assert_eq!(
+        names(WorkerRole::Embedder),
+        vec![
+            "embed-target".to_owned(),
+            "enqueue-unembedded".to_owned(),
+            "enqueue-unchunked".to_owned()
+        ]
+    );
     assert_eq!(
         names(WorkerRole::Summarizer),
         vec![
             "compact-conversation".to_owned(),
             "synthesize-tool-call".to_owned(),
+            "suggest-tags".to_owned(),
             "enqueue-idle".to_owned(),
             "enqueue-stale-compaction".to_owned(),
             "reap-dead-jobs".to_owned(),
@@ -66,6 +74,7 @@ fn roles_match_the_kernel_task_lists() {
         vec![
             "extract-wiki".to_owned(),
             "enqueue-wiki-backfill".to_owned(),
+            "enqueue-stale-wiki".to_owned(),
         ]
     );
     assert!(accepts(&fixed(FixedJob::EmbedTarget), WorkerRole::Embedder));

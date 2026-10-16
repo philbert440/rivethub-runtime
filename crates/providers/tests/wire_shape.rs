@@ -135,6 +135,7 @@ async fn a_tool_without_a_description_is_sent_without_one() {
     let mut undescribed = tool.clone();
     undescribed.description = None;
     let request = kernel::model::ModelRequest {
+        options: kernel::model::ModelOptions::default(),
         model: "test-model".to_owned(),
         messages: Vec::new(),
         tools: vec![undescribed, tool],
@@ -162,7 +163,7 @@ async fn a_tool_without_a_description_is_sent_without_one() {
 }
 
 #[tokio::test]
-async fn the_request_max_tokens_field_is_not_sent_on_the_wire() {
+async fn the_request_max_tokens_overrides_the_model_server_default() {
     let recorded = scenario_record("A-text");
     let server = scenario_server(recorded.canned.clone()).await;
     let provider = config::provider::OpenaiProvider {
@@ -170,9 +171,16 @@ async fn the_request_max_tokens_field_is_not_sent_on_the_wire() {
         base_url: Some(format!("http://{}", server.addr)),
         ..config::provider::OpenaiProvider::default()
     };
-    let built = providers::OpenAiCompatible::build(config::provider::ProviderType::Vllm, &provider)
-        .expect("the generic provider builds");
+    let built = providers::OpenAiCompatible::build(
+        config::provider::ProviderType::OpenaiCompatible,
+        &provider,
+    )
+    .expect("the generic provider builds");
     let request = kernel::model::ModelRequest {
+        options: kernel::model::ModelOptions {
+            temperature: Some(0.2),
+            enable_thinking: Some(false),
+        },
         model: "test-model".to_owned(),
         messages: Vec::new(),
         tools: Vec::new(),
@@ -187,9 +195,15 @@ async fn the_request_max_tokens_field_is_not_sent_on_the_wire() {
         .first()
         .cloned()
         .expect("the chat request is captured");
-    let sent: Json = serde_json::from_str(&call.body).expect("sent body parses");
-    assert!(
-        sent.get("max_tokens").is_none(),
-        "the wire max_tokens comes from the provider config only (CONTRACT decision 11); a caller-set request.max_tokens is not sent: {sent}"
+    let sent: wire::stream::openai::ChatCompletionRequest =
+        serde_json::from_str(&call.body).expect("sent body parses");
+    assert_eq!(sent.max_tokens, Some(999));
+    assert_eq!(sent.temperature, Some(0.2));
+    assert_eq!(sent.enable_thinking, Some(false));
+    assert_eq!(
+        sent.chat_template_kwargs,
+        Some(wire::stream::openai::ChatTemplateKwargs {
+            enable_thinking: false
+        })
     );
 }

@@ -133,7 +133,10 @@ impl From<StatusError> for ModelProviderError {
     fn from(error: StatusError) -> Self {
         Self::Request {
             message: error.to_string(),
-            source: Box::new(error),
+            source: Box::new(kernel::model::ModelCallFailure::Http {
+                status: error.code(),
+                source: Box::new(error),
+            }),
         }
     }
 }

@@ -297,6 +297,7 @@ pub(crate) async fn items(mut receiver: mpsc::Receiver<ModelStreamItem>) -> Vec<
 
 pub(crate) fn request() -> ModelRequest {
     ModelRequest {
+        options: kernel::model::ModelOptions::default(),
         model: "test-model".into(),
         messages: vec![wire::message::Message {
             role: wire::message::Role::User,

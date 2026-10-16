@@ -264,3 +264,30 @@ impl JobNotifications for tokio::sync::watch::Receiver<()> {
             .map_err(|source| JobQueueError::Unavailable(Box::new(source)))
     }
 }
+
+impl WorkerRole {
+    #[must_use]
+    pub fn task_list(self) -> &'static [JobName] {
+        match self {
+            Self::Embedder => &[
+                JobName::Fixed(FixedJob::EmbedTarget),
+                JobName::Fixed(FixedJob::EnqueueUnembedded),
+                JobName::Fixed(FixedJob::EnqueueUnchunked),
+            ],
+            Self::Summarizer => &[
+                JobName::Fixed(FixedJob::SummarizeConversation),
+                JobName::Fixed(FixedJob::SynthesizeToolCall),
+                JobName::Fixed(FixedJob::SuggestTags),
+                JobName::Fixed(FixedJob::EnqueueIdle),
+                JobName::Fixed(FixedJob::EnqueueStaleSummaries),
+                JobName::Fixed(FixedJob::ReapDeadJobs),
+            ],
+            Self::Categorizer => &[JobName::Fixed(FixedJob::SuggestTags)],
+            Self::WikiBuilder => &[
+                JobName::Fixed(FixedJob::ExtractWiki),
+                JobName::Fixed(FixedJob::EnqueueWikiBackfill),
+                JobName::Fixed(FixedJob::EnqueueStaleWiki),
+            ],
+        }
+    }
+}

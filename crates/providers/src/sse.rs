@@ -119,7 +119,16 @@ fn stream_event_error(source: EventStreamError<reqwest::Error>) -> ModelProvider
     } else {
         format!("the model server stream failed: {source}")
     };
-    stream_error(message, source)
+    if malformed {
+        stream_error(message, source)
+    } else {
+        stream_error(
+            message,
+            kernel::model::ModelCallFailure::Transport {
+                source: Box::new(source),
+            },
+        )
+    }
 }
 
 fn translate(
@@ -127,7 +136,7 @@ fn translate(
     out: &mut Vec<ModelChunk>,
     finish: Option<&AtomicU8>,
 ) -> Result<(), StreamFault> {
-    for choice in &chunk.choices {
+    for choice in chunk.choices.iter().take(1) {
         if let Some(reason) = choice.finish_reason {
             note_finish(finish, reason);
         }

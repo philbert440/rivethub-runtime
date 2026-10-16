@@ -80,7 +80,7 @@ const REPLAYED: &[&str] = &[
 const SKIPPED: &[(&str, &str)] = &[
     (
         "synthesize-tool-call",
-        "no recording of this job; the summarizer leaves it unhandled",
+        "no recording of this job; synthesis has dedicated database fixtures and provider retry tests",
     ),
     (
         "WIKI_EXTRACT_SYSTEM_PROMPT",

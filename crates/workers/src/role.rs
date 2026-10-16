@@ -51,33 +51,15 @@ impl ProcessRole {
 }
 
 pub fn jobs_for(role: WorkerRole) -> Vec<JobName> {
-    match role {
-        WorkerRole::Embedder => vec![fixed(FixedJob::EmbedTarget)],
-        WorkerRole::Summarizer => vec![
-            fixed(FixedJob::SummarizeConversation),
-            fixed(FixedJob::SynthesizeToolCall),
-            fixed(FixedJob::EnqueueIdle),
-            fixed(FixedJob::EnqueueStaleSummaries),
-            fixed(FixedJob::ReapDeadJobs),
-        ],
-        WorkerRole::Categorizer => vec![fixed(FixedJob::SuggestTags)],
-        WorkerRole::WikiBuilder => vec![
-            fixed(FixedJob::ExtractWiki),
-            fixed(FixedJob::EnqueueWikiBackfill),
-        ],
-    }
+    role.task_list().to_vec()
 }
 
 pub fn accepts(role: WorkerRole, name: &JobName) -> bool {
     jobs_for(role).iter().any(|job| job == name)
 }
 
-fn fixed(job: FixedJob) -> JobName {
-    JobName::Fixed(job)
-}
-
 fn role_has_handler(role: WorkerRole) -> bool {
-    jobs_for(role).iter().any(handler_ready)
+    jobs_for(role).iter().all(handler_ready)
 }
 
 pub(crate) fn handler_ready(name: &JobName) -> bool {
@@ -85,6 +67,7 @@ pub(crate) fn handler_ready(name: &JobName) -> bool {
         name,
         JobName::Fixed(
             FixedJob::EmbedTarget
+                | FixedJob::SynthesizeToolCall
                 | FixedJob::SummarizeConversation
                 | FixedJob::EnqueueIdle
                 | FixedJob::EnqueueStaleSummaries
@@ -92,6 +75,9 @@ pub(crate) fn handler_ready(name: &JobName) -> bool {
                 | FixedJob::SuggestTags
                 | FixedJob::ExtractWiki
                 | FixedJob::EnqueueWikiBackfill
+                | FixedJob::EnqueueUnembedded
+                | FixedJob::EnqueueUnchunked
+                | FixedJob::EnqueueStaleWiki
         )
     )
 }

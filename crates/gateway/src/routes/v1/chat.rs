@@ -227,6 +227,7 @@ fn turn(
 ) -> Turn {
     Turn {
         request: ModelRequest {
+            options: kernel::model::ModelOptions::default(),
             model,
             messages,
             tools: Vec::new(),
