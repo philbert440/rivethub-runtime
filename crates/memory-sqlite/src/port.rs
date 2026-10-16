@@ -93,6 +93,15 @@ impl JobQueue for SqliteStore {
             .map_err(|error| missing(id, error))
     }
 
+    async fn release(&self, id: JobId) -> Result<(), JobQueueError> {
+        let text = self
+            .text_for_claim(id)
+            .map_err(|error| missing(id, error))?;
+        self.release_job(text, Utc::now())
+            .await
+            .map_err(|error| missing(id, error))
+    }
+
     async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError> {
         let text = self
             .text_for_claim(id)

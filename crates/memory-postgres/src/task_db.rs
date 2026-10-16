@@ -15,7 +15,6 @@ use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskStore;
 use sqlx::PgConnection;
 use sqlx::PgPool;
-use sqlx::postgres::PgPoolOptions;
 use tokio::sync::watch;
 use uuid::Uuid;
 use wire::task::TaskStatus;
@@ -26,6 +25,7 @@ use crate::task_jobs::enqueue_job;
 use crate::task_jobs::fail_job;
 use crate::task_jobs::map_sql;
 use crate::task_jobs::read_job;
+use crate::task_jobs::release_job;
 use crate::task_rows::add_harness_session;
 use crate::task_rows::append_permission;
 use crate::task_rows::finish_task;
@@ -46,11 +46,7 @@ pub struct PostgresTasks {
 
 impl PostgresTasks {
     pub async fn connect(url: &str) -> Result<Self, TaskError> {
-        let pool = PgPoolOptions::new()
-            .max_connections(8)
-            .acquire_timeout(crate::ACQUIRE_TIMEOUT)
-            .test_before_acquire(true)
-            .connect(url)
+        let pool = crate::open_pool(url, 8, None)
             .await
             .map_err(|source| TaskError::Unavailable(Box::new(source)))?;
         Ok(Self::from_pool(pool))
@@ -131,6 +127,13 @@ impl TaskStore for PostgresTasks {
     ) -> Result<TaskRecord, TaskError> {
         in_transaction(&self.pool, async |conn| {
             mark_running(conn, id, claimed_by, node, now).await
+        })
+        .await
+    }
+
+    async fn release_running(&self, id: Uuid) -> Result<(), TaskError> {
+        in_transaction(&self.pool, async |conn| {
+            crate::task_rows::release_running(conn, id).await
         })
         .await
     }
@@ -224,6 +227,14 @@ impl JobQueue for PostgresTasks {
         let error = error.to_owned();
         job_transaction(&self.pool, async move |conn| {
             fail_job(conn, id, &error, &worker).await
+        })
+        .await
+    }
+
+    async fn release(&self, id: JobId) -> Result<(), JobQueueError> {
+        let worker = self.worker.clone();
+        job_transaction(&self.pool, async move |conn| {
+            release_job(conn, id, &worker).await
         })
         .await
     }

@@ -169,14 +169,20 @@ pub(super) struct Connected {
 }
 
 impl Connected {
-    pub(super) fn engine(self) -> Result<Arc<TaskEngine>, AgentError> {
+    pub(super) fn engine(
+        self,
+        activities: &kernel::shutdown::Activities,
+    ) -> Result<Arc<TaskEngine>, AgentError> {
         let directory = self.roster.directory(&self.plan)?;
-        Ok(Arc::new(tasks::Engine::new(
-            self.tasks.clone(),
-            self.tasks,
-            directory,
-            self.plan.settings(),
-        )?))
+        Ok(Arc::new(
+            tasks::Engine::new(
+                self.tasks.clone(),
+                self.tasks,
+                directory,
+                self.plan.settings(),
+            )?
+            .with_activities(activities.clone()),
+        ))
     }
 }
 

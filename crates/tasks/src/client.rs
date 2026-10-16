@@ -164,6 +164,7 @@ impl GatewayClient {
             .build()
             .map_err(|source| Error::Http(Box::new(source)))?;
         tokio::select! {
+            biased;
             () = cancel.cancelled() => Err(Error::Cancelled),
             result = self.http.execute(built) => {
                 result.map_err(|source| classify_transport(self.role, source))

@@ -64,6 +64,9 @@ where
                             tracing::error!(%error, "task execution failed");
                         }
                     });
+                    if cancel.is_cancelled() {
+                        return;
+                    }
                 }
                 Err(error) => {
                     tracing::error!(%error, "task claim failed");

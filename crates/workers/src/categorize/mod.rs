@@ -129,7 +129,11 @@ async fn ask(env: &CategorizeEnv<'_>, context: &TagJobContext) -> Result<String,
         thinking: None,
         max_tokens: Some(MAX_TAG_TOKENS),
     };
-    let response = env.provider.chat(request).await.map_err(llm_error)?;
+    let response = tokio::select! {
+        biased;
+        () = env.cancel.cancelled() => return Err(WorkerError::Cancelled),
+        result = env.provider.chat(request) => result.map_err(llm_error)?,
+    };
     match response.content {
         Some(text) if !text.is_empty() => Ok(text),
         Some(_) | None => Err(WorkerError::TagSuggestions {

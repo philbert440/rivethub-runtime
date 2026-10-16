@@ -10,7 +10,7 @@ use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 
-use super::{TestResult, provider_config, terminate, write_state};
+use super::{TestResult, interrupt, provider_config, terminate, write_state};
 
 #[derive(Deserialize)]
 struct Catalog {
@@ -50,6 +50,15 @@ fn served_names(tools: &[Arc<dyn kernel::tool::Tool>]) -> BTreeSet<String> {
 
 #[sqlx::test(migrations = false)]
 async fn mcp_lists_recorded_tools_over_stdio_and_stops_on_sigterm(pool: PgPool) -> TestResult {
+    stop_mcp(pool, false).await
+}
+
+#[sqlx::test(migrations = false)]
+async fn mcp_with_a_stdio_client_exits_within_the_grace_on_sigint(pool: PgPool) -> TestResult {
+    stop_mcp(pool, true).await
+}
+
+async fn stop_mcp(pool: PgPool, interrupt_process: bool) -> TestResult {
     migrate::postgres_pool(&pool).await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
@@ -83,11 +92,32 @@ async fn mcp_lists_recorded_tools_over_stdio_and_stops_on_sigterm(pool: PgPool) 
         .map_err(|error| format!("tools/list failed: {error}"))?;
     assert_eq!(served_names(&tools), expected_tool_names()?);
     let pid = child.id().ok_or("mcp already stopped")?;
-    terminate(pid)?;
-    let status = tokio::time::timeout(Duration::from_secs(30), child.wait()).await??;
-    let text = tokio::time::timeout(Duration::from_secs(30), logs).await???;
+    let started = tokio::time::Instant::now();
+    if interrupt_process {
+        interrupt(pid)?;
+    } else {
+        terminate(pid)?;
+    }
+    let waited = tokio::time::timeout(kernel::shutdown::SHUTDOWN_GRACE, child.wait()).await;
+    let elapsed = started.elapsed();
+    let Ok(status) = waited else {
+        child.start_kill()?;
+        let text = logs.await??;
+        return Err(format!("mcp still running after {elapsed:?}\n{text}").into());
+    };
+    let status = status?;
+    let text = tokio::time::timeout(Duration::from_secs(5), logs).await???;
+    assert!(
+        elapsed < kernel::shutdown::SHUTDOWN_GRACE,
+        "{elapsed:?}\n{text}"
+    );
     assert!(status.success(), "mcp exit: {status}\n{text}");
-    assert!(text.contains("SIGTERM received — shutting down"), "{text}");
+    let phrase = if interrupt_process {
+        "SIGINT received — shutting down"
+    } else {
+        "SIGTERM received — shutting down"
+    };
+    assert!(text.contains(phrase), "{text}");
     assert!(text.contains("mcp stopped"), "{text}");
     drop(client);
     Ok(())

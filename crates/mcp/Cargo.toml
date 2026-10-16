@@ -13,6 +13,7 @@ axum = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
 kernel = { workspace = true }
+nix = { workspace = true }
 rmcp = { workspace = true, features = ["server", "client", "transport-io", "transport-child-process", "transport-streamable-http-server", "transport-streamable-http-client-reqwest"] }
 schemars = { workspace = true }
 serde = { workspace = true }
@@ -21,7 +22,7 @@ sha2 = { workspace = true }
 subtle = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["net", "rt", "sync", "fs", "io-util", "time"] }
+tokio = { workspace = true, features = ["net", "rt", "sync", "fs", "io-util", "io-std", "time"] }
 tokio-util = { workspace = true }
 strum = { workspace = true }
 uuid = { workspace = true }

@@ -35,13 +35,14 @@ struct Started {
     logs: tokio::task::JoinHandle<std::io::Result<String>>,
 }
 
-fn terminate(pid: u32) -> TestResult {
+fn signal_process(pid: u32, signal: nix::sys::signal::Signal) -> TestResult {
     let pid = i32::try_from(pid)?;
-    nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(pid),
-        nix::sys::signal::Signal::SIGTERM,
-    )?;
+    nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), signal)?;
     Ok(())
+}
+
+fn terminate(pid: u32) -> TestResult {
+    signal_process(pid, nix::sys::signal::Signal::SIGTERM)
 }
 
 async fn start(
@@ -342,6 +343,188 @@ fn free_port() -> TestResult<u16> {
     let port = probe.local_addr()?.port();
     drop(probe);
     Ok(port)
+}
+
+#[derive(serde::Serialize)]
+struct EmbedTargetPayload<'a> {
+    #[serde(rename = "targetTable")]
+    target_table: &'a str,
+    #[serde(rename = "targetId")]
+    target_id: &'a str,
+}
+
+const MESSAGE_ID: &str = "0199e2a0-7b3c-7a00-8000-0000000000b1";
+const CONVERSATION_ID: &str = "0199e2a0-7b3c-7a00-8000-0000000000b2";
+const JOB_ID: &str = "0199e2a0-7b3c-7a00-8000-0000000000b3";
+
+fn seed_embed_job(path: &Path) -> TestResult {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    migrate::sqlite(path)?;
+    let conn = rusqlite::Connection::open(path)?;
+    let now = "2020-01-01T00:00:00.000Z";
+    conn.execute(
+        "INSERT INTO ros_conversations (id, session_key, agent, created_at, updated_at)
+         VALUES (?1, 'shutdown', 'rivet', ?2, ?2)",
+        (CONVERSATION_ID, now),
+    )?;
+    conn.execute(
+        "INSERT INTO ros_messages (id, conversation_id, agent, channel, role, content, created_at)
+         VALUES (?1, ?2, 'rivet', 'test', 'user', 'hello ledger', ?3)",
+        (MESSAGE_ID, CONVERSATION_ID, now),
+    )?;
+    let payload = serde_json::to_string(&wire::JsonObject::from_serialize(&EmbedTargetPayload {
+        target_table: "ros_messages",
+        target_id: MESSAGE_ID,
+    })?)?;
+    conn.execute(
+        "INSERT INTO ros_jobs (
+            id, task, job_key, payload, run_at, attempts, max_attempts, state, created_at, updated_at
+         ) VALUES (?1, 'embed-target', ?2, ?3, ?4, 0, 5, 'queued', ?4, ?4)",
+        (
+            JOB_ID,
+            format!("embed-ros_messages-{MESSAGE_ID}"),
+            payload,
+            now,
+        ),
+    )?;
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct SqliteJob {
+    state: String,
+    attempts: i64,
+    locked_at: Option<String>,
+    last_error: Option<String>,
+}
+
+fn sqlite_job(path: &Path) -> TestResult<SqliteJob> {
+    let conn = rusqlite::Connection::open(path)?;
+    conn.busy_timeout(Duration::from_secs(5))?;
+    let row = conn.query_row(
+        "SELECT state, attempts, locked_at, last_error FROM ros_jobs WHERE id = ?1",
+        [JOB_ID],
+        |row| {
+            Ok(SqliteJob {
+                state: row.get(0)?,
+                attempts: row.get(1)?,
+                locked_at: row.get(2)?,
+                last_error: row.get(3)?,
+            })
+        },
+    )?;
+    Ok(row)
+}
+
+async fn blackhole() -> TestResult<(SocketAddr, tokio::task::JoinHandle<()>)> {
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
+    let address = listener.local_addr()?;
+    let task = tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0_u8; 1024];
+                loop {
+                    match tokio::io::AsyncReadExt::read(&mut stream, &mut buf).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {}
+                    }
+                }
+            });
+        }
+    });
+    Ok((address, task))
+}
+
+async fn wait_running(database: &Path) -> Result<(), String> {
+    let result = tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            match sqlite_job(database) {
+                Ok(job) if job.state == "running" && job.attempts == 1 => return Ok(()),
+                Ok(_) => tokio::task::yield_now().await,
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+    })
+    .await;
+    match result {
+        Ok(inner) => inner,
+        Err(_) => Err("embed job was not claimed".to_owned()),
+    }
+}
+
+#[tokio::test]
+async fn local_blocked_on_a_provider_releases_the_job_on_sigint() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let port = free_port()?;
+    let (provider, hold) = blackhole().await?;
+    let database = home.path().join(".rivethub").join("memory.sqlite");
+    write_config(
+        home.path(),
+        &provider_base(
+            home.path(),
+            &format!("http://{provider}"),
+            &format!(
+                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    workers: true\nden:\n  host: 127.0.0.1\n  port: {port}\n",
+                database.display()
+            ),
+        ),
+    )?;
+    seed_embed_job(&database)?;
+    let started = match start(
+        home.path(),
+        &["local", "--no-lan"],
+        &["gateway listening on ", "worker running embedder"],
+    )
+    .await
+    {
+        Ok(started) => started,
+        Err(error) => {
+            hold.abort();
+            return Err(error);
+        }
+    };
+    let claimed = wait_running(&database).await;
+    let Started { mut child, logs } = started;
+    if let Err(error) = claimed {
+        if let Some(pid) = child.id() {
+            signal_process(pid, nix::sys::signal::Signal::SIGINT)?;
+        }
+        let text = tokio::time::timeout(Duration::from_secs(5), logs).await???;
+        hold.abort();
+        return Err(format!("{error}\n{text}").into());
+    }
+    let pid = child.id().ok_or("rh local already stopped")?;
+    let began = tokio::time::Instant::now();
+    signal_process(pid, nix::sys::signal::Signal::SIGINT)?;
+    let waited = tokio::time::timeout(kernel::shutdown::SHUTDOWN_GRACE, child.wait()).await;
+    let elapsed = began.elapsed();
+    let Ok(status) = waited else {
+        child.start_kill()?;
+        let text = logs.await??;
+        hold.abort();
+        return Err(format!("rh local still running after {elapsed:?}\n{text}").into());
+    };
+    let status = status?;
+    let text = tokio::time::timeout(Duration::from_secs(5), logs).await???;
+    hold.abort();
+    assert!(
+        elapsed < kernel::shutdown::SHUTDOWN_GRACE,
+        "{elapsed:?}\n{text}"
+    );
+    assert!(status.success(), "rh local exit: {status}\n{text}");
+    assert!(text.contains("SIGINT received — shutting down"), "{text}");
+    assert_eq!(
+        sqlite_job(&database)?,
+        SqliteJob {
+            state: "queued".to_owned(),
+            attempts: 0,
+            locked_at: None,
+            last_error: None,
+        }
+    );
+    Ok(())
 }
 
 fn seed_summary(path: &Path) -> TestResult {

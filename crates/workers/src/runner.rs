@@ -15,6 +15,7 @@ use kernel::queue::JobName;
 use kernel::queue::JobNotifications;
 use kernel::queue::JobQueue;
 use kernel::queue::WorkerRole;
+use kernel::shutdown::Activities;
 use tokio::sync::Mutex;
 use tokio::sync::Notify;
 use tokio::sync::OwnedSemaphorePermit;
@@ -108,6 +109,7 @@ pub struct Runner<Q> {
     idle: watch::Sender<bool>,
     cursor: Arc<AtomicUsize>,
     open: Arc<Mutex<Vec<JobId>>>,
+    activities: Activities,
 }
 
 impl<Q> Runner<Q>
@@ -133,7 +135,14 @@ where
             idle,
             cursor: Arc::new(AtomicUsize::new(0)),
             open: Arc::new(Mutex::new(Vec::new())),
+            activities: Activities::new(),
         }
+    }
+
+    #[must_use]
+    pub fn with_activities(mut self, activities: Activities) -> Self {
+        self.activities = activities;
+        self
     }
 
     #[must_use]
@@ -159,6 +168,7 @@ where
         let semaphore = Arc::new(Semaphore::new(permits));
         let cancel = cancel.child_token();
         let mut tasks = JoinSet::new();
+        let listening = self.activities.enter("queue listen");
         let mut notifications = tokio::select! {
             biased;
             () = cancel.cancelled() => return Ok(()),
@@ -173,6 +183,8 @@ where
                 &cancel,
             )
             .await;
+        drop(notifications);
+        drop(listening);
         cancel.cancel();
         let reaped = self.reap(&mut tasks, true).await;
         outcome.and(reaped)
@@ -209,7 +221,7 @@ where
                 }
                 continue;
             }
-            let job = match self.claim_one(roles).await {
+            let job = match self.claim_one(roles, cancel).await {
                 Ok(Some(job)) => job,
                 Ok(None) => {
                     drop(permit);
@@ -250,17 +262,23 @@ where
         }
     }
 
-    async fn claim_one(&self, roles: &[WorkerRole]) -> Result<Option<ClaimedJob>, WorkerError> {
+    async fn claim_one(
+        &self,
+        roles: &[WorkerRole],
+        cancel: &CancellationToken,
+    ) -> Result<Option<ClaimedJob>, WorkerError> {
         let count = roles.len();
         let start = self.cursor.fetch_add(1, Ordering::Relaxed) % count;
         for role in roles.iter().cycle().skip(start).take(count) {
             let selector = kernel::queue::ClaimSelector::matching(self.queue.task_names(*role));
-            if let Some(job) = self
-                .queue
-                .claim(&selector)
-                .await
-                .map_err(WorkerError::queue)?
-            {
+            let claim = self.queue.claim(&selector);
+            tokio::pin!(claim);
+            let claimed = tokio::select! {
+                biased;
+                result = &mut claim => result,
+                () = cancel.cancelled() => return Ok(None),
+            };
+            if let Some(job) = claimed.map_err(WorkerError::queue)? {
                 return Ok(Some(job));
             }
         }
@@ -290,7 +308,10 @@ where
         let open = Arc::clone(&self.open);
         let gate = Arc::clone(&self.outage);
         let id = job.id;
+        let activities = self.activities.clone();
+        let activity = format!("job {} {id}", job.name);
         tasks.spawn(async move {
+            let _activity = activities.enter(activity);
             let result = settle(gate.as_ref(), queue.as_ref(), &env, job, &cancel).await;
             {
                 let mut running = open.lock().await;
@@ -438,15 +459,23 @@ where
     };
     loop {
         if cancel.is_cancelled() {
-            return cancelled(queue, job.id, attempt).await;
+            return release(queue, job.id, attempt).await;
         }
-        match dispatch(queue, env, &job, cancel).await {
+        let work = dispatch(queue, env, &job, cancel);
+        tokio::pin!(work);
+        let outcome = tokio::select! {
+            biased;
+            () = cancel.cancelled() => return release(queue, job.id, attempt).await,
+            result = &mut work => result,
+        };
+        match outcome {
             Ok(()) => return finish_ok(queue, job.id, attempt).await,
             Err(WorkerError::ProviderUnreachable) => {
                 if !pause(&mut attempt, cancel).await {
-                    return cancelled(queue, job.id, attempt).await;
+                    return release(queue, job.id, attempt).await;
                 }
             }
+            Err(WorkerError::Cancelled) => return release(queue, job.id, attempt).await,
             Err(error) => return finish_err(queue, job.id, attempt, &error).await,
         }
     }
@@ -478,13 +507,13 @@ async fn finish_err<Q: JobQueue>(
     fail_job(queue, id, error).await
 }
 
-async fn cancelled<Q: JobQueue>(
+async fn release<Q: JobQueue>(
     queue: &Q,
     id: JobId,
     mut attempt: Attempt<'_>,
 ) -> Result<(), WorkerError> {
     attempt.hold.release(false);
-    fail_job(queue, id, &WorkerError::Cancelled).await
+    queue.release(id).await.map_err(WorkerError::queue)
 }
 
 async fn fail_job<Q: JobQueue>(

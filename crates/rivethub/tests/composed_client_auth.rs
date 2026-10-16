@@ -45,7 +45,13 @@ impl Composed {
         let store: Arc<dyn MemoryStore> = Arc::new(testkit::FakeMemoryStore::default());
         let composition = tokio::time::timeout(
             Duration::from_secs(30),
-            Composition::build(&loaded.config, &env, store, &shutdown),
+            Composition::build(
+                &loaded.config,
+                &env,
+                store,
+                &shutdown,
+                &kernel::shutdown::Activities::new(),
+            ),
         )
         .await??;
         Ok(Self {

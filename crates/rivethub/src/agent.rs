@@ -81,15 +81,12 @@ pub async fn start(env: &Environment, check: bool) -> Exit {
     if check {
         return finish(validate(env).await, "agent configuration valid");
     }
-    let signals = match crate::signals::install() {
-        Ok(signals) => signals,
-        Err(exit) => return exit,
-    };
-    let result = run(env, signals.token()).await;
-    if let Err(exit) = signals.finish().await {
-        return exit;
-    }
-    finish(result, "")
+    let env = env.clone();
+    crate::shutdown::signals_then(
+        async move |shutdown, activities| run(&env, shutdown, &activities).await,
+        |result| finish(result, ""),
+    )
+    .await
 }
 
 pub(crate) async fn attach(
@@ -131,10 +128,11 @@ pub(crate) async fn open_delegation(
     config: &Config,
     env: &Environment,
     shutdown: &CancellationToken,
+    activities: &kernel::shutdown::Activities,
 ) -> Result<DelegationRun, AgentError> {
     let connected = assemble::connect(config, env).await?;
     let tasks = connected.tasks.clone();
-    let engine = connected.engine()?;
+    let engine = connected.engine(activities)?;
     let cancel = shutdown.child_token();
     let cloned = Arc::clone(&engine);
     let port: Arc<dyn Delegation> = cloned;
@@ -223,13 +221,17 @@ async fn validate(env: &Environment) -> Result<(), RootError> {
     Ok(())
 }
 
-async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), RootError> {
+async fn run(
+    env: &Environment,
+    shutdown: CancellationToken,
+    activities: &kernel::shutdown::Activities,
+) -> Result<(), RootError> {
     let _guard = shutdown.clone().drop_guard();
     let config = read_config(env).await?;
     assemble::ensure_enabled(&config)?;
     crate::identity::announce_resolved("agent", &config, env).map_err(AgentError::from)?;
     let connected = assemble::connect(&config, env).await?;
-    let engine = connected.engine()?;
+    let engine = connected.engine(activities)?;
     tracing::info!("agent running");
     engine.serve(shutdown).await.map_err(AgentError::from)?;
     tracing::info!("agent stopped");

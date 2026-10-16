@@ -48,6 +48,10 @@ const MARK_RUNNING: &str = concat!(
     ") SELECT * FROM updated"
 );
 
+const RELEASE_RUNNING: &str = "UPDATE rh_tasks SET status = 'queued', \
+     attempt = GREATEST(attempt - 1, 0), claimed_by = NULL, started_at = NULL \
+     WHERE id = $1 AND status = 'running'";
+
 pub(crate) async fn insert_task(
     conn: &mut PgConnection,
     task: &TaskRecord,
@@ -115,6 +119,18 @@ pub(crate) async fn mark_running(
         Some(row) => decode_task(&row, "mark running"),
         None => conflict_or_missing(conn, id, ConflictAction::Run).await,
     }
+}
+
+pub(crate) async fn release_running(conn: &mut PgConnection, id: Uuid) -> Result<(), TaskError> {
+    let released = sqlx::query(RELEASE_RUNNING)
+        .bind(id)
+        .execute(&mut *conn)
+        .await
+        .map_err(|source| map_sql("release running", source))?;
+    if released.rows_affected() == 0 {
+        return conflict_or_missing(conn, id, ConflictAction::Release).await;
+    }
+    Ok(())
 }
 
 pub(crate) async fn finish_task(

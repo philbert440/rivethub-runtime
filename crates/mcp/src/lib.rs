@@ -3,6 +3,7 @@ pub mod client;
 mod delegate;
 pub mod error;
 pub mod memory;
+mod nonblock;
 mod render_delegate;
 mod render_memory;
 mod render_search;

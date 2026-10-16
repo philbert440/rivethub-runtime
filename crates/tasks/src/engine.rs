@@ -11,6 +11,7 @@ use tokio_util::task::TaskTracker;
 use uuid::Uuid;
 
 use kernel::queue::JobQueue;
+use kernel::shutdown::Activities;
 use kernel::tasks::TaskStore;
 
 use crate::directory::Directory;
@@ -56,6 +57,7 @@ pub struct Engine<S, J> {
     finished: watch::Sender<Option<Uuid>>,
     pub(crate) tracker: TaskTracker,
     inflight: Arc<Mutex<HashMap<Uuid, CancellationToken>>>,
+    pub(crate) activities: Activities,
 }
 
 impl<S, J> Engine<S, J>
@@ -83,7 +85,14 @@ where
             finished,
             tracker: TaskTracker::new(),
             inflight: Arc::new(Mutex::new(HashMap::new())),
+            activities: Activities::new(),
         })
+    }
+
+    #[must_use]
+    pub fn with_activities(mut self, activities: Activities) -> Self {
+        self.activities = activities;
+        self
     }
 
     pub fn subscribe(&self) -> watch::Receiver<Option<Uuid>> {

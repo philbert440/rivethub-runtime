@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 async-trait = { workspace = true }
 chrono = { workspace = true }
+parking_lot = { workspace = true }
 regex = { workspace = true }
 rmcp = { workspace = true }
 schemars = { workspace = true }

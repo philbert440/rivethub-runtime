@@ -11,6 +11,7 @@ use config::{Config, Environment, ServiceSwitch};
 use gateway::server::ServeOptions;
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
+use kernel::shutdown::Activities;
 use kernel::tasks::Delegation;
 use kernel::wiki::builder::WikiBuilderStore;
 use memory_sqlite::SqliteStore;
@@ -77,10 +78,30 @@ pub async fn start(env: &Environment, prepared: cli::Prepared) -> Exit {
         Ok(signals) => signals,
         Err(exit) => return exit,
     };
-    let result = run(env, &config, database, signals.token()).await;
+    let activities = Activities::new();
+    let token = signals.token();
+    let run_token = token.clone();
+    let result = crate::shutdown::bounded(
+        &token,
+        &activities,
+        Box::pin(run(env, &config, database, run_token, activities.clone())),
+    )
+    .await;
     let finished = signals.finish().await;
     let released = held.release();
-    finish(result, finished, released)
+    match result {
+        Ok(inner) => finish(inner, finished, released),
+        Err(running) => {
+            tracing::debug!("bounded shutdown: {running}");
+            if let Err(error) = released {
+                tracing::error!("pid file removal failed: {error}");
+            }
+            match finished {
+                Ok(()) => Exit::Failure,
+                Err(exit) => exit,
+            }
+        }
+    }
 }
 
 fn finish(
@@ -132,6 +153,7 @@ struct GatewayNode {
     listener: tokio::net::TcpListener,
     tls: Option<gateway::tls::TlsPaths>,
     runners: Vec<(ProcessRole, ComposedRunner<SqliteStore>)>,
+    activities: Activities,
 }
 
 async fn run(
@@ -139,12 +161,13 @@ async fn run(
     config: &Config,
     database: PathBuf,
     shutdown: CancellationToken,
+    activities: Activities,
 ) -> Result<(), LocalError> {
     let _guard = shutdown.clone().drop_guard();
     let store = open_store(database).await?;
     import::pending(&store, config, &shutdown).await?;
     let switches = config.service_switches(env);
-    let node = bind_node(&store, &switches, config, env, &shutdown).await?;
+    let node = bind_node(&store, &switches, config, env, &shutdown, &activities).await?;
     supervise(node, &switches, config, env, store, shutdown).await
 }
 
@@ -154,13 +177,23 @@ async fn bind_node(
     config: &Config,
     env: &Environment,
     shutdown: &CancellationToken,
+    activities: &Activities,
 ) -> Result<GatewayNode, LocalError> {
-    let runners = build_runners(store, worker_roles(switches), config, env, shutdown).await?;
+    let runners = build_runners(
+        store,
+        worker_roles(switches),
+        config,
+        env,
+        shutdown,
+        activities,
+    )
+    .await?;
     let composition = crate::composition::Composition::build(
         config,
         env,
         Arc::clone(store) as Arc<dyn MemoryStore>,
         shutdown,
+        activities,
     )
     .await
     .map_err(StartupError::from)?;
@@ -178,6 +211,7 @@ async fn bind_node(
         listener,
         tls,
         runners,
+        activities: activities.clone(),
     })
 }
 
@@ -194,6 +228,7 @@ async fn supervise(
         listener,
         tls,
         runners,
+        activities,
     } = node;
     let addr = listener.local_addr().map_err(StartupError::from)?;
     let secure = tls.is_some();
@@ -211,6 +246,7 @@ async fn supervise(
         env,
         store: &store,
         shutdown: &shutdown,
+        activities: &activities,
     })
     .start(runners, loopback_url(addr, secure)?)
     .await
@@ -228,6 +264,7 @@ async fn supervise(
         tls,
         shutdown.clone(),
         ServeOptions::default(),
+        activities.clone(),
     );
     tokio::pin!(serving);
     let outcome = await_node(composition, &mut failed_rx, &mut serving, &shutdown).await;
@@ -247,6 +284,7 @@ struct NodeBoot<'a> {
     env: &'a Environment,
     store: &'a Arc<SqliteStore>,
     shutdown: &'a CancellationToken,
+    activities: &'a Activities,
 }
 
 impl NodeBoot<'_> {
@@ -281,12 +319,15 @@ impl NodeBoot<'_> {
         }
         let (directory, settings) =
             crate::agent::standalone_tasks(self.config, self.env, gateway).await?;
-        let engine = Arc::new(tasks::Engine::new(
-            self.store.as_ref().clone(),
-            self.store.as_ref().clone(),
-            directory,
-            settings,
-        )?);
+        let engine = Arc::new(
+            tasks::Engine::new(
+                self.store.as_ref().clone(),
+                self.store.as_ref().clone(),
+                directory,
+                settings,
+            )?
+            .with_activities(self.activities.clone()),
+        );
         let port: Arc<dyn Delegation> = engine.clone();
         let failed = self.failed.clone();
         let token = self.shutdown.child_token();
@@ -409,6 +450,7 @@ async fn build_runners(
     config: &Config,
     env: &Environment,
     shutdown: &CancellationToken,
+    activities: &Activities,
 ) -> Result<Vec<(ProcessRole, ComposedRunner<SqliteStore>)>, LocalError> {
     let mut built = Vec::new();
     for role in roles {
@@ -421,7 +463,7 @@ async fn build_runners(
         };
         built.push((
             role,
-            worker::build_runner(role, ports, config, env, shutdown).await?,
+            worker::build_runner(role, ports, config, env, shutdown, activities).await?,
         ));
     }
     Ok(built)

@@ -42,6 +42,7 @@ async fn graceful_shutdown_waits_for_the_upgraded_socket() {
         None,
         token.clone(),
         ServeOptions::default(),
+        kernel::shutdown::Activities::new(),
     ));
     let (mut socket, _) = tokio_tungstenite::connect_async(format!("ws://{addr}/ws"))
         .await

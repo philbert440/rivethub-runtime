@@ -183,6 +183,7 @@ impl AgentChannel {
             Some(TlsAcceptor::from(self.tls)),
             shutdown,
             options,
+            kernel::shutdown::Activities::new(),
         )
         .await?;
         Ok(())

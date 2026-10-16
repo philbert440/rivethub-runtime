@@ -177,6 +177,16 @@ impl GraphileQueue {
         count(removed.removed)
     }
 
+    pub(crate) async fn release(&self, id: JobId) -> Result<u64, Error> {
+        let released: i64 = sqlx::query_scalar(crate::graphile_sql::RELEASE)
+            .bind(i64::from(id))
+            .bind(format!("{}-", self.worker))
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|source| Error::operation("release", source))?;
+        count(released)
+    }
+
     pub(crate) async fn fail(&self, id: JobId, error: &str) -> Result<(), Error> {
         sqlx::query(crate::graphile_sql::FAIL)
             .bind(i64::from(id))

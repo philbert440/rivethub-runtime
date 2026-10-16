@@ -1,7 +1,7 @@
 use std::process::ExitCode;
-use std::time::Duration;
 
 use config::Environment;
+use kernel::shutdown::SHUTDOWN_GRACE;
 use rivethub::Exit;
 
 fn main() -> ExitCode {
@@ -13,7 +13,7 @@ fn main() -> ExitCode {
     let exit = match build_runtime() {
         Ok(runtime) => {
             let exit = runtime.block_on(dispatch(cli, &env));
-            runtime.shutdown_timeout(Duration::from_secs(10));
+            runtime.shutdown_timeout(SHUTDOWN_GRACE);
             exit
         }
         Err(error) => write(cli::Report {

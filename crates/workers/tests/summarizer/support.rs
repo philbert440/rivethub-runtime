@@ -466,6 +466,20 @@ impl JobQueue for Seen {
         }
     }
 
+    async fn release(&self, id: JobId) -> Result<(), JobQueueError> {
+        let mut jobs = self.jobs.lock().await;
+        let outcome = match jobs.iter_mut().find(|held| held.id == id) {
+            Some(held) if held.claimed => {
+                held.claimed = false;
+                held.attempts = held.attempts.saturating_sub(1);
+                Ok(())
+            }
+            Some(_) | None => Err(JobQueueError::Missing { id }),
+        };
+        drop(jobs);
+        outcome
+    }
+
     async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError> {
         let mut jobs = self.jobs.lock().await;
         let outcome = match jobs.iter_mut().find(|held| held.id == id) {

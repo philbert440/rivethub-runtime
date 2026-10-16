@@ -13,6 +13,15 @@ watch channel. The poll deadline covers scheduled retries, missed notifications
 and writes made through separately opened SQLite connections. Notification errors
 propagate rather than turning into polling-only operation.
 
+Shutdown cancels the runner token, drops the LISTEN subscription, then waits for
+claimed jobs to settle. A cancelled job is released: the attempt added by the
+claim is removed, `locked_at` and `locked_by` are cleared, and the row stays
+queued with `run_at` and `last_error` unchanged. The runner does not fail that
+job. Provider chat and embedding calls select on the shutdown token, so an HTTP
+call that has not returned is dropped. The process grace is 10 seconds. Work
+still entered after the grace is named in
+`shutdown grace of 10s elapsed; still running: …` and the process exits non-zero.
+
 ## Why two queue-facing kernel contracts remain
 
 `queue::JobQueue` serves background memory workers: typed job names, role-based

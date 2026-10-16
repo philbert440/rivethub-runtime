@@ -218,7 +218,7 @@ async fn concurrency_stays_at_the_configured_limit() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn shutdown_fails_every_in_flight_embed() {
+async fn shutdown_releases_every_in_flight_embed() {
     let queue = Arc::new(Queue::new());
     let store = Arc::new(Store::new());
     let provider = Arc::new(common::HangEmbed::new());
@@ -257,9 +257,9 @@ async fn shutdown_fails_every_in_flight_embed() {
     run.await.expect("join").expect("runner");
     for id in ids {
         let job = queue.view(id).await;
-        assert_eq!(job.phase, Phase::Backoff);
-        assert_eq!(job.attempt, 1);
-        assert_eq!(job.error.as_deref(), Some("the worker was cancelled"));
+        assert_eq!(job.phase, Phase::Ready);
+        assert_eq!(job.attempt, 0);
+        assert_eq!(job.error, None);
     }
     assert_eq!(store.writes().await, 0);
     assert_eq!(store.failures(EmbedTable::Messages, "m").await, 0);

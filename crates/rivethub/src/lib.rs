@@ -6,6 +6,7 @@ pub mod local;
 pub mod logging;
 pub mod models;
 pub mod service;
+mod shutdown;
 pub mod sidecar;
 mod signals;
 pub mod worker;

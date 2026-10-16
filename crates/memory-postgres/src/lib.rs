@@ -95,12 +95,7 @@ impl PostgresMemory {
     }
 
     pub async fn connect(url: &str) -> Result<Self, Error> {
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .acquire_timeout(ACQUIRE_TIMEOUT)
-            .idle_timeout(Duration::from_secs(30))
-            .test_before_acquire(true)
-            .connect(url)
+        let pool = open_pool(url, 5, Some(Duration::from_secs(30)))
             .await
             .map_err(Error::Connection)?;
         Self::prepare(&pool).await?;
@@ -143,6 +138,35 @@ impl PostgresMemory {
 
     pub async fn queue_available(&self) -> Result<bool, Error> {
         GraphileQueue::schema_present(&self.pool).await
+    }
+}
+
+pub(crate) async fn open_pool(
+    url: &str,
+    max_connections: u32,
+    idle_timeout: Option<Duration>,
+) -> Result<PgPool, sqlx::Error> {
+    const ATTEMPTS: u8 = 3;
+    let mut attempt = 1;
+    loop {
+        let options = PgPoolOptions::new()
+            .max_connections(max_connections)
+            .acquire_timeout(ACQUIRE_TIMEOUT)
+            .test_before_acquire(true);
+        let options = match idle_timeout {
+            Some(idle) => options.idle_timeout(idle),
+            None => options,
+        };
+        match options.connect(url).await {
+            Ok(pool) => return Ok(pool),
+            Err(sqlx::Error::PoolTimedOut) if attempt < ATTEMPTS => {
+                tracing::warn!(
+                    "memory database connection timed out; retrying (attempt {attempt} of {ATTEMPTS})"
+                );
+                attempt += 1;
+            }
+            Err(error) => return Err(error),
+        }
     }
 }
 

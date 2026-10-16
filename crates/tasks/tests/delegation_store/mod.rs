@@ -34,6 +34,10 @@ impl TaskStore for NotifyStore {
         self.inner.mark_running(id, claimed_by, node, now).await
     }
 
+    async fn release_running(&self, id: Uuid) -> Result<(), TaskError> {
+        self.inner.release_running(id).await
+    }
+
     async fn finish(&self, id: Uuid, finish: &kernel::tasks::Finish) -> Result<bool, TaskError> {
         self.inner.finish(id, finish).await
     }

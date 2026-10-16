@@ -240,6 +240,8 @@ pub trait JobQueue: std::fmt::Debug + Send + Sync {
 
     async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError>;
 
+    async fn release(&self, id: JobId) -> Result<(), JobQueueError>;
+
     async fn revive_dead(
         &self,
         name: &JobName,

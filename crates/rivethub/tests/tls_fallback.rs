@@ -24,8 +24,14 @@ async fn composed_gateway_serves_https_from_the_shared_issued_pair() -> TestResu
     let config: config::Config = serde_yaml_ng::from_str("den:\n  host: 0.0.0.0\n  port: 0\n")?;
     let store: Arc<dyn kernel::memory::MemoryStore> = Arc::new(testkit::FakeMemoryStore::default());
     let shutdown = CancellationToken::new();
-    let composition =
-        rivethub::composition::Composition::build(&config, &env, store, &shutdown).await?;
+    let composition = rivethub::composition::Composition::build(
+        &config,
+        &env,
+        store,
+        &shutdown,
+        &kernel::shutdown::Activities::new(),
+    )
+    .await?;
     let (listener, tls) = rivethub::service::listen(&config, &env).await?;
     let paths = tls.as_ref().ok_or("shared fallback did not enable tls")?;
     assert!(paths.cert.ends_with("fallback-node.crt"));

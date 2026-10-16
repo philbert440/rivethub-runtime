@@ -108,8 +108,11 @@ impl Composition {
         env: &Environment,
         store: Arc<dyn MemoryStore>,
         shutdown: &CancellationToken,
+        activities: &kernel::shutdown::Activities,
     ) -> Result<Self, ComposeError> {
-        let factory = crate::models::ModelFactory::from_config(config, env).await?;
+        let factory = crate::models::ModelFactory::from_config(config, env)
+            .await?
+            .with_activities(activities.clone());
         Self::with_models(config, env, store, shutdown, &factory).await
     }
 

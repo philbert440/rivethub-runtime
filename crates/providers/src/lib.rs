@@ -19,7 +19,9 @@ use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
 use kernel::model::ModelRequest;
 use kernel::model::ModelStreamItem;
+use kernel::shutdown::Activities;
 use tokio::sync::mpsc::Receiver;
+use tokio_util::sync::CancellationToken;
 use wire::message::ToolCall;
 use wire::stream::LlmResponse;
 use wire::stream::LlmResponseKind;
@@ -63,6 +65,8 @@ pub struct OpenAiCompatible {
     probe_models: bool,
     client: reqwest::Client,
     embedder: embed::Embedder,
+    shutdown: CancellationToken,
+    activities: Activities,
 }
 
 impl OpenAiCompatible {
@@ -100,7 +104,21 @@ impl OpenAiCompatible {
             probe_models: probe_unless_disabled(provider.probe_models),
             client,
             embedder,
+            shutdown: CancellationToken::new(),
+            activities: Activities::new(),
         })
+    }
+
+    #[must_use]
+    pub fn with_shutdown(mut self, shutdown: CancellationToken) -> Self {
+        self.shutdown = shutdown;
+        self
+    }
+
+    #[must_use]
+    pub fn with_activities(mut self, activities: Activities) -> Self {
+        self.activities = activities;
+        self
     }
 
     #[must_use]
@@ -115,11 +133,42 @@ impl OpenAiCompatible {
     ) -> Result<Receiver<ModelStreamItem>, ModelProviderError> {
         let body = body::chat_body(self.variant, request, self.max_tokens)?;
         let url = body::chat_url(&self.base_url, &self.api_prefix);
-        let response =
-            token::dispatch(&self.auth, || self.client.post(url.clone()).json(&body)).await?;
+        let pending = token::dispatch(&self.auth, || self.client.post(url.clone()).json(&body));
+        tokio::pin!(pending);
+        let response = tokio::select! {
+            biased;
+            () = self.shutdown.cancelled() => return Err(cancelled_provider()),
+            result = &mut pending => result?,
+        };
         let (tx, rx) = tokio::sync::mpsc::channel(STREAM_CAPACITY);
-        tokio::spawn(sse::pump(response, tx, finish));
+        let pump = tokio::spawn(sse::pump(response, tx, finish));
+        let abort = pump.abort_handle();
+        let shutdown = self.shutdown.clone();
+        let activities = self.activities.clone();
+        let watcher = tokio::spawn(async move {
+            let _activity = activities.enter("provider chat");
+            tokio::select! {
+                biased;
+                () = shutdown.cancelled() => abort.abort(),
+                joined = pump => {
+                    if let Err(error) = joined {
+                        tracing::debug!("provider stream task ended: {error}");
+                    }
+                }
+            }
+        });
+        drop(watcher);
         Ok(rx)
+    }
+}
+
+fn cancelled_provider() -> ModelProviderError {
+    ModelProviderError::Request {
+        message: "the provider call was cancelled".to_owned(),
+        source: Box::new(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "the provider call was cancelled",
+        )),
     }
 }
 
@@ -148,7 +197,13 @@ impl ModelProvider for OpenAiCompatible {
     async fn chat(&self, request: ModelRequest) -> Result<LlmResponse, ModelProviderError> {
         let finish = Arc::new(AtomicU8::new(0));
         let rx = self.send_chat(&request, Some(Arc::clone(&finish))).await?;
-        let mut response = collect_response(rx).await?;
+        let collect = collect_response(rx);
+        tokio::pin!(collect);
+        let mut response = tokio::select! {
+            biased;
+            () = self.shutdown.cancelled() => return Err(cancelled_provider()),
+            result = &mut collect => result?,
+        };
         response.finish_reason = sse::decode_finish(finish.load(Ordering::Relaxed));
         Ok(response)
     }
@@ -161,7 +216,14 @@ impl ModelProvider for OpenAiCompatible {
     }
 
     async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
-        self.embedder.embed(texts).await.map_err(Into::into)
+        let _activity = self.activities.enter("provider embed");
+        let call = self.embedder.embed(texts);
+        tokio::pin!(call);
+        tokio::select! {
+            biased;
+            () = self.shutdown.cancelled() => Err(cancelled_provider()),
+            result = &mut call => result.map_err(Into::into),
+        }
     }
 
     async fn list_models(&self) -> Result<Vec<String>, ModelProviderError> {
@@ -169,7 +231,13 @@ impl ModelProvider for OpenAiCompatible {
             return Ok(vec![self.model.clone()]);
         }
         let url = body::models_url(&self.base_url, &self.api_prefix);
-        let response = token::dispatch(&self.auth, || self.client.get(url.clone())).await?;
+        let pending = token::dispatch(&self.auth, || self.client.get(url.clone()));
+        tokio::pin!(pending);
+        let response = tokio::select! {
+            biased;
+            () = self.shutdown.cancelled() => return Err(cancelled_provider()),
+            result = &mut pending => result?,
+        };
         let list: wire::stream::openai::ModelList = response.json().await.map_err(request_error)?;
         Ok(list.data.into_iter().map(|model| model.id).collect())
     }

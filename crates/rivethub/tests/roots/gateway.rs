@@ -13,7 +13,10 @@ use wire::gateway::catalog::OutcomesResponse;
 use wire::gateway::devices::PhonePairingAvailability;
 use wire::task::TasksListResponse;
 
-use super::{TestResult, provider_config, run_rh, stderr, terminate, write_state};
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+
+use super::{TestResult, interrupt, provider_config, run_rh, stderr, terminate, write_state};
 
 const GATEWAY_URL: &str = "http://127.0.0.1:9";
 
@@ -178,5 +181,57 @@ async fn phone_pairing_without_an_authority_stays_unavailable_and_agents_stay_on
     assert!(status.success(), "gateway exit: {status}\n{text}");
     assert!(text.contains("SIGTERM received — shutting down"), "{text}");
     assert!(text.contains("gateway stopped"), "{text}");
+    Ok(())
+}
+
+#[sqlx::test(migrations = false)]
+async fn gateway_with_a_partial_request_exits_within_the_grace_on_sigint(
+    pool: PgPool,
+) -> TestResult {
+    migrate::postgres_pool(&pool).await?;
+    let url = pool.connect_options().to_url_lossy();
+    let home = tempfile::tempdir()?;
+    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+    let port = probe.local_addr()?.port();
+    drop(probe);
+    write_state(
+        home.path(),
+        &provider_config(
+            home.path(),
+            &url,
+            &format!("den:\n  host: 127.0.0.1\n  port: {port}\n"),
+        ),
+    )?;
+    let Started { mut child, logs } = start_gateway(home.path()).await?;
+    let mut socket = TcpStream::connect(("127.0.0.1", port)).await?;
+    socket
+        .write_all(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n")
+        .await?;
+    let pid = child.id().ok_or("gateway already stopped")?;
+    let started = tokio::time::Instant::now();
+    interrupt(pid)?;
+    let bound = kernel::shutdown::SHUTDOWN_GRACE + Duration::from_secs(2);
+    let waited = tokio::time::timeout(bound, child.wait()).await;
+    let elapsed = started.elapsed();
+    let Ok(status) = waited else {
+        child.start_kill()?;
+        let text = logs.await??;
+        return Err(format!("gateway still running after {elapsed:?}\n{text}").into());
+    };
+    let status = status?;
+    let text = tokio::time::timeout(Duration::from_secs(5), logs).await???;
+    assert!(elapsed < bound, "elapsed {elapsed:?}\n{text}");
+    assert!(text.contains("SIGINT received — shutting down"), "{text}");
+    if status.success() {
+        assert!(elapsed < kernel::shutdown::SHUTDOWN_GRACE, "{text}");
+        assert!(text.contains("gateway stopped"), "{text}");
+    } else {
+        assert!(
+            text.contains("shutdown grace of 10s elapsed; still running:"),
+            "{status}\n{text}"
+        );
+        assert!(text.contains("gateway connection"), "{text}");
+    }
+    drop(socket);
     Ok(())
 }

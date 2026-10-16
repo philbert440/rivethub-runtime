@@ -96,6 +96,23 @@ pub(crate) async fn complete_job(
     Ok(())
 }
 
+pub(crate) async fn release_job(
+    conn: &mut PgConnection,
+    id: JobId,
+    worker: &str,
+) -> Result<(), JobQueueError> {
+    let released: i64 = sqlx::query_scalar(crate::graphile_sql::RELEASE)
+        .bind(i64::from(id))
+        .bind(format!("{worker}-"))
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(|source| map_queue("release", source))?;
+    if released == 0 {
+        return Err(JobQueueError::Missing { id });
+    }
+    Ok(())
+}
+
 pub(crate) async fn fail_job(
     conn: &mut PgConnection,
     id: JobId,

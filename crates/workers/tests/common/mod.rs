@@ -406,6 +406,23 @@ impl JobQueue for Queue {
         Ok(())
     }
 
+    async fn release(&self, id: JobId) -> Result<(), JobQueueError> {
+        {
+            let mut rows = self.rows.lock().await;
+            let Some(row) = rows.iter_mut().find(|row| row.id == id) else {
+                return Err(missing(id));
+            };
+            if row.phase != Phase::Running {
+                return Err(missing(id));
+            }
+            row.phase = Phase::Ready;
+            row.attempt = row.attempt.saturating_sub(1);
+            drop(rows);
+        }
+        self.bump();
+        Ok(())
+    }
+
     async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError> {
         {
             let mut rows = self.rows.lock().await;

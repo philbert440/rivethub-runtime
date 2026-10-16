@@ -40,6 +40,7 @@ pub enum RunOutcome {
     Idle,
     Completed(Uuid),
     AlreadyFinished(Uuid),
+    Released(Uuid),
 }
 
 impl<S, J> Engine<S, J>
@@ -76,6 +77,7 @@ where
             Ok(parsed) => parsed,
             Err(error) => return Err(self.fail_job(claimed.id, error).await),
         };
+        let _activity = self.activities.enter(format!("task {}", parsed.task_id));
         let task = match self.store.load(parsed.task_id).await {
             Ok(task) => task,
             Err(error) => return Err(self.fail_job(claimed.id, error.into()).await),
@@ -292,7 +294,9 @@ where
         if self.release_if_killed(id, job_id).await? {
             return Ok(RunOutcome::AlreadyFinished(id));
         }
-        Err(self.fail_job(job_id, Error::Cancelled).await)
+        self.store.release_running(id).await?;
+        self.jobs.release(job_id).await?;
+        Ok(RunOutcome::Released(id))
     }
 
     async fn fail_clock(

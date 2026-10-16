@@ -13,6 +13,7 @@ use gateway::server::BindSource;
 use gateway::server::ServeError;
 use gateway::tls::TlsPaths;
 use kernel::memory::MemoryStore;
+use kernel::shutdown::Activities;
 use memory_postgres::PostgresMemory;
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -70,9 +71,11 @@ pub(crate) fn postgres_url(config: &Config, env: &Environment) -> Result<String,
 pub(crate) async fn postgres(
     config: &Config,
     env: &Environment,
+    shutdown: &CancellationToken,
+    activities: &Activities,
 ) -> Result<PostgresMemory, StartupError> {
     let url = postgres_url(config, env)?;
-    let embed = query_embed(config, env)?;
+    let embed = query_embed(config, env, shutdown, activities)?;
     let memory = PostgresMemory::connect(&url).await?;
     Ok(match embed {
         Some(embed) => memory.with_query_embed(embed),
@@ -83,6 +86,8 @@ pub(crate) async fn postgres(
 fn query_embed(
     config: &Config,
     env: &Environment,
+    shutdown: &CancellationToken,
+    activities: &Activities,
 ) -> Result<Option<memory_postgres::QueryEmbed>, StartupError> {
     let Some(endpoint) = config.memory_embed_endpoint(env) else {
         return Ok(None);
@@ -103,7 +108,9 @@ fn query_embed(
             probe_models: Some(false),
             ..config::provider::OpenaiProvider::default()
         },
-    )?;
+    )?
+    .with_shutdown(shutdown.child_token())
+    .with_activities(activities.clone());
     Ok(Some(memory_postgres::QueryEmbed::new(
         Arc::new(provider),
         section.and_then(|section| section.embed_query_instruction.clone()),
@@ -116,7 +123,10 @@ pub async fn connect(
     config: &Config,
     env: &Environment,
 ) -> Result<Arc<dyn MemoryStore>, StartupError> {
-    Ok(Arc::new(postgres(config, env).await?))
+    let shutdown = CancellationToken::new();
+    Ok(Arc::new(
+        postgres(config, env, &shutdown, &Activities::new()).await?,
+    ))
 }
 
 pub fn compose(
@@ -225,7 +235,11 @@ fn warn_environment(env: &Environment) {
     }
 }
 
-async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), StartupError> {
+async fn run(
+    env: &Environment,
+    shutdown: CancellationToken,
+    activities: Activities,
+) -> Result<(), StartupError> {
     let _cancel_on_drop = shutdown.clone().drop_guard();
     if let Some(notice) = move_legacy_state(env).await? {
         tracing::warn!("{notice}");
@@ -236,9 +250,9 @@ async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), Start
         .map_err(StartupError::StateTask)??;
     let memory = tokio::select! {
         () = shutdown.cancelled() => return Ok(()),
-        memory = postgres(&config, env) => Arc::new(memory?),
+        memory = postgres(&config, env, &shutdown, &activities) => Arc::new(memory?),
     };
-    let result = run_gateway(&config, env, memory.clone(), &shutdown).await;
+    let result = run_gateway(&config, env, memory.clone(), &shutdown, &activities).await;
     shutdown.cancel();
     let closed = memory.close().await;
     closed?;
@@ -252,9 +266,10 @@ async fn run_gateway(
     env: &Environment,
     store: Arc<dyn MemoryStore>,
     shutdown: &CancellationToken,
+    activities: &Activities,
 ) -> Result<(), StartupError> {
     let mut composition =
-        crate::composition::Composition::build(config, env, store, shutdown).await?;
+        crate::composition::Composition::build(config, env, store, shutdown, activities).await?;
     let listening = async {
         let (listener, tls) = listen(config, env).await?;
         let addr = listener.local_addr()?;
@@ -278,6 +293,7 @@ async fn run_gateway(
         tls,
         shutdown.clone(),
         gateway::server::ServeOptions::default(),
+        activities.clone(),
     );
     tokio::pin!(serving);
     let (served, failed) = tokio::select! {
@@ -301,7 +317,7 @@ async fn run_gateway(
 }
 
 pub async fn start(env: &Environment) -> Exit {
-    start_with_check(env, false).await
+    Box::pin(start_with_check(env, false)).await
 }
 
 pub async fn start_with_check(env: &Environment, check: bool) -> Exit {
@@ -317,21 +333,18 @@ pub async fn start_with_check(env: &Environment, check: bool) -> Exit {
             }
         };
     }
-    let signals = match crate::signals::install() {
-        Ok(signals) => signals,
-        Err(exit) => return exit,
-    };
-    let result = run(env, signals.token()).await;
-    if let Err(exit) = signals.finish().await {
-        return exit;
-    }
-    match result {
-        Ok(()) => Exit::Ok,
-        Err(error) => {
-            report(&error);
-            error.exit()
-        }
-    }
+    let env = env.clone();
+    Box::pin(crate::shutdown::signals_then(
+        async move |shutdown, activities| run(&env, shutdown, activities).await,
+        |result| match result {
+            Ok(()) => Exit::Ok,
+            Err(error) => {
+                report(&error);
+                error.exit()
+            }
+        },
+    ))
+    .await
 }
 
 async fn check_config(env: &Environment) -> Result<(), StartupError> {
@@ -387,6 +400,13 @@ fn finding_line(finding: &Finding) -> String {
 mod embed_tests {
     use super::*;
 
+    fn searched(
+        config: &Config,
+        env: &Environment,
+    ) -> Result<Option<memory_postgres::QueryEmbed>, StartupError> {
+        query_embed(config, env, &CancellationToken::new(), &Activities::new())
+    }
+
     fn config(memory: &str) -> Result<Config, Box<dyn std::error::Error>> {
         let text = format!(
             "runtime:\n  workspace: /tmp\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\nmemory:\n  backend: postgres\n  postgres:\n    connection_string: postgres://u@127.0.0.1:9/db\n{memory}"
@@ -396,13 +416,13 @@ mod embed_tests {
 
     #[test]
     fn without_an_endpoint_search_stays_keyword_only() -> Result<(), Box<dyn std::error::Error>> {
-        assert!(query_embed(&config("")?, &Environment::default())?.is_none());
+        assert!(searched(&config("")?, &Environment::default())?.is_none());
         Ok(())
     }
 
     #[test]
     fn an_endpoint_without_a_model_is_refused() -> Result<(), Box<dyn std::error::Error>> {
-        let refused = query_embed(
+        let refused = searched(
             &config("    embed_endpoint: http://127.0.0.1:9\n")?,
             &Environment::default(),
         );
@@ -413,7 +433,7 @@ mod embed_tests {
     #[test]
     fn an_endpoint_and_model_give_search_a_query_embedder() -> Result<(), Box<dyn std::error::Error>>
     {
-        let embed = query_embed(
+        let embed = searched(
             &config(
                 "    embed_endpoint: http://127.0.0.1:9\n    embed_model: text-embedding-3-small\n",
             )?,
@@ -429,7 +449,7 @@ mod embed_tests {
             "RIVETOS_EMBED_MODEL".to_owned(),
             "qwen3-embedding-0.6b".to_owned(),
         )]);
-        let embed = query_embed(&config("    embed_endpoint: http://127.0.0.1:9\n")?, &env)?;
+        let embed = searched(&config("    embed_endpoint: http://127.0.0.1:9\n")?, &env)?;
         assert!(embed.is_some());
         let env = Environment::from_vars([
             (
@@ -441,7 +461,7 @@ mod embed_tests {
                 "qwen3-embedding-0.6b".to_owned(),
             ),
         ]);
-        assert!(query_embed(&config("")?, &env)?.is_some());
+        assert!(searched(&config("")?, &env)?.is_some());
         Ok(())
     }
 }

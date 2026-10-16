@@ -38,6 +38,13 @@ impl TaskStore for SqliteStore {
         .await
     }
 
+    async fn release_running(&self, id: Uuid) -> Result<(), TaskError> {
+        call(self, move |conn| {
+            crate::task_rows::release_running(conn, id)
+        })
+        .await
+    }
+
     async fn finish(&self, id: Uuid, finish: &Finish) -> Result<bool, TaskError> {
         let finish = finish.clone();
         call(self, move |conn| {

@@ -69,7 +69,14 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
         wiki: store.clone(),
     };
     for role in [workers::ProcessRole::Embedder, workers::ProcessRole::All] {
-        let refused = with_models(role, ports(), &config, &factory, &shutdown);
+        let refused = with_models(
+            role,
+            ports(),
+            &config,
+            &factory,
+            &shutdown,
+            &kernel::shutdown::Activities::new(),
+        );
         assert!(matches!(
             refused,
             Err(rivethub::worker::RootError::Provider(
@@ -83,6 +90,7 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
         &config,
         &factory,
         &shutdown,
+        &kernel::shutdown::Activities::new(),
     )?;
     let mut idle = runner.runner.idle();
     let cancel = shutdown.clone();

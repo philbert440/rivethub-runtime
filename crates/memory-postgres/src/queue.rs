@@ -174,6 +174,14 @@ impl JobQueue for PostgresQueue {
             .map_err(|source| JobQueueError::Unavailable(Box::new(source)))
     }
 
+    async fn release(&self, id: JobId) -> Result<(), JobQueueError> {
+        match self.inner.release(id).await {
+            Ok(0) => Err(JobQueueError::Missing { id }),
+            Ok(_) => Ok(()),
+            Err(source) => Err(JobQueueError::Unavailable(Box::new(source))),
+        }
+    }
+
     async fn revive_dead(
         &self,
         name: &JobName,

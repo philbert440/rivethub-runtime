@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use kernel::memory::MemoryStore;
+use kernel::shutdown::Activities;
 use rivethub::composition::Composition;
 use terminal::herdr::namespace;
 use terminal::herdr::namespace::SessionStamp;
@@ -114,7 +115,7 @@ async fn gateway_startup_adopts_only_its_namespace() -> TestResult {
     let store: Arc<dyn MemoryStore> = Arc::new(testkit::FakeMemoryStore::default());
     let composition = tokio::time::timeout(
         Duration::from_secs(30),
-        Composition::build(&loaded.config, &env, store, &shutdown),
+        Composition::build(&loaded.config, &env, store, &shutdown, &Activities::new()),
     )
     .await??;
     let owner = gateway::tenancy::UserId::new("owner".to_owned())?;

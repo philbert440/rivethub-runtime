@@ -91,6 +91,40 @@ pub(crate) fn mark_running(
     Ok(record)
 }
 
+pub(crate) fn release_running(conn: &mut Connection, id: Uuid) -> Result<(), TaskError> {
+    let tx = immediate(conn, "release task")?;
+    ensure(&tx, "release task")?;
+    let Some(task) = load_optional(&tx, id, "release task")? else {
+        return Err(TaskError::Missing { id });
+    };
+    if task.status != TaskStatus::Running {
+        return Err(TaskError::Conflict {
+            id,
+            status: task.status,
+            action: ConflictAction::Release,
+        });
+    }
+    let attempt = task
+        .attempt
+        .checked_sub(1)
+        .ok_or_else(|| TaskError::Stored("attempt underflow".to_owned()))?;
+    let rows = tx
+        .execute(
+            "UPDATE rh_tasks SET status = 'queued', attempt = ?2, claimed_by = NULL, started_at = NULL
+             WHERE id = ?1 AND status = 'running'",
+            params![id.to_string(), i64::from(attempt)],
+        )
+        .map_err(|source| sql_error("release task", source))?;
+    if rows != 1 {
+        return Err(TaskError::Stored(
+            "release running missed the row".to_owned(),
+        ));
+    }
+    tx.commit()
+        .map_err(|source| sql_error("release task", source))?;
+    Ok(())
+}
+
 pub(crate) fn finish_task(
     conn: &mut Connection,
     id: Uuid,

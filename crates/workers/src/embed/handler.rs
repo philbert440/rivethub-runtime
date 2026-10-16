@@ -98,6 +98,7 @@ async fn embed_pieces(
     let embed = provider.embed(texts);
     tokio::pin!(embed);
     tokio::select! {
+        biased;
         () = cancel.cancelled() => Err(WorkerError::Cancelled),
         result = tokio::time::timeout(timeout, &mut embed) => match result {
             Ok(Ok(rows)) => Ok(rows),

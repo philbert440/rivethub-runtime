@@ -37,6 +37,7 @@ pub enum ConflictAction {
     Run,
     Steer,
     Kill,
+    Release,
 }
 
 impl std::fmt::Display for ConflictAction {
@@ -45,6 +46,7 @@ impl std::fmt::Display for ConflictAction {
             Self::Run => "run",
             Self::Steer => "steer",
             Self::Kill => "kill",
+            Self::Release => "release",
         })
     }
 }
@@ -214,6 +216,8 @@ pub trait TaskStore: std::fmt::Debug + Send + Sync {
         node: &str,
         now: DateTime<Utc>,
     ) -> Result<TaskRecord, TaskError>;
+
+    async fn release_running(&self, id: Uuid) -> Result<(), TaskError>;
 
     async fn finish(&self, id: Uuid, finish: &Finish) -> Result<bool, TaskError>;
 

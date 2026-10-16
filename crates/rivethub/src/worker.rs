@@ -3,6 +3,7 @@ use std::sync::Arc;
 use config::{Config, Environment};
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::JobQueue;
+use kernel::shutdown::Activities;
 use kernel::wiki::builder::WikiBuilderStore;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
@@ -42,15 +43,12 @@ pub async fn start(env: &Environment, role: ProcessRole, check: bool) -> Exit {
     if check {
         return finish(check_role(env, role).await, "worker configuration valid");
     }
-    let signals = match crate::signals::install() {
-        Ok(signals) => signals,
-        Err(exit) => return exit,
-    };
-    let result = run(env, role, signals.token()).await;
-    if let Err(exit) = signals.finish().await {
-        return exit;
-    }
-    finish(result, "")
+    let env = env.clone();
+    crate::shutdown::signals_then(
+        async move |shutdown, activities| run(&env, role, shutdown, &activities).await,
+        |result| finish(result, ""),
+    )
+    .await
 }
 
 fn finish(result: Result<(), RootError>, ready: &str) -> Exit {
@@ -98,13 +96,14 @@ async fn run(
     env: &Environment,
     role: ProcessRole,
     shutdown: CancellationToken,
+    activities: &Activities,
 ) -> Result<(), RootError> {
     let _guard = shutdown.clone().drop_guard();
     role.claim_roles()?;
     let owned = env.clone();
     let config = tokio::task::spawn_blocking(move || load(&owned)).await??;
     crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
-    let memory = Arc::new(postgres(&config, env).await?);
+    let memory = Arc::new(postgres(&config, env, &shutdown, activities).await?);
     let result = async {
         let queue = memory.queue().await.map_err(StartupError::from)?;
         let targets: Arc<dyn EmbeddingStore> = memory.clone();
@@ -123,6 +122,7 @@ async fn run(
             &config,
             env,
             &shutdown,
+            activities,
         )
         .await?;
         tracing::info!("worker running {role}");
@@ -155,9 +155,12 @@ pub async fn build_runner<Q: JobQueue + 'static>(
     config: &Config,
     env: &Environment,
     shutdown: &CancellationToken,
+    activities: &Activities,
 ) -> Result<ComposedRunner<Q>, RootError> {
-    let factory = model_factory(config, env).await?;
-    with_models(role, ports, config, &factory, shutdown)
+    let factory = model_factory(config, env)
+        .await?
+        .with_activities(activities.clone());
+    with_models(role, ports, config, &factory, shutdown, activities)
 }
 
 pub fn with_models<Q: JobQueue + 'static>(
@@ -166,6 +169,7 @@ pub fn with_models<Q: JobQueue + 'static>(
     config: &Config,
     factory: &crate::models::ModelFactory,
     shutdown: &CancellationToken,
+    activities: &Activities,
 ) -> Result<ComposedRunner<Q>, RootError> {
     role.claim_roles()?;
     let cancel = shutdown.child_token();
@@ -191,7 +195,8 @@ pub fn with_models<Q: JobQueue + 'static>(
     .with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
         store: ports.wiki,
         model,
-    });
+    })
+    .with_activities(activities.clone());
     Ok(ComposedRunner {
         runner,
         tasks: factory.tasks(),
@@ -223,17 +228,15 @@ async fn drive<Q: JobQueue + 'static>(
     runner: ComposedRunner<Q>,
     shutdown: CancellationToken,
 ) -> Result<(), RootError> {
-    let tracker = TaskTracker::new();
     let token = shutdown.child_token();
-    let task = tracker.spawn(async move { runner.run(token).await });
+    let task = tokio::spawn(async move { runner.run(token).await });
+    let _abort = crate::shutdown::AbortOnDrop::arm(&task);
     tokio::pin!(task);
     let joined = tokio::select! {
         biased;
         () = shutdown.cancelled() => (&mut task).await,
         result = &mut task => result,
     };
-    tracker.close();
-    tracker.wait().await;
     joined??;
     Ok(())
 }

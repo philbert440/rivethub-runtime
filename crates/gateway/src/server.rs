@@ -22,6 +22,7 @@ use hyper::server::conn::http1;
 use hyper_util::rt::TokioIo;
 use hyper_util::rt::TokioTimer;
 use hyper_util::service::TowerToHyperService;
+use kernel::shutdown::Activities;
 use parking_lot::Mutex;
 use thiserror::Error;
 use tokio::io::AsyncRead;
@@ -30,10 +31,10 @@ use tokio::io::ReadBuf;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::sync::watch;
+use tokio::task::JoinSet;
 use tokio_rustls::TlsAcceptor;
 use tokio_util::either::Either;
 use tokio_util::sync::CancellationToken;
-use tokio_util::task::TaskTracker;
 
 use crate::Gateway;
 use crate::tls::TlsError;
@@ -139,6 +140,7 @@ pub async fn serve_with(
         tls,
         shutdown.clone(),
         options,
+        Activities::new(),
     );
     tokio::pin!(serving);
     tokio::select! {
@@ -153,6 +155,7 @@ pub async fn serve_router_with(
     tls: Option<TlsPaths>,
     shutdown: CancellationToken,
     options: ServeOptions,
+    activities: Activities,
 ) -> Result<(), ServeError> {
     let acceptor = match tls {
         Some(paths) => {
@@ -161,7 +164,7 @@ pub async fn serve_router_with(
         }
         None => None,
     };
-    serve_router_with_acceptor(listener, router, acceptor, shutdown, options).await
+    serve_router_with_acceptor(listener, router, acceptor, shutdown, options, activities).await
 }
 
 pub(crate) async fn serve_router_with_acceptor(
@@ -170,14 +173,16 @@ pub(crate) async fn serve_router_with_acceptor(
     acceptor: Option<TlsAcceptor>,
     shutdown: CancellationToken,
     options: ServeOptions,
+    activities: Activities,
 ) -> Result<(), ServeError> {
     let serving = Serving {
         options,
         router,
         acceptor,
         shutdown: shutdown.clone(),
+        activities,
     };
-    let tracker = TaskTracker::new();
+    let mut tasks = JoinSet::new();
     loop {
         tokio::select! {
             () = shutdown.cancelled() => break,
@@ -186,7 +191,7 @@ pub(crate) async fn serve_router_with_acceptor(
                     if let Err(error) = tcp.set_nodelay(true) {
                         tracing::debug!("tcp nodelay failed for {remote}: {error}");
                     }
-                    tracker.spawn(serving.clone().run(tcp, remote));
+                    tasks.spawn(serving.clone().run(tcp, remote));
                 }
                 Err(error) => {
                     tracing::warn!("gateway accept failed: {error}");
@@ -196,8 +201,11 @@ pub(crate) async fn serve_router_with_acceptor(
         }
     }
     drop(listener);
-    tracker.close();
-    tracker.wait().await;
+    while let Some(joined) = tasks.join_next().await {
+        if let Err(error) = joined {
+            tracing::debug!("gateway connection task ended: {error}");
+        }
+    }
     Ok(())
 }
 
@@ -207,10 +215,14 @@ struct Serving {
     router: Router,
     acceptor: Option<TlsAcceptor>,
     shutdown: CancellationToken,
+    activities: Activities,
 }
 
 impl Serving {
     async fn run(self, tcp: TcpStream, remote: SocketAddr) {
+        let _connection = self
+            .activities
+            .enter(format!("gateway connection {remote}"));
         let stream = match self.acceptor {
             Some(acceptor) => {
                 let handshake =

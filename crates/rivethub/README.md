@@ -4,7 +4,13 @@
 
 `rh gateway`, `rh agent`, `rh worker`, and `rh mcp` are the composition roots. Each one
 runs on the multithreaded Tokio runtime built in `rh`'s `main`, with one
-cancellation tree and a task tracker, and stops on SIGTERM or SIGINT.
+cancellation tree, and stops on SIGTERM or SIGINT. In-flight provider calls,
+embedding calls, queue listens, gateway connections, and claimed jobs observe
+that token. A claimed job is released back to the queue with the attempt added
+by the claim removed; it is not failed. Each root exits 0 when that work finishes
+inside a 10 second grace (`kernel::shutdown::SHUTDOWN_GRACE`). If anything is
+still entered when the grace elapses, the process logs
+`shutdown grace of 10s elapsed; still running: …` and exits non-zero.
 `rh start` supervises those roots as children of this binary and stays hidden
 from help. Invoking `rh` without arguments prints help.
 
@@ -53,7 +59,7 @@ and TLS with a client CA. It writes `mesh.json` beneath the configured shared
 root. Every configured agent receives a bounded mailbox and independent turns.
 Every configured agent is reachable at `/v1` by its id, and the default agent's runner serves the session wait path. All agents use the common audit pipeline.
 Registry heartbeats, listeners, turns and terminal maintenance belong to the
-shutdown tree. SIGTERM/SIGINT cancel and join these services.
+shutdown tree. SIGTERM/SIGINT cancel these services under the same 10 second grace.
 
 Before moving the compatibility state directory, startup acquires existing
 root-level `.pid`/`.lock` files and checks their PID owners. A live PID, held lock,
@@ -84,14 +90,20 @@ OpenAI-compatible provider. An absent queue fails closed.
 false, `rh agent` when Postgres memory would start, `rh worker --role` for
 sqlite `workers`, `tagging`, and `wiki_dir`, and `rh mcp` when `transports.mcp`
 sets `host` or `socket`. Postgres has no worker-role list, so those roles are
-not inferred. Stdio MCP is not a child. `rh local` is one process on one
+not inferred. Stdio MCP is not a child. On SIGTERM or SIGINT, `rh start` forwards
+SIGTERM to each child and waits the same 10 second grace. A child that exits
+inside the grace is not killed. A child still running after the grace is sent
+SIGKILL; if it has not exited after that same grace, start logs
+`shutdown grace of 10s elapsed; still running: child …` and returns an error. `rh local` is one process on one
 `SqliteStore`: the gateway (always, including when `den.enabled` is false), the
 embedder and summarizer when `memory.sqlite.workers` is true, the categorizer
 when `memory.sqlite.tagging` is true, the wiki builder when `memory.sqlite.wiki_dir`
 is set, and MCP when `transports.mcp` sets a host or a socket. A configured agent
 enables the task engine and MCP delegation. Stdio MCP is not attached.
 SQLite embeddings run with chunking disabled. A config or migrate error exits 1.
-SIGTERM and SIGINT drain the process tracker and exit 0. The default bind is
+SIGTERM and SIGINT cancel the process. It exits 0 when the gateway, workers, and
+sidecar finish inside the same 10 second grace, and exits non-zero, naming the
+work still entered, when they do not. The default bind is
 `0.0.0.0:5174`; pass `--no-lan` for `127.0.0.1`. An off-loopback bind still
 requires TLS. `--port` and `--no-lan` override an existing file in memory and
 do not rewrite it. Migrate runs in the CLI before the store opens, because the
@@ -99,7 +111,9 @@ runtime does not depend on the migrate crate.
 
 `rh agent` runs the task engine: it claims `run-task` jobs, executes each
 session through the gateway HTTP API, and finishes under the process shutdown
-token. `rh agent --check` validates the node, worker, pricing, gateway URL, and
+token. Shutdown releases a running `rh_tasks` row back to `queued` and releases
+its job, leaving both attempt counts where they were before the claim.
+`rh agent --check` validates the node, worker, pricing, gateway URL, and
 Postgres URL without connecting. `tasks.enabled: false` refuses the process.
 The gateway still serves `/api/tasks`, `/api/catalog`, and `/api/outcomes`.
 `GET /api/catalog` fails closed while harness commands and skills have no source.

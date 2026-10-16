@@ -168,6 +168,30 @@ impl TaskStore for TaskMemory {
         Ok(running)
     }
 
+    async fn release_running(&self, id: Uuid) -> Result<(), TaskError> {
+        let mut inner = self.inner.lock();
+        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
+        if task.status != TaskStatus::Running {
+            let status = task.status;
+            drop(inner);
+            return Err(TaskError::Conflict {
+                id,
+                status,
+                action: ConflictAction::Release,
+            });
+        }
+        task.attempt = task
+            .attempt
+            .checked_sub(1)
+            .ok_or_else(|| TaskError::Stored("attempt underflow".to_owned()))?;
+        task.status = TaskStatus::Queued;
+        task.claimed_by = None;
+        task.started_at = None;
+        drop(inner);
+        self.touch();
+        Ok(())
+    }
+
     async fn finish(&self, id: Uuid, finish: &Finish) -> Result<bool, TaskError> {
         let mut inner = self.inner.lock();
         let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
@@ -441,6 +465,23 @@ impl JobQueue for TaskMemory {
         }
         drop(inner);
         Ok(())
+    }
+
+    async fn release(&self, id: JobId) -> Result<(), JobQueueError> {
+        let mut inner = self.inner.lock();
+        let outcome = match inner.jobs.get_mut(&id) {
+            Some(job) if job.locked => match job.attempts.checked_sub(1) {
+                Some(attempts) => {
+                    job.attempts = attempts;
+                    job.locked = false;
+                    Ok(())
+                }
+                None => Err(JobQueueError::Stored("attempt underflow".to_owned())),
+            },
+            Some(_) | None => Err(JobQueueError::Missing { id }),
+        };
+        drop(inner);
+        outcome
     }
 
     async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError> {

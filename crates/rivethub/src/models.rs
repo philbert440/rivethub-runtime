@@ -5,6 +5,7 @@ use config::provider::{ProviderBody, ProviderSlot, ProviderType};
 use config::{Config, Environment};
 use kernel::harness::HarnessAdapter;
 use kernel::model::ModelProvider;
+use kernel::shutdown::Activities;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
@@ -40,6 +41,7 @@ pub struct ModelFactory {
     tasks: tokio_util::task::TaskTracker,
     embed_endpoint: Option<String>,
     embed_model: Option<String>,
+    activities: Activities,
 }
 
 #[expect(
@@ -146,6 +148,12 @@ impl ModelFactory {
         self
     }
 
+    #[must_use]
+    pub fn with_activities(mut self, activities: Activities) -> Self {
+        self.activities = activities;
+        self
+    }
+
     async fn install(
         &mut self,
         config: &Config,
@@ -187,7 +195,9 @@ impl ModelFactory {
         let kind = slot.kind.ok_or_else(|| ModelError::Type(id.into()))?;
         match &slot.body {
             ProviderBody::Openai(body) => {
-                let provider = providers::OpenAiCompatible::build(kind, body)?;
+                let provider = providers::OpenAiCompatible::build(kind, body)?
+                    .with_shutdown(shutdown.child_token())
+                    .with_activities(self.activities.clone());
                 let model = match model {
                     Some(model) => model.to_owned(),
                     None => provider.model().to_owned(),

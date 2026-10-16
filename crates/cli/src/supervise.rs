@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use config::Environment;
 
@@ -30,7 +30,7 @@ impl RestartPolicy {
             initial: Duration::from_secs(1),
             maximum: Duration::from_secs(60),
             reset_after: Duration::from_secs(60),
-            grace: Duration::from_secs(10),
+            grace: kernel::shutdown::SHUTDOWN_GRACE,
         }
     }
 
@@ -293,7 +293,7 @@ async fn supervise_root(
         let started = tokio::time::Instant::now();
         tokio::select! {
             () = shutdown.cancelled() => {
-                let signal = stop_child(&mut child, policy.grace()).await;
+                let signal = stop_child(&mut child, policy.grace()).await?;
                 emit(observer.as_ref(), SupervisionEvent::Stopped { root, signal });
                 return Ok(());
             }
@@ -390,20 +390,20 @@ async fn stop_unusable(child: &mut Child) {
     }
 }
 
-async fn stop_child(child: &mut Child, grace: Duration) -> Signal {
+async fn stop_child(child: &mut Child, grace: Duration) -> Result<Signal, Error> {
     let Some(pid) = child.id() else {
         tracing::warn!("supervised child had already exited");
-        return Signal::SIGTERM;
+        return Ok(Signal::SIGTERM);
     };
     let raw = match i32::try_from(pid) {
         Ok(raw) if raw > 1 => raw,
         Ok(raw) => {
             tracing::error!("refusing to signal child pid {raw}");
-            return Signal::SIGKILL;
+            return Ok(Signal::SIGKILL);
         }
         Err(error) => {
             tracing::error!("supervised child pid {pid} cannot be signalled: {error}");
-            return Signal::SIGKILL;
+            return Ok(Signal::SIGKILL);
         }
     };
     let target = Pid::from_raw(raw);
@@ -422,16 +422,48 @@ async fn stop_child(child: &mut Child, grace: Duration) -> Signal {
         () = tokio::time::sleep(grace) => false,
     };
     if exited {
-        return Signal::SIGTERM;
+        return Ok(Signal::SIGTERM);
     }
     match kill(target, Signal::SIGKILL) {
         Ok(()) | Err(Errno::ESRCH) => {}
         Err(error) => tracing::error!("sending SIGKILL to {pid} failed: {error}"),
     }
-    if let Err(error) = child.wait().await {
+    reap_killed(child, pid, grace).await
+}
+
+fn grace_elapsed_on_the_wall(wall: Duration, grace: Duration) -> bool {
+    wall >= grace / 2
+}
+
+fn killed(pid: u32, result: std::io::Result<std::process::ExitStatus>) -> Signal {
+    if let Err(error) = result {
         tracing::error!("reaping child {pid} failed: {error}");
     }
     Signal::SIGKILL
+}
+
+async fn reap_killed(child: &mut Child, pid: u32, grace: Duration) -> Result<Signal, Error> {
+    let started = Instant::now();
+    let finished = tokio::select! {
+        result = child.wait() => Some(result),
+        () = tokio::time::sleep(grace) => None,
+    };
+    let wall = started.elapsed();
+    match finished {
+        Some(result) => Ok(killed(pid, result)),
+        None if grace_elapsed_on_the_wall(wall, grace) => {
+            tracing::error!("shutdown grace of 10s elapsed; still running: child {pid}");
+            Err(Error::Io(std::io::Error::other(format!(
+                "shutdown grace of 10s elapsed; still running: child {pid}"
+            ))))
+        }
+        None => {
+            tracing::debug!(
+                "shutdown timer advanced after {wall:?} of wall time; reaping child {pid}"
+            );
+            Ok(killed(pid, child.wait().await))
+        }
+    }
 }
 
 fn emit(observer: Option<&UnboundedSender<SupervisionEvent>>, event: SupervisionEvent) {
@@ -446,7 +478,7 @@ fn emit(observer: Option<&UnboundedSender<SupervisionEvent>>, event: Supervision
 
 #[cfg(test)]
 mod tests {
-    use super::RestartPolicy;
+    use super::{RestartPolicy, grace_elapsed_on_the_wall};
     use std::time::Duration;
 
     #[test]
@@ -481,5 +513,14 @@ mod tests {
             Duration::from_secs(4)
         );
         assert_eq!(policy.grace(), Duration::from_secs(10));
+    }
+
+    #[test]
+    fn a_paused_clock_is_not_the_grace() {
+        let grace = Duration::from_secs(10);
+        assert!(!grace_elapsed_on_the_wall(Duration::from_millis(60), grace));
+        assert!(!grace_elapsed_on_the_wall(Duration::from_secs(4), grace));
+        assert!(grace_elapsed_on_the_wall(grace / 2, grace));
+        assert!(grace_elapsed_on_the_wall(grace, grace));
     }
 }

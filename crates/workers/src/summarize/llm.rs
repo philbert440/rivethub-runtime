@@ -25,7 +25,11 @@ pub(super) async fn chat(
         thinking: None,
         max_tokens: Some(max_tokens),
     };
-    env.provider.chat(request).await.map_err(llm_error)
+    tokio::select! {
+        biased;
+        () = env.cancel.cancelled() => Err(WorkerError::Cancelled),
+        result = env.provider.chat(request) => result.map_err(llm_error),
+    }
 }
 
 pub(super) fn require_text(response: &LlmResponse) -> Result<String, WorkerError> {

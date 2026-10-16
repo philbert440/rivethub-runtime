@@ -193,6 +193,11 @@ impl SqliteStore {
         self.with_conn(move |conn| delete_job(conn, &id)).await
     }
 
+    pub async fn release_job(&self, id: String, now: DateTime<Utc>) -> Result<(), SqliteError> {
+        self.with_conn(move |conn| release_one(conn, &id, now))
+            .await
+    }
+
     pub async fn revive(
         &self,
         key: String,
@@ -417,6 +422,22 @@ fn reject_claim(
     )
     .map_err(SqliteError::query("job claim reject"))?;
     Ok(())
+}
+
+fn release_one(conn: &Connection, id: &str, now: DateTime<Utc>) -> Result<(), SqliteError> {
+    let changed = conn
+        .execute(
+            "UPDATE ros_jobs
+                SET state = 'queued', attempts = MAX(attempts - 1, 0), locked_at = NULL, updated_at = ?2
+              WHERE id = ?1 AND state = 'running'",
+            params![id, time::stamp(now)],
+        )
+        .map_err(SqliteError::query("job release"))?;
+    if changed == 0 {
+        Err(SqliteError::MissingJob { id: id.to_owned() })
+    } else {
+        Ok(())
+    }
 }
 
 fn fail_one(

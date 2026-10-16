@@ -92,15 +92,12 @@ pub async fn start(env: &Environment, check: bool) -> Exit {
     if check {
         return finish(validate(env).await, "mcp configuration valid");
     }
-    let signals = match crate::signals::install() {
-        Ok(signals) => signals,
-        Err(exit) => return exit,
-    };
-    let result = run(env, signals.token()).await;
-    if let Err(exit) = signals.finish().await {
-        return exit;
-    }
-    finish(result, "")
+    let env = env.clone();
+    crate::shutdown::signals_then(
+        async move |shutdown, activities| run(&env, shutdown, &activities).await,
+        |result| finish(result, ""),
+    )
+    .await
 }
 
 fn finish(result: Result<(), SidecarError>, ready: &str) -> Exit {
@@ -137,13 +134,26 @@ async fn validate(env: &Environment) -> Result<(), SidecarError> {
     Ok(())
 }
 
-async fn run(env: &Environment, shutdown: CancellationToken) -> Result<(), SidecarError> {
+async fn run(
+    env: &Environment,
+    shutdown: CancellationToken,
+    activities: &kernel::shutdown::Activities,
+) -> Result<(), SidecarError> {
     let _guard = shutdown.clone().drop_guard();
     let config = read_config(env).await?;
     let selected = select(&config)?;
     crate::identity::announce_resolved("mcp", &config, env).map_err(StartupError::from)?;
-    let memory = Arc::new(postgres(&config, env).await?) as Arc<dyn MemoryStore>;
-    let result = run_server(&config, env, Arc::clone(&memory), selected, &shutdown).await;
+    let memory =
+        Arc::new(postgres(&config, env, &shutdown, activities).await?) as Arc<dyn MemoryStore>;
+    let result = run_server(
+        &config,
+        env,
+        Arc::clone(&memory),
+        selected,
+        &shutdown,
+        activities,
+    )
+    .await;
     shutdown.cancel();
     let closed = memory.close().await.map_err(StartupError::from);
     closed?;
@@ -158,8 +168,9 @@ async fn run_server(
     memory: Arc<dyn MemoryStore>,
     selected: Selected,
     shutdown: &CancellationToken,
+    activities: &kernel::shutdown::Activities,
 ) -> Result<(), SidecarError> {
-    let delegation = crate::agent::open_delegation(config, env, shutdown).await?;
+    let delegation = crate::agent::open_delegation(config, env, shutdown, activities).await?;
     let ran = async {
         let server = mcp::Server::builder(memory, false, shutdown.child_token())
             .display_zone(display_zone(env))
@@ -425,6 +436,7 @@ async fn join_task<T: Send>(
     shutdown: &CancellationToken,
     task: tokio::task::JoinHandle<T>,
 ) -> Result<T, tokio::task::JoinError> {
+    let _abort = crate::shutdown::AbortOnDrop::arm(&task);
     tokio::pin!(task);
     tokio::select! {
         biased;

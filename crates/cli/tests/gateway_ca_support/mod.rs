@@ -115,6 +115,7 @@ impl Material {
             Some(tls),
             shutdown,
             ServeOptions::default(),
+            kernel::shutdown::Activities::new(),
         ));
         Ok(Lab {
             _directory: self.directory,
