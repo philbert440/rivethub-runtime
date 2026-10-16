@@ -174,6 +174,7 @@ async fn run_server(
 pub(crate) fn memory_future(
     config: &Config,
     memory: Arc<dyn MemoryStore>,
+    delegation: Option<Arc<dyn kernel::tasks::Delegation>>,
     shutdown: CancellationToken,
 ) -> Result<impl std::future::Future<Output = Result<(), SidecarError>> + Send + use<>, SidecarError>
 {
@@ -183,7 +184,11 @@ pub(crate) fn memory_future(
             "rh local serves MCP only when a host or socket is configured".into(),
         ));
     }
-    let server = mcp::Server::builder(memory, false, shutdown.child_token()).build()?;
+    let mut builder = mcp::Server::builder(memory, false, shutdown.child_token());
+    if let Some(port) = delegation {
+        builder = builder.delegation(port, mcp::Surface::Stdio);
+    }
+    let server = builder.build()?;
     Ok(async move {
         serve(server, selected, shutdown).await?;
         tracing::info!("mcp stopped");

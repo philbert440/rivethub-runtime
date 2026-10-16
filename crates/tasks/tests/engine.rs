@@ -68,6 +68,7 @@ async fn a_chat_task_posts_the_goal_and_completes() {
     assert_eq!(posted.text, "ship it");
     assert_eq!(posted.agent.as_deref(), Some("worker"));
     assert_eq!(posted.user_id, None);
+    assert_eq!(posted.exclude_tools, None);
     let loaded = engine.load(id).await.expect("load");
     assert_eq!(loaded.status, TaskStatus::Completed);
     assert_eq!(
@@ -92,7 +93,9 @@ async fn an_appended_system_prompt_is_posted_after_the_agent_prompt() {
     directory.local_agent("worker", agent);
     let (engine, _) = engine_with(directory, settings(None, std::collections::BTreeMap::new()));
     let mut created = request("ship it");
-    created.spec = Some(spec("sess-1", Some("extra"), None));
+    let mut overrides = spec("sess-1", Some("extra"), None);
+    overrides.exclude_tools = Some(vec!["delegate_task".to_owned(), "wiki_search".to_owned()]);
+    created.spec = Some(overrides);
     let id = engine
         .submit(tasks::NewTask {
             request: created,
@@ -103,6 +106,10 @@ async fn an_appended_system_prompt_is_posted_after_the_agent_prompt() {
     engine.run_one().await.expect("run");
     let posted = posted(&next_body(&mut rx).body);
     assert_eq!(posted.system_prompt.as_deref(), Some("base\nextra"));
+    assert_eq!(
+        posted.exclude_tools,
+        Some(vec!["delegate_task".to_owned(), "wiki_search".to_owned()])
+    );
     assert_eq!(
         engine.load(id).await.expect("load").status,
         TaskStatus::Completed

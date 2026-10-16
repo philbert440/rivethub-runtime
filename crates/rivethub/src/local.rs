@@ -1,9 +1,15 @@
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use config::{Config, Environment, ServiceSwitch};
 use gateway::server::ServeOptions;
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
+use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
+use kernel::tasks::Delegation;
+use kernel::wiki::builder::WikiBuilderStore;
 use memory_sqlite::SqliteStore;
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -28,8 +34,14 @@ enum LocalError {
     Store(#[from] memory_sqlite::SqliteError),
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
-    #[error("rh local cannot run the wiki builder: SQLite does not implement that port")]
-    Wiki,
+    #[error(transparent)]
+    Tasks(#[from] tasks::Error),
+    #[error(transparent)]
+    Agent(#[from] crate::agent::AgentError),
+    #[error(transparent)]
+    Queue(#[from] kernel::queue::JobQueueError),
+    #[error("gateway address is not a loopback url")]
+    GatewayUrl,
 }
 
 impl LocalError {
@@ -38,7 +50,12 @@ impl LocalError {
             Self::Startup(error) => error.exit(),
             Self::Worker(error) => error.exit(),
             Self::Mcp(error) => error.exit(),
-            Self::Store(_) | Self::Join(_) | Self::Wiki => Exit::Failure,
+            Self::Store(_)
+            | Self::Join(_)
+            | Self::Tasks(_)
+            | Self::Agent(_)
+            | Self::Queue(_)
+            | Self::GatewayUrl => Exit::Failure,
         }
     }
 }
@@ -92,7 +109,12 @@ fn report_local(error: &LocalError) {
         LocalError::Startup(error) => report(error),
         LocalError::Worker(error) => worker::report_root(error),
         LocalError::Mcp(error) => sidecar::report_error(error),
-        LocalError::Store(_) | LocalError::Join(_) | LocalError::Wiki => {
+        LocalError::Store(_)
+        | LocalError::Join(_)
+        | LocalError::Tasks(_)
+        | LocalError::Agent(_)
+        | LocalError::Queue(_)
+        | LocalError::GatewayUrl => {
             tracing::error!("{error}");
         }
     }
@@ -114,11 +136,8 @@ async fn run(
     let _guard = shutdown.clone().drop_guard();
     let store = open_store(database).await?;
     let switches = config.service_switches(env);
-    if switches.contains(&ServiceSwitch::Wiki) {
-        return Err(LocalError::Wiki);
-    }
     let node = bind_node(&store, &switches, config, env, &shutdown).await?;
-    supervise(node, &switches, config, store, shutdown).await
+    supervise(node, &switches, config, env, store, shutdown).await
 }
 
 async fn bind_node(
@@ -158,6 +177,7 @@ async fn supervise(
     node: GatewayNode,
     switches: &[ServiceSwitch],
     config: &Config,
+    env: &Environment,
     store: Arc<SqliteStore>,
     shutdown: CancellationToken,
 ) -> Result<(), LocalError> {
@@ -175,8 +195,18 @@ async fn supervise(
     );
     let tracker = TaskTracker::new();
     let (failed_tx, mut failed_rx) = mpsc::unbounded_channel();
-    spawn_workers(&tracker, &failed_tx, &shutdown, runners);
-    if let Err(error) = spawn_mcp(&tracker, &failed_tx, switches, config, store, &shutdown) {
+    if let Err(error) = (NodeBoot {
+        tracker: &tracker,
+        failed: &failed_tx,
+        switches,
+        config,
+        env,
+        store: &store,
+        shutdown: &shutdown,
+    })
+    .start(runners, loopback_url(addr, secure)?)
+    .await
+    {
         shutdown.cancel();
         note_close(composition.close().await.map_err(StartupError::from));
         drop(failed_tx);
@@ -201,25 +231,116 @@ async fn supervise(
     Ok(())
 }
 
-fn spawn_mcp(
-    tracker: &TaskTracker,
-    failed_tx: &mpsc::UnboundedSender<LocalError>,
-    switches: &[ServiceSwitch],
-    config: &Config,
-    store: Arc<SqliteStore>,
-    shutdown: &CancellationToken,
-) -> Result<(), LocalError> {
-    if !switches.contains(&ServiceSwitch::Mcp) {
-        return Ok(());
-    }
-    let task = sidecar::memory_future(config, store, shutdown.clone())?;
-    let failed = failed_tx.clone();
-    tracker.spawn(async move {
-        if let Err(error) = task.await {
-            deliver(&failed, LocalError::Mcp(error));
+struct NodeBoot<'a> {
+    tracker: &'a TaskTracker,
+    failed: &'a mpsc::UnboundedSender<LocalError>,
+    switches: &'a [ServiceSwitch],
+    config: &'a Config,
+    env: &'a Environment,
+    store: &'a Arc<SqliteStore>,
+    shutdown: &'a CancellationToken,
+}
+
+impl NodeBoot<'_> {
+    async fn start(
+        &self,
+        runners: Vec<(ProcessRole, Runner<SqliteStore>)>,
+        gateway: url::Url,
+    ) -> Result<(), LocalError> {
+        if self.switches.contains(&ServiceSwitch::Wiki) {
+            enqueue_backfill(self.store).await?;
         }
-    });
+        spawn_workers(self.tracker, self.failed, self.shutdown, runners);
+        let delegation = if self.switches.contains(&ServiceSwitch::Mcp) {
+            self.delegation(gateway).await?
+        } else {
+            None
+        };
+        self.spawn_mcp(delegation)
+    }
+
+    async fn delegation(
+        &self,
+        gateway: url::Url,
+    ) -> Result<Option<Arc<dyn Delegation>>, LocalError> {
+        if self
+            .config
+            .tasks
+            .as_ref()
+            .is_some_and(|tasks| tasks.enabled == Some(false))
+        {
+            return Ok(None);
+        }
+        let (directory, settings) =
+            crate::agent::standalone_tasks(self.config, self.env, gateway).await?;
+        let engine = Arc::new(tasks::Engine::new(
+            self.store.as_ref().clone(),
+            self.store.as_ref().clone(),
+            directory,
+            settings,
+        )?);
+        let port: Arc<dyn Delegation> = engine.clone();
+        let failed = self.failed.clone();
+        let token = self.shutdown.child_token();
+        self.tracker.spawn(async move {
+            if let Err(error) = engine.serve(token).await {
+                deliver(&failed, LocalError::Tasks(error));
+            }
+        });
+        Ok(Some(port))
+    }
+
+    fn spawn_mcp(&self, delegation: Option<Arc<dyn Delegation>>) -> Result<(), LocalError> {
+        if !self.switches.contains(&ServiceSwitch::Mcp) {
+            return Ok(());
+        }
+        let task = sidecar::memory_future(
+            self.config,
+            Arc::clone(self.store) as Arc<dyn MemoryStore>,
+            delegation,
+            self.shutdown.clone(),
+        )?;
+        let failed = self.failed.clone();
+        self.tracker.spawn(async move {
+            if let Err(error) = task.await {
+                deliver(&failed, LocalError::Mcp(error));
+            }
+        });
+        Ok(())
+    }
+}
+
+async fn enqueue_backfill(store: &SqliteStore) -> Result<(), LocalError> {
+    store
+        .enqueue(Job {
+            name: JobName::Fixed(FixedJob::EnqueueWikiBackfill),
+            payload: wire::JsonObject::default(),
+            key: Some("wiki-backfill".to_owned()),
+            key_mode: JobKeyMode::Replace,
+            priority: 5,
+            run_at: None,
+            max_attempts: None,
+        })
+        .await?;
     Ok(())
+}
+
+fn loopback_url(addr: SocketAddr, secure: bool) -> Result<url::Url, LocalError> {
+    let ip = if addr.ip().is_unspecified() {
+        IpAddr::V4(Ipv4Addr::LOCALHOST)
+    } else {
+        addr.ip()
+    };
+    let mut url = url::Url::parse("http://127.0.0.1/").map_err(|_| LocalError::GatewayUrl)?;
+    if secure {
+        url.set_scheme("https")
+            .map_err(|()| LocalError::GatewayUrl)?;
+    }
+    url.set_ip_host(ip).map_err(|()| LocalError::GatewayUrl)?;
+    url.set_port(Some(addr.port()))
+        .map_err(|()| LocalError::GatewayUrl)?;
+    url.set_path("/");
+    Ok(url)
 }
 
 async fn await_node(
@@ -285,7 +406,7 @@ fn build_runners(
             targets: Arc::clone(store) as Arc<dyn EmbeddingStore>,
             summaries: Arc::clone(store) as Arc<dyn SummaryStore>,
             memory: Arc::clone(store) as Arc<dyn MemoryStore>,
-            wiki: None,
+            wiki: Arc::clone(store) as Arc<dyn WikiBuilderStore>,
         };
         built.push((role, worker::build_runner(role, ports, config)?));
     }
@@ -301,10 +422,8 @@ fn worker_roles(switches: &[ServiceSwitch]) -> Vec<ProcessRole> {
                 roles.push(ProcessRole::Summarizer);
             }
             ServiceSwitch::Tagging => roles.push(ProcessRole::Categorizer),
-            ServiceSwitch::Gateway
-            | ServiceSwitch::Agent
-            | ServiceSwitch::Wiki
-            | ServiceSwitch::Mcp => {}
+            ServiceSwitch::Wiki => roles.push(ProcessRole::WikiBuilder),
+            ServiceSwitch::Gateway | ServiceSwitch::Agent | ServiceSwitch::Mcp => {}
         }
     }
     roles

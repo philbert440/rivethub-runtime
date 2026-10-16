@@ -1,6 +1,6 @@
 # Service composition
 
-`Config::load` with `Profile::Node`, and `rh config validate`, still require the `runtime`, `agents`, and `providers` sections. `rh local` does not invent an agent, a provider, or an endpoint. When no config file resolves it writes only the SQLite database path and the gateway bind, then loads that file with `Profile::Standalone`, which does not require those sections. A present section is still validated. `rh agent` is not part of `rh local`: the task engine needs Postgres. `memory.sqlite.wiki_dir` refuses startup because SQLite does not implement the wiki builder port.
+`Config::load` with `Profile::Node`, and `rh config validate`, still require the `runtime`, `agents`, and `providers` sections. `rh local` does not invent an agent, a provider, or an endpoint. When no config file resolves it writes only the SQLite database path and the gateway bind, then loads that file with `Profile::Standalone`, which does not require those sections. A present section is still validated. `rh local` composes the task engine, gateway, configured workers, and MCP sidecar in one process over SQLite. With an agent and provider configured, MCP `delegate_task` runs through the gateway session API; `memory.sqlite.wiki_dir` enables the wiki builder. Standalone and service roots resolve the node identity through the same resolver.
 
 `rh gateway`, `rh agent`, `rh worker`, and `rh mcp` are the composition roots. Each one
 runs on the multithreaded Tokio runtime built in `rh`'s `main`, with one
@@ -82,8 +82,9 @@ sets `host` or `socket`. Postgres has no worker-role list, so those roles are
 not inferred. Stdio MCP is not a child. `rh local` is one process on one
 `SqliteStore`: the gateway (always, including when `den.enabled` is false), the
 embedder and summarizer when `memory.sqlite.workers` is true, the categorizer
-when `memory.sqlite.tagging` is true, and MCP when `transports.mcp` sets a host
-or a socket. It does not start the task engine and it does not attach stdio MCP.
+when `memory.sqlite.tagging` is true, the wiki builder when `memory.sqlite.wiki_dir`
+is set, and MCP when `transports.mcp` sets a host or a socket. A configured agent
+enables the task engine and MCP delegation. Stdio MCP is not attached.
 SQLite embeddings run with chunking disabled. A config or migrate error exits 1.
 SIGTERM and SIGINT drain the process tracker and exit 0. The default bind is
 `0.0.0.0:5174`; pass `--no-lan` for `127.0.0.1`. An off-loopback bind still

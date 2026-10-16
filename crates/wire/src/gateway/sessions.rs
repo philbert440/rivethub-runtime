@@ -91,6 +91,7 @@ pub struct SessionMessage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionPostRequest {
+    pub exclude_tools: Option<Vec<String>>,
     pub text: String,
     pub user_id: Option<String>,
     pub agent: Option<String>,

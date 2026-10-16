@@ -40,6 +40,7 @@ impl Harness {
         let service = Service::open(
             "test-provider".to_owned(),
             Arc::clone(&provider),
+            "test-model".to_owned(),
             &dir.path().join("conversations"),
             CancellationToken::new(),
         )
@@ -88,6 +89,7 @@ impl Harness {
         self.service = Service::open(
             "test-provider".to_owned(),
             Arc::clone(&self.provider),
+            "test-model".to_owned(),
             &self.dir.path().join("conversations"),
             CancellationToken::new(),
         )

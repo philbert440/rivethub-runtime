@@ -62,9 +62,4 @@ Tests drive `rh start` with fake roots: a test binary that sleeps, crashes or ig
 
 `rh local [--port <n>] [--no-lan]` runs one process: the gateway, the SQLite worker roles, and MCP when `transports.mcp` has a host or socket. It claims the state directory, runs `migrate::sqlite` once, and opens one SQLite store. SIGTERM and SIGINT drain that process and exit 0. A config or migrate error exits 1. `--port` defaults to 5174. `--no-lan` binds `127.0.0.1`; otherwise the written bind is `0.0.0.0`. Flags on an existing file apply in memory and do not rewrite it.
 
-`rh agent` is not part of `rh local` because the task engine needs Postgres.
-
-Skipped scenarios:
-
-- `wiki-builder` — SQLite does not implement the wiki builder port, so memory.sqlite.wiki_dir refuses startup.
-- `task-engine` — rh agent needs Postgres and is not part of rh local.
+`rh local` runs the wiki builder when `memory.sqlite.wiki_dir` is set, and its MCP server exposes `delegate_task` on the SQLite task queue. The supervised `rh agent` process remains the Postgres task service.

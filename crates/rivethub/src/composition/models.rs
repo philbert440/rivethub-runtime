@@ -83,15 +83,16 @@ pub(super) async fn build(
         tool_names.extend(built.tool_names());
         let runner: Arc<dyn TurnRunner> = Arc::new(built);
         if id == default_agent {
-            selected = Some((provider_id.clone(), provider, runner.clone()));
+            selected = Some((provider_id.clone(), provider, runner.clone(), model.clone()));
         }
         bindings.insert(id.clone(), AgentBinding { runner, model });
     }
-    let (provider_id, provider, runner) =
+    let (provider_id, provider, runner, model) =
         selected.ok_or_else(|| ComposeError::Invalid("default agent is missing".into()))?;
     let service = gateway::routes::v1::Service::open(
         provider_id,
         provider,
+        model,
         &state.join("conversations"),
         cancel.child_token(),
     )

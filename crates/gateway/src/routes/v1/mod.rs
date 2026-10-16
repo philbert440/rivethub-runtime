@@ -28,6 +28,7 @@ use crate::error::ApiError;
 pub struct Service {
     provider: Arc<dyn ModelProvider>,
     provider_id: String,
+    model: String,
     conversations: storage::Store,
     limits: TurnLimits,
     cancel: CancellationToken,
@@ -38,6 +39,7 @@ impl Service {
     pub async fn open(
         provider_id: String,
         provider: Arc<dyn ModelProvider>,
+        model: String,
         directory: &Path,
         cancel: CancellationToken,
     ) -> Result<Arc<Self>, Error> {
@@ -46,6 +48,7 @@ impl Service {
         Ok(Arc::new(Self {
             provider,
             provider_id,
+            model,
             conversations,
             limits: TurnLimits {
                 steps: 1,
@@ -56,6 +59,18 @@ impl Service {
             cancel,
             tasks,
         }))
+    }
+
+    pub(crate) fn model(&self) -> &str {
+        &self.model
+    }
+
+    pub(crate) fn limits(&self) -> TurnLimits {
+        self.limits
+    }
+
+    pub(crate) fn child_token(&self) -> CancellationToken {
+        self.cancel.child_token()
     }
 
     pub fn router(self: &Arc<Self>, gateway: &Arc<Gateway>, secure: bool) -> Router {

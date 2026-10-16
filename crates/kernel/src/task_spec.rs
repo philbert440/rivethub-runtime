@@ -6,10 +6,10 @@ use wire::task::TaskSpec;
 use wire::task_overrides::TaskColumns;
 use wire::task_overrides::TaskOverrides;
 
-use kernel::tasks::TaskError;
+use crate::tasks::TaskError;
 
 #[derive(Debug)]
-pub(crate) struct LoadedColumns<'a> {
+pub struct LoadedColumns<'a> {
     pub id: Uuid,
     pub agent_id: &'a str,
     pub goal: &'a str,
@@ -19,17 +19,16 @@ pub(crate) struct LoadedColumns<'a> {
     pub session_key: Option<&'a str>,
 }
 
-pub(crate) fn bag_json(spec: &TaskSpec) -> Result<String, TaskError> {
+pub fn overrides(spec: &TaskSpec) -> Result<TaskOverrides, TaskError> {
     if spec.tools.is_some() {
         return Err(TaskError::Stored(
             "tools is not a column override".to_string(),
         ));
     }
-    serde_json::to_string(&TaskOverrides::from_spec(spec))
-        .map_err(|source| TaskError::Stored(source.to_string()))
+    Ok(TaskOverrides::from_spec(spec))
 }
 
-pub(crate) fn assemble_spec(
+pub fn assemble_spec(
     columns: &LoadedColumns<'_>,
     overrides: TaskOverrides,
 ) -> Result<TaskSpec, TaskError> {

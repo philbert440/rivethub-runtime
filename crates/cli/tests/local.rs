@@ -3,16 +3,7 @@ mod support;
 use cli::{Cli, Command, Dispatch, Exit};
 use support::{config, environment, home, run};
 
-const SKIPPED: &[(&str, &str)] = &[
-    (
-        "wiki-builder",
-        "SQLite does not implement the wiki builder port, so memory.sqlite.wiki_dir refuses startup.",
-    ),
-    (
-        "task-engine",
-        "rh agent needs Postgres and is not part of rh local.",
-    ),
-];
+const SKIPPED: &[(&str, &str)] = &[];
 
 #[test]
 fn skipped_local_scenarios_are_named() {

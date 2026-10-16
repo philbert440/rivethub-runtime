@@ -17,3 +17,6 @@ pub mod support;
 
 #[path = "v1/runner.rs"]
 pub mod runner;
+
+#[path = "v1/chat.rs"]
+mod chat;

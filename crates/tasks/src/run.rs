@@ -132,6 +132,7 @@ where
         client.healthz_at(cancel).await?;
         check_segment(&task.spec.session)?;
         let body = SessionPostRequest {
+            exclude_tools: task.spec.exclude_tools.clone(),
             text: prompt_text(&task.goal, task.pending_message.as_deref()),
             user_id: None,
             agent: Some(task.agent_id.clone()),

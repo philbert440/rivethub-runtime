@@ -46,9 +46,73 @@ async fn reset(pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn replay_public_arm(pool: PgPool) -> TestResult {
-    let queue = queue_present(&pool).await?;
+#[sqlx::test]
+async fn replay_public_arm(
+    _options: sqlx::postgres::PgPoolOptions,
+    connect: sqlx::postgres::PgConnectOptions,
+) -> TestResult {
+    let name = ephemeral_name()?;
+    let admin = PgPool::connect_with(connect.clone().database("postgres")).await?;
+    create_database(&admin, &name).await?;
+    let result = replay_in(&connect, &name).await;
+    let dropped = remove_database(&admin, &name).await;
+    admin.close().await;
+    result?;
+    dropped
+}
+
+fn ephemeral_name() -> Result<String, Box<dyn std::error::Error>> {
+    let name = format!("rr_replay_{}", uuid::Uuid::new_v4().simple());
+    quoted_catalog(&name)?;
+    Ok(name)
+}
+
+fn quoted_catalog(name: &str) -> Result<String, Box<dyn std::error::Error>> {
+    if name
+        .bytes()
+        .all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'_'))
+    {
+        Ok(format!("\"{name}\""))
+    } else {
+        Err("ephemeral database name".into())
+    }
+}
+
+async fn create_database(admin: &PgPool, name: &str) -> TestResult {
+    let quoted = quoted_catalog(name)?;
+    execute_audited(admin, format!("CREATE DATABASE {quoted}")).await
+}
+
+async fn remove_database(admin: &PgPool, name: &str) -> TestResult {
+    let quoted = quoted_catalog(name)?;
+    execute_audited(
+        admin,
+        format!("DROP DATABASE IF EXISTS {quoted} WITH (FORCE)"),
+    )
+    .await
+}
+
+async fn execute_audited(admin: &PgPool, sql: String) -> TestResult {
+    sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
+        .execute(admin)
+        .await?;
+    Ok(())
+}
+
+async fn replay_in(connect: &sqlx::postgres::PgConnectOptions, name: &str) -> TestResult {
+    let pool = PgPool::connect_with(connect.clone().database(name)).await?;
+    let result = migrated_replay(&pool).await;
+    pool.close().await;
+    result
+}
+
+async fn migrated_replay(pool: &PgPool) -> TestResult {
+    migrate::POSTGRES.run(pool).await?;
+    replay_recorded(pool).await
+}
+
+async fn replay_recorded(pool: &PgPool) -> TestResult {
+    let queue = queue_present(pool).await?;
     let skipped = deviations::exclusions()?;
     let mut failures = Vec::new();
     for file in GOLDEN_FILES {
@@ -61,7 +125,7 @@ async fn replay_public_arm(pool: PgPool) -> TestResult {
             if !queue {
                 drop_graphile_rows(&mut scenario);
             }
-            reset(&pool).await?;
+            reset(pool).await?;
             let started = chrono::Utc::now() - chrono::Duration::seconds(5);
             let mut outcomes: Vec<PgOutcome> = Vec::new();
             let mut namer = testkit::PgNamer::new();
@@ -72,7 +136,7 @@ async fn replay_public_arm(pool: PgPool) -> TestResult {
                     input: step.input.clone(),
                 };
                 let mut context = StepContext {
-                    pool: &pool,
+                    pool,
                     started,
                     namer: &mut namer,
                 };

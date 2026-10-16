@@ -200,6 +200,55 @@ pub(super) fn plan(config: &Config, env: &Environment) -> Result<Plan, AgentErro
     })
 }
 
+pub(super) async fn standalone(
+    config: &Config,
+    env: &Environment,
+    gateway: url::Url,
+) -> Result<(tasks::Directory, tasks::Settings), AgentError> {
+    let identity = crate::identity::resolve(config, env)?;
+    if identity.name.is_empty() {
+        return Err(AgentError::Invalid("node name is empty".into()));
+    }
+    let node = identity.name;
+    let worker = format!("{node}:agent");
+    let gateway_settings =
+        gateway::Settings::from_config_in(config, env, identity.hostname, node.clone())?;
+    let state_dir = gateway_settings.state_dir.clone();
+    let presets = load_presets(state_dir).await?;
+    let mut directory = tasks::Directory::new(node.clone(), gateway)?;
+    install_local(&mut directory, config)?;
+    for preset in presets {
+        directory.preset(preset);
+    }
+    Ok((
+        directory,
+        tasks::Settings {
+            node,
+            worker,
+            files_root: gateway_settings.files_root,
+            pricing: pricing(config)?,
+            api_token: api_token(config)?,
+        },
+    ))
+}
+
+fn install_local(directory: &mut tasks::Directory, config: &Config) -> Result<(), AgentError> {
+    for (name, binding) in local_agents(config)? {
+        directory.local_agent(
+            name,
+            tasks::LocalAgent {
+                model: binding.model,
+                provider: binding.provider,
+                effort: None,
+                harness: None,
+                system_prompt: None,
+                working_dir: None,
+            },
+        );
+    }
+    Ok(())
+}
+
 pub(super) async fn connect(config: &Config, env: &Environment) -> Result<Connected, AgentError> {
     let mut plan = plan(config, env)?;
     plan.mesh_identity = load_mesh_identity(config).await?;

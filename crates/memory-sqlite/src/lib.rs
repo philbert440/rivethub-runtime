@@ -18,9 +18,13 @@ mod summary_port;
 mod tags;
 mod tags_suggest;
 mod tags_write;
+mod task_rows;
+mod task_store;
 mod taxonomy;
 mod time;
+mod wiki_builder;
 mod wiki_read;
+mod wiki_topics;
 
 use std::collections::BTreeMap;
 use std::path::Path;

@@ -1,0 +1,131 @@
+use kernel::tasks::{TaskError, TaskOrigin, TaskRecord};
+use wire::task::{AcceptanceCriterion, ContextRef};
+
+use super::{
+    decode, decode_opt, i32_opt, parse_enum, parse_time, parse_uuid, time_opt, u32_in, uuid_opt,
+};
+
+pub(super) struct Raw {
+    id: String,
+    goal: String,
+    context_refs: String,
+    acceptance_criteria: String,
+    spec: String,
+    executor: String,
+    executor_target: Option<String>,
+    requested_by: Option<String>,
+    agent_id: String,
+    origin: String,
+    parent_task_id: Option<String>,
+    chain_depth: i64,
+    budget: String,
+    node_affinity: Option<String>,
+    usage: Option<String>,
+    status: String,
+    attempt: i64,
+    max_attempts: i64,
+    result: Option<String>,
+    error: Option<String>,
+    conversation_id: Option<String>,
+    session_key: Option<String>,
+    pending_message: Option<String>,
+    claimed_by: Option<String>,
+    harness_session_ids: String,
+    created_at: String,
+    started_at: Option<String>,
+    last_heartbeat_at: Option<String>,
+    completed_at: Option<String>,
+    duration_ms: Option<i64>,
+    eval: Option<String>,
+    eval_attempt: i64,
+}
+
+pub(super) fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Raw> {
+    Ok(Raw {
+        id: row.get(0)?,
+        goal: row.get(1)?,
+        context_refs: row.get(2)?,
+        acceptance_criteria: row.get(3)?,
+        spec: row.get(4)?,
+        executor: row.get(5)?,
+        executor_target: row.get(6)?,
+        requested_by: row.get(7)?,
+        agent_id: row.get(8)?,
+        origin: row.get(9)?,
+        parent_task_id: row.get(10)?,
+        chain_depth: row.get(11)?,
+        budget: row.get(12)?,
+        node_affinity: row.get(13)?,
+        usage: row.get(14)?,
+        status: row.get(15)?,
+        attempt: row.get(16)?,
+        max_attempts: row.get(17)?,
+        result: row.get(18)?,
+        error: row.get(19)?,
+        conversation_id: row.get(20)?,
+        session_key: row.get(21)?,
+        pending_message: row.get(22)?,
+        claimed_by: row.get(23)?,
+        harness_session_ids: row.get(24)?,
+        created_at: row.get(25)?,
+        started_at: row.get(26)?,
+        last_heartbeat_at: row.get(27)?,
+        completed_at: row.get(28)?,
+        duration_ms: row.get(29)?,
+        eval: row.get(30)?,
+        eval_attempt: row.get(31)?,
+    })
+}
+
+pub(super) fn record_from(raw: Raw) -> Result<TaskRecord, TaskError> {
+    let id = parse_uuid(&raw.id)?;
+    let context_refs: Vec<ContextRef> = decode(&raw.context_refs)?;
+    let acceptance_criteria: Vec<AcceptanceCriterion> = decode(&raw.acceptance_criteria)?;
+    let budget = decode(&raw.budget)?;
+    let spec = kernel::task_spec::assemble_spec(
+        &kernel::task_spec::LoadedColumns {
+            id,
+            agent_id: &raw.agent_id,
+            goal: &raw.goal,
+            resolved_context: &context_refs,
+            acceptance_criteria: &acceptance_criteria,
+            budget,
+            session_key: raw.session_key.as_deref(),
+        },
+        decode(&raw.spec)?,
+    )?;
+    Ok(TaskRecord {
+        id,
+        goal: raw.goal,
+        context_refs,
+        acceptance_criteria,
+        spec,
+        executor: parse_enum(&raw.executor)?,
+        executor_target: raw.executor_target,
+        requested_by: raw.requested_by,
+        agent_id: raw.agent_id,
+        origin: parse_enum::<TaskOrigin>(&raw.origin)?,
+        parent_task_id: uuid_opt(raw.parent_task_id)?,
+        chain_depth: u32_in(raw.chain_depth)?,
+        budget,
+        node_affinity: raw.node_affinity,
+        usage: decode_opt(raw.usage)?,
+        status: parse_enum(&raw.status)?,
+        attempt: u32_in(raw.attempt)?,
+        max_attempts: u32_in(raw.max_attempts)?,
+        result: decode_opt(raw.result)?,
+        error: raw.error,
+        conversation_id: uuid_opt(raw.conversation_id)?,
+        session_key: raw.session_key,
+        pending_message: raw.pending_message,
+        claimed_by: raw.claimed_by,
+        harness_session_ids: decode(&raw.harness_session_ids)?,
+        created_at: parse_time(&raw.created_at)?,
+        started_at: time_opt(raw.started_at)?,
+        last_heartbeat_at: time_opt(raw.last_heartbeat_at)?,
+        completed_at: time_opt(raw.completed_at)?,
+        duration_ms: i32_opt(raw.duration_ms)?,
+        eval: decode_opt(raw.eval)?,
+        eval_attempt: u32_in(raw.eval_attempt)?,
+    })
+}

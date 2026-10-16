@@ -1,12 +1,29 @@
+use std::net::SocketAddr;
+use std::path::Path;
 use std::process::Stdio;
+use std::sync::Arc;
 use std::time::Duration;
 
+use kernel::ToolContext;
+use kernel::tasks::TaskStore as _;
+use kernel::tool::Tool;
+use mcp::client::Client;
+use rmcp::transport::StreamableHttpClientTransport;
+use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+use tokio_util::sync::CancellationToken;
 use wire::gateway::HealthzResponse;
 use wire::gateway::memory::MemoryBrowseResponse;
 use wire::memory::MemoryEntry;
 use wire::message::Role;
+
+const SUMMARY_ID: &str = "0199e2a0-7b3c-7a00-8000-000000000001";
+const WIKI_PATCH: &str = concat!(
+    r#"[{"action":"create","slug":"acmekit-deploys","title":"AcmeKit deploys","#,
+    r#""summary":"AcmeKit deploys on Fridays.","aliases":[],"tags":[],"entities":[]}]"#
+);
+const DELEGATE_TEXT: &str = "delegate finished the ledger";
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -87,8 +104,12 @@ async fn stop(started: Started) -> TestResult<String> {
 }
 
 fn provider(home: &std::path::Path, extra: &str) -> String {
+    provider_base(home, "http://127.0.0.1:1", extra)
+}
+
+fn provider_base(home: &Path, base: &str, extra: &str) -> String {
     format!(
-        "runtime:\n  workspace: {home}\n  default_agent: main\nagents:\n  main:\n    provider: p\n    model: m\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:1\n    model: m\n{extra}",
+        "runtime:\n  workspace: {home}\n  default_agent: main\nagents:\n  main:\n    provider: p\n    model: m\nproviders:\n  p:\n    type: openai-compatible\n    base_url: {base}\n    model: m\n{extra}",
         home = home.display()
     )
 }
@@ -174,18 +195,18 @@ async fn local_serves_health_and_sqlite_memory_then_stops_on_sigterm() -> TestRe
 }
 
 #[tokio::test]
-async fn wiki_dir_refuses_startup() -> TestResult {
+async fn sqlite_builds_a_wiki_topic_from_a_seeded_summary() -> TestResult {
     let home = tempfile::tempdir()?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
+    let port = free_port()?;
+    let stub = model_stub().await?;
     let database = home.path().join(".rivethub").join("memory.sqlite");
     let wiki = home.path().join("wiki");
     std::fs::create_dir_all(&wiki)?;
     write_config(
         home.path(),
-        &provider(
+        &provider_base(
             home.path(),
+            &format!("http://{}", stub.address),
             &format!(
                 "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    wiki_dir: {}\nden:\n  host: 127.0.0.1\n  port: {port}\n",
                 database.display(),
@@ -193,21 +214,26 @@ async fn wiki_dir_refuses_startup() -> TestResult {
             ),
         ),
     )?;
-    let output = tokio::time::timeout(
-        Duration::from_secs(30),
-        Command::new(env!("CARGO_BIN_EXE_rh"))
-            .args(["local", "--no-lan"])
-            .env_clear()
-            .env("HOME", home.path())
-            .env("TOKIO_WORKER_THREADS", "2")
-            .current_dir(home.path())
-            .output(),
+    seed_summary(&database)?;
+    let built = wiki_topic(home.path(), &database).await;
+    let closed = stub.close().await;
+    built?;
+    closed
+}
+
+async fn wiki_topic(home: &Path, database: &Path) -> TestResult {
+    let started = start(
+        home,
+        &["local", "--no-lan"],
+        &[
+            "worker running wiki-builder",
+            "wiki topic stored acmekit-deploys",
+        ],
     )
-    .await??;
-    let text = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(output.status.code(), Some(1), "{text}");
-    assert!(text.contains("wiki builder"), "{text}");
-    assert!(!home.path().join(".rivethub/rivethub.pid").exists());
+    .await?;
+    let title = topic_title(database);
+    stop(started).await?;
+    assert_eq!(title?, "AcmeKit deploys");
     Ok(())
 }
 
@@ -247,4 +273,208 @@ async fn sqlite_worker_roles_and_mcp_share_the_process() -> TestResult {
     assert!(!socket.exists(), "{logs}");
     assert!(!home.path().join(".rivethub/rivethub.pid").exists());
     Ok(())
+}
+
+#[tokio::test]
+async fn mcp_delegate_task_runs_to_completion() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let gateway = free_port()?;
+    let mcp_port = free_port()?;
+    let stub = model_stub().await?;
+    let database = home.path().join(".rivethub").join("memory.sqlite");
+    write_config(
+        home.path(),
+        &provider_base(
+            home.path(),
+            &format!("http://{}", stub.address),
+            &mcp_config(&database, gateway, mcp_port),
+        ),
+    )?;
+    let ran = delegated(home.path(), &database, mcp_port).await;
+    let closed = stub.close().await;
+    ran?;
+    closed
+}
+
+fn mcp_config(database: &Path, gateway: u16, mcp_port: u16) -> String {
+    format!(
+        "mesh:\n  node_name: standalone-node\nmemory:\n  backend: sqlite\n  sqlite:\n    path: {}\nden:\n  host: 127.0.0.1\n  port: {gateway}\ntransports:\n  mcp:\n    host: 127.0.0.1\n    port: {mcp_port}\n    auth_token: test-secret\n",
+        database.display()
+    )
+}
+
+async fn delegated(home: &Path, database: &Path, mcp_port: u16) -> TestResult {
+    let started = start(
+        home,
+        &["local", "--no-lan"],
+        &["gateway listening on ", "mcp listening on "],
+    )
+    .await?;
+    let outcome = delegate_outcome(mcp_port).await;
+    stop(started).await?;
+    let outcome = outcome?;
+    assert_eq!(outcome.status, wire::task::TaskStatus::Completed);
+    assert!(!outcome.timed_out);
+    let store = memory_sqlite::SqliteStore::open(database)?;
+    let stored = store.load(outcome.id).await?;
+    assert_eq!(stored.claimed_by.as_deref(), Some("standalone-node:agent"));
+    assert_eq!(stored.node_affinity.as_deref(), Some("standalone-node"));
+    let result = outcome.result.ok_or("task result")?;
+    assert_eq!(result.summary, DELEGATE_TEXT);
+    assert_eq!(result.verdict, wire::task::TaskVerdict::Completed);
+    Ok(())
+}
+
+fn free_port() -> TestResult<u16> {
+    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+    let port = probe.local_addr()?.port();
+    drop(probe);
+    Ok(port)
+}
+
+fn seed_summary(path: &Path) -> TestResult {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    migrate::sqlite(path)?;
+    let conn = rusqlite::Connection::open(path)?;
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    conn.execute(
+        "INSERT INTO ros_summaries (id, content, created_at) VALUES (?1, ?2, ?3)",
+        (SUMMARY_ID, "AcmeKit deploys on Fridays.", now),
+    )?;
+    Ok(())
+}
+
+fn topic_title(path: &Path) -> TestResult<String> {
+    let conn = rusqlite::Connection::open(path)?;
+    let title = conn.query_row(
+        "SELECT title FROM ros_wiki_topics WHERE slug = 'acmekit-deploys'",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(title)
+}
+
+struct ModelStub {
+    address: SocketAddr,
+    cancel: CancellationToken,
+    task: tokio::task::JoinHandle<std::io::Result<()>>,
+}
+
+async fn model_stub() -> TestResult<ModelStub> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let address = listener.local_addr()?;
+    let cancel = CancellationToken::new();
+    let stopped = cancel.clone();
+    let router = axum::Router::new().route("/v1/chat/completions", axum::routing::post(complete));
+    let task = tokio::spawn(async move {
+        axum::serve(listener, router)
+            .with_graceful_shutdown(stopped.cancelled_owned())
+            .await
+    });
+    Ok(ModelStub {
+        address,
+        cancel,
+        task,
+    })
+}
+
+impl ModelStub {
+    async fn close(self) -> TestResult {
+        self.cancel.cancel();
+        tokio::time::timeout(Duration::from_secs(5), self.task).await???;
+        Ok(())
+    }
+}
+
+async fn complete(
+    body: axum::body::Bytes,
+) -> Result<([(axum::http::HeaderName, &'static str); 1], String), (axum::http::StatusCode, String)>
+{
+    let text = std::str::from_utf8(&body)
+        .map_err(|error| (axum::http::StatusCode::BAD_REQUEST, error.to_string()))?;
+    let content = if text.contains("Extract durable") {
+        WIKI_PATCH
+    } else {
+        DELEGATE_TEXT
+    };
+    let payload = event_stream(content).map_err(|error| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            error.to_string(),
+        )
+    })?;
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+        payload,
+    ))
+}
+
+fn event_stream(content: &str) -> TestResult<String> {
+    let chunk = wire::gateway::v1::CompletionChunk {
+        id: "c".to_owned(),
+        created: 0,
+        model: "m".to_owned(),
+        choices: vec![wire::gateway::v1::ChunkChoice {
+            index: 0,
+            delta: wire::gateway::v1::CompletionDelta {
+                content: Some(content.to_owned()),
+                ..wire::gateway::v1::CompletionDelta::default()
+            },
+            finish_reason: None,
+        }],
+        usage: None,
+    };
+    Ok(format!(
+        "data: {}\n\ndata: [DONE]\n\n",
+        serde_json::to_string(&chunk)?
+    ))
+}
+
+async fn delegate_outcome(port: u16) -> TestResult<kernel::tasks::DelegateOutcome> {
+    let shutdown = CancellationToken::new();
+    let http = reqwest::Client::builder().no_proxy().build()?;
+    let config =
+        StreamableHttpClientTransportConfig::with_uri(format!("http://127.0.0.1:{port}/mcp"))
+            .auth_header("test-secret");
+    let client = Client::connect(
+        StreamableHttpClientTransport::with_client(http, config),
+        shutdown.clone(),
+    )
+    .await?;
+    let tools = client.tools().await?;
+    let outcome = call_delegate(&tools).await;
+    let closed = client.close().await;
+    shutdown.cancel();
+    closed?;
+    outcome
+}
+
+async fn call_delegate(tools: &[Arc<dyn Tool>]) -> TestResult<kernel::tasks::DelegateOutcome> {
+    let tool = tools
+        .iter()
+        .find(|tool| tool.definition().name == "delegate_task")
+        .ok_or("delegate_task")?;
+    let result = tokio::time::timeout(
+        Duration::from_secs(30),
+        tool.call(
+            Some(serde_json::from_str(
+                r#"{"to_agent":"main","task":"finish the ledger"}"#,
+            )?),
+            ToolContext {
+                agent_id: None,
+                working_dir: None,
+                session: None,
+            },
+        ),
+    )
+    .await??;
+    let [block] = result.content.as_slice() else {
+        return Err("one result block".into());
+    };
+    let Some(text) = block.as_text() else {
+        return Err("text outcome".into());
+    };
+    Ok(serde_json::from_str(&text.text)?)
 }

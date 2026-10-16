@@ -27,6 +27,14 @@ pub(super) struct LocalBinding {
 
 pub(super) type TaskEngine = tasks::Engine<PostgresTasks, PostgresTasks>;
 
+pub(crate) async fn standalone_tasks(
+    config: &Config,
+    env: &Environment,
+    gateway: url::Url,
+) -> Result<(tasks::Directory, tasks::Settings), AgentError> {
+    assemble::standalone(config, env, gateway).await
+}
+
 #[derive(Debug, Error)]
 enum RootError {
     #[error(transparent)]

@@ -67,7 +67,7 @@ pub(crate) async fn insert_task(
         .bind(&task.goal)
         .bind(Json(&task.context_refs))
         .bind(Json(&task.acceptance_criteria))
-        .bind(crate::task_spec::bag_json(&task.spec)?)
+        .bind(stored_json(&kernel::task_spec::overrides(&task.spec)?)?)
         .bind(task.executor.to_string())
         .bind(&task.executor_target)
         .bind(&task.requested_by)
@@ -300,8 +300,8 @@ pub(crate) fn decode_task(
     let overrides: Json<TaskOverrides> = cell(row, operation, "spec")?;
     let budget: Json<TaskBudget> = cell(row, operation, "budget")?;
     let session_key: Option<String> = cell(row, operation, "session_key")?;
-    let spec = crate::task_spec::assemble_spec(
-        &crate::task_spec::LoadedColumns {
+    let spec = kernel::task_spec::assemble_spec(
+        &kernel::task_spec::LoadedColumns {
             id,
             agent_id: &agent_id,
             goal: &goal,

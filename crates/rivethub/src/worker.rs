@@ -4,7 +4,7 @@ use config::provider::ProviderBody;
 use config::{Config, Environment};
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::model::ModelProvider;
-use kernel::queue::{JobQueue, WorkerRole};
+use kernel::queue::JobQueue;
 use kernel::wiki::builder::WikiBuilderStore;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
@@ -116,7 +116,7 @@ async fn run(
                 targets,
                 summaries,
                 memory: store,
-                wiki: Some(wiki),
+                wiki,
             },
             &config,
         )?;
@@ -137,7 +137,7 @@ pub(crate) struct WorkerPorts<Q> {
     pub targets: Arc<dyn EmbeddingStore>,
     pub summaries: Arc<dyn SummaryStore>,
     pub memory: Arc<dyn MemoryStore>,
-    pub wiki: Option<Arc<dyn WikiBuilderStore>>,
+    pub wiki: Arc<dyn WikiBuilderStore>,
 }
 
 pub(crate) fn build_runner<Q: JobQueue + 'static>(
@@ -145,12 +145,7 @@ pub(crate) fn build_runner<Q: JobQueue + 'static>(
     ports: WorkerPorts<Q>,
     config: &Config,
 ) -> Result<Runner<Q>, RootError> {
-    let roles = role.claim_roles()?;
-    if ports.wiki.is_none() && roles.contains(&WorkerRole::WikiBuilder) {
-        return Err(RootError::Invalid(
-            "the wiki builder port was not supplied".into(),
-        ));
-    }
+    role.claim_roles()?;
     let model = provider_model(config)?;
     let concrete = open_provider(config)?;
     let provider: Arc<dyn ModelProvider> = Arc::new(concrete);
@@ -163,18 +158,15 @@ pub(crate) fn build_runner<Q: JobQueue + 'static>(
         memory: ports.memory,
         tags: workers::TagSettings::new(model.clone(), false)?,
     };
-    let runner = Runner::new(
+    Ok(Runner::new(
         ports.queue,
         RunnerConfig::new(role, EMBED_CONCURRENCY)?,
         deps,
-    );
-    let runner = match ports.wiki {
-        Some(store) => {
-            runner.with_wiki_builder(workers::wiki_builder::WikiBuilderDeps { store, model })
-        }
-        None => runner,
-    };
-    Ok(runner)
+    )
+    .with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
+        store: ports.wiki,
+        model,
+    }))
 }
 
 async fn drive<Q: JobQueue + 'static>(

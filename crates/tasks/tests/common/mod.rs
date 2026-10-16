@@ -15,7 +15,6 @@ use axum::routing::get;
 use axum::routing::post;
 use chrono::DateTime;
 use chrono::Utc;
-use serde::Deserialize;
 use serde::Serialize;
 use tasks::Directory;
 use tasks::Engine;
@@ -358,19 +357,7 @@ struct DeadlineDoc {
     error: &'static str,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct PostedChat {
-    pub(crate) text: String,
-    #[serde(default)]
-    pub(crate) user_id: Option<String>,
-    #[serde(default)]
-    pub(crate) agent: Option<String>,
-    #[serde(default)]
-    pub(crate) system_prompt: Option<String>,
-}
-
-pub(crate) fn posted(body: &[u8]) -> PostedChat {
+pub(crate) fn posted(body: &[u8]) -> wire::gateway::sessions::SessionPostRequest {
     serde_json::from_slice(body).expect("posted chat")
 }
 

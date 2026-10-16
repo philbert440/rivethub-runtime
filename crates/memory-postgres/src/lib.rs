@@ -20,7 +20,6 @@ mod task_db;
 mod task_jobs;
 mod task_query;
 mod task_rows;
-mod task_spec;
 mod task_watch;
 mod wiki;
 mod wiki_builder;

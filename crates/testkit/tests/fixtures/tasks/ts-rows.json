@@ -13,16 +13,8 @@
       "reason": "Task creation still accepts a runtime spec; a bag-only create body is a different request shape."
     },
     {
-      "name": "session-api-tool-filter",
-      "reason": "The task engine posts the goal to the gateway session API, which accepts text only; the exclusion set is applied by the in-process turn filter."
-    },
-    {
       "name": "null-versus-absent",
       "reason": "A null override and a missing override are the same Option; the column does not store a third state."
-    },
-    {
-      "name": "foreign-slice-recordings",
-      "reason": "HTTP transcripts owned by other slices are not replayed here."
     }
   ],
   "rows": [
