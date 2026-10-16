@@ -350,3 +350,27 @@ fn the_advertised_host_falls_back_like_the_den() -> Result<(), Box<dyn std::erro
     assert_eq!(set.mesh_advertise_host(&host), "node.mesh");
     Ok(())
 }
+
+#[test]
+fn partial_mesh_tls_takes_the_den_defaults() -> Result<(), Box<dyn std::error::Error>> {
+    let paths: config::model::MeshTlsPaths = serde_yaml_ng::from_str(
+        "cert_path: /state/mesh/node.crt\nca_path: /state/mesh/ca-chain.pem\n",
+    )?;
+    let resolved = paths.resolve("node-a", Path::new("/shared"));
+    assert_eq!(resolved.cert, PathBuf::from("/state/mesh/node.crt"));
+    assert_eq!(resolved.ca, PathBuf::from("/state/mesh/ca-chain.pem"));
+    assert_eq!(
+        resolved.key,
+        PathBuf::from("/shared/rivet-ca/issued/node-a.key")
+    );
+    let empty = config::model::MeshTlsPaths::default().resolve("node-a", Path::new("/shared"));
+    assert_eq!(
+        empty.ca,
+        PathBuf::from("/shared/rivet-ca/intermediate/ca-chain.pem")
+    );
+    assert_eq!(
+        empty.cert,
+        PathBuf::from("/shared/rivet-ca/issued/node-a.crt")
+    );
+    Ok(())
+}

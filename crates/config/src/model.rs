@@ -275,6 +275,32 @@ pub struct MeshTlsPaths {
     pub crl_path: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedMeshTls {
+    pub ca: PathBuf,
+    pub cert: PathBuf,
+    pub key: PathBuf,
+    pub crl: Option<PathBuf>,
+}
+
+impl MeshTlsPaths {
+    #[must_use]
+    pub fn resolve(&self, node: &str, shared: &std::path::Path) -> ResolvedMeshTls {
+        let paths = self.clone();
+        let authority = shared.join("rivet-ca");
+        let present = |path: Option<PathBuf>| path.filter(|path| !path.as_os_str().is_empty());
+        ResolvedMeshTls {
+            ca: present(paths.ca_path)
+                .unwrap_or_else(|| authority.join("intermediate").join("ca-chain.pem")),
+            cert: present(paths.cert_path)
+                .unwrap_or_else(|| authority.join("issued").join(format!("{node}.crt"))),
+            key: present(paths.key_path)
+                .unwrap_or_else(|| authority.join("issued").join(format!("{node}.key"))),
+            crl: present(paths.crl_path),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(default)]
 pub struct GatewaySection {

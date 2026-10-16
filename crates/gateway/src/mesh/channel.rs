@@ -1,3 +1,4 @@
+use config::model::MeshTls;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -8,7 +9,6 @@ use axum::extract::{DefaultBodyLimit, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse as _, Response};
 use axum::{Json, Router, routing};
-use config::model::MeshTls;
 use thiserror::Error;
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot};
@@ -64,13 +64,16 @@ impl ChannelSettings {
         let tls = match &mesh.tls {
             MeshTls::Enabled(false) => return Err(ChannelError::TlsRequired),
             MeshTls::Enabled(true) => gateway_tls,
-            MeshTls::Paths(paths) => TlsPaths {
-                cert: paths.cert_path.clone().ok_or(ChannelError::TlsRequired)?,
-                key: paths.key_path.clone().ok_or(ChannelError::TlsRequired)?,
-                ca: Some(paths.ca_path.clone().ok_or(ChannelError::TlsRequired)?),
-                crl: paths.crl_path.clone(),
-                require_client: true,
-            },
+            MeshTls::Paths(paths) => {
+                let resolved = paths.resolve(node_name, shared_dir);
+                TlsPaths {
+                    cert: resolved.cert,
+                    key: resolved.key,
+                    ca: Some(resolved.ca),
+                    crl: resolved.crl,
+                    require_client: true,
+                }
+            }
         };
         let settings = Self {
             host: BindSource::resolve(config, env, node_name, shared_dir).host,

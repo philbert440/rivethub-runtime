@@ -373,12 +373,17 @@ fn gateway_mesh_files(
     })
 }
 
-fn explicit_mesh_files(paths: &config::model::MeshTlsPaths) -> Result<MeshTlsFiles, AgentError> {
-    Ok(MeshTlsFiles {
-        cert: require_path(paths.cert_path.clone())?,
-        key: require_path(paths.key_path.clone())?,
-        ca: require_path(paths.ca_path.clone())?,
-    })
+fn explicit_mesh_files(
+    paths: &config::model::MeshTlsPaths,
+    node_name: &str,
+    shared: &std::path::Path,
+) -> MeshTlsFiles {
+    let resolved = paths.resolve(node_name, shared);
+    MeshTlsFiles {
+        cert: resolved.cert,
+        key: resolved.key,
+        ca: resolved.ca,
+    }
 }
 
 fn require_path(path: Option<PathBuf>) -> Result<PathBuf, AgentError> {
@@ -400,7 +405,7 @@ async fn load_mesh_identity(
     match tokio::task::spawn_blocking(move || {
         let files = match choice {
             MeshChoice::Gateway => gateway_mesh_files(section.as_ref(), &env, &node.name, &shared)?,
-            MeshChoice::Explicit(paths) => explicit_mesh_files(&paths)?,
+            MeshChoice::Explicit(paths) => explicit_mesh_files(&paths, &node.name, &shared),
         };
         tasks::MeshIdentity::from_files(&files.cert, &files.key, &files.ca)
             .map_err(AgentError::from)
