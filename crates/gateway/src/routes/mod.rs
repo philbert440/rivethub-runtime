@@ -25,7 +25,8 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use kernel::memory::MemoryStoreError;
-use wire::gateway::HealthzResponse;
+use kernel::model::{ProviderHealth, ProviderStatus};
+use wire::gateway::{DegradedProvider, HealthzResponse};
 
 use crate::Gateway;
 use crate::error::ApiError;
@@ -61,6 +62,7 @@ pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> axum::respon
     let sessions = gateway.sessions().count() as u64;
     let name = gateway.settings().hostname.clone();
     let node = gateway.settings().node.clone();
+    let degraded_providers = degraded_providers(gateway.provider_health());
     match gateway.store().probe().await {
         Ok(()) => (
             StatusCode::OK,
@@ -70,6 +72,7 @@ pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> axum::respon
                 name,
                 node,
                 degraded: None,
+                degraded_providers,
             }),
         )
             .into_response(),
@@ -81,10 +84,25 @@ pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> axum::respon
                 name,
                 node,
                 degraded: Some(degraded_reason(&error)),
+                degraded_providers,
             }),
         )
             .into_response(),
     }
+}
+
+fn degraded_providers(providers: &[ProviderHealth]) -> Vec<DegradedProvider> {
+    providers
+        .iter()
+        .filter_map(|provider| match &*provider.status.borrow() {
+            ProviderStatus::Ready => None,
+            ProviderStatus::Degraded(degradation) => Some(DegradedProvider {
+                id: provider.id.clone(),
+                recovery: degradation.recovery,
+                reason: degradation.cause.to_string(),
+            }),
+        })
+        .collect()
 }
 
 fn degraded_reason(error: &MemoryStoreError) -> String {

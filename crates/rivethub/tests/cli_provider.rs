@@ -1,3 +1,5 @@
+#[path = "cli_provider/degraded.rs"]
+mod degraded;
 #[path = "cli_provider/embed.rs"]
 mod embed;
 #[path = "cli_provider/harness.rs"]
@@ -182,34 +184,6 @@ async fn each_cli_provider_starts_gateway_and_replays_chat_and_task_turn() -> Te
         );
         server.close().await?;
         tokio::time::timeout(Duration::from_secs(5), composition.close()).await??;
-    }
-    Ok(())
-}
-
-#[tokio::test]
-async fn unavailable_launcher_is_a_named_startup_error() -> TestResult {
-    for &kind in KINDS {
-        let home = tempfile::tempdir()?;
-        let (mut config, env) = configured(home.path(), kind, "")?;
-        let slot = config
-            .providers
-            .as_mut()
-            .ok_or("providers")?
-            .get_mut("p")
-            .ok_or("provider")?;
-        let config::provider::ProviderBody::Cli(body) = &mut slot.body else {
-            panic!("CLI provider");
-        };
-        body.binary = Some(home.path().join("absent").display().to_string());
-        let Err(error) = ModelFactory::from_config(&config, &env).await else {
-            panic!("missing launcher accepted");
-        };
-        assert!(matches!(
-            error,
-            rivethub::models::ModelError::Launcher { .. }
-        ));
-        assert!(error.to_string().contains(&kind.to_string()));
-        assert!(error.to_string().contains("provider p"));
     }
     Ok(())
 }

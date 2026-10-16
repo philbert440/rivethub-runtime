@@ -241,6 +241,7 @@ pub struct Gateway {
     audio: Option<AudioBridge>,
     voice: VoiceProxy,
     tasks: Option<Arc<routes::tasks::TasksApi>>,
+    providers: Vec<kernel::model::ProviderHealth>,
 }
 
 impl Gateway {
@@ -274,7 +275,14 @@ impl Gateway {
             audio: None,
             voice: VoiceProxy::unconfigured(),
             tasks: None,
+            providers: Vec::new(),
         }
+    }
+
+    #[must_use]
+    pub fn with_provider_health(mut self, providers: Vec<kernel::model::ProviderHealth>) -> Self {
+        self.providers = providers;
+        self
     }
 
     #[must_use]
@@ -416,6 +424,10 @@ impl Gateway {
     #[must_use]
     pub fn settings(&self) -> &Settings {
         &self.settings
+    }
+
+    pub(crate) fn provider_health(&self) -> &[kernel::model::ProviderHealth] {
+        &self.providers
     }
 
     pub(crate) fn store(&self) -> &Arc<dyn MemoryStore> {

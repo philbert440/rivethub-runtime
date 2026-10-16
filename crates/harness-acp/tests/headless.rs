@@ -3,12 +3,51 @@ use std::path::Path;
 use std::time::Duration;
 
 use config::provider::CliProvider;
-use harness_acp::{AcpError, AcpHarnessAdapter, UnverifiedReason};
+use harness_acp::{AcpError, HeadlessHarness, HeadlessLaunch, Retry, Supervisor, UnverifiedReason};
 use kernel::harness::{HarnessAdapter, SessionEvent, SessionSpec, TurnInput};
+use kernel::model::{Degradation, ProviderStatus};
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
+use wire::gateway::ProviderRecovery;
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 
+#[path = "headless/degraded.rs"]
+mod degraded;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+fn supervisor(retry: Retry) -> Supervisor {
+    Supervisor {
+        shutdown: CancellationToken::new(),
+        tasks: TaskTracker::new(),
+        retry,
+    }
+}
+
+async fn started(
+    config: &config::Config,
+    harness: HarnessId,
+    provider: &CliProvider,
+    search: Vec<std::path::PathBuf>,
+    supervisor: &Supervisor,
+) -> HeadlessHarness {
+    HeadlessLaunch::prepare(config, harness, provider, search, "p".into())
+        .await
+        .start(supervisor.clone())
+        .await
+}
+
+fn degradation(harness: &HeadlessHarness) -> Option<Degradation> {
+    match &*harness.health().status.borrow() {
+        ProviderStatus::Ready => None,
+        ProviderStatus::Degraded(degradation) => Some(degradation.clone()),
+    }
+}
+
+fn cause(degradation: &Degradation) -> Option<&AcpError> {
+    degradation.cause.downcast_ref::<AcpError>()
+}
 
 fn launcher(path: &Path, session: &str) -> TestResult {
     launcher_requiring(path, session, None)
@@ -50,9 +89,17 @@ async fn configured_headless_binary_and_directory_reach_the_acp_process() -> Tes
             }
         };
         let (config, provider) = headless_setup(harness, home.path(), &program, native)?;
-        let adapter =
-            AcpHarnessAdapter::for_provider(&config, harness, &provider, vec![home.path().into()])
-                .await?;
+        let supervisor = supervisor(Retry::STANDARD);
+        let adapter = started(
+            &config,
+            harness,
+            &provider,
+            vec![home.path().into()],
+            &supervisor,
+        )
+        .await;
+        assert!(degradation(&adapter).is_none(), "{harness}");
+        assert!(supervisor.tasks.is_empty());
         let session = adapter
             .new_session(SessionSpec {
                 session: SessionId::new(harness, native),
@@ -100,22 +147,29 @@ async fn absent_and_non_executable_programs_fail_before_any_turn() -> TestResult
             binary: Some(program.display().to_string()),
             ..CliProvider::default()
         };
-        let error = AcpHarnessAdapter::for_provider(
+        let supervisor = supervisor(Retry::STANDARD);
+        let harness = started(
             &config::Config::default(),
             HarnessId::ClaudeCode,
             &provider,
             Vec::new(),
+            &supervisor,
         )
-        .await
-        .expect_err("unavailable executable");
+        .await;
+        let degradation = degradation(&harness).expect("unavailable executable");
+        assert_eq!(degradation.recovery, ProviderRecovery::Permanent);
         assert!(matches!(
-            error,
-            AcpError::UnverifiedLaunch {
+            cause(&degradation),
+            Some(AcpError::UnverifiedLaunch {
                 harness: HarnessId::ClaudeCode,
                 reason: UnverifiedReason::NotInstalled,
                 ..
-            }
+            })
         ));
+        assert!(
+            supervisor.tasks.is_empty(),
+            "a permanent failure is not retried"
+        );
     }
     Ok(())
 }
@@ -132,18 +186,23 @@ async fn an_installed_program_without_acp_is_not_a_launcher() -> TestResult {
             cwd: Some(home.path().into()),
             ..CliProvider::default()
         };
-        let error = AcpHarnessAdapter::for_provider(
+        let supervisor = supervisor(Retry::STANDARD);
+        let started = started(
             &config::Config::default(),
             harness,
             &provider,
             Vec::new(),
+            &supervisor,
         )
-        .await
-        .expect_err("unverified invocation");
+        .await;
+        let degradation = degradation(&started).expect("unverified invocation");
         assert!(matches!(
-            error,
-            AcpError::Closed { .. } | AcpError::Protocol { .. } | AcpError::Launch { .. }
+            cause(&degradation),
+            Some(AcpError::Closed { .. } | AcpError::Protocol { .. } | AcpError::Launch { .. })
         ));
+        supervisor.shutdown.cancel();
+        supervisor.tasks.close();
+        tokio::time::timeout(Duration::from_secs(5), supervisor.tasks.wait()).await?;
     }
     Ok(())
 }

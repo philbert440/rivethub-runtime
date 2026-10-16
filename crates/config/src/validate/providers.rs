@@ -104,6 +104,12 @@ fn cli(out: &mut ValidationResult, name: &str, kind: Option<ProviderType>, provi
         provider.timeout_ms,
         &format!("Provider \"{name}\" timeout_ms must be a positive number"),
     );
+    positive(
+        out,
+        &format!("{path}.discovery_timeout_ms"),
+        provider.discovery_timeout_ms,
+        &format!("Provider \"{name}\" discovery_timeout_ms must be a positive number"),
+    );
     if kind != Some(ProviderType::ClaudeCli) {
         return;
     }

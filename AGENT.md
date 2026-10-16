@@ -58,3 +58,13 @@ Still skipped, with a reason a test checks: project-rule tagging, health, histor
 scenario, summarizer/wiki/tagger/embedder job loops, `get_full` of summaries, and the MCP tool layer.
 Gotcha: the recordings do not carry inputs; the replay tests rebuild them from labels and the recorded rows, and match
 generated ids by role (a bijection), never by text.
+
+## harness-acp: degraded headless providers (2026-10-16)
+
+A CLI-backed provider whose harness fails ACP discovery no longer stops startup. `HeadlessLaunch::prepare(..).start(Supervisor)`
+returns a `HeadlessHarness` (a `HarnessAdapter`) that is ready or degraded; transient failures (timeout, launch I/O, closed
+pipes) retry under the factory's `TaskTracker` and child `CancellationToken` with 1 s → 60 s backoff, permanent ones
+(`AcpError::recovery()`) do not. Turns on a degraded provider fail fast with `AcpError::ProviderDegraded`. Readiness is a
+kernel `ProviderHealth` watch the gateway shows under `/healthz` `degradedProviders` and `rh status` prints.
+`providers.<id>.discovery_timeout_ms` bounds discovery (default `harness_acp::DEFAULT_DISCOVERY_TIMEOUT`, 30 s);
+`timeout_ms` bounds turns only.

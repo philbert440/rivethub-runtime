@@ -23,6 +23,24 @@ pub struct HealthzResponse {
     pub node: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub degraded: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub degraded_providers: Vec<DegradedProvider>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DegradedProvider {
+    pub id: String,
+    pub recovery: ProviderRecovery,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
+pub enum ProviderRecovery {
+    Retrying,
+    Permanent,
 }
 
 #[serde_with::skip_serializing_none]

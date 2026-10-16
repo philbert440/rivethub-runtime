@@ -70,7 +70,7 @@ pub struct Composition {
     audit_cancel: CancellationToken,
     tasks: JoinSet<Result<(), ComposeError>>,
     background: tokio_util::task::TaskTracker,
-    model_tasks: tokio_util::task::TaskTracker,
+    model_tasks: crate::models::ModelTasks,
     cancel: CancellationToken,
 }
 
@@ -82,6 +82,17 @@ fn gateway_settings(config: &Config, env: &Environment) -> Result<gateway::Setti
         node.hostname,
         node.name,
     )?)
+}
+
+fn transcripts(
+    env: &Environment,
+) -> Result<Arc<capture::transcript::ClaudeTranscriptReader>, ComposeError> {
+    let home = env
+        .home()
+        .ok_or_else(|| ComposeError::Invalid("HOME is required".into()))?;
+    Ok(Arc::new(capture::transcript::ClaudeTranscriptReader::new(
+        std::path::Path::new(home).join(".claude"),
+    )))
 }
 
 impl Composition {
@@ -110,7 +121,7 @@ impl Composition {
         shutdown: &CancellationToken,
         activities: &kernel::shutdown::Activities,
     ) -> Result<Self, ComposeError> {
-        let factory = crate::models::ModelFactory::from_config(config, env)
+        let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
             .with_activities(activities.clone());
         Self::with_models(config, env, store, shutdown, &factory).await
@@ -142,20 +153,14 @@ impl Composition {
         );
         let identity = identities::load(config, env).await?;
         let mut gateway = Gateway::new(store, settings)
+            .with_provider_health(factory.health())
             .with_uploads(crate::service::uploads(env)?)
             .with_tenancy(identity.tenancy.clone())
             .with_identity_required()
             .with_client_certificate_required(bind.require_client)
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
-        let home = env
-            .home()
-            .ok_or_else(|| ComposeError::Invalid("HOME is required".into()))?;
-        gateway = gateway.with_transcript_reader(Arc::new(
-            capture::transcript::ClaudeTranscriptReader::new(
-                std::path::Path::new(home).join(".claude"),
-            ),
-        ));
+        gateway = gateway.with_transcript_reader(transcripts(env)?);
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let background = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {
@@ -230,8 +235,7 @@ impl Composition {
         }
         self.background.close();
         self.background.wait().await;
-        self.model_tasks.close();
-        self.model_tasks.wait().await;
+        self.model_tasks.close().await;
         Ok(())
     }
 }

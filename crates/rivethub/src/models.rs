@@ -1,13 +1,16 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use config::provider::{ProviderBody, ProviderSlot, ProviderType};
+use config::provider::{ProviderBody, ProviderSlot};
 use config::{Config, Environment};
+use harness_acp::{HeadlessLaunch, Retry, Supervisor};
 use kernel::harness::HarnessAdapter;
-use kernel::model::ModelProvider;
+use kernel::model::{ModelProvider, ProviderHealth};
 use kernel::shutdown::Activities;
 use thiserror::Error;
+use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 
 #[derive(Debug, Error)]
 pub enum ModelError {
@@ -17,12 +20,8 @@ pub enum ModelError {
     Type(String),
     #[error("provider {0} requires a model on the provider or agent")]
     Model(String),
-    #[error("provider {provider} ({kind}) has no headless launcher: {source}")]
-    Launcher {
-        provider: String,
-        kind: ProviderType,
-        source: Box<harness_acp::AcpError>,
-    },
+    #[error("headless provider startup failed: {0}")]
+    Startup(#[from] tokio::task::JoinError),
     #[error("provider {0} has no composed harness adapter")]
     Harness(String),
     #[error(transparent)]
@@ -38,10 +37,26 @@ pub enum ModelError {
 #[derive(Default)]
 pub struct ModelFactory {
     harnesses: BTreeMap<String, Arc<dyn HarnessAdapter>>,
-    tasks: tokio_util::task::TaskTracker,
+    health: BTreeMap<String, ProviderHealth>,
+    tasks: TaskTracker,
+    cancel: CancellationToken,
     embed_endpoint: Option<String>,
     embed_model: Option<String>,
     activities: Activities,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ModelTasks {
+    tasks: TaskTracker,
+    cancel: CancellationToken,
+}
+
+impl ModelTasks {
+    pub(crate) async fn close(&self) {
+        self.cancel.cancel();
+        self.tasks.close();
+        self.tasks.wait().await;
+    }
 }
 
 #[expect(
@@ -116,30 +131,52 @@ impl ModelFactory {
             .map_err(Into::into)
     }
 
-    pub(crate) fn tasks(&self) -> tokio_util::task::TaskTracker {
-        self.tasks.clone()
+    pub(crate) fn tasks(&self) -> ModelTasks {
+        ModelTasks {
+            tasks: self.tasks.clone(),
+            cancel: self.cancel.clone(),
+        }
     }
 
-    pub async fn from_config(config: &Config, env: &Environment) -> Result<Self, ModelError> {
-        let mut factory = Self::with_embedding(env);
-        if let Some(agents) = &config.agents {
-            for agent in agents.values() {
-                if let Some(id) = &agent.provider {
-                    factory.install(config, env, id).await?;
-                }
-            }
-        }
-        Ok(factory)
+    #[must_use]
+    pub fn health(&self) -> Vec<ProviderHealth> {
+        self.health.values().cloned().collect()
+    }
+
+    pub async fn from_config(
+        config: &Config,
+        env: &Environment,
+        shutdown: &CancellationToken,
+    ) -> Result<Self, ModelError> {
+        Self::with_embedding(env)
+            .with_agent_providers(config, env, shutdown)
+            .await
+    }
+
+    pub async fn with_agent_providers(
+        self,
+        config: &Config,
+        env: &Environment,
+        shutdown: &CancellationToken,
+    ) -> Result<Self, ModelError> {
+        let ids = config
+            .agents
+            .iter()
+            .flat_map(|agents| agents.values())
+            .filter_map(|agent| agent.provider.as_deref())
+            .collect();
+        self.install(config, env, ids, shutdown).await
     }
 
     pub async fn for_provider(
         config: &Config,
         env: &Environment,
         id: &str,
+        shutdown: &CancellationToken,
     ) -> Result<Self, ModelError> {
-        let mut factory = Self::with_embedding(env);
-        factory.install(config, env, id).await?;
-        Ok(factory)
+        Self::with_embedding(env)
+            .install(config, env, BTreeSet::from([id]), shutdown)
+            .await
     }
 
     #[must_use]
@@ -155,33 +192,43 @@ impl ModelFactory {
     }
 
     async fn install(
-        &mut self,
+        mut self,
         config: &Config,
         env: &Environment,
-        id: &str,
-    ) -> Result<(), ModelError> {
-        if self.harnesses.contains_key(id) {
-            return Ok(());
+        ids: BTreeSet<&str>,
+        shutdown: &CancellationToken,
+    ) -> Result<Self, ModelError> {
+        self.cancel = shutdown.child_token();
+        let supervisor = Supervisor {
+            shutdown: self.cancel.clone(),
+            tasks: self.tasks.clone(),
+            retry: Retry::STANDARD,
+        };
+        let search: Vec<_> = match env.get("PATH") {
+            Some(paths) => std::env::split_paths(paths).collect(),
+            None => Vec::new(),
+        };
+        let mut starting = JoinSet::new();
+        for id in ids {
+            if self.harnesses.contains_key(id) {
+                continue;
+            }
+            let slot = slot(config, id)?;
+            if let ProviderBody::Cli(body) = &slot.body {
+                let kind = slot.kind.ok_or_else(|| ModelError::Type(id.into()))?;
+                let harness = providers::cli::harness_id(kind)?;
+                let launch =
+                    HeadlessLaunch::prepare(config, harness, body, search.clone(), id.into()).await;
+                starting.spawn(launch.start(supervisor.clone()));
+            }
         }
-        let slot = slot(config, id)?;
-        if let ProviderBody::Cli(body) = &slot.body {
-            let kind = slot.kind.ok_or_else(|| ModelError::Type(id.into()))?;
-            let harness = providers::cli::harness_id(kind)?;
-            let search = match env.get("PATH") {
-                Some(paths) => std::env::split_paths(paths).collect(),
-                None => Vec::new(),
-            };
-            let adapter =
-                harness_acp::AcpHarnessAdapter::for_provider(config, harness, body, search)
-                    .await
-                    .map_err(|source| ModelError::Launcher {
-                        provider: id.into(),
-                        kind,
-                        source: Box::new(source),
-                    })?;
-            self.harnesses.insert(id.into(), Arc::new(adapter));
+        while let Some(started) = starting.join_next().await {
+            let harness = started?;
+            let health = harness.health();
+            self.harnesses.insert(health.id.clone(), Arc::new(harness));
+            self.health.insert(health.id.clone(), health);
         }
-        Ok(())
+        Ok(self)
     }
 
     pub fn build(

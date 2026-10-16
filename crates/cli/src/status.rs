@@ -90,7 +90,14 @@ async fn health(env: &Environment) -> Result<Report, Error> {
     if let Some(uptime) = health.uptime {
         parts.push(format!("; uptime {uptime}s"));
     }
-    let mut report = Report::success(format!("{}\n", parts.join("")));
+    parts.push("\n".to_owned());
+    for provider in &health.response.degraded_providers {
+        parts.push(format!(
+            "Provider {} is degraded ({}): {}\n",
+            provider.id, provider.recovery, provider.reason
+        ));
+    }
+    let mut report = Report::success(parts.join(""));
     report.stderr = configuration::notices(&loaded);
     Ok(report)
 }

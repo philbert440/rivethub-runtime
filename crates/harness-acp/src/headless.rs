@@ -1,17 +1,38 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use config::Config;
 use config::provider::CliProvider;
 use wire::harness::HarnessId;
 
-use crate::{AcpError, AcpLaunch, LaunchTable};
+use crate::discovery::{Advertisement, DEFAULT_DISCOVERY_TIMEOUT};
+use crate::{AcpCommand, AcpError, AcpHarnessAdapter, AcpLaunch, LaunchTable};
 
-pub(crate) async fn launch(
+#[derive(Debug)]
+pub(crate) struct Prepared {
+    adapter: AcpHarnessAdapter,
+    harness: HarnessId,
+    command: AcpCommand,
+    cwd: PathBuf,
+    timeout: Duration,
+}
+
+impl Prepared {
+    pub(crate) async fn discover(&self) -> Result<Advertisement, AcpError> {
+        crate::discovery::discover(&self.command, &self.cwd, self.timeout).await
+    }
+
+    pub(crate) fn ready(self, advertisement: Advertisement) -> AcpHarnessAdapter {
+        self.adapter.advertise(self.harness, advertisement)
+    }
+}
+
+pub(crate) async fn prepare(
     config: &Config,
     harness: HarnessId,
     provider: &CliProvider,
     search: Vec<PathBuf>,
-) -> Result<(LaunchTable, crate::discovery::Advertisement), AcpError> {
+) -> Result<Prepared, AcpError> {
     let launch = LaunchTable::from_config(config).launch(harness)?;
     let mut command = launch.command().clone();
     if let Some(binary) = &provider.binary {
@@ -30,7 +51,8 @@ pub(crate) async fn launch(
             .and_then(|runtime| runtime.workspace.clone())
     });
     let program = command.program.clone();
-    let resolved = tokio::task::spawn_blocking(move || resolve_executable(&program, &search))
+    let paths = search.clone();
+    let resolved = tokio::task::spawn_blocking(move || resolve_executable(&program, &paths))
         .await
         .map_err(AcpError::ProbeTask)?
         .map_err(|source| AcpError::Launch {
@@ -45,19 +67,17 @@ pub(crate) async fn launch(
         });
     };
     command.program = program;
-    let cwd = command.working_dir.as_ref().ok_or(AcpError::WorkingDir)?;
-    let discovery = crate::discovery::discover(&command, cwd);
-    let advertisement = if let Some(timeout) = provider.timeout_ms {
-        tokio::time::timeout(std::time::Duration::from_millis(timeout), discovery)
-            .await
-            .map_err(|_| AcpError::DiscoveryTimeout)??
-    } else {
-        discovery.await?
-    };
-    Ok((
-        LaunchTable::from_entries([(harness, AcpLaunch::Native(command))]),
-        advertisement,
-    ))
+    let cwd = command.working_dir.clone().ok_or(AcpError::WorkingDir)?;
+    let timeout = provider
+        .discovery_timeout_ms
+        .map_or(DEFAULT_DISCOVERY_TIMEOUT, Duration::from_millis);
+    Ok(Prepared {
+        adapter: AcpHarnessAdapter::headless(config, harness, command.clone(), search),
+        harness,
+        command,
+        cwd,
+        timeout,
+    })
 }
 
 fn resolve_executable(

@@ -85,13 +85,16 @@ impl Advertisement {
     }
 }
 
-pub(crate) async fn discover(command: &AcpCommand, cwd: &Path) -> Result<Advertisement, AcpError> {
-    let agent = tokio::time::timeout(
-        Duration::from_secs(30),
-        crate::connection::start_new(command, cwd),
-    )
-    .await
-    .map_err(|_| AcpError::DiscoveryTimeout)??;
+pub const DEFAULT_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
+
+pub(crate) async fn discover(
+    command: &AcpCommand,
+    cwd: &Path,
+    timeout: Duration,
+) -> Result<Advertisement, AcpError> {
+    let agent = tokio::time::timeout(timeout, crate::connection::start_new(command, cwd))
+        .await
+        .map_err(|_| AcpError::DiscoveryTimeout { timeout })??;
     let advertised = Advertisement::from_agent(&agent);
     agent.shutdown.cancel();
     agent

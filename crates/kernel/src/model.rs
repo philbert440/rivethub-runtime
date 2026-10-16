@@ -1,7 +1,11 @@
+use std::sync::Arc;
+
 use crate::BoxError;
 use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
+use tokio::sync::watch;
+use wire::gateway::ProviderRecovery;
 use wire::message::Message;
 use wire::stream::LlmUsage;
 use wire::stream::ThinkingLevel;
@@ -76,4 +80,22 @@ pub trait ModelProvider: Send + Sync {
     async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError>;
 
     async fn list_models(&self) -> Result<Vec<String>, ModelProviderError>;
+}
+
+#[derive(Debug, Clone)]
+pub enum ProviderStatus {
+    Ready,
+    Degraded(Degradation),
+}
+
+#[derive(Debug, Clone)]
+pub struct Degradation {
+    pub recovery: ProviderRecovery,
+    pub cause: Arc<dyn std::error::Error + Send + Sync>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProviderHealth {
+    pub id: String,
+    pub status: watch::Receiver<ProviderStatus>,
 }

@@ -7,7 +7,6 @@ use kernel::shutdown::Activities;
 use kernel::wiki::builder::WikiBuilderStore;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
-use tokio_util::task::TaskTracker;
 use workers::{
     EMBED_CONCURRENCY, EmbedSettings, ProcessRole, Runner, RunnerConfig, SummarySettings,
     WorkerDeps,
@@ -82,8 +81,10 @@ async fn check_role(env: &Environment, role: ProcessRole) -> Result<(), RootErro
     let config = tokio::task::spawn_blocking(move || load(&owned)).await??;
     postgres_url(&config, env)?;
     let shutdown = CancellationToken::new();
-    let factory = model_factory(&config, env).await?;
-    let binding = model_binding(&config, &factory, &shutdown)?;
+    let factory = model_factory(&config, env, &shutdown).await?;
+    let binding = model_binding(&config, &factory, &shutdown);
+    factory.tasks().close().await;
+    let binding = binding?;
     check_embeddings(role, &binding)?;
     let model = binding.model;
     EmbedSettings::from_config(&config)?;
@@ -157,7 +158,7 @@ pub async fn build_runner<Q: JobQueue + 'static>(
     shutdown: &CancellationToken,
     activities: &Activities,
 ) -> Result<ComposedRunner<Q>, RootError> {
-    let factory = model_factory(config, env)
+    let factory = model_factory(config, env, shutdown)
         .await?
         .with_activities(activities.clone());
     with_models(role, ports, config, &factory, shutdown, activities)
@@ -210,7 +211,7 @@ pub fn with_models<Q: JobQueue + 'static>(
 )]
 pub struct ComposedRunner<Q> {
     pub runner: Runner<Q>,
-    tasks: TaskTracker,
+    tasks: crate::models::ModelTasks,
     cancel: CancellationToken,
 }
 
@@ -218,8 +219,7 @@ impl<Q: JobQueue + 'static> ComposedRunner<Q> {
     pub async fn run(&self, shutdown: CancellationToken) -> Result<(), workers::WorkerError> {
         let result = self.runner.run(shutdown.clone()).await;
         self.cancel.cancel();
-        self.tasks.close();
-        self.tasks.wait().await;
+        self.tasks.close().await;
         result
     }
 }
@@ -256,8 +256,12 @@ fn check_embeddings(
 async fn model_factory(
     config: &Config,
     env: &Environment,
+    shutdown: &CancellationToken,
 ) -> Result<crate::models::ModelFactory, RootError> {
-    Ok(crate::models::ModelFactory::for_provider(config, env, provider_id(config)?).await?)
+    Ok(
+        crate::models::ModelFactory::for_provider(config, env, provider_id(config)?, shutdown)
+            .await?,
+    )
 }
 
 fn model_binding(

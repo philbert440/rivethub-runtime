@@ -98,7 +98,15 @@ removed, a config that still sets one warns
 (`<key> is set on the model server, not in RivetHub`), and the runtime sends
 no sampling fields, never sends `tool_choice`, and carries no hard-coded
 `max_tokens` default on the wire: `max_tokens` goes out only when the
-provider config sets it. The agent loop stays, minimal, for Discord, the
+provider config sets it. A cli-backed provider whose harness fails ACP
+discovery (bounded by `discovery_timeout_ms`, default 30000; `timeout_ms`
+bounds turns only) is degraded, never fatal: the gateway and every other
+provider start, a turn on it fails fast naming the provider and the cause,
+timeouts and launch I/O retry with exponential backoff (1 s doubling to
+60 s) until discovery succeeds, a missing or unverified harness or a
+protocol refusal does not retry, and `/healthz` lists it under
+`degradedProviders` (`id`, `recovery`, `reason`), which `rh status`
+prints. The agent loop stays, minimal, for Discord, the
 task engine's API agents and `/v1`.
 (12) Chat-channel bots (Discord, Telegram, voice) live in `rivethub-channels`; `channels.discord/telegram/voice` config is
 accepted and ignored with a warning. (13) Workflows kept but outside the runtime: the separate `rivethub-workflows` workspace package

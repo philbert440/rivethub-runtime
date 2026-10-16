@@ -26,6 +26,7 @@ async fn status_reads_health_and_optional_version_and_uptime() {
                     name: "host".to_owned(),
                     node: "node".to_owned(),
                     degraded: None,
+                    degraded_providers: Vec::new(),
                 },
                 version: "1.2.3",
                 uptime: 12.5,
@@ -89,6 +90,7 @@ async fn ordinary_redirects_reach_the_health_route() {
                         name: "host".to_owned(),
                         node: "node".to_owned(),
                         degraded: None,
+                        degraded_providers: Vec::new(),
                     })
                 }),
             ),
@@ -153,5 +155,48 @@ async fn stalled_health_request_times_out_after_three_seconds() {
     assert!(report.stderr.contains("Health unavailable"));
     assert!(report.stdout.contains("not running"));
     release.cancel();
+    stub.close().await.expect("stub shuts down");
+}
+
+#[tokio::test]
+async fn status_names_each_degraded_provider() {
+    let stub = testkit::stub_server(Router::new().route(
+        "/healthz",
+        get(|| async {
+            Json(HealthzResponse {
+                ok: true,
+                sessions: 0,
+                name: "host".to_owned(),
+                node: "node".to_owned(),
+                degraded: None,
+                degraded_providers: vec![
+                    wire::gateway::DegradedProvider {
+                        id: "hermes-cli".to_owned(),
+                        recovery: wire::gateway::ProviderRecovery::Retrying,
+                        reason: "ACP discovery timed out after 30000ms".to_owned(),
+                    },
+                    wire::gateway::DegradedProvider {
+                        id: "kimi".to_owned(),
+                        recovery: wire::gateway::ProviderRecovery::Permanent,
+                        reason: "not installed".to_owned(),
+                    },
+                ],
+            })
+        }),
+    ))
+    .await
+    .expect("health route");
+    let home = home();
+    let env = environment(&home);
+    config(
+        &home,
+        &format!("den:\n  host: 127.0.0.1\n  port: {}\n", stub.addr.port()),
+    );
+    let report = run(&["status"], &env).await;
+    assert_eq!(report.exit, Exit::Ok);
+    assert_eq!(
+        report.stdout,
+        "RivetHub is running\nProvider hermes-cli is degraded (retrying): ACP discovery timed out after 30000ms\nProvider kimi is degraded (permanent): not installed\n"
+    );
     stub.close().await.expect("stub shuts down");
 }

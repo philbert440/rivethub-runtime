@@ -82,3 +82,34 @@ fn absent_options_remain_absent_and_invalid_timeouts_are_rejected() {
         }
     }
 }
+
+#[test]
+fn discovery_timeout_is_its_own_positive_setting() {
+    let loaded = Config::from_str(
+        &Environment::default(),
+        &document(
+            ProviderType::HermesCli,
+            "    timeout_ms: 9000\n    discovery_timeout_ms: 45000\n",
+        ),
+    )
+    .expect("discovery timeout loads");
+    let providers = loaded.config.providers.expect("providers");
+    let ProviderBody::Cli(entry) = &providers.get("harness").expect("harness provider").body else {
+        panic!("CLI entry")
+    };
+    assert_eq!(entry.discovery_timeout_ms, Some(45_000));
+    assert_eq!(entry.timeout_ms, Some(9000));
+    let error = Config::from_str(
+        &Environment::default(),
+        &document(ProviderType::HermesCli, "    discovery_timeout_ms: 0\n"),
+    )
+    .expect_err("zero discovery timeout");
+    let ConfigError::Validation { result } = error else {
+        panic!("validation error expected: {error}")
+    };
+    let message = result.to_string();
+    assert!(message.contains("providers.harness.discovery_timeout_ms"));
+    assert!(
+        message.contains("Provider \"harness\" discovery_timeout_ms must be a positive number")
+    );
+}

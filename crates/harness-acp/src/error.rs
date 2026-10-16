@@ -1,6 +1,7 @@
 use std::fmt;
 
 use thiserror::Error;
+use wire::gateway::ProviderRecovery;
 use wire::harness::{ApprovalDecision, HarnessId};
 
 use crate::identity::IdentityError;
@@ -81,8 +82,13 @@ pub enum AcpError {
     MissingPermissionTitle,
     #[error("ACP media content cannot be represented as text")]
     NonTextContent,
-    #[error("ACP discovery timed out")]
-    DiscoveryTimeout,
+    #[error("ACP discovery timed out after {}ms", timeout.as_millis())]
+    DiscoveryTimeout { timeout: std::time::Duration },
+    #[error("provider {provider} is degraded ({recovery}): {cause}", recovery = degradation.recovery, cause = degradation.cause)]
+    ProviderDegraded {
+        provider: String,
+        degradation: kernel::model::Degradation,
+    },
     #[error("the session update has no kernel event")]
     UnmappedUpdate,
     #[error(transparent)]
@@ -97,6 +103,35 @@ pub enum AcpError {
         "no working directory: the request, the launch command and runtime.workspace all leave it unset"
     )]
     WorkingDir,
+}
+
+impl AcpError {
+    #[must_use]
+    pub const fn recovery(&self) -> ProviderRecovery {
+        match self {
+            Self::DiscoveryTimeout { .. }
+            | Self::Launch { .. }
+            | Self::Stdio { .. }
+            | Self::Closed { .. }
+            | Self::ProbeTask(_) => ProviderRecovery::Retrying,
+            Self::ChatUnsupported { .. }
+            | Self::Protocol { .. }
+            | Self::SessionActive { .. }
+            | Self::Unconfigured { .. }
+            | Self::UnverifiedLaunch { .. }
+            | Self::ConfigOptionUnavailable { .. }
+            | Self::ConfigValueRejected { .. }
+            | Self::MissingPermissionTitle
+            | Self::NonTextContent
+            | Self::ProviderDegraded { .. }
+            | Self::UnmappedUpdate
+            | Self::Identity(_)
+            | Self::UnknownPermission { .. }
+            | Self::UnanswerablePermission { .. }
+            | Self::ToolInput { .. }
+            | Self::WorkingDir => ProviderRecovery::Permanent,
+        }
+    }
 }
 
 pub(crate) fn port(error: impl Into<AcpError>) -> kernel::harness::HarnessAdapterError {

@@ -119,6 +119,7 @@ pub struct CliProvider {
     pub append_system_prompt: Option<bool>,
     pub cwd: Option<PathBuf>,
     pub timeout_ms: Option<u64>,
+    pub discovery_timeout_ms: Option<u64>,
     pub permission_prompts: Option<String>,
     pub permission_timeout_ms: Option<u64>,
     pub allowed_api_key_sources: Option<Vec<String>>,

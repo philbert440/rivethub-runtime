@@ -79,18 +79,24 @@ pub struct AcpHarnessAdapter {
 }
 
 impl AcpHarnessAdapter {
-    pub async fn for_provider(
+    pub(crate) fn headless(
         config: &Config,
         harness: HarnessId,
-        provider: &config::provider::CliProvider,
+        command: AcpCommand,
         search_paths: Vec<PathBuf>,
-    ) -> Result<Self, AcpError> {
-        let (launch, advertisement) =
-            crate::headless::launch(config, harness, provider, search_paths.clone()).await?;
+    ) -> Self {
         let mut adapter = Self::new(config).with_search_paths(search_paths);
-        adapter.launch = launch;
-        adapter.advertised.get_mut().insert(harness, advertisement);
-        Ok(adapter)
+        adapter.launch = LaunchTable::from_entries([(harness, crate::AcpLaunch::Native(command))]);
+        adapter
+    }
+
+    pub(crate) fn advertise(
+        mut self,
+        harness: HarnessId,
+        advertisement: crate::discovery::Advertisement,
+    ) -> Self {
+        self.advertised.get_mut().insert(harness, advertisement);
+        self
     }
 
     #[must_use]
@@ -435,9 +441,13 @@ impl HarnessAdapter for AcpHarnessAdapter {
                         .as_ref()
                         .or(self.default_working_dir.as_ref())
                     {
-                        let advertised = crate::discovery::discover(command, cwd)
-                            .await
-                            .map_err(port)?;
+                        let advertised = crate::discovery::discover(
+                            command,
+                            cwd,
+                            crate::discovery::DEFAULT_DISCOVERY_TIMEOUT,
+                        )
+                        .await
+                        .map_err(port)?;
                         advertised
                             .apply(&mut offering, self.sheets.get(&fact.harness))
                             .map_err(port)?;
