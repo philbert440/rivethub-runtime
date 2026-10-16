@@ -38,6 +38,8 @@ pub enum ModelError {
 pub struct ModelFactory {
     harnesses: BTreeMap<String, Arc<dyn HarnessAdapter>>,
     tasks: tokio_util::task::TaskTracker,
+    embed_endpoint: Option<String>,
+    embed_model: Option<String>,
 }
 
 #[expect(
@@ -51,12 +53,73 @@ pub struct ModelBinding {
 }
 
 impl ModelFactory {
+    fn with_embedding(env: &Environment) -> Self {
+        Self {
+            embed_endpoint: env.embed_url(),
+            embed_model: env.embed_model(),
+            ..Self::default()
+        }
+    }
+
+    fn embedder(&self, config: &Config) -> Result<Option<providers::embed::Embedder>, ModelError> {
+        let Some(memory) = &config.memory else {
+            return Ok(None);
+        };
+        let settings = if config.sqlite_selected() {
+            memory.sqlite.as_ref().and_then(|section| {
+                section.embed_endpoint.as_ref().map(|endpoint| {
+                    Ok::<_, providers::BuildError>(providers::embed::EmbedConfig {
+                        endpoint: endpoint.clone(),
+                        model: section
+                            .embed_model
+                            .clone()
+                            .ok_or(providers::BuildError::MissingEmbedModel)?,
+                        api_key: section.embed_api_key.clone(),
+                        api_prefix: None,
+                        expected_dims: None,
+                        timeout_ms: None,
+                        query_instruction: None,
+                    })
+                })
+            })
+        } else {
+            let section = memory.postgres.as_ref();
+            let text = |value: Option<&String>| {
+                value
+                    .map(|text| text.trim())
+                    .filter(|text| !text.is_empty())
+                    .map(str::to_owned)
+            };
+            let endpoint = text(section.and_then(|section| section.embed_endpoint.as_ref()))
+                .or_else(|| self.embed_endpoint.clone());
+            let model = text(section.and_then(|section| section.embed_model.as_ref()))
+                .or_else(|| self.embed_model.clone());
+            endpoint.map(|endpoint| {
+                Ok::<_, providers::BuildError>(providers::embed::EmbedConfig {
+                    endpoint,
+                    model: model.ok_or(providers::BuildError::MissingEmbedModel)?,
+                    api_key: section.and_then(|section| section.embed_api_key.clone()),
+                    api_prefix: None,
+                    expected_dims: section.and_then(|section| section.embed_expected_dims),
+                    timeout_ms: section.and_then(|section| section.embed_timeout_ms),
+                    query_instruction: section
+                        .and_then(|section| section.embed_query_instruction.clone()),
+                })
+            })
+        };
+        settings
+            .transpose()?
+            .map(providers::embed::Embedder::build)
+            .transpose()
+            .map_err(Into::into)
+    }
+
     pub(crate) fn tasks(&self) -> tokio_util::task::TaskTracker {
         self.tasks.clone()
     }
 
     pub async fn from_config(config: &Config, env: &Environment) -> Result<Self, ModelError> {
-        let mut factory = Self::default();
+        let mut factory = Self::with_embedding(env);
         if let Some(agents) = &config.agents {
             for agent in agents.values() {
                 if let Some(id) = &agent.provider {
@@ -72,7 +135,7 @@ impl ModelFactory {
         env: &Environment,
         id: &str,
     ) -> Result<Self, ModelError> {
-        let mut factory = Self::default();
+        let mut factory = Self::with_embedding(env);
         factory.install(config, env, id).await?;
         Ok(factory)
     }
@@ -152,7 +215,7 @@ impl ModelFactory {
                         .as_ref()
                         .and_then(|runtime| runtime.workspace.clone())
                 });
-                let embedder = embedder(config)?;
+                let embedder = self.embedder(config)?;
                 let embeddings = embedder.is_some();
                 let provider = providers::cli::CliBacked::build(
                     kind,
@@ -179,50 +242,4 @@ fn slot<'a>(config: &'a Config, id: &str) -> Result<&'a ProviderSlot, ModelError
         .as_ref()
         .and_then(|slots| slots.get(id))
         .ok_or_else(|| ModelError::Missing(id.into()))
-}
-
-fn embedder(config: &Config) -> Result<Option<providers::embed::Embedder>, ModelError> {
-    let Some(memory) = &config.memory else {
-        return Ok(None);
-    };
-    let settings = if config.sqlite_selected() {
-        memory.sqlite.as_ref().and_then(|section| {
-            section.embed_endpoint.as_ref().map(|endpoint| {
-                Ok::<_, providers::BuildError>(providers::embed::EmbedConfig {
-                    endpoint: endpoint.clone(),
-                    model: section
-                        .embed_model
-                        .clone()
-                        .ok_or(providers::BuildError::MissingEmbedModel)?,
-                    api_key: section.embed_api_key.clone(),
-                    api_prefix: None,
-                    expected_dims: None,
-                    timeout_ms: None,
-                    query_instruction: None,
-                })
-            })
-        })
-    } else {
-        memory.postgres.as_ref().and_then(|section| {
-            section.embed_endpoint.as_ref().map(|endpoint| {
-                Ok::<_, providers::BuildError>(providers::embed::EmbedConfig {
-                    endpoint: endpoint.clone(),
-                    model: section
-                        .embed_model
-                        .clone()
-                        .ok_or(providers::BuildError::MissingEmbedModel)?,
-                    api_key: section.embed_api_key.clone(),
-                    api_prefix: None,
-                    expected_dims: section.embed_expected_dims,
-                    timeout_ms: section.embed_timeout_ms,
-                    query_instruction: section.embed_query_instruction.clone(),
-                })
-            })
-        })
-    };
-    settings
-        .transpose()?
-        .map(providers::embed::Embedder::build)
-        .transpose()
-        .map_err(Into::into)
 }

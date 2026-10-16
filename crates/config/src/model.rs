@@ -445,6 +445,31 @@ impl Config {
     }
 
     #[must_use]
+    pub fn memory_embed_endpoint(&self, env: &Environment) -> Option<String> {
+        self.postgres_memory_text(|postgres| postgres.embed_endpoint.as_deref())
+            .or_else(|| env.embed_url())
+    }
+
+    #[must_use]
+    pub fn memory_embed_model(&self, env: &Environment) -> Option<String> {
+        self.postgres_memory_text(|postgres| postgres.embed_model.as_deref())
+            .or_else(|| env.embed_model())
+    }
+
+    fn postgres_memory_text(
+        &self,
+        field: impl Fn(&PostgresSection) -> Option<&str>,
+    ) -> Option<String> {
+        self.memory
+            .as_ref()
+            .and_then(|memory| memory.postgres.as_ref())
+            .and_then(field)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_owned)
+    }
+
+    #[must_use]
     pub fn postgres_selected(&self, env: &Environment) -> bool {
         !self.sqlite_selected() && self.memory_postgres_url(env).is_some()
     }

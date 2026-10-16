@@ -40,7 +40,9 @@ pub enum StartupError {
     Memory(#[from] memory_postgres::Error),
     #[error(transparent)]
     Close(#[from] kernel::memory::MemoryStoreError),
-    #[error("memory.postgres.embed_model is required when embed_endpoint is set")]
+    #[error(
+        "memory.postgres.embed_model (or RIVETHUB_EMBED_MODEL) is required when an embedding endpoint is set"
+    )]
     EmbedModel,
     #[error(transparent)]
     EmbedProvider(#[from] providers::BuildError),
@@ -70,7 +72,7 @@ pub(crate) async fn postgres(
     env: &Environment,
 ) -> Result<PostgresMemory, StartupError> {
     let url = postgres_url(config, env)?;
-    let embed = query_embed(config)?;
+    let embed = query_embed(config, env)?;
     let memory = PostgresMemory::connect(&url).await?;
     Ok(match embed {
         Some(embed) => memory.with_query_embed(embed),
@@ -78,36 +80,35 @@ pub(crate) async fn postgres(
     })
 }
 
-fn query_embed(config: &Config) -> Result<Option<memory_postgres::QueryEmbed>, StartupError> {
-    let Some(section) = config
+fn query_embed(
+    config: &Config,
+    env: &Environment,
+) -> Result<Option<memory_postgres::QueryEmbed>, StartupError> {
+    let Some(endpoint) = config.memory_embed_endpoint(env) else {
+        return Ok(None);
+    };
+    let model = config
+        .memory_embed_model(env)
+        .ok_or(StartupError::EmbedModel)?;
+    let section = config
         .memory
         .as_ref()
-        .and_then(|memory| memory.postgres.as_ref())
-    else {
-        return Ok(None);
-    };
-    let Some(endpoint) = section.embed_endpoint.clone() else {
-        return Ok(None);
-    };
-    let model = section
-        .embed_model
-        .clone()
-        .ok_or(StartupError::EmbedModel)?;
+        .and_then(|memory| memory.postgres.as_ref());
     let provider = providers::OpenAiCompatible::build(
         config::ProviderType::OpenaiCompatible,
         &config::provider::OpenaiProvider {
             base_url: Some(endpoint),
             model: Some(model),
-            api_key: section.embed_api_key.clone(),
+            api_key: section.and_then(|section| section.embed_api_key.clone()),
             probe_models: Some(false),
             ..config::provider::OpenaiProvider::default()
         },
     )?;
     Ok(Some(memory_postgres::QueryEmbed::new(
         Arc::new(provider),
-        section.embed_query_instruction.clone(),
-        section.embed_timeout_ms,
-        section.hnsw_ef_search,
+        section.and_then(|section| section.embed_query_instruction.clone()),
+        section.and_then(|section| section.embed_timeout_ms),
+        section.and_then(|section| section.hnsw_ef_search),
     )))
 }
 
@@ -395,13 +396,16 @@ mod embed_tests {
 
     #[test]
     fn without_an_endpoint_search_stays_keyword_only() -> Result<(), Box<dyn std::error::Error>> {
-        assert!(query_embed(&config("")?)?.is_none());
+        assert!(query_embed(&config("")?, &Environment::default())?.is_none());
         Ok(())
     }
 
     #[test]
     fn an_endpoint_without_a_model_is_refused() -> Result<(), Box<dyn std::error::Error>> {
-        let refused = query_embed(&config("    embed_endpoint: http://127.0.0.1:9\n")?);
+        let refused = query_embed(
+            &config("    embed_endpoint: http://127.0.0.1:9\n")?,
+            &Environment::default(),
+        );
         assert!(matches!(refused, Err(StartupError::EmbedModel)));
         Ok(())
     }
@@ -409,10 +413,35 @@ mod embed_tests {
     #[test]
     fn an_endpoint_and_model_give_search_a_query_embedder() -> Result<(), Box<dyn std::error::Error>>
     {
-        let embed = query_embed(&config(
-            "    embed_endpoint: http://127.0.0.1:9\n    embed_model: text-embedding-3-small\n",
-        )?)?;
+        let embed = query_embed(
+            &config(
+                "    embed_endpoint: http://127.0.0.1:9\n    embed_model: text-embedding-3-small\n",
+            )?,
+            &Environment::default(),
+        )?;
         assert!(embed.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn the_environment_supplies_the_model_like_the_den() -> Result<(), Box<dyn std::error::Error>> {
+        let env = Environment::from_vars([(
+            "RIVETOS_EMBED_MODEL".to_owned(),
+            "qwen3-embedding-0.6b".to_owned(),
+        )]);
+        let embed = query_embed(&config("    embed_endpoint: http://127.0.0.1:9\n")?, &env)?;
+        assert!(embed.is_some());
+        let env = Environment::from_vars([
+            (
+                "RIVETHUB_EMBED_URL".to_owned(),
+                "http://127.0.0.1:9".to_owned(),
+            ),
+            (
+                "RIVETHUB_EMBED_MODEL".to_owned(),
+                "qwen3-embedding-0.6b".to_owned(),
+            ),
+        ]);
+        assert!(query_embed(&config("")?, &env)?.is_some());
         Ok(())
     }
 }
