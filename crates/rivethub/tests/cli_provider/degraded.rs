@@ -50,6 +50,7 @@ async fn refuses_a_turn_fast(
             tools: Vec::new(),
             thinking: None,
             max_tokens: None,
+            options: kernel::model::ModelOptions::default(),
         }),
     )
     .await?

@@ -89,6 +89,9 @@ impl JobQueue for RecordingQueue {
     async fn fail(&self, id: JobId, error: &str) -> Result<(), JobQueueError> {
         self.inner.fail(id, error).await
     }
+    async fn release(&self, id: JobId) -> Result<(), JobQueueError> {
+        self.inner.release(id).await
+    }
     async fn revive_dead(
         &self,
         name: &JobName,
