@@ -1,0 +1,1391 @@
+{
+  "calls": [
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "query": "kiwi build cache miss ratio"
+        }
+      },
+      "note": "default hybrid: summaries (expanded) plus message hits",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"kiwi build cache miss ratio\"\nFound 4 results (1 summaries, 3 messages)\n\n### Summaries (expanded)\n\n**[leaf]** (43d ago · 2026-09-02 15:00:00 UTC, score: 0.097, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n### Messages\n\n- [opus/assistant] (43d ago · 2026-09-02 14:20:00 UTC, score: 0.100) tags: project:Kiwi, topic:CI cache\nSecond run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n- [opus/assistant] (43d ago · 2026-09-02 14:01:00 UTC, score: 0.098) tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:03:00 UTC, score: 0.098) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 7642 chars]\nkiwi ci-build (baseline, per-runner cache)\nstep 001/212: compiled kiwi-module-001 in 437 ms (cache miss)\nstep 002/212: compiled kiwi-module-002 in 474 ms (cache miss)\nstep 003/212: compiled kiwi-module-003 in 511 ms (cache miss)\nstep 004/212: compiled kiwi-module-004 in 548 ms (cache miss)\nstep 005/212: compiled kiwi-module-005 in 585 ms (cache miss)\nstep 006/212: compiled kiwi-module-006 in 622 ms (cache miss)\nstep 007/212: compiled kiwi-module-007 in 659 ms (cache miss)\nstep 008/212: compiled …\n…[display-truncated tool_result → memory_get_full id=a0000000-0000-4000-8000-000000000003]"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "limit": 5,
+          "mode": "hybrid",
+          "query": "sccache shared bucket"
+        }
+      },
+      "note": "hybrid with a limit: summary and tool hits fused",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"sccache shared bucket\"\nFound 4 results (2 summaries, 2 messages)\n\n### Summaries (expanded)\n\n**[branch]** (43d ago · 2026-09-03 01:00:00 UTC, score: 0.100, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI cache migration: decided to keep sccache on a shared object-store bucket and retire per-runner cache volumes after a measured before/after comparison.\n\n  **Children (1):**\n  - [leaf] Kiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n**[leaf]** (43d ago · 2026-09-02 15:00:00 UTC, score: 0.096, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n### Messages\n\n- [opus/assistant] (43d ago · 2026-09-02 14:01:00 UTC, score: 0.103) tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n- [opus/assistant] (43d ago · 2026-09-02 14:05:00 UTC, score: 0.102) tags: project:Kiwi, topic:CI cache\nBaseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "fts",
+          "query": "KIWI_CACHE_MISS_RATIO",
+          "scope": "messages"
+        }
+      },
+      "note": "fts over messages: the 7642-char tool_result hit, display-truncated with a memory_get_full handle",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"KIWI_CACHE_MISS_RATIO\"\nFound 3 results (0 summaries, 3 messages)\n\n### Messages\n\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:03:00 UTC, score: 0.297) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 7642 chars]\nkiwi ci-build (baseline, per-runner cache)\nstep 001/212: compiled kiwi-module-001 in 437 ms (cache miss)\nstep 002/212: compiled kiwi-module-002 in 474 ms (cache miss)\nstep 003/212: compiled kiwi-module-003 in 511 ms (cache miss)\nstep 004/212: compiled kiwi-module-004 in 548 ms (cache miss)\nstep 005/212: compiled kiwi-module-005 in 585 ms (cache miss)\nstep 006/212: compiled kiwi-module-006 in 622 ms (cache miss)\nstep 007/212: compiled kiwi-module-007 in 659 ms (cache miss)\nstep 008/212: compiled …\n…[display-truncated tool_result → memory_get_full id=a0000000-0000-4000-8000-000000000003]\n- [opus/assistant] (43d ago · 2026-09-02 14:20:00 UTC, score: 0.292) tags: project:Kiwi, topic:CI cache\nSecond run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n- [opus/assistant] (43d ago · 2026-09-02 14:01:00 UTC, score: 0.277) tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "trigram",
+          "query": "KIWI_CACHE_MISS_RATIO"
+        }
+      },
+      "note": "trigram on a token inside a long tool_result: whole-string similarity stays under 0.3, so no hit",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No results found for query \"KIWI_CACHE_MISS_RATIO\".\n\nIf you expected a hit: retry with `mode=\"trigram\"` for literal tokens (IPs, hostnames, error strings), or vary the angle (service / host / subnet / role) and try two more queries before trusting the empty result. For time-bounded questions (\"today\", \"yesterday\", \"last week\"), prefer `memory_browse` with window= — search ANDs the query with any date filter and returns empty when FTS misses."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "trigram",
+          "query": "[tool] edit_file"
+        }
+      },
+      "note": "trigram hit on a short tool row (whole-string similarity > 0.3), shown with its tool_result",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"[tool] edit_file\"\nFound 1 results (0 summaries, 1 messages)\n\n### Messages\n\n- [opus/tool] [tool: edit_file] (43d ago · 2026-09-02 14:06:00 UTC, score: 0.371) tags: project:Kiwi, topic:CI cache\n[tool] edit_file\n[tool_result (edit_file)]\nUpdated ci/kiwi.yml: SCCACHE_BUCKET=kiwi-build-cache, SCCACHE_LOCAL_SIZE=20G (2 lines changed)"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "trigram",
+          "query": "ship it",
+          "scope": "messages"
+        }
+      },
+      "note": "trigram hit on a short user message",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"ship it\"\nFound 1 results (0 summaries, 1 messages)\n\n### Messages\n\n- [grok/user] (37d ago · 2026-09-08 18:12:00 UTC, score: 0.419)\nShip it."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "regex",
+          "query": "kiwi-module-1[0-9]{2}",
+          "scope": "messages"
+        }
+      },
+      "note": "regex pattern match inside the long tool_result",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"kiwi-module-1[0-9]{2}\"\nFound 1 results (0 summaries, 1 messages)\n\n### Messages\n\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:03:00 UTC, score: 0.380) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 7642 chars]\nkiwi ci-build (baseline, per-runner cache)\nstep 001/212: compiled kiwi-module-001 in 437 ms (cache miss)\nstep 002/212: compiled kiwi-module-002 in 474 ms (cache miss)\nstep 003/212: compiled kiwi-module-003 in 511 ms (cache miss)\nstep 004/212: compiled kiwi-module-004 in 548 ms (cache miss)\nstep 005/212: compiled kiwi-module-005 in 585 ms (cache miss)\nstep 006/212: compiled kiwi-module-006 in 622 ms (cache miss)\nstep 007/212: compiled kiwi-module-007 in 659 ms (cache miss)\nstep 008/212: compiled …\n…[display-truncated tool_result → memory_get_full id=a0000000-0000-4000-8000-000000000003]"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "regex",
+          "query": "([unclosed"
+        }
+      },
+      "note": "invalid regular expression",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "invalid regular expression: brackets [] not balanced"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "vector",
+          "query": "how much faster did the CI pipeline get after changing the compiler cache"
+        }
+      },
+      "note": "pure vector (ANN) search",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"how much faster did the CI pipeline get after changing the compiler cache\"\nFound 10 results (3 summaries, 7 messages)\n\n### Summaries (expanded)\n\n**[leaf]** (43d ago · 2026-09-02 15:00:00 UTC, score: 0.309, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n**[branch]** (43d ago · 2026-09-03 01:00:00 UTC, score: 0.279, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI cache migration: decided to keep sccache on a shared object-store bucket and retire per-runner cache volumes after a measured before/after comparison.\n\n  **Children (1):**\n  - [leaf] Kiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n**[root]** (43d ago · 2026-09-03 02:00:00 UTC, score: 0.258, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi project overview: CI build performance work in early September 2026. The build cache now lives in the shared kiwi-build-cache bucket.\n\n  **Children (1):**\n  - [branch] Kiwi CI cache migration: decided to keep sccache on a shared object-store bucket and retire per-runner cache volumes after a measured before/after comparison.\n\n### Messages\n\n- [opus/assistant] (43d ago · 2026-09-02 14:20:00 UTC, score: 0.288) tags: project:Kiwi, topic:CI cache\nSecond run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n- [opus/user] (43d ago · 2026-09-02 14:00:00 UTC, score: 0.279) tags: project:Kiwi, topic:CI cache\nThe Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n- [opus/assistant] (43d ago · 2026-09-02 14:01:00 UTC, score: 0.276) tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n- [opus/assistant] (43d ago · 2026-09-02 14:05:00 UTC, score: 0.263) tags: project:Kiwi, topic:CI cache\nBaseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:03:00 UTC, score: 0.246) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 7642 chars]\nkiwi ci-build (baseline, per-runner cache)\nstep 001/212: compiled kiwi-module-001 in 437 ms (cache miss)\nstep 002/212: compiled kiwi-module-002 in 474 ms (cache miss)\nstep 003/212: compiled kiwi-module-003 in 511 ms (cache miss)\nstep 004/212: compiled kiwi-module-004 in 548 ms (cache miss)\nstep 005/212: compiled kiwi-module-005 in 585 ms (cache miss)\nstep 006/212: compiled kiwi-module-006 in 622 ms (cache miss)\nstep 007/212: compiled kiwi-module-007 in 659 ms (cache miss)\nstep 008/212: compiled …\n…[display-truncated tool_result → memory_get_full id=a0000000-0000-4000-8000-000000000003]\n- [opus/user] (40d ago · 2026-09-05 09:00:00 UTC, score: 0.229) tags: project:Lighthouse, topic:CI cache\nThe Lighthouse dashboard p95 latency doubled after the Tuesday deploy. What changed?\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:15:00 UTC, score: 0.227) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 766 chars]\nkiwi ci-build (shared bucket kiwi-build-cache)\nstep 001/212: compiled kiwi-module-001 in 33 ms (cache hit)\nstep 002/212: compiled kiwi-module-002 in 46 ms (cache hit)\nstep 003/212: compiled kiwi-module-003 in 59 ms (cache hit)\nstep 004/212: compiled kiwi-module-004 in 72 ms (cache hit)\nstep 005/212: compiled kiwi-module-005 in 25 ms (cache hit)\nstep 006/212: compiled kiwi-module-006 in 38 ms (cache hit)\nstep 007/212: compiled kiwi-module-007 in 51 ms (cache hit)\nstep 008/212: compiled kiwi-modul…\n⚠ truncated at capture (full: 16384 chars) → memory_get_full id=a0000000-0000-4000-8000-000000000007"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "limit": 3,
+          "mode": "vector",
+          "query": "compile log full of cache misses before the migration",
+          "scope": "messages"
+        }
+      },
+      "note": "vector over messages: may surface a chunk hit from ros_message_chunks",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"compile log full of cache misses before the migration\"\nFound 3 results (0 summaries, 3 messages)\n\n### Messages\n\n- [opus/assistant] (43d ago · 2026-09-02 14:01:00 UTC, score: 0.288) tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n- [opus/assistant] (43d ago · 2026-09-02 14:05:00 UTC, score: 0.277) tags: project:Kiwi, topic:CI cache\nBaseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:03:00 UTC, score: 0.260) tags: project:Kiwi, topic:CI cache\n…[chunk 2/2 · chars 5990-7670 → memory_get_full id=a0000000-0000-4000-8000-000000000003]…\n\nstep 096/212: compiled kiwi-module-096 in 1252 ms (cache miss)\nstep 097/212: compiled kiwi-module-097 in 1289 ms (cache miss)\nstep 098/212: compiled kiwi-module-098 in 426 ms (cache miss)\nstep 099/212: compiled kiwi-module-099 in 463 ms (cache miss)\nstep 100/212: compiled kiwi-module-100 in 500 ms (cache miss)\nstep 101/212: compiled kiwi-module-101 in 537 ms (cache miss)\nstep 102/212: compiled kiwi-module-102 in 574 ms (cache miss)\nstep 103/212: compiled kiwi-module-103 in 611 ms (cache miss)\nstep 104/212: compiled kiwi-module-104 in 648 ms (cache miss)\nstep 105/212: compiled kiwi-module-105 in 685 ms (cache miss)\nstep 106/212: compiled kiwi-module-106 in 722 ms (cache miss)\nstep 107/212: compiled kiwi-module-107 in 759 ms (cache miss)\nstep 108/212: compiled kiwi-module-108 in 796 ms (cache miss)\nstep 109/212: compiled kiwi-module-109 in 833 ms (cache miss)\nstep 110/212: compiled kiwi-module-110 in 870 ms (cache miss)\nstep 111/212: compiled kiwi-module-111 in 907 ms (cache miss)\nstep 112/212: compiled kiwi-module-112 in 944 ms (cache miss)\nstep 113/212: compiled kiwi-module-113 in 981 ms (cache miss)\nstep 114/212: compiled kiwi-module-114 in 1018 ms (cache miss)\nstep 115/212: compiled kiwi-module-115 in 1055 ms (cache miss)\nstep 116/212: compiled kiwi-module-116 in 1092 ms (cache miss)\nstep 117/212: compiled kiwi-module-117 in 1129 ms (cache miss)\nstep 118/212: compiled kiwi-module-118 in 1166 ms (cache miss)\nstep 119/212: compiled kiwi-module-119 in 1203 ms (cache miss)\nste…"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "query": "Lighthouse p95 regression index",
+          "scope": "summaries"
+        }
+      },
+      "note": "summaries only: the legacy condensed summary, expanded with source messages",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"Lighthouse p95 regression index\"\nFound 1 results (1 summaries, 0 messages)\n\n### Summaries (expanded)\n\n**[condensed]** (40d ago · 2026-09-05 12:00:00 UTC, score: 0.136, period: 2026-09-05 → 2026-09-05) tags: project:Lighthouse, topic:CI cache\nLighthouse dashboard p95 regression: the Tuesday migration dropped the (tenant_id, bucket_start) rollup index. Index recreated, p95 back to 180 ms, alert lighthouse_p95_high added at 400 ms for 10 minutes.\n\n  **Source messages (5):**\n  > [user] The Lighthouse dashboard p95 latency doubled after the Tuesday deploy. What changed?\n  > [assistant] The slow query is the per-tenant rollup. The Tuesday migration dropped its index on (tenant_id, bucket_start), so every dashboard load does a sequential scan.\n  > [assistant] Recreated idx_rollups_tenant_bucket concurrently. Dashboard p95 is back to 180 ms.\n  > [user] Nice. Add an alert if p95 goes above 400 ms for ten minutes.\n  > ... and 1 more messages\n"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "expand": false,
+          "mode": "fts",
+          "query": "kiwi",
+          "scope": "summaries"
+        }
+      },
+      "note": "summaries only, expand=false: unexpanded summary list with ids",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"kiwi\"\nFound 3 results (3 summaries, 0 messages)\n\n### Summaries\n\n- [root/b0000000-0000-4000-8000-000000000003] (43d ago · 2026-09-03 02:00:00 UTC, score: 0.319) tags: project:Kiwi, topic:CI cache Kiwi project overview: CI build performance work in early September 2026. The build cache now lives in the shared kiwi-build-cache bucket.\n- [leaf/b0000000-0000-4000-8000-000000000001] (43d ago · 2026-09-02 15:00:00 UTC, score: 0.292) tags: project:Kiwi, topic:CI cache Kiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n- [branch/b0000000-0000-4000-8000-000000000002] (43d ago · 2026-09-03 01:00:00 UTC, score: 0.255) tags: project:Kiwi, topic:CI cache Kiwi CI cache migration: decided to keep sccache on a shared object-store bucket and retire per-runner cache volumes after a measured before/after comparison.\n"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "fts",
+          "query": "cache",
+          "scope": "messages"
+        }
+      },
+      "note": "messages only",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"cache\"\nFound 6 results (0 summaries, 6 messages)\n\n### Messages\n\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:03:00 UTC, score: 0.478) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 7642 chars]\nkiwi ci-build (baseline, per-runner cache)\nstep 001/212: compiled kiwi-module-001 in 437 ms (cache miss)\nstep 002/212: compiled kiwi-module-002 in 474 ms (cache miss)\nstep 003/212: compiled kiwi-module-003 in 511 ms (cache miss)\nstep 004/212: compiled kiwi-module-004 in 548 ms (cache miss)\nstep 005/212: compiled kiwi-module-005 in 585 ms (cache miss)\nstep 006/212: compiled kiwi-module-006 in 622 ms (cache miss)\nstep 007/212: compiled kiwi-module-007 in 659 ms (cache miss)\nstep 008/212: compiled …\n…[display-truncated tool_result → memory_get_full id=a0000000-0000-4000-8000-000000000003]\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:15:00 UTC, score: 0.359) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 766 chars]\nkiwi ci-build (shared bucket kiwi-build-cache)\nstep 001/212: compiled kiwi-module-001 in 33 ms (cache hit)\nstep 002/212: compiled kiwi-module-002 in 46 ms (cache hit)\nstep 003/212: compiled kiwi-module-003 in 59 ms (cache hit)\nstep 004/212: compiled kiwi-module-004 in 72 ms (cache hit)\nstep 005/212: compiled kiwi-module-005 in 25 ms (cache hit)\nstep 006/212: compiled kiwi-module-006 in 38 ms (cache hit)\nstep 007/212: compiled kiwi-module-007 in 51 ms (cache hit)\nstep 008/212: compiled kiwi-modul…\n⚠ truncated at capture (full: 16384 chars) → memory_get_full id=a0000000-0000-4000-8000-000000000007\n- [opus/assistant] (43d ago · 2026-09-02 14:01:00 UTC, score: 0.307) tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n- [opus/assistant] (43d ago · 2026-09-02 14:20:00 UTC, score: 0.275) tags: project:Kiwi, topic:CI cache\nSecond run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n- [opus/user] (43d ago · 2026-09-02 14:00:00 UTC, score: 0.272) tags: project:Kiwi, topic:CI cache\nThe Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n- [opus/tool] [tool: edit_file] (43d ago · 2026-09-02 14:06:00 UTC, score: 0.202) tags: project:Kiwi, topic:CI cache\n[tool] edit_file\n[tool_result (edit_file)]\nUpdated ci/kiwi.yml: SCCACHE_BUCKET=kiwi-build-cache, SCCACHE_LOCAL_SIZE=20G (2 lines changed)"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "query": "latency",
+          "tag": "project:lighthouse"
+        }
+      },
+      "note": "tag filter (accepted tag)",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"latency\"\nFound 2 results (1 summaries, 1 messages)\n\n### Summaries (expanded)\n\n**[condensed]** (40d ago · 2026-09-05 12:00:00 UTC, score: 0.053, period: 2026-09-05 → 2026-09-05) tags: project:Lighthouse, topic:CI cache\nLighthouse dashboard p95 regression: the Tuesday migration dropped the (tenant_id, bucket_start) rollup index. Index recreated, p95 back to 180 ms, alert lighthouse_p95_high added at 400 ms for 10 minutes.\n\n  **Source messages (5):**\n  > [user] The Lighthouse dashboard p95 latency doubled after the Tuesday deploy. What changed?\n  > [assistant] The slow query is the per-tenant rollup. The Tuesday migration dropped its index on (tenant_id, bucket_start), so every dashboard load does a sequential scan.\n  > [assistant] Recreated idx_rollups_tenant_bucket concurrently. Dashboard p95 is back to 180 ms.\n  > [user] Nice. Add an alert if p95 goes above 400 ms for ten minutes.\n  > ... and 1 more messages\n\n### Messages\n\n- [opus/user] (40d ago · 2026-09-05 09:00:00 UTC, score: 0.106) tags: project:Lighthouse, topic:CI cache\nThe Lighthouse dashboard p95 latency doubled after the Tuesday deploy. What changed?"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "fts",
+          "query": "bucket",
+          "tag": "project:kiwi"
+        }
+      },
+      "note": "tag filter on another conversation; hits carry tag suffixes",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"bucket\"\nFound 9 results (3 summaries, 6 messages)\n\n### Summaries (expanded)\n\n**[root]** (43d ago · 2026-09-03 02:00:00 UTC, score: 0.238, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi project overview: CI build performance work in early September 2026. The build cache now lives in the shared kiwi-build-cache bucket.\n\n  **Children (1):**\n  - [branch] Kiwi CI cache migration: decided to keep sccache on a shared object-store bucket and retire per-runner cache volumes after a measured before/after comparison.\n\n**[branch]** (43d ago · 2026-09-03 01:00:00 UTC, score: 0.231, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI cache migration: decided to keep sccache on a shared object-store bucket and retire per-runner cache volumes after a measured before/after comparison.\n\n  **Children (1):**\n  - [leaf] Kiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n**[leaf]** (43d ago · 2026-09-02 15:00:00 UTC, score: 0.220, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n### Messages\n\n- [opus/user] (43d ago · 2026-09-02 14:00:00 UTC, score: 0.243) tags: project:Kiwi, topic:CI cache\nThe Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n- [opus/assistant] (43d ago · 2026-09-02 14:05:00 UTC, score: 0.241) tags: project:Kiwi, topic:CI cache\nBaseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n- [opus/assistant] (43d ago · 2026-09-02 14:20:00 UTC, score: 0.222) tags: project:Kiwi, topic:CI cache\nSecond run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n- [opus/assistant] (43d ago · 2026-09-02 14:01:00 UTC, score: 0.220) tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:15:00 UTC, score: 0.191) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 766 chars]\nkiwi ci-build (shared bucket kiwi-build-cache)\nstep 001/212: compiled kiwi-module-001 in 33 ms (cache hit)\nstep 002/212: compiled kiwi-module-002 in 46 ms (cache hit)\nstep 003/212: compiled kiwi-module-003 in 59 ms (cache hit)\nstep 004/212: compiled kiwi-module-004 in 72 ms (cache hit)\nstep 005/212: compiled kiwi-module-005 in 25 ms (cache hit)\nstep 006/212: compiled kiwi-module-006 in 38 ms (cache hit)\nstep 007/212: compiled kiwi-module-007 in 51 ms (cache hit)\nstep 008/212: compiled kiwi-modul…\n⚠ truncated at capture (full: 16384 chars) → memory_get_full id=a0000000-0000-4000-8000-000000000007\n- [opus/tool] [tool: edit_file] (43d ago · 2026-09-02 14:06:00 UTC, score: 0.188) tags: project:Kiwi, topic:CI cache\n[tool] edit_file\n[tool_result (edit_file)]\nUpdated ci/kiwi.yml: SCCACHE_BUCKET=kiwi-build-cache, SCCACHE_LOCAL_SIZE=20G (2 lines changed)"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "query": "fractions",
+          "tag": "project:pelican"
+        }
+      },
+      "note": "tag filter on a tag that is only suggested: no hits",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No results found for query \"fractions\".\n\nIf you expected a hit: retry with `mode=\"trigram\"` for literal tokens (IPs, hostnames, error strings), or vary the angle (service / host / subnet / role) and try two more queries before trusting the empty result. For time-bounded questions (\"today\", \"yesterday\", \"last week\"), prefer `memory_browse` with window= — search ANDs the query with any date filter and returns empty when FTS misses."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "query": "latency",
+          "tag": "lighthouse"
+        }
+      },
+      "note": "tag filter that is not key:value: error text",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Search failed: tag must be key:value (got \"lighthouse\")"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "before": "2026-09-06T00:00:00Z",
+          "query": "p95",
+          "since": "2026-09-05T00:00:00Z"
+        }
+      },
+      "note": "explicit since/before window with hits",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"p95\"\nFound 5 results (1 summaries, 4 messages)\n\n### Summaries (expanded)\n\n**[condensed]** (40d ago · 2026-09-05 12:00:00 UTC, score: 0.110, period: 2026-09-05 → 2026-09-05) tags: project:Lighthouse, topic:CI cache\nLighthouse dashboard p95 regression: the Tuesday migration dropped the (tenant_id, bucket_start) rollup index. Index recreated, p95 back to 180 ms, alert lighthouse_p95_high added at 400 ms for 10 minutes.\n\n  **Source messages (5):**\n  > [user] The Lighthouse dashboard p95 latency doubled after the Tuesday deploy. What changed?\n  > [assistant] The slow query is the per-tenant rollup. The Tuesday migration dropped its index on (tenant_id, bucket_start), so every dashboard load does a sequential scan.\n  > [assistant] Recreated idx_rollups_tenant_bucket concurrently. Dashboard p95 is back to 180 ms.\n  > [user] Nice. Add an alert if p95 goes above 400 ms for ten minutes.\n  > ... and 1 more messages\n\n### Messages\n\n- [opus/assistant] (40d ago · 2026-09-05 09:25:00 UTC, score: 0.102) tags: project:Lighthouse, topic:CI cache\nAlert rule lighthouse_p95_high added: p95 above 400 ms for 10 minutes pages the on-call rotation.\n- [opus/user] (40d ago · 2026-09-05 09:20:00 UTC, score: 0.099) tags: project:Lighthouse, topic:CI cache\nNice. Add an alert if p95 goes above 400 ms for ten minutes.\n- [opus/user] (40d ago · 2026-09-05 09:00:00 UTC, score: 0.099) tags: project:Lighthouse, topic:CI cache\nThe Lighthouse dashboard p95 latency doubled after the Tuesday deploy. What changed?\n- [opus/assistant] (40d ago · 2026-09-05 09:15:00 UTC, score: 0.094) tags: project:Lighthouse, topic:CI cache\nRecreated idx_rollups_tenant_bucket concurrently. Dashboard p95 is back to 180 ms."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "before": "2026-09-03T00:00:00Z",
+          "query": "fractions",
+          "since": "2026-09-01T00:00:00Z"
+        }
+      },
+      "note": "hybrid inside a window that holds no keyword match: the vector arm still returns the nearest in-window rows",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"fractions\"\nFound 8 results (1 summaries, 7 messages)\n\n### Summaries (expanded)\n\n**[leaf]** (43d ago · 2026-09-02 15:00:00 UTC, score: 0.051, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n### Messages\n\n- [opus/assistant] (43d ago · 2026-09-02 14:05:00 UTC, score: 0.052) tags: project:Kiwi, topic:CI cache\nBaseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n- [opus/assistant] (43d ago · 2026-09-02 14:20:00 UTC, score: 0.050) tags: project:Kiwi, topic:CI cache\nSecond run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n- [opus/tool] [tool: edit_file] (43d ago · 2026-09-02 14:06:00 UTC, score: 0.046) tags: project:Kiwi, topic:CI cache\n[tool] edit_file\n[tool_result (edit_file)]\nUpdated ci/kiwi.yml: SCCACHE_BUCKET=kiwi-build-cache, SCCACHE_LOCAL_SIZE=20G (2 lines changed)\n- [opus/assistant] (43d ago · 2026-09-02 14:01:00 UTC, score: 0.046) tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n- [opus/user] (43d ago · 2026-09-02 14:00:00 UTC, score: 0.044) tags: project:Kiwi, topic:CI cache\nThe Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:15:00 UTC, score: 0.041) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 766 chars]\nkiwi ci-build (shared bucket kiwi-build-cache)\nstep 001/212: compiled kiwi-module-001 in 33 ms (cache hit)\nstep 002/212: compiled kiwi-module-002 in 46 ms (cache hit)\nstep 003/212: compiled kiwi-module-003 in 59 ms (cache hit)\nstep 004/212: compiled kiwi-module-004 in 72 ms (cache hit)\nstep 005/212: compiled kiwi-module-005 in 25 ms (cache hit)\nstep 006/212: compiled kiwi-module-006 in 38 ms (cache hit)\nstep 007/212: compiled kiwi-module-007 in 51 ms (cache hit)\nstep 008/212: compiled kiwi-modul…\n⚠ truncated at capture (full: 16384 chars) → memory_get_full id=a0000000-0000-4000-8000-000000000007\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:03:00 UTC, score: 0.040) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 7642 chars]\nkiwi ci-build (baseline, per-runner cache)\nstep 001/212: compiled kiwi-module-001 in 437 ms (cache miss)\nstep 002/212: compiled kiwi-module-002 in 474 ms (cache miss)\nstep 003/212: compiled kiwi-module-003 in 511 ms (cache miss)\nstep 004/212: compiled kiwi-module-004 in 548 ms (cache miss)\nstep 005/212: compiled kiwi-module-005 in 585 ms (cache miss)\nstep 006/212: compiled kiwi-module-006 in 622 ms (cache miss)\nstep 007/212: compiled kiwi-module-007 in 659 ms (cache miss)\nstep 008/212: compiled …\n…[display-truncated tool_result → memory_get_full id=a0000000-0000-4000-8000-000000000003]"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "before": "2026-09-03T00:00:00Z",
+          "mode": "fts",
+          "query": "fractions",
+          "since": "2026-09-01T00:00:00Z"
+        }
+      },
+      "note": "fts inside a window that excludes the hits: empty result naming since/before and pointing at memory_browse",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No results found for query \"fractions\" with since=\"2026-09-01T00:00:00Z\", before=\"2026-09-03T00:00:00Z\".\n\nFor chronological browsing of a date window without a topic filter, call `memory_browse(since=\"2026-09-01T00:00:00Z\", before=\"2026-09-03T00:00:00Z\")` instead — that returns every message in the window, no FTS match required."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "query": "kiwi",
+          "window": "last_24h"
+        }
+      },
+      "note": "window shortcut with no data in range: empty result names the window",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No results found for query \"kiwi\" with window=\"last_24h\".\n\nFor chronological browsing of a date window without a topic filter, call `memory_browse(window=\"last_24h\")` instead — that returns every message in the window, no FTS match required."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "agent": "grok",
+          "query": "fractions"
+        }
+      },
+      "note": "agent filter (grok), hybrid: message hits are grok's; summary hits are not filtered by agent",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"fractions\"\nFound 7 results (3 summaries, 4 messages)\n\n### Summaries (expanded)\n\n**[leaf]** (43d ago · 2026-09-02 15:00:00 UTC, score: 0.057, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n**[branch]** (43d ago · 2026-09-03 01:00:00 UTC, score: 0.055, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI cache migration: decided to keep sccache on a shared object-store bucket and retire per-runner cache volumes after a measured before/after comparison.\n\n  **Children (1):**\n  - [leaf] Kiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n**[root]** (43d ago · 2026-09-03 02:00:00 UTC, score: 0.053, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi project overview: CI build performance work in early September 2026. The build cache now lives in the shared kiwi-build-cache bucket.\n\n  **Children (1):**\n  - [branch] Kiwi CI cache migration: decided to keep sccache on a shared object-store bucket and retire per-runner cache volumes after a measured before/after comparison.\n\n### Messages\n\n- [grok/user] (37d ago · 2026-09-08 18:00:00 UTC, score: 0.104)\nPelican's recipe parser chokes on unicode fractions like 1½ cups of flour.\n- [grok/assistant] (37d ago · 2026-09-08 18:03:00 UTC, score: 0.098)\nThe tokenizer splits on the vulgar-fraction codepoint. I will normalize ½, ¼ and ¾ to decimal before the quantity parser runs.\n- [grok/tool] [tool: run_tests] (37d ago · 2026-09-08 18:08:00 UTC, score: 0.096)\n[tool] run_tests\n[tool_result (run_tests)]\nrunning 48 tests\ntest parse_fraction_unicode ... ok\ntest parse_fraction_ascii ... ok\ntest parse_mixed_number ... ok\ntest result: ok. 48 passed; 0 failed\n- [grok/assistant] (37d ago · 2026-09-08 18:10:00 UTC, score: 0.094)\nUnicode fractions now parse: 1½ becomes 1.5 and ¾ becomes 0.75. All 48 parser tests pass."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "agent": "opus",
+          "mode": "fts",
+          "query": "fractions"
+        }
+      },
+      "note": "agent filter that excludes the only hits: generic empty-result guidance",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No results found for query \"fractions\".\n\nIf you expected a hit: retry with `mode=\"trigram\"` for literal tokens (IPs, hostnames, error strings), or vary the angle (service / host / subnet / role) and try two more queries before trusting the empty result. For time-bounded questions (\"today\", \"yesterday\", \"last week\"), prefer `memory_browse` with window= — search ANDs the query with any date filter and returns empty when FTS misses."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "trigram",
+          "query": "1½ cups"
+        }
+      },
+      "note": "non-ASCII query",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No results found for query \"1½ cups\".\n\nIf you expected a hit: retry with `mode=\"trigram\"` for literal tokens (IPs, hostnames, error strings), or vary the angle (service / host / subnet / role) and try two more queries before trusting the empty result. For time-bounded questions (\"today\", \"yesterday\", \"last week\"), prefer `memory_browse` with window= — search ANDs the query with any date filter and returns empty when FTS misses."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "limit": 1,
+          "query": "kiwi"
+        }
+      },
+      "note": "limit=1",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"kiwi\"\nFound 1 results (0 summaries, 1 messages)\n\n### Messages\n\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:03:00 UTC, score: 0.100) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 7642 chars]\nkiwi ci-build (baseline, per-runner cache)\nstep 001/212: compiled kiwi-module-001 in 437 ms (cache miss)\nstep 002/212: compiled kiwi-module-002 in 474 ms (cache miss)\nstep 003/212: compiled kiwi-module-003 in 511 ms (cache miss)\nstep 004/212: compiled kiwi-module-004 in 548 ms (cache miss)\nstep 005/212: compiled kiwi-module-005 in 585 ms (cache miss)\nstep 006/212: compiled kiwi-module-006 in 622 ms (cache miss)\nstep 007/212: compiled kiwi-module-007 in 659 ms (cache miss)\nstep 008/212: compiled …\n…[display-truncated tool_result → memory_get_full id=a0000000-0000-4000-8000-000000000003]"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "limit": 50,
+          "query": "cache"
+        }
+      },
+      "note": "limit=50 (the maximum)",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory Search: \"cache\"\nFound 9 results (3 summaries, 6 messages)\n\n### Summaries (expanded)\n\n**[leaf]** (43d ago · 2026-09-02 15:00:00 UTC, score: 0.090, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n**[branch]** (43d ago · 2026-09-03 01:00:00 UTC, score: 0.087, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi CI cache migration: decided to keep sccache on a shared object-store bucket and retire per-runner cache volumes after a measured before/after comparison.\n\n  **Children (1):**\n  - [leaf] Kiwi CI build cache moved from per-runner disks to the shared kiwi-build-cache bucket via sccache. Cache miss ratio fell from 0.83 to 0.11 and pipeline time from about 40 to 14 minutes.\n\n  **Source messages (4):**\n  > [user] The Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n  > [assistant] Yes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n  > [assistant] Baseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n  > [assistant] Second run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n**[root]** (43d ago · 2026-09-03 02:00:00 UTC, score: 0.087, period: 2026-09-02 → 2026-09-02) tags: project:Kiwi, topic:CI cache\nKiwi project overview: CI build performance work in early September 2026. The build cache now lives in the shared kiwi-build-cache bucket.\n\n  **Children (1):**\n  - [branch] Kiwi CI cache migration: decided to keep sccache on a shared object-store bucket and retire per-runner cache volumes after a measured before/after comparison.\n\n### Messages\n\n- [opus/assistant] (43d ago · 2026-09-02 14:01:00 UTC, score: 0.100) tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:03:00 UTC, score: 0.098) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 7642 chars]\nkiwi ci-build (baseline, per-runner cache)\nstep 001/212: compiled kiwi-module-001 in 437 ms (cache miss)\nstep 002/212: compiled kiwi-module-002 in 474 ms (cache miss)\nstep 003/212: compiled kiwi-module-003 in 511 ms (cache miss)\nstep 004/212: compiled kiwi-module-004 in 548 ms (cache miss)\nstep 005/212: compiled kiwi-module-005 in 585 ms (cache miss)\nstep 006/212: compiled kiwi-module-006 in 622 ms (cache miss)\nstep 007/212: compiled kiwi-module-007 in 659 ms (cache miss)\nstep 008/212: compiled …\n…[display-truncated tool_result → memory_get_full id=a0000000-0000-4000-8000-000000000003]\n- [opus/user] (43d ago · 2026-09-02 14:00:00 UTC, score: 0.093) tags: project:Kiwi, topic:CI cache\nThe Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n- [opus/assistant] (43d ago · 2026-09-02 14:20:00 UTC, score: 0.092) tags: project:Kiwi, topic:CI cache\nSecond run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n- [opus/tool] [tool: run_terminal_command] (43d ago · 2026-09-02 14:15:00 UTC, score: 0.090) tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 766 chars]\nkiwi ci-build (shared bucket kiwi-build-cache)\nstep 001/212: compiled kiwi-module-001 in 33 ms (cache hit)\nstep 002/212: compiled kiwi-module-002 in 46 ms (cache hit)\nstep 003/212: compiled kiwi-module-003 in 59 ms (cache hit)\nstep 004/212: compiled kiwi-module-004 in 72 ms (cache hit)\nstep 005/212: compiled kiwi-module-005 in 25 ms (cache hit)\nstep 006/212: compiled kiwi-module-006 in 38 ms (cache hit)\nstep 007/212: compiled kiwi-module-007 in 51 ms (cache hit)\nstep 008/212: compiled kiwi-modul…\n⚠ truncated at capture (full: 16384 chars) → memory_get_full id=a0000000-0000-4000-8000-000000000007\n- [opus/tool] [tool: edit_file] (43d ago · 2026-09-02 14:06:00 UTC, score: 0.082) tags: project:Kiwi, topic:CI cache\n[tool] edit_file\n[tool_result (edit_file)]\nUpdated ci/kiwi.yml: SCCACHE_BUCKET=kiwi-build-cache, SCCACHE_LOCAL_SIZE=20G (2 lines changed)"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "limit": 0,
+          "query": "kiwi"
+        }
+      },
+      "note": "limit=0 is below the schema minimum",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool memory_search: limit: Too small: expected number to be >=1"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "limit": 51,
+          "query": "kiwi"
+        }
+      },
+      "note": "limit=51 is above the schema maximum",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool memory_search: limit: Too big: expected number to be <=50"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "limit": 2.5,
+          "query": "kiwi"
+        }
+      },
+      "note": "non-integer limit",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool memory_search: limit: Invalid input: expected int, received number"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "semantic",
+          "query": "kiwi"
+        }
+      },
+      "note": "unknown mode",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool memory_search: mode: Invalid option: expected one of \"hybrid\"|\"fts\"|\"trigram\"|\"regex\"|\"vector\""
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {}
+      },
+      "note": "missing required query",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool memory_search: query: Invalid input: expected string, received undefined"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "memory_search",
+        "arguments": {
+          "mode": "fts",
+          "query": "zebra crossing quartz"
+        }
+      },
+      "note": "no matches: generic empty-result guidance",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No results found for query \"zebra crossing quartz\".\n\nIf you expected a hit: retry with `mode=\"trigram\"` for literal tokens (IPs, hostnames, error strings), or vary the angle (service / host / subnet / role) and try two more queries before trusting the empty result. For time-bounded questions (\"today\", \"yesterday\", \"last week\"), prefer `memory_browse` with window= — search ANDs the query with any date filter and returns empty when FTS misses."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_browse",
+        "arguments": {}
+      },
+      "note": "default browse: newest first, tool rows excluded",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Messages (15 returned, newest first)\n_tools excluded (include_tools=true to show)_\n\n[2026-09-08 18:12:00 UTC] grok/user\nShip it.\n\n---\n\n[2026-09-08 18:10:00 UTC] grok/assistant\nUnicode fractions now parse: 1½ becomes 1.5 and ¾ becomes 0.75. All 48 parser tests pass.\n\n---\n\n[2026-09-08 18:03:00 UTC] grok/assistant\nThe tokenizer splits on the vulgar-fraction codepoint. I will normalize ½, ¼ and ¾ to decimal before the quantity parser runs.\n\n---\n\n[2026-09-08 18:00:00 UTC] grok/user\nPelican's recipe parser chokes on unicode fractions like 1½ cups of flour.\n\n---\n\n[2026-09-05 09:30:00 UTC] opus/system tags: project:Lighthouse, topic:CI cache\nSession resumed after compaction.\n\n---\n\n[2026-09-05 09:25:00 UTC] opus/assistant tags: project:Lighthouse, topic:CI cache\nAlert rule lighthouse_p95_high added: p95 above 400 ms for 10 minutes pages the on-call rotation.\n\n---\n\n[2026-09-05 09:20:00 UTC] opus/user tags: project:Lighthouse, topic:CI cache\nNice. Add an alert if p95 goes above 400 ms for ten minutes.\n\n---\n\n[2026-09-05 09:15:00 UTC] opus/assistant tags: project:Lighthouse, topic:CI cache\nRecreated idx_rollups_tenant_bucket concurrently. Dashboard p95 is back to 180 ms.\n\n---\n\n[2026-09-05 09:04:00 UTC] opus/assistant tags: project:Lighthouse, topic:CI cache\nThe slow query is the per-tenant rollup. The Tuesday migration dropped its index on (tenant_id, bucket_start), so every dashboard load does a sequential scan.\n\n---\n\n[2026-09-05 09:00:00 UTC] opus/user tags: project:Lighthouse, topic:CI cache\nThe Lighthouse dashboard p95 latency doubled after the Tuesday deploy. What changed?\n\n---\n\n[2026-09-02 14:20:00 UTC] opus/assistant tags: project:Kiwi, topic:CI cache\nSecond run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n---\n\n[2026-09-02 14:08:00 UTC] opus/user tags: project:Kiwi, topic:CI cache\nRerun it and tell me the new number.\n\n---\n\n[2026-09-02 14:05:00 UTC] opus/assistant tags: project:Kiwi, topic:CI cache\nBaseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n\n---\n\n[2026-09-02 14:01:00 UTC] opus/assistant tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n\n---\n\n[2026-09-02 14:00:00 UTC] opus/user tags: project:Kiwi, topic:CI cache\nThe Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_browse",
+        "arguments": {
+          "conversation_id": "c0000000-0000-4000-8000-000000000001",
+          "include_tools": true,
+          "order": "asc"
+        }
+      },
+      "note": "one conversation with tool rows: long tool_result display cut and the capture-truncation hint",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Messages (8 returned, oldest first)\n\n[2026-09-02 14:00:00 UTC] opus/user tags: project:Kiwi, topic:CI cache\nThe Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?\n\n---\n\n[2026-09-02 14:01:00 UTC] opus/assistant tags: project:Kiwi, topic:CI cache\nYes. Plan: point sccache at a shared object-store bucket named kiwi-build-cache, keep a 20 GB local tier on each runner, and measure the cache miss ratio before and after the switch.\n\n---\n\n[2026-09-02 14:03:00 UTC] opus/tool [tool: run_terminal_command] tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command) 7642 chars]\nkiwi ci-build (baseline, per-runner cache)\nstep 001/212: compiled kiwi-module-001 in 437 ms (cache miss)\nstep 002/212: compiled kiwi-module-002 in 474 ms (cache miss)\nstep 003/212: compiled kiwi-module-003 in 511 ms (cache miss)\nstep 004/212: compiled kiwi-module-004 in 548 ms (cache miss)\nstep 005/212: compiled kiwi-module-005 in 585 ms (cache miss)\nstep 006/212: compiled kiwi-module-006 in 622 ms (cache miss)\nstep 007/212: compiled kiwi-module-007 in 659 ms (cache miss)\nstep 008/212: compiled kiwi-module-008 in 696 ms (cache miss)\nstep 009/212: compiled kiwi-module-009 in 733 ms (cache miss)\nstep 010/212: compiled kiwi-module-010 in 770 ms (cache miss)\nstep 011/212: compiled kiwi-module-011 in 807 ms (cache miss)\nstep 012/212: compiled kiwi-module-012 in 844 ms (cache miss)\nstep 013/212:…\n…[display-truncated tool_result → memory_get_full id=a0000000-0000-4000-8000-000000000003]\n\n---\n\n[2026-09-02 14:05:00 UTC] opus/assistant tags: project:Kiwi, topic:CI cache\nBaseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now.\n\n---\n\n[2026-09-02 14:06:00 UTC] opus/tool [tool: edit_file] tags: project:Kiwi, topic:CI cache\n[tool] edit_file\n[tool_result (edit_file)]\nUpdated ci/kiwi.yml: SCCACHE_BUCKET=kiwi-build-cache, SCCACHE_LOCAL_SIZE=20G (2 lines changed)\n\n---\n\n[2026-09-02 14:08:00 UTC] opus/user tags: project:Kiwi, topic:CI cache\nRerun it and tell me the new number.\n\n---\n\n[2026-09-02 14:15:00 UTC] opus/tool [tool: run_terminal_command] tags: project:Kiwi, topic:CI cache\n[tool] run_terminal_command\n[tool_result (run_terminal_command)]\nkiwi ci-build (shared bucket kiwi-build-cache)\nstep 001/212: compiled kiwi-module-001 in 33 ms (cache hit)\nstep 002/212: compiled kiwi-module-002 in 46 ms (cache hit)\nstep 003/212: compiled kiwi-module-003 in 59 ms (cache hit)\nstep 004/212: compiled kiwi-module-004 in 72 ms (cache hit)\nstep 005/212: compiled kiwi-module-005 in 25 ms (cache hit)\nstep 006/212: compiled kiwi-module-006 in 38 ms (cache hit)\nstep 007/212: compiled kiwi-module-007 in 51 ms (cache hit)\nstep 008/212: compiled kiwi-module-008 in 64 ms (cache hit)\nstep 009/212: compiled kiwi-module-009 in 77 ms (cache hit)\nstep 010/212: compiled kiwi-module-010 in 30 ms (cache hit)\nstep 011/212: compiled kiwi-module-011 in 43 ms (cache hit)\nstep 012/212: compiled kiwi-module-012 in 56 ms (cache hit)\n⚠ truncated at capture (full: 16384 chars) → memory_get_full id=a0000000-0000-4000-8000-000000000007\n\n---\n\n[2026-09-02 14:20:00 UTC] opus/assistant tags: project:Kiwi, topic:CI cache\nSecond run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_browse",
+        "arguments": {
+          "agent": "grok",
+          "limit": 2,
+          "order": "asc"
+        }
+      },
+      "note": "agent filter, limit 2, oldest first",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Messages (2 returned, oldest first)\n_tools excluded (include_tools=true to show)_\n_Hit limit=2. Flip order, raise limit (max 200), or narrow since/before/window._\n\n[2026-09-08 18:00:00 UTC] grok/user\nPelican's recipe parser chokes on unicode fractions like 1½ cups of flour.\n\n---\n\n[2026-09-08 18:03:00 UTC] grok/assistant\nThe tokenizer splits on the vulgar-fraction codepoint. I will normalize ½, ¼ and ¾ to decimal before the quantity parser runs."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_browse",
+        "arguments": {
+          "before": "2026-09-06T00:00:00Z",
+          "include_tools": true,
+          "since": "2026-09-05T00:00:00Z"
+        }
+      },
+      "note": "explicit since/before",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Messages (7 returned, newest first)\n_since=2026-09-05T00:00:00Z before=2026-09-06T00:00:00Z_\n\n[2026-09-05 09:30:00 UTC] opus/system tags: project:Lighthouse, topic:CI cache\nSession resumed after compaction.\n\n---\n\n[2026-09-05 09:25:00 UTC] opus/assistant tags: project:Lighthouse, topic:CI cache\nAlert rule lighthouse_p95_high added: p95 above 400 ms for 10 minutes pages the on-call rotation.\n\n---\n\n[2026-09-05 09:20:00 UTC] opus/user tags: project:Lighthouse, topic:CI cache\nNice. Add an alert if p95 goes above 400 ms for ten minutes.\n\n---\n\n[2026-09-05 09:15:00 UTC] opus/assistant tags: project:Lighthouse, topic:CI cache\nRecreated idx_rollups_tenant_bucket concurrently. Dashboard p95 is back to 180 ms.\n\n---\n\n[2026-09-05 09:06:00 UTC] opus/tool [tool: sql_query] tags: project:Lighthouse, topic:CI cache\n[tool] sql_query\n[tool_result (sql_query)]\nSeq Scan on rollups  (actual time=1840 ms rows=96000 loops=1)\n  Filter: (tenant_id = 42)\n  Rows Removed by Filter: 3104000\nPlanning Time: 0.4 ms\nExecution Time: 1846 ms\n\n---\n\n[2026-09-05 09:04:00 UTC] opus/assistant tags: project:Lighthouse, topic:CI cache\nThe slow query is the per-tenant rollup. The Tuesday migration dropped its index on (tenant_id, bucket_start), so every dashboard load does a sequential scan.\n\n---\n\n[2026-09-05 09:00:00 UTC] opus/user tags: project:Lighthouse, topic:CI cache\nThe Lighthouse dashboard p95 latency doubled after the Tuesday deploy. What changed?"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_browse",
+        "arguments": {
+          "limit": 3,
+          "tag": "project:kiwi"
+        }
+      },
+      "note": "tag filter",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Messages (3 returned, newest first)\n_tools excluded (include_tools=true to show)_\n_Hit limit=3. Flip order, raise limit (max 200), or narrow since/before/window._\n\n[2026-09-02 14:20:00 UTC] opus/assistant tags: project:Kiwi, topic:CI cache\nSecond run: miss ratio dropped to 0.11 and the pipeline finished in 14 minutes. Decision: keep the shared kiwi-build-cache bucket and retire the per-runner cache volumes.\n\n---\n\n[2026-09-02 14:08:00 UTC] opus/user tags: project:Kiwi, topic:CI cache\nRerun it and tell me the new number.\n\n---\n\n[2026-09-02 14:05:00 UTC] opus/assistant tags: project:Kiwi, topic:CI cache\nBaseline captured: miss ratio 0.83 across 212 compile units, 39m52s wall time. Switching SCCACHE_BUCKET to the shared bucket now."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_browse",
+        "arguments": {
+          "window": "today"
+        }
+      },
+      "note": "window shortcut with no data in range",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No messages found.\n_window=\"today\" since=2026-10-16T00:00:00.000Z tools excluded (include_tools=true to show)_\n_Try a wider window, drop agent/conversation filters, flip order, pass include_tools=true, or use memory_search for topic recall._"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_browse",
+        "arguments": {
+          "conversation_id": "c0000000-0000-4000-8000-0000000000ff"
+        }
+      },
+      "note": "unknown conversation id",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No messages found.\n_tools excluded (include_tools=true to show)_\n_Try a wider window, drop agent/conversation filters, flip order, pass include_tools=true, or use memory_search for topic recall._"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_browse",
+        "arguments": {
+          "conversation_id": "not-a-uuid"
+        }
+      },
+      "note": "malformed conversation id",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Browse failed: invalid input syntax for type uuid: \"not-a-uuid\""
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_browse",
+        "arguments": {
+          "limit": 0
+        }
+      },
+      "note": "limit=0 is below the schema minimum",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool memory_browse: limit: Too small: expected number to be >=1"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "memory_browse",
+        "arguments": {
+          "limit": 201
+        }
+      },
+      "note": "limit=201 is above the schema maximum",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool memory_browse: limit: Too big: expected number to be <=200"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "memory_get_full",
+        "arguments": {
+          "id": "a0000000-0000-4000-8000-000000000003"
+        }
+      },
+      "note": "the long tool row (complete in the database): full stored payload",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "(row was not truncated — stored payload is complete)\n\n[tool] run_terminal_command\n\n[tool: run_terminal_command]\nkiwi ci-build (baseline, per-runner cache)\nstep 001/212: compiled kiwi-module-001 in 437 ms (cache miss)\nstep 002/212: compiled kiwi-module-002 in 474 ms (cache miss)\nstep 003/212: compiled kiwi-module-003 in 511 ms (cache miss)\nstep 004/212: compiled kiwi-module-004 in 548 ms (cache miss)\nstep 005/212: compiled kiwi-module-005 in 585 ms (cache miss)\nstep 006/212: compiled kiwi-module-006 in 622 ms (cache miss)\nstep 007/212: compiled kiwi-module-007 in 659 ms (cache miss)\nstep 008/212: compiled kiwi-module-008 in 696 ms (cache miss)\nstep 009/212: compiled kiwi-module-009 in 733 ms (cache miss)\nstep 010/212: compiled kiwi-module-010 in 770 ms (cache miss)\nstep 011/212: compiled kiwi-module-011 in 807 ms (cache miss)\nstep 012/212: compiled kiwi-module-012 in 844 ms (cache miss)\nstep 013/212: compiled kiwi-module-013 in 881 ms (cache miss)\nstep 014/212: compiled kiwi-module-014 in 918 ms (cache miss)\nstep 015/212: compiled kiwi-module-015 in 955 ms (cache miss)\nstep 016/212: compiled kiwi-module-016 in 992 ms (cache miss)\nstep 017/212: compiled kiwi-module-017 in 1029 ms (cache miss)\nstep 018/212: compiled kiwi-module-018 in 1066 ms (cache miss)\nstep 019/212: compiled kiwi-module-019 in 1103 ms (cache miss)\nstep 020/212: compiled kiwi-module-020 in 1140 ms (cache miss)\nstep 021/212: compiled kiwi-module-021 in 1177 ms (cache miss)\nstep 022/212: compiled kiwi-module-022 in 1214 ms (cache miss)\nstep 023/212: compiled kiwi-module-023 in 1251 ms (cache miss)\nstep 024/212: compiled kiwi-module-024 in 1288 ms (cache miss)\nstep 025/212: compiled kiwi-module-025 in 425 ms (cache miss)\nstep 026/212: compiled kiwi-module-026 in 462 ms (cache miss)\nstep 027/212: compiled kiwi-module-027 in 499 ms (cache miss)\nstep 028/212: compiled kiwi-module-028 in 536 ms (cache miss)\nstep 029/212: compiled kiwi-module-029 in 573 ms (cache miss)\nstep 030/212: compiled kiwi-module-030 in 610 ms (cache miss)\nstep 031/212: compiled kiwi-module-031 in 647 ms (cache miss)\nstep 032/212: compiled kiwi-module-032 in 684 ms (cache miss)\nstep 033/212: compiled kiwi-module-033 in 721 ms (cache miss)\nstep 034/212: compiled kiwi-module-034 in 758 ms (cache miss)\nstep 035/212: compiled kiwi-module-035 in 795 ms (cache miss)\nstep 036/212: compiled kiwi-module-036 in 832 ms (cache miss)\nstep 037/212: compiled kiwi-module-037 in 869 ms (cache miss)\nstep 038/212: compiled kiwi-module-038 in 906 ms (cache miss)\nstep 039/212: compiled kiwi-module-039 in 943 ms (cache miss)\nstep 040/212: compiled kiwi-module-040 in 980 ms (cache miss)\nstep 041/212: compiled kiwi-module-041 in 1017 ms (cache miss)\nstep 042/212: compiled kiwi-module-042 in 1054 ms (cache miss)\nstep 043/212: compiled kiwi-module-043 in 1091 ms (cache miss)\nstep 044/212: compiled kiwi-module-044 in 1128 ms (cache miss)\nstep 045/212: compiled kiwi-module-045 in 1165 ms (cache miss)\nstep 046/212: compiled kiwi-module-046 in 1202 ms (cache miss)\nstep 047/212: compiled kiwi-module-047 in 1239 ms (cache miss)\nstep 048/212: compiled kiwi-module-048 in 1276 ms (cache miss)\nstep 049/212: compiled kiwi-module-049 in 413 ms (cache miss)\nstep 050/212: compiled kiwi-module-050 in 450 ms (cache miss)\nstep 051/212: compiled kiwi-module-051 in 487 ms (cache miss)\nstep 052/212: compiled kiwi-module-052 in 524 ms (cache miss)\nstep 053/212: compiled kiwi-module-053 in 561 ms (cache miss)\nstep 054/212: compiled kiwi-module-054 in 598 ms (cache miss)\nstep 055/212: compiled kiwi-module-055 in 635 ms (cache miss)\nstep 056/212: compiled kiwi-module-056 in 672 ms (cache miss)\nstep 057/212: compiled kiwi-module-057 in 709 ms (cache miss)\nstep 058/212: compiled kiwi-module-058 in 746 ms (cache miss)\nstep 059/212: compiled kiwi-module-059 in 783 ms (cache miss)\nstep 060/212: compiled kiwi-module-060 in 820 ms (cache miss)\nstep 061/212: compiled kiwi-module-061 in 857 ms (cache miss)\nstep 062/212: compiled kiwi-module-062 in 894 ms (cache miss)\nstep 063/212: compiled kiwi-module-063 in 931 ms (cache miss)\nstep 064/212: compiled kiwi-module-064 in 968 ms (cache miss)\nstep 065/212: compiled kiwi-module-065 in 1005 ms (cache miss)\nstep 066/212: compiled kiwi-module-066 in 1042 ms (cache miss)\nstep 067/212: compiled kiwi-module-067 in 1079 ms (cache miss)\nstep 068/212: compiled kiwi-module-068 in 1116 ms (cache miss)\nstep 069/212: compiled kiwi-module-069 in 1153 ms (cache miss)\nstep 070/212: compiled kiwi-module-070 in 1190 ms (cache miss)\nstep 071/212: compiled kiwi-module-071 in 1227 ms (cache miss)\nstep 072/212: compiled kiwi-module-072 in 1264 ms (cache miss)\nstep 073/212: compiled kiwi-module-073 in 401 ms (cache miss)\nstep 074/212: compiled kiwi-module-074 in 438 ms (cache miss)\nstep 075/212: compiled kiwi-module-075 in 475 ms (cache miss)\nstep 076/212: compiled kiwi-module-076 in 512 ms (cache miss)\nstep 077/212: compiled kiwi-module-077 in 549 ms (cache miss)\nstep 078/212: compiled kiwi-module-078 in 586 ms (cache miss)\nstep 079/212: compiled kiwi-module-079 in 623 ms (cache miss)\nstep 080/212: compiled kiwi-module-080 in 660 ms (cache miss)\nstep 081/212: compiled kiwi-module-081 in 697 ms (cache miss)\nstep 082/212: compiled kiwi-module-082 in 734 ms (cache miss)\nstep 083/212: compiled kiwi-module-083 in 771 ms (cache miss)\nstep 084/212: compiled kiwi-module-084 in 808 ms (cache miss)\nstep 085/212: compiled kiwi-module-085 in 845 ms (cache miss)\nstep 086/212: compiled kiwi-module-086 in 882 ms (cache miss)\nstep 087/212: compiled kiwi-module-087 in 919 ms (cache miss)\nstep 088/212: compiled kiwi-module-088 in 956 ms (cache miss)\nstep 089/212: compiled kiwi-module-089 in 993 ms (cache miss)\nstep 090/212: compiled kiwi-module-090 in 1030 ms (cache miss)\nstep 091/212: compiled kiwi-module-091 in 1067 ms (cache miss)\nstep 092/212: compiled kiwi-module-092 in 1104 ms (cache miss)\nstep 093/212: compiled kiwi-module-093 in 1141 ms (cache miss)\nstep 094/212: compiled kiwi-module-094 in 1178 ms (cache miss)\nstep 095/212: compiled kiwi-module-095 in 1215 ms (cache miss)\nstep 096/212: compiled kiwi-module-096 in 1252 ms (cache miss)\nstep 097/212: compiled kiwi-module-097 in 1289 ms (cache miss)\nstep 098/212: compiled kiwi-module-098 in 426 ms (cache miss)\nstep 099/212: compiled kiwi-module-099 in 463 ms (cache miss)\nstep 100/212: compiled kiwi-module-100 in 500 ms (cache miss)\nstep 101/212: compiled kiwi-module-101 in 537 ms (cache miss)\nstep 102/212: compiled kiwi-module-102 in 574 ms (cache miss)\nstep 103/212: compiled kiwi-module-103 in 611 ms (cache miss)\nstep 104/212: compiled kiwi-module-104 in 648 ms (cache miss)\nstep 105/212: compiled kiwi-module-105 in 685 ms (cache miss)\nstep 106/212: compiled kiwi-module-106 in 722 ms (cache miss)\nstep 107/212: compiled kiwi-module-107 in 759 ms (cache miss)\nstep 108/212: compiled kiwi-module-108 in 796 ms (cache miss)\nstep 109/212: compiled kiwi-module-109 in 833 ms (cache miss)\nstep 110/212: compiled kiwi-module-110 in 870 ms (cache miss)\nstep 111/212: compiled kiwi-module-111 in 907 ms (cache miss)\nstep 112/212: compiled kiwi-module-112 in 944 ms (cache miss)\nstep 113/212: compiled kiwi-module-113 in 981 ms (cache miss)\nstep 114/212: compiled kiwi-module-114 in 1018 ms (cache miss)\nstep 115/212: compiled kiwi-module-115 in 1055 ms (cache miss)\nstep 116/212: compiled kiwi-module-116 in 1092 ms (cache miss)\nstep 117/212: compiled kiwi-module-117 in 1129 ms (cache miss)\nstep 118/212: compiled kiwi-module-118 in 1166 ms (cache miss)\nstep 119/212: compiled kiwi-module-119 in 1203 ms (cache miss)\nstep 120/212: compiled kiwi-module-120 in 1240 ms (cache miss)\ncompile units: 212, hits: 36, misses: 176\nKIWI_CACHE_MISS_RATIO=0.83 (baseline before migration)\ntotal wall time: 39m52s"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_get_full",
+        "arguments": {
+          "id": "a0000000-0000-4000-8000-000000000007"
+        }
+      },
+      "note": "the capture-truncated tool row: its capture file is not on this host",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Source JSONL not readable from this host (/home/rivet/.grok/sessions/fixture-kiwi/updates.jsonl). agent=opus\n\nPath is under /home/rivet/ — fleet agent home. The JSONL almost certainly lives on the mesh node that ran that harness session, not on the host serving this MCP query.\n\nNext steps (pick one):\n1. Re-run memory_get_full / rivet_memory_get_full on the node that owns this path (same host as the session dir), or via that node’s MCP sidecar.\n2. Use the truncated preview already on the row (content / tool_result) — that text is complete in Postgres up to the 16K capture cap.\n3. Do not treat this as permanent data loss: the elided tail is usually still on the capture host’s disk unless the session dir was deleted."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_get_full",
+        "arguments": {
+          "id": "a0000000-0000-4000-8000-000000000001"
+        }
+      },
+      "note": "a short user message",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "(row was not truncated — stored payload is complete)\n\nThe Kiwi CI builds are taking 40 minutes again. Can we move the build cache off the runner disks and into a shared bucket?"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_get_full",
+        "arguments": {
+          "id": "b0000000-0000-4000-8000-000000000001"
+        }
+      },
+      "note": "a summary id (memory_get_full reads messages only)",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No message with id b0000000-0000-4000-8000-000000000001."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_get_full",
+        "arguments": {
+          "id": "a0000000-0000-4000-8000-0000000000ff"
+        }
+      },
+      "note": "unknown message id",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No message with id a0000000-0000-4000-8000-0000000000ff."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_get_full",
+        "arguments": {
+          "id": "not-a-uuid"
+        }
+      },
+      "note": "malformed id",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "memory_get_full failed: invalid input syntax for type uuid: \"not-a-uuid\""
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_get_full",
+        "arguments": {
+          "id": ""
+        }
+      },
+      "note": "empty id is below the schema minimum length",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool memory_get_full: id: Too small: expected string to have >=1 characters"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "memory_get_full",
+        "arguments": {}
+      },
+      "note": "missing required id",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool memory_get_full: id: Invalid input: expected string, received undefined"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "memory_stats",
+        "arguments": {}
+      },
+      "note": "whole-store stats",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory System Health\n\n**Messages:** 20\n**Date range:** 2026-09-02 → 2026-09-08\n\n**Capture spool:** ✅ empty\n\n**Embedding queue:** ✅ caught up\n  Messages awaiting embedding: 0\n  Summaries awaiting embedding: 0\n\n**Search runtime:**\n  vectorArmDropped: 0\n  vectorArmDroppedLastHour: 0\n  queryEmbedCacheHits: 6\n  queryEmbedCacheMisses: 13\n  chunkArmHits: 3\n  parentArmHits: 101\n  chunkArmUnavailable: 0\n\n**Unsummarized messages:** 4 total\n  Eligible for compaction: 4 msgs in 1 convs ⏳\n    (≥10 unsummarized, OR ≥5 + idle ≥15m, OR ≥2 + idle ≥4d)\n  Active tail: 0 msgs in 0 convs (will flush when idle)\n  Below floor: 0 msgs in 0 convs (<2 qualifying, or not yet stale — won't compact yet)\n\n**Top conversations eligible for compaction:**\n  grok: 4 unsummarized [stale_partial] (conv: c0000000…)\n\n**By agent:**\n  opus: 15\n  grok: 5\n\n**By role:**\n  assistant: 8\n  user: 6\n  tool: 5\n  system: 1\n\n**Conversations:** 3 total, 1 active\n\n**Summaries:** 4 total\n  leaf: 1 (max depth: 0)\n  condensed: 1 (max depth: 1)\n  branch: 1 (max depth: 1)\n  root: 1 (max depth: 2)\n\n**Embedding coverage:**\n  Messages: 20/20 (100.0%)\n  Summaries: 4/4 (100.0%)\n\n**Summary tree:**\n  Max depth: 2\n  Root summaries: 2\n  Child summaries: 2\n\n**Freshness:**\n  Newest message: 37d ago\n  Newest summary: 40d ago"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_stats",
+        "arguments": {
+          "agent": "grok"
+        }
+      },
+      "note": "stats for one agent",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Memory System Health\n\n**Messages:** 5\n**Date range:** 2026-09-08 → 2026-09-08\n\n**Capture spool:** ✅ empty\n\n**Embedding queue:** ✅ caught up\n  Messages awaiting embedding: 0\n  Summaries awaiting embedding: 0\n\n**Search runtime:**\n  vectorArmDropped: 0\n  vectorArmDroppedLastHour: 0\n  queryEmbedCacheHits: 6\n  queryEmbedCacheMisses: 13\n  chunkArmHits: 3\n  parentArmHits: 101\n  chunkArmUnavailable: 0\n\n**Unsummarized messages:** 4 total\n  Eligible for compaction: 4 msgs in 1 convs ⏳\n    (≥10 unsummarized, OR ≥5 + idle ≥15m, OR ≥2 + idle ≥4d)\n  Active tail: 0 msgs in 0 convs (will flush when idle)\n  Below floor: 0 msgs in 0 convs (<2 qualifying, or not yet stale — won't compact yet)\n\n**Top conversations eligible for compaction:**\n  grok: 4 unsummarized [stale_partial] (conv: c0000000…)\n\n**By agent:**\n  grok: 5\n\n**By role:**\n  assistant: 2\n  user: 2\n  tool: 1\n\n**Conversations:** 3 total, 1 active\n\n**Summaries:** 4 total\n  leaf: 1 (max depth: 0)\n  condensed: 1 (max depth: 1)\n  branch: 1 (max depth: 1)\n  root: 1 (max depth: 2)\n\n**Embedding coverage:**\n  Messages: 20/20 (100.0%)\n  Summaries: 4/4 (100.0%)\n\n**Summary tree:**\n  Max depth: 2\n  Root summaries: 2\n  Child summaries: 2\n\n**Freshness:**\n  Newest message: 37d ago\n  Newest summary: 40d ago"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_tags",
+        "arguments": {}
+      },
+      "note": "default action (pending)",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "3 pending (decide with action=decide, ids=[…], state=accepted|rejected):\nd0000000-0000-4000-8000-000000000005  project:Pelican (0.80)  ← session fixture:pelican-parser \"Pelican recipe parser\"\n    user names the Pelican recipe parser\nd0000000-0000-4000-8000-000000000004  topic:CI cache (0.55)  ← session fixture:lighthouse-p95 \"Lighthouse dashboard latency\"\n    conversation is about query latency, not CI caching\nd0000000-0000-4000-8000-000000000006  topic:Build performance (0.65)  ← summary b0000000 of fixture:kiwi-cache\n    summary reports pipeline wall time"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_tags",
+        "arguments": {
+          "action": "pending",
+          "limit": 1
+        }
+      },
+      "note": "pending with a limit",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "1 pending (decide with action=decide, ids=[…], state=accepted|rejected):\nd0000000-0000-4000-8000-000000000005  project:Pelican (0.80)  ← session fixture:pelican-parser \"Pelican recipe parser\"\n    user names the Pelican recipe parser"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_tags",
+        "arguments": {
+          "action": "list",
+          "entity_id": "c0000000-0000-4000-8000-000000000001",
+          "entity_type": "conversation"
+        }
+      },
+      "note": "tags on one conversation",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "d0000000-0000-4000-8000-000000000001  project:Kiwi  [accepted/rule] conversation:c0000000-0000-4000-8000-000000000001\nd0000000-0000-4000-8000-000000000002  topic:CI cache  [accepted/user] conversation:c0000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_tags",
+        "arguments": {
+          "action": "list",
+          "key": "project",
+          "value": "kiwi"
+        }
+      },
+      "note": "entities carrying one tag",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "d0000000-0000-4000-8000-000000000001  project:Kiwi  [accepted/rule] conversation:c0000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_tags",
+        "arguments": {
+          "action": "list",
+          "state": "suggested"
+        }
+      },
+      "note": "list filtered by state",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "d0000000-0000-4000-8000-000000000005  project:Pelican  [suggested/model] conversation:c0000000-0000-4000-8000-000000000003\nd0000000-0000-4000-8000-000000000006  topic:Build performance  [suggested/model] summary:b0000000-0000-4000-8000-000000000001"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_tags",
+        "arguments": {
+          "action": "counts"
+        }
+      },
+      "note": "accepted usage per tag",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "topic:CI cache  2\nproject:Kiwi  1\nproject:Lighthouse  1"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_tags",
+        "arguments": {
+          "action": "lookup",
+          "session_keys": [
+            "fixture:kiwi-cache",
+            "fixture:pelican-parser",
+            "fixture:missing"
+          ]
+        }
+      },
+      "note": "tags by session key",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "fixture:kiwi-cache: project:Kiwi, topic:CI cache\nfixture:pelican-parser: project:Pelican?\nfixture:missing: (none)"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_tags",
+        "arguments": {
+          "action": "taxonomy"
+        }
+      },
+      "note": "the tag vocabulary",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "project:Kiwi  [accepted]\nproject:Lighthouse  [accepted]\nproject:Pelican  [accepted]\ntopic:CI cache  [accepted]"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_tags",
+        "arguments": {
+          "action": "decide",
+          "ids": [
+            "d0000000-0000-4000-8000-000000000005"
+          ],
+          "state": "accepted"
+        }
+      },
+      "note": "a write action on the read-only surface: refused",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "memory_tags: \"decide\" is not available here (read-only surface). Review and edit tags in the hub under Memory → Tags."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "memory_tags",
+        "arguments": {
+          "action": "bogus"
+        }
+      },
+      "note": "unknown action",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool memory_tags: action: Invalid option: expected one of \"list\"|\"pending\"|\"counts\"|\"decide\"|\"add\"|\"lookup\"|\"taxonomy\"|\"taxonomy_upsert\"|\"taxonomy_decide\"|\"taxonomy_merge\""
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "wiki_search",
+        "arguments": {
+          "query": "kiwi cache"
+        }
+      },
+      "note": "wiki search with a hit",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Kiwi build cache (kiwi-build-cache) — verified 2026-09-03\nKiwi CI uses sccache backed by the shared kiwi-build-cache bucket with a 20 GB local tier per runner. Miss ratio about 0.11; pipeline about 14 minutes.\n\n## Lighthouse dashboard (lighthouse-dashboard) — verified 2026-09-05\nLighthouse dashboard p95 is about 180 ms. The per-tenant rollup depends on idx_rollups_tenant_bucket; alert lighthouse_p95_high fires above 400 ms for 10 minutes."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "wiki_search",
+        "arguments": {
+          "limit": 1,
+          "query": "p95 alert"
+        }
+      },
+      "note": "wiki search, limit 1",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Lighthouse dashboard (lighthouse-dashboard) — verified 2026-09-05\nLighthouse dashboard p95 is about 180 ms. The per-tenant rollup depends on idx_rollups_tenant_bucket; alert lighthouse_p95_high fires above 400 ms for 10 minutes."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "wiki_search",
+        "arguments": {
+          "query": "zebra crossing quartz"
+        }
+      },
+      "note": "wiki search for an unrelated query: the vector arm still ranks every topic",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "## Lighthouse dashboard (lighthouse-dashboard) — verified 2026-09-05\nLighthouse dashboard p95 is about 180 ms. The per-tenant rollup depends on idx_rollups_tenant_bucket; alert lighthouse_p95_high fires above 400 ms for 10 minutes.\n\n## Kiwi build cache (kiwi-build-cache) — verified 2026-09-03\nKiwi CI uses sccache backed by the shared kiwi-build-cache bucket with a 20 GB local tier per runner. Miss ratio about 0.11; pipeline about 14 minutes."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "wiki_search",
+        "arguments": {
+          "limit": 0,
+          "query": "kiwi"
+        }
+      },
+      "note": "limit=0 is below the schema minimum",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool wiki_search: limit: Too small: expected number to be >=1"
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "wiki_read",
+        "arguments": {
+          "slug": "kiwi-build-cache"
+        }
+      },
+      "note": "small page: returned verbatim",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "---\ntitle: Kiwi build cache\nslug: kiwi-build-cache\naliases:\n  - kiwi sccache\n  - kiwi-build-cache bucket\ntags:\n  - kiwi\n  - ci\nlast_verified: 2026-09-03T02:00:00Z\n---\n\n## Summary\n\nKiwi CI uses sccache backed by the shared kiwi-build-cache bucket with a 20 GB local tier per runner. Miss ratio about 0.11; pipeline about 14 minutes.\n\n## Article\n\nThe Kiwi project moved its compiler cache off per-runner disks in September 2026. A baseline run showed a 0.83 miss ratio across 212 compile units; after the switch the ratio fell to 0.11.\n\n## See also\n\n- [[lighthouse-dashboard]]\n\n## History\n\n### 2026-09-02 — Cache moved to the shared bucket\n\n- baseline miss ratio 0.83, wall time 39m52s\n- after the switch: miss ratio 0.11, wall time 14m\n- per-runner cache volumes retired\n\n## Citations\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|\n| 2026-09-03 | leaf | `b0000000-0000-4000-8000-000000000001` | miss ratio before/after |\n| 2026-09-03 | root | `b0000000-0000-4000-8000-000000000003` | project overview |\n"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "wiki_read",
+        "arguments": {
+          "section": "summary",
+          "slug": "lighthouse-dashboard"
+        }
+      },
+      "note": "section=summary",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "section=summary\n\n---\ntitle: Lighthouse dashboard\nslug: lighthouse-dashboard\nlast_verified: 2026-09-05T12:00:00Z\ntags: lighthouse, latency\naliases: 1 (lighthouse p95)\n---\n\n## Summary\n\nLighthouse dashboard p95 is about 180 ms. The per-tenant rollup depends on idx_rollups_tenant_bucket; alert lighthouse_p95_high fires above 400 ms for 10 minutes."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "wiki_read",
+        "arguments": {
+          "section": "citations",
+          "slug": "lighthouse-dashboard"
+        }
+      },
+      "note": "section=citations",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "section=citations\n\n---\ntitle: Lighthouse dashboard\nslug: lighthouse-dashboard\nlast_verified: 2026-09-05T12:00:00Z\ntags: lighthouse, latency\naliases: 1 (lighthouse p95)\n---\n\n## Citations (1 of 1)\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|\n| 2026-09-05 | condensed | `b0000000-0000-4000-8000-000000000004` | index regression and alert |"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "wiki_read",
+        "arguments": {
+          "slug": "kiwi"
+        }
+      },
+      "note": "no page: red link with did-you-mean candidates",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "No page for \"kiwi\" — a red link. Did you mean: lighthouse-dashboard?"
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "wiki_read",
+        "arguments": {
+          "slug": "Bad_Slug"
+        }
+      },
+      "note": "invalid slug",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Invalid slug \"Bad_Slug\" — lowercase kebab-case only."
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "name": "wiki_read",
+        "arguments": {
+          "section": "intro",
+          "slug": "kiwi-build-cache"
+        }
+      },
+      "note": "unknown section",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Input validation error: Invalid arguments for tool wiki_read: section: Invalid option: expected one of \"summary\"|\"article\"|\"history\"|\"aliases\"|\"citations\"|\"full\""
+          }
+        ],
+        "isError": true
+      }
+    },
+    {
+      "request": {
+        "name": "list_agents",
+        "arguments": {}
+      },
+      "note": "presets from ros_agent_presets plus the runtime roster from mesh.json",
+      "kind": "result",
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "- kiwi-reviewer (agent: claude-code on fixture-node — this node, dir /home/rivet/work/kiwi)\n- pelican-tester (agent: grok-build on fixture-node — this node, dir /home/rivet/work/pelican)\n\nRuntime agents (mesh):\n- opus (fixture-node)\n- grok (fixture-node)\n\nto_agent accepts a preset name or id, or a runtime agent id (agent@node pins the node)."
+          }
+        ]
+      }
+    }
+  ]
+}
