@@ -29,7 +29,9 @@ pub fn normalize_api_prefix(prefix: Option<&str>) -> String {
 }
 
 fn endpoint_url(base_url: &str, prefix: &str, path: &str) -> String {
-    format!("{}{prefix}/{path}", base_url.trim_end_matches('/'))
+    let base = base_url.trim_end_matches('/');
+    let base = base.strip_suffix("/v1").unwrap_or(base);
+    format!("{base}{prefix}/{path}")
 }
 
 #[must_use]
@@ -203,4 +205,36 @@ fn tools(tools: &[rmcp::model::Tool]) -> Result<Option<Vec<Tool>>, ModelProvider
         });
     }
     Ok(Some(converted))
+}
+
+#[cfg(test)]
+mod url_tests {
+    use super::{chat_url, embeddings_url, models_url, normalize_api_prefix};
+
+    #[test]
+    fn a_trailing_v1_on_the_base_is_stripped_and_re_appended_like_the_den() {
+        let prefix = normalize_api_prefix(None);
+        for base in [
+            "https://api.deepseek.com/v1",
+            "https://api.deepseek.com/v1/",
+            "https://api.deepseek.com",
+        ] {
+            assert_eq!(
+                chat_url(base, &prefix),
+                "https://api.deepseek.com/v1/chat/completions"
+            );
+            assert_eq!(
+                models_url(base, &prefix),
+                "https://api.deepseek.com/v1/models"
+            );
+            assert_eq!(
+                embeddings_url(base, &prefix),
+                "https://api.deepseek.com/v1/embeddings"
+            );
+        }
+        assert_eq!(
+            chat_url("http://host:8000/v1", &normalize_api_prefix(Some(""))),
+            "http://host:8000/chat/completions"
+        );
+    }
 }
