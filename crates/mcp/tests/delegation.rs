@@ -64,6 +64,8 @@ fn directory() -> AgentDirectory {
             name: "worker".to_owned(),
             node: None,
             harness: Some(HarnessId::Codex),
+            directory: None,
+            local: true,
         }],
         runtime: Vec::new(),
     }
@@ -133,11 +135,10 @@ async fn list_agents_returns_the_port_directory() {
     let server = server(Arc::clone(&port), Surface::Stdio);
     let result = call(&server, "list_agents", "{}").await;
     assert_eq!(result.is_error, None);
-    let parsed: AgentDirectory = serde_json::from_str(text(&result)).expect("directory");
-    assert_eq!(parsed, port.directory);
-    let document: wire::JsonObject = serde_json::from_str(text(&result)).expect("json");
-    let encoded = wire::JsonObject::from_serialize(&port.directory).expect("value");
-    assert_eq!(document, encoded);
+    assert_eq!(
+        text(&result),
+        "- worker (agent: codex)\n\nto_agent accepts a preset name or id, or a runtime agent id (agent@node pins the node).\n"
+    );
 }
 
 #[tokio::test]
@@ -151,8 +152,10 @@ async fn delegate_task_joins_context_and_applies_the_default_timeout() {
     )
     .await;
     assert_eq!(result.is_error, None);
-    let parsed: DelegateOutcome = serde_json::from_str(text(&result)).expect("outcome");
-    assert_eq!(parsed, port.outcome);
+    assert_eq!(
+        text(&result),
+        "[completed]\nkept\n\nTask: 00000000-0000-0000-0000-000000000000"
+    );
     let request = port.requests.lock().await.first().expect("request").clone();
     assert_eq!(request.target, "worker");
     assert_eq!(request.requested_by.as_deref(), Some("mcp-sidecar"));

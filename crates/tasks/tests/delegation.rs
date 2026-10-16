@@ -357,12 +357,16 @@ fn listed(seen: DateTime<Utc>, older: DateTime<Utc>, newer: DateTime<Utc>) -> Ag
                 name: "alpha-preset".to_owned(),
                 node: Some("down".to_owned()),
                 harness: Some(HarnessId::Codex),
+                directory: None,
+                local: false,
             },
             PresetAgent {
                 id: "bravo-id".to_owned(),
                 name: "bravo".to_owned(),
                 node: None,
                 harness: None,
+                directory: None,
+                local: true,
             },
         ],
         runtime: vec![

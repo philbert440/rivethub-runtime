@@ -143,7 +143,7 @@ async fn invalid_and_unsupported_options_never_reach_store() {
             )
             .await
             .is_error,
-            Some(true)
+            None
         );
     }
     assert_eq!(store.requests().await, Vec::new());
@@ -202,9 +202,10 @@ async fn memory_results_preserve_content_and_enabled_write_annotations() {
         .first()
         .and_then(|block| block.as_text())
         .expect("text content");
-    let actual: Option<MemoryEntry> =
-        serde_json::from_str(&content.text).expect("typed memory result");
-    assert_eq!(actual, Some(entry));
+    assert_eq!(
+        content.text,
+        "(row was not truncated — stored payload is complete)\n\n日本語 😀"
+    );
     let tags = server
         .tools()
         .iter()
@@ -280,8 +281,12 @@ async fn search_forwards_every_argument_and_preserves_the_outcome() {
         .first()
         .and_then(|block| block.as_text())
         .expect("text");
-    let actual: kernel::memory::SearchOutcome = serde_json::from_str(&text.text).expect("outcome");
-    assert_eq!(actual, outcome);
+    assert!(text.text.contains("http 503"));
+    assert!(
+        text.text
+            .contains("Keyword / FTS ranking only — not meaning-based.")
+    );
+    assert!(text.text.contains("The release is ready."));
     assert_eq!(
         store.requests().await,
         vec![MemoryRequest::Search(SearchQuery {
@@ -335,4 +340,57 @@ async fn search_accepts_windows_and_false_flags_but_rejects_wrong_types() {
         );
     }
     assert_eq!(store.requests().await, requests);
+}
+
+#[tokio::test]
+async fn tool_previews_count_characters_and_reject_malformed_capture_metadata() {
+    use kernel::memory::MemoryStore;
+    use wire::memory::MemoryEntry;
+    let (server, store) = setup(false);
+    let mut entry = MemoryEntry {
+        id: Some("unicode-tool".into()),
+        session_id: "unicode-session".into(),
+        agent: "worker".into(),
+        channel: "test".into(),
+        role: wire::message::Role::Tool,
+        content: "[tool] inspect".into(),
+        tool_name: Some("inspect".into()),
+        tool_args: None,
+        tool_result: Some("🦀".repeat(801)),
+        metadata: None,
+        created_at: Some("2026-09-02T00:00:00Z".parse().expect("date")),
+    };
+    store.append(vec![entry.clone()]).await.expect("seed");
+    let result = support::call(&server, "memory_browse", r#"{"include_tools":true}"#).await;
+    assert_eq!(result.is_error, None);
+    let text = &result
+        .content
+        .first()
+        .expect("content")
+        .as_text()
+        .expect("text")
+        .text;
+    assert!(text.contains("[tool_result (inspect) 801 chars]"));
+    assert!(text.contains(&format!(
+        "{}…\n…[display-truncated tool_result → memory_get_full id=unicode-tool]",
+        "🦀".repeat(800)
+    )));
+    entry.id = Some("malformed".into());
+    entry.metadata = Some(serde_json::from_str(r#"{"truncated":"true"}"#).expect("metadata"));
+    store
+        .append(vec![entry])
+        .await
+        .expect("seed malformed metadata");
+    let result = support::call(&server, "memory_get_full", r#"{"id":"malformed"}"#).await;
+    assert_eq!(result.is_error, Some(true));
+    assert!(
+        result
+            .content
+            .first()
+            .expect("content")
+            .as_text()
+            .expect("text")
+            .text
+            .contains("expected a boolean")
+    );
 }

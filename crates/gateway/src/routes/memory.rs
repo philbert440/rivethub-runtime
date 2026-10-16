@@ -174,6 +174,7 @@ async fn search(
 
 fn search_hit(result: wire::memory::MemorySearchResult) -> MemorySearchHit {
     MemorySearchHit {
+        chunk: result.chunk,
         id: result.id,
         source: result.source,
         content: result.content,

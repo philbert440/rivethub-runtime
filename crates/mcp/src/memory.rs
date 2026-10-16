@@ -1,4 +1,5 @@
-use crate::{Error, json};
+use crate::Error;
+use crate::catalog::ToolInput as _;
 use chrono::{DateTime, Utc};
 use kernel::memory::{BrowseFilter, Limit, MemoryStore, SearchMode, SearchQuery};
 use rmcp::model::CallToolResult;
@@ -140,10 +141,20 @@ impl crate::catalog::ToolInput for GetFull {
     }
 }
 
-pub fn limit(raw: Option<u32>, default: u32, maximum: u32) -> Result<Limit, Error> {
-    if raw.is_some_and(|value| value == 0 || value > maximum) {
+pub(crate) fn limit(
+    tool: &str,
+    raw: Option<u32>,
+    default: u32,
+    maximum: u32,
+) -> Result<Limit, Error> {
+    if raw == Some(0) {
         return Err(Error::Invalid(format!(
-            "limit must be between 1 and {maximum}"
+            "Input validation error: Invalid arguments for tool {tool}: limit: Too small: expected number to be >=1"
+        )));
+    }
+    if raw.is_some_and(|value| value > maximum) {
+        return Err(Error::Invalid(format!(
+            "Input validation error: Invalid arguments for tool {tool}: limit: Too big: expected number to be <={maximum}"
         )));
     }
     Ok(Limit::clamped(raw, default, 1..=maximum))
@@ -154,28 +165,60 @@ pub async fn search(store: &dyn MemoryStore, args: Search) -> Result<CallToolRes
         Some(scope) => scope,
         None => MemoryScope::Both,
     };
-    json(
-        &store
-            .search(
-                SearchQuery {
-                    since: args.since,
-                    before: args.before,
-                    window: args.window,
-                    expand: args.expand,
-                    synthesize: args.synthesize,
-                    text: args.query,
-                    mode: args.mode,
-                    scope,
-                    agent: args.agent,
-                    tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
-                        |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),
-                    )?,
-                    limit: limit(args.limit, 10, 50)?,
-                }
-                .resolve_window(chrono::Utc::now(), &chrono::Local),
-            )
-            .await?,
-    )
+    let expand = args.expand != Some(false);
+    let query =
+        SearchQuery {
+            since: args.since,
+            before: args.before,
+            window: args.window,
+            expand: args.expand,
+            synthesize: args.synthesize,
+            text: args.query,
+            mode: args.mode,
+            scope,
+            agent: args.agent,
+            tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
+                |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),
+            )?,
+            limit: limit(Search::NAME, args.limit, 10, 50)?,
+        };
+    let outcome = store
+        .search(query.clone().resolve_window(Utc::now(), &chrono::Local))
+        .await?;
+    let mut messages = std::collections::BTreeMap::new();
+    for hit in outcome
+        .results
+        .iter()
+        .filter(|hit| hit.source == wire::gateway::memory::MemoryHitSource::Message)
+    {
+        let entry = store.get_full(&hit.id).await?.ok_or_else(|| {
+            Error::Invalid(format!("message {} disappeared during search", hit.id))
+        })?;
+        messages.insert(hit.id.clone(), entry);
+    }
+    let tags = if messages.is_empty() {
+        std::collections::BTreeMap::new()
+    } else {
+        store
+            .lookup_tags(kernel::memory::TagLookup {
+                session_keys: messages
+                    .values()
+                    .map(|entry| entry.session_id.clone())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect(),
+                states: vec![wire::gateway::memory::TagState::Accepted],
+            })
+            .await?
+    };
+    Ok(crate::text(crate::render_search::search(
+        &query,
+        &outcome,
+        &messages,
+        &tags,
+        expand,
+        Utc::now(),
+    )?))
 }
 
 pub async fn browse(store: &dyn MemoryStore, args: Browse) -> Result<CallToolResult, Error> {
@@ -189,40 +232,66 @@ pub async fn browse(store: &dyn MemoryStore, args: Browse) -> Result<CallToolRes
     {
         return Err(Error::Invalid("since must precede before".into()));
     }
-    json(
-        &store
-            .browse(
-                BrowseFilter {
-                    conversation_id: args.conversation_id,
-                    agent: args.agent,
-                    role: None,
-                    tool_name: None,
-                    tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
-                        |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),
-                    )?,
-                    window: args.window,
-                    since: args.since,
-                    before: args.before,
-                    include_tools: args.include_tools,
-                    order: args.order,
-                    limit: limit(args.limit, 50, 200)?,
-                }
-                .resolve_window(chrono::Utc::now(), &chrono::Local),
-            )
-            .await?,
-    )
+    let filter =
+        BrowseFilter {
+            conversation_id: args.conversation_id,
+            agent: args.agent,
+            role: None,
+            tool_name: None,
+            tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
+                |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),
+            )?,
+            window: args.window,
+            since: args.since,
+            before: args.before,
+            include_tools: args.include_tools,
+            order: args.order,
+            limit: limit(Browse::NAME, args.limit, 50, 200)?,
+        }
+        .resolve_window(chrono::Utc::now(), &chrono::Local);
+    let entries = store.browse(filter.clone()).await?;
+    let sessions = if entries.is_empty() {
+        std::collections::BTreeMap::new()
+    } else {
+        store
+            .lookup_tags(kernel::memory::TagLookup {
+                session_keys: entries
+                    .iter()
+                    .map(|entry| entry.session_id.clone())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect(),
+                states: vec![wire::gateway::memory::TagState::Accepted],
+            })
+            .await?
+    };
+    let mut display_filter = filter;
+    display_filter.window = args.window;
+    Ok(crate::text(crate::render_memory::browse(
+        &entries,
+        &display_filter,
+        &sessions,
+    )?))
 }
 
 pub async fn stats(store: &dyn MemoryStore, args: Stats) -> Result<CallToolResult, Error> {
     if args.agent.is_some() {
         return Err(Error::Refused("MemoryStore stats has no agent filter"));
     }
-    json(&store.stats().await?)
+    Ok(crate::text(crate::render_memory::stats(
+        &store.stats().await?,
+    )?))
 }
 
 pub async fn get_full(store: &dyn MemoryStore, args: GetFull) -> Result<CallToolResult, Error> {
     if args.id.is_empty() {
-        return Err(Error::Invalid("id must not be empty".into()));
+        return Err(Error::Invalid(format!(
+            "Input validation error: Invalid arguments for tool {}: id: Too small: expected string to have >=1 characters",
+            GetFull::NAME
+        )));
     }
-    json(&store.get_full(&args.id).await?)
+    Ok(crate::text(crate::render_memory::get_full(
+        &args.id,
+        store.get_full(&args.id).await?.as_ref(),
+    )?))
 }

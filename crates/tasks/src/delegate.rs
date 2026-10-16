@@ -43,7 +43,10 @@ pub struct DelegationTarget {
 
 impl Directory {
     pub fn catalog(&self) -> AgentDirectory {
-        let mut presets: Vec<PresetAgent> = self.presets().map(preset_agent).collect();
+        let mut presets: Vec<PresetAgent> = self
+            .presets()
+            .map(|preset| preset_agent(preset, self.local_node()))
+            .collect();
         presets.sort_by(|left, right| {
             left.name
                 .cmp(&right.name)
@@ -97,12 +100,14 @@ impl Directory {
     }
 }
 
-fn preset_agent(preset: &AgentPreset) -> PresetAgent {
+fn preset_agent(preset: &AgentPreset, local_node: &str) -> PresetAgent {
     PresetAgent {
         id: preset.id.clone(),
         name: preset.name.clone(),
         node: preset.node.clone(),
         harness: preset.harness_id,
+        directory: preset.directory.clone(),
+        local: preset.node.as_deref().is_none_or(|node| node == local_node),
     }
 }
 

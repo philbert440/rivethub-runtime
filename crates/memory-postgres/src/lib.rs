@@ -15,6 +15,7 @@ pub mod queue;
 pub mod read;
 pub mod search;
 mod search_complete;
+mod search_details;
 mod search_sql;
 pub use search_complete::SearchSynthesis;
 mod store_impl;
@@ -56,6 +57,7 @@ pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]
 pub struct PostgresMemory {
+    wiki_directory: Option<std::path::PathBuf>,
     pool: PgPool,
     embed: Option<embed::EmbedArm>,
     synthesis: Option<SearchSynthesis>,
@@ -66,11 +68,18 @@ impl PostgresMemory {
     #[must_use]
     pub fn new(pool: PgPool) -> Self {
         Self {
+            wiki_directory: None,
             pool,
             embed: None,
             synthesis: None,
             access: std::sync::Arc::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_wiki_directory(mut self, directory: std::path::PathBuf) -> Self {
+        self.wiki_directory = Some(directory);
+        self
     }
 
     #[must_use]

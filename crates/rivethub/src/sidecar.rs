@@ -55,7 +55,8 @@ fn mcp_exit(error: &mcp::Error) -> Exit {
         | mcp::Error::WikiRedirect
         | mcp::Error::Task(_)
         | mcp::Error::Initialize(_)
-        | mcp::Error::Service(_) => Exit::Failure,
+        | mcp::Error::Service(_)
+        | mcp::Error::Format(_) => Exit::Failure,
     }
 }
 

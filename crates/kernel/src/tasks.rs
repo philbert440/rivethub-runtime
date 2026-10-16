@@ -262,6 +262,9 @@ pub struct PresetAgent {
     pub node: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub harness: Option<HarnessId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub directory: Option<String>,
+    pub local: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

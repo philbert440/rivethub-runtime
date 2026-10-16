@@ -5,6 +5,7 @@ pub mod fakes;
 pub mod graphile_schema;
 pub mod http;
 pub mod json;
+pub mod mcp_text;
 pub mod memory;
 pub mod naming;
 pub mod paths;

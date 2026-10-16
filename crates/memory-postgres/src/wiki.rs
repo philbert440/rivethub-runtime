@@ -107,7 +107,9 @@ impl PostgresMemory {
         };
         let (citations, sources) =
             tokio::try_join!(self.wiki_citations(&row.slug), self.wiki_sources(&row.slug))?;
-        let markdown = if row.article.is_empty() {
+        let markdown = if let Some(directory) = &self.wiki_directory {
+            read_markdown(directory, slug).await?
+        } else if row.article.is_empty() {
             format!("# {}\n\n{}\n", row.title, row.current_state)
         } else {
             format!(
@@ -239,4 +241,17 @@ impl PostgresMemory {
             stalest: stalest.into_iter().map(|row| row.slug).collect(),
         })
     }
+}
+
+async fn read_markdown(directory: &std::path::Path, slug: &WikiSlug) -> Result<String, Error> {
+    let root = tokio::fs::canonicalize(directory)
+        .await
+        .map_err(Error::WikiIo)?;
+    let path = tokio::fs::canonicalize(root.join(format!("{}.md", slug.as_ref())))
+        .await
+        .map_err(Error::WikiIo)?;
+    if !path.starts_with(&root) {
+        return Err(Error::WikiContainment);
+    }
+    tokio::fs::read_to_string(path).await.map_err(Error::WikiIo)
 }

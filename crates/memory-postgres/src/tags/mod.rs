@@ -194,7 +194,11 @@ async fn list_tags(pool: &PgPool, query: &TagListQuery) -> Result<Vec<TagWire>, 
             .push(")");
     }
     builder
-        .push(" order by t.created_at desc limit ")
+        .push(if query.entity_id.is_some() {
+            " order by t.key, t.value limit "
+        } else {
+            " order by t.created_at desc limit "
+        })
         .push_bind(i64::from(query.limit.get()));
     let rows = read_rows(
         "tags list",
@@ -216,14 +220,16 @@ async fn pending_tags(
             PendingTagRow,
             "select t.id::text as \"id!\", t.entity_type, t.entity_id::text as \"entity_id!\", \
                  t.key, t.value, \
-                t.display, t.source, t.state, t.confidence, t.proposed_by, t.reason, \
+                t.display, t.source, t.state, t.confidence, t.proposed_by, \
+                CASE WHEN t.removal_state = 'suggested' THEN t.removal_reason ELSE t.reason END AS \"reason!\", \
                 t.decided_by, t.decided_at, t.created_at, t.updated_at, \
-                (t.removal_state = 'suggested') as is_removal, \
-                c.session_key, c.title, c.agent, c.id::text as conversation_id, \
+                (t.removal_state = 'suggested') as \"is_removal?\", \
+                c.session_key as \"session_key?\", c.title as \"title?\", c.agent as \"agent?\", c.id::text as \"conversation_id?\", \
                 (select left(m.content, 120) from rh_messages m
                   where m.conversation_id = c.id order by m.created_at asc limit 1) as excerpt \
            from rh_tags t \
-           left join rh_conversations c on t.entity_type = 'conversation' and c.id = t.entity_id \
+           left join rh_summaries s on t.entity_type = 'summary' and s.id = t.entity_id \
+           left join rh_conversations c on (t.entity_type = 'conversation' and c.id = t.entity_id) OR c.id = s.conversation_id \
           where t.state = 'suggested' or t.removal_state = 'suggested' \
           order by t.created_at desc \
           limit $1",

@@ -1,4 +1,5 @@
-use crate::{Error, error::required, json, memory::limit};
+use crate::catalog::ToolInput as _;
+use crate::{Error, error::required, json, memory::limit, render_tags, text};
 use kernel::memory::{
     MemoryStore, TagAdd, TagCountsQuery, TagDecision, TagEntity, TagId, TagListQuery, TagLookup,
     TagTaxonomyDecision, TagTaxonomyQuery, TagTaxonomyUpsert,
@@ -8,8 +9,9 @@ use serde::Deserialize;
 use uuid::Uuid;
 use wire::gateway::memory::{TagEntityType, TagEntryPair, TagState, TagTaxonomyMerge};
 
-#[derive(schemars::JsonSchema, serde::Serialize, Debug, Default, Deserialize)]
+#[derive(schemars::JsonSchema, serde::Serialize, Debug, Default, Deserialize, strum::Display)]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 enum Action {
     List,
     #[default]
@@ -90,11 +92,15 @@ pub async fn call(
     write: bool,
     args: Args,
 ) -> Result<CallToolResult, Error> {
-    authorize(write, &args.action)?;
-    let count = limit(args.limit, 100, 1000)?;
+    if let Some(message) = refusal(write, &args.action) {
+        return Ok(text(message));
+    }
+    let count = limit(Args::NAME, args.limit, 100, 1000)?;
     match args.action {
-        Action::Pending => json(&store.pending_tags(count).await?),
-        Action::List => json(
+        Action::Pending => Ok(text(render_tags::pending(
+            &store.pending_tags(count).await?,
+        )?)),
+        Action::List => Ok(text(render_tags::list(
             &store
                 .list_tags(TagListQuery {
                     entity_type: args.entity_type,
@@ -105,28 +111,27 @@ pub async fn call(
                     limit: count,
                 })
                 .await?,
-        ),
-        Action::Counts => json(
+        ))),
+        Action::Counts => Ok(text(render_tags::counts(
             &store
                 .tag_counts(TagCountsQuery {
                     key: args.key,
                     limit: count,
                 })
                 .await?,
-        ),
+        ))),
         Action::Lookup => {
             let session_keys = required(args.session_keys, "session_keys")?;
             bounded(&session_keys, 500)?;
-            json(
-                &store
-                    .lookup_tags(TagLookup {
-                        session_keys,
-                        states: args.state.into_iter().collect(),
-                    })
-                    .await?,
-            )
+            let sessions = store
+                .lookup_tags(TagLookup {
+                    session_keys: session_keys.clone(),
+                    states: args.state.into_iter().collect(),
+                })
+                .await?;
+            Ok(text(render_tags::lookup(&session_keys, &sessions)))
         }
-        Action::Taxonomy => json(
+        Action::Taxonomy => Ok(text(render_tags::taxonomy(
             &store
                 .list_tag_taxonomy(TagTaxonomyQuery {
                     key: args.key,
@@ -134,7 +139,7 @@ pub async fn call(
                     limit: count,
                 })
                 .await?,
-        ),
+        ))),
         Action::Decide => decide(store, args).await,
         Action::Add => add(store, args).await,
         Action::TaxonomyUpsert => upsert(store, args).await,
@@ -239,7 +244,7 @@ async fn decide(store: &dyn MemoryStore, args: Args) -> Result<CallToolResult, E
     )
 }
 
-fn authorize(write: bool, action: &Action) -> Result<(), Error> {
+fn refusal(write: bool, action: &Action) -> Option<String> {
     if !write
         && matches!(
             action,
@@ -250,7 +255,9 @@ fn authorize(write: bool, action: &Action) -> Result<(), Error> {
                 | Action::TaxonomyMerge
         )
     {
-        return Err(Error::Refused("memory tag writes are disabled"));
+        return Some(format!(
+            "memory_tags: \"{action}\" is not available here (read-only surface). Review and edit tags in the hub under Memory → Tags."
+        ));
     }
-    Ok(())
+    None
 }

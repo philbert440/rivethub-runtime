@@ -24,6 +24,8 @@ pub struct MemoryEntry {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemorySearchResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunk: Option<MemoryChunkMatch>,
     pub id: String,
     pub source: MemoryHitSource,
     pub content: String,
@@ -31,4 +33,14 @@ pub struct MemorySearchResult {
     pub agent: Option<String>,
     pub relevance_score: f64,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryChunkMatch {
+    pub index: u32,
+    pub total: u32,
+    pub char_start: u32,
+    pub char_end: u32,
+    pub content: String,
 }

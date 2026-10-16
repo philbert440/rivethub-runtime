@@ -454,6 +454,16 @@ async fn the_chunk_arm_surfaces_and_merges_parents(pool: PgPool) -> TestResult {
         "the merged row carries the chunk score, not the weak parent score: {}",
         rollback_hit.score
     );
+    assert_eq!(
+        rollback_hit.chunk,
+        Some(wire::memory::MemoryChunkMatch {
+            index: 0,
+            total: 1,
+            char_start: 0,
+            char_end: 16,
+            content: "seed chunk".to_owned(),
+        })
+    );
     Ok(())
 }
 

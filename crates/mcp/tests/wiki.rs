@@ -6,9 +6,7 @@ use rmcp::model::CallToolResult;
 use std::sync::Arc;
 use testkit::{FakeMemoryStore, MemoryRequest};
 use tokio_util::sync::CancellationToken;
-use wire::gateway::wiki::{
-    WikiCitation, WikiHistoryEntry, WikiPageResponse, WikiTopic, WikiTopicList,
-};
+use wire::gateway::wiki::{WikiCitation, WikiHistoryEntry, WikiPageResponse};
 
 pub mod support;
 
@@ -77,17 +75,6 @@ fn text(result: &CallToolResult) -> &str {
 async fn search_preserves_typed_results_and_validates_limits() {
     let (server, store) = setup();
     let page = page();
-    let expected = WikiTopicList {
-        topics: vec![WikiTopic {
-            slug: page.slug.clone(),
-            title: page.title.clone(),
-            tags: page.tags.clone(),
-            entities: page.entities.clone(),
-            updated_at: page.updated_at,
-            excerpt: page.current_state.clone(),
-        }],
-        total: 1,
-    };
     store.insert_wiki_page(page).await;
     for (arguments, limit) in [
         (r#"{"query":"日本語"}"#, 5),
@@ -95,8 +82,10 @@ async fn search_preserves_typed_results_and_validates_limits() {
         (r#"{"query":"日本語","limit":20}"#, 20),
     ] {
         let result = support::call(&server, "wiki_search", arguments).await;
-        let actual: WikiTopicList = serde_json::from_str(text(&result)).expect("typed topic list");
-        assert_eq!(actual, expected);
+        assert_eq!(
+            text(&result),
+            "## Acme 日本語 (acme) — verified 2026-10-14\nReady 🦀"
+        );
         assert_eq!(
             store.requests().await.last(),
             Some(&MemoryRequest::WikiTopics(WikiFilter {
@@ -108,13 +97,7 @@ async fn search_preserves_typed_results_and_validates_limits() {
         );
     }
     let result = support::call(&server, "wiki_search", r#"{"query":"missing"}"#).await;
-    assert_eq!(
-        serde_json::from_str::<WikiTopicList>(text(&result)).expect("empty list"),
-        WikiTopicList {
-            topics: vec![],
-            total: 0
-        }
-    );
+    assert_eq!(text(&result), "No wiki topics match \"missing\".");
 }
 
 #[tokio::test]
@@ -126,7 +109,7 @@ async fn read_uses_typed_sections_and_preserves_small_markdown() {
     assert_eq!(text(&result), page.markdown);
     for (section, expected) in [
         ("full", page.markdown.as_str()),
-        ("summary", "Ready 🦀"),
+        ("summary", "## Summary\n\nReady 🦀"),
         ("article", "Article 日本語"),
         ("aliases", "AcmeKit\nAcme's $(tool)"),
         (
@@ -135,7 +118,7 @@ async fn read_uses_typed_sections_and_preserves_small_markdown() {
         ),
         (
             "citations",
-            "00000000-0000-4000-8000-000000000001 — 2026-10-14T00:00:00.000Z — summary — Decision 🦀",
+            "## Citations (1 of 1)\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|\n| 2026-10-14 | summary | `00000000-0000-4000-8000-000000000001` | Decision 🦀 |",
         ),
     ] {
         let result = support::call(
@@ -144,7 +127,16 @@ async fn read_uses_typed_sections_and_preserves_small_markdown() {
             &format!(r#"{{"slug":"acme","section":"{section}"}}"#),
         )
         .await;
-        assert_eq!(text(&result), expected);
+        if section == "full" {
+            assert_eq!(text(&result), expected);
+        } else {
+            assert_eq!(
+                text(&result),
+                format!(
+                    "section={section}\n\n---\ntitle: Acme 日本語\nslug: acme\ntags: project\naliases: 2 (AcmeKit, Acme's $(tool))\n---\n\n{expected}"
+                )
+            );
+        }
     }
     assert_eq!(
         store.requests().await,
@@ -327,7 +319,9 @@ async fn valid_literal_slugs_and_absent_sections_are_handled_explicitly() {
             &format!(r#"{{"slug":"Acme's $(topic) 日本語","section":"{section}"}}"#),
         )
         .await;
-        assert_eq!(text(&result), "");
+        assert!(
+            text(&result).starts_with(&format!("section={section}\n\n---\ntitle: Acme 日本語"))
+        );
     }
 }
 
@@ -385,8 +379,8 @@ async fn store_failures_are_tool_errors_and_search_totals_are_not_page_lengths()
     second.slug = "acme-next".into();
     store.insert_wiki_page(second).await;
     let result = support::call(&server, "wiki_search", r#"{"query":"acme","limit":1}"#).await;
-    let result: WikiTopicList = serde_json::from_str(text(&result)).expect("topic list");
-    assert_eq!(result.total, 2);
-    assert_eq!(result.topics.len(), 1);
-    assert_eq!(result.topics.first().expect("topic").slug, "acme");
+    assert_eq!(
+        text(&result),
+        "## Acme 日本語 (acme) — verified 2026-10-14\nReady 🦀"
+    );
 }

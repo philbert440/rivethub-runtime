@@ -293,6 +293,7 @@ impl MemoryStore for FakeMemoryStore {
             .take(query.limit.get() as usize)
             .map(|e| {
                 Ok(MemorySearchResult {
+                    chunk: None,
                     id: e
                         .id
                         .clone()

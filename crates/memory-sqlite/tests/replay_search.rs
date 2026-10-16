@@ -362,6 +362,7 @@ fn project_hit(hit: &Json) -> TestResult<MemorySearchResult> {
         .and_then(Json::as_f64)
         .ok_or("missing score")?;
     Ok(MemorySearchResult {
+        chunk: None,
         id: field_str(hit, "id")?.to_owned(),
         source,
         content,

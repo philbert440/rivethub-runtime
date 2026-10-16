@@ -45,6 +45,7 @@ pub use embed::Unembeddable;
 pub use origin::DumpOrigin;
 pub use origin::DumpSource;
 pub use search::SearchOutcome;
+pub use search::{SummaryDetail, SummaryExcerpt};
 pub use suggest::TagJobContext;
 pub use suggest::TagOnEntity;
 pub use suggest::TagSuggestKind;

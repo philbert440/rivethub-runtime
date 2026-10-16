@@ -379,6 +379,7 @@ impl Candidate {
         let relevance_score = relevance(self.rank);
         match self.kind {
             Kind::Message { role, agent, .. } => MemorySearchResult {
+                chunk: None,
                 id: self.id,
                 source: MemoryHitSource::Message,
                 content: self.content,
@@ -388,6 +389,7 @@ impl Candidate {
                 created_at: self.created_at,
             },
             Kind::Summary { .. } => MemorySearchResult {
+                chunk: None,
                 id: self.id,
                 source: MemoryHitSource::Summary,
                 content: self.content,

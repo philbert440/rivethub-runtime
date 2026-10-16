@@ -9,7 +9,7 @@ use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 
 use crate::error::Error;
-use crate::json;
+use crate::{render_delegate, text};
 
 const DEFAULT_TIMEOUT_MS: i64 = 1_200_000;
 const MAX_TIMEOUT_MS: i64 = 1_800_000;
@@ -92,7 +92,7 @@ pub(crate) async fn task(
         timeout: timeout_ms(arguments.timeout_ms)?,
     };
     match port.delegate(request, cancel).await {
-        Ok(outcome) => json(&outcome),
+        Ok(outcome) => Ok(text(render_delegate::task(&outcome)?)),
         Err(error) => Err(map_delegation(error)),
     }
 }
@@ -102,7 +102,7 @@ pub(crate) async fn agents(
     _arguments: ListAgents,
 ) -> Result<CallToolResult, Error> {
     match port.agents().await {
-        Ok(directory) => json(&directory),
+        Ok(directory) => Ok(text(render_delegate::agents(&directory)?)),
         Err(error) => Err(map_delegation(error)),
     }
 }

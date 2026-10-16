@@ -39,6 +39,7 @@ pub struct SearchOutcome {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ArmRow {
+    pub(crate) chunk: Option<wire::memory::MemoryChunkMatch>,
     pub(crate) id: String,
     pub(crate) source: MemoryHitSource,
     pub(crate) content: String,
@@ -96,6 +97,7 @@ fn fuse(fts: &[ArmRow], vector: Option<&[ArmRow]>, trigram: Option<&[ArmRow]>) -
             FusedEntry {
                 arm_count: ranked.arm_count,
                 hit: MemorySearchHit {
+                    chunk: row.chunk.clone(),
                     id: row.id.clone(),
                     source: row.source,
                     content: row.content.clone(),
@@ -144,6 +146,7 @@ fn finish_rows(rows: Vec<ArmRow>, limit: u32) -> Result<Vec<MemorySearchHit>, Er
             let score =
                 kernel::memory_core::composite_score(row.arm_score, row.semantic, row.boost);
             MemorySearchHit {
+                chunk: row.chunk,
                 id: row.id,
                 source: row.source,
                 content: row.content,

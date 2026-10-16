@@ -1,10 +1,12 @@
-use crate::{Error, json, text};
+use crate::catalog::ToolInput as _;
+use crate::{Error, text};
 use kernel::memory::MemoryStore;
 use kernel::wiki::{WikiFilter, WikiLookup};
 use rmcp::model::{CallToolResult, ToolAnnotations};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use wire::gateway::wiki::{WikiPageResponse, WikiSlug};
 
 const PAGE_LIMIT: usize = 24_000;
@@ -59,8 +61,9 @@ impl crate::catalog::ToolInput for Read {
     }
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, JsonSchema, strum::Display)]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 enum Section {
     Summary,
     Article,
@@ -71,21 +74,45 @@ enum Section {
 }
 
 pub async fn search(store: &dyn MemoryStore, args: Search) -> Result<CallToolResult, Error> {
-    json(
-        &store
-            .wiki_topics(WikiFilter {
-                query: Some(args.query),
-                tag: None,
-                limit: crate::memory::limit(args.limit, 5, 20)?.get(),
-                offset: 0,
+    let query = args.query.clone();
+    let topics = store
+        .wiki_topics(WikiFilter {
+            query: Some(args.query),
+            tag: None,
+            limit: crate::memory::limit(Search::NAME, args.limit, 5, 20)?.get(),
+            offset: 0,
+        })
+        .await?;
+    if topics.topics.is_empty() {
+        return Ok(text(format!("No wiki topics match \"{query}\".")));
+    }
+    Ok(text(
+        topics
+            .topics
+            .iter()
+            .map(|topic| {
+                format!(
+                    "## {} ({}) — verified {}\n{}",
+                    topic.title,
+                    topic.slug,
+                    topic.updated_at.format("%Y-%m-%d"),
+                    topic.excerpt
+                )
             })
-            .await?,
-    )
+            .collect::<Vec<_>>()
+            .join("\n\n"),
+    ))
 }
 
-pub async fn read(store: &dyn MemoryStore, args: Read) -> Result<CallToolResult, Error> {
+pub(crate) async fn read(store: &dyn MemoryStore, args: Read) -> Result<CallToolResult, Error> {
     let page = lookup(store, args.slug).await?;
     let oversized = page.markdown.chars().count() > PAGE_LIMIT;
+    let header = args
+        .section
+        .as_ref()
+        .filter(|section| !matches!(section, Section::Full))
+        .map(|section| section_header(&page, section))
+        .transpose()?;
     let content = match args.section {
         Some(Section::Full) if oversized => {
             return Err(Error::Refused(
@@ -94,39 +121,67 @@ pub async fn read(store: &dyn MemoryStore, args: Read) -> Result<CallToolResult,
         }
         None if oversized => encyclopedia(&page),
         None | Some(Section::Full) => page.markdown,
-        Some(Section::Summary) => bounded(&page.current_state, PAGE_LIMIT),
+        Some(Section::Summary) => format!("## Summary\n\n{}", page.current_state),
         Some(Section::Article) => match page.article {
             Some(article) => bounded(&article, PAGE_LIMIT),
             None => return Err(Error::Refused("wiki page has no article section")),
         },
         Some(Section::History) => bounded(&history(&page), PAGE_LIMIT),
         Some(Section::Aliases) => bounded(&page.aliases.join("\n"), PAGE_LIMIT),
-        Some(Section::Citations) => bounded(
-            &page
-                .citations
-                .iter()
-                .map(|citation| {
-                    let mut line = citation.summary_id.clone();
-                    if let Some(date) = citation.date {
-                        line.push_str(" — ");
-                        line.push_str(&date.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
-                    }
-                    if let Some(kind) = &citation.kind {
-                        line.push_str(" — ");
-                        line.push_str(kind);
-                    }
-                    if let Some(note) = &citation.note {
-                        line.push_str(" — ");
-                        line.push_str(note);
-                    }
-                    line
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
-            PAGE_LIMIT,
-        ),
+        Some(Section::Citations) => citations(&page)?,
     };
-    Ok(text(content))
+    Ok(text(match header {
+        Some(header) => bounded(&format!("{header}\n\n{content}"), PAGE_LIMIT),
+        None => content,
+    }))
+}
+
+fn section_header(page: &WikiPageResponse, section: &Section) -> Result<String, Error> {
+    let mut header = format!(
+        "section={section}\n\n---\ntitle: {}\nslug: {}",
+        bounded(&page.title, 256),
+        page.slug
+    );
+    if let Some(verified) = page.last_verified {
+        write!(
+            header,
+            "\nlast_verified: {}",
+            verified.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
+        )?;
+    }
+    write!(
+        header,
+        "\ntags: {}\naliases: {} ({})\n---",
+        bounded(&page.tags.join(", "), 1000),
+        page.aliases.len(),
+        bounded(&page.aliases.join(", "), 1000)
+    )?;
+    Ok(header)
+}
+
+fn citations(page: &WikiPageResponse) -> Result<String, Error> {
+    let mut lines = vec![format!(
+        "## Citations ({} of {})\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|",
+        page.citations.len(),
+        page.citations.len()
+    )];
+    for citation in &page.citations {
+        let mut line = "| ".to_owned();
+        if let Some(date) = citation.date {
+            line.push_str(&date.format("%Y-%m-%d").to_string());
+        }
+        line.push_str(" | ");
+        if let Some(kind) = &citation.kind {
+            line.push_str(kind);
+        }
+        write!(line, " | `{}` | ", citation.summary_id)?;
+        if let Some(note) = &citation.note {
+            line.push_str(note);
+        }
+        line.push_str(" |");
+        lines.push(line);
+    }
+    Ok(lines.join("\n"))
 }
 
 async fn lookup(store: &dyn MemoryStore, mut slug: WikiSlug) -> Result<WikiPageResponse, Error> {

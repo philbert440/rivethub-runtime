@@ -136,7 +136,14 @@ impl crate::PostgresMemory {
         let outcome = self.search_outcome_for(&query).await?;
         let reason = match outcome.degraded {
             Some(reason) => Some(reason),
-            None if self.embed.is_none() => Some("embedding endpoint not configured".to_owned()),
+            None if self.embed.is_none()
+                && matches!(
+                    query.mode,
+                    kernel::memory::SearchMode::Hybrid | kernel::memory::SearchMode::Vector
+                ) =>
+            {
+                Some("embedding endpoint not configured".to_owned())
+            }
             None => None,
         };
         let expanded = if query.expand == Some(false) {
@@ -144,11 +151,14 @@ impl crate::PostgresMemory {
         } else {
             self.expand_summaries(&outcome.hits, &query).await?
         };
+        let summaries = self.summary_details(&outcome.hits, &query).await?;
         let mut response = SearchOutcome {
+            summaries,
             results: outcome
                 .hits
                 .into_iter()
                 .map(|hit| wire::memory::MemorySearchResult {
+                    chunk: hit.chunk,
                     id: hit.id,
                     source: hit.source,
                     content: hit.content,

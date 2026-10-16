@@ -55,9 +55,10 @@ async fn search(tools: &[Arc<dyn Tool>]) {
         panic!("one result block")
     };
     let text = block.as_text().expect("text outcome");
-    let outcome: kernel::memory::SearchOutcome =
-        serde_json::from_str(&text.text).expect("search outcome");
-    assert_eq!(outcome, kernel::memory::SearchOutcome::default());
+    assert!(
+        text.text
+            .starts_with("No results found for query \"remote ✓\".")
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

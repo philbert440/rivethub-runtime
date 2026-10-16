@@ -316,13 +316,14 @@ async fn delegated(home: &Path, database: &Path, mcp_port: u16) -> TestResult {
     let outcome = delegate_outcome(mcp_port).await;
     stop(started).await?;
     let outcome = outcome?;
-    assert_eq!(outcome.status, wire::task::TaskStatus::Completed);
-    assert!(!outcome.timed_out);
+    let (body, id) = outcome.rsplit_once("\n\nTask: ").ok_or("task footer")?;
+    assert_eq!(body, format!("[completed] {DELEGATE_TEXT}"));
     let store = memory_sqlite::SqliteStore::open(database)?;
-    let stored = store.load(outcome.id).await?;
+    let stored = store.load(id.parse()?).await?;
+    assert_eq!(stored.status, wire::task::TaskStatus::Completed);
     assert_eq!(stored.claimed_by.as_deref(), Some("standalone-node:agent"));
     assert_eq!(stored.node_affinity.as_deref(), Some("standalone-node"));
-    let result = outcome.result.ok_or("task result")?;
+    let result = stored.result.ok_or("task result")?;
     assert_eq!(result.summary, DELEGATE_TEXT);
     assert_eq!(result.verdict, wire::task::TaskVerdict::Completed);
     Ok(())
@@ -435,7 +436,7 @@ fn event_stream(content: &str) -> TestResult<String> {
     ))
 }
 
-async fn delegate_outcome(port: u16) -> TestResult<kernel::tasks::DelegateOutcome> {
+async fn delegate_outcome(port: u16) -> TestResult<String> {
     let shutdown = CancellationToken::new();
     let http = reqwest::Client::builder().no_proxy().build()?;
     let config =
@@ -454,7 +455,7 @@ async fn delegate_outcome(port: u16) -> TestResult<kernel::tasks::DelegateOutcom
     outcome
 }
 
-async fn call_delegate(tools: &[Arc<dyn Tool>]) -> TestResult<kernel::tasks::DelegateOutcome> {
+async fn call_delegate(tools: &[Arc<dyn Tool>]) -> TestResult<String> {
     let tool = tools
         .iter()
         .find(|tool| tool.definition().name == "delegate_task")
@@ -479,5 +480,5 @@ async fn call_delegate(tools: &[Arc<dyn Tool>]) -> TestResult<kernel::tasks::Del
     let Some(text) = block.as_text() else {
         return Err("text outcome".into());
     };
-    Ok(serde_json::from_str(&text.text)?)
+    Ok(text.text.clone())
 }

@@ -111,6 +111,7 @@ fn push_agent_condition(query: &mut QueryBuilder<sqlx::Postgres>, agent: &str, i
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 struct ArmSqlRow {
+    chunk: Option<sqlx::types::Json<wire::memory::MemoryChunkMatch>>,
     id: String,
     content: String,
     role_or_kind: Option<String>,
@@ -134,6 +135,7 @@ impl ArmSqlRow {
             (None, summary_kind(self.role_or_kind)?)
         };
         Ok(ArmRow {
+            chunk: self.chunk.map(|chunk| chunk.0),
             id: self.id,
             source: if is_message {
                 MemoryHitSource::Message
@@ -154,8 +156,13 @@ impl ArmSqlRow {
     }
 }
 
-fn push_select_prefix(query: &mut QueryBuilder<sqlx::Postgres>, is_message: bool) {
+fn push_select_prefix(query: &mut QueryBuilder<sqlx::Postgres>, is_message: bool, chunk: bool) {
     query.push("SELECT ");
+    query.push(if chunk {
+        "jsonb_build_object('index', c.idx, 'total', (SELECT count(*) FROM rh_message_chunks all_chunks WHERE all_chunks.message_id = c.message_id), 'charStart', c.char_start, 'charEnd', c.char_end, 'content', c.content) AS chunk, "
+    } else {
+        "NULL::jsonb AS chunk, "
+    });
     if is_message {
         query.push(
             "m.id::text, m.content, m.role AS role_or_kind, m.agent, m.tool_name, \
@@ -227,7 +234,7 @@ impl crate::PostgresMemory {
         let pool = hybrid_pool(options.limit);
         let alias = if is_message { "m" } else { "s" };
         let mut query = QueryBuilder::new("");
-        push_select_prefix(&mut query, is_message);
+        push_select_prefix(&mut query, is_message, false);
         match kind {
             ArmKind::Fts | ArmKind::FtsExplicit => {
                 query.push(format!(
@@ -422,7 +429,7 @@ impl crate::PostgresMemory {
         };
         let distance = format!("{alias}.embedding");
         let mut query = QueryBuilder::new("");
-        push_select_prefix(&mut query, is_message);
+        push_select_prefix(&mut query, is_message, false);
         query.push("coalesce(1.0 - (");
         query.push(distance.clone());
         query.push(" <=> ");
@@ -464,7 +471,7 @@ impl crate::PostgresMemory {
         tx: &mut sqlx::PgConnection,
     ) -> Result<Vec<ArmRow>, Error> {
         let mut query = QueryBuilder::new("");
-        push_select_prefix(&mut query, true);
+        push_select_prefix(&mut query, true, true);
         query.push("coalesce(1.0 - (c.embedding <=> ");
         query.push_bind(vector.clone());
         query.push("), 0.0)::float8 AS score, ");

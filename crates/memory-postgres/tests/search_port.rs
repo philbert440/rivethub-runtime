@@ -153,12 +153,7 @@ async fn expansion_is_opt_out_and_retains_time_bounds(pool: PgPool) -> TestResul
             assert_eq!(entry.created_at, Some("2026-10-12T00:00:00Z".parse()?));
             assert_eq!(entry.content, TEXT);
         }
-        let notice = outcome.degraded.ok_or("missing notice")?;
-        assert_eq!(notice.reason, "embedding endpoint not configured");
-        assert_eq!(
-            notice.effect,
-            "Keyword / FTS ranking only — not meaning-based."
-        );
+        assert_eq!(outcome.degraded, None);
     }
     Ok(())
 }

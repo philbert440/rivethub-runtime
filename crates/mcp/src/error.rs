@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error(transparent)]
+    Format(#[from] std::fmt::Error),
     #[error("invalid arguments: {0}")]
     Arguments(#[from] serde_json::Error),
     #[error("{0}")]

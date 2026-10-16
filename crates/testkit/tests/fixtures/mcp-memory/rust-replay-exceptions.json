@@ -1,0 +1,230 @@
+[
+  {
+    "tool": "memory_search",
+    "note": "default hybrid: summaries (expanded) plus message hits",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "hybrid with a limit: summary and tool hits fused",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "fts over messages: the 7642-char tool_result hit, display-truncated with a memory_get_full handle",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "trigram hit on a short tool row (whole-string similarity > 0.3), shown with its tool_result",
+    "kind": "unresolved",
+    "reason": "Non-vector score mismatch: expected 0.371, actual 0.368. Current-time recency and earlier omitted semantic-search reinforcement affect the score. The README does not permit masking this score."
+  },
+  {
+    "tool": "memory_search",
+    "note": "trigram hit on a short user message",
+    "kind": "unresolved",
+    "reason": "Non-vector score mismatch: expected 0.419, actual 0.418. Current-time recency and earlier omitted semantic-search reinforcement affect the score. The README does not permit masking this score."
+  },
+  {
+    "tool": "memory_search",
+    "note": "regex pattern match inside the long tool_result",
+    "kind": "unresolved",
+    "reason": "Non-vector score mismatch: expected 0.380, actual 0.372. Tool preview and truncation text match, but the README does not permit masking this score."
+  },
+  {
+    "tool": "memory_search",
+    "note": "invalid regular expression",
+    "kind": "typed_rejection",
+    "reason": "Rust rejects invalid input through typed serde, UUID, tag or range validation. Zod wording, PostgreSQL coercion diagnostics, and success envelopes containing errors are not emulated."
+  },
+  {
+    "tool": "memory_search",
+    "note": "pure vector (ANN) search",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "vector over messages: may surface a chunk hit from ros_message_chunks",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "summaries only: the legacy condensed summary, expanded with source messages",
+    "kind": "unresolved",
+    "reason": "Migration 0023 canonicalizes condensed to branch; missing embeddings also prevent reproducing retrieval. No legacy summary-kind shim is added."
+  },
+  {
+    "tool": "memory_search",
+    "note": "summaries only, expand=false: unexpanded summary list with ids",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "messages only",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "tag filter (accepted tag)",
+    "kind": "unresolved",
+    "reason": "Legacy condensed kind is canonicalized by migration 0023; semantic query vectors are not vendored."
+  },
+  {
+    "tool": "memory_search",
+    "note": "tag filter on another conversation; hits carry tag suffixes",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "tag filter on a tag that is only suggested: no hits",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "tag filter that is not key:value: error text",
+    "kind": "typed_rejection",
+    "reason": "Rust rejects invalid input through typed serde, UUID, tag or range validation. Zod wording, PostgreSQL coercion diagnostics, and success envelopes containing errors are not emulated."
+  },
+  {
+    "tool": "memory_search",
+    "note": "explicit since/before window with hits",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "hybrid inside a window that holds no keyword match: the vector arm still returns the nearest in-window rows",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "window shortcut with no data in range: empty result names the window",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "agent filter (grok), hybrid: message hits are grok's; summary hits are not filtered by agent",
+    "kind": "unresolved",
+    "reason": "The recording leaks summaries across the agent filter. Rust keeps the agent constraint on summaries and source messages; that bug is not copied."
+  },
+  {
+    "tool": "memory_search",
+    "note": "limit=1",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "limit=50 (the maximum)",
+    "kind": "unresolved",
+    "reason": "The seed has NULL embeddings and no endpoint or embedding snapshot is available. This call depends on semantic retrieval or scoring; no expected hit list or score is copied into the store."
+  },
+  {
+    "tool": "memory_search",
+    "note": "non-integer limit",
+    "kind": "typed_rejection",
+    "reason": "Rust rejects invalid input through typed serde, UUID, tag or range validation. Zod wording, PostgreSQL coercion diagnostics, and success envelopes containing errors are not emulated."
+  },
+  {
+    "tool": "memory_search",
+    "note": "unknown mode",
+    "kind": "typed_rejection",
+    "reason": "Rust rejects invalid input through typed serde, UUID, tag or range validation. Zod wording, PostgreSQL coercion diagnostics, and success envelopes containing errors are not emulated."
+  },
+  {
+    "tool": "memory_search",
+    "note": "missing required query",
+    "kind": "typed_rejection",
+    "reason": "Rust rejects invalid input through typed serde, UUID, tag or range validation. Zod wording, PostgreSQL coercion diagnostics, and success envelopes containing errors are not emulated."
+  },
+  {
+    "tool": "memory_browse",
+    "note": "malformed conversation id",
+    "kind": "typed_rejection",
+    "reason": "Rust rejects invalid input through typed serde, UUID, tag or range validation. Zod wording, PostgreSQL coercion diagnostics, and success envelopes containing errors are not emulated."
+  },
+  {
+    "tool": "memory_get_full",
+    "note": "the capture-truncated tool row: its capture file is not on this host",
+    "kind": "unresolved",
+    "reason": "No authorized capture-file reader is configured. The fleet-home/remote-host guessing heuristic is not copied and tests never open the stored host path."
+  },
+  {
+    "tool": "memory_get_full",
+    "note": "malformed id",
+    "kind": "typed_rejection",
+    "reason": "Rust rejects invalid input through typed serde, UUID, tag or range validation. Zod wording, PostgreSQL coercion diagnostics, and success envelopes containing errors are not emulated."
+  },
+  {
+    "tool": "memory_get_full",
+    "note": "missing required id",
+    "kind": "typed_rejection",
+    "reason": "Rust rejects invalid input through typed serde, UUID, tag or range validation. Zod wording, PostgreSQL coercion diagnostics, and success envelopes containing errors are not emulated."
+  },
+  {
+    "tool": "memory_stats",
+    "note": "whole-store stats",
+    "kind": "unresolved",
+    "reason": "Unfinished: MemoryStore stats lacks the detailed health, summary-tree, summarizer, capture-spool and runtime-counter data required by this recording."
+  },
+  {
+    "tool": "memory_stats",
+    "note": "stats for one agent",
+    "kind": "unresolved",
+    "reason": "Unfinished: MemoryStore stats has no agent filter or detailed health report. The renderer does not invent counters."
+  },
+  {
+    "tool": "memory_tags",
+    "note": "unknown action",
+    "kind": "typed_rejection",
+    "reason": "Rust rejects invalid input through typed serde, UUID, tag or range validation. Zod wording, PostgreSQL coercion diagnostics, and success envelopes containing errors are not emulated."
+  },
+  {
+    "tool": "wiki_search",
+    "note": "wiki search with a hit",
+    "kind": "unresolved",
+    "reason": "Unfinished: wiki_topics is a keyword port; the recording also includes topics from a vector arm whose embeddings are absent."
+  },
+  {
+    "tool": "wiki_search",
+    "note": "wiki search for an unrelated query: the vector arm still ranks every topic",
+    "kind": "unresolved",
+    "reason": "The recording returns unrelated wiki topics through its vector arm. No always-return-all-topics imitation is introduced; embedding-aware wiki retrieval remains unfinished."
+  },
+  {
+    "tool": "wiki_read",
+    "note": "no page: red link with did-you-mean candidates",
+    "kind": "unresolved",
+    "reason": "Unfinished: missing-page suggestions require the wiki retrieval port; the existing typed missing-page error is retained."
+  },
+  {
+    "tool": "wiki_read",
+    "note": "invalid slug",
+    "kind": "unresolved",
+    "reason": "WikiSlug intentionally accepts safe literal filenames, including uppercase, quoting and Unicode. The stricter recorded spelling restriction is not copied."
+  },
+  {
+    "tool": "wiki_read",
+    "note": "unknown section",
+    "kind": "typed_rejection",
+    "reason": "Rust rejects invalid input through typed serde, UUID, tag or range validation. Zod wording, PostgreSQL coercion diagnostics, and success envelopes containing errors are not emulated."
+  },
+  {
+    "tool": "list_agents",
+    "note": "presets from ros_agent_presets plus the runtime roster from mesh.json",
+    "kind": "unresolved",
+    "reason": "Unfinished: real directory loading and roster order need replay coverage. The typed renderer is tested separately; the seed uses the legacy grok harness identifier."
+  }
+]

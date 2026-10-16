@@ -4,6 +4,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("wiki page escapes its directory")]
+    WikiContainment,
+    #[error("wiki file access failed: {0}")]
+    WikiIo(#[source] std::io::Error),
     #[error("capture channel is required")]
     MissingChannel,
     #[error("time windows must be resolved by the caller with its time zone")]
@@ -100,6 +104,7 @@ impl From<Error> for MemoryStoreError {
             Error::NotAdopted => Self::Unavailable(Box::new(Error::NotAdopted)),
             Error::QueueAbsent => Self::Unavailable(Box::new(Error::QueueAbsent)),
             Error::MissingChannel
+            | Error::WikiContainment
             | Error::UnresolvedWindow
             | Error::InvalidId(_)
             | Error::Json(_)
@@ -112,6 +117,7 @@ impl From<Error> for MemoryStoreError {
                 message: value.to_string(),
             },
             Error::Integer(_)
+            | Error::WikiIo(_)
             | Error::ProjectIo(_)
             | Error::ProjectEncoding(_)
             | Error::ProjectTask(_) => Self::Unavailable(Box::new(value)),
@@ -139,6 +145,8 @@ impl From<Error> for JobQueueError {
             Error::NotAdopted => Self::Unavailable(Box::new(Error::NotAdopted)),
             Error::QueueAbsent => Self::Unavailable(Box::new(Error::QueueAbsent)),
             Error::MissingChannel
+            | Error::WikiContainment
+            | Error::WikiIo(_)
             | Error::UnresolvedWindow
             | Error::InvalidId(_)
             | Error::Json(_)
