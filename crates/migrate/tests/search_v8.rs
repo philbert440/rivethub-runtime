@@ -7,7 +7,7 @@ fn v7_upgrade_backfills_trigram_indexes_and_keeps_the_original_backup() -> TestR
     let fixture = testkit::copy_fixture(&testkit::recording("memory-sqlite/fixture-v7.sqlite"))?;
     let original = std::fs::read(fixture.path())?;
     let status = migrate::sqlite(fixture.path())?;
-    assert_eq!(status.current, 8);
+    assert_eq!(status.current, memory_sqlite::SCHEMA_VERSION);
     let backup = fixture.path().with_extension("sqlite.v7.bak");
     assert_eq!(std::fs::read(backup)?, original);
     let conn = Connection::open(fixture.path())?;

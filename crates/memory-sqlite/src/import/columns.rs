@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use kernel::memory::SummaryKind;
 use rusqlite::types::Value;
 use rusqlite::{Connection, Transaction, params_from_iter};
 
@@ -118,7 +119,7 @@ impl Block {
                 continue;
             };
             let value = match field {
-                None if column.required => {
+                None if column.required && !summary_depth(self.table, column) => {
                     return Err(copy::invalid(
                         line,
                         format!("NULL in required column {}", column.name),
@@ -129,8 +130,100 @@ impl Block {
             };
             values.push(value);
         }
+        if self.table == ImportTable::Summaries {
+            rewrite_legacy_summary_kind(&self.columns, &mut values, line)?;
+        }
         tx.execute(&self.sql, params_from_iter(values))?;
         Ok(())
+    }
+}
+
+fn rewrite_legacy_summary_kind(
+    columns: &[Option<Column>],
+    values: &mut [Value],
+    line: usize,
+) -> Result<(), ImportError> {
+    let stored: Vec<&str> = columns
+        .iter()
+        .filter_map(|column| column.as_ref().map(|column| column.name.as_str()))
+        .collect();
+    if stored.len() != values.len() {
+        return Err(copy::invalid(
+            line,
+            "summary column count does not match values",
+        ));
+    }
+    if let Some(kind_at) = stored.iter().position(|name| *name == "kind") {
+        let kind = match values.get(kind_at) {
+            Some(Value::Text(kind)) => kind.clone(),
+            Some(Value::Null | Value::Integer(_) | Value::Real(_) | Value::Blob(_)) => {
+                return Err(copy::invalid(line, "summary kind is not text"));
+            }
+            None => {
+                return Err(copy::invalid(
+                    line,
+                    "summary column count does not match values",
+                ));
+            }
+        };
+        let depth = stored_depth(&stored, values, line)?;
+        if let Some(mapped) = legacy_kind(&kind, depth, line)? {
+            let slot = values
+                .get_mut(kind_at)
+                .ok_or_else(|| copy::invalid(line, "summary column count does not match values"))?;
+            *slot = Value::Text(mapped.as_str().to_owned());
+        }
+    }
+    if let Some(index) = stored.iter().position(|name| *name == "depth")
+        && matches!(values.get(index), Some(Value::Null))
+    {
+        return Err(copy::invalid(line, "NULL in required column depth"));
+    }
+    Ok(())
+}
+
+fn summary_depth(table: ImportTable, column: &Column) -> bool {
+    table == ImportTable::Summaries && column.name == "depth"
+}
+
+fn stored_depth(
+    stored: &[&str],
+    values: &[Value],
+    line: usize,
+) -> Result<Option<i64>, ImportError> {
+    let Some(index) = stored.iter().position(|name| *name == "depth") else {
+        return Ok(None);
+    };
+    match values.get(index) {
+        Some(Value::Integer(depth)) => Ok(Some(*depth)),
+        Some(Value::Null) => Ok(None),
+        Some(Value::Real(_) | Value::Text(_) | Value::Blob(_)) => {
+            Err(copy::invalid(line, "summary depth is not an integer"))
+        }
+        None => Err(copy::invalid(
+            line,
+            "summary column count does not match values",
+        )),
+    }
+}
+
+fn legacy_kind(
+    kind: &str,
+    depth: Option<i64>,
+    line: usize,
+) -> Result<Option<SummaryKind>, ImportError> {
+    if kind.parse::<SummaryKind>().is_ok() {
+        return Ok(None);
+    }
+    let Some(depth) = depth else {
+        return Err(copy::invalid(line, "legacy summary kind needs its depth"));
+    };
+    match SummaryKind::from_depth(depth) {
+        Some(kind) => Ok(Some(kind)),
+        None => Err(copy::invalid(
+            line,
+            "legacy summary kind has no depth mapping",
+        )),
     }
 }
 

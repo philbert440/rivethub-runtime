@@ -11,12 +11,12 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 22);
+    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 23);
 
     let applied = sqlx::query("SELECT count(*)::bigint AS n FROM _sqlx_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 22);
+    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 23);
 
     migrate::postgres_pool(&pool).await?;
 
@@ -184,8 +184,8 @@ async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
         .await?;
     assert_eq!(
         tracked.try_get::<i64, _>("n").unwrap(),
-        22,
-        "0021 renames the tables and 0022 adds the summaries trigram index"
+        23,
+        "0021 renames the tables, 0022 adds the summaries trigram index, and 0023 rewrites legacy summary kinds"
     );
     let summaries_trgm =
         sqlx::query("SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_ros_summaries_trgm'")

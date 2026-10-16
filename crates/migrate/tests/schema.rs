@@ -106,7 +106,7 @@ fn a_delete_mode_v5_backup_is_the_original_file() -> TestResult<()> {
     let path = delete_mode_v5(dir.path())?;
     let original = fs::read(&path)?;
     let status = migrate::sqlite(&path)?;
-    assert_eq!(status.current, 8);
+    assert_eq!(status.current, memory_sqlite::SCHEMA_VERSION);
     let backup = dir.path().join("memory.sqlite.v5.bak");
     assert_eq!(
         fs::read(&backup)?,

@@ -10,6 +10,8 @@ use crate::error::Error;
 use crate::upgrade;
 use crate::version::SchemaVersion;
 
+const CURRENT: SchemaVersion = SchemaVersion::V9;
+
 const SCHEMA_SQL: &str = include_str!("schema/schema_v7.sql");
 
 const TAIL_INDEXES_SQL: &str = "
@@ -20,8 +22,6 @@ CREATE INDEX IF NOT EXISTS idx_ros_conversations_owner ON ros_conversations (own
 CREATE INDEX IF NOT EXISTS idx_ros_tags_removal_state ON ros_tags (removal_state)
           WHERE removal_state = 'suggested';
 ";
-
-const CURRENT_VERSION_PRAGMA: &str = "PRAGMA user_version = 8;";
 
 const CONNECTION_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
@@ -41,25 +41,18 @@ pub fn sqlite_at(path: &Path, now: DateTime<Utc>) -> Result<Status, Error> {
         create_fresh(&mut conn)?;
         return Ok(current());
     }
-    match SchemaVersion::try_from(found)? {
-        SchemaVersion::V8 => Ok(current()),
-        from @ (SchemaVersion::V1
-        | SchemaVersion::V2
-        | SchemaVersion::V3
-        | SchemaVersion::V4
-        | SchemaVersion::V5
-        | SchemaVersion::V6
-        | SchemaVersion::V7) => {
-            copy_original(path, from)?;
-            let mut conn = open_writing(path)?;
-            bring_through(&mut conn, from, now)?;
-            Ok(current())
-        }
+    let from = SchemaVersion::try_from(found)?;
+    if from == CURRENT {
+        return Ok(current());
     }
+    copy_original(path, from)?;
+    let mut conn = open_writing(path)?;
+    bring_through(&mut conn, from, now)?;
+    Ok(current())
 }
 
 pub fn sqlite_status(path: &Path) -> Result<Status, Error> {
-    let required = SchemaVersion::V8.number();
+    let required = CURRENT.number();
     if !exists(path)? {
         return Ok(Status {
             current: 0,
@@ -86,8 +79,8 @@ pub fn sqlite_status(path: &Path) -> Result<Status, Error> {
 
 fn current() -> Status {
     Status {
-        current: SchemaVersion::V8.number(),
-        required: SchemaVersion::V8.number(),
+        current: CURRENT.number(),
+        required: CURRENT.number(),
         pending: 0,
     }
 }
@@ -95,7 +88,7 @@ fn current() -> Status {
 fn steps(from: i64) -> usize {
     let mut count = 0usize;
     let mut current = from;
-    while current < SchemaVersion::V8.number() {
+    while current < CURRENT.number() {
         count += 1;
         current += 1;
     }
@@ -174,8 +167,7 @@ fn create_fresh(conn: &mut Connection) -> Result<(), Error> {
     tx.execute_batch(include_str!("schema/search_v8.sql"))
         .map_err(Error::SqliteCreate)?;
     apply_tail_indexes(&tx)?;
-    tx.execute_batch(CURRENT_VERSION_PRAGMA)
-        .map_err(Error::SqliteCreate)?;
+    stamp_current(&tx)?;
     tx.commit().map_err(Error::SqliteCreate)
 }
 
@@ -190,9 +182,13 @@ fn bring_through(
     upgrade::ladder(conn, from, now)?;
     let tx = begin(conn)?;
     apply_tail_indexes(&tx)?;
-    tx.execute_batch(CURRENT_VERSION_PRAGMA)
-        .map_err(Error::SqliteCreate)?;
+    stamp_current(&tx)?;
     tx.commit().map_err(Error::SqliteCreate)
+}
+
+fn stamp_current(tx: &rusqlite::Transaction<'_>) -> Result<(), Error> {
+    tx.pragma_update(None, "user_version", CURRENT.number())
+        .map_err(Error::SqliteCreate)
 }
 
 fn user_version(conn: &Connection) -> Result<i64, Error> {

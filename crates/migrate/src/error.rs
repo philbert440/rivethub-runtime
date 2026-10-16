@@ -47,6 +47,8 @@ pub enum Error {
     },
     #[error("a backup already exists at {path} — refusing to replace it")]
     BackupExists { path: PathBuf },
+    #[error("a legacy summary kind has no depth mapping")]
+    UnmappedSummaryKind,
 }
 
 pub(crate) fn relation_missing(source: &sqlx::Error) -> bool {

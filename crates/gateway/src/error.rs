@@ -136,10 +136,13 @@ impl ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 GatewayError::new(STORE_UNAVAILABLE),
             ),
-            Self::Store(MemoryStoreError::Query { .. }) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                GatewayError::new(STORE_QUERY_FAILED),
-            ),
+            Self::Store(MemoryStoreError::Query { source, .. }) => {
+                tracing::error!(error = %source, "memory query failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    GatewayError::new(STORE_QUERY_FAILED),
+                )
+            }
             Self::Store(error @ MemoryStoreError::TagTablesMissing) => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 GatewayError::new(error.to_string()),

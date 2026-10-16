@@ -32,7 +32,40 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         SchemaVersion::V8 => in_transaction(conn, to, |tx| {
             tx.execute_batch(include_str!("schema/search_v8.sql"))
         }),
+        SchemaVersion::V9 => rewrite_legacy_summary_kinds(conn),
     }
+}
+
+const LEGACY_KIND_REWRITE: &str = "
+UPDATE ros_summaries
+SET kind = CASE
+    WHEN depth = 0 THEN 'leaf'
+    WHEN depth = 1 THEN 'branch'
+    WHEN depth >= 2 THEN 'root'
+END
+WHERE kind NOT IN ('leaf', 'branch', 'root')
+  AND depth >= 0;
+";
+
+fn rewrite_legacy_summary_kinds(conn: &mut Connection) -> Result<(), Error> {
+    let failed = |source| Error::SqliteUpgrade {
+        version: SchemaVersion::V9.number(),
+        source,
+    };
+    let tx = conn.transaction().map_err(failed)?;
+    tx.execute_batch(LEGACY_KIND_REWRITE).map_err(failed)?;
+    let left: i64 = tx
+        .query_row(
+            "SELECT count(*) FROM ros_summaries WHERE kind NOT IN ('leaf', 'branch', 'root')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(failed)?;
+    if left > 0 {
+        return Err(Error::UnmappedSummaryKind);
+    }
+    tx.commit().map_err(failed)?;
+    Ok(())
 }
 
 fn in_transaction(

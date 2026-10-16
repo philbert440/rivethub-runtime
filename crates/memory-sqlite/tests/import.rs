@@ -289,6 +289,136 @@ struct Skip {
     reason: String,
 }
 
+fn summaries(columns: &str, body: &str) -> String {
+    format!(
+        "COPY public.ros_summaries ({columns}) FROM stdin;\n{body}\n\\.\n-- PostgreSQL database dump complete\n"
+    )
+}
+
+async fn summary_rows(target: &Target) -> Result<Vec<(String, String, i64)>> {
+    let rows = target
+        .store
+        .with_conn(|conn| {
+            Ok(testkit::query_json(
+                conn,
+                "SELECT id, kind, depth FROM ros_summaries ORDER BY id",
+                &[],
+            ))
+        })
+        .await??;
+    let mut stored = Vec::new();
+    for row in rows {
+        let object = row.as_object().ok_or("expected row object")?;
+        let id = object
+            .get("id")
+            .and_then(testkit::Json::as_str)
+            .ok_or("id")?
+            .to_owned();
+        let kind = object
+            .get("kind")
+            .and_then(testkit::Json::as_str)
+            .ok_or("kind")?
+            .to_owned();
+        let depth = object
+            .get("depth")
+            .and_then(testkit::Json::as_i64)
+            .ok_or("depth")?;
+        stored.push((id, kind, depth));
+    }
+    Ok(stored)
+}
+
+async fn refuses(dump: &str, detail: &str) -> Result {
+    let target = Target::new()?;
+    match target.import(dump).await {
+        Err(ImportError::Format { detail: found, .. }) => assert_eq!(found, detail),
+        other => return Err(format!("expected a format error, got {other:?}").into()),
+    }
+    target.assert_empty().await
+}
+
+#[tokio::test]
+async fn imported_legacy_summary_kinds_follow_depth() -> Result {
+    let target = Target::new()?;
+    let dump = summaries(
+        "id, depth, kind, content, created_at",
+        "d1\t1\tcondensed\tcondensed one\t2026-10-10 12:00:00+00
+d2\t2\tcondensed\tcondensed two\t2026-10-10 12:00:00+00
+k0\t0\tbranch\tkept branch\t2026-10-10 12:00:00+00
+k2\t2\tleaf\tkept leaf\t2026-10-10 12:00:00+00
+kn\t-3\tleaf\tkept negative\t2026-10-10 12:00:00+00
+kr\t1\troot\tkept root\t2026-10-10 12:00:00+00
+u0\t0\trollup\tunknown zero\t2026-10-10 12:00:00+00
+u4\t4\trollup\tunknown four\t2026-10-10 12:00:00+00",
+    );
+    target.import(&dump).await?;
+    assert_eq!(
+        summary_rows(&target).await?,
+        vec![
+            ("d1".to_owned(), "branch".to_owned(), 1),
+            ("d2".to_owned(), "root".to_owned(), 2),
+            ("k0".to_owned(), "branch".to_owned(), 0),
+            ("k2".to_owned(), "leaf".to_owned(), 2),
+            ("kn".to_owned(), "leaf".to_owned(), -3),
+            ("kr".to_owned(), "root".to_owned(), 1),
+            ("u0".to_owned(), "leaf".to_owned(), 0),
+            ("u4".to_owned(), "root".to_owned(), 4),
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_canonical_summary_kind_imports_without_a_depth_column() -> Result {
+    let target = Target::new()?;
+    let dump = summaries(
+        "id, kind, content, created_at",
+        "keep\tleaf\tkept leaf\t2026-10-10 12:00:00+00",
+    );
+    target.import(&dump).await?;
+    assert_eq!(
+        summary_rows(&target).await?,
+        vec![("keep".to_owned(), "leaf".to_owned(), 0)]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_legacy_summary_kind_without_depth_rolls_back() -> Result {
+    refuses(
+        &summaries(
+            "id, kind, content, created_at",
+            "d1\tcondensed\tcondensed one\t2026-10-10 12:00:00+00",
+        ),
+        "legacy summary kind needs its depth",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn a_legacy_summary_kind_with_null_depth_rolls_back() -> Result {
+    refuses(
+        &summaries(
+            "id, depth, kind, content, created_at",
+            "d1\t\\N\tcondensed\tcondensed one\t2026-10-10 12:00:00+00",
+        ),
+        "legacy summary kind needs its depth",
+    )
+    .await
+}
+
+#[tokio::test]
+async fn a_legacy_summary_kind_below_zero_rolls_the_import_back() -> Result {
+    refuses(
+        &summaries(
+            "id, depth, kind, content, created_at",
+            "bad\t-1\tcondensed\tbelow zero\t2026-10-10 12:00:00+00",
+        ),
+        "legacy summary kind has no depth mapping",
+    )
+    .await
+}
+
 #[test]
 fn import_skip_list_has_no_unexplained_or_unrelated_scenarios() -> Result {
     let SkipList { skips } =
