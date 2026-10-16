@@ -1,12 +1,7 @@
 use axum::extract::FromRequest;
 use axum::extract::Request;
-use chrono::DateTime;
-use chrono::Utc;
 use serde::Serialize;
 use wire::capture::CaptureBatchRequest;
-use wire::json::JsonObject;
-use wire::memory::MemoryEntry;
-use wire::message::Role;
 
 use crate::error::ApiError;
 use crate::error::invalid_json;
@@ -15,45 +10,7 @@ use crate::extract::limited_bytes;
 const CAPTURE_BODY_LIMIT: usize = 1024 * 1024;
 
 #[derive(Debug)]
-pub(crate) struct ValidatedBatch {
-    pub(crate) session_key: String,
-    agent: String,
-    channel: Option<String>,
-    messages: Vec<ValidatedMessage>,
-}
-
-#[derive(Debug)]
-pub(crate) struct ValidatedMessage {
-    event_id: String,
-    role: Role,
-    content: String,
-    tool_name: Option<String>,
-    tool_args: Option<JsonObject>,
-    tool_result: Option<String>,
-    metadata: Option<JsonObject>,
-    created_at: Option<DateTime<Utc>>,
-}
-
-impl ValidatedBatch {
-    pub(crate) fn entries(&self) -> Vec<MemoryEntry> {
-        self.messages
-            .iter()
-            .map(|message| MemoryEntry {
-                id: Some(message.event_id.clone()),
-                session_id: self.session_key.clone(),
-                agent: self.agent.clone(),
-                channel: self.channel.clone().unwrap_or_default(),
-                role: message.role,
-                content: message.content.clone(),
-                tool_name: message.tool_name.clone(),
-                tool_args: message.tool_args.clone(),
-                tool_result: message.tool_result.clone(),
-                metadata: message.metadata.clone(),
-                created_at: message.created_at,
-            })
-            .collect()
-    }
-}
+pub(crate) struct ValidatedBatch(pub(crate) CaptureBatchRequest);
 
 impl<S> FromRequest<S> for ValidatedBatch
 where
@@ -74,30 +31,13 @@ pub(crate) fn validate(batch: CaptureBatchRequest) -> Result<ValidatedBatch, Api
     let mut issues = Vec::new();
     non_empty(&mut issues, &batch.session_key, "session_key");
     non_empty(&mut issues, &batch.agent, "agent");
-    let mut messages = Vec::with_capacity(batch.messages.len());
-    for (index, message) in batch.messages.into_iter().enumerate() {
+    for (index, message) in batch.messages.iter().enumerate() {
         if message.event_id.is_empty() {
             issues.push(too_small(message_path(index, "event_id")));
         }
-        let created_at = message.created_at;
-        messages.push(ValidatedMessage {
-            event_id: message.event_id,
-            role: message.role,
-            content: message.content,
-            tool_name: message.tool_name,
-            tool_args: message.tool_args,
-            tool_result: message.tool_result,
-            metadata: message.metadata,
-            created_at,
-        });
     }
     if issues.is_empty() {
-        Ok(ValidatedBatch {
-            session_key: batch.session_key,
-            agent: batch.agent,
-            channel: batch.channel,
-            messages,
-        })
+        Ok(ValidatedBatch(batch))
     } else {
         Err(ApiError::BadRequest(issue_text(&issues)?))
     }
@@ -216,7 +156,7 @@ mod validated_batch_tests {
             }],
         };
         let validated = validate(batch).expect("valid batch");
-        let entries = validated.entries();
+        let entries = validated.0.entries();
         let created_at = entries.first().and_then(|entry| entry.created_at);
         assert_eq!(
             created_at,

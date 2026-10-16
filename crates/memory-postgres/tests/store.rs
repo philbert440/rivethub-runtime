@@ -206,6 +206,38 @@ async fn append_is_idempotent_per_event_id(pool: PgPool) -> TestResult {
     Ok(())
 }
 
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_capture_port_skips_resent_events_and_defaults_the_channel(pool: PgPool) -> TestResult {
+    let memory = store(&pool);
+    let mut sent = batch(
+        "claude-code:resend",
+        vec![
+            message("r1", Role::User, "first"),
+            message("r2", Role::Assistant, "second"),
+        ],
+    );
+    sent.channel = None;
+    sent.title = Some("Resent".to_owned());
+    let first = memory.capture(sent.clone()).await?;
+    let second = memory.capture(sent).await?;
+    assert_eq!((first.inserted, first.skipped), (2, 0));
+    assert_eq!((second.inserted, second.skipped), (0, 2));
+    let row = sqlx::query(
+        "select c.channel, c.title, count(m.id) as messages from rh_conversations c
+           join rh_messages m on m.conversation_id = c.id
+          where c.session_key = 'claude-code:resend' group by c.channel, c.title",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(row.try_get::<String, _>("channel")?, "unknown");
+    assert_eq!(
+        row.try_get::<Option<String>, _>("title")?.as_deref(),
+        Some("Resent")
+    );
+    assert_eq!(row.try_get::<i64, _>("messages")?, 2);
+    Ok(())
+}
+
 fn entry_metadata(event: &str) -> wire::JsonObject {
     #[derive(serde::Serialize)]
     struct EntryMetadata<'a> {

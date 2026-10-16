@@ -165,6 +165,13 @@ impl MemoryStore for FailingStore {
         unavailable()
     }
 
+    async fn capture(
+        &self,
+        _batch: wire::capture::CaptureBatchRequest,
+    ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
+        unavailable()
+    }
+
     async fn append(
         &self,
         _batch: Vec<wire::memory::MemoryEntry>,
@@ -349,6 +356,13 @@ impl MemoryStore for GatedStore {
         limit: u32,
     ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
         self.inner.wiki_gaps(limit).await
+    }
+
+    async fn capture(
+        &self,
+        batch: wire::capture::CaptureBatchRequest,
+    ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
+        self.inner.capture(batch).await
     }
 
     async fn append(&self, batch: Vec<wire::memory::MemoryEntry>) -> Result<u64, MemoryStoreError> {

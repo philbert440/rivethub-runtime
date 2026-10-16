@@ -40,6 +40,28 @@ pub struct CaptureMessage {
     pub created_at: Option<DateTime<Utc>>,
 }
 
+impl CaptureBatchRequest {
+    #[must_use]
+    pub fn entries(&self) -> Vec<crate::memory::MemoryEntry> {
+        self.messages
+            .iter()
+            .map(|message| crate::memory::MemoryEntry {
+                id: Some(message.event_id.clone()),
+                session_id: self.session_key.clone(),
+                agent: self.agent.clone(),
+                channel: self.channel.clone().unwrap_or_default(),
+                role: message.role,
+                content: message.content.clone(),
+                tool_name: message.tool_name.clone(),
+                tool_args: message.tool_args.clone(),
+                tool_result: message.tool_result.clone(),
+                metadata: message.metadata.clone(),
+                created_at: message.created_at,
+            })
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CaptureResult {
     pub ok: bool,

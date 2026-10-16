@@ -263,6 +263,32 @@ impl MemoryStore for FakeMemoryStore {
         Ok(wire::gateway::wiki::WikiGapsResponse { red_links, stalest })
     }
 
+    async fn capture(
+        &self,
+        batch: wire::capture::CaptureBatchRequest,
+    ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
+        let mut entries = batch.entries();
+        self.record(MemoryRequest::Append(entries.clone())).await;
+        let now = Utc::now();
+        let total = entries.len() as u64;
+        let inserted = {
+            let mut stored = self.entries.lock().await;
+            entries.retain(|entry| !stored.iter().any(|seen| seen.id == entry.id));
+            for entry in &mut entries {
+                entry.created_at.get_or_insert(now);
+            }
+            let inserted = entries.len() as u64;
+            stored.extend(entries);
+            inserted
+        };
+        Ok(wire::capture::CaptureResult {
+            ok: true,
+            conversation_id: batch.session_key,
+            inserted,
+            skipped: total - inserted,
+        })
+    }
+
     async fn append(&self, mut batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
         let count = batch.len() as u64;
         self.record(MemoryRequest::Append(batch.clone())).await;

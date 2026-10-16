@@ -345,6 +345,11 @@ pub trait MemoryStore: Send + Sync {
         limit: u32,
     ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError>;
 
+    async fn capture(
+        &self,
+        batch: wire::capture::CaptureBatchRequest,
+    ) -> Result<wire::capture::CaptureResult, MemoryStoreError>;
+
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError>;
 
     async fn search(&self, query: SearchQuery) -> Result<SearchOutcome, MemoryStoreError>;

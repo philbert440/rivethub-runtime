@@ -69,6 +69,16 @@ impl MemoryStore for SqliteStore {
         self.read_wiki_gaps(limit).await
     }
 
+    async fn capture(
+        &self,
+        batch: wire::capture::CaptureBatchRequest,
+    ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
+        let now = self.now();
+        Self::capture(self, batch, now)
+            .await
+            .map_err(MemoryStoreError::from)
+    }
+
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
         let now = self.now();
         let ids = self

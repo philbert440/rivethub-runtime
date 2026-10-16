@@ -34,6 +34,8 @@ use wire::gateway::memory::TagTaxonomyMergeResult;
 use wire::gateway::memory::TagWire;
 use wire::memory::MemoryEntry;
 
+const UNKNOWN_CHANNEL: &str = "unknown";
+
 impl crate::PostgresMemory {
     pub async fn capture_batch(
         &self,
@@ -251,6 +253,18 @@ impl MemoryStore for crate::PostgresMemory {
         limit: u32,
     ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
         self.read_wiki_gaps(limit).await.map_err(Into::into)
+    }
+
+    async fn capture(
+        &self,
+        mut batch: CaptureBatchRequest,
+    ) -> Result<CaptureResult, MemoryStoreError> {
+        batch
+            .channel
+            .get_or_insert_with(|| UNKNOWN_CHANNEL.to_owned());
+        self.capture_batch(&batch, &CaptureOptions::default())
+            .await
+            .map_err(MemoryStoreError::from)
     }
 
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {

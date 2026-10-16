@@ -10,15 +10,14 @@ use crate::routes::capture_schema::ValidatedBatch;
 
 pub(crate) async fn ingest(
     State(gateway): State<Arc<Gateway>>,
-    batch: ValidatedBatch,
+    ValidatedBatch(batch): ValidatedBatch,
 ) -> Result<Json<CaptureResult>, ApiError> {
-    let entries = batch.entries();
-    let total = entries.len() as u64;
-    let inserted = gateway.store().append(entries).await?;
+    let session_key = batch.session_key.clone();
+    let captured = gateway.store().capture(batch).await?;
     Ok(Json(CaptureResult {
         ok: true,
-        conversation_id: batch.session_key,
-        inserted,
-        skipped: total.saturating_sub(inserted),
+        conversation_id: session_key,
+        inserted: captured.inserted,
+        skipped: captured.skipped,
     }))
 }

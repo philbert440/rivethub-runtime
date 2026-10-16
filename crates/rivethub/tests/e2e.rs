@@ -306,8 +306,9 @@ async fn recorded_batches_land_and_read_back_through_the_memory_api(pool: PgPool
         .find(|session| session.messages == 6)
         .ok_or("the finalized chunked session is missing from stats")?;
     assert_eq!(
-        chunked.title, None,
-        "the /api/capture route carries messages only, not the batch title"
+        chunked.title.as_deref(),
+        Some("t"),
+        "the /api/capture route keeps the batch title"
     );
 
     let hello_text = get_full_text(&client, &base, &hello_id).await?;

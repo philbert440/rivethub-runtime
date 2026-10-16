@@ -173,6 +173,32 @@ fn capture_body_over_the_mebibyte_limit_is_413() {
 }
 
 #[test]
+fn a_resent_batch_is_accepted_and_stores_each_event_once() -> Result<(), Box<dyn std::error::Error>>
+{
+    let body = serde_json::to_vec(&batch(|batch| {
+        batch.messages = vec![
+            message(|message| message.event_id = "resent-1".to_owned()),
+            message(|message| message.event_id = "resent-2".to_owned()),
+        ];
+    }))?;
+    let (gateway, store) = common::gateway();
+    let mut counts = Vec::new();
+    for _ in 0..2 {
+        let response = block_on(common::answer(
+            gateway.router(false),
+            recorded("POST", "/api/capture", body.clone()),
+        ))
+        .expect("in-process answer");
+        assert_eq!(response.status, 200);
+        let parsed: wire::capture::CaptureResult = serde_json::from_slice(&response.body)?;
+        counts.push((parsed.inserted, parsed.skipped));
+    }
+    assert_eq!(counts, vec![(2, 0), (0, 2)]);
+    assert_eq!(block_on(store.browse(filter_all()))?.len(), 2);
+    Ok(())
+}
+
+#[test]
 fn capture_lone_surrogates_become_replacement_characters() -> Result<(), Box<dyn std::error::Error>>
 {
     let body = concat!(
