@@ -27,11 +27,16 @@ async fn the_wiki_builder_role_has_a_handler() -> TestResult {
         home.path(),
         &provider_config(home.path(), DEAD_POSTGRES, ""),
     )?;
-    let output = run_rh(
-        home.path(),
-        &["worker", "--role", "wiki-builder", "--check"],
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        tokio::process::Command::new(env!("CARGO_BIN_EXE_rh"))
+            .args(["worker", "--role", "wiki-builder", "--check"])
+            .env_clear()
+            .env("HOME", home.path())
+            .env("RIVETHUB_WIKI_EXTRACTION", "1")
+            .output(),
     )
-    .await?;
+    .await??;
     let text = stderr(&output);
     assert!(output.status.success(), "wiki-builder: {text}");
     Ok(())

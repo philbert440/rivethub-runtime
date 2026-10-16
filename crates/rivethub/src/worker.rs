@@ -38,6 +38,25 @@ impl RootError {
     }
 }
 
+const WIKI_EXTRACTION: &str = "RIVETHUB_WIKI_EXTRACTION";
+
+fn wiki_extraction(env: &Environment) -> bool {
+    env.text(WIKI_EXTRACTION) == Some("1")
+}
+
+fn require_wiki_extraction(env: &Environment, role: ProcessRole) -> Result<(), RootError> {
+    if role
+        .claim_roles()?
+        .contains(&kernel::queue::WorkerRole::WikiBuilder)
+        && !wiki_extraction(env)
+    {
+        return Err(RootError::Invalid(format!(
+            "worker role {role} claims extract-wiki jobs and would complete them without extracting; set {WIKI_EXTRACTION}=1"
+        )));
+    }
+    Ok(())
+}
+
 pub async fn start(env: &Environment, role: ProcessRole, check: bool) -> Exit {
     if check {
         return finish(check_role(env, role).await, "worker configuration valid");
@@ -76,7 +95,7 @@ pub(crate) fn report_root(error: &RootError) {
 }
 
 async fn check_role(env: &Environment, role: ProcessRole) -> Result<(), RootError> {
-    role.claim_roles()?;
+    require_wiki_extraction(env, role)?;
     let owned = env.clone();
     let config = tokio::task::spawn_blocking(move || load(&owned)).await??;
     postgres_url(&config, env)?;
@@ -102,7 +121,7 @@ async fn run(
     activities: &Activities,
 ) -> Result<(), RootError> {
     let _guard = shutdown.clone().drop_guard();
-    role.claim_roles()?;
+    require_wiki_extraction(env, role)?;
     let owned = env.clone();
     let config = tokio::task::spawn_blocking(move || load(&owned)).await??;
     crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
@@ -132,7 +151,7 @@ async fn run(
             .runner
             .with_memory_jobs(memory.clone())
             .with_job_settings(workers::MemoryJobSettings::from_environment(env)?)
-            .with_schedules(env.text("RIVETHUB_WIKI_EXTRACTION") == Some("1"));
+            .with_schedules(wiki_extraction(env));
         if let Some(concurrency) = workers::worker_concurrency(env)? {
             runner.runner = runner.runner.with_concurrency(concurrency);
         }
