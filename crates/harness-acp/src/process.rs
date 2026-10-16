@@ -25,6 +25,7 @@ pub(crate) fn spawn_child(
     let program = command.program.display().to_string();
     let mut child = tokio::process::Command::new(&command.program)
         .args(&command.args)
+        .envs(command.env.iter().map(|(key, value)| (key, value)))
         .current_dir(working_dir)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())

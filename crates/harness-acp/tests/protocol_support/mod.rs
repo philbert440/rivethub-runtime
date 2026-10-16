@@ -32,6 +32,7 @@ pub(super) fn launch(steps: &[&str], extra: &[&str]) -> LaunchTable {
             program: fake_agent_program(),
             args,
             working_dir: None,
+            env: Vec::new(),
         }),
     )])
 }
@@ -49,6 +50,7 @@ pub(super) fn launch_in(steps: &[&str], extra: &[&str], cwd: &Path) -> LaunchTab
             program: fake_agent_program(),
             args,
             working_dir: Some(cwd.to_path_buf()),
+            env: Vec::new(),
         }),
     )])
 }

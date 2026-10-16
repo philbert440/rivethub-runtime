@@ -15,7 +15,13 @@ pub(crate) async fn launch(
     let launch = LaunchTable::from_config(config).launch(harness)?;
     let mut command = launch.command().clone();
     if let Some(binary) = &provider.binary {
-        command.program = PathBuf::from(binary);
+        match (&launch, harness) {
+            (AcpLaunch::Adapter(_), HarnessId::ClaudeCode) => command
+                .env
+                .push(("CLAUDE_CODE_EXECUTABLE".to_owned(), binary.clone())),
+            (AcpLaunch::Adapter(_), _) => {}
+            _ => command.program = PathBuf::from(binary),
+        }
     }
     command.working_dir = provider.cwd.clone().or(command.working_dir).or_else(|| {
         config

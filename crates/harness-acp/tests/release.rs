@@ -24,6 +24,7 @@ async fn release_closes_the_owner_and_allows_resume_on_the_same_adapter() {
                 "replay".into(),
             ],
             working_dir: Some(directory.path().to_path_buf()),
+            env: Vec::new(),
         }),
     )]));
     let session = tokio::time::timeout(

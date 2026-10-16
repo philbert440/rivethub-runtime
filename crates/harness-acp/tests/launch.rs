@@ -147,6 +147,7 @@ fn an_explicit_table_serves_exactly_its_entries() {
             program: std::path::PathBuf::from("/home/user/bin/fake_agent"),
             args: vec!["acp".to_owned()],
             working_dir: None,
+            env: Vec::new(),
         }),
     )]);
     assert!(table.launch(HarnessId::Opencode).is_ok());

@@ -15,6 +15,7 @@ pub struct AcpCommand {
     pub program: PathBuf,
     pub args: Vec<String>,
     pub working_dir: Option<PathBuf>,
+    pub env: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,6 +192,7 @@ fn acp_command(
         program: configured(config, harness, program),
         args,
         working_dir: configured_dir(config, harness),
+        env: Vec::new(),
     }
 }
 

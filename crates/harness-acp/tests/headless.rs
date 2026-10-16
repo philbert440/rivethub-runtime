@@ -11,10 +11,17 @@ use wire::session_id::SessionId;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 fn launcher(path: &Path, session: &str) -> TestResult {
+    launcher_requiring(path, session, None)
+}
+
+fn launcher_requiring(path: &Path, session: &str, executable: Option<&str>) -> TestResult {
     let binary = env!("CARGO_BIN_EXE_fake-acp-agent").replace('\'', "'\"'\"'");
+    let guard = executable.map_or_else(String::new, |expected| {
+        format!("[ \"$CLAUDE_CODE_EXECUTABLE\" = '{expected}' ] || exit 3\n")
+    });
     std::fs::write(
         path,
-        format!("#!/bin/sh\nexec '{binary}' --session-id '{session}' --steps text:Hi\n"),
+        format!("#!/bin/sh\n{guard}exec '{binary}' --session-id '{session}' --steps text:Hi\n"),
     )?;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
     Ok(())
@@ -42,19 +49,10 @@ async fn configured_headless_binary_and_directory_reach_the_acp_process() -> Tes
                 panic!("not a CLI provider")
             }
         };
-        launcher(&program, native)?;
-        let provider = CliProvider {
-            binary: Some("launcher with spaces".into()),
-            cwd: Some(home.path().into()),
-            ..CliProvider::default()
-        };
-        let adapter = AcpHarnessAdapter::for_provider(
-            &config::Config::default(),
-            harness,
-            &provider,
-            vec![home.path().into()],
-        )
-        .await?;
+        let (config, provider) = headless_setup(harness, home.path(), &program, native)?;
+        let adapter =
+            AcpHarnessAdapter::for_provider(&config, harness, &provider, vec![home.path().into()])
+                .await?;
         let session = adapter
             .new_session(SessionSpec {
                 session: SessionId::new(harness, native),
@@ -148,4 +146,47 @@ async fn an_installed_program_without_acp_is_not_a_launcher() -> TestResult {
         ));
     }
     Ok(())
+}
+
+fn headless_setup(
+    harness: HarnessId,
+    home: &Path,
+    program: &Path,
+    native: &str,
+) -> Result<(config::Config, CliProvider), Box<dyn std::error::Error>> {
+    match harness {
+        HarnessId::ClaudeCode | HarnessId::Codex => {
+            let cli = "/opt/vendor/bin/cli with spaces";
+            let required = (harness == HarnessId::ClaudeCode).then_some(cli);
+            launcher_requiring(program, native, required)?;
+            let key = if harness == HarnessId::ClaudeCode {
+                "claude-code"
+            } else {
+                "codex"
+            };
+            let document = format!(
+                "tasks:\n  harnesses:\n    {key}:\n      binary: '{}'\n",
+                program.display()
+            );
+            let config: config::Config = serde_yaml_ng::from_str(&document)?;
+            let provider = CliProvider {
+                binary: Some(cli.into()),
+                cwd: Some(home.into()),
+                ..CliProvider::default()
+            };
+            Ok((config, provider))
+        }
+        HarnessId::GrokBuild | HarnessId::Opencode | HarnessId::Hermes | HarnessId::KimiCode => {
+            launcher(program, native)?;
+            let provider = CliProvider {
+                binary: Some("launcher with spaces".into()),
+                cwd: Some(home.into()),
+                ..CliProvider::default()
+            };
+            Ok((config::Config::default(), provider))
+        }
+        HarnessId::Pi | HarnessId::QwenCode | HarnessId::Cursor | HarnessId::Cowork => {
+            Err("not a CLI provider".into())
+        }
+    }
 }

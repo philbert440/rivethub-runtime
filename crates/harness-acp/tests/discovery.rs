@@ -22,6 +22,7 @@ fn adapter(cwd: Option<&Path>, listing: bool) -> AcpHarnessAdapter {
             program: env!("CARGO_BIN_EXE_fake-acp-agent").into(),
             args,
             working_dir: cwd.map(Path::to_path_buf),
+            env: Vec::new(),
         }),
     )]))
 }
