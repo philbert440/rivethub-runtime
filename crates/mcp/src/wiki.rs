@@ -6,10 +6,10 @@ use rmcp::model::{CallToolResult, ToolAnnotations};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::collections::HashSet;
-use std::fmt::Write as _;
 use wire::gateway::wiki::{WikiPageResponse, WikiSlug};
+use wire::wiki::{FullPageRefused, ReadSection, format_wiki_read};
 
-const PAGE_LIMIT: usize = 24_000;
+const FULL_PAGE_REFUSED: &str = "wiki page exceeds 24,000 characters; choose a section";
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -43,7 +43,7 @@ pub struct Read {
     #[schemars(description = "Topic slug, e.g. rh-task-engine", with = "String")]
     slug: WikiSlug,
     #[schemars(description = "Slice of an oversized page. Default: verbatim when small, encyclopedia view (Summary + Article + recent history) when large. full is refused while the page exceeds 24,000 characters.", transform = crate::catalog::optional_non_null)]
-    section: Option<Section>,
+    section: Option<ReadSection>,
 }
 
 impl crate::catalog::ToolInput for Read {
@@ -59,18 +59,6 @@ impl crate::catalog::ToolInput for Read {
             None,
         ))
     }
-}
-
-#[derive(Debug, Deserialize, JsonSchema, strum::Display)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-enum Section {
-    Summary,
-    Article,
-    History,
-    Aliases,
-    Citations,
-    Full,
 }
 
 pub async fn search(store: &dyn MemoryStore, args: Search) -> Result<CallToolResult, Error> {
@@ -106,82 +94,9 @@ pub async fn search(store: &dyn MemoryStore, args: Search) -> Result<CallToolRes
 
 pub(crate) async fn read(store: &dyn MemoryStore, args: Read) -> Result<CallToolResult, Error> {
     let page = lookup(store, args.slug).await?;
-    let oversized = page.markdown.chars().count() > PAGE_LIMIT;
-    let header = args
-        .section
-        .as_ref()
-        .filter(|section| !matches!(section, Section::Full))
-        .map(|section| section_header(&page, section))
-        .transpose()?;
-    let content = match args.section {
-        Some(Section::Full) if oversized => {
-            return Err(Error::Refused(
-                "wiki page exceeds 24,000 characters; choose a section",
-            ));
-        }
-        None if oversized => encyclopedia(&page),
-        None | Some(Section::Full) => page.markdown,
-        Some(Section::Summary) => format!("## Summary\n\n{}", page.current_state),
-        Some(Section::Article) => match page.article {
-            Some(article) => bounded(&article, PAGE_LIMIT),
-            None => return Err(Error::Refused("wiki page has no article section")),
-        },
-        Some(Section::History) => bounded(&history(&page), PAGE_LIMIT),
-        Some(Section::Aliases) => bounded(&page.aliases.join("\n"), PAGE_LIMIT),
-        Some(Section::Citations) => citations(&page)?,
-    };
-    Ok(text(match header {
-        Some(header) => bounded(&format!("{header}\n\n{content}"), PAGE_LIMIT),
-        None => content,
-    }))
-}
-
-fn section_header(page: &WikiPageResponse, section: &Section) -> Result<String, Error> {
-    let mut header = format!(
-        "section={section}\n\n---\ntitle: {}\nslug: {}",
-        bounded(&page.title, 256),
-        page.slug
-    );
-    if let Some(verified) = page.last_verified {
-        write!(
-            header,
-            "\nlast_verified: {}",
-            verified.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
-        )?;
-    }
-    write!(
-        header,
-        "\ntags: {}\naliases: {} ({})\n---",
-        bounded(&page.tags.join(", "), 1000),
-        page.aliases.len(),
-        bounded(&page.aliases.join(", "), 1000)
-    )?;
-    Ok(header)
-}
-
-fn citations(page: &WikiPageResponse) -> Result<String, Error> {
-    let mut lines = vec![format!(
-        "## Citations ({} of {})\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|",
-        page.citations.len(),
-        page.citations.len()
-    )];
-    for citation in &page.citations {
-        let mut line = "| ".to_owned();
-        if let Some(date) = citation.date {
-            line.push_str(&date.format("%Y-%m-%d").to_string());
-        }
-        line.push_str(" | ");
-        if let Some(kind) = &citation.kind {
-            line.push_str(kind);
-        }
-        write!(line, " | `{}` | ", citation.summary_id)?;
-        if let Some(note) = &citation.note {
-            line.push_str(note);
-        }
-        line.push_str(" |");
-        lines.push(line);
-    }
-    Ok(lines.join("\n"))
+    let view = format_wiki_read(&page.markdown, &page.slug, args.section)
+        .map_err(|FullPageRefused| Error::Refused(FULL_PAGE_REFUSED))?;
+    Ok(text(view))
 }
 
 async fn lookup(store: &dyn MemoryStore, mut slug: WikiSlug) -> Result<WikiPageResponse, Error> {
@@ -197,46 +112,4 @@ async fn lookup(store: &dyn MemoryStore, mut slug: WikiSlug) -> Result<WikiPageR
         }
     }
     Err(Error::WikiRedirect)
-}
-
-fn bounded(value: &str, limit: usize) -> String {
-    const NOTICE: &str = "\n…[truncated; select a wiki_read section]";
-    if value.chars().count() <= limit {
-        return value.to_owned();
-    }
-    let mut result: String = value.chars().take(limit - NOTICE.chars().count()).collect();
-    result.push_str(NOTICE);
-    result
-}
-
-fn history(page: &WikiPageResponse) -> String {
-    let mut entries: Vec<_> = page.history.iter().collect();
-    entries.sort_by_key(|entry| std::cmp::Reverse(entry.date));
-    entries
-        .into_iter()
-        .map(|entry| format!("### {} — {}\n{}", entry.date, entry.title, entry.body))
-        .collect::<Vec<_>>()
-        .join("\n\n")
-}
-
-fn encyclopedia(page: &WikiPageResponse) -> String {
-    let mut result = format!(
-        "# {}\n\n## Summary\n{}",
-        bounded(&page.title, 256),
-        bounded(&page.current_state, 6_000),
-    );
-    if let Some(article) = &page.article {
-        result.push_str("\n\n## Article\n");
-        result.push_str(&bounded(article, 12_000));
-    }
-    if let Some(links) = &page.see_also {
-        result.push_str("\n\n## See also\n");
-        result.push_str(&bounded(&links.join("\n"), 1_000));
-    }
-    result.push_str("\n\n## History\n");
-    result.push_str(&bounded(&history(page), 4_000));
-    result.push_str(
-        "\n\nBounded wiki view; use section=summary|article|history|aliases|citations for a slice.",
-    );
-    result
 }

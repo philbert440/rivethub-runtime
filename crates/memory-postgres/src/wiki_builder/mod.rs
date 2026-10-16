@@ -8,6 +8,8 @@ use kernel::wiki::builder::{
 };
 use sqlx::{PgConnection, Postgres, Transaction};
 use uuid::Uuid;
+use wire::gateway::wiki::WikiSlug;
+use wire::wiki::normalize_slug;
 
 use crate::PostgresMemory;
 
@@ -118,12 +120,14 @@ impl PostgresMemory {
         mut patches: Vec<WikiPatch>,
         now: DateTime<Utc>,
     ) -> Result<Vec<String>, WikiStoreError> {
-        for patch in &patches {
+        for patch in &mut patches {
             if patch.title.trim().is_empty() || patch.summary.trim().is_empty() {
                 return Err(WikiStoreError::InvalidPatch(
                     "title and summary must be nonempty".to_owned(),
                 ));
             }
+            patch.slug = WikiSlug::try_from(normalize_slug(patch.slug.as_ref()))
+                .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;
         }
         let mut tx = self.pool.begin().await.map_err(query_error)?;
         let summary = load_summary(&mut tx, job, true).await?;

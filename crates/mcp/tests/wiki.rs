@@ -16,6 +16,11 @@ fn setup() -> (Server, Arc<FakeMemoryStore>) {
     (server, store)
 }
 
+const MARKDOWN: &str = "---\ntitle: Acme 日本語\nslug: acme\naliases:\n  - AcmeKit\n  - Acme's $(tool)\ntags:\n  - project\nlast_verified: 2026-10-14T00:00:00Z\n---\n\n## Summary\n\nReady 🦀\n\n## Article\n\nArticle 日本語\n\n## See also\n\n- [[related-topic]]\n\n## History\n\n### 2026-10-14 — Ready\n\nRecent history\n\n### 2026-10-01 — Started\n\nOlder history\n\n## Citations\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|\n| 2026-10-14 | leaf | `00000000-0000-4000-8000-000000000001` | Decision 🦀 |\n";
+
+const HEADER: &str =
+    "---\ntitle: Acme 日本語\nslug: acme\nlast_verified: 2026-10-14T00:00:00Z\ntags: project";
+
 fn page() -> WikiPageResponse {
     WikiPageResponse {
         slug: "acme".into(),
@@ -48,7 +53,7 @@ fn page() -> WikiPageResponse {
             kind: Some("summary".into()),
             note: Some("Decision 🦀".into()),
         }],
-        markdown: "---\ntitle: Acme\n---\n# Acme\nReady 🦀\n".into(),
+        markdown: MARKDOWN.into(),
         sources: vec![],
         git_sha: None,
         last_verified: None,
@@ -107,18 +112,24 @@ async fn read_uses_typed_sections_and_preserves_small_markdown() {
     store.insert_wiki_page(page.clone()).await;
     let result = support::call(&server, "wiki_read", r#"{"slug":"acme"}"#).await;
     assert_eq!(text(&result), page.markdown);
-    for (section, expected) in [
-        ("full", page.markdown.as_str()),
-        ("summary", "## Summary\n\nReady 🦀"),
-        ("article", "Article 日本語"),
-        ("aliases", "AcmeKit\nAcme's $(tool)"),
+    let aliases = "aliases: 2 (AcmeKit, Acme's $(tool))";
+    for (section, alias_line, expected) in [
+        ("summary", aliases, "## Summary\n\nReady 🦀"),
+        ("article", aliases, "## Article\n\nArticle 日本語"),
+        (
+            "aliases",
+            "aliases_count: 2",
+            "## Aliases (2 of 2)\n\n- AcmeKit\n- Acme's $(tool)",
+        ),
         (
             "history",
-            "### 2026-10-14 — Ready\nRecent history\n\n### 2026-10-01 — Started\nOlder history",
+            aliases,
+            "## History (2 of 2, newest first)\n\n### 2026-10-14 — Ready\n\nRecent history\n\n### 2026-10-01 — Started\n\nOlder history",
         ),
         (
             "citations",
-            "## Citations (1 of 1)\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|\n| 2026-10-14 | summary | `00000000-0000-4000-8000-000000000001` | Decision 🦀 |",
+            aliases,
+            "## Citations (1 of 1)\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|\n| 2026-10-14 | leaf | `00000000-0000-4000-8000-000000000001` | Decision 🦀 |",
         ),
     ] {
         let result = support::call(
@@ -127,17 +138,13 @@ async fn read_uses_typed_sections_and_preserves_small_markdown() {
             &format!(r#"{{"slug":"acme","section":"{section}"}}"#),
         )
         .await;
-        if section == "full" {
-            assert_eq!(text(&result), expected);
-        } else {
-            assert_eq!(
-                text(&result),
-                format!(
-                    "section={section}\n\n---\ntitle: Acme 日本語\nslug: acme\ntags: project\naliases: 2 (AcmeKit, Acme's $(tool))\n---\n\n{expected}"
-                )
-            );
-        }
+        assert_eq!(
+            text(&result),
+            format!("section={section}\n\n{HEADER}\n{alias_line}\n---\n\n{expected}")
+        );
     }
+    let result = support::call(&server, "wiki_read", r#"{"slug":"acme","section":"full"}"#).await;
+    assert_eq!(text(&result), page.markdown);
     assert_eq!(
         store.requests().await,
         vec![MemoryRequest::WikiPage("acme".into()); 7]
@@ -148,53 +155,44 @@ async fn read_uses_typed_sections_and_preserves_small_markdown() {
 async fn oversized_views_and_sections_count_unicode_characters() {
     let (server, store) = setup();
     let mut page = page();
-    page.markdown = "🦀".repeat(24_000);
+    let padding = 24_000 - page.markdown.chars().count() - "  - \n".len();
+    page.markdown =
+        page.markdown
+            .replacen("tags:", &format!("  - {}\ntags:", "🦀".repeat(padding)), 1);
+    assert_eq!(page.markdown.chars().count(), 24_000);
     store.insert_wiki_page(page.clone()).await;
     let result = support::call(&server, "wiki_read", r#"{"slug":"acme","section":"full"}"#).await;
     assert_eq!(text(&result), page.markdown);
-    page.markdown.push('🦀');
+    let aliases = (0..400)
+        .map(|index| format!("  - alias {index}\n"))
+        .collect::<Vec<_>>()
+        .concat();
+    page.markdown = page
+        .markdown
+        .replacen("tags:", &format!("{aliases}tags:"), 1);
     store.insert_wiki_page(page.clone()).await;
     let result = support::call(&server, "wiki_read", r#"{"slug":"acme"}"#).await;
     let view = text(&result);
-    assert!(view.contains("## Summary\nReady 🦀"));
-    assert!(view.contains("## Article\nArticle 日本語"));
-    assert!(view.contains("related-topic"));
-    assert!(view.contains("Recent history"));
-    assert!(!view.contains("AcmeKit"));
-    assert!(view.chars().count() <= 24_000);
-    assert_eq!(
-        support::call(&server, "wiki_read", r#"{"slug":"acme","section":"full"}"#)
-            .await
-            .is_error,
-        Some(true)
+    assert!(view.starts_with("⚠ Oversized wiki page \"acme\" ("));
+    assert!(view.contains("aliases: 403 (showing 8: AcmeKit, Acme's $(tool), "));
+    assert!(view.contains("## Summary\n\nReady 🦀"));
+    assert!(view.contains("## Article\n\nArticle 日本語"));
+    assert!(view.contains("- [[related-topic]]"));
+    assert!(view.contains("## Recent history (2 of 2)"));
+    assert!(!view.contains("alias 399"));
+    let result = support::call(&server, "wiki_read", r#"{"slug":"acme","section":"full"}"#).await;
+    assert_eq!(result.is_error, Some(true));
+    let result = support::call(
+        &server,
+        "wiki_read",
+        r#"{"slug":"acme","section":"aliases"}"#,
+    )
+    .await;
+    assert!(text(&result).contains("## Aliases (200 of 403)\n\n- AcmeKit\n- Acme's $(tool)\n"));
+    assert!(
+        text(&result)
+            .ends_with("\n…[203 more — wiki_read slug=acme section=aliases (first 200 only)]")
     );
-    page.title = "🦀".repeat(30_000);
-    page.current_state.clone_from(&page.title);
-    page.article = Some(page.title.clone());
-    page.aliases = vec![page.title.clone()];
-    page.see_also = Some(vec![page.title.clone()]);
-    page.history
-        .get_mut(1)
-        .expect("recent history")
-        .body
-        .clone_from(&page.title);
-    page.citations.first_mut().expect("citation").note = Some(page.title.clone());
-    store.insert_wiki_page(page).await;
-    for section in ["summary", "article", "history", "aliases", "citations"] {
-        let result = support::call(
-            &server,
-            "wiki_read",
-            &format!(r#"{{"slug":"acme","section":"{section}"}}"#),
-        )
-        .await;
-        assert_eq!(text(&result).chars().count(), 24_000);
-        assert!(text(&result).contains("truncated"));
-    }
-    let result = support::call(&server, "wiki_read", r#"{"slug":"acme"}"#).await;
-    assert!(text(&result).chars().count() <= 24_000);
-    assert!(text(&result).contains("## Summary"));
-    assert!(text(&result).contains("## Article"));
-    assert!(text(&result).contains("## History"));
 }
 
 #[tokio::test]
@@ -294,25 +292,16 @@ async fn valid_literal_slugs_and_absent_sections_are_handled_explicitly() {
     let (server, store) = setup();
     let mut page = page();
     page.slug = "Acme's $(topic) 日本語".into();
-    page.article = None;
-    page.see_also = None;
-    page.history.clear();
-    page.citations.clear();
-    page.aliases.clear();
+    page.markdown = "---\ntitle: Acme 日本語\nslug: acme\n---\n\n## Summary\n\nReady 🦀\n".into();
     store.insert_wiki_page(page.clone()).await;
     let result = support::call(&server, "wiki_read", r#"{"slug":"Acme's $(topic) 日本語"}"#).await;
     assert_eq!(text(&result), page.markdown);
-    assert_eq!(
-        support::call(
-            &server,
-            "wiki_read",
-            r#"{"slug":"Acme's $(topic) 日本語","section":"article"}"#
-        )
-        .await
-        .is_error,
-        Some(true)
-    );
-    for section in ["history", "aliases", "citations"] {
+    for (section, expected) in [
+        ("article", "## Article\n\n(empty)"),
+        ("history", "## History (0 of 0, newest first)\n\n(none yet)"),
+        ("aliases", "## Aliases (0 of 0)\n\n(none)"),
+        ("citations", "## Citations (0 of 0)\n\n(none)"),
+    ] {
         let result = support::call(
             &server,
             "wiki_read",
@@ -320,9 +309,18 @@ async fn valid_literal_slugs_and_absent_sections_are_handled_explicitly() {
         )
         .await;
         assert!(
-            text(&result).starts_with(&format!("section={section}\n\n---\ntitle: Acme 日本語"))
+            text(&result).starts_with(&format!("section={section}\n\n---\ntitle: Acme 日本語")),
+            "{section}"
         );
+        assert!(text(&result).ends_with(expected), "{section}");
     }
+    page.markdown = "---\ntitle: Acme 日本語\n---\n".into();
+    store.insert_wiki_page(page).await;
+    let result = support::call(&server, "wiki_read", r#"{"slug":"Acme's $(topic) 日本語"}"#).await;
+    assert_eq!(
+        text(&result),
+        "⚠ Page \"Acme's $(topic) 日本語\" is malformed (invalid wiki page: slug required) — raw content follows; the next extractor pass will re-structure it.\n\n---\ntitle: Acme 日本語\n---\n"
+    );
 }
 
 #[tokio::test]

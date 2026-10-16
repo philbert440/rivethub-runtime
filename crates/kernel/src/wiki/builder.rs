@@ -95,4 +95,6 @@ pub enum WikiWriteError {
     Task(#[from] tokio::task::JoinError),
     #[error("wiki page slug does not match its file")]
     SlugMismatch,
+    #[error("wiki page slug: {0}")]
+    Slug(#[from] wire::gateway::wiki::WikiSlugError),
 }

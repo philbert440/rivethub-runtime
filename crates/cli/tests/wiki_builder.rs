@@ -184,11 +184,11 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
     let markdown = tokio::fs::read_to_string(wiki.path().join("topics/acmekit-deploys.md")).await?;
     let page = wire::wiki::parse_wiki_page(&markdown)?;
     assert_eq!(
-        page.citations.first().ok_or("citation")?.note,
-        "Blue-green adopted"
+        page.citations.first().ok_or("citation")?.note.as_deref(),
+        Some("Blue-green adopted")
     );
     assert_eq!(
-        page.frontmatter.sources.first().ok_or("source")?.ids,
+        page.meta.sources.first().ok_or("source")?.ids,
         vec![job.summary_id.to_string()]
     );
     let source: (uuid::Uuid, uuid::Uuid) =

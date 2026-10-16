@@ -1,55 +1,132 @@
-mod markdown;
+mod article;
+mod citations;
+mod extraction;
+mod frontmatter;
+mod limits;
+mod lines;
+mod parse;
 mod patch;
+mod read;
+mod search;
+mod serialize;
+mod slug;
+mod summary;
+mod yaml;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::Extra;
-use crate::gateway::wiki::{WikiHistoryEntry, WikiSlug, WikiSource};
+use crate::gateway::wiki::{WikiHistoryEntry, WikiSlug, WikiSourceKind};
 
-pub use markdown::{parse_wiki_page, serialize_wiki_page};
-pub use patch::{WikiAction, WikiPatch, apply_patch, build_wiki_search_text, extract_wiki_links};
+pub use article::{
+    ArticlePatch, ArticlePatchMode, ArticleSection, ArticleSections, apply_article_patches,
+    demote_h2_headings, join_article_sections, split_article_sections,
+};
+pub use citations::{parse_citations, parse_see_also};
+pub use extraction::{WikiAction, WikiPatch};
+pub use parse::parse_wiki_page;
+pub use patch::{PagePatch, apply_patch};
+pub use read::{FullPageRefused, READ_LIMIT, ReadSection, format_wiki_read};
+pub use search::build_wiki_search_text;
+pub use serialize::serialize_wiki_page;
+pub use slug::{extract_wiki_links, normalize_slug};
+pub use summary::{CappedSummary, SUMMARY_LIMIT, cap_summary, merge_summary_text};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WikiFrontmatter {
+#[serde(rename_all = "camelCase")]
+pub struct WikiPage {
+    pub meta: WikiMeta,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preamble: Option<String>,
+    pub current_state: String,
+    pub article: String,
+    pub history: Vec<WikiHistoryEntry>,
+    pub citations: Vec<PageCitation>,
+    pub see_also: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_sections: Vec<ArticleSection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiMeta {
     pub title: String,
     pub slug: WikiSlug,
-    #[serde(default)]
     pub aliases: Vec<String>,
-    #[serde(default)]
     pub tags: Vec<String>,
-    #[serde(default)]
     pub entities: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_verified: Option<DateTime<Utc>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub sources: Vec<WikiSource>,
-    #[serde(flatten, default)]
+    pub related: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_verified: Option<LastVerified>,
+    pub sources: Vec<PageSource>,
+    #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WikiPage {
-    pub frontmatter: WikiFrontmatter,
-    pub preamble: String,
-    pub summary: Option<String>,
-    pub article: Option<String>,
-    pub see_also: Option<String>,
-    pub history: Vec<WikiHistoryEntry>,
-    pub citations: Vec<PageCitation>,
+#[serde(try_from = "String", into = "String")]
+pub struct LastVerified(String);
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("last_verified is neither an RFC 3339 timestamp nor a date: {0}")]
+pub struct LastVerifiedError(String);
+
+impl TryFrom<String> for LastVerified {
+    type Error = LastVerifiedError;
+
+    fn try_from(text: String) -> Result<Self, Self::Error> {
+        if DateTime::parse_from_rfc3339(&text).is_ok() || citations::iso_date(&text).is_some() {
+            Ok(Self(text))
+        } else {
+            Err(LastVerifiedError(text))
+        }
+    }
+}
+
+impl From<DateTime<Utc>> for LastVerified {
+    fn from(instant: DateTime<Utc>) -> Self {
+        Self(instant.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+    }
+}
+
+impl From<LastVerified> for String {
+    fn from(verified: LastVerified) -> Self {
+        verified.0
+    }
+}
+
+impl AsRef<str> for LastVerified {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageSource {
+    pub kind: WikiSourceKind,
+    pub ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<String>,
+    #[serde(flatten, default)]
+    pub extra: Extra,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PageCitation {
     pub summary_id: String,
-    pub date: NaiveDate,
-    pub kind: CitationKind,
-    pub note: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date: Option<NaiveDate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<CitationKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumString, strum::Display,
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumIter, strum::Display,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -62,12 +139,22 @@ pub enum CitationKind {
 
 #[derive(Debug, thiserror::Error)]
 pub enum WikiPageError {
-    #[error("wiki frontmatter: {0}")]
-    Frontmatter(#[from] serde_yaml_ng::Error),
     #[error("invalid wiki page: {0}")]
-    Format(String),
-    #[error("invalid wiki date: {0}")]
-    Date(#[from] chrono::ParseError),
-    #[error("invalid wiki citation kind: {0}")]
-    CitationKind(#[from] strum::ParseError),
+    Invalid(PageDefect),
+    #[error("{0}")]
+    Yaml(#[from] serde_yaml_ng::Error),
+    #[error("wiki frontmatter could not be written: {0}")]
+    Emit(#[from] yaml::EmitError),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+pub enum PageDefect {
+    #[strum(serialize = "missing YAML frontmatter")]
+    MissingFrontmatter,
+    #[strum(serialize = "frontmatter not a map")]
+    FrontmatterNotMap,
+    #[strum(serialize = "title required")]
+    TitleRequired,
+    #[strum(serialize = "slug required")]
+    SlugRequired,
 }

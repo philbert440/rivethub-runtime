@@ -6,8 +6,10 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use kernel::wiki::builder::WikiWriteError;
 use memory_postgres::wiki_writer::{AppliedPage, WikiRepository};
-use wire::gateway::wiki::{WikiHistoryEntry, WikiSlug, WikiSource, WikiSourceKind};
-use wire::wiki::{CitationKind, PageCitation, WikiAction, WikiPatch, parse_wiki_page};
+use wire::gateway::wiki::{WikiHistoryEntry, WikiSourceKind};
+use wire::wiki::{
+    CitationKind, PageCitation, PagePatch, PageSource, WikiAction, normalize_slug, parse_wiki_page,
+};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -15,47 +17,47 @@ fn now() -> DateTime<Utc> {
     "2026-10-10T12:00:00Z".parse().expect("date")
 }
 
-fn patch(slug: &str) -> WikiPatch {
-    WikiPatch {
+const SUMMARY_ID: &str = "00000000-0000-4000-8000-000000000001";
+
+fn patch(slug: &str) -> PagePatch {
+    PagePatch {
         action: WikiAction::Create,
-        slug: WikiSlug::try_from(slug.to_owned()).expect("slug"),
-        title: "Deployment notes".to_owned(),
-        aliases: vec![],
-        tags: vec!["deploy".to_owned()],
-        entities: vec!["AcmeKit".to_owned()],
-        summary: "Ship 🚀 safely.".to_owned(),
+        slug: slug.to_owned(),
+        verified_at: now(),
+        title: Some("Deployment notes".to_owned()),
+        add_aliases: Vec::new(),
+        add_tags: vec!["deploy".to_owned()],
+        add_entities: vec!["AcmeKit".to_owned()],
+        add_related: Vec::new(),
+        summary_delta: Some("Ship 🚀 safely.".to_owned()),
+        current_state: None,
         article: None,
-        related: None,
+        article_patches: Vec::new(),
         history_entry: Some(WikiHistoryEntry {
             date: now().date_naive(),
             title: "Release".to_owned(),
             body: "Checked health.".to_owned(),
         }),
+        add_citations: vec![PageCitation {
+            summary_id: SUMMARY_ID.to_owned(),
+            date: Some(now().date_naive()),
+            kind: Some(CitationKind::Leaf),
+            note: Some("Release | notes".to_owned()),
+        }],
+        add_sources: vec![PageSource {
+            kind: WikiSourceKind::Summary,
+            ids: vec![SUMMARY_ID.to_owned()],
+            conversation_id: None,
+            extra: wire::Extra::default(),
+        }],
+        allow_shrink: false,
     }
 }
 
-async fn apply(root: &Path, patch: WikiPatch) -> Result<AppliedPage, WikiWriteError> {
-    let summary_id = "00000000-0000-4000-8000-000000000001".to_owned();
+async fn apply(root: &Path, patch: PagePatch) -> Result<AppliedPage, WikiWriteError> {
     let (result, released) = {
         let mut repository = WikiRepository::new(root.to_path_buf()).lock().await?;
-        let result = repository
-            .apply(
-                patch,
-                PageCitation {
-                    summary_id: summary_id.clone(),
-                    date: now().date_naive(),
-                    kind: CitationKind::Leaf,
-                    note: "Release | notes\nnext line".to_owned(),
-                },
-                WikiSource {
-                    kind: WikiSourceKind::Summary,
-                    ids: vec![summary_id],
-                    conversation_id: None,
-                    span: None,
-                },
-                now(),
-            )
-            .await;
+        let result = repository.apply(patch, SUMMARY_ID).await;
         (result, repository.release().await)
     };
     released?;
@@ -202,7 +204,7 @@ async fn fixture_keeps_history_article_frontmatter_and_sources_through_apply() -
     assert!(
         applied
             .page
-            .frontmatter
+            .meta
             .aliases
             .contains(&"kiwi sccache".to_owned())
     );
@@ -236,7 +238,7 @@ async fn containment_refuses_symlinks_parent_paths_and_accepts_quoted_slug() -> 
 }
 
 #[tokio::test]
-async fn quoted_glob_slug_is_literal_and_unrelated_staged_work_is_preserved() -> TestResult {
+async fn quoted_glob_slug_is_normalized_and_unrelated_staged_work_is_preserved() -> TestResult {
     let directory = tempfile::tempdir()?;
     apply(directory.path(), patch("release")).await?;
     tokio::fs::write(directory.path().join("human.txt"), "human work").await?;
@@ -253,7 +255,7 @@ async fn quoted_glob_slug_is_literal_and_unrelated_staged_work_is_preserved() ->
         directory
             .path()
             .join("topics")
-            .join(format!("{slug}.md"))
+            .join(format!("{}.md", normalize_slug(slug)))
             .is_file()
     );
     assert_eq!(

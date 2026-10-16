@@ -271,7 +271,8 @@ async fn wiki_files_follow_redirects_and_refuse_sibling_traversal_and_symlinks(
         .bind(slug)
         .execute(&pool)
         .await?;
-    std::fs::write(directory.join(format!("{slug}.md")), "literal file")?;
+    let literal = "---\ntitle: Literal title\nslug: literal\n---\n\n## Summary\n\nliteral file\n";
+    std::fs::write(directory.join(format!("{slug}.md")), literal)?;
     let server = mcp::Server::new(
         Arc::new(
             memory_postgres::PostgresMemory::new(pool)
@@ -292,7 +293,7 @@ async fn wiki_files_follow_redirects_and_refuse_sibling_traversal_and_symlinks(
             .as_text()
             .ok_or("text")?
             .text,
-        "literal file"
+        literal
     );
     for arguments in [
         r#"{"slug":"../topics-private/secret"}"#,

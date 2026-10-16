@@ -86,13 +86,15 @@ pub struct WikiSource {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumString)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum WikiSourceKind {
     Summary,
     Message,
     Conversation,
     Task,
+    Leaf,
+    ExtractWiki,
 }
 
 #[serde_as]

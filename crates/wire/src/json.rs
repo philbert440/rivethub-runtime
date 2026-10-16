@@ -11,6 +11,11 @@ impl Extra {
     pub fn extend(&mut self, other: Self) {
         self.0.extend(other.0);
     }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

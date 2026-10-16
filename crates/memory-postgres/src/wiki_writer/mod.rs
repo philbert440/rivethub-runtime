@@ -2,11 +2,12 @@ mod lock;
 
 use std::path::{Component, Path, PathBuf};
 
-use chrono::{DateTime, Utc};
-use kernel::wiki::builder::{WikiPatch, WikiWriteError};
+use kernel::wiki::builder::WikiWriteError;
 use tokio::process::Command;
-use wire::gateway::wiki::WikiSource;
-use wire::wiki::{PageCitation, WikiPage, apply_patch, parse_wiki_page, serialize_wiki_page};
+use wire::gateway::wiki::WikiSlug;
+use wire::wiki::{
+    PagePatch, WikiPage, apply_patch, normalize_slug, parse_wiki_page, serialize_wiki_page,
+};
 
 use lock::WriterLock;
 
@@ -42,12 +43,10 @@ pub struct LockedRepository {
 impl LockedRepository {
     pub async fn apply(
         &mut self,
-        patch: WikiPatch,
-        citation: PageCitation,
-        source: WikiSource,
-        verified: DateTime<Utc>,
+        patch: PagePatch,
+        provenance: &str,
     ) -> Result<AppliedPage, WikiWriteError> {
-        apply_locked(&self.root, patch, citation, source, verified).await
+        apply_locked(&self.root, patch, provenance).await
     }
 
     pub async fn release(self) -> Result<(), WikiWriteError> {
@@ -113,11 +112,10 @@ async fn ensure_repo(root: &Path) -> Result<(), WikiWriteError> {
 
 async fn apply_locked(
     root: &Path,
-    patch: WikiPatch,
-    citation: PageCitation,
-    source: WikiSource,
-    verified: DateTime<Utc>,
+    patch: PagePatch,
+    provenance: &str,
 ) -> Result<AppliedPage, WikiWriteError> {
+    let slug = WikiSlug::try_from(normalize_slug(&patch.slug))?;
     ensure_repo(root).await?;
     if tokio::fs::try_exists(root.join(".git/refs/remotes")).await? {
         #[expect(
@@ -129,7 +127,7 @@ async fn apply_locked(
             .inspect_err(|error| tracing::warn!(%error, "wiki pull failed; applying local patch"));
     }
     reject_symlink(&root.join("topics")).await?;
-    let relative = format!("topics/{}.md", patch.slug.as_ref());
+    let relative = format!("topics/{}.md", slug.as_ref());
     let destination = root.join(&relative);
     reject_symlink(&destination).await?;
     let page = match tokio::fs::canonicalize(&destination).await {
@@ -139,7 +137,7 @@ async fn apply_locked(
             }
             let markdown = tokio::fs::read_to_string(canonical).await?;
             let page = parse_wiki_page(&markdown)?;
-            if page.frontmatter.slug != patch.slug {
+            if page.meta.slug != slug {
                 return Err(WikiWriteError::SlugMismatch);
             }
             Some(page)
@@ -147,14 +145,13 @@ async fn apply_locked(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error.into()),
     };
-    let summary_id = &citation.summary_id;
-    let prefix: String = summary_id.chars().take(8).collect();
+    let prefix: String = provenance.chars().take(8).collect();
     let message = format!(
-        "wiki({}): {} from summary {prefix}\n\nProvenance: summary {summary_id}\nPipeline: wiki-v7",
-        patch.slug.as_ref(),
+        "wiki({}): {} from summary {prefix}\n\nProvenance: summary {provenance}\nPipeline: wiki-v7",
+        slug.as_ref(),
         patch.action
     );
-    let page = apply_patch(page, patch, citation, source, verified);
+    let page = apply_patch(page, patch)?;
     let markdown = serialize_wiki_page(&page)?;
     let temporary = root
         .join("topics")
