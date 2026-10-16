@@ -47,11 +47,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: House identity and attribution
         run: cargo xtask commits "origin/${{ github.base_ref }}..HEAD"
       - name: Conventional Commits
-        uses: crate-ci/committed@v1
+        uses: crate-ci/committed@v1.1.11
         with:
           args: --no-wip
           commits: "origin/${{ github.base_ref }}..HEAD"
