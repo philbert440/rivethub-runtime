@@ -261,15 +261,17 @@ async fn snapshot_then_events_has_no_gap_under_concurrent_ingest() {
 }
 
 #[tokio::test]
-async fn directory_containment_refuses_parent_sibling_and_symlink_escape() {
+async fn roster_commands_may_start_outside_the_files_root_but_must_be_absolute() {
     use gateway::term::{LaunchCommand, TerminalOptions, TerminalService};
     let fixture = Fixture::new().await;
     let root = fixture.directory.path().join("allowed");
     let sibling = fixture.directory.path().join("allowed-sibling");
     std::fs::create_dir(&root).expect("root");
     std::fs::create_dir(&sibling).expect("sibling");
-    std::os::unix::fs::symlink(&sibling, root.join("escape")).expect("symlink");
-    for cwd in [sibling, root.join(".."), root.join("escape")] {
+    for (cwd, accepted) in [
+        (sibling.clone(), true),
+        (std::path::PathBuf::from("relative/dir"), false),
+    ] {
         let result = TerminalService::new(
             fixture.mux.clone(),
             fixture.registry.clone(),
@@ -281,7 +283,7 @@ async fn directory_containment_refuses_parent_sibling_and_symlink_escape() {
                     id: "shell".into(),
                     label: "Shell".into(),
                     argv: vec!["sh".into()],
-                    cwd,
+                    cwd: cwd.clone(),
                     harness: None,
                     session: false,
                     env: std::collections::BTreeMap::new(),
@@ -289,7 +291,7 @@ async fn directory_containment_refuses_parent_sibling_and_symlink_escape() {
             },
         )
         .await;
-        assert!(result.is_err());
+        assert_eq!(result.is_ok(), accepted, "{}", cwd.display());
     }
     fixture.gateway.close().await;
 }

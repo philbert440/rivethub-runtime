@@ -159,7 +159,7 @@ async fn mesh_roster_uses_the_top_level_cwd_env_and_key_harness() -> TestResult 
     let pi = command(&loaded, "pi")?;
     assert_eq!(pi.label, "Pi");
     assert_eq!(pi.argv, ["/home/rivet/.local/bin/pi"]);
-    assert_eq!(pi.cwd, Path::new("/home/rivet"));
+    assert_eq!(pi.cwd, Path::new("/roster-fixture/fallback"));
     assert_eq!(pi.harness, Some(HarnessId::Pi));
     assert!(pi.session);
     assert_eq!(
@@ -180,7 +180,7 @@ async fn layered_roster_overlays_entry_env_and_cwd() -> TestResult {
     let loaded = load_fixture("layered.json").await?;
     assert_eq!(loaded.default_id, "echo");
     let echo = command(&loaded, "echo")?;
-    assert_eq!(echo.cwd, Path::new("/roster-fixture/top"));
+    assert_eq!(echo.cwd, Path::new("/roster-fixture/fallback"));
     assert_eq!(echo.harness, None);
     assert!(echo.session);
     assert_eq!(env_value(echo, "ACME_ROSTER_ENV"), Some("roster"));
@@ -205,11 +205,11 @@ async fn layered_roster_overlays_entry_env_and_cwd() -> TestResult {
     assert_eq!(claude.argv, ["node", "claude.js"]);
     assert_eq!(claude.harness, Some(HarnessId::ClaudeCode));
     assert!(claude.session);
-    assert_eq!(claude.cwd, Path::new("/roster-fixture/top"));
+    assert_eq!(claude.cwd, Path::new("/roster-fixture/fallback"));
     let silent = command(&loaded, "silent")?;
     assert!(!silent.session);
     assert_eq!(silent.harness, None);
-    assert_eq!(silent.cwd, echo.cwd);
+    assert_eq!(silent.cwd, Path::new("/roster-fixture/top"));
     assert_eq!(silent.env, echo.env);
     Ok(())
 }
@@ -484,5 +484,32 @@ fn write_env_roster(path: &Path, cwd: &Path) -> TestResult {
         ]),
     };
     std::fs::write(path, serde_json::to_vec(&file)?)?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn harness_entries_start_in_home_except_opencode_with_its_own_cwd() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("den-term.json");
+    std::fs::write(
+        &path,
+        r#"{"default":"claude","cwd":"/roster-fixture/top","commands":{
+            "claude":{"label":"Claude","cmd":["claude"],"room":true,"cwd":"/ignored"},
+            "opencode":{"label":"OpenCode","cmd":["opencode"],"room":true,"cwd":"/roster-fixture/project"},
+            "shell":{"label":"Shell","cmd":["bash","-l"],"room":false}}}"#,
+    )?;
+    let loaded = terminal::load_roster(&path, Path::new("/roster-fixture/home")).await?;
+    assert_eq!(
+        command(&loaded, "claude")?.cwd,
+        Path::new("/roster-fixture/home")
+    );
+    assert_eq!(
+        command(&loaded, "opencode")?.cwd,
+        Path::new("/roster-fixture/project")
+    );
+    assert_eq!(
+        command(&loaded, "shell")?.cwd,
+        Path::new("/roster-fixture/top")
+    );
     Ok(())
 }

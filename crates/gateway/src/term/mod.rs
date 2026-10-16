@@ -441,7 +441,11 @@ fn validate_options(mut options: TerminalOptions) -> Result<TerminalOptions, Api
                 "invalid terminal command or directory".into(),
             ));
         }
-        command.cwd = contained_directory(&options.root, &command.cwd)?;
+        if !command.cwd.is_absolute() {
+            return Err(ApiError::BadRequest(
+                "invalid terminal command or directory".into(),
+            ));
+        }
     }
     Ok(options)
 }

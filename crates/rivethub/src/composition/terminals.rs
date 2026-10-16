@@ -32,7 +32,11 @@ pub(super) async fn build(
     let state_dir = config::Paths::new(env)?.state_dir();
     let roster_path =
         terminal::resolve_roster_path(gateway.commands_file.as_deref(), env, &state_dir);
-    let roster = terminal::load_roster(&roster_path, &root).await?;
+    let home = env
+        .home()
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| ComposeError::Invalid("HOME is required for terminals".into()))?;
+    let roster = terminal::load_roster(&roster_path, &home).await?;
     let settings = terminal::TerminalSettings::from_config(
         config,
         env,

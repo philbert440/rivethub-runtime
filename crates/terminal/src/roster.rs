@@ -128,9 +128,11 @@ fn resolve_command(
     if entry.argv.is_empty() {
         return Err(RosterError::EmptyArgv { id }.into());
     }
-    let cwd = match &entry.cwd {
-        Some(cwd) => absolute_cwd(cwd)?,
-        None => match top {
+    let cwd = match (entry.session == Some(true), &entry.cwd) {
+        (true, Some(cwd)) if id == "opencode" => absolute_cwd(cwd)?,
+        (true, _) => fallback.to_path_buf(),
+        (false, Some(cwd)) => absolute_cwd(cwd)?,
+        (false, None) => match top {
             Some(cwd) => cwd.to_path_buf(),
             None => fallback.to_path_buf(),
         },

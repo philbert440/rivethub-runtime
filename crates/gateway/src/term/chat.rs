@@ -33,14 +33,14 @@ impl TerminalService {
             .find(|command| command.harness == Some(harness_id))
             .ok_or_else(|| ApiError::BadRequest("harness is not allowed on this node".into()))?;
         let directory = match cwd {
-            Some(directory) => directory,
+            Some(directory) => {
+                let root = self.options.root.clone();
+                tokio::task::spawn_blocking(move || super::contained_directory(&root, &directory))
+                    .await
+                    .map_err(ApiError::Task)??
+            }
             None => command.cwd.clone(),
         };
-        let root = self.options.root.clone();
-        let directory =
-            tokio::task::spawn_blocking(move || super::contained_directory(&root, &directory))
-                .await
-                .map_err(ApiError::Task)??;
         let spec = SessionSpec {
             session: SessionId::new(harness_id, &uuid::Uuid::new_v4().to_string()),
             harness: harness_id,
