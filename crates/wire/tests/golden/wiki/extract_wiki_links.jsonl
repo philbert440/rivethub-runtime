@@ -1,0 +1,800 @@
+{"fn":"extract_wiki_links","in":"fix the the 🔩 café","out":[]}
+{"fn":"extract_wiki_links","in":"See https://example.com/docs for details.","out":[]}
+{"fn":"extract_wiki_links","in":"[[garden-v2-app]] [[Café Notes]] ezbu [[a_b]]","out":["garden-v2-app"]}
+{"fn":"extract_wiki_links","in":"[[gateway-node-kit-x-notes]] [[V2-ACME]] hkacpigikt [[Café Notes]]","out":["gateway-node-kit-x-notes","v2-acme"]}
+{"fn":"extract_wiki_links","in":"[[task-release-notes-mesh]] [[a_b]]","out":["task-release-notes-mesh"]}
+{"fn":"extract_wiki_links","in":"[[notes-notes-node-release-kit]] [[garden-den-den-release-notes]] zty bidrkwqbv t [[memory-task-kit-mesh-mesh]] [[task-x-app-release]]","out":["notes-notes-node-release-kit","garden-den-den-release-notes","memory-task-kit-mesh-mesh","task-x-app-release"]}
+{"fn":"extract_wiki_links","in":"","out":[]}
+{"fn":"extract_wiki_links","in":"error session v1.2.3 naïve 42 PR","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[ spaced ]] [[kit-kit-memory-kit-den]] [[]] [[acme-kit-]] [[2026-gateway-kit-2026]] iodbxvnwmr","out":["a-b","kit-kit-memory-kit-den","acme-kit","2026-gateway-kit-2026"]}
+{"fn":"extract_wiki_links","in":"vsmcs [[ spaced ]] [[ACME-WIKI-GATEWAY-WIKI]]","out":["acme-wiki-gateway-wiki"]}
+{"fn":"extract_wiki_links","in":"kasausdgs jvafa [[task-release-kit-den]] [[x|label]] wdcziij tgq [[]]","out":["task-release-kit-den"]}
+{"fn":"extract_wiki_links","in":"[[2026-ACME-KIT-ACME]] ]] [[ spaced ]] [[mesh-x-node]] xjnqivojxb [[A-B]]","out":["2026-acme-kit-acme","mesh-x-node","a-b"]}
+{"fn":"extract_wiki_links","in":"addk tsldvpqcwy [[acme-kit-]] [[node]] [[2026-gateway-release]] [[wiki]]","out":["acme-kit","node","2026-gateway-release","wiki"]}
+{"fn":"extract_wiki_links","in":"acme-app search session build","out":[]}
+{"fn":"extract_wiki_links","in":"東京 AcmeKit notes agent cache","out":[]}
+{"fn":"extract_wiki_links","in":"zcmlxuwptx [[garden-2026-x-2026]] ]] [[A-B]] [[acme]] [[mesh-engine]] ]] [[memory]]","out":["garden-2026-x-2026","a-b","acme","mesh-engine","memory"]}
+{"fn":"extract_wiki_links","in":"[[]] [[ bdnshufm [[den-notes-2026-x]] ]] [[ACME-Kit]] [[A-B]] [[APP]] [[]]","out":["den-notes-2026-x","acme-kit","a-b","app"]}
+{"fn":"extract_wiki_links","in":"[[release-2026-memory]] [[A_B C]] [[den-memory]] m [[a_b]] [[2026]] [[]] [[-acme-]]","out":["release-2026-memory","den-memory","2026","acme"]}
+{"fn":"extract_wiki_links","in":"mykjwz","out":[]}
+{"fn":"extract_wiki_links","in":"[[x|label]] wdjjswxhqn nxommgp [[mesh-app-wiki]] vfwshesevs [[Café Notes]]","out":["mesh-app-wiki"]}
+{"fn":"extract_wiki_links","in":"kcipt vygajyuyv [[ spaced ]] [[den-x-2026]] [[2026-node-node-task-app]] dnhevlecl [[ wifg [[x|label]] [[Café Notes]]","out":["den-x-2026","2026-node-node-task-app"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[ [[gateway-acme-x-mesh]] vc deuxg twhm [[acme_kit]]","out":["gateway-acme-x-mesh"]}
+{"fn":"extract_wiki_links","in":"uvsndm ]] [[x|label]] [[Café Notes]] [[Café Notes]] [[release-v2]] [[GARDEN]] [[ ]]","out":["release-v2","garden"]}
+{"fn":"extract_wiki_links","in":"[[app-release-task-acme-x]] [[a_b]] a jdk ho [[TASK]] ]]","out":["app-release-task-acme-x","task"]}
+{"fn":"extract_wiki_links","in":"[[app-kit-mesh-v2]] [[a_b]] cpdjnjj [[kit-wiki-den-gateway]] [[KIT-NODE-DEN-WIKI-MEMORY]] hm [[Café Notes]]","out":["app-kit-mesh-v2","kit-wiki-den-gateway","kit-node-den-wiki-memory"]}
+{"fn":"extract_wiki_links","in":"[[wiki-2026-kit-den-den]] [[x|label]] [[ acolplbyhh ]] ]] [[ACME-Kit]] [[GARDEN-APP-TASK-KIT]]","out":["wiki-2026-kit-den-den","acme-kit","garden-app-task-kit"]}
+{"fn":"extract_wiki_links","in":"[[mesh-v2-engine]] [[x|label]] [[v2-memory]] [[v2-app]] suwa [[garden-node-x-wiki-app]] [[]] ]] rjmmn [[V2-TASK-V2]]","out":["mesh-v2-engine","v2-memory","v2-app","garden-node-x-wiki-app","v2-task-v2"]}
+{"fn":"extract_wiki_links","in":"[[ [[ [[]] [[node-node-task]] [[Café Notes]]","out":["node-node-task"]}
+{"fn":"extract_wiki_links","in":"[[ACME-GARDEN-ACME-GATEWAY]] stdoca","out":["acme-garden-acme-gateway"]}
+{"fn":"extract_wiki_links","in":"[[]] [[x|label]] [[a_b]] [[ACME-Kit]] bgotsko [[gateway]] [[v2-mesh-task-den]] ]] [[1-2-3]] suicljht","out":["acme-kit","gateway","v2-mesh-task-den","1-2-3"]}
+{"fn":"extract_wiki_links","in":"[[app-app-memory-notes-app]] [[a_b]] twkokwxubk [[]] [[app-engine-release-app-kit]] hohngijp ypjwt krh [[a_b]]","out":["app-app-memory-notes-app","app-engine-release-app-kit"]}
+{"fn":"extract_wiki_links","in":"[[]] [[release-engine-garden]] [[ [[ACME-Kit]] [[x|label]] yhy [[a_b]] zospycbv","out":["release-engine-garden","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[x|label]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[engine-den]] [[mesh-wiki-app-kit-garden]] [[release-mesh-acme]] owunbpb [[a_b]]","out":["engine-den","mesh-wiki-app-kit-garden","release-mesh-acme"]}
+{"fn":"extract_wiki_links","in":"kgodudway bvdndsddh [[den-den-garden-mesh-notes]] [[ [[acme_kit]]","out":["den-den-garden-mesh-notes"]}
+{"fn":"extract_wiki_links","in":"sgjgk [[release-den-x-x]] [[node-engine-x-engine]] [[x|label]] sppdsjg","out":["release-den-x-x","node-engine-x-engine"]}
+{"fn":"extract_wiki_links","in":"q [[mesh-x]] [[Acme Kit]] [[acme-kit-]] ktwqmka [[A-B]] ]]","out":["mesh-x","acme-kit","a-b"]}
+{"fn":"extract_wiki_links","in":"vjrpebku yxafukgn [[Café Notes]] [[a_b]] [[mesh-wiki-gateway-gateway-memory]] [[engine-notes-v2-engine-den]] [[garden-wiki-2026-kit]]","out":["mesh-wiki-gateway-gateway-memory","engine-notes-v2-engine-den","garden-wiki-2026-kit"]}
+{"fn":"extract_wiki_links","in":"kydmnp [[Acme Kit]] [[ [[ msrviwvlgu tkvhvss","out":[]}
+{"fn":"extract_wiki_links","in":"[[x-task-v2]] [[ [[Café Notes]] [[]] [[release-task]] msvxmfx [[garden-app-release]]","out":["x-task-v2","release-task","garden-app-release"]}
+{"fn":"extract_wiki_links","in":"z [[acme-kit-]] yezw [[A_B C]]","out":["acme-kit"]}
+{"fn":"extract_wiki_links","in":"ueseecz","out":[]}
+{"fn":"extract_wiki_links","in":"avaany [[A-B]] l [[wiki-v2]] [[A-B]] bwzeqbva mruigjk rums a [[","out":["a-b","wiki-v2"]}
+{"fn":"extract_wiki_links","in":"b [[acme-app]] [[Café Notes]] [[x|label]] [[ ctbpphipdj [[GARDEN-DEN-V2-ENGINE-ENGINE]] aceemhukz kbcykjffvn yin","out":["acme-app","garden-den-v2-engine-engine"]}
+{"fn":"extract_wiki_links","in":"[[node]] nt [[notes]] [[x|label]] [[A-B]] [[garden-app-garden-wiki]] [[Café Notes]] [[A-B]] pfid ]]","out":["node","notes","a-b","garden-app-garden-wiki"]}
+{"fn":"extract_wiki_links","in":"[[Zürich Office]] [[release-mesh-engine]] ]] [[memory-garden]] w tmnpxz [[acme]] shgqrn [[x-wiki-v2-task]]","out":["release-mesh-engine","memory-garden","acme","x-wiki-v2-task"]}
+{"fn":"extract_wiki_links","in":"t [[v2-release]] [[ [[WIKI-RELEASE-MESH-GATEWAY]] mvebr [[release-acme-memory-node-memory]] yz rqqujoir [[release-kit-2026]] fo","out":["v2-release","wiki-release-mesh-gateway","release-acme-memory-node-memory","release-kit-2026"]}
+{"fn":"extract_wiki_links","in":"[[den]] [[]] [[app-app-x-mesh]] [[2026]] sbv [[A-B]] sone jzc","out":["den","app-app-x-mesh","2026","a-b"]}
+{"fn":"extract_wiki_links","in":"uaka [[den-notes-task]] tndri","out":["den-notes-task"]}
+{"fn":"extract_wiki_links","in":"[[acme-kit-]] [[x|label]] [[v2-memory-notes-memory-den]] [[x|label]] wkpu [[ [[den-memory]]","out":["acme-kit","v2-memory-notes-memory-den","den-memory"]}
+{"fn":"extract_wiki_links","in":"[[ACME-Kit]] [[v2]] mrfj [[acme_kit]] [[node-engine]] [[A-B]]","out":["acme-kit","v2","node-engine","a-b"]}
+{"fn":"extract_wiki_links","in":"]] gabctaxib [[a_b]] cneryund [[V2-KIT]] [[DEN-KIT-MEMORY-X]]","out":["v2-kit","den-kit-memory-x"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[A-B]] l [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[wiki-mesh-garden]] qzpkhuhtqz [[ spaced ]] ]]","out":["a-b","release-notes-release-notes-release-notes-release-notes-release-notes-release-no","wiki-mesh-garden"]}
+{"fn":"extract_wiki_links","in":"zdllg jhtwu [[memory]] [[Café Notes]] [[gateway-garden-engine-acme]] [[Café Notes]]","out":["memory","gateway-garden-engine-acme"]}
+{"fn":"extract_wiki_links","in":"[[engine]] ctocm uzjwvejvyg dmw [[v2]] [[task-2026-release-garden]] [[a_b]] gfbyqmebg [[acme-task]] yzo","out":["engine","v2","task-2026-release-garden","acme-task"]}
+{"fn":"extract_wiki_links","in":"i","out":[]}
+{"fn":"extract_wiki_links","in":"eqj [[A-B]] [[A_B C]] [[x|label]] [[ [[Café Notes]] [[]] [[x|label]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] mvx [[ACME-Kit]] [[RELEASE-APP]] [[x|label]] c ]]","out":["a-b","acme-kit","release-app"]}
+{"fn":"extract_wiki_links","in":"[[mesh-2026-memory-garden-gateway]] [[ spaced ]] bbdmzha","out":["mesh-2026-memory-garden-gateway"]}
+{"fn":"extract_wiki_links","in":"lpixy [[2026]] [[x|label]] [[a_b]] [[a_b]] [[garden-v2]] [[ENGINE-MEMORY-V2-APP-ENGINE]] h [[]] ]]","out":["2026","garden-v2","engine-memory-v2-app-engine"]}
+{"fn":"extract_wiki_links","in":"bqpl ym [[engine-x]] [[task-mesh-notes-acme]] hiybyk a [[acme]] rja qhbnxdb [[]]","out":["engine-x","task-mesh-notes-acme","acme"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[ [[memory-mesh]] [[app-engine-engine]] jujy ]]","out":["memory-mesh","app-engine-engine"]}
+{"fn":"extract_wiki_links","in":"[[den-mesh-mesh-2026]] luvn dakzm","out":["den-mesh-mesh-2026"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] xnpupefk yi [[memory-node-x-kit-garden]] tyqcwk [[]]","out":["memory-node-x-kit-garden"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[engine-memory-v2]] uvgzm [[2026-wiki]]","out":["engine-memory-v2","2026-wiki"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] riil vbhnxnkbp [[v2]] [[kit]] [[x-mesh]]","out":["a-b","v2","kit","x-mesh"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[garden]] [[MESH-MEMORY-DEN]]","out":["garden","mesh-memory-den"]}
+{"fn":"extract_wiki_links","in":"gsrllo [[x-node-app-x-kit]]","out":["x-node-app-x-kit"]}
+{"fn":"extract_wiki_links","in":"[[acme/kit]] [[A-B]] xnfzsyqm [[x-memory-memory-2026]] [[MEMORY-X-NODE]] [[memory-x-2026]] onjtwncso [[]] [[x|label]] [[engine-v2]]","out":["a-b","x-memory-memory-2026","memory-x-node","memory-x-2026","engine-v2"]}
+{"fn":"extract_wiki_links","in":"ej ]] ]] [[garden]] [[x-garden]]","out":["garden","x-garden"]}
+{"fn":"extract_wiki_links","in":"xkomx [[ [[ spaced ]] [[den-app-notes]] [[app-kit-v2]] fvvnchaan ouzggkszad chsc [[]] [[release-notes-task-x-engine]]","out":["den-app-notes","app-kit-v2","release-notes-task-x-engine"]}
+{"fn":"extract_wiki_links","in":"qslwiwe [[]]","out":[]}
+{"fn":"extract_wiki_links","in":"session notes 42 42 cache ✅","out":[]}
+{"fn":"extract_wiki_links","in":"t [[memory-task-garden-gateway-v2]] [[notes-wiki-garden-v2-gateway]] [[den-acme-kit-x]] [[app-gateway-kit-memory]] [[garden]]","out":["memory-task-garden-gateway-v2","notes-wiki-garden-v2-gateway","den-acme-kit-x","app-gateway-kit-memory","garden"]}
+{"fn":"extract_wiki_links","in":"[[]] opoxyqxn [[ spaced ]] osmdegecp [[a_b]]","out":[]}
+{"fn":"extract_wiki_links","in":"]] plh [[mesh-task-garden]] [[ vhjrt qbizw","out":["mesh-task-garden"]}
+{"fn":"extract_wiki_links","in":"database acme-app review 🚀 AcmeKit database naïve config","out":[]}
+{"fn":"extract_wiki_links","in":"[[X-TASK-KIT]] [[Release 2026 notes]] txzduqcqvn [[mesh]] [[release-garden-garden]]","out":["x-task-kit","mesh","release-garden-garden"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] ttyrhxa zdwsmrz ajncvcpu [[NOTES-TASK-RELEASE-NOTES-ENGINE]]","out":["a-b","notes-task-release-notes-engine"]}
+{"fn":"extract_wiki_links","in":"undnlhnwuh [[notes-2026-node-gateway]] uejhgpan [[notes-app-x-kit-wiki]] [[wiki-wiki-release]] mle xhsk [[engine-task]] [[x|label]]","out":["notes-2026-node-gateway","notes-app-x-kit-wiki","wiki-wiki-release","engine-task"]}
+{"fn":"extract_wiki_links","in":"wfclakpz hexg [[ACME-Kit]] ddol dteo [[a_b]] [[wiki-x]] [[A-B]] [[ spaced ]] [[MESH-ACME-DEN-GARDEN-KIT]]","out":["acme-kit","wiki-x","a-b","mesh-acme-den-garden-kit"]}
+{"fn":"extract_wiki_links","in":"arpss [[app-den]] [[wiki-gateway-task-notes-app]] [[ [[acme/kit]] [[release-2026]]","out":["app-den","wiki-gateway-task-notes-app","release-2026"]}
+{"fn":"extract_wiki_links","in":"[[acme-v2-memory-app]] [[GATEWAY-WIKI-DEN-APP-ACME]] [[Café Notes]] ktk","out":["acme-v2-memory-app","gateway-wiki-den-app-acme"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] gnhl kxzxdrdce gvngslpw [[acme-kit-]] [[x|label]] [[MESH-MESH-NODE-TASK]]","out":["acme-kit","mesh-mesh-node-task"]}
+{"fn":"extract_wiki_links","in":"[[node-acme]] [[MEMORY]] [[Café Notes]] lbfswgkcwq ssjd ]] uzophforin v","out":["node-acme","memory"]}
+{"fn":"extract_wiki_links","in":"kcgy [[ [[wiki-task-release-2026]] lcuizegllx [[x|label]] gbzri ]] obtppnbary [[ [[","out":["wiki-task-release-2026"]}
+{"fn":"extract_wiki_links","in":"vuws [[acme-kit-]] [[Café Notes]] uaddplb hgcbmrbyox","out":["acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] wxfl ]] boersg","out":[]}
+{"fn":"extract_wiki_links","in":"zqgja [[Café Notes]] [[A_B C]] qgox [[kit]] uwhsl wfoxrdmjg ghvefmogeo [[Café Notes]]","out":["kit"]}
+{"fn":"extract_wiki_links","in":"[[den-den-v2]] [[wiki-app]] wzmnjvvglc [[x|label]] [[engine-garden]] [[notes]] [[acme-engine-den]] [[","out":["den-den-v2","wiki-app","engine-garden","notes","acme-engine-den"]}
+{"fn":"extract_wiki_links","in":"yuu agfpze [[app]] [[node]] [[MESH-V2-ACME]] [[x|label]]","out":["app","node","mesh-v2-acme"]}
+{"fn":"extract_wiki_links","in":"[[mesh-kit-notes-task-memory]] kqv [[ [[A-B]] [[]]","out":["mesh-kit-notes-task-memory","a-b"]}
+{"fn":"extract_wiki_links","in":"task AcmeKit error","out":[]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[mesh-x-garden-engine]] [[]] ]] [[mesh-app-garden-v2]] [[ [[MESH-MEMORY]]","out":["mesh-x-garden-engine","mesh-app-garden-v2","mesh-memory"]}
+{"fn":"extract_wiki_links","in":"[[MESH]] pzim","out":["mesh"]}
+{"fn":"extract_wiki_links","in":"e [[a_b]] [[garden-x-2026]] [[x|label]] [[A-B]] qj [[MEMORY-GATEWAY-MESH-GATEWAY]] [[x]]","out":["garden-x-2026","a-b","memory-gateway-mesh-gateway","x"]}
+{"fn":"extract_wiki_links","in":"[[1-2-3]]","out":["1-2-3"]}
+{"fn":"extract_wiki_links","in":"hnefsdrgkp [[a_b]] [[ ilianw pabovzdrhz [[ [[kit]] [[x|label]] [[MESH-APP-ENGINE-APP]]","out":["kit","mesh-app-engine-app"]}
+{"fn":"extract_wiki_links","in":"[[-acme-]] [[ACME-X-WIKI]] [[a_b]] [[kit-app-node-task-wiki]] asxp ydnuavu","out":["acme","acme-x-wiki","kit-app-node-task-wiki"]}
+{"fn":"extract_wiki_links","in":"gateway test 2026 summary summary build task","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]] hhkasyr","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"Merged PR #123 into main.","out":[]}
+{"fn":"extract_wiki_links","in":"TODO: wire the embed endpoint","out":[]}
+{"fn":"extract_wiki_links","in":"brflr [[]] [[]] [[engine]] sohgdj [[task-v2-2026-wiki]]","out":["engine","task-v2-2026-wiki"]}
+{"fn":"extract_wiki_links","in":"[[acme/kit]] [[notes]] [[Café Notes]] [[memory-memory-den]] [[ ]] yfzimssaqx","out":["notes","memory-memory-den"]}
+{"fn":"extract_wiki_links","in":"[[node]] ]] ounjlwy [[ spaced ]] cbsmriuweb zbcykuo viz [[v2-den-app-v2]]","out":["node","v2-den-app-v2"]}
+{"fn":"extract_wiki_links","in":"c [[kit-acme-mesh-release]]","out":["kit-acme-mesh-release"]}
+{"fn":"extract_wiki_links","in":"[[wiki]] [[ spaced ]] [[]] [[x-task-engine-garden]] [[notes]] [[ spaced ]] wflmypit o","out":["wiki","x-task-engine-garden","notes"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[acme.kit]] [[x|label]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[Zürich Office]] [[Café Notes]] [[notes]] plcs allrt ]] sr [[wiki-wiki-x]] ]]","out":["notes","wiki-wiki-x"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[Café Notes]] ueuomz [[1-2-3]] [[ spaced ]] [[a_b]] [[2026-task-x-wiki]] [[ [[]] [[Café Notes]]","out":["1-2-3","2026-task-x-wiki"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[Zürich Office]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[ [[node-task-engine]] [[]] [[release-task-acme-garden]] ]] bvpys","out":["node-task-engine","release-task-acme-garden"]}
+{"fn":"extract_wiki_links","in":"al [[-acme-]]","out":["acme"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[acme-garden-den-release-mesh]] gpsdbik [[acme-engine-notes-node]] ovbuv [[a_b]] [[garden]] ]] [[den]]","out":["acme-garden-den-release-mesh","acme-engine-notes-node","garden","den"]}
+{"fn":"extract_wiki_links","in":"Can you summarise yesterday's session?","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme-release-x]]","out":["acme-release-x"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[notes-mesh-engine-kit-acme]] [[engine-node-acme-mesh-notes]] [[","out":["notes-mesh-engine-kit-acme","engine-node-acme-mesh-notes"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[Café Notes]] emoiltas [[notes]] [[2026-wiki-memory-memory-gateway]] [[acme-kit-]] [[den-engine-v2-kit-acme]] [[]] [[garden-engine-engine-mesh-wiki]] [[node-x-gateway]]","out":["notes","2026-wiki-memory-memory-gateway","acme-kit","den-engine-v2-kit-acme","garden-engine-engine-mesh-wiki","node-x-gateway"]}
+{"fn":"extract_wiki_links","in":"Error: connection refused (ECONNREFUSED)","out":[]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[]] [[a_b]] v ksdgxqag j [[-acme-]] [[Café Notes]] [[A-B]] [[release-engine-release-acme-v2]]","out":["acme","a-b","release-engine-release-acme-v2"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] zxqfasr [[1-2-3]] kedbqg ewxdmwuyl [[a_b]] f ijjl nizg [[x|label]]","out":["1-2-3"]}
+{"fn":"extract_wiki_links","in":"sffnhndv [[gateway-memory-2026]] [[A-B]] ]] [[memory]] wtxc [[acme_kit]]","out":["gateway-memory-2026","a-b","memory"]}
+{"fn":"extract_wiki_links","in":"jmrroxj [[ spaced ]] r ]] [[Café Notes]] qhukohywq","out":[]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]]","out":[]}
+{"fn":"extract_wiki_links","in":"The build is green on main.","out":[]}
+{"fn":"extract_wiki_links","in":"database update","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme.kit]] zqs s [[kit]] [[Café Notes]] u [[gateway]]","out":["kit","gateway"]}
+{"fn":"extract_wiki_links","in":"wysjugz [[MESH-NOTES-V2-X]]","out":["mesh-notes-v2-x"]}
+{"fn":"extract_wiki_links","in":"[[ ]] [[ spaced ]] [[x|label]] [[ [[wiki-v2]] [[A-B]] [[ spaced ]] [[release-den]] [[","out":["wiki-v2","a-b","release-den"]}
+{"fn":"extract_wiki_links","in":"[[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[WIKI-V2-ENGINE-RELEASE-DEN]] lgfjcctjj [[1-2-3]] utpyravisy jgpywiki [[ spaced ]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]]","out":["release-notes-release-notes-release-notes-release-notes-release-notes-release-no","wiki-v2-engine-release-den","1-2-3"]}
+{"fn":"extract_wiki_links","in":"[[kit-notes-app-kit-x]] c [[kit-v2-mesh-den-den]] [[wiki-garden-2026-release]] [[engine]] [[a_b]] f [[a_b]] [[a_b]] [[v2-engine-den-release]]","out":["kit-notes-app-kit-x","kit-v2-mesh-den-den","wiki-garden-2026-release","engine","v2-engine-den-release"]}
+{"fn":"extract_wiki_links","in":"[[gateway-app-notes-memory]] zxbh abmivmujh [[Café Notes]] rueefixrhz [[den]] [[gateway-kit-acme]] [[]] [[ [[x|label]]","out":["gateway-app-notes-memory","den","gateway-kit-acme"]}
+{"fn":"extract_wiki_links","in":"gdu q [[Acme Kit]] [[a_b]] ]] udydpbouyn [[acme-kit-]] [[engine-den-2026-v2]] gvanubs","out":["acme-kit","engine-den-2026-v2"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[MESH-DEN-MESH-RELEASE]] ]] [[A-B]] [[wiki-wiki-2026-memory-x]] [[acme/kit]] [[wiki-memory-2026-node-wiki]] [[notes]]","out":["a-b","mesh-den-mesh-release","wiki-wiki-2026-memory-x","wiki-memory-2026-node-wiki","notes"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[wiki-memory]] [[app-notes-release-engine-v2]] [[release-node]] [[TASK]] [[ spaced ]]","out":["wiki-memory","app-notes-release-engine-v2","release-node","task"]}
+{"fn":"extract_wiki_links","in":"Updated README.md with the new flags.","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme-kit-]] jpogbzpue [[2026-GATEWAY-NOTES-DEN-DEN]] ]] mrjaxmzpep sfkjjijt [[acme--kit]]","out":["acme-kit","2026-gateway-notes-den-den"]}
+{"fn":"extract_wiki_links","in":"[[memory-gateway-2026-acme]] [[v2-den]] [[engine-2026-notes]] tgnpnfgr","out":["memory-gateway-2026-acme","v2-den","engine-2026-notes"]}
+{"fn":"extract_wiki_links","in":"[[den-engine]] sxpe [[garden-mesh-release-garden]] [[Café Notes]] fd [[app-2026-x-x]] [[acme--kit]]","out":["den-engine","garden-mesh-release-garden","app-2026-x-x","acme-kit"]}
+{"fn":"extract_wiki_links","in":"nntlfhsa [[acme-kit-]] lqzz [[v2]] rwtwrlov [[ spaced ]] [[x|label]] or [[gateway-notes]] [[]]","out":["acme-kit","v2","gateway-notes"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] tarwcfkdcr ]]","out":[]}
+{"fn":"extract_wiki_links","in":"qveelhjvuh [[kit-engine-2026]] [[task-wiki-x-garden-memory]] [[A-B]] [[-acme-]]","out":["kit-engine-2026","task-wiki-x-garden-memory","a-b","acme"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[A-B]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[ [[Café Notes]] [[A-B]] [[A-B]] fdz","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"tph [[v2]] [[]] [[]]","out":["v2"]}
+{"fn":"extract_wiki_links","in":"]] exjm biut h [[x-acme-x-den-kit]] [[Café Notes]] [[x|label]] [[app]]","out":["x-acme-x-den-kit","app"]}
+{"fn":"extract_wiki_links","in":"rof [[acme-kit-node-engine]] [[app-2026-den-v2]] [[x|label]]","out":["acme-kit-node-engine","app-2026-den-v2"]}
+{"fn":"extract_wiki_links","in":"]] [[acme-notes-notes]] hlbcghmcjo [[garden-wiki-garden-garden-release]] [[den-x-2026-task-gateway]] pfjfp [[den]] yts rrsybn [[acme--kit]]","out":["acme-notes-notes","garden-wiki-garden-garden-release","den-x-2026-task-gateway","den","acme-kit"]}
+{"fn":"extract_wiki_links","in":"bsys [[MEMORY-X-2026-WIKI]] xvnmwuabxe n grrjnyh [[ spaced ]] ]] xj","out":["memory-x-2026-wiki"]}
+{"fn":"extract_wiki_links","in":"cache emoji memory release workflow the","out":[]}
+{"fn":"extract_wiki_links","in":"✅ v1.2.3","out":[]}
+{"fn":"extract_wiki_links","in":"[[2026-APP-ENGINE]] tipkahv ]] [[wiki]] ]]","out":["2026-app-engine","wiki"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] jug jyqqs [[den-wiki-memory]] [[2026-gateway]]","out":["a-b","den-wiki-memory","2026-gateway"]}
+{"fn":"extract_wiki_links","in":"[[]] [[node-app-acme-mesh]] [[notes]] lvyyzjic [[x-notes-memory-den]]","out":["node-app-acme-mesh","notes","x-notes-memory-den"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[A-B]] [[Zürich Office]] [[ aymwacyg [[engine-garden-den]]","out":["a-b","engine-garden-den"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] wulfukpcrf","out":[]}
+{"fn":"extract_wiki_links","in":"[[GARDEN]] [[A_B C]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[garden-wiki]] po","out":["garden","release-notes-release-notes-release-notes-release-notes-release-notes-release-no","garden-wiki"]}
+{"fn":"extract_wiki_links","in":"]] [[engine-node-kit]] [[v2-task]] [[acme/kit]] hrljprkzup ]]","out":["engine-node-kit","v2-task"]}
+{"fn":"extract_wiki_links","in":"[[release]] [[node-node-memory-kit-task]] [[A-B]] hsiiz rkh [[2026]] [[acme-notes-wiki-x]] xowfbk","out":["release","node-node-memory-kit-task","a-b","2026","acme-notes-wiki-x"]}
+{"fn":"extract_wiki_links","in":"[[engine-memory]] [[den-acme-den]] gaelqjeerz [[x-acme]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[v2]] lykfp [[KIT-DEN]] ugwg","out":["engine-memory","den-acme-den","x-acme","release-notes-release-notes-release-notes-release-notes-release-notes-release-no","v2","kit-den"]}
+{"fn":"extract_wiki_links","in":"✅ All checks passed","out":[]}
+{"fn":"extract_wiki_links","in":"[[DEN]] [[garden-v2-acme]] mpkv [[app-acme-v2-wiki-garden]] ooxhm [[]]","out":["den","garden-v2-acme","app-acme-v2-wiki-garden"]}
+{"fn":"extract_wiki_links","in":"build error","out":[]}
+{"fn":"extract_wiki_links","in":"dquh qs","out":[]}
+{"fn":"extract_wiki_links","in":"eacronvom","out":[]}
+{"fn":"extract_wiki_links","in":"patt [[acme/kit]] [[]] f [[ [[A-B]] [[ [[x|label]] [[app-task-2026-engine]]","out":["a-b","app-task-2026-engine"]}
+{"fn":"extract_wiki_links","in":"rzkwsna [[ mggoqsvhip [[acme]] [[garden-release-notes]] [[A-B]] qopn [[ACME-Kit]] [[notes-gateway]] [[NOTES-MEMORY-MEMORY]]","out":["acme","garden-release-notes","a-b","acme-kit","notes-gateway","notes-memory-memory"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[notes-notes-2026]] [[Café Notes]] [[Café Notes]] rcdp [[Café Notes]]","out":["notes-notes-2026"]}
+{"fn":"extract_wiki_links","in":"hupsl [[Café Notes]] [[-acme-]]","out":["acme"]}
+{"fn":"extract_wiki_links","in":"[[den-den]] [[DEN-DEN-V2-MESH-GARDEN]] ]] azjunke [[wiki-kit-kit-node]]","out":["den-den","den-den-v2-mesh-garden","wiki-kit-kit-node"]}
+{"fn":"extract_wiki_links","in":"mrnyvjbdsy [[a_b]] [[RELEASE-APP-GATEWAY-KIT-GATEWAY]]","out":["release-app-gateway-kit-gateway"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] oz m [[ACME-Kit]] [[2026-acme]] [[a_b]] [[gateway-mesh]] [[A_B C]] [[ spaced ]] ptjaosn","out":["acme-kit","2026-acme","gateway-mesh"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] wsg ]] [[v2-app-engine-memory-notes]] [[Café Notes]] [[A-B]] [[gateway-den-notes-2026-v2]] ajctmako","out":["v2-app-engine-memory-notes","a-b","gateway-den-notes-2026-v2"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[mesh-2026]] [[garden-task-engine]] [[A_B C]] [[kit]] [[A-B]] ytwpdrvqqs [[x|label]]","out":["mesh-2026","garden-task-engine","kit","a-b"]}
+{"fn":"extract_wiki_links","in":"xwpeh dfkkst hhopmzbz [[release-wiki]] [[gateway]] q","out":["release-wiki","gateway"]}
+{"fn":"extract_wiki_links","in":"maklit cxtj [[]] [[gateway-kit-memory-wiki-mesh]] [[engine-garden-den]]","out":["gateway-kit-memory-wiki-mesh","engine-garden-den"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] vw [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[acme--kit]] [[Zürich Office]] [[acme-app-node]] uyiavcjlvl","out":["release-notes-release-notes-release-notes-release-notes-release-notes-release-no","acme-kit","acme-app-node"]}
+{"fn":"extract_wiki_links","in":"PR agent привет notes","out":[]}
+{"fn":"extract_wiki_links","in":"[[Release 🚀 Notes]] rnlrjyemk [[Café Notes]] [[memory-task-acme-wiki-task]]","out":["memory-task-acme-wiki-task"]}
+{"fn":"extract_wiki_links","in":"clqqyuofio","out":[]}
+{"fn":"extract_wiki_links","in":"[[ ]] [[x|label]]","out":[]}
+{"fn":"extract_wiki_links","in":"привет São the","out":[]}
+{"fn":"extract_wiki_links","in":"[[x]] yxzpdhw [[A-B]] oxghwfimt [[wiki]] [[acme.kit]] [[ spaced ]]","out":["x","a-b","wiki"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] wkmboranha [[ spaced ]] xah ]]","out":[]}
+{"fn":"extract_wiki_links","in":"Fix the failing test in the gateway.","out":[]}
+{"fn":"extract_wiki_links","in":"ksqd [[","out":[]}
+{"fn":"extract_wiki_links","in":"[[ [[v2-acme-garden-acme-acme]] rlac ]] [[A-B]]","out":["v2-acme-garden-acme-acme","a-b"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[x|label]] [[Café Notes]] [[ chonhwlq [[ [[Café Notes]]","out":[]}
+{"fn":"extract_wiki_links","in":"uz [[x|label]] tredwb [[A-B]] [[ spaced ]] bkzlv ufudmtqr [[Café Notes]] ekfrn","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[engine-den-gateway-task]] [[Café Notes]] [[wiki-x]] [[A-B]] [[a_b]] ]] h [[Café Notes]]","out":["engine-den-gateway-task","wiki-x","a-b"]}
+{"fn":"extract_wiki_links","in":"[[release]]","out":["release"]}
+{"fn":"extract_wiki_links","in":"p obhqwmh [[ spaced ]] [[]] demhtm [[A-B]] [[Café Notes]] bnwpmh [[-acme-]]","out":["a-b","acme"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] iyhyjn [[mesh-engine-node]]","out":["a-b","mesh-engine-node"]}
+{"fn":"extract_wiki_links","in":"vdaztbipqd rsqjgi bng rpxxmz [[]] [[ [[Acme Kit]] ydeuvhl","out":[]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[NOTES]] nsqgkyo [[]] [[]] [[notes]] [[v2]] [[a_b]]","out":["notes","v2"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] ]] [[Release 2026 notes]] ijtaarve [[gateway-gateway]] ]] [[v2-acme]]","out":["a-b","gateway-gateway","v2-acme"]}
+{"fn":"extract_wiki_links","in":"]] [[den-kit-den-kit]]","out":["den-kit-den-kit"]}
+{"fn":"extract_wiki_links","in":"[[memory]] [[A-B]] [[]] [[acme-mesh-task-app-kit]]","out":["memory","a-b","acme-mesh-task-app-kit"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[garden]] xgtm [[","out":["garden"]}
+{"fn":"extract_wiki_links","in":"東京のデプロイは完了しました。","out":[]}
+{"fn":"extract_wiki_links","in":"i [[memory-memory-mesh-task]] rcql [[x|label]] [[task-v2-kit-garden]] [[app-v2]] [[acme]] [[acme-release-kit]] [[ [[release-app-mesh-acme]]","out":["memory-memory-mesh-task","task-v2-kit-garden","app-v2","acme","acme-release-kit","release-app-mesh-acme"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[task-gateway-release-gateway-v2]]","out":["task-gateway-release-gateway-v2"]}
+{"fn":"extract_wiki_links","in":"j nbxzmzpm [[x|label]] wrusrx [[A-B]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"Use `rivetos update --mesh` to roll out.","out":[]}
+{"fn":"extract_wiki_links","in":"[[Release 🚀 Notes]] [[x|label]] [[release-garden]] [[acme_kit]] ta [[garden-2026-mesh-node]] ]]","out":["release-garden","garden-2026-mesh-node"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[ [[kit-release-notes-acme-v2]]","out":["kit-release-notes-acme-v2"]}
+{"fn":"extract_wiki_links","in":"]] [[gateway]] [[Café Notes]] ]] [[acme/kit]] zov [[acme-wiki-mesh-engine-memory]]","out":["gateway","acme-wiki-mesh-engine-memory"]}
+{"fn":"extract_wiki_links","in":"[[]] [[app-release]] ]]","out":["app-release"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[engine-node-app-v2]] jcrwxer ivg","out":["engine-node-app-v2"]}
+{"fn":"extract_wiki_links","in":"Run `npm test` and report back.","out":[]}
+{"fn":"extract_wiki_links","in":"pjliiqhdvw [[A-B]] ]] [[acme.kit]] [[2026-kit-garden-kit-kit]]","out":["a-b","2026-kit-garden-kit-kit"]}
+{"fn":"extract_wiki_links","in":"ginnnedlpc [[ spaced ]] [[TASK-TASK-WIKI]] lnw [[a_b]] [[Release 🚀 Notes]] rp ]] [[x|label]]","out":["task-task-wiki"]}
+{"fn":"extract_wiki_links","in":"[[den]] [[ [[1-2-3]] eoqdfxnxt [[a_b]] [[acme-task]] nkfgl [[1-2-3]] [[app-notes]]","out":["den","1-2-3","acme-task","app-notes"]}
+{"fn":"extract_wiki_links","in":"fvzjik [[x|label]] [[a_b]] [[acme-2026-task]] xcykrjjjtj iwraquh df qkgcv [[x|label]]","out":["acme-2026-task"]}
+{"fn":"extract_wiki_links","in":"zpsjk [[]] [[Zürich Office]] [[v2-den-app-den]] yqqny","out":["v2-den-app-den"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] zmlpwbymc xfsah ebmaatatmm [[]] [[a_b]]","out":[]}
+{"fn":"extract_wiki_links","in":"stqalcto [[Café Notes]] [[ spaced ]] ljvxns [[]] couglr ]] [[node-v2]] [[2026-wiki-release-kit]]","out":["node-v2","2026-wiki-release-kit"]}
+{"fn":"extract_wiki_links","in":"[[acme--kit]] [[gateway-v2]] [[app-memory-node]] [[Release 🚀 Notes]] lpqnurb [[ENGINE-APP-DEN]] pdwzmt j ykjncy omjrb","out":["acme-kit","gateway-v2","app-memory-node","engine-app-den"]}
+{"fn":"extract_wiki_links","in":"fix v1.2.3 привет","out":[]}
+{"fn":"extract_wiki_links","in":"odmehtp [[node-notes-v2-node-mesh]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] yshyzsbm ujyr [[x|label]] x [[A-B]]","out":["node-notes-v2-node-mesh","release-notes-release-notes-release-notes-release-notes-release-notes-release-no","a-b"]}
+{"fn":"extract_wiki_links","in":"[[ [[A-B]] sg [[]] [[a_b]] [[1-2-3]] [[release]] [[wiki-memory-x-gateway]]","out":["a-b","1-2-3","release","wiki-memory-x-gateway"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] kpq j [[app-notes-kit-notes]] [[a_b]] [[ ]] [[ spaced ]] cwxwi [[acme-task]]","out":["app-notes-kit-notes","acme-task"]}
+{"fn":"extract_wiki_links","in":"[[x|label]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[Release 🚀 Notes]] wjenybx [[mesh]] [[v2-app]]","out":["mesh","v2-app"]}
+{"fn":"extract_wiki_links","in":"[[den-release-release-x]] r [[]]","out":["den-release-release-x"]}
+{"fn":"extract_wiki_links","in":"test the config ✅","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] ujxkxj [[a_b]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[a_b]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] ]] jgamkvqtql","out":[]}
+{"fn":"extract_wiki_links","in":"[[wiki-memory]] [[acme.kit]]","out":["wiki-memory"]}
+{"fn":"extract_wiki_links","in":"[[]]","out":[]}
+{"fn":"extract_wiki_links","in":"fjaybqhbi [[Acme Kit]] [[x|label]] [[A_B C]] eccufgh ]] [[A-B]] [[wiki-kit-node-2026-engine]]","out":["a-b","wiki-kit-node-2026-engine"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] flizelckec [[a_b]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"jbrjg bcp [[ spaced ]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] iuzkdd [[NOTES-WIKI-KIT-NODE-KIT]]","out":["notes-wiki-kit-node-kit"]}
+{"fn":"extract_wiki_links","in":"ngdnvdubg [[v2-node]] kqgrrnzop [[x|label]] [[2026-engine-den]] [[]]","out":["v2-node","2026-engine-den"]}
+{"fn":"extract_wiki_links","in":"odyjwxf fdbgflhm bvxxtl [[APP-GARDEN-V2]] [[A-B]] [[v2-den]]","out":["app-garden-v2","a-b","v2-den"]}
+{"fn":"extract_wiki_links","in":"[[mesh-notes-release-release]] [[A-B]] [[Café Notes]]","out":["mesh-notes-release-release","a-b"]}
+{"fn":"extract_wiki_links","in":"[[Acme Kit]] [[A-B]] ]] [[a_b]] xeudjwwq","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"mquf [[]] [[ [[]] hcaffzht [[A-B]] [[DEN-NODE-NOTES-RELEASE-2026]] [[Release 🚀 Notes]] [[DEN-NODE-DEN-WIKI]]","out":["a-b","den-node-notes-release-2026","den-node-den-wiki"]}
+{"fn":"extract_wiki_links","in":"Deploy finished in 42s.","out":[]}
+{"fn":"extract_wiki_links","in":"[[Acme Kit]] [[v2-kit]] [[acme-gateway]] [[Café Notes]] aivscnji [[MEMORY]]","out":["v2-kit","acme-gateway","memory"]}
+{"fn":"extract_wiki_links","in":"aawevm nx [[Café Notes]] gqepeqzipe wibaawkz","out":[]}
+{"fn":"extract_wiki_links","in":"[[]] hmfja [[x|label]] [[kit-x-x-mesh-notes]] jsehrv","out":["kit-x-x-mesh-notes"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] c [[ pwhdmkfl","out":[]}
+{"fn":"extract_wiki_links","in":"[[gateway-kit-gateway-garden-node]] [[]] [[A-B]] ]] xtk [[GATEWAY]]","out":["gateway-kit-gateway-garden-node","a-b","gateway"]}
+{"fn":"extract_wiki_links","in":"[[acme-memory-mesh]] [[DEN-V2-NOTES]] [[ spaced ]] k g ]] mpzwxy [[wiki]] [[x|label]]","out":["acme-memory-mesh","den-v2-notes","wiki"]}
+{"fn":"extract_wiki_links","in":"kmqjoj hryvf [[A_B C]] [[x-x-garden-memory-task]] bkhwclnl","out":["x-x-garden-memory-task"]}
+{"fn":"extract_wiki_links","in":"]] [[mesh]] [[Café Notes]] [[Café Notes]] [[a_b]] [[ spaced ]] [[Café Notes]] [[","out":["mesh"]}
+{"fn":"extract_wiki_links","in":"try [[x|label]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[x-release-task]] mbxn [[]] [[Café Notes]] [[den-node-acme-acme-wiki]] [[ACME-Kit]]","out":["x-release-task","den-node-acme-acme-wiki","acme-kit"]}
+{"fn":"extract_wiki_links","in":"d [[ gxluxch hhkh [[ wxisj [[engine-2026-app-garden]] [[GARDEN-ENGINE]] [[2026-NOTES-MEMORY-APP-DEN]]","out":["engine-2026-app-garden","garden-engine","2026-notes-memory-app-den"]}
+{"fn":"extract_wiki_links","in":"[[gateway-garden-node-release-node]] qqpnfvx r qnybxlegsw [[acme]] [[acme]] [[app-garden-notes]]","out":["gateway-garden-node-release-node","acme","app-garden-notes"]}
+{"fn":"extract_wiki_links","in":"[[den-mesh]] tylurolt","out":["den-mesh"]}
+{"fn":"extract_wiki_links","in":"tmhhhyjd [[]] [[ [[gateway]] [[ [[a_b]]","out":["gateway"]}
+{"fn":"extract_wiki_links","in":"[[mesh]] [[Release 2026 notes]] [[ spaced ]] ez [[KIT-GATEWAY]] [[A-B]] [[acme.kit]] [[acme]] fhcvdbohv","out":["mesh","kit-gateway","a-b","acme"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] rqlamaglt dnx [[ [[A-B]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"mzlsqq a [[acme_kit]] [[acme_kit]] j","out":[]}
+{"fn":"extract_wiki_links","in":"mynvc wa [[A-B]] eraqvn","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[ ]] ub [[2026]] [[A-B]] [[node-mesh-app]]","out":["2026","a-b","node-mesh-app"]}
+{"fn":"extract_wiki_links","in":"task #123 São Zürich résumé memory","out":[]}
+{"fn":"extract_wiki_links","in":"[[gateway-gateway-engine-gateway]] [[Café Notes]] qdxpfky [[node-memory]]","out":["gateway-gateway-engine-gateway","node-memory"]}
+{"fn":"extract_wiki_links","in":"[[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[node-2026-task-den]] mtjbet [[acme--kit]]","out":["release-notes-release-notes-release-notes-release-notes-release-notes-release-no","node-2026-task-den","acme-kit"]}
+{"fn":"extract_wiki_links","in":"]] [[notes-release-2026-app-app]] tdt jbxqpyzer [[a_b]] xovdvbn","out":["notes-release-2026-app-app"]}
+{"fn":"extract_wiki_links","in":"zhot [[Release 🚀 Notes]] [[x|label]] ozrnopyju wbku [[A-B]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[release-task-engine]] [[release-x-node-app]]","out":["release-task-engine","release-x-node-app"]}
+{"fn":"extract_wiki_links","in":"wjfhml [[app-node]] [[-acme-]] [[Café Notes]] [[mesh-2026-release]] [[kit-memory-app-node-den]] qw [[MEMORY-WIKI-KIT-APP]] ]] [[A-B]]","out":["app-node","acme","mesh-2026-release","kit-memory-app-node-den","memory-wiki-kit-app","a-b"]}
+{"fn":"extract_wiki_links","in":"[[gateway]] xh [[1-2-3]] [[garden-wiki-garden-v2]] cqptti aksoar [[kit]] vqjvl [[x|label]]","out":["gateway","1-2-3","garden-wiki-garden-v2","kit"]}
+{"fn":"extract_wiki_links","in":"[[gateway-v2-task]] [[x|label]] ctc [[]]","out":["gateway-v2-task"]}
+{"fn":"extract_wiki_links","in":"2026 2026 notes naïve file","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme-release-acme]] [[a_b]] [[garden-v2-gateway]] [[mesh-node]] uskxwvjnp [[A-B]]","out":["acme-release-acme","garden-v2-gateway","mesh-node","a-b"]}
+{"fn":"extract_wiki_links","in":"[[]] [[-acme-]]","out":["acme"]}
+{"fn":"extract_wiki_links","in":"[[gateway]] cbzk sgrjvdn [[a_b]]","out":["gateway"]}
+{"fn":"extract_wiki_links","in":"[[v2-memory-app-notes]]","out":["v2-memory-app-notes"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[acme-kit-]] vnhqerx emhvaxkvh","out":["acme-kit"]}
+{"fn":"extract_wiki_links","in":"yatwhh [[Café Notes]] [[ spaced ]] [[x|label]] kwr [[Café Notes]] [[gateway-kit-garden-node]] blwhzaaph","out":["gateway-kit-garden-node"]}
+{"fn":"extract_wiki_links","in":"jxvg [[node-mesh]] [[Release 2026 notes]] [[memory-release-mesh-notes]] skn [[A-B]] [[kit-garden-acme-notes]]","out":["node-mesh","memory-release-mesh-notes","a-b","kit-garden-acme-notes"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[A_B C]] wvqmxflebb [[Café Notes]] [[A-B]] [[]] [[acme-kit-]]","out":["a-b","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] sdvkmec ]] so c [[A-B]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[wiki-task-memory-v2-x]] [[task-gateway-release]] [[x|label]] [[NOTES]] [[Café Notes]]","out":["wiki-task-memory-v2-x","task-gateway-release","notes"]}
+{"fn":"extract_wiki_links","in":"[[kit-notes-release-v2-wiki]]","out":["kit-notes-release-v2-wiki"]}
+{"fn":"extract_wiki_links","in":"[[gateway-app-kit-acme]] lfxnrf","out":["gateway-app-kit-acme"]}
+{"fn":"extract_wiki_links","in":"[[memory]] [[wiki-garden-den]] [[x|label]]","out":["memory","wiki-garden-den"]}
+{"fn":"extract_wiki_links","in":"[[node]] ]] myynnfgjh [[ spaced ]] [[NOTES-GATEWAY-APP-MESH-ACME]] [[a_b]] [[engine]]","out":["node","notes-gateway-app-mesh-acme","engine"]}
+{"fn":"extract_wiki_links","in":"dmrs [[A-B]] [[ spaced ]] ro [[app-2026-memory-release]] envacujbxe [[ spaced ]] [[Café Notes]]","out":["a-b","app-2026-memory-release"]}
+{"fn":"extract_wiki_links","in":"ai lpxs [[x|label]] kuhzhik zirnad [[task-acme-2026-node-x]] ohhei ibbkscukdt [[task-x-mesh-engine]]","out":["task-acme-2026-node-x","task-x-mesh-engine"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[mesh-release-engine]] [[ [[ t vdqcaffsmg nutskvr [[mesh-mesh-gateway-2026]]","out":["mesh-release-engine","mesh-mesh-gateway-2026"]}
+{"fn":"extract_wiki_links","in":"uwkyu j","out":[]}
+{"fn":"extract_wiki_links","in":"[[ fozn [[x|label]] [[x|label]] [[2026-task-wiki-memory]] [[release-wiki-v2]] bsapehpk dakcmcgca","out":["2026-task-wiki-memory","release-wiki-v2"]}
+{"fn":"extract_wiki_links","in":"[[gateway-task]] ]] ajkamr","out":["gateway-task"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[garden-node-acme-memory]] q [[wiki-engine-release]] qstz krga","out":["garden-node-acme-memory","wiki-engine-release"]}
+{"fn":"extract_wiki_links","in":"eamowdtz rkhysoyc [[Café Notes]] [[den-release]] mnndoha [[task-node-garden-notes-v2]] [[mesh-den-den]]","out":["den-release","task-node-garden-notes-v2","mesh-den-den"]}
+{"fn":"extract_wiki_links","in":"zufuuzuz [[Zürich Office]] [[v2]] damwkmsbv","out":["v2"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] ojtt [[ qi [[x|label]] [[node-2026-node-acme]] novjl f","out":["node-2026-node-acme"]}
+{"fn":"extract_wiki_links","in":"dwpfkdbflt [[Café Notes]] [[a_b]] [[engine-memory]] [[","out":["engine-memory"]}
+{"fn":"extract_wiki_links","in":"w [[acme/kit]] [[a_b]] [[acme-kit-]] wtwqcfe kke [[x|label]] [[A-B]]","out":["acme-kit","a-b"]}
+{"fn":"extract_wiki_links","in":"[[ [[wiki-release-wiki]] xdfdbgeza zylvwpcut etrqgldfzh","out":["wiki-release-wiki"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] aazfds [[Release 🚀 Notes]] [[app-release]] [[garden-release-2026]] [[ zjknbgflx","out":["app-release","garden-release-2026"]}
+{"fn":"extract_wiki_links","in":"[[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[2026-app-node]] [[Café Notes]] [[release-app]]","out":["release-notes-release-notes-release-notes-release-notes-release-notes-release-no","2026-app-node","release-app"]}
+{"fn":"extract_wiki_links","in":"djizlytuwx [[x|label]] [[x|label]] [[garden-notes]] [[acme-node-gateway-engine-x]] [[garden-x-mesh-x]] [[v2-2026-mesh-2026-acme]] [[x|label]] p [[a_b]]","out":["garden-notes","acme-node-gateway-engine-x","garden-x-mesh-x","v2-2026-mesh-2026-acme"]}
+{"fn":"extract_wiki_links","in":"[[]] qeqfnahwgl ]] [[]] f [[garden-2026-mesh]] [[A-B]] iutqmhrvd [[ACME-Kit]]","out":["garden-2026-mesh","a-b","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[acme-x-gateway]] [[memory-garden]] [[NOTES-DEN]] [[wiki-node-2026-memory-gateway]] [[Zürich Office]] wpbbmhw [[","out":["acme-x-gateway","memory-garden","notes-den","wiki-node-2026-memory-gateway"]}
+{"fn":"extract_wiki_links","in":"[[MESH-KIT]] [[Café Notes]] xrepbv [[","out":["mesh-kit"]}
+{"fn":"extract_wiki_links","in":"njmrv [[2026-acme-mesh-garden]] [[RELEASE-ACME]] [[den-engine-acme-gateway]] [[kit-notes-node-notes-kit]] [[app-v2]] [[Café Notes]] [[task-engine-wiki-notes]] [[]] s","out":["2026-acme-mesh-garden","release-acme","den-engine-acme-gateway","kit-notes-node-notes-kit","app-v2","task-engine-wiki-notes"]}
+{"fn":"extract_wiki_links","in":"zytayud [[garden-wiki]] ajchev [[release-wiki-garden]] cegsrbpono [[]]","out":["garden-wiki","release-wiki-garden"]}
+{"fn":"extract_wiki_links","in":"café update naïve café config","out":[]}
+{"fn":"extract_wiki_links","in":"zd [[Café Notes]] pdgaoz kwsfrsxptr qhevjnr [[garden-mesh]] [[DEN]] [[]] tvrze","out":["garden-mesh","den"]}
+{"fn":"extract_wiki_links","in":"cache 42 Paulo 🔩","out":[]}
+{"fn":"extract_wiki_links","in":"[[2026-app-node-app]] [[ [[app]]","out":["2026-app-node-app","app"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] jbm [[acme.kit]] [[notes-release-v2-wiki]]","out":["a-b","notes-release-v2-wiki"]}
+{"fn":"extract_wiki_links","in":"[[den]]","out":["den"]}
+{"fn":"extract_wiki_links","in":"]]","out":[]}
+{"fn":"extract_wiki_links","in":"acme-app naïve 🚀 task привет test","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[gateway-mesh-memory]] [[ spaced ]] npyz xegti [[node-task]] ]]","out":["a-b","gateway-mesh-memory","node-task"]}
+{"fn":"extract_wiki_links","in":"[[notes-garden-acme-memory-acme]] ]] [[MEMORY-ENGINE-2026]] [[gateway-mesh-gateway]] [[mesh-node]] [[A-B]] cvkjlsea [[x|label]] [[x|label]] [[","out":["notes-garden-acme-memory-acme","memory-engine-2026","gateway-mesh-gateway","mesh-node","a-b"]}
+{"fn":"extract_wiki_links","in":"[[x-app-kit]] ykccc [[2026-node-engine]] wnssnseb [[X]]","out":["x-app-kit","2026-node-engine","x"]}
+{"fn":"extract_wiki_links","in":"vsi [[A-B]] [[ spaced ]] zsj [[engine-den]] [[node-notes-release-wiki-mesh]] [[release]] [[wiki-notes-acme-wiki]] yb","out":["a-b","engine-den","node-notes-release-wiki-mesh","release","wiki-notes-acme-wiki"]}
+{"fn":"extract_wiki_links","in":"tilzqf [[wiki-node-mesh-den-x]] [[engine-task]]","out":["wiki-node-mesh-den-x","engine-task"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[Café Notes]] xydvuso [[app]] ieytnf [[A-B]] [[Café Notes]] [[a_b]] [[ spaced ]] ormqqhpka","out":["app","a-b"]}
+{"fn":"extract_wiki_links","in":"[[]] pibjoczldk cxfavrpgfl [[ spaced ]] [[acme--kit]] [[node-mesh-v2-engine-v2]] mg [[engine-memory-v2]] [[acme-kit-]]","out":["acme-kit","node-mesh-v2-engine-v2","engine-memory-v2"]}
+{"fn":"extract_wiki_links","in":"PR résumé Paulo Paulo","out":[]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[a_b]] kmvu [[]] [[ spaced ]] it ]] vmfjt","out":[]}
+{"fn":"extract_wiki_links","in":"w [[x|label]] [[]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[node-garden-kit-notes]] [[a_b]] ]] [[acme]] [[acme_kit]] zmvomk hurulifxyy","out":["node-garden-kit-notes","acme"]}
+{"fn":"extract_wiki_links","in":"[[task-node]] [[Café Notes]] [[release-wiki-app-engine]] [[KIT-X-GATEWAY]] [[A-B]] [[task-task]] yzkshvdswq","out":["task-node","release-wiki-app-engine","kit-x-gateway","a-b","task-task"]}
+{"fn":"extract_wiki_links","in":"[[NODE-NOTES]] ]] [[-acme-]] [[notes-engine-notes]] [[Café Notes]]","out":["node-notes","acme","notes-engine-notes"]}
+{"fn":"extract_wiki_links","in":"]] [[Café Notes]] [[A-B]] bfzyjjmws pznlbqgyn [[ spaced ]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"привет search","out":[]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[Café Notes]] [[]] lb","out":[]}
+{"fn":"extract_wiki_links","in":"[[ dfh [[gateway-gateway-v2-den-wiki]] [[A-B]] [[notes-notes-task-node-memory]] hgpzm [[v2-2026-acme-release-x]] [[ spaced ]] [[","out":["gateway-gateway-v2-den-wiki","a-b","notes-notes-task-node-memory","v2-2026-acme-release-x"]}
+{"fn":"extract_wiki_links","in":"acnkwc [[v2]] c nqmes emiootp [[A-B]] [[release-task-acme-release-v2]] [[]]","out":["v2","a-b","release-task-acme-release-v2"]}
+{"fn":"extract_wiki_links","in":"yjsieuzctg [[engine-kit-x]] [[A-B]] [[A-B]] x [[gateway-gateway-mesh-acme]]","out":["engine-kit-x","a-b","gateway-gateway-mesh-acme"]}
+{"fn":"extract_wiki_links","in":"ftpal","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme.kit]] ynjdedhbfm k","out":[]}
+{"fn":"extract_wiki_links","in":"wy bjcsvbdwzf tcvjgzd","out":[]}
+{"fn":"extract_wiki_links","in":"naïve PR résumé AcmeKit 🚀","out":[]}
+{"fn":"extract_wiki_links","in":"[[notes-engine-notes-v2]] [[v2-memory-x]] [[acme-kit-]]","out":["notes-engine-notes-v2","v2-memory-x","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[node-garden]] [[Café Notes]] lfkbxeax ]] [[Café Notes]] atky [[Café Notes]] [[A_B C]]","out":["node-garden"]}
+{"fn":"extract_wiki_links","in":"[[acme-gateway-acme]] [[]]","out":["acme-gateway-acme"]}
+{"fn":"extract_wiki_links","in":"[[acme-app-task-wiki-memory]]","out":["acme-app-task-wiki-memory"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] ]] [[release-den]] [[engine-node]] yzbjjluxhl [[v2-node]]","out":["release-den","engine-node","v2-node"]}
+{"fn":"extract_wiki_links","in":"[[acme_kit]] dv [[ spaced ]] f [[ spaced ]] ]] [[wiki-task]]","out":["wiki-task"]}
+{"fn":"extract_wiki_links","in":"txbednitl [[node-den]]","out":["node-den"]}
+{"fn":"extract_wiki_links","in":"jutztns","out":[]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] ]] [[x|label]] dciqzwrr [[ spaced ]] [[ [[notes-engine]] telpdjf","out":["notes-engine"]}
+{"fn":"extract_wiki_links","in":"emgolgo tdcwor tvjjsh itbxsl [[x]] jmspdzf [[a_b]]","out":["x"]}
+{"fn":"extract_wiki_links","in":"[[1-2-3]] [[A-B]] [[ spaced ]] [[A-B]] gbufvxcz [[notes-app-release]] t","out":["1-2-3","a-b","notes-app-release"]}
+{"fn":"extract_wiki_links","in":"lvtozg ]] weudcdixl [[notes-app]] [[]] qkzy [[a_b]] ofwthhlhr tgmocl [[ spaced ]]","out":["notes-app"]}
+{"fn":"extract_wiki_links","in":"wxounwosq hchdauwdv [[acme-den]] [[mesh-wiki]] [[A-B]] [[kit-x-mesh-2026]] [[ spaced ]] [[acme--kit]] dkjl [[a_b]]","out":["acme-den","mesh-wiki","a-b","kit-x-mesh-2026","acme-kit"]}
+{"fn":"extract_wiki_links","in":"]] [[x-memory-wiki]] nqd [[acme-node]] [[wiki-mesh-notes]] erwizihy","out":["x-memory-wiki","acme-node","wiki-mesh-notes"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] ysegcphx gdnhn [[acme-wiki-den]] [[TASK]] tiaerlw fpuzwq [[Café Notes]] [[","out":["acme-wiki-den","task"]}
+{"fn":"extract_wiki_links","in":"ga [[GARDEN]] jvxkzoh lmc [[notes-node-release-gateway-engine]] wppmn hbhwmzrhsc","out":["garden","notes-node-release-gateway-engine"]}
+{"fn":"extract_wiki_links","in":"gateway naïve deploy 42 database search summary deploy","out":[]}
+{"fn":"extract_wiki_links","in":"lyopvmly [[x-notes]] vnh","out":["x-notes"]}
+{"fn":"extract_wiki_links","in":"yfh ujlhyv stylno d [[x|label]] [[acme--kit]] [[node]] [[ spaced ]]","out":["acme-kit","node"]}
+{"fn":"extract_wiki_links","in":"[[engine-garden-den-gateway]] njhw [[gateway-release-x-kit]] [[ tx [[x|label]] [[x-acme-task-2026]]","out":["engine-garden-den-gateway","gateway-release-x-kit","x-acme-task-2026"]}
+{"fn":"extract_wiki_links","in":"w t [[x|label]] [[den-2026]] dml ]]","out":["den-2026"]}
+{"fn":"extract_wiki_links","in":"привет memory config データ","out":[]}
+{"fn":"extract_wiki_links","in":"[[task-mesh]] [[ spaced ]] [[]] [[app-gateway-garden]] [[ spaced ]]","out":["task-mesh","app-gateway-garden"]}
+{"fn":"extract_wiki_links","in":"[[DEN]] ggcnd ]] [[acme-kit-]]","out":["den","acme-kit"]}
+{"fn":"extract_wiki_links","in":"bmgtlm [[Café Notes]] [[app-release-gateway]] [[Release 🚀 Notes]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[A-B]]","out":["app-release-gateway","release-notes-release-notes-release-notes-release-notes-release-notes-release-no","a-b"]}
+{"fn":"extract_wiki_links","in":"[[node-den]]","out":["node-den"]}
+{"fn":"extract_wiki_links","in":"dzsxs [[wiki-engine-node-gateway]] ffsb oan clhnpatd","out":["wiki-engine-node-gateway"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[acme-kit-]] [[x|label]] eggsmod [[engine]] [[Café Notes]] [[Café Notes]] tok [[x|label]] [[ spaced ]]","out":["a-b","acme-kit","engine"]}
+{"fn":"extract_wiki_links","in":"[[-acme-]] aadnxpbtif [[v2-notes-mesh]] [[ [[]] [[ACME-Kit]] [[release-wiki]] [[acme_kit]]","out":["acme","v2-notes-mesh","acme-kit","release-wiki"]}
+{"fn":"extract_wiki_links","in":"u [[a_b]] kxbjqtvkwl ]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[kit-kit-node-wiki]] u hbs [[gateway-app]] dmbborm","out":["kit-kit-node-wiki","gateway-app"]}
+{"fn":"extract_wiki_links","in":"xgeygayfn [[ spaced ]] [[ spaced ]] [[x|label]] ]] cnddr [[ spaced ]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[]] [[ toymkj","out":[]}
+{"fn":"extract_wiki_links","in":"release","out":[]}
+{"fn":"extract_wiki_links","in":"[[ACME-Kit]] [[Acme Kit]] [[A-B]] [[Café Notes]] atofjked [[x|label]] [[x-task]] [[acme/kit]] [[ [[V2-RELEASE]]","out":["acme-kit","a-b","x-task","v2-release"]}
+{"fn":"extract_wiki_links","in":"[[node-x-engine-wiki]]","out":["node-x-engine-wiki"]}
+{"fn":"extract_wiki_links","in":"waawxmr [[den-notes-acme-den]] nmrp [[ [[Café Notes]] y [[A-B]]","out":["den-notes-acme-den","a-b"]}
+{"fn":"extract_wiki_links","in":"[[MESH-DEN]] ixirzxi ]] [[engine-node]] [[V2-2026-MESH-RELEASE-NOTES]] [[Café Notes]] [[Zürich Office]] snagdj [[A-B]]","out":["mesh-den","engine-node","v2-2026-mesh-release-notes","a-b"]}
+{"fn":"extract_wiki_links","in":"[[2026]] [[","out":["2026"]}
+{"fn":"extract_wiki_links","in":"kceam [[]] [[release-x]] [[-acme-]] [[engine]] [[A-B]]","out":["release-x","acme","engine","a-b"]}
+{"fn":"extract_wiki_links","in":"g","out":[]}
+{"fn":"extract_wiki_links","in":"[[task-kit-engine]] cbvsw [[ spaced ]] hkui rmyzqwzcd [[WIKI]] [[Zürich Office]]","out":["task-kit-engine","wiki"]}
+{"fn":"extract_wiki_links","in":"[[NODE-2026-APP-KIT-2026]] [[acme.kit]] [[garden-release]] [[Café Notes]] [[ xflq [[a_b]] [[Release 2026 notes]] [[x-node]] [[A-B]]","out":["node-2026-app-kit-2026","garden-release","x-node","a-b"]}
+{"fn":"extract_wiki_links","in":"[[notes-task-notes-gateway]]","out":["notes-task-notes-gateway"]}
+{"fn":"extract_wiki_links","in":"[[]] [[A-B]] [[TASK]] [[DEN-GATEWAY-APP-MEMORY-MEMORY]]","out":["a-b","task","den-gateway-app-memory-memory"]}
+{"fn":"extract_wiki_links","in":"test emoji AcmeKit checklist agent deploy index","out":[]}
+{"fn":"extract_wiki_links","in":"sahnpkq niujicydur [[a_b]] [[ spaced ]] [[a_b]] hywobbnnj","out":[]}
+{"fn":"extract_wiki_links","in":"[[]] [[ [[acme--kit]] [[Café Notes]] [[garden-v2]]","out":["acme-kit","garden-v2"]}
+{"fn":"extract_wiki_links","in":"zbj [[a_b]] [[acme/kit]] [[]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] tixmcdae uyuwupxdmr [[A-B]] gcvny","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[task]] [[gateway-engine-2026-kit]] gwpezkgmgp [[2026]] [[ACME-NOTES-NODE-GARDEN-TASK]]","out":["task","gateway-engine-2026-kit","2026","acme-notes-node-garden-task"]}
+{"fn":"extract_wiki_links","in":"]] [[engine-2026-mesh-acme-engine]] szarefzhyz symggiqm vlkpqlpq a [[acme-kit-]] [[","out":["engine-2026-mesh-acme-engine","acme-kit"]}
+{"fn":"extract_wiki_links","in":"qdpos bvtn [[x|label]] [[]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[Café Notes]] [[node-memory]] [[garden-v2-mesh-memory]] [[mesh-release-v2-notes-node]] [[gateway-garden-2026-release-wiki]] [[node-gateway]] g [[]] ocm","out":["node-memory","garden-v2-mesh-memory","mesh-release-v2-notes-node","gateway-garden-2026-release-wiki","node-gateway"]}
+{"fn":"extract_wiki_links","in":"[[kit-release-acme-garden-v2]] [[app-node-notes-den-notes]]","out":["kit-release-acme-garden-v2","app-node-notes-den-notes"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[ spaced ]] [[task-v2-2026-mesh]] [[A-B]]","out":["task-v2-2026-mesh","a-b"]}
+{"fn":"extract_wiki_links","in":"[[node]] [[Café Notes]] emiafyki","out":["node"]}
+{"fn":"extract_wiki_links","in":"bkpzdvuy tuhhcgueg","out":[]}
+{"fn":"extract_wiki_links","in":"[[ [[2026-garden-gateway-engine-2026]]","out":["2026-garden-gateway-engine-2026"]}
+{"fn":"extract_wiki_links","in":"[[mesh-gateway-memory-v2]] vnprbrhb [[node-gateway]] mieqmtpj [[A-B]] [[]]","out":["mesh-gateway-memory-v2","node-gateway","a-b"]}
+{"fn":"extract_wiki_links","in":"est","out":[]}
+{"fn":"extract_wiki_links","in":"kjl [[task-notes-mesh-2026]] [[v2-wiki-garden]] [[ [[2026-acme-kit]] [[NODE-NOTES]] hm [[notes-kit]] cbwhgni","out":["task-notes-mesh-2026","v2-wiki-garden","2026-acme-kit","node-notes","notes-kit"]}
+{"fn":"extract_wiki_links","in":"zphmout [[mesh]] [[notes-v2-memory-task]] [[A-B]]","out":["mesh","notes-v2-memory-task","a-b"]}
+{"fn":"extract_wiki_links","in":"café config emoji config","out":[]}
+{"fn":"extract_wiki_links","in":"xc [[release-release]] [[A-B]] ]] [[mesh-kit-x-notes-x]] nrywtebn [[Café Notes]] [[ spaced ]] [[x|label]]","out":["release-release","a-b","mesh-kit-x-notes-x"]}
+{"fn":"extract_wiki_links","in":"config database test","out":[]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[KIT]] ]] [[app-kit-gateway]] lxnzw gdihwdy qfxi [[den]] [[Release 2026 notes]] [[den-mesh-gateway-engine-notes]] [[GATEWAY-GARDEN-APP-KIT]]","out":["kit","app-kit-gateway","den","den-mesh-gateway-engine-notes","gateway-garden-app-kit"]}
+{"fn":"extract_wiki_links","in":"[[gateway-v2-app-2026-app]] ajhah [[A-B]]","out":["gateway-v2-app-2026-app","a-b"]}
+{"fn":"extract_wiki_links","in":"b","out":[]}
+{"fn":"extract_wiki_links","in":"skosmdphz","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[release-engine-den-notes]] [[wiki-app-release]] [[]] ]]","out":["a-b","release-engine-den-notes","wiki-app-release"]}
+{"fn":"extract_wiki_links","in":"Résumé of the café meeting: ship Friday.","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme--kit]]","out":["acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[]] [[A_B C]] [[x|label]] ipvotrdr [[]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[2026-engine-memory-kit-notes]] [[x|label]] [[]] [[garden-release-node-gateway]] [[Release 🚀 Notes]] [[ spaced ]]","out":["2026-engine-memory-kit-notes","garden-release-node-gateway"]}
+{"fn":"extract_wiki_links","in":"kvyllof [[wiki-den-x-wiki-2026]] cjxkveoto yig","out":["wiki-den-x-wiki-2026"]}
+{"fn":"extract_wiki_links","in":"xblgtshs [[Café Notes]] [[memory-notes]] eyjyrlwgiq [[app-release]]","out":["memory-notes","app-release"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] zdm iopyitdvu","out":[]}
+{"fn":"extract_wiki_links","in":"mlw [[den-acme]] [[Café Notes]] smxa [[app-node-engine-task-den]]","out":["den-acme","app-node-engine-task-den"]}
+{"fn":"extract_wiki_links","in":"[[","out":[]}
+{"fn":"extract_wiki_links","in":"[[app-kit]] [[1-2-3]]","out":["app-kit","1-2-3"]}
+{"fn":"extract_wiki_links","in":"hzp [[Café Notes]] mechntazjl","out":[]}
+{"fn":"extract_wiki_links","in":"gltflvz [[Café Notes]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[2026-den-app-app]] ekpdmuhw [[Café Notes]] r ihpaxtimip ]]","out":["2026-den-app-app"]}
+{"fn":"extract_wiki_links","in":"build file 🔩 PR","out":[]}
+{"fn":"extract_wiki_links","in":"[[ iz wh [[garden-notes-x-x-task]] nhgqufv [[a_b]]","out":["garden-notes-x-x-task"]}
+{"fn":"extract_wiki_links","in":"[[2026-wiki-task-2026]] [[gateway-app-v2-v2]]","out":["2026-wiki-task-2026","gateway-app-v2-v2"]}
+{"fn":"extract_wiki_links","in":"rusxe lagibzmhve [[A-B]] [[x|label]] [[release]] [[APP-MEMORY-DEN-WIKI-MEMORY]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[a_b]]","out":["a-b","release","app-memory-den-wiki-memory","release-notes-release-notes-release-notes-release-notes-release-notes-release-no"]}
+{"fn":"extract_wiki_links","in":"[[A_B C]] cvfpsckq","out":[]}
+{"fn":"extract_wiki_links","in":"[[]] [[ [[garden-release-release-den]]","out":["garden-release-release-den"]}
+{"fn":"extract_wiki_links","in":"ljqyqarm","out":[]}
+{"fn":"extract_wiki_links","in":"jzgwiahjib [[mesh-garden-node]] [[Café Notes]] [[Café Notes]] [[mesh-v2]] ryavinoc wy xnpirdo [[v2-acme]]","out":["mesh-garden-node","mesh-v2","v2-acme"]}
+{"fn":"extract_wiki_links","in":"[[ spoulnwiwh nptxe yyoueh [[kit-node-v2]] wfzopp","out":["kit-node-v2"]}
+{"fn":"extract_wiki_links","in":"[[mesh-engine]] [[]] ]] [[notes]] [[Café Notes]]","out":["mesh-engine","notes"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] qppy zwqfv tbb [[ACME-GARDEN-2026]]","out":["acme-garden-2026"]}
+{"fn":"extract_wiki_links","in":"wtr zggdyajdt [[Release 2026 notes]] [[garden-2026-notes]] nqjxosdto [[Café Notes]] xnxpjxk eozgioe","out":["garden-2026-notes"]}
+{"fn":"extract_wiki_links","in":"t","out":[]}
+{"fn":"extract_wiki_links","in":"ccdah qf [[Café Notes]] [[kit-gateway]]","out":["kit-gateway"]}
+{"fn":"extract_wiki_links","in":"[[ [[]] iphcpcyqmi ]] [[a_b]] [[ w [[MEMORY-ENGINE-TASK-X]]","out":["memory-engine-task-x"]}
+{"fn":"extract_wiki_links","in":"avd fvr [[ spaced ]] ylgghffti gcafwbywx [[Café Notes]] oybquwaz [[gateway]] dglsgyrwej [[Zürich Office]]","out":["gateway"]}
+{"fn":"extract_wiki_links","in":"[[app-release-kit-2026]] vz [[engine-node-x-gateway-notes]] [[memory-engine]] [[a_b]] h [[Café Notes]] [[Release 2026 notes]] [[acme--kit]]","out":["app-release-kit-2026","engine-node-x-gateway-notes","memory-engine","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[2026]] [[den-x-den-garden-v2]] [[Café Notes]] [[ACME-2026]] bktplcjllk","out":["2026","den-x-den-garden-v2","acme-2026"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[a_b]] [[x-notes-release]] [[ spaced ]] rpkmjbf qiqypnia [[A-B]]","out":["x-notes-release","a-b"]}
+{"fn":"extract_wiki_links","in":"]] [[MEMORY-MEMORY-WIKI-WIKI]] [[kit]] [[acme]]","out":["memory-memory-wiki-wiki","kit","acme"]}
+{"fn":"extract_wiki_links","in":"[[memory-memory-den]] [[Release 2026 notes]] gf [[x-engine-gateway-wiki-notes]] [[x|label]] cigjw mu rq","out":["memory-memory-den","x-engine-gateway-wiki-notes"]}
+{"fn":"extract_wiki_links","in":"[[mesh]] [[a_b]] [[a_b]] [[notes-den-garden]] dkmnfmoowb","out":["mesh","notes-den-garden"]}
+{"fn":"extract_wiki_links","in":"[[WIKI-KIT]] [[]] [[Zürich Office]] iiqkvr [[Café Notes]] hdf [[v2-memory-v2-memory-memory]] dqn","out":["wiki-kit","v2-memory-v2-memory-memory"]}
+{"fn":"extract_wiki_links","in":"[[notes-node-app-engine-kit]] rzn jyqakezic [[kit-x]] [[ENGINE-RELEASE]] ssqsjdj [[MESH-MESH-GARDEN-ACME-2026]] [[]] qfjwtxhvb [[2026-NOTES-MEMORY]]","out":["notes-node-app-engine-kit","kit-x","engine-release","mesh-mesh-garden-acme-2026","2026-notes-memory"]}
+{"fn":"extract_wiki_links","in":"Path: /home/user/work/acme-app/src/index.ts","out":[]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[Café Notes]] [[den-task-mesh-v2-mesh]] [[app-kit]] ]]","out":["den-task-mesh-v2-mesh","app-kit"]}
+{"fn":"extract_wiki_links","in":"f","out":[]}
+{"fn":"extract_wiki_links","in":"]] [[-acme-]] [[ACME-Kit]] [[]] [[mesh]] ih [[ spaced ]]","out":["acme","acme-kit","mesh"]}
+{"fn":"extract_wiki_links","in":"[[acme/kit]] [[acme/kit]] uf [[ACME-Kit]] e [[gateway-wiki-gateway-den-v2]] [[ ]]","out":["acme-kit","gateway-wiki-gateway-den-v2"]}
+{"fn":"extract_wiki_links","in":"[[]] [[notes-node]] [[A-B]] yx qpmiqx [[x|label]] [[acme_kit]]","out":["notes-node","a-b"]}
+{"fn":"extract_wiki_links","in":"[[NODE]] [[x|label]]","out":["node"]}
+{"fn":"extract_wiki_links","in":"i ]] [[ yu [[garden-wiki-app-gateway-app]] [[wiki-2026]]","out":["garden-wiki-app-gateway-app","wiki-2026"]}
+{"fn":"extract_wiki_links","in":"[[garden-wiki-wiki]] [[a_b]] vqkm govnbsfewo phdte","out":["garden-wiki-wiki"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[node]] [[A-B]] [[release-release-gateway-memory]]","out":["node","a-b","release-release-gateway-memory"]}
+{"fn":"extract_wiki_links","in":"[[acme/kit]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[2026-acme]] [[release]] oyzye t yvrgrhwckm vbkiqfxfe gcbthrmta [[engine]]","out":["a-b","2026-acme","release","engine"]}
+{"fn":"extract_wiki_links","in":"[[GARDEN-MEMORY-MESH]] ]] nbzwjfwagm [[DEN-TASK]] [[TASK-MESH]] [[Café Notes]] [[x|label]] [[Café Notes]]","out":["garden-memory-mesh","den-task","task-mesh"]}
+{"fn":"extract_wiki_links","in":"loicxns [[ [[a_b]] [[v2-release]] [[x|label]] wab ytdajdac [[acme]]","out":["v2-release","acme"]}
+{"fn":"extract_wiki_links","in":"[[ENGINE-APP-2026-MESH]]","out":["engine-app-2026-mesh"]}
+{"fn":"extract_wiki_links","in":"r [[ spaced ]] [[A-B]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[mesh]] jpqhpov [[wiki-memory]] ehif ]] [[Café Notes]] [[A-B]] p","out":["mesh","wiki-memory","a-b"]}
+{"fn":"extract_wiki_links","in":"🔩 acme-app agent","out":[]}
+{"fn":"extract_wiki_links","in":"[[den]] [[node-kit-mesh-task-release]] [[mesh-release]] [[ spaced ]] ixkebsqh","out":["den","node-kit-mesh-task-release","mesh-release"]}
+{"fn":"extract_wiki_links","in":"lxkpbo [[v2-task-memory-mesh-release]] [[a_b]] [[wiki-x-garden-kit]] vf [[]] lclgdcllf [[A-B]] [[WIKI-GATEWAY-V2-TASK]] [[kit-notes-engine]]","out":["v2-task-memory-mesh-release","wiki-x-garden-kit","a-b","wiki-gateway-v2-task","kit-notes-engine"]}
+{"fn":"extract_wiki_links","in":"[[v2-notes-release-task-mesh]] [[2026-notes-release-notes]] [[ spaced ]] [[Zürich Office]] ddrkrcewfj [[]]","out":["v2-notes-release-task-mesh","2026-notes-release-notes"]}
+{"fn":"extract_wiki_links","in":"mtapzom","out":[]}
+{"fn":"extract_wiki_links","in":"café release index","out":[]}
+{"fn":"extract_wiki_links","in":"[[garden-engine]] [[mesh]] [[task-kit-app-v2-app]] glwptxse [[ [[garden-wiki]] lltgnapq [[a_b]]","out":["garden-engine","mesh","task-kit-app-v2-app","garden-wiki"]}
+{"fn":"extract_wiki_links","in":"[[gateway-engine-mesh-node]]","out":["gateway-engine-mesh-node"]}
+{"fn":"extract_wiki_links","in":"[[engine-engine]] zqn efcxa [[1-2-3]] [[Acme Kit]] [[A-B]] slbn t [[A-B]]","out":["engine-engine","1-2-3","a-b"]}
+{"fn":"extract_wiki_links","in":"[[task-garden-garden-app]] [[Café Notes]] [[app]] ejssqmbz [[ spaced ]] ]] [[ spaced ]] rnsy [[]] wmuicol","out":["task-garden-garden-app","app"]}
+{"fn":"extract_wiki_links","in":"jemcxj [[a_b]] dxxekqjghb [[app-acme]] gxmjdbmxnv [[x]] [[v2-mesh-engine-v2]] ]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]]","out":["app-acme","x","v2-mesh-engine-v2","release-notes-release-notes-release-notes-release-notes-release-notes-release-no"]}
+{"fn":"extract_wiki_links","in":"wroxayd [[ACME-Kit]] z [[ con [[Café Notes]]","out":["acme-kit"]}
+{"fn":"extract_wiki_links","in":"pcfv [[ spaced ]] jlzuqiice hzudgtf wzznbhnjiv [[engine]] [[gateway-acme-memory-app]] vi","out":["engine","gateway-acme-memory-app"]}
+{"fn":"extract_wiki_links","in":"dang uihl ]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[A-B]] bmkj","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[node-mesh-task-notes]] [[a_b]] [[ [[]] [[gateway-task]] lqj [[]]","out":["node-mesh-task-notes","gateway-task"]}
+{"fn":"extract_wiki_links","in":"qzknppp [[engine-release-x-wiki]] vjzjvm [[x|label]]","out":["engine-release-x-wiki"]}
+{"fn":"extract_wiki_links","in":"[[v2-gateway-memory-2026]] [[A-B]] pqwnekjo","out":["v2-gateway-memory-2026","a-b"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] ccry","out":[]}
+{"fn":"extract_wiki_links","in":"the project résumé error memory","out":[]}
+{"fn":"extract_wiki_links","in":"o [[ENGINE-WIKI-APP]] [[Café Notes]] [[APP-2026-DEN-V2]] sx [[x|label]]","out":["engine-wiki-app","app-2026-den-v2"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] irg gqo [[acme/kit]] xa baxb [[x|label]] ftq","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[acme-den-release-den-release]] sqesq xe ontrzt [[task-x-x]] [[TASK-V2]] [[A-B]] mjn flyoctewy sz","out":["acme-den-release-den-release","task-x-x","task-v2","a-b"]}
+{"fn":"extract_wiki_links","in":"qd [[gateway]] [[ACME-Kit]]","out":["gateway","acme-kit"]}
+{"fn":"extract_wiki_links","in":"run","out":[]}
+{"fn":"extract_wiki_links","in":"agent 2026 search résumé task","out":[]}
+{"fn":"extract_wiki_links","in":"AcmeKit Paulo","out":[]}
+{"fn":"extract_wiki_links","in":"[[Release 2026 notes]] pa yqazmgjsmj [[ spaced ]] xhpm [[2026-GARDEN-MEMORY-NOTES]] [[x|label]]","out":["2026-garden-memory-notes"]}
+{"fn":"extract_wiki_links","in":"]] yppcqk [[Café Notes]] [[]] [[x|label]] [[release]] [[v2-v2-mesh-engine-x]] [[v2-garden]] [[x|label]]","out":["release","v2-v2-mesh-engine-x","v2-garden"]}
+{"fn":"extract_wiki_links","in":"]] [[ [[MESH-DEN-DEN-X-RELEASE]]","out":["mesh-den-den-x-release"]}
+{"fn":"extract_wiki_links","in":"[[v2]] [[garden]] xvmcds","out":["v2","garden"]}
+{"fn":"extract_wiki_links","in":"[[den-v2-2026-task]] [[a_b]] ]] vbppwjq [[x]] [[app-memory]] [[A-B]] [[ [[a_b]] [[","out":["den-v2-2026-task","x","app-memory","a-b"]}
+{"fn":"extract_wiki_links","in":"[[engine-wiki-den]] [[2026-task-2026-release]]","out":["engine-wiki-den","2026-task-2026-release"]}
+{"fn":"extract_wiki_links","in":"[[den-den-app]]","out":["den-den-app"]}
+{"fn":"extract_wiki_links","in":"emoji review config the emoji AcmeKit update","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[ citol mjnedtlyr [[]] z [[acme_kit]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] ]] k [[]] [[A-B]] efyuex cvaggbjj [[NODE-X-NODE-GARDEN]]","out":["a-b","node-x-node-garden"]}
+{"fn":"extract_wiki_links","in":"AcmeKit","out":[]}
+{"fn":"extract_wiki_links","in":"xhgbh janbgnan [[2026-kit-node-x-release]] [[release]]","out":["2026-kit-node-x-release","release"]}
+{"fn":"extract_wiki_links","in":"jiirow [[Zürich Office]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[Acme Kit]] kifnkhlkb mlcdxp ospkryi","out":[]}
+{"fn":"extract_wiki_links","in":"]] kqlrbeb ]] uahmt [[ [[a_b]]","out":[]}
+{"fn":"extract_wiki_links","in":"wzczjb f [[MESH-WIKI]] [[acme.kit]] fgo [[a_b]] [[]] oirdize","out":["mesh-wiki"]}
+{"fn":"extract_wiki_links","in":"[[x-kit]] [[garden]]","out":["x-kit","garden"]}
+{"fn":"extract_wiki_links","in":"[[1-2-3]] fne sheou [[Acme Kit]] b yoxiqywke ]] [[ [[x|label]]","out":["1-2-3"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] qspcffumui igbgdwdrkr [[acme_kit]] fuvipdytrn","out":[]}
+{"fn":"extract_wiki_links","in":"[[gateway-memory-node-memory]] [[ spaced ]] [[a_b]]","out":["gateway-memory-node-memory"]}
+{"fn":"extract_wiki_links","in":"workflow build 🚀 agent São AcmeKit café","out":[]}
+{"fn":"extract_wiki_links","in":"msgzhv vavud","out":[]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[APP-ACME-ACME-2026-V2]] [[x|label]] [[ spaced ]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[Café Notes]] [[A-B]] [[a_b]]","out":["app-acme-acme-2026-v2","release-notes-release-notes-release-notes-release-notes-release-notes-release-no","a-b"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] xtqufyefhn [[ spaced ]] [[acme-x-gateway-gateway-release]] [[x|label]] [[a_b]] [[ ptscv","out":["a-b","acme-x-gateway-gateway-release"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] qw [[den-v2]] a","out":["den-v2"]}
+{"fn":"extract_wiki_links","in":"[[den-2026-2026-task-memory]] [[Café Notes]] [[v2-node-den]] ]] [[acme--kit]] [[A-B]] [[Café Notes]]","out":["den-2026-2026-task-memory","v2-node-den","acme-kit","a-b"]}
+{"fn":"extract_wiki_links","in":"[[kit-mesh-garden-memory-node]] zkvdwkeh wzoqbiue [[]] [[x]] [[task-notes-gateway-acme]]","out":["kit-mesh-garden-memory-node","x","task-notes-gateway-acme"]}
+{"fn":"extract_wiki_links","in":"urwrwhry [[ACME-Kit]] [[2026-wiki-kit]] [[wiki]] [[v2-den-task-acme-x]] [[ spaced ]] [[ [[acme--kit]] vdecxezier [[a_b]]","out":["acme-kit","2026-wiki-kit","wiki","v2-den-task-acme-x"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[ spaced ]] [[A-B]] jkxajfw [[wiki-den-notes-gateway-x]] [[wiki-x-memory]] [[A_B C]] fvnzi topkwwg","out":["a-b","wiki-den-notes-gateway-x","wiki-x-memory"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[ spaced ]] [[Café Notes]] [[-acme-]] apdrrfncj c [[x|label]] [[node-task-x]]","out":["a-b","acme","node-task-x"]}
+{"fn":"extract_wiki_links","in":"[[GATEWAY-NOTES-NODE-X]]","out":["gateway-notes-node-x"]}
+{"fn":"extract_wiki_links","in":"mzpkgztsh dkgjvu ugwhc fpeceubi [[ENGINE-GATEWAY]] [[]] [[RELEASE-X-ENGINE]] [[V2-MESH]]","out":["engine-gateway","release-x-engine","v2-mesh"]}
+{"fn":"extract_wiki_links","in":"[[ [[engine-v2-engine-app]]","out":["engine-v2-engine-app"]}
+{"fn":"extract_wiki_links","in":"[[app-wiki-memory-x-release]] [[a_b]]","out":["app-wiki-memory-x-release"]}
+{"fn":"extract_wiki_links","in":"ilcclgyf nxujin","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme--kit]] [[a_b]] [[]] [[ ut [[ spaced ]]","out":["acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[1-2-3]] [[WIKI]] [[MEMORY-DEN]] [[notes]] [[wiki-gateway-notes-engine-engine]]","out":["1-2-3","wiki","memory-den","notes","wiki-gateway-notes-engine-engine"]}
+{"fn":"extract_wiki_links","in":"2026 checklist emoji summary notes","out":[]}
+{"fn":"extract_wiki_links","in":"[[mesh-acme]]","out":["mesh-acme"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[2026-release-v2-2026]] [[app-2026-2026-engine-v2]] [[A-B]] [[den-den-notes]] [[x|label]] fwvkkwciwq [[x|label]] [[x|label]]","out":["2026-release-v2-2026","app-2026-2026-engine-v2","a-b","den-den-notes"]}
+{"fn":"extract_wiki_links","in":"[[den]] [[A-B]] u [[ spaced ]] [[1-2-3]] jsrzkmcc","out":["den","a-b","1-2-3"]}
+{"fn":"extract_wiki_links","in":"[[kit-engine-2026]] teacl [[den]] krnhjxry [[Café Notes]]","out":["kit-engine-2026","den"]}
+{"fn":"extract_wiki_links","in":"ajmyty [[garden-2026]] [[acme]] [[v2-mesh-engine-mesh]] ia irunmjqckz [[acme-app-2026-task-wiki]] [[x|label]] [[ spaced ]]","out":["garden-2026","acme","v2-mesh-engine-mesh","acme-app-2026-task-wiki"]}
+{"fn":"extract_wiki_links","in":"[[acme.kit]] ]] [[ spaced ]]","out":[]}
+{"fn":"extract_wiki_links","in":"build","out":[]}
+{"fn":"extract_wiki_links","in":"[[app-2026-acme-gateway-node]] wlej ]]","out":["app-2026-acme-gateway-node"]}
+{"fn":"extract_wiki_links","in":"mkdnv akkekqowia [[acme/kit]]","out":[]}
+{"fn":"extract_wiki_links","in":"acme-app résumé v1.2.3","out":[]}
+{"fn":"extract_wiki_links","in":"review memory résumé cache Zürich agent deploy","out":[]}
+{"fn":"extract_wiki_links","in":"update checklist","out":[]}
+{"fn":"extract_wiki_links","in":"[[garden-acme-node-den-memory]] [[Café Notes]] idzcysawtj syj ushlimmo ]] [[A-B]] j","out":["garden-acme-node-den-memory","a-b"]}
+{"fn":"extract_wiki_links","in":"[[v2-mesh-task-node-release]] [[task-gateway]] [[]] ]]","out":["v2-mesh-task-node-release","task-gateway"]}
+{"fn":"extract_wiki_links","in":"[[A_B C]] abdflah","out":[]}
+{"fn":"extract_wiki_links","in":"gqldegt [[gateway-wiki-notes]] o [[memory-acme]] zock [[notes-2026-garden]]","out":["gateway-wiki-notes","memory-acme","notes-2026-garden"]}
+{"fn":"extract_wiki_links","in":"[[x-garden]] [[a_b]] jkgd l","out":["x-garden"]}
+{"fn":"extract_wiki_links","in":"kgkumtl [[gateway-mesh-task-2026-garden]] [[app-app]] [[ spaced ]] [[A_B C]]","out":["gateway-mesh-task-2026-garden","app-app"]}
+{"fn":"extract_wiki_links","in":"[[ [[memory-acme-wiki]] [[memory-garden-garden-notes-task]] [[A-B]] hdaopoh [[A-B]] [[TASK-2026-GATEWAY-GARDEN-ENGINE]] [[Café Notes]]","out":["memory-acme-wiki","memory-garden-garden-notes-task","a-b","task-2026-gateway-garden-engine"]}
+{"fn":"extract_wiki_links","in":"hw [[acme-gateway]] [[ spaced ]] dpogvnsfn kuybuvr pdqzb [[a_b]] zclolf","out":["acme-gateway"]}
+{"fn":"extract_wiki_links","in":"]] [[x-den-gateway]] [[node-engine-2026]]","out":["x-den-gateway","node-engine-2026"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] vwlr [[x-gateway-2026]] [[garden]] [[a_b]] ]] [[x-mesh-den-node-memory]]","out":["x-gateway-2026","garden","x-mesh-den-node-memory"]}
+{"fn":"extract_wiki_links","in":"[[WIKI-DEN-ACME]] ejdhqbi [[]] [[kit-memory-task]] [[Release 🚀 Notes]] lzaeogumhg [[a_b]]","out":["wiki-den-acme","kit-memory-task"]}
+{"fn":"extract_wiki_links","in":"[[acme--kit]] [[-acme-]] [[x|label]] [[A-B]] [[acme/kit]] [[ spaced ]] hyquup fje oi","out":["acme-kit","acme","a-b"]}
+{"fn":"extract_wiki_links","in":"Paulo gateway 🚀 2026","out":[]}
+{"fn":"extract_wiki_links","in":"notes release database update emoji 東京","out":[]}
+{"fn":"extract_wiki_links","in":"review session","out":[]}
+{"fn":"extract_wiki_links","in":"[[2026]] [[task-node-memory-x]]","out":["2026","task-node-memory-x"]}
+{"fn":"extract_wiki_links","in":"[[task-task-acme-2026]] apcvwnq","out":["task-task-acme-2026"]}
+{"fn":"extract_wiki_links","in":"]] [[x-engine-den-release]] [[Café Notes]]","out":["x-engine-den-release"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[acme_kit]] [[x|label]] [[ [[memory]] [[engine-kit-app-wiki]] [[A-B]] [[memory]] [[ spaced ]]","out":["memory","engine-kit-app-wiki","a-b"]}
+{"fn":"extract_wiki_links","in":"gateway 🔩 42 PR v1.2.3","out":[]}
+{"fn":"extract_wiki_links","in":"gzs ukfggthcj [[A-B]] [[a_b]] [[mesh-engine-gateway-2026]] [[Café Notes]] [[Café Notes]] [[node-engine-memory-acme-memory]]","out":["a-b","mesh-engine-gateway-2026","node-engine-memory-acme-memory"]}
+{"fn":"extract_wiki_links","in":"[[gateway-task-gateway]] bhwggbjbe f [[]]","out":["gateway-task-gateway"]}
+{"fn":"extract_wiki_links","in":"drbar [[ [[]] [[A-B]] [[ spaced ]] dovlnvrjeu [[A_B C]] [[kit]] ghwatmnq [[acme_kit]]","out":["a-b","kit"]}
+{"fn":"extract_wiki_links","in":"jsfmxc ypyyshv [[ACME-2026-NOTES-ACME]] [[kit-gateway-kit]] [[den-2026-v2-kit-release]]","out":["acme-2026-notes-acme","kit-gateway-kit","den-2026-v2-kit-release"]}
+{"fn":"extract_wiki_links","in":"東京 Zürich","out":[]}
+{"fn":"extract_wiki_links","in":"fpb ]] [[DEN-V2-ENGINE]] [[NOTES-2026-NOTES-ENGINE-TASK]] [[ACME-Kit]]","out":["den-v2-engine","notes-2026-notes-engine-task","acme-kit"]}
+{"fn":"extract_wiki_links","in":"test workflow データ Zürich review file","out":[]}
+{"fn":"extract_wiki_links","in":"[[app-x]] [[x-app-node-acme-x]] [[x|label]] ezbsgx drxje [[notes-gateway-garden]] [[notes-node]] [[2026-task-garden-garden]] [[ spaced ]] rbkp","out":["app-x","x-app-node-acme-x","notes-gateway-garden","notes-node","2026-task-garden-garden"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[]] [[RELEASE-NODE-TASK-MEMORY-WIKI]] [[release-memory-den]] [[","out":["release-node-task-memory-wiki","release-memory-den"]}
+{"fn":"extract_wiki_links","in":"task #123","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme-x-mesh]] [[gateway-garden-den-memory]] tteh","out":["acme-x-mesh","gateway-garden-den-memory"]}
+{"fn":"extract_wiki_links","in":"[[ENGINE-2026-ACME-TASK-APP]] ]] [[A-B]] oizhztk [[ [[Acme Kit]]","out":["engine-2026-acme-task-app","a-b"]}
+{"fn":"extract_wiki_links","in":"[[ [[Acme Kit]] qnkhzoh [[den-node-release-app]] [[x-2026-v2]] [[A-B]] kbdo","out":["den-node-release-app","x-2026-v2","a-b"]}
+{"fn":"extract_wiki_links","in":"nfv [[","out":[]}
+{"fn":"extract_wiki_links","in":"привет привет 42 AcmeKit 2026","out":[]}
+{"fn":"extract_wiki_links","in":"[[ [[engine-wiki-den]] [[Café Notes]] [[]] [[x|label]] [[memory-gateway-v2-kit-gateway]] vujdpy [[ [[app-x-mesh-acme]]","out":["engine-wiki-den","memory-gateway-v2-kit-gateway","app-x-mesh-acme"]}
+{"fn":"extract_wiki_links","in":"[[2026-release-garden-den-task]] [[x|label]] [[x|label]]","out":["2026-release-garden-den-task"]}
+{"fn":"extract_wiki_links","in":"qrkhipuse [[memory-den-node-task-x]] uineyo xkmxyr","out":["memory-den-node-task-x"]}
+{"fn":"extract_wiki_links","in":"[[]] g [[garden-den-release-2026-mesh]] eyscfujim oay [[v2]] g","out":["garden-den-release-2026-mesh","v2"]}
+{"fn":"extract_wiki_links","in":"[[x-garden-wiki-v2]] [[A-B]] [[A-B]]","out":["x-garden-wiki-v2","a-b"]}
+{"fn":"extract_wiki_links","in":"nkri [[app]] [[task-x]]","out":["app","task-x"]}
+{"fn":"extract_wiki_links","in":"memory","out":[]}
+{"fn":"extract_wiki_links","in":"[[ [[acme-x-release]] [[a_b]] nbi [[mesh-wiki-memory-node]]","out":["acme-x-release","mesh-wiki-memory-node"]}
+{"fn":"extract_wiki_links","in":"nekwvahs qkcjcabd [[acme-kit-]] i ownwmlzvf [[release-v2-wiki-gateway-release]]","out":["acme-kit","release-v2-wiki-gateway-release"]}
+{"fn":"extract_wiki_links","in":"qncug [[acme-gateway-engine-gateway]]","out":["acme-gateway-engine-gateway"]}
+{"fn":"extract_wiki_links","in":"owzzmn ucru ]] [[A-B]] [[wiki-v2-task-den-acme]] tqew [[V2]] ]] [[ACME]] e","out":["a-b","wiki-v2-task-den-acme","v2","acme"]}
+{"fn":"extract_wiki_links","in":"dkaiv","out":[]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[ [[Café Notes]] [[x|label]] l o","out":[]}
+{"fn":"extract_wiki_links","in":"zdnnkl [[x|label]] [[acme-task-gateway-engine]] [[x|label]] [[acme--kit]] [[GATEWAY-MESH-ACME-KIT]]","out":["acme-task-gateway-engine","acme-kit","gateway-mesh-acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[]] tlzymkrpc [[ rfgoij [[Café Notes]]","out":[]}
+{"fn":"extract_wiki_links","in":"café Zürich error deploy agent 🔩","out":[]}
+{"fn":"extract_wiki_links","in":"[[2026-WIKI-NOTES-V2-V2]] [[A-B]]","out":["2026-wiki-notes-v2-v2","a-b"]}
+{"fn":"extract_wiki_links","in":"[[app-memory-mesh-kit-x]] [[2026-2026-node-acme-notes]] [[A-B]] yxafe [[Release 🚀 Notes]]","out":["app-memory-mesh-kit-x","2026-2026-node-acme-notes","a-b"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] qsiwbblem [[]] [[ spaced ]] ]] [[Café Notes]] [[ spaced ]] [[Release 2026 notes]] ghhndg","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[ [[ spaced ]]","out":[]}
+{"fn":"extract_wiki_links","in":"ubcge oamcvy [[mesh-2026]] [[]] clzxj [[a_b]] ]]","out":["mesh-2026"]}
+{"fn":"extract_wiki_links","in":"[[notes-memory-acme-release]] [[release]]","out":["notes-memory-acme-release","release"]}
+{"fn":"extract_wiki_links","in":"gfxoncohen [[task-garden-v2]]","out":["task-garden-v2"]}
+{"fn":"extract_wiki_links","in":"plpi te fuo","out":[]}
+{"fn":"extract_wiki_links","in":"]] cy [[Café Notes]] ]] [[den-wiki-garden-kit]]","out":["den-wiki-garden-kit"]}
+{"fn":"extract_wiki_links","in":"fix cache Paulo database Zürich cache v1.2.3 task","out":[]}
+{"fn":"extract_wiki_links","in":"[[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[acme-kit-]] [[garden-app]] [[x|label]] gwice qzfknjkrlt qemwyyd mxyhpgqidc","out":["release-notes-release-notes-release-notes-release-notes-release-notes-release-no","acme-kit","garden-app"]}
+{"fn":"extract_wiki_links","in":"file データ","out":[]}
+{"fn":"extract_wiki_links","in":"[[2026-acme]] hffwtsi xsruf","out":["2026-acme"]}
+{"fn":"extract_wiki_links","in":"kxeve [[garden-engine]] [[GATEWAY-TASK-WIKI]]","out":["garden-engine","gateway-task-wiki"]}
+{"fn":"extract_wiki_links","in":"pcld ba w [[task]] [[engine]] [[notes-notes-task-garden-den]] [[x-wiki-mesh-engine-2026]] zvlrbtma nzyzj","out":["task","engine","notes-notes-task-garden-den","x-wiki-mesh-engine-2026"]}
+{"fn":"extract_wiki_links","in":"[[task-garden-app-den-task]] [[A-B]] [[x|label]] ]] [[kit-garden-memory-notes-release]] [[x-v2-notes]]","out":["task-garden-app-den-task","a-b","kit-garden-memory-notes-release","x-v2-notes"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] jp ]] sghfg dpmsime [[v2-node]]","out":["a-b","v2-node"]}
+{"fn":"extract_wiki_links","in":"42 🔩","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme-kit-]] egowmlovf dumiw [[acme-release]]","out":["acme-kit","acme-release"]}
+{"fn":"extract_wiki_links","in":"ybsyrwb","out":[]}
+{"fn":"extract_wiki_links","in":"rvtevktw ]] [[den]] clhwmncvep [[wiki-memory-wiki-node-app]]","out":["den","wiki-memory-wiki-node-app"]}
+{"fn":"extract_wiki_links","in":"東京 naïve fix","out":[]}
+{"fn":"extract_wiki_links","in":"[[a_b]] wsgqvrk mb [[Zürich Office]] [[acme-engine-den]] [[a_b]] otvrwol","out":["acme-engine-den"]}
+{"fn":"extract_wiki_links","in":"bquurm [[A-B]] [[garden-memory-task]] [[ nj","out":["a-b","garden-memory-task"]}
+{"fn":"extract_wiki_links","in":"[[memory-kit-engine-release]]","out":["memory-kit-engine-release"]}
+{"fn":"extract_wiki_links","in":"sqq [[garden-engine-garden-wiki]] [[acme]]","out":["garden-engine-garden-wiki","acme"]}
+{"fn":"extract_wiki_links","in":"résumé #123","out":[]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[]] [[acme]] [[]] uxqgvnc [[ spaced ]]","out":["acme"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[x|label]] [[Release 2026 notes]] obilcviev [[ spaced ]] [[task-node-gateway-engine]]","out":["task-node-gateway-engine"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[Acme Kit]] kwmmyd [[ [[ACME-Kit]] [[ [[kit-garden]] lklxrgjhsz","out":["acme-kit","kit-garden"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[acme-notes-task-mesh]] uteaemtzee ]] [[1-2-3]]","out":["a-b","acme-notes-task-mesh","1-2-3"]}
+{"fn":"extract_wiki_links","in":"deploy notes","out":[]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] kticzp nnq [[Café Notes]] [[x|label]] [[","out":[]}
+{"fn":"extract_wiki_links","in":"vchfyfszbh [[GATEWAY-DEN]] em [[Release 🚀 Notes]] ah","out":["gateway-den"]}
+{"fn":"extract_wiki_links","in":"ipibh [[Café Notes]] zhg [[]] [[]]","out":[]}
+{"fn":"extract_wiki_links","in":"jzxdydgjs","out":[]}
+{"fn":"extract_wiki_links","in":"[[engine]] [[node-x-garden]] [[RELEASE-X]] [[ACME-Kit]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]]","out":["engine","node-x-garden","release-x","acme-kit","release-notes-release-notes-release-notes-release-notes-release-notes-release-no"]}
+{"fn":"extract_wiki_links","in":"[[X]] ecbe [[kit]] bggp [[A-B]]","out":["x","kit","a-b"]}
+{"fn":"extract_wiki_links","in":"Paulo database","out":[]}
+{"fn":"extract_wiki_links","in":"[[ACME-Kit]] firtp [[garden-2026-memory]] [[x|label]] [[engine]]","out":["acme-kit","garden-2026-memory","engine"]}
+{"fn":"extract_wiki_links","in":"[[]] [[A-B]] [[ spaced ]] iprrnmj lfhp [[notes-den-garden-den]]","out":["a-b","notes-den-garden-den"]}
+{"fn":"extract_wiki_links","in":"[[garden-memory-mesh]]","out":["garden-memory-mesh"]}
+{"fn":"extract_wiki_links","in":"]] jvn [[]] [[x-engine]]","out":["x-engine"]}
+{"fn":"extract_wiki_links","in":"[[app-kit-notes]] [[Café Notes]] njvutpmdzy [[notes]] [[2026-wiki-acme-x-notes]] [[Café Notes]] [[]] [[Café Notes]]","out":["app-kit-notes","notes","2026-wiki-acme-x-notes"]}
+{"fn":"extract_wiki_links","in":"[[notes]] [[acme_kit]] [[gateway-2026-v2]] ]] hrgfwlsdbx","out":["notes","gateway-2026-v2"]}
+{"fn":"extract_wiki_links","in":"z [[x-mesh-node-notes]]","out":["x-mesh-node-notes"]}
+{"fn":"extract_wiki_links","in":"jbrp","out":[]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[x|label]] [[a_b]] [[ spaced ]] [[ ]] [[x|label]] [[TASK]] [[engine]]","out":["task","engine"]}
+{"fn":"extract_wiki_links","in":"h [[RELEASE-DEN-GARDEN-NODE]] [[engine]] [[acme-garden-wiki]] jd [[den-acme-app-engine-kit]] [[app-engine-memory-engine-engine]] [[Release 🚀 Notes]] [[mesh-memory]] d","out":["release-den-garden-node","engine","acme-garden-wiki","den-acme-app-engine-kit","app-engine-memory-engine-engine","mesh-memory"]}
+{"fn":"extract_wiki_links","in":"42 test session cache AcmeKit config Zürich 🔩","out":[]}
+{"fn":"extract_wiki_links","in":"[[a_b]] pzhydzbn pykng","out":[]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[Café Notes]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[x|label]]","out":[]}
+{"fn":"extract_wiki_links","in":"データ #123 emoji cache the task","out":[]}
+{"fn":"extract_wiki_links","in":"dg [[app-release-memory]] okugubtipy [[2026-ACME-V2-NODE-APP]] ggdogbpuho agruwf mgakzalf [[wiki-notes-node]] yxvat vm","out":["app-release-memory","2026-acme-v2-node-app","wiki-notes-node"]}
+{"fn":"extract_wiki_links","in":"hcyzivl [[a_b]] [[x|label]] [[Café Notes]] ]] [[memory-notes-x]] [[A-B]] [[A-B]] [[den-2026-den-release]]","out":["memory-notes-x","a-b","den-2026-den-release"]}
+{"fn":"extract_wiki_links","in":"[[]] [[ spaced ]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] wg aolpyou s [[A-B]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"vanpad [[engine-2026-memory-den]] [[2026-acme-memory-release]]","out":["engine-2026-memory-den","2026-acme-memory-release"]}
+{"fn":"extract_wiki_links","in":"[[2026-gateway-den-wiki]]","out":["2026-gateway-den-wiki"]}
+{"fn":"extract_wiki_links","in":"[[2026-TASK]] [[acme-notes]] njyimv [[A_B C]] [[ACME-Kit]] egrkvjal l [[a_b]] [[A_B C]] rufpw","out":["2026-task","acme-notes","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[acme/kit]] [[a_b]] ggnf kkpqkhkswn [[notes-wiki]] ]] [[wiki-den]] [[ spaced ]] [[Café Notes]] [[release-mesh-den-mesh]]","out":["notes-wiki","wiki-den","release-mesh-den-mesh"]}
+{"fn":"extract_wiki_links","in":"rgo yrdg ]] vq zwauz jicrds oei [[1-2-3]]","out":["1-2-3"]}
+{"fn":"extract_wiki_links","in":"[[acme_kit]] lmnog [[release-notes]] peufhalnd [[ spaced ]] x [[Release 2026 notes]] [[engine]]","out":["release-notes","engine"]}
+{"fn":"extract_wiki_links","in":"project checklist the memory the v1.2.3 build the","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme--kit]] [[task-release-garden]]","out":["acme-kit","task-release-garden"]}
+{"fn":"extract_wiki_links","in":"[[engine-v2-wiki-task]] pm","out":["engine-v2-wiki-task"]}
+{"fn":"extract_wiki_links","in":"привет 42 São database привет test config","out":[]}
+{"fn":"extract_wiki_links","in":"[[notes-v2-gateway-task]] elotsiwasl [[acme--kit]] [[Café Notes]] [[x|label]]","out":["notes-v2-gateway-task","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] tkutxpw kksoc rfezjwo [[Café Notes]] rayfmif [[A-B]] [[a_b]] fvugqnj [[release-notes]]","out":["a-b","release-notes"]}
+{"fn":"extract_wiki_links","in":"bxtyxmk [[GATEWAY-X-MEMORY]] [[ spaced ]] [[release-kit-release-release-gateway]] xrygpaxs vco [[a_b]]","out":["gateway-x-memory","release-kit-release-release-gateway"]}
+{"fn":"extract_wiki_links","in":"dzqamgvp [[notes-x-wiki-gateway-v2]]","out":["notes-x-wiki-gateway-v2"]}
+{"fn":"extract_wiki_links","in":"vhjysfgauw wqfuiwb [[engine-garden-mesh]] anngomz [[gateway-wiki-app-2026-node]] fnfzf [[ spaced ]]","out":["engine-garden-mesh","gateway-wiki-app-2026-node"]}
+{"fn":"extract_wiki_links","in":"otkcar [[ [[gateway]] [[x|label]] stuxztw","out":["gateway"]}
+{"fn":"extract_wiki_links","in":"gvfcz u ufyszc [[]] [[app-v2]] [[ spaced ]]","out":["app-v2"]}
+{"fn":"extract_wiki_links","in":"ztsom [[2026]]","out":["2026"]}
+{"fn":"extract_wiki_links","in":"cthmjg [[2026]]","out":["2026"]}
+{"fn":"extract_wiki_links","in":"[[ [[ spaced ]] [[release]] [[a_b]] tegiulhg [[Café Notes]]","out":["release"]}
+{"fn":"extract_wiki_links","in":"[[acme/kit]] ehduncjge","out":[]}
+{"fn":"extract_wiki_links","in":"[[gateway]] [[]] [[mesh-v2-engine-kit]]","out":["gateway","mesh-v2-engine-kit"]}
+{"fn":"extract_wiki_links","in":"[[x-kit]] ]] ]]","out":["x-kit"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] uvizppzm [[Acme Kit]] db [[ spaced ]] qikb [[a_b]] [[-acme-]] [[A-B]] [[x|label]]","out":["acme","a-b"]}
+{"fn":"extract_wiki_links","in":"[[gateway-v2-kit]] drcznxxsyt [[wiki-2026-engine-x-kit]] [[Café Notes]] [[ spaced ]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[Café Notes]] ajyk [[release]] [[a_b]]","out":["gateway-v2-kit","wiki-2026-engine-x-kit","release-notes-release-notes-release-notes-release-notes-release-notes-release-no","release"]}
+{"fn":"extract_wiki_links","in":"nvr [[A-B]] [[mesh-garden-task]] [[a_b]]","out":["a-b","mesh-garden-task"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] zmnxg ]] [[ spaced ]] [[acme/kit]]","out":[]}
+{"fn":"extract_wiki_links","in":"PR checklist Zürich","out":[]}
+{"fn":"extract_wiki_links","in":"nnylqxkc","out":[]}
+{"fn":"extract_wiki_links","in":"lfedcrrd [[node-task-wiki]] [[Café Notes]] [[ spaced ]] yelk","out":["node-task-wiki"]}
+{"fn":"extract_wiki_links","in":"e [[Release 🚀 Notes]] [[notes]]","out":["notes"]}
+{"fn":"extract_wiki_links","in":"bxzufcxh [[x-gateway]]","out":["x-gateway"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] ess ribrm [[KIT]]","out":["kit"]}
+{"fn":"extract_wiki_links","in":"workflow ✅ task","out":[]}
+{"fn":"extract_wiki_links","in":"[[]] tflaskqhm [[A-B]] gzzdmzmmb izek [[x|label]] scujt","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[wiki-node-notes]] [[den-node-den-engine-garden]]","out":["wiki-node-notes","den-node-den-engine-garden"]}
+{"fn":"extract_wiki_links","in":"gateway the checklist session Zürich test Paulo Zürich","out":[]}
+{"fn":"extract_wiki_links","in":"[[acme_kit]] [[]] [[A-B]] [[ spaced ]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] bfuu ]] xlpk [[x|label]] [[Café Notes]] r chwpiwu","out":[]}
+{"fn":"extract_wiki_links","in":"tc fjxqr [[release-app-task-task]] [[v2-mesh]] extyjws [[x|label]] rzos","out":["release-app-task-task","v2-mesh"]}
+{"fn":"extract_wiki_links","in":"pku [[notes-task-kit-2026]] dfsx","out":["notes-task-kit-2026"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[acme-app-node-x-notes]] [[Café Notes]] [[]] [[ spaced ]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]]","out":["acme-app-node-x-notes","release-notes-release-notes-release-notes-release-notes-release-notes-release-no"]}
+{"fn":"extract_wiki_links","in":"データ workflow PR résumé error AcmeKit #123","out":[]}
+{"fn":"extract_wiki_links","in":"[[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] cm fcdla [[den]] [[task-engine-kit-den-acme]] i dkp [[acme-app]] [[x|label]] [[app-gateway]]","out":["release-notes-release-notes-release-notes-release-notes-release-notes-release-no","den","task-engine-kit-den-acme","acme-app","app-gateway"]}
+{"fn":"extract_wiki_links","in":"[[ mtfy","out":[]}
+{"fn":"extract_wiki_links","in":"summary build agent AcmeKit checklist AcmeKit summary","out":[]}
+{"fn":"extract_wiki_links","in":"ebdovilhfd fd ]] gu [[ [[ rtymopekz ugtrsn","out":[]}
+{"fn":"extract_wiki_links","in":"✅","out":[]}
+{"fn":"extract_wiki_links","in":"qkum [[acme/kit]] [[wiki]] [[ uvaiqfwesq tfdhff","out":["wiki"]}
+{"fn":"extract_wiki_links","in":"sdnqamrtbj [[gateway-gateway-app-release-mesh]] [[release-2026-wiki-garden-release]]","out":["gateway-gateway-app-release-mesh","release-2026-wiki-garden-release"]}
+{"fn":"extract_wiki_links","in":"zgljovdqd [[task-acme-kit]] [[A-B]] [[ [[]] [[ACME-DEN]]","out":["task-acme-kit","a-b","acme-den"]}
+{"fn":"extract_wiki_links","in":"gcklylxtwa ctq [[MESH-TASK-GARDEN-WIKI-GATEWAY]] [[memory-2026-mesh-2026]] [[ENGINE-GARDEN]] [[garden-x]] [[a_b]] uqvulqhdmn","out":["mesh-task-garden-wiki-gateway","memory-2026-mesh-2026","engine-garden","garden-x"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[x-mesh-kit-x]] [[Café Notes]] [[a_b]] ptjydmjx [[notes-gateway-den]] [[ spaced ]] [[acme.kit]]","out":["x-mesh-kit-x","notes-gateway-den"]}
+{"fn":"extract_wiki_links","in":"bxcznwgtv [[gateway-engine-app-acme-node]] xffofy [[a_b]] [[2026-GATEWAY]] [[x|label]] [[v2-gateway-release-node-memory]] [[ spaced ]] [[ENGINE-X]]","out":["gateway-engine-app-acme-node","2026-gateway","v2-gateway-release-node-memory","engine-x"]}
+{"fn":"extract_wiki_links","in":"[[ [[engine-2026-den-app]]","out":["engine-2026-den-app"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] p [[]] [[Café Notes]] [[engine-acme-gateway-engine]]","out":["engine-acme-gateway-engine"]}
+{"fn":"extract_wiki_links","in":"ynlaukf [[2026]] [[kit-acme-engine]] [[]] [[NODE-RELEASE]]","out":["2026","kit-acme-engine","node-release"]}
+{"fn":"extract_wiki_links","in":"task fix project agent index workflow file session","out":[]}
+{"fn":"extract_wiki_links","in":"[[ [[engine-mesh-memory-gateway-release]] ceibqvg","out":["engine-mesh-memory-gateway-release"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[2026-x]] [[a_b]]","out":["2026-x"]}
+{"fn":"extract_wiki_links","in":"jliwnlr s [[]] [[ spaced ]] [[Zürich Office]] ]] ebzjl [[a_b]] snyylt [[task-node-2026-task-engine]]","out":["task-node-2026-task-engine"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] cbd isl ]] lfe kzkh","out":[]}
+{"fn":"extract_wiki_links","in":"b [[kit-wiki-garden-app]] qiozsmnscc","out":["kit-wiki-garden-app"]}
+{"fn":"extract_wiki_links","in":"[[engine-2026]] fvl [[mesh-v2-x-gateway]] spoimfm","out":["engine-2026","mesh-v2-x-gateway"]}
+{"fn":"extract_wiki_links","in":"workflow café task","out":[]}
+{"fn":"extract_wiki_links","in":"u ayqolmd [[A-B]] [[2026-TASK]] yd [[ACME-Kit]]","out":["a-b","2026-task","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[acme/kit]] vmhnreof [[V2]] [[garden-engine]] xjdtjb gxe v [[]] fl","out":["v2","garden-engine"]}
+{"fn":"extract_wiki_links","in":"ibco [[2026]] [[acme-memory-x]] [[ spaced ]] [[node]] [[memory-den-x-x]] [[gateway]]","out":["2026","acme-memory-x","node","memory-den-x-x","gateway"]}
+{"fn":"extract_wiki_links","in":"outtd [[X]] [[1-2-3]] [[x|label]] [[KIT]] lckapqu [[A-B]]","out":["x","1-2-3","kit","a-b"]}
+{"fn":"extract_wiki_links","in":"[[acme-wiki-release]] yuxhikp [[ spaced ]] [[Café Notes]] [[","out":["acme-wiki-release"]}
+{"fn":"extract_wiki_links","in":"s","out":[]}
+{"fn":"extract_wiki_links","in":"[[memory-task]] [[DEN-X-NODE-X-NOTES]] [[ spaced ]] [[DEN-MESH-APP-ENGINE]] wlizboucw [[mesh-wiki-node-mesh]] m ]]","out":["memory-task","den-x-node-x-notes","den-mesh-app-engine","mesh-wiki-node-mesh"]}
+{"fn":"extract_wiki_links","in":"piequjj [[app-gateway-release]] [[garden-app-den-mesh-task]] [[acme-kit-]] idxr [[Café Notes]] [[GATEWAY-NODE-DEN]] [[1-2-3]] vihejn","out":["app-gateway-release","garden-app-den-mesh-task","acme-kit","gateway-node-den","1-2-3"]}
+{"fn":"extract_wiki_links","in":"]] [[ spaced ]]","out":[]}
+{"fn":"extract_wiki_links","in":"f rmp [[memory-notes-x-release-mesh]]","out":["memory-notes-x-release-mesh"]}
+{"fn":"extract_wiki_links","in":"[[ENGINE]] jpp [[task]] [[kit-mesh-task-gateway-x]] [[x|label]] [[A-B]] [[a_b]] eafftvbido qkwvon","out":["engine","task","kit-mesh-task-gateway-x","a-b"]}
+{"fn":"extract_wiki_links","in":"memory file deploy","out":[]}
+{"fn":"extract_wiki_links","in":"task project error データ checklist","out":[]}
+{"fn":"extract_wiki_links","in":"[[]] [[engine-wiki-app-2026]] iqxm [[task-app]] [[ spaced ]]","out":["engine-wiki-app-2026","task-app"]}
+{"fn":"extract_wiki_links","in":"workflow agent review config summary","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]] iglgmtnemi qllpz [[acme/kit]] axdcwpqgdv","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"release 🔩 v1.2.3 review the café the","out":[]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[RELEASE-WIKI-MEMORY-RELEASE]] oapql [[app-memory-kit]]","out":["release-wiki-memory-release","app-memory-kit"]}
+{"fn":"extract_wiki_links","in":"[[TASK-TASK-V2-NOTES]] [[]] gnshysvs [[den-garden-den-memory]] [[ [[ spaced ]] [[-acme-]] [[]]","out":["task-task-v2-notes","den-garden-den-memory","acme"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] zaofnpejr uofqvx [[A-B]] efnq [[a_b]] [[a_b]]","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"notes 2026 привет fix fix summary update","out":[]}
+{"fn":"extract_wiki_links","in":"[[x|label]] pesk [[x-den-x]] [[Café Notes]] shrnfoqenf [[app-task-wiki-den]]","out":["x-den-x","app-task-wiki-den"]}
+{"fn":"extract_wiki_links","in":"orb","out":[]}
+{"fn":"extract_wiki_links","in":"qrbtyzds [[ [[Café Notes]] [[A-B]] [[x-notes-v2]] [[x-2026-den-gateway-release]]","out":["a-b","x-notes-v2","x-2026-den-gateway-release"]}
+{"fn":"extract_wiki_links","in":"szbldts [[x|label]] [[v2-memory-kit]] [[x|label]] [[A-B]] jmzv [[garden]]","out":["v2-memory-kit","a-b","garden"]}
+{"fn":"extract_wiki_links","in":"hoqmudgt [[x|label]] ]] avmarhcm [[A-B]] [[app-notes-release]] u","out":["a-b","app-notes-release"]}
+{"fn":"extract_wiki_links","in":"[[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]]","out":["release-notes-release-notes-release-notes-release-notes-release-notes-release-no"]}
+{"fn":"extract_wiki_links","in":"njwmcid [[ [[node-task-garden-kit]] [[gateway-engine]] [[den-node]] [[notes-app-release-kit]] [[a_b]] [[release-garden]] auq ragu","out":["node-task-garden-kit","gateway-engine","den-node","notes-app-release-kit","release-garden"]}
+{"fn":"extract_wiki_links","in":"review emoji acme-app task Paulo index #123 file","out":[]}
+{"fn":"extract_wiki_links","in":"[[x|label]] trpdjtipyf [[]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[1-2-3]] [[acme]] [[A-B]] hzdfo [[memory-garden-v2]] kntswpcvu","out":["1-2-3","acme","a-b","memory-garden-v2"]}
+{"fn":"extract_wiki_links","in":"sucntayrjn wcz [[ spaced ]] xk [[engine-den-wiki-gateway]]","out":["engine-den-wiki-gateway"]}
+{"fn":"extract_wiki_links","in":"ogwmea [[Café Notes]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]] sibsbzhau ynxx izfkh","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] blafujtw [[acme-gateway-2026-task]] [[2026-V2-TASK-RELEASE]]","out":["acme-gateway-2026-task","2026-v2-task-release"]}
+{"fn":"extract_wiki_links","in":"oixitlvrwu n [[Café Notes]] fjprpt [[ [[wiki-release-garden]]","out":["wiki-release-garden"]}
+{"fn":"extract_wiki_links","in":"pjh","out":[]}
+{"fn":"extract_wiki_links","in":"[[A-B]] [[ ncbykyjhbw ]] jofyautydb b","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[a_b]] [[Café Notes]] fya [[wiki-den-gateway-2026-engine]] [[node]] jyz [[2026-V2-ENGINE-WIKI-APP]] [[x|label]] ozfj","out":["wiki-den-gateway-2026-engine","node","2026-v2-engine-wiki-app"]}
+{"fn":"extract_wiki_links","in":"database update summary build привет search","out":[]}
+{"fn":"extract_wiki_links","in":"[[v2-den]] [[]] [[x|label]] [[]] [[notes-release-2026-task-app]] neb","out":["v2-den","notes-release-2026-task-app"]}
+{"fn":"extract_wiki_links","in":"be [[acme/kit]] ufjdjs [[]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] edckgnhisj [[A-B]] [[]] [[mesh-wiki-v2-den-app]] [[Café Notes]] jvjgn [[MESH-GATEWAY]] [[acme-kit-]]","out":["a-b","mesh-wiki-v2-den-app","mesh-gateway","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[acme--kit]] [[]]","out":["acme-kit"]}
+{"fn":"extract_wiki_links","in":"x quymckguh edzwz [[acme_kit]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[Acme Kit]] [[]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[v2-task]] v [[acme-gateway]] [[A-B]] [[X-GARDEN-TASK-2026-V2]]","out":["v2-task","acme-gateway","a-b","x-garden-task-2026-v2"]}
+{"fn":"extract_wiki_links","in":"clbjqg i","out":[]}
+{"fn":"extract_wiki_links","in":"[[2026-acme-wiki-task-notes]] [[engine-2026-release]] [[kit-2026-mesh-memory]] vmn [[DEN]]","out":["2026-acme-wiki-task-notes","engine-2026-release","kit-2026-mesh-memory","den"]}
+{"fn":"extract_wiki_links","in":"task index task release 東京 São cache","out":[]}
+{"fn":"extract_wiki_links","in":"]] [[A-B]] o [[a_b]] [[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[release]] zdjcg [[a_b]] butf","out":["a-b","release-notes-release-notes-release-notes-release-notes-release-notes-release-no","release"]}
+{"fn":"extract_wiki_links","in":"[[ [[MEMORY-MESH-NOTES]] [[GARDEN-TASK-RELEASE-X-DEN]] [[acme.kit]] [[wiki-engine-notes-node]] [[]] ]]","out":["memory-mesh-notes","garden-task-release-x-den","wiki-engine-notes-node"]}
+{"fn":"extract_wiki_links","in":"[[]] d","out":[]}
+{"fn":"extract_wiki_links","in":"kpjuk [[A-B]] [[A_B C]] tqozf lk [[a_b]] [[notes-2026-memory-kit-node]] [[2026-X]] ]] mnlksd","out":["a-b","notes-2026-memory-kit-node","2026-x"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] [[]] krlmtop sqlcdnxel gvknlk rojgwwrzl","out":[]}
+{"fn":"extract_wiki_links","in":"twpvpmynpl [[wiki]] [[node-node-2026]] tmugvgjcha imtn ssvy","out":["wiki","node-node-2026"]}
+{"fn":"extract_wiki_links","in":"[[engine-den]] iqjoi","out":["engine-den"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[memory]] ptltp [[TASK-X-GATEWAY-X-2026]] [[A-B]] [[A-B]] [[garden-node-acme-node]] [[gateway-garden-engine-task-gateway]] [[den-app]] [[A-B]]","out":["memory","task-x-gateway-x-2026","a-b","garden-node-acme-node","gateway-garden-engine-task-gateway","den-app"]}
+{"fn":"extract_wiki_links","in":"[[A-B]] mzcmynuvvo elbvigbt [[ [[kit]] lipy [[NOTES-MESH-2026-ENGINE]] [[ACME-GARDEN-NOTES-GATEWAY]] csistjh","out":["a-b","kit","notes-mesh-2026-engine","acme-garden-notes-gateway"]}
+{"fn":"extract_wiki_links","in":"iihebohhc [[kit]] [[v2]] [[v2]] ]] [[release-v2-mesh-task-x]] rwzcs [[NOTES-TASK-MESH-WIKI]] [[x|label]] aody","out":["kit","v2","release-v2-mesh-task-x","notes-task-mesh-wiki"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] kat [[ [[x|label]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[A-B]] gzrb kzwwvfvho [[garden-memory]] inv [[mesh]]","out":["a-b","garden-memory","mesh"]}
+{"fn":"extract_wiki_links","in":"[[v2]]","out":["v2"]}
+{"fn":"extract_wiki_links","in":"rhio","out":[]}
+{"fn":"extract_wiki_links","in":"cb [[notes-acme]] lko u","out":["notes-acme"]}
+{"fn":"extract_wiki_links","in":"ts jnssx nrvbjjq","out":[]}
+{"fn":"extract_wiki_links","in":"kiivleck [[A-B]] [[","out":["a-b"]}
+{"fn":"extract_wiki_links","in":"lhpjgptob odgszzdoc [[2026-gateway-app]] [[acme--kit]]","out":["2026-gateway-app","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] extu [[node-gateway-release-notes-garden]] [[memory-task-v2-app]] efzemoedi","out":["node-gateway-release-notes-garden","memory-task-v2-app"]}
+{"fn":"extract_wiki_links","in":"[[release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026]] [[acme_kit]] [[v2-gateway-garden]] [[acme--kit]] [[den-app-acme-garden-2026]] lzrnw [[]] [[ gwaodd sh","out":["release-notes-release-notes-release-notes-release-notes-release-notes-release-no","v2-gateway-garden","acme-kit","den-app-acme-garden-2026"]}
+{"fn":"extract_wiki_links","in":"[[a_b]] [[acme--kit]] phxfncktqz [[ spaced ]] hqtzk [[Café Notes]] ]] v ilw [[ACME-Kit]]","out":["acme-kit"]}
+{"fn":"extract_wiki_links","in":"test workflow ✅ gateway","out":[]}
+{"fn":"extract_wiki_links","in":"[[ACME-Kit]] [[acme_kit]] vdbzygye [[den-garden-engine]] ozanzqustz","out":["acme-kit","den-garden-engine"]}
+{"fn":"extract_wiki_links","in":"[[NODE-NODE-WIKI-GATEWAY-X]] [[]] [[Zürich Office]] [[ENGINE]] [[ zlhcagay w","out":["node-node-wiki-gateway-x","engine"]}
+{"fn":"extract_wiki_links","in":"[[ spaced ]] rbzgtiv bayeuehcq [[2026-TASK-APP]] ihhnvjlztf ]]","out":["2026-task-app"]}
+{"fn":"extract_wiki_links","in":"tdim [[ [[ [[ spaced ]]","out":[]}
+{"fn":"extract_wiki_links","in":"[[Release 🚀 Notes]] [[A-B]] [[garden]] r [[acme_kit]] [[ACME-X-2026-GATEWAY]]","out":["a-b","garden","acme-x-2026-gateway"]}
+{"fn":"extract_wiki_links","in":"knamqidq lyogxgvhoc [[ spaced ]] onjghy vq s lrynfezb [[KIT-WIKI]] [[ [[ACME-Kit]]","out":["kit-wiki","acme-kit"]}
+{"fn":"extract_wiki_links","in":"[[]] [[wiki-wiki]]","out":["wiki-wiki"]}
+{"fn":"extract_wiki_links","in":"[[x|label]] [[a_b]] [[notes-v2]]","out":["notes-v2"]}
+{"fn":"extract_wiki_links","in":"東京 build release привет Paulo release update привет","out":[]}
+{"fn":"extract_wiki_links","in":"✅ agent café update #123 #123 index","out":[]}
+{"fn":"extract_wiki_links","in":"[[kit-release]] wj [[kit-2026-acme-release-2026]] [[ lgzsfuckpi f [[release-app-garden]] [[a_b]] ypled [[Café Notes]]","out":["kit-release","kit-2026-acme-release-2026","release-app-garden"]}
+{"fn":"extract_wiki_links","in":"[[Café Notes]] [[ spaced ]] plfww zcoboyesp dihzn [[APP-MEMORY-V2-ENGINE-ENGINE]]","out":["app-memory-v2-engine-engine"]}

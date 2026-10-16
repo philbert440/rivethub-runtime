@@ -1,0 +1,600 @@
+{"fn":"find_stem_match","in":["ACME-Kit",["ACME-Kit","ACME-Kit-node","ACME-Kit-notes","ACME-Kit","ACME-Kit","ACME-Kit"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["acme-gateway-acme-node-memory",["acme-gateway-mesh","acme-gateway-notes","acme-gateway-acme-node-memory-node","acme-gateway-node","acme-gateway-acme"]],"out":"acme-gateway-acme"}
+{"fn":"find_stem_match","in":["den-gateway-task-x-den",["DEN-GATEWAY-TASK-X-DEN"]],"out":"den-gateway-task-x-den"}
+{"fn":"find_stem_match","in":["x-engine-wiki",["X-ENGINE-WIKI","x-engine-wiki-wiki","x-engine-wiki","release-app-task-v2"]],"out":"x-engine-wiki"}
+{"fn":"find_stem_match","in":["acme--kit",["ACME--KIT"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["engine-kit-wiki-memory-notes",["ENGINE-KIT-WIKI-MEMORY-NOTES","engine-kit-wiki-den","engine-kit-wiki-memory-notes-memory"]],"out":"engine-kit-wiki-memory-notes"}
+{"fn":"find_stem_match","in":["mesh-v2-notes",["mesh-v2-notes-notes","MESH-V2-NOTES","mesh-v2-notes-v2","mesh-kit","mesh-v2-notes-app"]],"out":"mesh-v2-notes"}
+{"fn":"find_stem_match","in":["release-node-v2-notes-kit",["release-node","release-node-kit","release-node-engine"]],"out":"release-node"}
+{"fn":"find_stem_match","in":["-acme-",["-acme-x","-acme--release","-acme-kit","-acme--mesh"]],"out":"acme-x"}
+{"fn":"find_stem_match","in":["v2-x-engine",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["garden-release-gateway-x",["x-gateway-v2-task","GARDEN-RELEASE-GATEWAY-X","GARDEN-RELEASE-GATEWAY-X"]],"out":"garden-release-gateway-x"}
+{"fn":"find_stem_match","in":["x-2026-mesh",["x","X-2026-MESH","x"]],"out":"x"}
+{"fn":"find_stem_match","in":["ACME-Kit",["ACME-KIT","ACME-Kit-memory"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["2026",["2026"]],"out":"2026"}
+{"fn":"find_stem_match","in":["wiki-den",["WIKI-DEN","wiki-den-engine","wiki-den"]],"out":"wiki-den"}
+{"fn":"find_stem_match","in":["2026-gateway-kit",["den-wiki","2026-GATEWAY-KIT","2026-gateway-kit","2026-gateway-kit","2026-gateway-kit"]],"out":"2026-gateway-kit"}
+{"fn":"find_stem_match","in":["x-kit-release-acme",["X-KIT-RELEASE-ACME","NOTES-MEMORY-V2-KIT-TASK"]],"out":"x-kit-release-acme"}
+{"fn":"find_stem_match","in":["node",["node-gateway-x-release"]],"out":"node-gateway-x-release"}
+{"fn":"find_stem_match","in":["gateway-memory-engine",["GATEWAY-MEMORY-ENGINE"]],"out":"gateway-memory-engine"}
+{"fn":"find_stem_match","in":["v2",["v2","V2","v2","v2"]],"out":"v2"}
+{"fn":"find_stem_match","in":["v2",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["APP",["NOTES-V2-V2"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["wiki-garden",["WIKI-GARDEN","wiki-engine","wiki"]],"out":"wiki"}
+{"fn":"find_stem_match","in":["node-release-v2-v2",["NODE-RELEASE-V2-V2","NODE-RELEASE-V2-V2","node"]],"out":"node"}
+{"fn":"find_stem_match","in":["garden",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["v2-den-acme-release",["ACME-Kit","v2-den-acme-release-mesh","v2-den","v2-den"]],"out":"v2-den"}
+{"fn":"find_stem_match","in":["den-notes-memory-node-wiki",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme--kit",["acme--kit-memory","ACME--KIT","acme--kit","acme--kit-engine","acme--kit-kit"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["x-engine-v2-app",["x-engine-v2-app","X-ENGINE-V2-APP","x-engine-v2","x-engine-v2-acme","X-ENGINE-V2-APP"]],"out":"x-engine-v2"}
+{"fn":"find_stem_match","in":["node-wiki-acme-acme-x",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["kit-x-kit-task-release",["kit","kit-x","kit-wiki","kit-app","kit-x-kit-task-release-release"]],"out":"kit"}
+{"fn":"find_stem_match","in":["kit-kit-notes",["KIT-KIT-NOTES","wiki-notes-memory-kit","kit","Release 2026 notes"]],"out":"kit"}
+{"fn":"find_stem_match","in":["mesh-garden-garden-gateway-engine",["mesh-mesh","mesh-garden-garden-gateway-engine-notes","mesh","mesh-den"]],"out":"mesh"}
+{"fn":"find_stem_match","in":["app-engine",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["den-engine-kit-den-garden",["den-engine-kit-den-garden-2026","den-engine","acme_kit","den-engine","den-engine","den-engine-den"]],"out":"den-engine"}
+{"fn":"find_stem_match","in":["Acme Kit",["Acme Kit","Acme Kit-garden","Acme Kit-release","Acme Kit-garden"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["node-node",["NODE-NODE"]],"out":"node-node"}
+{"fn":"find_stem_match","in":["RELEASE",["RELEASE-den","RELEASE","RELEASE"]],"out":"release"}
+{"fn":"find_stem_match","in":["kit-mesh-2026-engine",["kit-acme","kit-mesh-2026-engine-release"]],"out":"kit-mesh-2026-engine-release"}
+{"fn":"find_stem_match","in":["notes-task-memory",["notes-gateway","notes-memory","notes","node-task","NOTES-TASK-MEMORY"]],"out":"notes"}
+{"fn":"find_stem_match","in":["release-x-mesh-2026",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["2026-MEMORY",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["wiki-mesh-kit-v2",["wiki-task","WIKI-MESH-KIT-V2","release-engine-gateway-x","WIKI-MESH-KIT-V2"]],"out":"wiki-mesh-kit-v2"}
+{"fn":"find_stem_match","in":["den-kit-x-acme-engine",["den","DEN-KIT-X-ACME-ENGINE"]],"out":"den"}
+{"fn":"find_stem_match","in":["app-node-engine-garden-x",["APP-NODE-ENGINE-GARDEN-X","app-node-engine-garden-x-node","garden-engine-v2","app-node-engine-garden-x-task"]],"out":"app-node-engine-garden-x"}
+{"fn":"find_stem_match","in":["v2",["V2","v2"]],"out":"v2"}
+{"fn":"find_stem_match","in":["MEMORY-V2-GATEWAY-DEN",["MEMORY-V2-GATEWAY-DEN-kit","acme.kit","MEMORY-V2-GATEWAY-acme","MEMORY-V2-GATEWAY-app","MEMORY-V2-GATEWAY","memory-den-kit-den-memory"]],"out":"memory-v2-gateway"}
+{"fn":"find_stem_match","in":["engine-2026-app-release-wiki",["engine-2026","engine-2026-acme","engine-2026"]],"out":"engine-2026"}
+{"fn":"find_stem_match","in":["wiki",["wiki","wiki-release","v2-acme-2026-app"]],"out":"wiki"}
+{"fn":"find_stem_match","in":["ACME",["ACME-acme","ACME","x-notes-task"]],"out":"acme"}
+{"fn":"find_stem_match","in":["GATEWAY",["GATEWAY","GATEWAY-release","ACME-NODE-NODE-MEMORY-2026","v2-x"]],"out":"gateway"}
+{"fn":"find_stem_match","in":["2026-release-app-2026",["app-v2-acme-notes"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["den",["acme/kit"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["2026-notes-acme",["2026-engine","2026-NOTES-ACME"]],"out":"2026-notes-acme"}
+{"fn":"find_stem_match","in":["DEN-X",["acme--kit","-acme-","DEN-X-mesh","DEN-X","DEN-X"]],"out":"den-x"}
+{"fn":"find_stem_match","in":["mesh-node",["mesh-node-release","mesh-node","mesh-node-2026"]],"out":"mesh-node"}
+{"fn":"find_stem_match","in":["gateway-v2-memory-garden",["gateway-v2-memory-garden-2026","gateway-v2-memory-garden-release","gateway-v2-memory"]],"out":"gateway-v2-memory"}
+{"fn":"find_stem_match","in":["engine-gateway-task-x-den",["ENGINE-GATEWAY-TASK-X-DEN","engine-gateway-task-x-den-2026","ENGINE-GATEWAY-TASK-X-DEN","engine-gateway-task-x","engine-gateway-task-v2"]],"out":"engine-gateway-task-x"}
+{"fn":"find_stem_match","in":["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026",["release"]],"out":"release"}
+{"fn":"find_stem_match","in":["ENGINE-MEMORY",["ENGINE-MEMORY","ENGINE-MEMORY","ENGINE-MEMORY-engine","ACME-ENGINE-MEMORY-NODE-WIKI","x-x-engine-v2-node","ENGINE-MEMORY"]],"out":"engine-memory"}
+{"fn":"find_stem_match","in":["gateway-memory-gateway-notes",["garden"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme--kit",["acme-mesh","wiki-acme-engine-acme-x"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["release-mesh",["task-garden-2026","notes-2026-task-engine-node","release-mesh-task","release-mesh"]],"out":"release-mesh"}
+{"fn":"find_stem_match","in":["Zürich Office",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["release-node-mesh",["release","release","Release 2026 notes","release-node-mesh-acme"]],"out":"release"}
+{"fn":"find_stem_match","in":["acme-wiki",["ACME-WIKI"]],"out":"acme-wiki"}
+{"fn":"find_stem_match","in":["notes-notes",["notes-v2","wiki-kit","NOTES-NOTES","notes-notes-task"]],"out":"notes-notes"}
+{"fn":"find_stem_match","in":["acme--kit",["ACME--KIT","acme-","ACME--KIT","acme-","ACME--KIT","acme--kit"]],"out":"acme"}
+{"fn":"find_stem_match","in":["acme/kit",["acme/kit","acme/kit-node","ACME/KIT","acme/kit-kit","acme/kit-acme"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["notes-notes-garden",["NOTES-NOTES-GARDEN","notes-notes-garden-release","acme-kit-","notes-notes-garden-node","notes-notes-garden-task","notes-notes"]],"out":"notes-notes"}
+{"fn":"find_stem_match","in":["1-2-3",["1-2-3","1-kit","1","app-den-x-2026","1-den","1"]],"out":"1"}
+{"fn":"find_stem_match","in":["engine-2026",["engine","ENGINE-2026","ENGINE-2026","ENGINE-2026"]],"out":"engine"}
+{"fn":"find_stem_match","in":["WIKI-ENGINE",["WIKI-ENGINE-node","WIKI-ENGINE","WIKI-ENGINE","WIKI-ENGINE"]],"out":"wiki-engine"}
+{"fn":"find_stem_match","in":["kit-kit-task",["kit-kit-x","garden-gateway-mesh-memory"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["V2-2026-DEN-ACME",["V2-2026-DEN-ACME-wiki","V2-2026","V2-2026","V2-2026-DEN-ACME"]],"out":"v2-2026"}
+{"fn":"find_stem_match","in":["node-gateway-garden-den",["x","NODE-GATEWAY-GARDEN-DEN","node-gateway"]],"out":"node-gateway"}
+{"fn":"find_stem_match","in":["wiki-engine-garden-engine",["wiki-engine-garden"]],"out":"wiki-engine-garden"}
+{"fn":"find_stem_match","in":["notes-gateway-v2-den",["notes-gateway-acme","NOTES-GATEWAY-V2-DEN","NOTES-GATEWAY-V2-DEN","NODE-APP-NOTES-GARDEN"]],"out":"notes-gateway-v2-den"}
+{"fn":"find_stem_match","in":["den-notes-v2-wiki",["den-notes-v2-wiki-acme","den-notes-v2-wiki-kit","V2","DEN-NOTES-V2-WIKI","den-notes-v2-wiki-den","den-2026-v2-x-gateway"]],"out":"den-notes-v2-wiki"}
+{"fn":"find_stem_match","in":["acme/kit",["acme-app-memory-gateway"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["engine-node-memory",["Acme Kit","engine-node-wiki","gateway-wiki-node"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["v2-notes-den-kit-kit",["v2-notes-den-kit-kit-garden","v2-app","v2-notes-den-kit-kit-wiki","v2-node","V2-NOTES-DEN-KIT-KIT"]],"out":"v2-notes-den-kit-kit"}
+{"fn":"find_stem_match","in":["node-notes",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["mesh-task",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["1-2-3",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Zürich Office",["Zürich Office-app","x-x-2026-wiki"]],"out":"z-rich-office-app"}
+{"fn":"find_stem_match","in":["node-gateway-memory-engine-2026",["memory-release-engine-engine"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["GARDEN-ENGINE",["2026","GARDEN"]],"out":"garden"}
+{"fn":"find_stem_match","in":["TASK-MESH-2026-TASK-X",["TASK-MESH-2026-TASK-X-den","gateway-v2-memory"]],"out":"task-mesh-2026-task-x-den"}
+{"fn":"find_stem_match","in":["release-2026",["release-2026-den","RELEASE-2026","release-2026-notes","mesh-memory-node"]],"out":"release-2026"}
+{"fn":"find_stem_match","in":["Release 🚀 Notes",["Release 🚀 Notes-engine","memory-engine-den-notes","Release 🚀 Notes","Release 🚀 Notes","RELEASE 🚀 NOTES","Release 🚀 Notes-node"]],"out":"release-notes"}
+{"fn":"find_stem_match","in":["acme-kit-",["ACME-KIT-","wiki-memory-x-v2","acme-kit-gateway","ACME-KIT-","node","acme-kit--garden"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["mesh-task-v2-x-x",["MESH-TASK-V2-X-X","mesh-task-v2","MESH-TASK-V2-X-X"]],"out":"mesh-task-v2"}
+{"fn":"find_stem_match","in":["memory-app-x-app-den",["mesh-v2-wiki-kit","memory-app-notes","memory-app-memory"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["engine-den-x-acme",["engine-den-x-acme-v2","engine-den-x-acme-app","engine-den-x"]],"out":"engine-den-x"}
+{"fn":"find_stem_match","in":["acme-kit-",["acme-kit--kit","acme-kit","acme-kit--engine","ACME-KIT-","release-memory-memory-wiki"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["gateway-den-x-kit-memory",["gateway-den-x-kit-memory-engine","GATEWAY-DEN-X-KIT-MEMORY","gateway-den-x"]],"out":"gateway-den-x"}
+{"fn":"find_stem_match","in":["x-v2-app-x-den",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["release-engine-wiki-2026",["release-engine-wiki-2026-app","node-task-notes-garden","TASK-2026-TASK","release-engine-wiki-2026-app","release-engine","release-engine"]],"out":"release-engine"}
+{"fn":"find_stem_match","in":["RELEASE",["RELEASE","RELEASE-x","RELEASE-den","x-gateway-garden-garden","RELEASE-gateway","RELEASE-task"]],"out":"release"}
+{"fn":"find_stem_match","in":["garden-app-x-2026",["garden","garden-wiki","acme_kit"]],"out":"garden"}
+{"fn":"find_stem_match","in":["garden-garden-release-garden",["GARDEN-GARDEN-RELEASE-GARDEN","GARDEN-GARDEN-RELEASE-GARDEN","engine-app","garden","garden-garden-release-garden-2026","garden"]],"out":"garden"}
+{"fn":"find_stem_match","in":["mesh-mesh-x-garden-node",["acme_kit"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["engine-v2-kit-notes-app",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["garden-x-memory",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["garden-garden-release-wiki",["garden-garden-wiki","garden-garden"]],"out":"garden-garden"}
+{"fn":"find_stem_match","in":["memory",["MEMORY","memory-x","memory","memory-mesh"]],"out":"memory"}
+{"fn":"find_stem_match","in":["acme--kit",["ACME--KIT","ACME--KIT","acme-","kit-gateway-den-v2-release"]],"out":"acme"}
+{"fn":"find_stem_match","in":["TASK",["TASK","TASK","TASK","TASK"]],"out":"task"}
+{"fn":"find_stem_match","in":["memory",["memory-garden","acme-task-task-v2-mesh","memory-kit","memory","memory-garden"]],"out":"memory"}
+{"fn":"find_stem_match","in":["acme-memory-gateway-wiki",["acme-memory-gateway-release","ACME-DEN","acme-memory-gateway-wiki-kit","acme-memory-gateway-2026","ACME-MEMORY-GATEWAY-WIKI"]],"out":"acme-memory-gateway-wiki"}
+{"fn":"find_stem_match","in":["node-task-gateway",["node-memory-den-v2","TASK-ACME-RELEASE-V2-GARDEN","node-task-gateway-gateway","node-task-gateway-2026","wiki-gateway","node"]],"out":"node"}
+{"fn":"find_stem_match","in":["Release 2026 notes",["x-engine","Release 2026 notes-gateway","RELEASE 2026 NOTES","Release 2026 notes-mesh"]],"out":"release-2026-notes"}
+{"fn":"find_stem_match","in":["kit-x-den",["kit-den-garden-release","KIT-X-DEN","task-gateway-engine-node","kit-x-app","kit-x"]],"out":"kit-x"}
+{"fn":"find_stem_match","in":["garden-notes-mesh-release",["garden-wiki"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["release-engine-node-gateway",["release-engine-node-gateway-app"]],"out":"release-engine-node-gateway-app"}
+{"fn":"find_stem_match","in":["x-v2",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["garden-app-kit",["TASK","GARDEN-APP-KIT","garden-app-kit","acme--kit","garden-app-kit"]],"out":"garden-app-kit"}
+{"fn":"find_stem_match","in":["2026-gateway",["2026-gateway-kit","2026-gateway-x"]],"out":"2026-gateway-x"}
+{"fn":"find_stem_match","in":["Release 2026 notes",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["x-release-acme-notes-app",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Acme Kit",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["garden",["GARDEN","GARDEN","garden-gateway","garden-notes"]],"out":"garden"}
+{"fn":"find_stem_match","in":["memory-app-node",["memory","memory-2026","MEMORY-APP-NODE","memory","memory-x"]],"out":"memory"}
+{"fn":"find_stem_match","in":["node",["node"]],"out":"node"}
+{"fn":"find_stem_match","in":["den-wiki",["x-kit-gateway","den-wiki"]],"out":"den-wiki"}
+{"fn":"find_stem_match","in":["acme-gateway",["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026","ACME-GATEWAY","acme-gateway"]],"out":"acme-gateway"}
+{"fn":"find_stem_match","in":["x-notes",["den-release-2026-x"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["2026",["2026","2026"]],"out":"2026"}
+{"fn":"find_stem_match","in":["garden-den-2026-memory-notes",["release-gateway","garden-den-2026-memory-notes-app","garden-den-mesh"]],"out":"garden-den-2026-memory-notes-app"}
+{"fn":"find_stem_match","in":["acme.kit",["ACME.KIT","acme.kit","acme.kit-kit","acme.kit-release"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["app-gateway-acme-node",["wiki-notes","app-gateway","app-gateway","app-gateway-garden"]],"out":"app-gateway"}
+{"fn":"find_stem_match","in":["acme.kit",["acme.kit","mesh","ACME.KIT","acme.kit-notes","acme.kit"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["mesh-x-wiki-v2",["MESH-X-WIKI-V2","acme-kit-den-mesh","mesh-x"]],"out":"mesh-x"}
+{"fn":"find_stem_match","in":["memory-acme-app",["memory-release-task","memory-acme","x-task","memory-acme-app-wiki","memory-acme","MEMORY-ACME-APP"]],"out":"memory-acme"}
+{"fn":"find_stem_match","in":["wiki-wiki-acme",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["TASK",["TASK-node"]],"out":"task-node"}
+{"fn":"find_stem_match","in":["MEMORY",["memory-notes-engine","kit-notes","MEMORY","MEMORY-den","MEMORY-x"]],"out":"memory"}
+{"fn":"find_stem_match","in":["garden-gateway-x-memory-garden",["garden-gateway-x-memory-garden-node","garden-x"]],"out":"garden-gateway-x-memory-garden-node"}
+{"fn":"find_stem_match","in":["acme_kit",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme/kit",["acme/kit-task","acme/kit"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["acme-kit-",["release","acme-kit--engine","acme-gateway","ACME-Kit"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["v2-den-den-task",["app-wiki-v2-wiki","v2-den-den-task-garden","V2-DEN-DEN-TASK","v2-den-den"]],"out":"v2-den-den"}
+{"fn":"find_stem_match","in":["RELEASE-V2-GATEWAY-WIKI",["RELEASE-V2-GATEWAY-WIKI-2026","RELEASE-V2"]],"out":"release-v2"}
+{"fn":"find_stem_match","in":["engine-v2-engine",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["x-x-x-node-memory",["x-x-x-node-memory-gateway","x-x-v2","x-x-release","x-x-x-node-memory-app","x-x"]],"out":"x-x"}
+{"fn":"find_stem_match","in":["release",["release-v2","RELEASE"]],"out":"release"}
+{"fn":"find_stem_match","in":["wiki-engine-release",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Acme Kit",["Acme Kit"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["MEMORY",["MEMORY"]],"out":"memory"}
+{"fn":"find_stem_match","in":["task-garden-acme",["TASK-GARDEN-ACME"]],"out":"task-garden-acme"}
+{"fn":"find_stem_match","in":["Release 🚀 Notes",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["memory",["MEMORY"]],"out":"memory"}
+{"fn":"find_stem_match","in":["v2-v2-mesh",["Release 2026 notes","v2-v2-mesh-mesh","V2-V2-MESH"]],"out":"v2-v2-mesh"}
+{"fn":"find_stem_match","in":["ACME-V2-RELEASE-NODE",["ACME-V2-RELEASE-NODE-node"]],"out":"acme-v2-release-node-node"}
+{"fn":"find_stem_match","in":["2026",["2026-notes","garden-den-x","2026-kit","acme_kit","2026","2026"]],"out":"2026"}
+{"fn":"find_stem_match","in":["kit-wiki-kit-2026-acme",["KIT-WIKI-KIT-2026-ACME","kit-wiki-kit-2026-acme-node","kit-wiki-kit","kit-wiki-kit-2026-acme-memory","KIT-WIKI-KIT-2026-ACME","gateway-acme"]],"out":"kit-wiki-kit"}
+{"fn":"find_stem_match","in":["release-notes-notes",["RELEASE-NOTES-NOTES","release-notes-notes"]],"out":"release-notes-notes"}
+{"fn":"find_stem_match","in":["Release 2026 notes",["wiki-gateway-garden-engine-app"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["node-mesh-node-den",["node-mesh-node-x","node-mesh-node-node","node-mesh-node","APP-X-DEN-RELEASE","node-mesh-node-mesh"]],"out":"node-mesh-node"}
+{"fn":"find_stem_match","in":["Release 🚀 Notes",["2026-kit-wiki"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme-wiki-x-x-app",["acme-wiki-x-x-app-task","memory-notes-kit","ACME-WIKI-X-X-APP","acme-wiki-x-x-app-kit","acme-wiki-x","kit-gateway-gateway"]],"out":"acme-wiki-x"}
+{"fn":"find_stem_match","in":["gateway-den-2026-notes",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["den-kit-task",["Acme Kit","WIKI-MEMORY-APP-ENGINE-NODE","den-kit","den-kit-acme"]],"out":"den-kit"}
+{"fn":"find_stem_match","in":["release-app",["RELEASE-APP","NOTES-2026-WIKI-ACME","release"]],"out":"release"}
+{"fn":"find_stem_match","in":["NODE-X-ACME-NODE",["NODE-X-ACME-acme"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["wiki-memory-gateway",["WIKI-MEMORY-GATEWAY","WIKI-MEMORY-GATEWAY","wiki-memory-gateway-task"]],"out":"wiki-memory-gateway"}
+{"fn":"find_stem_match","in":["v2",["garden"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["memory-release-gateway",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["KIT",["KIT","KIT","KIT","KIT-wiki","wiki-notes-acme"]],"out":"kit"}
+{"fn":"find_stem_match","in":["x",["x-app","X","wiki-2026-den-notes","x-garden","node-gateway-v2-notes","x-2026"]],"out":"x"}
+{"fn":"find_stem_match","in":["app-notes-v2-v2",["app-notes-v2-v2-den","app-notes-v2-v2-memory","app","app-release","A_B C"]],"out":"app"}
+{"fn":"find_stem_match","in":["V2-WIKI-GARDEN-NOTES",["V2-WIKI-GARDEN-NOTES-acme","V2-WIKI-GARDEN-NOTES-acme","app-mesh-notes-app","V2-WIKI-mesh","V2-WIKI-GARDEN-NOTES"]],"out":"v2-wiki-garden-notes"}
+{"fn":"find_stem_match","in":["2026-x",["2026-den","2026-task","2026-X"]],"out":"2026-x"}
+{"fn":"find_stem_match","in":["-acme-",["-acme--den","-acme--garden","notes-memory-app-task","-acme--den"]],"out":"acme-den"}
+{"fn":"find_stem_match","in":["kit",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme.kit",["acme","acme.kit-notes"]],"out":"acme"}
+{"fn":"find_stem_match","in":["RELEASE-NODE-X",["RELEASE-NODE"]],"out":"release-node"}
+{"fn":"find_stem_match","in":["1-2-3",["1-2-3","1-2-3","1-2-3","v2-task-den-2026","1-2-3"]],"out":"1-2-3"}
+{"fn":"find_stem_match","in":["den-2026-wiki",["den-2026-wiki-gateway","den-2026-wiki","den-2026-wiki-garden","den-2026-wiki-notes"]],"out":"den-2026-wiki"}
+{"fn":"find_stem_match","in":["acme-den-x-den-acme",["acme-den-x-den-acme-notes","ACME-DEN-X-DEN-ACME","acme"]],"out":"acme"}
+{"fn":"find_stem_match","in":["mesh",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Release 2026 notes",["RELEASE 2026 NOTES","Release 2026 notes-x"]],"out":"release-2026-notes"}
+{"fn":"find_stem_match","in":["mesh-x-kit-wiki-v2",["MESH-X-KIT-WIKI-V2","MESH-X-KIT-WIKI-V2","mesh-task","mesh","engine-gateway-app-release-garden"]],"out":"mesh"}
+{"fn":"find_stem_match","in":["den-gateway-wiki-wiki",["garden-engine-node-mesh","den-gateway-wiki-wiki-gateway","den-gateway-wiki","den-gateway-wiki","den-gateway-wiki-mesh","gateway-memory"]],"out":"den-gateway-wiki"}
+{"fn":"find_stem_match","in":["x-mesh-mesh-engine-gateway",["x-mesh-mesh"]],"out":"x-mesh-mesh"}
+{"fn":"find_stem_match","in":["node-notes",["GARDEN-ACME","node-notes-memory","node-notes-mesh","node-notes","NODE-NOTES","node-notes"]],"out":"node-notes"}
+{"fn":"find_stem_match","in":["gateway-release-acme",["gateway-release-acme-kit","acme","GATEWAY-RELEASE-ACME","gateway-release-acme-gateway","gateway-release-acme-kit","GATEWAY-RELEASE-ACME"]],"out":"gateway-release-acme"}
+{"fn":"find_stem_match","in":["mesh-x-2026-x-engine",["mesh-x","mesh-x-2026-x-engine-app","mesh-x-notes"]],"out":"mesh-x"}
+{"fn":"find_stem_match","in":["x-acme",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["2026-engine-x-v2-mesh",["2026-engine-2026","2026-engine-node","2026-engine-x-v2-mesh-engine"]],"out":"2026-engine-x-v2-mesh-engine"}
+{"fn":"find_stem_match","in":["engine-den-task-acme-wiki",["ENGINE-DEN-TASK-ACME-WIKI","engine-den-task-acme-wiki-mesh","ENGINE-DEN-TASK-ACME-WIKI","engine-den-task-wiki"]],"out":"engine-den-task-acme-wiki"}
+{"fn":"find_stem_match","in":["garden-release",["garden-release-wiki","garden-release-mesh","GARDEN-RELEASE"]],"out":"garden-release"}
+{"fn":"find_stem_match","in":["notes-acme-node-node",["engine","notes-acme"]],"out":"notes-acme"}
+{"fn":"find_stem_match","in":["v2-gateway",["v2-gateway-release","acme_kit","v2-gateway-2026","release","V2-GATEWAY","v2-gateway"]],"out":"v2-gateway"}
+{"fn":"find_stem_match","in":["Acme Kit",["Acme Kit-gateway","Acme Kit-memory","task-memory-mesh-gateway-2026"]],"out":"acme-kit-memory"}
+{"fn":"find_stem_match","in":["x-wiki-2026-2026",["x-wiki-2026-2026-x","x-wiki-2026-2026-v2","x-wiki-2026-2026","engine-wiki-engine-mesh-acme","node-node"]],"out":"x-wiki-2026-2026"}
+{"fn":"find_stem_match","in":["den-den-gateway-garden-2026",["den-den-gateway-garden-2026-memory","gateway-x-wiki-gateway","DEN-DEN-GATEWAY-GARDEN-2026","memory"]],"out":"den-den-gateway-garden-2026"}
+{"fn":"find_stem_match","in":["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026",["release","garden-den-kit-mesh","release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026-task","notes-v2-task-engine","2026-garden-release-release-app","release"]],"out":"release"}
+{"fn":"find_stem_match","in":["kit-v2-memory-notes-release",["APP-MESH"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Zürich Office",["Zürich Office-engine","Zürich Office-engine"]],"out":"z-rich-office-engine"}
+{"fn":"find_stem_match","in":["mesh-node-mesh",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["MEMORY-TASK-DEN-GATEWAY",["MEMORY-TASK-memory","MEMORY-TASK-gateway","MEMORY-TASK","MEMORY-TASK-memory","MEMORY-TASK-DEN-GATEWAY-v2","MEMORY-TASK-kit"]],"out":"memory-task"}
+{"fn":"find_stem_match","in":["kit-acme-engine-engine-notes",["kit-acme-engine-gateway","acme/kit","KIT-ACME-ENGINE-ENGINE-NOTES","kit-acme-engine-engine-notes-node","V2-V2-2026-V2"]],"out":"kit-acme-engine-engine-notes"}
+{"fn":"find_stem_match","in":["garden",["garden","GARDEN","garden-2026","garden-mesh","garden","garden"]],"out":"garden"}
+{"fn":"find_stem_match","in":["memory-x-2026-engine",["memory-x-2026-engine-engine","memory-x-2026-acme"]],"out":"memory-x-2026-engine-engine"}
+{"fn":"find_stem_match","in":["task-2026-wiki-den",["TASK-2026-WIKI-DEN","task-2026-wiki-x"]],"out":"task-2026-wiki-den"}
+{"fn":"find_stem_match","in":["gateway-den-garden-node-garden",["gateway-den-wiki","gateway-den-task","gateway-den-garden","GATEWAY-DEN-GARDEN-NODE-GARDEN","GATEWAY-DEN-GARDEN-NODE-GARDEN"]],"out":"gateway-den-garden"}
+{"fn":"find_stem_match","in":["den-node-memory",["engine-mesh","DEN-NODE-MEMORY","den-node-memory","den-node-memory","den-node-memory","den-node-memory-x"]],"out":"den-node-memory"}
+{"fn":"find_stem_match","in":["notes-den-den-memory",["notes","notes-den-den-memory-kit","notes-den"]],"out":"notes"}
+{"fn":"find_stem_match","in":["Release 2026 notes",["memory-v2-mesh-acme-acme"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["X",["acme--kit","X-acme"]],"out":"x-acme"}
+{"fn":"find_stem_match","in":["ACME-Kit",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["app-wiki-x-2026",["app-x","app-wiki-x-2026-engine","app-engine"]],"out":"app-wiki-x-2026-engine"}
+{"fn":"find_stem_match","in":["1-2-3",["gateway-notes-v2-release-x","1-task"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Release 🚀 Notes",["Release 🚀 Notes-garden","RELEASE 🚀 NOTES","RELEASE 🚀 NOTES","Release 🚀 Notes","RELEASE 🚀 NOTES"]],"out":"release-notes"}
+{"fn":"find_stem_match","in":["acme-kit-",["acme-kit-mesh","acme-kit-kit"]],"out":"acme-kit-kit"}
+{"fn":"find_stem_match","in":["notes-notes-2026-acme-engine",["NOTES-NOTES-2026-ACME-ENGINE"]],"out":"notes-notes-2026-acme-engine"}
+{"fn":"find_stem_match","in":["notes",["NOTES","NOTES","wiki-notes","NOTES","NOTES","NOTES"]],"out":"notes"}
+{"fn":"find_stem_match","in":["garden",["GARDEN"]],"out":"garden"}
+{"fn":"find_stem_match","in":["release-task-den",["app","release-task-den-garden"]],"out":"release-task-den-garden"}
+{"fn":"find_stem_match","in":["NODE-GARDEN-MEMORY-KIT-GATEWAY",["NODE-GARDEN-MEMORY-KIT-GATEWAY","den","mesh-task-acme-node"]],"out":"node-garden-memory-kit-gateway"}
+{"fn":"find_stem_match","in":["kit-app-den-memory",["app-kit-engine-gateway-2026","ACME-Kit","kit-app-den"]],"out":"kit-app-den"}
+{"fn":"find_stem_match","in":["task",["task-gateway","task-memory","task"]],"out":"task"}
+{"fn":"find_stem_match","in":["notes-x",["notes-x-x","x-x-garden-2026"]],"out":"notes-x-x"}
+{"fn":"find_stem_match","in":["NODE-DEN-MESH-RELEASE-2026",["NODE-DEN-MESH-RELEASE-2026"]],"out":"node-den-mesh-release-2026"}
+{"fn":"find_stem_match","in":["node-kit-mesh",["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026","node-kit","Release 🚀 Notes","node-kit","NODE-KIT-MESH"]],"out":"node-kit"}
+{"fn":"find_stem_match","in":["engine",["notes-v2-notes","engine-kit","engine-memory"]],"out":"engine-kit"}
+{"fn":"find_stem_match","in":["wiki-mesh-acme",["wiki-mesh-acme-release","wiki-mesh-acme-x","wiki-mesh-acme-release"]],"out":"wiki-mesh-acme-x"}
+{"fn":"find_stem_match","in":["acme.kit",["acme.kit-wiki","acme-task-wiki","ACME.KIT","acme.kit"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["kit-mesh-app-memory",["kit-mesh-app-memory-wiki"]],"out":"kit-mesh-app-memory-wiki"}
+{"fn":"find_stem_match","in":["2026",["2026-mesh","2026-acme","2026-app","2026","2026"]],"out":"2026"}
+{"fn":"find_stem_match","in":["engine-engine-release-kit-2026",["ENGINE-ENGINE-RELEASE-KIT-2026","engine-engine-release-kit-2026-memory"]],"out":"engine-engine-release-kit-2026"}
+{"fn":"find_stem_match","in":["wiki-garden-release-task",["mesh-acme-engine-x-garden","wiki-garden-release","wiki-garden-release","WIKI-GARDEN-RELEASE-TASK","wiki-garden-release","wiki-garden-release"]],"out":"wiki-garden-release"}
+{"fn":"find_stem_match","in":["app-v2",["app-v2-node"]],"out":"app-v2-node"}
+{"fn":"find_stem_match","in":["den",["acme-wiki-garden","engine-2026-memory-notes","den-2026"]],"out":"den-2026"}
+{"fn":"find_stem_match","in":["2026-WIKI-X-V2-2026",["2026-acme"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["mesh-v2-wiki-kit",["MESH-V2-WIKI-KIT","mesh-v2-wiki-kit-node","MESH-V2-WIKI-KIT","mesh-v2-wiki-2026","mesh-v2-wiki-den"]],"out":"mesh-v2-wiki-kit"}
+{"fn":"find_stem_match","in":["den",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["gateway-gateway",["gateway-gateway-x","GATEWAY-GATEWAY","gateway-gateway-task","gateway-gateway-wiki"]],"out":"gateway-gateway"}
+{"fn":"find_stem_match","in":["A_B C",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["2026-task",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["MEMORY",["MEMORY","x-node-den-notes","MEMORY","MEMORY","kit-den-x"]],"out":"memory"}
+{"fn":"find_stem_match","in":["den-v2-task-garden-notes",["task-notes-v2-mesh","den"]],"out":"den"}
+{"fn":"find_stem_match","in":["acme--kit",["acme--kit-release","app-memory-den","ACME--KIT","acme--kit-x","acme--kit-engine","x-app"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["acme-app-task",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["den-memory-garden",["mesh-x-mesh-mesh-x","den-memory-wiki","den-memory-den","den-memory-garden-gateway","den-memory-garden-notes"]],"out":"den-memory-garden-notes"}
+{"fn":"find_stem_match","in":["acme_kit",["acme_kit","Release 🚀 Notes"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["acme",["acme"]],"out":"acme"}
+{"fn":"find_stem_match","in":["garden-engine-garden-den",["GARDEN-ENGINE-GARDEN-DEN","GARDEN","GARDEN-ENGINE-GARDEN-DEN","garden-engine-garden-den-acme","garden-engine-garden-den-kit","GARDEN-ENGINE-GARDEN-DEN"]],"out":"garden"}
+{"fn":"find_stem_match","in":["v2-2026-v2-gateway-den",["v2-2026-v2-gateway-den-den"]],"out":"v2-2026-v2-gateway-den-den"}
+{"fn":"find_stem_match","in":["RELEASE",["RELEASE","RELEASE","RELEASE-v2","RELEASE-gateway"]],"out":"release"}
+{"fn":"find_stem_match","in":["NOTES-KIT",["node-v2"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["wiki-acme-gateway-node-task",["wiki-notes"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["app-engine",["APP-ENGINE","app-engine-v2","app","app-release"]],"out":"app"}
+{"fn":"find_stem_match","in":["x-2026-wiki",["x-2026-den","X-2026-WIKI","x-2026","X-2026-WIKI"]],"out":"x-2026"}
+{"fn":"find_stem_match","in":["x-wiki-x-2026",["x-wiki-x-2026","X-WIKI-X-2026","x-wiki-x-v2","X-WIKI-X-2026","x-wiki-x-2026-task"]],"out":"x-wiki-x-2026"}
+{"fn":"find_stem_match","in":["task-x-den-wiki",["memory-release","engine","notes","task-x","TASK-X-DEN-WIKI","acme--kit"]],"out":"task-x"}
+{"fn":"find_stem_match","in":["notes-app-release-wiki-release",["notes-app-release-wiki-release-memory","NOTES-APP-RELEASE-WIKI-RELEASE"]],"out":"notes-app-release-wiki-release"}
+{"fn":"find_stem_match","in":["v2-kit",["mesh-v2-den-den-kit","v2-kit-engine","acme-kit-","v2-kit-node","acme","v2"]],"out":"v2"}
+{"fn":"find_stem_match","in":["x",["x-release","1-2-3"]],"out":"x-release"}
+{"fn":"find_stem_match","in":["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026",["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026-kit"]],"out":"release-notes-release-notes-release-notes-release-notes-release-notes-release-no"}
+{"fn":"find_stem_match","in":["A_B C",["1-2-3","acme--kit","A_B C-v2","A_B C-memory","acme.kit","A_B C-task"]],"out":"a-b-c-v2"}
+{"fn":"find_stem_match","in":["1-2-3",["node-memory-release","1-2-3-acme","1-2-3-x","1","1-2-3-gateway","1-2-3"]],"out":"1"}
+{"fn":"find_stem_match","in":["garden-node-node-den",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["ACME-Kit",["ACME-node","ACME-Kit-task","ACME","task-v2-gateway"]],"out":"acme"}
+{"fn":"find_stem_match","in":["garden-gateway-acme-v2-den",["garden-gateway","garden-gateway-acme-v2-den-x","garden-gateway"]],"out":"garden-gateway"}
+{"fn":"find_stem_match","in":["release-app-wiki-acme-acme",["release-app-wiki","RELEASE-APP-WIKI-ACME-ACME"]],"out":"release-app-wiki"}
+{"fn":"find_stem_match","in":["task-gateway-app-garden",["TASK-GATEWAY-APP-GARDEN"]],"out":"task-gateway-app-garden"}
+{"fn":"find_stem_match","in":["acme_kit",["acme_kit","acme--kit","acme_kit-acme","acme_kit-release"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["acme/kit",["kit","memory","acme/kit","acme/kit","acme/kit-gateway"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["garden-memory-app-release-wiki",["garden","GARDEN-MEMORY-APP-RELEASE-WIKI","garden-memory-app-release-wiki-garden","garden-x","garden"]],"out":"garden"}
+{"fn":"find_stem_match","in":["-acme-",["-acme"]],"out":"acme"}
+{"fn":"find_stem_match","in":["2026-mesh-2026-task-engine",["2026-mesh-2026-task-engine-memory","2026-MESH-2026-TASK-ENGINE","2026-MESH-2026-TASK-ENGINE"]],"out":"2026-mesh-2026-task-engine"}
+{"fn":"find_stem_match","in":["Acme Kit",["Acme Kit","Acme Kit-garden","Acme Kit-gateway"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["wiki",["wiki","wiki"]],"out":"wiki"}
+{"fn":"find_stem_match","in":["memory-release-mesh-engine-wiki",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["x-notes-engine-kit",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["KIT-GARDEN-MEMORY",["acme-notes-app-gateway-app","mesh","KIT"]],"out":"kit"}
+{"fn":"find_stem_match","in":["garden-2026",["garden-2026","garden-2026-acme","GARDEN-2026"]],"out":"garden-2026"}
+{"fn":"find_stem_match","in":["mesh-release-mesh",["mesh-release-mesh-acme"]],"out":"mesh-release-mesh-acme"}
+{"fn":"find_stem_match","in":["task",["TASK","acme-node","TASK","TASK","task-app","task"]],"out":"task"}
+{"fn":"find_stem_match","in":["1-2-3",["1-2-3-notes","1-2-3-node","1-garden"]],"out":"1-2-3-node"}
+{"fn":"find_stem_match","in":["node",["node-memory","node-acme"]],"out":"node-acme"}
+{"fn":"find_stem_match","in":["memory-engine",["Café Notes","node-notes"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["2026-release",["2026-release","2026-release-node","x-memory-engine-mesh-mesh","engine-notes-wiki-garden-x","2026-release-gateway","2026-release-kit"]],"out":"2026-release"}
+{"fn":"find_stem_match","in":["notes-x-kit",["NOTES-X-KIT","notes-x-kit-gateway","notes","NOTES-X-KIT","notes","NOTES-X-KIT"]],"out":"notes"}
+{"fn":"find_stem_match","in":["garden-acme-node-gateway",["garden-acme-node-wiki","garden-acme-node-v2","garden-acme-node-gateway-task","garden-acme-node"]],"out":"garden-acme-node"}
+{"fn":"find_stem_match","in":["gateway-wiki-app-gateway-acme",["ENGINE-TASK","acme/kit","GATEWAY-WIKI-APP-GATEWAY-ACME","gateway-wiki"]],"out":"gateway-wiki"}
+{"fn":"find_stem_match","in":["task-engine-task",["TASK-ENGINE-TASK"]],"out":"task-engine-task"}
+{"fn":"find_stem_match","in":["garden",["garden-app"]],"out":"garden-app"}
+{"fn":"find_stem_match","in":["engine-acme",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["node-engine-release",["A_B C","NODE-ENGINE-RELEASE","node-acme","NODE-ENGINE-RELEASE"]],"out":"node-engine-release"}
+{"fn":"find_stem_match","in":["v2-kit",["v2-kit","kit-x-x","v2-kit-app","v2-kit-kit"]],"out":"v2-kit"}
+{"fn":"find_stem_match","in":["garden-memory-gateway-acme",["garden-memory-gateway-acme-node","garden","garden-kit","garden"]],"out":"garden"}
+{"fn":"find_stem_match","in":["acme-kit-",["gateway-2026-gateway-release-node"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme.kit",["acme.kit-node"]],"out":"acme-kit-node"}
+{"fn":"find_stem_match","in":["release-engine",["release","RELEASE-ENGINE","release-engine-wiki"]],"out":"release"}
+{"fn":"find_stem_match","in":["kit-engine",["kit-engine-garden","kit-engine","memory-wiki-kit-gateway-garden","kit-engine","kit-engine-kit"]],"out":"kit-engine"}
+{"fn":"find_stem_match","in":["KIT",["KIT","KIT"]],"out":"kit"}
+{"fn":"find_stem_match","in":["GARDEN-ACME-APP",["GARDEN-task","acme_kit","2026","GARDEN-ACME-APP-gateway"]],"out":"garden-acme-app-gateway"}
+{"fn":"find_stem_match","in":["engine",["engine-engine","engine-x"]],"out":"engine-x"}
+{"fn":"find_stem_match","in":["notes-notes-app-x-notes",["notes-notes","notes-notes","kit-acme-acme","NOTES-NOTES-APP-X-NOTES","NOTES-NOTES-APP-X-NOTES"]],"out":"notes-notes"}
+{"fn":"find_stem_match","in":["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026",["RELEASE-NOTES-RELEASE-NOTES-RELEASE-NOTES-RELEASE-NOTES-RELEASE-NOTES-RELEASE-NOTES-2026","release-notes","release-notes"]],"out":"release-notes"}
+{"fn":"find_stem_match","in":["V2",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["v2-task-den",["v2-task-den-v2","v2-task-den-app","release","v2-task-den-garden"]],"out":"v2-task-den-v2"}
+{"fn":"find_stem_match","in":["memory-node-task-mesh-2026",["A_B C","memory-node-task-mesh-2026-task","memory-node"]],"out":"memory-node"}
+{"fn":"find_stem_match","in":["acme/kit",["garden","ACME/KIT"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["notes",["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["task",["task","2026-mesh-node-mesh-den","task-v2"]],"out":"task"}
+{"fn":"find_stem_match","in":["2026",["2026-engine","2026-node","mesh-task-gateway-x","2026","2026-release","MEMORY-MESH"]],"out":"2026"}
+{"fn":"find_stem_match","in":["acme--kit",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Release 2026 notes",["acme-kit-","MESH-X","Release 2026 notes-v2","Release 2026 notes-memory","Acme Kit"]],"out":"release-2026-notes-v2"}
+{"fn":"find_stem_match","in":["Release 2026 notes",["Release 2026 notes-task","Release 2026 notes-release"]],"out":"release-2026-notes-task"}
+{"fn":"find_stem_match","in":["Acme Kit",["ACME KIT","Acme Kit","ACME KIT","Acme Kit-release","Acme Kit-x","Acme Kit-app"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["v2-2026-den-acme-app",["ACME-DEN","v2-2026-den-acme-app-task","V2-2026-DEN-ACME-APP","v2-2026"]],"out":"v2-2026"}
+{"fn":"find_stem_match","in":["acme-app",["app-mesh","acme","acme-app-2026"]],"out":"acme"}
+{"fn":"find_stem_match","in":["kit",["KIT","KIT","2026-x-node","ACME-Kit"]],"out":"kit"}
+{"fn":"find_stem_match","in":["kit-den-task",["KIT-DEN-TASK","kit-den","kit-den-task-notes"]],"out":"kit-den"}
+{"fn":"find_stem_match","in":["2026-kit-wiki",["wiki-kit-engine","2026","2026-acme","2026-KIT-WIKI","2026","2026"]],"out":"2026"}
+{"fn":"find_stem_match","in":["kit-memory",["kit-memory-app","kit-memory-gateway","KIT-MEMORY","v2","kit-memory"]],"out":"kit-memory"}
+{"fn":"find_stem_match","in":["kit-engine-acme-x-task",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["wiki-den-kit",["kit-task-release"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["NOTES-X-X",["NOTES-X","NOTES-X-memory","x"]],"out":"notes-x"}
+{"fn":"find_stem_match","in":["engine-engine-gateway",["v2-release-node","ENGINE-ENGINE-GATEWAY","engine-engine","ENGINE-ENGINE-GATEWAY","release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026","engine-engine-gateway-kit"]],"out":"engine-engine"}
+{"fn":"find_stem_match","in":["V2-MEMORY-V2-MESH-X",["V2-MEMORY","V2-MEMORY","gateway-gateway-app-wiki","V2-MEMORY-V2-MESH-X-node","V2-MEMORY"]],"out":"v2-memory"}
+{"fn":"find_stem_match","in":["v2",["notes-notes-notes-mesh"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["gateway-memory-engine-v2",["gateway-memory","gateway-memory-memory","gateway-memory","notes"]],"out":"gateway-memory"}
+{"fn":"find_stem_match","in":["WIKI-WIKI-NOTES-ENGINE",["WIKI-WIKI-NOTES-2026"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["kit",["kit-engine","garden-wiki-x","KIT","kit-release","kit","kit"]],"out":"kit"}
+{"fn":"find_stem_match","in":["acme.kit",["acme.kit","acme.kit","ACME.KIT"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["mesh",["mesh","mesh-app"]],"out":"mesh"}
+{"fn":"find_stem_match","in":["-acme-",["-acme--acme","-acme--v2","-ACME-"]],"out":"acme"}
+{"fn":"find_stem_match","in":["MEMORY-APP-MESH-NODE",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["notes-node-v2",["notes-node-v2"]],"out":"notes-node-v2"}
+{"fn":"find_stem_match","in":["notes-den",["notes-den-mesh","NOTES-DEN","x-2026","wiki-wiki","NOTES-DEN"]],"out":"notes-den"}
+{"fn":"find_stem_match","in":["notes-wiki",["notes-wiki-engine","notes-wiki-release","notes-wiki-mesh","notes-wiki-app","NOTES-WIKI"]],"out":"notes-wiki"}
+{"fn":"find_stem_match","in":["acme-garden-2026-garden-app",["v2-node-task-release","den-garden-engine-memory-engine","acme-garden-2026-garden-app-notes"]],"out":"acme-garden-2026-garden-app-notes"}
+{"fn":"find_stem_match","in":["Acme Kit",["ACME KIT","ACME KIT","ACME KIT","Acme Kit","wiki-v2-den","Acme Kit-app"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["acme-app",["acme-engine","acme","acme-v2","acme","acme-app-den"]],"out":"acme"}
+{"fn":"find_stem_match","in":["x-den-engine",["x-den-engine-gateway","x-den-acme","x-den"]],"out":"x-den"}
+{"fn":"find_stem_match","in":["A_B C",["A_B C","A_B C-den","A_B C-mesh"]],"out":"a-b-c"}
+{"fn":"find_stem_match","in":["den",["DEN","acme-notes-engine","app","den-den"]],"out":"den"}
+{"fn":"find_stem_match","in":["acme-kit-",["acme-wiki-engine-wiki-den","acme_kit","acme-kit-","acme-kit--x","acme-kit-","acme-kit--gateway"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["A_B C",["A_B C-app","A_B C-mesh","A_B C","A_B C","A_B C","A_B C"]],"out":"a-b-c"}
+{"fn":"find_stem_match","in":["gateway-engine-kit",["gateway-engine-kit-node","v2-notes-den-garden","gateway-engine","gateway-engine","node-release","gateway-engine-den"]],"out":"gateway-engine"}
+{"fn":"find_stem_match","in":["kit-notes-garden",["kit-notes-garden-release","KIT-NOTES-GARDEN","kit-notes-garden-v2","kit-notes-garden","KIT-NOTES-GARDEN"]],"out":"kit-notes-garden"}
+{"fn":"find_stem_match","in":["task-acme-app-v2-release",["TASK-ACME-APP-V2-RELEASE","task","task","TASK-ACME-APP-V2-RELEASE"]],"out":"task"}
+{"fn":"find_stem_match","in":["kit",["kit-wiki","kit-x","kit-gateway","node-x-release-memory-mesh"]],"out":"kit-x"}
+{"fn":"find_stem_match","in":["x-2026-notes-x-task",["X-2026-NOTES-X-TASK","ACME-APP-ACME","x-2026-notes","x-2026-notes-x"]],"out":"x-2026-notes"}
+{"fn":"find_stem_match","in":["gateway",["gateway-gateway","gateway-den","gateway"]],"out":"gateway"}
+{"fn":"find_stem_match","in":["mesh-release-gateway",["mesh-release-gateway-notes","MESH-RELEASE-GATEWAY","mesh-release-gateway-v2","mesh-release-gateway-memory","mesh-release-gateway-2026"]],"out":"mesh-release-gateway"}
+{"fn":"find_stem_match","in":["notes-garden-mesh",["memory-acme-notes-wiki","notes-garden-mesh","notes-garden-mesh-2026"]],"out":"notes-garden-mesh"}
+{"fn":"find_stem_match","in":["den-2026-app-2026",["v2-acme-wiki-engine","app-notes-app-x-engine","v2-node","ACME-Kit"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Café Notes",["Café Notes","Café Notes","Café Notes-2026","Café Notes-x","Café Notes-mesh"]],"out":"caf-notes"}
+{"fn":"find_stem_match","in":["notes-task-garden",["notes-task-garden-den"]],"out":"notes-task-garden-den"}
+{"fn":"find_stem_match","in":["memory-mesh-app-gateway",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["x-engine-notes",["x-engine-notes-x","x-engine-notes-release","x-engine-notes","x-engine-notes-task"]],"out":"x-engine-notes"}
+{"fn":"find_stem_match","in":["task-kit",["task-kit-x","task-kit","task-kit-task"]],"out":"task-kit"}
+{"fn":"find_stem_match","in":["TASK-GARDEN-V2-RELEASE-DEN",["TASK-GARDEN-V2-RELEASE-DEN-engine","TASK","TASK-GARDEN-V2-RELEASE-DEN","TASK-GARDEN-V2-RELEASE-DEN-app","TASK-engine"]],"out":"task"}
+{"fn":"find_stem_match","in":["gateway-gateway-acme-memory-den",["gateway-kit","GATEWAY-GATEWAY-ACME-MEMORY-DEN","GATEWAY-GATEWAY-ACME-MEMORY-DEN","acme-kit-"]],"out":"gateway-gateway-acme-memory-den"}
+{"fn":"find_stem_match","in":["release-acme-v2",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["v2-app",["V2-APP","v2-app-den"]],"out":"v2-app"}
+{"fn":"find_stem_match","in":["NODE-RELEASE-APP",["NODE-RELEASE","NODE-RELEASE-wiki","app-acme-garden-app-garden","acme"]],"out":"node-release"}
+{"fn":"find_stem_match","in":["app-node-garden",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["app",["app-x"]],"out":"app-x"}
+{"fn":"find_stem_match","in":["app-notes-task-wiki",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["mesh-node-task-engine-memory",["mesh-notes","2026-notes","mesh-gateway","mesh","GATEWAY-V2-NODE","mesh-node-task-engine-memory-release"]],"out":"mesh"}
+{"fn":"find_stem_match","in":["den-den-release",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["app-2026",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["1-2-3",["1-2-3-garden","1-2-3","Café Notes","1-2-3","v2-wiki-den-node-v2"]],"out":"1-2-3"}
+{"fn":"find_stem_match","in":["x-memory-v2-memory-den",["x-memory-v2-memory-den-node","x-memory-v2-memory-den-memory","X-MEMORY-V2-MEMORY-DEN","x-memory-v2-memory-den-mesh"]],"out":"x-memory-v2-memory-den"}
+{"fn":"find_stem_match","in":["acme-memory-acme-acme",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme_kit",["acme_kit-garden","acme_kit","acme_kit-mesh","acme_kit-app","ACME_KIT","ACME_KIT"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["gateway-x",["gateway-x-acme","GATEWAY-X","gateway-notes-node","GATEWAY-X"]],"out":"gateway-x"}
+{"fn":"find_stem_match","in":["app",["app"]],"out":"app"}
+{"fn":"find_stem_match","in":["memory-v2-garden-node-release",["memory-v2"]],"out":"memory-v2"}
+{"fn":"find_stem_match","in":["kit",["kit-memory","acme-2026-den-app-2026","GARDEN-KIT-TASK-RELEASE-ACME","memory-memory-engine","kit","kit-node"]],"out":"kit"}
+{"fn":"find_stem_match","in":["gateway-v2-release",["GATEWAY-V2-RELEASE","GATEWAY-V2-RELEASE","gateway-v2-release","gateway-v2-release-release"]],"out":"gateway-v2-release"}
+{"fn":"find_stem_match","in":["GARDEN",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["ACME-MESH",["notes-garden-release","ACME-MESH"]],"out":"acme-mesh"}
+{"fn":"find_stem_match","in":["Zürich Office",["Zürich Office-2026","Zürich Office-release","Zürich Office-2026","ZÜRICH OFFICE","Zürich Office","Zürich Office"]],"out":"z-rich-office"}
+{"fn":"find_stem_match","in":["acme.kit",["acme.kit","ACME.KIT","acme.kit-task","x-kit-task","ACME.KIT"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["mesh-wiki",["mesh-wiki","mesh-wiki","MESH-WIKI","mesh-wiki","mesh-wiki"]],"out":"mesh-wiki"}
+{"fn":"find_stem_match","in":["2026-v2-notes-notes",["2026-den","2026-v2-notes-notes-v2","2026-v2-notes-notes-2026"]],"out":"2026-v2-notes-notes-v2"}
+{"fn":"find_stem_match","in":["A_B C",["A_B C","A_B C-mesh","A_B C-x","A_B C"]],"out":"a-b-c"}
+{"fn":"find_stem_match","in":["kit-v2-x-x",["mesh-app","kit-v2-x"]],"out":"kit-v2-x"}
+{"fn":"find_stem_match","in":["task-garden",["acme/kit","TASK-GARDEN"]],"out":"task-garden"}
+{"fn":"find_stem_match","in":["garden-node-den",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["den-task-task-2026",["den-task-task-2026-den","den-task-task-task","den-task-task-2026-v2","NOTES-GARDEN-GATEWAY-ENGINE","den-task-task-2026-garden"]],"out":"den-task-task-2026-v2"}
+{"fn":"find_stem_match","in":["-acme-",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Acme Kit",["Acme Kit-wiki","Acme Kit-kit","ACME KIT","Acme Kit-x"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["acme_kit",["acme_kit","acme_kit-den","acme_kit-garden"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["task-memory-x-mesh",["x","TASK-MEMORY-X-MESH"]],"out":"task-memory-x-mesh"}
+{"fn":"find_stem_match","in":["2026-app",["2026-app-notes","2026-app-garden","acme_kit","2026-app-kit","2026-app"]],"out":"2026-app"}
+{"fn":"find_stem_match","in":["x-mesh-acme",["x-mesh-acme-gateway","-acme-","x-mesh-acme","task-task","X-MESH-ACME","DEN-X-X"]],"out":"x-mesh-acme"}
+{"fn":"find_stem_match","in":["acme-notes-den-x",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme-v2-engine-memory-app",["acme-v2-engine","acme-v2-engine-garden","ACME-V2-ENGINE-MEMORY-APP","acme/kit","Zürich Office"]],"out":"acme-v2-engine"}
+{"fn":"find_stem_match","in":["NOTES-APP-MESH-ACME-V2",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["memory-node",["memory-node-release","MEMORY-NODE","MEMORY-NODE","memory-den","MEMORY-NODE"]],"out":"memory-node"}
+{"fn":"find_stem_match","in":["memory-gateway-engine-memory-2026",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Café Notes",["Café Notes-gateway","engine-kit","CAFÉ NOTES","CAFÉ NOTES","Café Notes-release"]],"out":"caf-notes"}
+{"fn":"find_stem_match","in":["task",["task-wiki"]],"out":"task-wiki"}
+{"fn":"find_stem_match","in":["NOTES-ENGINE-X",["NOTES-ENGINE-X","den-mesh-app"]],"out":"notes-engine-x"}
+{"fn":"find_stem_match","in":["garden-den",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["2026-x-wiki-gateway-wiki",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["task-engine-mesh-2026",["task","memory"]],"out":"task"}
+{"fn":"find_stem_match","in":["x-garden-task",["acme_kit","X-GARDEN-TASK","x-garden-task-app","x-garden-task-app","X-GARDEN-TASK","x-garden-task"]],"out":"x-garden-task"}
+{"fn":"find_stem_match","in":["acme-node-kit-wiki-acme",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["2026-node-notes-garden",["2026-node-notes-mesh","2026-NODE-NOTES-GARDEN"]],"out":"2026-node-notes-garden"}
+{"fn":"find_stem_match","in":["acme/kit",["acme-wiki-wiki","ACME/KIT","acme/kit","ACME/KIT"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["ACME-Kit",["ACME-Kit","ACME-Kit-notes","ACME-Kit-task","ACME-KIT","Release 🚀 Notes"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["v2-notes",["mesh","v2-notes-2026","den-x","v2-notes-task"]],"out":"v2-notes-2026"}
+{"fn":"find_stem_match","in":["node-garden",["notes-memory-notes-gateway","node-garden"]],"out":"node-garden"}
+{"fn":"find_stem_match","in":["acme-wiki-engine",["garden","acme-kit"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["kit-notes-notes-garden-task",["kit-notes-notes-garden-task-app","kit-notes-node","gateway-wiki-kit","KIT-NOTES-NOTES-GARDEN-TASK"]],"out":"kit-notes-notes-garden-task"}
+{"fn":"find_stem_match","in":["notes-release-wiki-kit",["notes-release-wiki","NOTES-RELEASE-WIKI-KIT","notes-release-wiki","notes-release-wiki","acme.kit"]],"out":"notes-release-wiki"}
+{"fn":"find_stem_match","in":["WIKI-DEN",["WIKI"]],"out":"wiki"}
+{"fn":"find_stem_match","in":["task-notes-notes-node-x",["task-notes-memory","TASK-NOTES-NOTES-NODE-X","garden-2026-node-kit-app","task-notes-notes-node-x-engine","task-notes"]],"out":"task-notes"}
+{"fn":"find_stem_match","in":["den-app-garden-memory-release",["DEN-APP-GARDEN-MEMORY-RELEASE","v2"]],"out":"den-app-garden-memory-release"}
+{"fn":"find_stem_match","in":["GARDEN-ACME",["GARDEN"]],"out":"garden"}
+{"fn":"find_stem_match","in":["ACME-Kit",["ACME"]],"out":"acme"}
+{"fn":"find_stem_match","in":["1-2-3",["1-2-3-memory","1-2-3-wiki","1-2-3","1-2-3","1","1"]],"out":"1"}
+{"fn":"find_stem_match","in":["task-memory-v2-x",["task-memory-v2-x-engine","TASK-MEMORY-V2-X","task-memory-v2-x-den"]],"out":"task-memory-v2-x"}
+{"fn":"find_stem_match","in":["release-mesh-node",["release-mesh-node"]],"out":"release-mesh-node"}
+{"fn":"find_stem_match","in":["x-den-garden-garden",["x","x-den-garden-garden-wiki","v2-kit-memory","x-den-garden-garden-v2","x-gateway","x-task"]],"out":"x"}
+{"fn":"find_stem_match","in":["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026",["release-notes","ENGINE-2026-ACME-NODE"]],"out":"release-notes"}
+{"fn":"find_stem_match","in":["mesh",["mesh-acme","MESH","MESH"]],"out":"mesh"}
+{"fn":"find_stem_match","in":["ENGINE-RELEASE-KIT-TASK-MEMORY",["ACME-Kit","ENGINE-RELEASE-notes"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["KIT",["KIT-gateway"]],"out":"kit-gateway"}
+{"fn":"find_stem_match","in":["memory",["MEMORY","MEMORY","GARDEN-MESH","memory-mesh","memory","MEMORY"]],"out":"memory"}
+{"fn":"find_stem_match","in":["task-kit-den",["engine-app-mesh","engine-app-node-node-garden","task","release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026"]],"out":"task"}
+{"fn":"find_stem_match","in":["notes-v2",["NOTES-V2","notes-engine","notes-wiki"]],"out":"notes-v2"}
+{"fn":"find_stem_match","in":["memory-app-wiki",["memory-app-wiki-task","memory-app-wiki-garden","memory","app-gateway-memory-acme"]],"out":"memory"}
+{"fn":"find_stem_match","in":["acme/kit",["acme/kit-mesh"]],"out":"acme-kit-mesh"}
+{"fn":"find_stem_match","in":["ENGINE-V2-GARDEN",["ENGINE-V2-GARDEN-memory","ENGINE-V2-GARDEN-kit","garden-memory","ENGINE-V2-GARDEN","ENGINE-V2-GARDEN","ENGINE-V2-GARDEN-app"]],"out":"engine-v2-garden"}
+{"fn":"find_stem_match","in":["memory-2026",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["task-engine-task-v2",["task-engine-engine"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["node-den-kit-den-task",["NODE-DEN-KIT-DEN-TASK","node-den-kit-den-task-2026","NODE-DEN-KIT-DEN-TASK","node","node-mesh"]],"out":"node"}
+{"fn":"find_stem_match","in":["app",["app","app"]],"out":"app"}
+{"fn":"find_stem_match","in":["release-app-2026-acme",["release-app","release-app-task","Release 2026 notes","2026-KIT-RELEASE","release-node"]],"out":"release-app"}
+{"fn":"find_stem_match","in":["notes-engine-x-memory",["notes","notes-engine-x-memory-node","NOTES-ENGINE-X-MEMORY","NOTES-ENGINE-X-MEMORY","notes-engine-x-memory-garden","notes"]],"out":"notes"}
+{"fn":"find_stem_match","in":["wiki-den",["WIKI-DEN","wiki-acme","wiki-acme"]],"out":"wiki-den"}
+{"fn":"find_stem_match","in":["garden",["garden-den","GARDEN","GARDEN"]],"out":"garden"}
+{"fn":"find_stem_match","in":["x",["X"]],"out":"x"}
+{"fn":"find_stem_match","in":["acme_kit",["acme_kit","WIKI","acme_kit-node"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["RELEASE",["RELEASE-den"]],"out":"release-den"}
+{"fn":"find_stem_match","in":["den-v2",["den-v2-garden","den-v2","DEN-V2"]],"out":"den-v2"}
+{"fn":"find_stem_match","in":["app-garden-release",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["den-den",["DEN-DEN","den-den","den-den","den-den-2026"]],"out":"den-den"}
+{"fn":"find_stem_match","in":["notes",["NOTES","notes-notes","notes-node","notes-task","notes-memory"]],"out":"notes"}
+{"fn":"find_stem_match","in":["ENGINE-GATEWAY",["ENGINE-GATEWAY","ENGINE-GATEWAY"]],"out":"engine-gateway"}
+{"fn":"find_stem_match","in":["wiki-wiki",["wiki","wiki-2026","wiki-wiki-acme","Release 🚀 Notes"]],"out":"wiki"}
+{"fn":"find_stem_match","in":["node-garden-x-den-v2",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["gateway-notes-2026-task",["gateway-notes"]],"out":"gateway-notes"}
+{"fn":"find_stem_match","in":["MEMORY",["MEMORY-kit","MEMORY-2026"]],"out":"memory-kit"}
+{"fn":"find_stem_match","in":["task-engine-release",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["task-v2-app-den",["task-v2-app-den-2026","task","task"]],"out":"task"}
+{"fn":"find_stem_match","in":["app-app-wiki-node",["APP-APP-WIKI-NODE","app-app-wiki","app-app-wiki","app-app-wiki-wiki","app-app-wiki-node-gateway"]],"out":"app-app-wiki"}
+{"fn":"find_stem_match","in":["acme",["acme-release-mesh","acme","acme","acme-engine","acme-den","acme-v2"]],"out":"acme"}
+{"fn":"find_stem_match","in":["v2-mesh-gateway-task",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["gateway-wiki",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["wiki-kit-acme-wiki",["wiki-kit-acme-wiki-app","WIKI-KIT-ACME-WIKI","wiki-kit-acme-wiki-notes","wiki-kit-acme"]],"out":"wiki-kit-acme"}
+{"fn":"find_stem_match","in":["A_B C",["A_B C-gateway","A_B C-den","A_B C-engine","A_B C-acme","kit-memory-kit-kit-task"]],"out":"a-b-c-den"}
+{"fn":"find_stem_match","in":["Zürich Office",["Zürich Office","ZÜRICH OFFICE","Zürich Office-v2","Zürich Office-kit"]],"out":"z-rich-office"}
+{"fn":"find_stem_match","in":["2026-garden-gateway-gateway-release",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme-memory-task-den",["notes-app","acme","acme-memory-task-den-task","acme-acme"]],"out":"acme"}
+{"fn":"find_stem_match","in":["engine-memory-garden-task",["engine-memory"]],"out":"engine-memory"}
+{"fn":"find_stem_match","in":["-acme-",["-ACME-","-ACME-","-ACME-","-ACME-","-ACME-"]],"out":"acme"}
+{"fn":"find_stem_match","in":["task-2026-task",["x-engine-node-x-v2","task-2026-release"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["gateway-release-garden",["gateway-release-garden","gateway-release-garden","gateway-release-garden-wiki","2026","gateway-release-garden-acme"]],"out":"gateway-release-garden"}
+{"fn":"find_stem_match","in":["task-release-gateway-release-task",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["node-x-v2-app-engine",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["ACME-Kit",["ACME-Kit-notes","ACME-Kit-notes","ACME-Kit","ACME-Kit","ACME-KIT"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["acme-mesh-2026",["acme-mesh-2026-gateway","acme-mesh-2026"]],"out":"acme-mesh-2026"}
+{"fn":"find_stem_match","in":["node",["wiki-gateway-mesh-node","node","node-mesh","-acme-","NODE","node-memory"]],"out":"node"}
+{"fn":"find_stem_match","in":["2026-memory-engine",["2026-memory-engine-task"]],"out":"2026-memory-engine-task"}
+{"fn":"find_stem_match","in":["2026-wiki-kit-node",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["memory-wiki-gateway",["memory","memory-wiki-gateway-memory","MEMORY-WIKI-GATEWAY","memory","memory","memory-wiki-gateway-2026"]],"out":"memory"}
+{"fn":"find_stem_match","in":["memory-release",["memory","MEMORY-RELEASE","MEMORY-RELEASE","engine-2026","memory-app","MEMORY-RELEASE"]],"out":"memory"}
+{"fn":"find_stem_match","in":["kit-den-den-v2-memory",["task-task-v2","NODE-RELEASE-GARDEN-NODE-NODE","garden-engine","kit-wiki","kit-memory","kit-den-den-v2-memory-kit"]],"out":"kit-den-den-v2-memory-kit"}
+{"fn":"find_stem_match","in":["acme.kit",["release","ACME-Kit","Release 🚀 Notes","acme.kit","acme.kit-app","acme.kit-v2"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["release-acme",["RELEASE-ACME","acme-wiki-engine-mesh-mesh","RELEASE-ACME","RELEASE-ACME"]],"out":"release-acme"}
+{"fn":"find_stem_match","in":["x-v2-x-release-release",["x-v2","x-v2-wiki","x-v2-x-release-release-den","x-v2-x-release-release-acme","x-v2-wiki","-acme-"]],"out":"x-v2"}
+{"fn":"find_stem_match","in":["DEN",["DEN","A_B C","DEN"]],"out":"den"}
+{"fn":"find_stem_match","in":["app-notes-engine-engine-den",["app","app-engine","Zürich Office","mesh","app-notes-engine-engine-den-release","app-notes-engine-engine-den-wiki"]],"out":"app"}
+{"fn":"find_stem_match","in":["Café Notes",["GARDEN","Café Notes-x","den-task-node-v2","CAFÉ NOTES","gateway-app-gateway-den"]],"out":"caf-notes"}
+{"fn":"find_stem_match","in":["engine-x-2026",["engine-x-2026-mesh","engine-x-2026","engine-x-2026-v2","engine-x-2026-2026","engine-x-2026-notes"]],"out":"engine-x-2026"}
+{"fn":"find_stem_match","in":["v2-node",["release","app-task-task","v2-memory","v2","v2-node-release"]],"out":"v2"}
+{"fn":"find_stem_match","in":["release-task-app",["release-task-app","acme-gateway-app-garden-node","release-task-app","release-task-app-node","release-task-app-app"]],"out":"release-task-app"}
+{"fn":"find_stem_match","in":["node",["node-x","NODE","node","node-release"]],"out":"node"}
+{"fn":"find_stem_match","in":["engine-acme-kit-notes",["engine-acme","engine-acme","engine-acme"]],"out":"engine-acme"}
+{"fn":"find_stem_match","in":["wiki-engine-x-2026-engine",["wiki-engine-x","WIKI-ENGINE-X-2026-ENGINE","wiki-engine-x-engine","wiki-engine-x-app","wiki-engine-x-2026-engine-notes","wiki-engine-x-2026-engine-notes"]],"out":"wiki-engine-x"}
+{"fn":"find_stem_match","in":["acme-kit-",["ACME-KIT-","acme-kit--task","node-notes-engine","acme-kit-","notes-release-wiki-app-notes","memory-node-notes"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["acme-kit",["acme-kit","acme-kit-task"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["2026-node",["wiki","2026-NODE"]],"out":"2026-node"}
+{"fn":"find_stem_match","in":["MESH-ENGINE",["memory-memory","MESH-ENGINE-app","MESH-ENGINE-task","acme--kit","MESH-ENGINE","MESH-release"]],"out":"mesh-engine"}
+{"fn":"find_stem_match","in":["task",["task-gateway","task","TASK","notes","task"]],"out":"task"}
+{"fn":"find_stem_match","in":["app-2026-gateway",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["v2-kit-task-app",["x-node-acme","garden-gateway-app","v2","v2-kit-release"]],"out":"v2"}
+{"fn":"find_stem_match","in":["den-v2-engine",["den-v2-engine","DEN-V2-ENGINE","DEN-V2-ENGINE","RELEASE-NODE-ACME-KIT","den-v2-engine-kit"]],"out":"den-v2-engine"}
+{"fn":"find_stem_match","in":["mesh-v2-mesh-app",["mesh-v2","mesh-v2","mesh-v2","mesh-v2-garden"]],"out":"mesh-v2"}
+{"fn":"find_stem_match","in":["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026",["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026-app","release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026-notes"]],"out":"release-notes-release-notes-release-notes-release-notes-release-notes-release-no"}
+{"fn":"find_stem_match","in":["RELEASE-2026-MEMORY-GATEWAY",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Café Notes",["Café Notes-notes"]],"out":"caf-notes-notes"}
+{"fn":"find_stem_match","in":["node-release-node",["node-release-kit"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["memory-wiki",["memory-wiki-release","memory-acme","memory","memory-wiki-garden","memory-wiki-mesh","memory"]],"out":"memory"}
+{"fn":"find_stem_match","in":["node-wiki-kit-gateway",["node-gateway","node","node-node","node","node-wiki-kit-gateway-notes","node-task"]],"out":"node"}
+{"fn":"find_stem_match","in":["garden-task-engine-task",["garden-engine"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026",["app-x-engine-garden-gateway","acme","release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026-den"]],"out":"release-notes-release-notes-release-notes-release-notes-release-notes-release-no"}
+{"fn":"find_stem_match","in":["wiki-task-garden",["WIKI-TASK-GARDEN"]],"out":"wiki-task-garden"}
+{"fn":"find_stem_match","in":["wiki-node-acme-task-acme",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["release-memory",["gateway","release-memory","release-memory-x","release-memory"]],"out":"release-memory"}
+{"fn":"find_stem_match","in":["memory-notes-acme",["memory-notes-acme-2026","memory-notes-acme-garden"]],"out":"memory-notes-acme-2026"}
+{"fn":"find_stem_match","in":["node-acme-mesh-node-garden",["node-acme-mesh-node-garden-memory","node"]],"out":"node"}
+{"fn":"find_stem_match","in":["2026-release",["v2-wiki-task-engine-engine","2026-release","2026-release-node","NOTES-RELEASE-TASK-2026","2026-release"]],"out":"2026-release"}
+{"fn":"find_stem_match","in":["gateway-node-v2-mesh-v2",["v2-app-garden","task-engine-x-notes","GATEWAY-NODE-V2-MESH-V2"]],"out":"gateway-node-v2-mesh-v2"}
+{"fn":"find_stem_match","in":["memory-kit-mesh-mesh",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["task-release-garden",["task-release-garden","task-release-garden-2026","TASK-RELEASE-GARDEN","task-release-garden-engine","memory-mesh","engine-notes-engine-den"]],"out":"task-release-garden"}
+{"fn":"find_stem_match","in":["notes",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["x-memory",["x-memory-memory","x-memory","x-memory-x","x-memory-task"]],"out":"x-memory"}
+{"fn":"find_stem_match","in":["acme/kit",["acme/kit","acme/kit-notes","acme/kit","acme/kit","acme/kit-task","acme/kit"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["memory",["release-memory-gateway-wiki-acme","memory-app","memory","MEMORY","memory-memory"]],"out":"memory"}
+{"fn":"find_stem_match","in":["v2-memory-mesh-mesh",["v2-memory-mesh-mesh-notes","v2"]],"out":"v2"}
+{"fn":"find_stem_match","in":["kit-2026-2026-acme-x",["kit-2026-2026-acme-x-x","mesh-release-app-memory","memory-node-node"]],"out":"kit-2026-2026-acme-x-x"}
+{"fn":"find_stem_match","in":["-acme-",["-release","acme-v2-kit-release-notes"]],"out":"acme-v2-kit-release-notes"}
+{"fn":"find_stem_match","in":["x-release-wiki",["X-RELEASE-WIKI","x-release-wiki-x","x-release-wiki-garden","x-memory-acme-task-gateway","v2-den-mesh"]],"out":"x-release-wiki"}
+{"fn":"find_stem_match","in":["Release 2026 notes",["Release 2026 notes","Release 2026 notes-acme","Release 2026 notes","Release 2026 notes-node","Release 2026 notes-notes","Release 2026 notes-app"]],"out":"release-2026-notes"}
+{"fn":"find_stem_match","in":["kit-memory-app-x",["kit-memory-app-x-garden","kit-memory","notes-engine-task","kit-memory-app-x-gateway","kit-memory"]],"out":"kit-memory"}
+{"fn":"find_stem_match","in":["ACME-Kit",["A_B C","ACME-Kit-den","ACME","mesh","ACME"]],"out":"acme"}
+{"fn":"find_stem_match","in":["release-v2-node",["release-v2-node-engine","release-v2-node","den-den-gateway-mesh-x","x"]],"out":"release-v2-node"}
+{"fn":"find_stem_match","in":["mesh-release",["MESH-RELEASE","mesh-app","mesh-release-memory","mesh-den","node-notes-kit"]],"out":"mesh-release"}
+{"fn":"find_stem_match","in":["ACME-Kit",["ACME-Kit-engine","ACME-Kit-notes","MESH-RELEASE-NODE-KIT","engine-task","ACME-Kit-wiki"]],"out":"acme-kit-wiki"}
+{"fn":"find_stem_match","in":["release-den-wiki",["release-release-x","release-den-wiki"]],"out":"release-den-wiki"}
+{"fn":"find_stem_match","in":["2026-kit",["memory-2026-wiki","2026-kit-v2","2026-KIT","garden","2026-KIT"]],"out":"2026-kit"}
+{"fn":"find_stem_match","in":["x-task-release-den-acme",["x-task-release-den-acme-v2","x","X-TASK-RELEASE-DEN-ACME","X-TASK-RELEASE-DEN-ACME"]],"out":"x"}
+{"fn":"find_stem_match","in":["acme-kit-",["acme-kit-memory","acme-kit","acme-kit-acme","acme-kit--gateway"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["app-garden-2026-mesh-task",["APP-GARDEN-2026-MESH-TASK","app-node"]],"out":"app-garden-2026-mesh-task"}
+{"fn":"find_stem_match","in":["acme-x-kit",["ACME-X-KIT","engine-app-x-den-v2","acme-x-kit-acme","acme-x-kit","acme-x-kit","app"]],"out":"acme-x-kit"}
+{"fn":"find_stem_match","in":["x-x-release-engine-kit",["x-x"]],"out":"x-x"}
+{"fn":"find_stem_match","in":["app-engine-node-memory-garden",["APP-ENGINE-NODE-MEMORY-GARDEN","app-engine-gateway","app-engine-node-memory-garden-x","APP-ENGINE-NODE-MEMORY-GARDEN"]],"out":"app-engine-node-memory-garden"}
+{"fn":"find_stem_match","in":["gateway-kit-acme",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["APP",["APP","APP-notes","APP-v2"]],"out":"app"}
+{"fn":"find_stem_match","in":["x-engine",["app-memory-2026","x-engine-kit"]],"out":"x-engine-kit"}
+{"fn":"find_stem_match","in":["2026-engine-task-kit-mesh",["garden-memory-notes","2026-ENGINE-TASK-KIT-MESH","2026-engine-task-kit-mesh-x"]],"out":"2026-engine-task-kit-mesh"}
+{"fn":"find_stem_match","in":["gateway-release",["A_B C","-acme-","gateway-release-gateway","gateway-release-release"]],"out":"gateway-release-gateway"}
+{"fn":"find_stem_match","in":["garden-task-acme-app-den",["Release 2026 notes","garden-task"]],"out":"garden-task"}
+{"fn":"find_stem_match","in":["acme_kit",["acme_kit-mesh","acme_kit-node","acme_kit-2026","acme_kit-x","den-node-engine-garden"]],"out":"acme-kit-x"}
+{"fn":"find_stem_match","in":["ACME-Kit",["ACME-Kit-notes","ACME-Kit","ACME-Kit-node","ACME-Kit-v2","ACME-Kit-node","ACME-Kit-acme"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["v2-task-wiki",["acme-acme-memory-v2"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme-kit-",["ACME-KIT-","ACME-Kit","acme-kit--acme","engine-acme-2026-node"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["mesh-memory-task-2026",["mesh-memory-task-2026-task","mesh-memory","mesh-memory-task-2026-gateway","mesh-memory-node","mesh-memory-garden"]],"out":"mesh-memory"}
+{"fn":"find_stem_match","in":["acme-kit-",["x","acme-kit-","acme-kit-","acme-kit-","ACME-KIT-"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["mesh",["mesh","mesh-node","mesh-app"]],"out":"mesh"}
+{"fn":"find_stem_match","in":["x-v2-gateway-app-task",["wiki","x-v2","X-V2-GATEWAY-APP-TASK","x-v2-memory","x-v2","X-V2-GATEWAY-APP-TASK"]],"out":"x-v2"}
+{"fn":"find_stem_match","in":["V2-NOTES-MEMORY",["V2-NOTES-MEMORY-engine","V2-NOTES-MEMORY","V2-NOTES","V2-NOTES-MEMORY-v2"]],"out":"v2-notes"}
+{"fn":"find_stem_match","in":["ACME-Kit",["ACME-KIT"]],"out":"acme-kit"}
+{"fn":"find_stem_match","in":["den-task-app",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["gateway-garden-release-garden",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["Release 🚀 Notes",["RELEASE 🚀 NOTES","task-engine","Release 🚀 Notes-den","Release 🚀 Notes","Release 🚀 Notes-mesh","Release 🚀 Notes"]],"out":"release-notes"}
+{"fn":"find_stem_match","in":["app-mesh-kit-task",["app"]],"out":"app"}
+{"fn":"find_stem_match","in":["app-gateway",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["A_B C",["A_B C","A_B C-app","A_B C-mesh","A_B C-node"]],"out":"a-b-c"}
+{"fn":"find_stem_match","in":["wiki-x-garden-acme-gateway",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["memory-v2-garden",["memory-release","memory-v2-garden-den","memory-v2-garden-acme","MEMORY-V2-GARDEN"]],"out":"memory-v2-garden"}
+{"fn":"find_stem_match","in":["app-node-2026",["NOTES","release-notes-release-notes-release-notes-release-notes-release-notes-release-notes-2026"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme-app-wiki",["ACME-APP-WIKI","ACME-APP-WIKI","acme-app","acme-app","acme-app-den"]],"out":"acme-app"}
+{"fn":"find_stem_match","in":["wiki-memory-garden-garden",["kit-garden-task","wiki-memory-garden-garden-engine","wiki-memory-garden","node-app-x-x"]],"out":"wiki-memory-garden"}
+{"fn":"find_stem_match","in":["-acme-",["-acme-acme","-ACME-","-acme-acme","garden-den-den","-acme--engine"]],"out":"acme"}
+{"fn":"find_stem_match","in":["A_B C",["acme.kit","A_B C-mesh","A_B C-engine"]],"out":"a-b-c-mesh"}
+{"fn":"find_stem_match","in":["v2-v2",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["app-gateway-engine",["app-gateway-engine","app-gateway-engine-garden","app-gateway-engine-mesh","2026-x-acme-v2-node","app-gateway-engine-node"]],"out":"app-gateway-engine"}
+{"fn":"find_stem_match","in":["wiki-mesh-den-2026",["wiki-mesh-den-2026-app","wiki-mesh-den","wiki-mesh-den","wiki-mesh-den-2026-notes","2026-kit","WIKI-MESH-DEN-2026"]],"out":"wiki-mesh-den"}
+{"fn":"find_stem_match","in":["acme-x-2026-x",["ACME-X-2026-X"]],"out":"acme-x-2026-x"}
+{"fn":"find_stem_match","in":["v2",["v2-gateway"]],"out":"v2-gateway"}
+{"fn":"find_stem_match","in":["-acme-",["-acme--wiki","","-ACME-","-acme"]],"out":"acme"}
+{"fn":"find_stem_match","in":["ACME-V2-ENGINE-ACME",["den-notes-app-v2-x","ACME-V2-ENGINE-ACME-2026","ACME-V2-ENGINE-ACME-app","garden-mesh"]],"out":"acme-v2-engine-acme-app"}
+{"fn":"find_stem_match","in":["app-v2-gateway-engine",["app-v2-gateway-wiki"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["node-v2",["node-v2-den"]],"out":"node-v2-den"}
+{"fn":"find_stem_match","in":["garden-gateway-engine-wiki-kit",["garden-gateway-engine-v2","GARDEN-GATEWAY-ENGINE-WIKI-KIT","garden-gateway-engine-wiki-kit-mesh","GARDEN-GATEWAY-ENGINE-WIKI-KIT","garden-gateway-engine-wiki-kit-wiki","garden-gateway-engine-wiki-kit-v2"]],"out":"garden-gateway-engine-wiki-kit"}
+{"fn":"find_stem_match","in":["mesh-gateway-x-engine-notes",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["release-den-wiki-notes-gateway",["RELEASE-DEN-WIKI-NOTES-GATEWAY","RELEASE-DEN-WIKI-NOTES-GATEWAY","release","RELEASE-DEN-WIKI-NOTES-GATEWAY","release-den-wiki-notes-gateway-x"]],"out":"release"}
+{"fn":"find_stem_match","in":["mesh-kit-den",["mesh-x","mesh-kit-den-acme","mesh"]],"out":"mesh"}
+{"fn":"find_stem_match","in":["Release 🚀 Notes",["Release 🚀 Notes","Release 🚀 Notes-2026","Release 🚀 Notes","wiki","node","RELEASE 🚀 NOTES"]],"out":"release-notes"}
+{"fn":"find_stem_match","in":["notes-acme-memory-wiki",["notes-acme-x","notes-acme-engine","notes-acme-den","notes-acme","app"]],"out":"notes-acme"}
+{"fn":"find_stem_match","in":["garden-node",["garden","-acme-"]],"out":"garden"}
+{"fn":"find_stem_match","in":["mesh-2026-x-engine-den",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["acme--kit",["acme","acme--kit"]],"out":"acme"}
+{"fn":"find_stem_match","in":["acme.kit",["acme.kit-memory","acme.kit-den","acme-notes-2026-mesh"]],"out":"acme-kit-den"}
+{"fn":"find_stem_match","in":["gateway-garden-acme-wiki-app",["gateway-garden-x","gateway-garden","gateway-garden"]],"out":"gateway-garden"}
+{"fn":"find_stem_match","in":["NODE-2026-MEMORY",["NODE-2026-MEMORY","NODE-2026","NODE-2026-MEMORY-x"]],"out":"node-2026"}
+{"fn":"find_stem_match","in":["notes-mesh-app-wiki-mesh",["notes-mesh-app-v2","notes-mesh-app","NOTES-MESH-APP-WIKI-MESH","x-gateway-task-v2","engine-notes-wiki"]],"out":"notes-mesh-app"}
+{"fn":"find_stem_match","in":["gateway-wiki-garden",["GATEWAY-WIKI-GARDEN","gateway-wiki-garden","Acme Kit","node-v2","gateway-wiki-garden-release"]],"out":"gateway-wiki-garden"}
+{"fn":"find_stem_match","in":["2026-wiki-x-memory-den",["2026-wiki-x-memory-den-garden","2026-wiki","2026-wiki","task","2026-wiki-x-memory-den-2026"]],"out":"2026-wiki"}
+{"fn":"find_stem_match","in":["memory",["den-garden-den-2026","memory-acme"]],"out":"memory-acme"}
+{"fn":"find_stem_match","in":["Café Notes",[]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["task-notes-task-memory-release",["TASK-NOTES-TASK-MEMORY-RELEASE","TASK-NOTES-TASK-MEMORY-RELEASE"]],"out":"task-notes-task-memory-release"}
+{"fn":"find_stem_match","in":["den-gateway-memory-v2-notes",["den-memory","app"]],"out":{"$t":"undefined"}}
+{"fn":"find_stem_match","in":["release-acme-kit",["release","memory","release-engine","release-wiki","release-task","release"]],"out":"release"}
