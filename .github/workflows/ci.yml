@@ -80,6 +80,8 @@ jobs:
         run: cargo build --release --locked -p rivethub --bin rh
       - name: cli tests
         run: cargo nextest run --locked -p cli --all-features --profile macos --no-fail-fast
+        env:
+          TMPDIR: ${{ runner.temp }}
 
   rust:
     name: Tests (coverage) and build

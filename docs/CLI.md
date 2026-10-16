@@ -15,7 +15,9 @@ one-release compatibility binary dispatches through the same entry point.
 Platforms: `rh` targets Linux and macOS (Apple Silicon). CI builds `rh` and runs the
 `cli` tests on `macos-latest`. `rh service` and the restart step of `rh update` manage systemd units only. On macOS
 running `rh start` under launchd (a LaunchAgent or LaunchDaemon plist) is the operator's job, and `rh update` refuses
-any platform other than Linux x86_64 because that is the only published release asset.
+any platform other than Linux x86_64 because that is the only published release asset. The PKI commands refuse a
+state, holder or authority path that passes through a symlink; on macOS `/tmp` and `/var` are symlinks into
+`/private`, so keep those paths under the home directory (the default `~/.rivethub` is fine).
 
 Doctor calls `migrate`'s read-only schema status library APIs in-process. Postgres uses the async status API;
 SQLite runs on a blocking task. The typed status stays in `migrate`. Doctor never runs migrations or opens a store
