@@ -105,6 +105,7 @@ async fn recorded_memory_text(pool: PgPool) -> TestResult {
         false,
         shutdown.clone(),
     )
+    .display_zone(chrono_tz::Tz::UTC)
     .build()?;
     let (client_io, server_io) = tokio::io::duplex(65536);
     let task = tokio::spawn(mcp::transport::serve_io(

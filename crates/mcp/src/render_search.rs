@@ -21,14 +21,21 @@ pub(crate) fn age(date: DateTime<Utc>, now: DateTime<Utc>) -> String {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Clock {
+    pub(crate) now: DateTime<Utc>,
+    pub(crate) zone: chrono_tz::Tz,
+}
+
 pub(crate) fn search(
     query: &SearchQuery,
     outcome: &SearchOutcome,
     messages: &BTreeMap<String, MemoryEntry>,
     tags: &BTreeMap<String, Vec<TagWire>>,
     expand: bool,
-    now: DateTime<Utc>,
+    clock: Clock,
 ) -> Result<String, Error> {
+    let Clock { now, zone } = clock;
     let mut text = String::new();
     if let Some(degraded) = &outcome.degraded {
         write!(text, "⚠ {}\n{}\n\n", degraded.reason, degraded.effect)?;
@@ -68,11 +75,11 @@ pub(crate) fn search(
         let mut blocks = Vec::new();
         for hit in summaries {
             blocks.push(match outcome.summaries.get(&hit.id) {
-                Some(detail) => summary(hit, detail, expand, now)?,
+                Some(detail) => summary(hit, detail, expand, now, zone)?,
                 None => format!(
                     "- [summary/{}] ({}, score: {:.3}) {}",
                     hit.id,
-                    dated(hit, now),
+                    dated(hit, now, zone),
                     hit.relevance_score,
                     hit.content
                 ),
@@ -87,7 +94,7 @@ pub(crate) fn search(
             let entry = messages.get(&hit.id).ok_or_else(|| {
                 Error::Invalid(format!("message {} disappeared during search", hit.id))
             })?;
-            blocks.push(message(hit, entry, tags, now)?);
+            blocks.push(message(hit, entry, tags, now, zone)?);
         }
         text.push_str(&blocks.join("\n"));
     }
@@ -99,6 +106,7 @@ fn message(
     entry: &MemoryEntry,
     tags: &BTreeMap<String, Vec<TagWire>>,
     now: DateTime<Utc>,
+    zone: chrono_tz::Tz,
 ) -> Result<String, Error> {
     let mut heading = format!("- [{}/{}]", entry.agent, entry.role);
     if let Some(name) = &entry.tool_name {
@@ -107,7 +115,7 @@ fn message(
     write!(
         heading,
         " ({}, score: {:.3})",
-        dated(hit, now),
+        dated(hit, now, zone),
         hit.relevance_score
     )?;
     if let Some(tags) = render_memory::tags(entry, tags) {
@@ -162,11 +170,11 @@ fn empty(query: &SearchQuery) -> String {
     }
 }
 
-fn dated(hit: &MemorySearchResult, now: DateTime<Utc>) -> String {
+fn dated(hit: &MemorySearchResult, now: DateTime<Utc>, zone: chrono_tz::Tz) -> String {
     format!(
         "{} · {}",
         age(hit.created_at, now),
-        render_memory::timestamp(hit.created_at)
+        render_memory::timestamp(hit.created_at, zone)
     )
 }
 
@@ -175,6 +183,7 @@ fn summary(
     detail: &SummaryDetail,
     expand: bool,
     now: DateTime<Utc>,
+    zone: chrono_tz::Tz,
 ) -> Result<String, Error> {
     let tags = if detail.tags.is_empty() {
         String::new()
@@ -186,7 +195,7 @@ fn summary(
             "- [{}/{}] ({}, score: {:.3}){tags} {}",
             detail.kind,
             hit.id,
-            dated(hit, now),
+            dated(hit, now, zone),
             hit.relevance_score,
             hit.content
         ));
@@ -194,15 +203,15 @@ fn summary(
     let mut text = format!(
         "**[{}]** ({}, score: {:.3}",
         detail.kind,
-        dated(hit, now),
+        dated(hit, now, zone),
         hit.relevance_score,
     );
     if let (Some(earliest), Some(latest)) = (detail.earliest_at, detail.latest_at) {
         write!(
             text,
             ", period: {} → {}",
-            earliest.format("%Y-%m-%d"),
-            latest.format("%Y-%m-%d")
+            render_memory::local_date(earliest, zone),
+            render_memory::local_date(latest, zone)
         )?;
     }
     write!(text, "){tags}\n{}", hit.content)?;

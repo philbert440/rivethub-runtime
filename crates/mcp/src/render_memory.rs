@@ -90,6 +90,7 @@ pub(crate) fn browse(
     entries: &[MemoryEntry],
     filter: &BrowseFilter,
     sessions: &BTreeMap<String, Vec<TagWire>>,
+    zone: chrono_tz::Tz,
 ) -> Result<String, Error> {
     let mut details = Vec::new();
     if let Some(window) = filter.window {
@@ -139,7 +140,7 @@ pub(crate) fn browse(
     for entry in entries {
         let mut heading = String::new();
         if let Some(date) = entry.created_at {
-            write!(heading, "[{}] ", timestamp(date))?;
+            write!(heading, "[{}] ", timestamp(date, zone))?;
         }
         write!(heading, "{}/{}", entry.agent, entry.role)?;
         if let Some(name) = &entry.tool_name {
@@ -155,8 +156,14 @@ pub(crate) fn browse(
     Ok(text)
 }
 
-pub(crate) fn timestamp(date: DateTime<Utc>) -> String {
-    date.format("%Y-%m-%d %H:%M:%S UTC").to_string()
+pub(crate) fn timestamp(date: DateTime<Utc>, zone: chrono_tz::Tz) -> String {
+    date.with_timezone(&zone)
+        .format("%Y-%m-%d %H:%M:%S %Z")
+        .to_string()
+}
+
+pub(crate) fn local_date(date: DateTime<Utc>, zone: chrono_tz::Tz) -> String {
+    date.with_timezone(&zone).format("%Y-%m-%d").to_string()
 }
 
 pub(crate) fn get_full(id: &str, entry: Option<&MemoryEntry>) -> Result<String, Error> {

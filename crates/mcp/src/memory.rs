@@ -160,7 +160,11 @@ pub(crate) fn limit(
     Ok(Limit::clamped(raw, default, 1..=maximum))
 }
 
-pub async fn search(store: &dyn MemoryStore, args: Search) -> Result<CallToolResult, Error> {
+pub async fn search(
+    store: &dyn MemoryStore,
+    args: Search,
+    zone: chrono_tz::Tz,
+) -> Result<CallToolResult, Error> {
     let scope = match args.scope {
         Some(scope) => scope,
         None => MemoryScope::Both,
@@ -217,11 +221,18 @@ pub async fn search(store: &dyn MemoryStore, args: Search) -> Result<CallToolRes
         &messages,
         &tags,
         expand,
-        Utc::now(),
+        crate::render_search::Clock {
+            now: Utc::now(),
+            zone,
+        },
     )?))
 }
 
-pub async fn browse(store: &dyn MemoryStore, args: Browse) -> Result<CallToolResult, Error> {
+pub async fn browse(
+    store: &dyn MemoryStore,
+    args: Browse,
+    zone: chrono_tz::Tz,
+) -> Result<CallToolResult, Error> {
     if args.window.is_some() && (args.since.is_some() || args.before.is_some()) {
         return Err(Error::Invalid(
             "window cannot be combined with since or before".into(),
@@ -271,6 +282,7 @@ pub async fn browse(store: &dyn MemoryStore, args: Browse) -> Result<CallToolRes
         &entries,
         &display_filter,
         &sessions,
+        zone,
     )?))
 }
 

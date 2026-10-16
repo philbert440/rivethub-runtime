@@ -306,6 +306,7 @@ impl NodeBoot<'_> {
             self.config,
             Arc::clone(self.store) as Arc<dyn MemoryStore>,
             delegation,
+            sidecar::display_zone(self.env),
             self.shutdown.clone(),
         )?;
         let failed = self.failed.clone();

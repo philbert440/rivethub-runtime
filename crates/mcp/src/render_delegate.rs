@@ -37,22 +37,41 @@ pub(crate) fn agents(directory: &AgentDirectory) -> Result<String, Error> {
     Ok(lines.join("\n"))
 }
 
-pub(crate) fn task(outcome: &DelegateOutcome) -> Result<String, Error> {
-    let mut text = format!("[{}]", outcome.status);
+pub(crate) fn task(outcome: &DelegateOutcome, elapsed: std::time::Duration) -> String {
+    let status = if outcome.timed_out {
+        "timeout".to_owned()
+    } else {
+        outcome.status.to_string()
+    };
+    let mut meta = vec![format!("{}ms", elapsed.as_millis())];
     if let Some(result) = &outcome.result {
-        text.push(' ');
-        text.push_str(&result.summary);
-        if let Some(output) = &result.output {
-            text.push_str("\n\n");
-            text.push_str(output);
-        }
+        meta.push(format!("tokens: {}", result.usage.total_tokens));
     }
-    if let Some(error) = &outcome.error {
-        write!(text, "\n{error}")?;
+    let meta_line = format!("\n\n---\n_Delegation [{status}]: {}_", meta.join(" | "));
+    if outcome.status == wire::task::TaskStatus::Completed && !outcome.timed_out {
+        let response = outcome
+            .result
+            .as_ref()
+            .and_then(|result| {
+                result
+                    .output
+                    .clone()
+                    .filter(|output| !output.is_empty())
+                    .or_else(|| Some(result.summary.clone()).filter(|summary| !summary.is_empty()))
+            })
+            .unwrap_or_else(|| "[no response from remote agent]".to_owned());
+        return format!("{response}{meta_line}");
     }
-    if outcome.timed_out {
-        text.push_str("\nTimed out waiting for the delegate.");
-    }
-    write!(text, "\n\nTask: {}", outcome.id)?;
-    Ok(text)
+    let reason = outcome
+        .error
+        .clone()
+        .or_else(|| {
+            outcome
+                .result
+                .as_ref()
+                .and_then(|result| result.error.clone())
+        })
+        .or_else(|| outcome.result.as_ref().map(|result| result.summary.clone()))
+        .unwrap_or_default();
+    format!("[{status}] {reason}{meta_line}")
 }

@@ -316,8 +316,16 @@ async fn delegated(home: &Path, database: &Path, mcp_port: u16) -> TestResult {
     let outcome = delegate_outcome(mcp_port).await;
     stop(started).await?;
     let outcome = outcome?;
-    let (body, id) = outcome.rsplit_once("\n\nTask: ").ok_or("task footer")?;
-    assert_eq!(body, format!("[completed] {DELEGATE_TEXT}"));
+    let (body, meta) = outcome
+        .split_once("\n\n---\n")
+        .ok_or("delegation meta line")?;
+    assert_eq!(body, DELEGATE_TEXT);
+    assert!(meta.starts_with("_Delegation [completed]: "), "{meta}");
+    let id: String = rusqlite::Connection::open(database)?.query_row(
+        "SELECT id FROM rh_tasks ORDER BY created_at DESC LIMIT 1",
+        [],
+        |row| row.get(0),
+    )?;
     let store = memory_sqlite::SqliteStore::open(database)?;
     let stored = store.load(id.parse()?).await?;
     assert_eq!(stored.status, wire::task::TaskStatus::Completed);

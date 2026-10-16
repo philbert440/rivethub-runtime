@@ -32,6 +32,7 @@ pub struct Server {
     tools: Arc<Vec<Tool>>,
     memory_write: bool,
     shutdown: CancellationToken,
+    zone: chrono_tz::Tz,
 }
 
 pub struct Builder {
@@ -39,6 +40,7 @@ pub struct Builder {
     memory_write: bool,
     shutdown: CancellationToken,
     delegation: Option<(Arc<dyn Delegation>, Surface)>,
+    zone: Option<chrono_tz::Tz>,
 }
 
 #[cfg_attr(
@@ -114,6 +116,7 @@ impl Server {
             memory_write,
             shutdown,
             delegation: None,
+            zone: None,
         }
     }
 
@@ -179,8 +182,12 @@ impl Server {
         cancel: CancellationToken,
     ) -> Result<CallToolResult, Error> {
         match operation {
-            Operation::Search => memory::search(self.memory.as_ref(), decode(arguments)?).await,
-            Operation::Browse => memory::browse(self.memory.as_ref(), decode(arguments)?).await,
+            Operation::Search => {
+                memory::search(self.memory.as_ref(), decode(arguments)?, self.zone).await
+            }
+            Operation::Browse => {
+                memory::browse(self.memory.as_ref(), decode(arguments)?, self.zone).await
+            }
             Operation::Stats => memory::stats(self.memory.as_ref(), decode(arguments)?).await,
             Operation::GetFull => memory::get_full(self.memory.as_ref(), decode(arguments)?).await,
             Operation::Tags => {
@@ -203,6 +210,12 @@ impl Server {
 }
 
 impl Builder {
+    #[must_use]
+    pub fn display_zone(mut self, zone: chrono_tz::Tz) -> Self {
+        self.zone = Some(zone);
+        self
+    }
+
     #[must_use]
     pub fn delegation(mut self, port: Arc<dyn Delegation>, surface: Surface) -> Self {
         self.delegation = Some((port, surface));
@@ -236,6 +249,7 @@ impl Builder {
             tools: Arc::new(tools),
             memory_write: self.memory_write,
             shutdown: self.shutdown,
+            zone: self.zone.unwrap_or(chrono_tz::Tz::UTC),
         })
     }
 }

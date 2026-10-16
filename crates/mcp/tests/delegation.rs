@@ -152,10 +152,12 @@ async fn delegate_task_joins_context_and_applies_the_default_timeout() {
     )
     .await;
     assert_eq!(result.is_error, None);
-    assert_eq!(
-        text(&result),
-        "[completed]\nkept\n\nTask: 00000000-0000-0000-0000-000000000000"
+    let rendered = text(&result);
+    assert!(
+        rendered.starts_with("[no response from remote agent]\n\n---\n_Delegation [completed]: "),
+        "{rendered}"
     );
+    assert!(rendered.ends_with("ms_"), "{rendered}");
     let request = port.requests.lock().await.first().expect("request").clone();
     assert_eq!(request.target, "worker");
     assert_eq!(request.requested_by.as_deref(), Some("mcp-sidecar"));

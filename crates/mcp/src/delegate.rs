@@ -91,8 +91,9 @@ pub(crate) async fn task(
         node: None,
         timeout: timeout_ms(arguments.timeout_ms)?,
     };
+    let started = std::time::Instant::now();
     match port.delegate(request, cancel).await {
-        Ok(outcome) => Ok(text(render_delegate::task(&outcome)?)),
+        Ok(outcome) => Ok(text(render_delegate::task(&outcome, started.elapsed()))),
         Err(error) => Err(map_delegation(error)),
     }
 }

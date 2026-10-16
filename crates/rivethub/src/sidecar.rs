@@ -162,6 +162,7 @@ async fn run_server(
     let delegation = crate::agent::open_delegation(config, env, shutdown).await?;
     let ran = async {
         let server = mcp::Server::builder(memory, false, shutdown.child_token())
+            .display_zone(display_zone(env))
             .delegation(Arc::clone(&delegation.port), surface(&selected))
             .build()?;
         serve(server, selected, shutdown.clone()).await
@@ -176,6 +177,7 @@ pub(crate) fn memory_future(
     config: &Config,
     memory: Arc<dyn MemoryStore>,
     delegation: Option<Arc<dyn kernel::tasks::Delegation>>,
+    zone: chrono_tz::Tz,
     shutdown: CancellationToken,
 ) -> Result<impl std::future::Future<Output = Result<(), SidecarError>> + Send + use<>, SidecarError>
 {
@@ -185,7 +187,8 @@ pub(crate) fn memory_future(
             "rh local serves MCP only when a host or socket is configured".into(),
         ));
     }
-    let mut builder = mcp::Server::builder(memory, false, shutdown.child_token());
+    let mut builder =
+        mcp::Server::builder(memory, false, shutdown.child_token()).display_zone(zone);
     if let Some(port) = delegation {
         builder = builder.delegation(port, mcp::Surface::Stdio);
     }
@@ -427,5 +430,36 @@ async fn join_task<T: Send>(
         biased;
         () = shutdown.cancelled() => (&mut task).await,
         result = &mut task => result,
+    }
+}
+
+pub(crate) fn display_zone(env: &Environment) -> chrono_tz::Tz {
+    let configured = env
+        .get("TZ")
+        .and_then(std::ffi::OsStr::to_str)
+        .map(|value| value.trim_start_matches(':').to_owned())
+        .filter(|value| !value.is_empty());
+    let Some(name) = configured.or_else(zone_from_localtime) else {
+        return chrono_tz::Tz::UTC;
+    };
+    match name.parse::<chrono_tz::Tz>() {
+        Ok(zone) => zone,
+        Err(error) => {
+            tracing::warn!("unknown time zone {name:?} ({error}) — MCP timestamps show UTC");
+            chrono_tz::Tz::UTC
+        }
+    }
+}
+
+fn zone_from_localtime() -> Option<String> {
+    match std::fs::read_link("/etc/localtime") {
+        Ok(target) => {
+            let (_, name) = target.to_str()?.split_once("zoneinfo/")?;
+            Some(name.to_owned())
+        }
+        Err(error) => {
+            tracing::debug!(%error, "/etc/localtime is not a zone link — MCP timestamps show UTC");
+            None
+        }
     }
 }
