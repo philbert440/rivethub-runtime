@@ -38,6 +38,18 @@ pub enum Error {
     NotAdopted,
     #[error("the graphile_worker schema is absent on this database")]
     QueueAbsent,
+    #[error("Postgres dump line {line}: {detail}")]
+    DumpFormat { line: usize, detail: String },
+    #[error("Postgres import refused: target table {table} is not empty")]
+    DumpOccupied { table: &'static str },
+    #[error("Postgres dump is incomplete: expected COPY blocks and the pg_dump completion footer")]
+    DumpTruncated,
+    #[error("Postgres dump repeats table {table}")]
+    DumpDuplicate { table: &'static str },
+    #[error("memory dump cancelled")]
+    DumpCancelled,
+    #[error("{0}")]
+    DumpMessage(String),
     #[error("{operation} failed: {message}")]
     Operation {
         operation: &'static str,
@@ -89,7 +101,13 @@ impl From<Error> for MemoryStoreError {
             Error::MissingChannel
             | Error::UnresolvedWindow
             | Error::InvalidId(_)
-            | Error::Json(_) => Self::InvalidRequest {
+            | Error::Json(_)
+            | Error::DumpFormat { .. }
+            | Error::DumpOccupied { .. }
+            | Error::DumpTruncated
+            | Error::DumpDuplicate { .. }
+            | Error::DumpCancelled
+            | Error::DumpMessage(_) => Self::InvalidRequest {
                 message: value.to_string(),
             },
             Error::Integer(_)
@@ -126,7 +144,13 @@ impl From<Error> for JobQueueError {
             | Error::Integer(_)
             | Error::ProjectIo(_)
             | Error::ProjectEncoding(_)
-            | Error::ProjectTask(_) => Self::Unavailable(Box::new(value)),
+            | Error::ProjectTask(_)
+            | Error::DumpFormat { .. }
+            | Error::DumpOccupied { .. }
+            | Error::DumpTruncated
+            | Error::DumpDuplicate { .. }
+            | Error::DumpCancelled
+            | Error::DumpMessage(_) => Self::Unavailable(Box::new(value)),
             error @ Error::StoredValue { .. } => Self::Claim {
                 message: error.to_string(),
                 source: Box::new(error),

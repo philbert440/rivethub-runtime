@@ -289,6 +289,7 @@ pub(super) fn finish(finished: Finished) -> Result<Report, Error> {
         stdout,
         stderr: warnings,
         exit: Exit::Ok,
+        stdout_raw: Vec::new(),
     })
 }
 
@@ -332,6 +333,7 @@ fn cancelled(error: &Error) -> bool {
 fn hub(error: &Error) -> Report {
     Report {
         stdout: String::new(),
+        stdout_raw: Vec::new(),
         stderr: format!("  ❌ {error}\n"),
         exit: Exit::Failure,
     }

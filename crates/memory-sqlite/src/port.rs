@@ -286,6 +286,7 @@ fn claim_message(error: &SqliteError) -> Option<String> {
         | SqliteError::Regex(_)
         | SqliteError::StoredEmbedding
         | SqliteError::SearchCancelled
+        | SqliteError::ExportCancelled
         | SqliteError::SynthesisUnconfigured
         | SqliteError::MissingHit { .. }
         | SqliteError::MissingTable { .. }

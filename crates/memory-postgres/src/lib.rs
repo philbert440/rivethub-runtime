@@ -1,6 +1,8 @@
 mod access;
+pub mod admin;
 pub mod capture;
 mod conversation;
+pub mod dump;
 pub mod embed;
 mod embedding_store;
 pub mod error;

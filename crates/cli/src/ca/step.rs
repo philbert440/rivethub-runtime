@@ -42,6 +42,7 @@ pub(super) async fn issue(
         stdout: format!("{}\n", minted.token),
         stderr: minted.stderr,
         exit: Exit::Ok,
+        stdout_raw: Vec::new(),
     })
 }
 

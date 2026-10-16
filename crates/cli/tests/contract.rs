@@ -4,7 +4,7 @@ use cli::{ConfigCommand, Exit};
 use std::collections::BTreeSet;
 use support::{config, environment, home, run};
 
-const DEFERRED: [(&str, &str); 12] = [
+const DEFERRED: [(&str, &str); 10] = [
     (
         "start",
         "The third slice of this contract supervises the service roots.",
@@ -13,8 +13,6 @@ const DEFERRED: [(&str, &str); 12] = [
     ("init", "Interactive setup is a later slice."),
     ("pair", "Device pairing CLI is a later slice."),
     ("user", "User administration is a later slice."),
-    ("memory", "Memory administration is a later slice."),
-    ("logs", "Log viewing is a later slice."),
     ("test", "Provider diagnostics are a later slice."),
     ("agent", "Agent commands are a later slice."),
     ("model", "Model commands are a later slice."),
@@ -56,6 +54,39 @@ fn every_readme_deferred_scenario_has_a_named_reason() {
         ["README.md"],
         "new transcripts must be added to the replay suite"
     );
+}
+
+const SKIPPED: [(&str, &str); 4] = [
+    (
+        "docker log detection",
+        "rh logs always reads the rivethub journal",
+    ),
+    (
+        "bare-metal tee instructions",
+        "bare metal still reads the rivethub journal",
+    ),
+    (
+        "embedded postgres",
+        "memory commands never start a database",
+    ),
+    (
+        "rh cloud import",
+        "cloud-host import exits 2; the cloud import command is not implemented",
+    ),
+];
+
+#[test]
+fn skipped_memory_and_logs_scenarios_name_a_reason() {
+    let readme =
+        std::fs::read_to_string(testkit::recording("cli/README.md")).expect("CLI contract");
+    let rest = readme
+        .split("## `rh service`")
+        .nth(1)
+        .expect("service section");
+    for (name, reason) in SKIPPED {
+        assert!(!reason.is_empty(), "{name}");
+        assert!(rest.contains(name), "{name}");
+    }
 }
 
 #[tokio::test]

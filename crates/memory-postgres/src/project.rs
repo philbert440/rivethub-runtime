@@ -43,6 +43,13 @@ fn plan_project_rule_tag(
     Ok(Some(basename_rule(trimmed)))
 }
 
+pub async fn project_rule_tag(
+    cwd: Option<String>,
+    allow_filesystem: bool,
+) -> Result<Option<ProjectTag>, Error> {
+    resolve_project_tag_blocking(cwd, allow_filesystem).await
+}
+
 pub(crate) async fn resolve_project_tag_blocking(
     cwd: Option<String>,
     allow_filesystem: bool,

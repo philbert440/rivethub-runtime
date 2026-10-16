@@ -11,6 +11,7 @@ rust-version.workspace = true
 async-trait = { workspace = true }
 chrono = { workspace = true }
 hex = { workspace = true }
+futures = { workspace = true }
 kernel = { workspace = true }
 parking_lot = { workspace = true }
 pgvector = { workspace = true, features = ["halfvec", "sqlx"] }

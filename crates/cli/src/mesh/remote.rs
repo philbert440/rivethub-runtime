@@ -245,6 +245,7 @@ async fn classify_join(response: reqwest::Response) -> Result<Posted, Error> {
         Loaded::TooLarge => {
             return Ok(Posted::Report(Report {
                 stdout: String::new(),
+                stdout_raw: Vec::new(),
                 stderr: format!("❌ Join failed: HTTP {code} — body exceeds 1 MiB\n"),
                 exit: Exit::Failure,
             }));
@@ -253,6 +254,7 @@ async fn classify_join(response: reqwest::Response) -> Result<Posted, Error> {
     match String::from_utf8(bytes) {
         Ok(body) => Ok(Posted::Report(Report {
             stdout: String::new(),
+            stdout_raw: Vec::new(),
             stderr: format!("❌ Join failed: HTTP {code} — {body}\n"),
             exit: Exit::Failure,
         })),
@@ -360,6 +362,7 @@ fn render_ping(nodes: Vec<PingNode>, json: bool) -> Result<Report, Error> {
         stdout,
         stderr: String::new(),
         exit: if failed { Exit::Failure } else { Exit::Ok },
+        stdout_raw: Vec::new(),
     })
 }
 
@@ -491,6 +494,7 @@ fn plain_join(host: Option<&str>) -> Report {
         None => Report::success(JOIN_POINTER),
         Some(host) => Report {
             stdout: String::new(),
+            stdout_raw: Vec::new(),
             stderr: format!(
                 "mesh join {host} is no longer a join (exiting non-zero so scripts do not assume success). Use `rh mesh enroll <user@host> --name <node>`, or `rh mesh join --manual <host>` for the legacy YAML flow.\n"
             ),
@@ -502,6 +506,7 @@ fn plain_join(host: Option<&str>) -> Report {
 fn seed_status(code: u16) -> Report {
     Report {
         stdout: String::new(),
+        stdout_raw: Vec::new(),
         stderr: format!("❌ Seed node responded with HTTP {code}\n"),
         exit: Exit::Failure,
     }
@@ -510,6 +515,7 @@ fn seed_status(code: u16) -> Report {
 fn seed_reach(message: &str) -> Report {
     Report {
         stdout: String::new(),
+        stdout_raw: Vec::new(),
         stderr: format!("❌ Cannot reach seed node: {message}\n"),
         exit: Exit::Failure,
     }

@@ -24,7 +24,7 @@ alias), state in `~/.rivethub`, environment `RIVETHUB_*` (the `RIVETOS_*` aliase
 The CA and holder commands are now implemented; their approved new B14 contract and acceptance coverage are documented in `crates/cli/README.md`. They have no historical recordings.
 
 Out of this slice (later slices): `start`, `update --mesh`, `init`, `pair`,
-`user`, `memory`, `logs`, `test`, `agent`, `model`, `keys`, `gateway token`.
+`user`, `test`, `agent`, `model`, `keys`, `gateway token`.
 
 ## `rh service` (second slice)
 Manages the systemd unit that runs the node. Run as root, it manages `/etc/systemd/system/rivethub.service`; otherwise the
@@ -67,3 +67,7 @@ Tests drive `rh start` with fake roots: a test binary that sleeps, crashes or ig
 ## `rh mesh`
 
 `rh mesh` registers and inspects mesh nodes through `gateway::mesh::Registry` and the typed `mesh.json` document. `enroll` mints a roster token with the same `pki` minter as `rh ca token`, writes the holder key under the state directory, and records the node. `renew` calls `rh cert renew` over step-ca mTLS and does not rewrite `mesh.json`. `sync` reads `http://<hub>:<port>/mesh.json` and merges it. `join --manual` reads that same document from the seed and posts `/api/mesh/join`. SSH to `rivethub-hub`, `rivet-ca.sh`, and the legacy YAML seed are not implemented. The roster is `/rivet-shared/rivet-ca/mesh-nodes.conf`, never `mesh.json`. Private keys are not written under `/rivet-shared`.
+
+## Memory and logs scenarios left out
+
+`docker log detection` is not implemented: `rh logs` always reads the `rivethub` journal. `bare-metal tee instructions` are not implemented: `RIVETHUB_BARE_METAL` still reads that journal. `embedded postgres` is not started: memory commands never launch a database. `rh cloud import` is not implemented: a cloud-host import exits 2 and names that command.

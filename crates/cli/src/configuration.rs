@@ -71,6 +71,7 @@ async fn validate(path: Option<PathBuf>, env: &Environment) -> Result<Report, Er
         } else {
             Exit::Failure
         },
+        stdout_raw: Vec::new(),
     })
 }
 

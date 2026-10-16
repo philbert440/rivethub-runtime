@@ -105,6 +105,7 @@ impl DoctorReport {
             } else {
                 Exit::Failure
             },
+            stdout_raw: Vec::new(),
         })
     }
 }

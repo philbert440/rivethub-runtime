@@ -21,6 +21,8 @@ pub enum ServiceCommand {
     Logs,
 }
 
+pub const UNIT_NAME: &str = "rivethub";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
     System,
@@ -34,8 +36,25 @@ impl Scope {
 
     pub fn unit_path(self, home: &Path) -> PathBuf {
         match self {
-            Self::System => PathBuf::from("/etc/systemd/system/rivethub.service"),
-            Self::User => home.join(".config/systemd/user/rivethub.service"),
+            Self::System => PathBuf::from(format!("/etc/systemd/system/{UNIT_NAME}.service")),
+            Self::User => home.join(format!(".config/systemd/user/{UNIT_NAME}.service")),
+        }
+    }
+
+    pub async fn read_journal(
+        self,
+        arguments: &[String],
+        follow: bool,
+        env: &Environment,
+        shutdown: &CancellationToken,
+    ) -> Result<Report, ServiceError> {
+        let mut command = self.command("journalctl", env);
+        command.arg("-u").arg(UNIT_NAME);
+        command.args(arguments);
+        if follow {
+            command::follow(command, shutdown).await
+        } else {
+            command::capture(command, "journalctl", shutdown).await
         }
     }
 
@@ -59,9 +78,13 @@ impl Scope {
         match action {
             ServiceCommand::Init => self.init(env, shutdown).await,
             ServiceCommand::Logs => {
-                let mut command = self.command("journalctl", env);
-                command.args(["-u", "rivethub", "-f", "--no-pager"]);
-                command::follow(command, shutdown).await
+                self.read_journal(
+                    &["-f".to_string(), "--no-pager".to_string()],
+                    true,
+                    env,
+                    shutdown,
+                )
+                .await
             }
             ServiceCommand::Start | ServiceCommand::Restart => {
                 self.systemctl(&["daemon-reload"], env, shutdown)

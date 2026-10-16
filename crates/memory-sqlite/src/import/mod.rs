@@ -1,3 +1,4 @@
+mod catalog;
 mod columns;
 mod copy;
 mod error;
@@ -68,8 +69,22 @@ impl ImportTable {
         arguments
     }
 
-    fn compatibility_name(self) -> String {
+    pub fn compatibility_name(self) -> String {
         format!("ros_{self}")
+    }
+
+    pub fn postgres_name(self) -> String {
+        format!("rh_{self}")
+    }
+
+    #[must_use]
+    pub fn dump_columns(self) -> Option<&'static [&'static str]> {
+        catalog::columns(self)
+    }
+
+    #[must_use]
+    pub fn dump_order(self) -> &'static str {
+        catalog::order(self)
     }
 }
 
@@ -84,12 +99,29 @@ impl SqliteStore {
         path: PathBuf,
         cancellation: CancellationToken,
     ) -> Result<ImportReport, ImportError> {
+        self.load_dump(path, cancellation, true).await
+    }
+
+    pub async fn preview_pg_dump(
+        &self,
+        path: PathBuf,
+        cancellation: CancellationToken,
+    ) -> Result<ImportReport, ImportError> {
+        self.load_dump(path, cancellation, false).await
+    }
+
+    async fn load_dump(
+        &self,
+        path: PathBuf,
+        cancellation: CancellationToken,
+        apply: bool,
+    ) -> Result<ImportReport, ImportError> {
         let conn = self.conn.clone();
         self.pending
             .spawn_blocking(move || {
                 let file =
                     File::open(&path).map_err(|source| ImportError::File { path, source })?;
-                import(&mut conn.lock(), BufReader::new(file), &cancellation)
+                import(&mut conn.lock(), BufReader::new(file), &cancellation, apply)
             })
             .await?
     }
@@ -118,6 +150,7 @@ fn import(
     conn: &mut Connection,
     reader: impl BufRead,
     cancellation: &CancellationToken,
+    apply: bool,
 ) -> Result<ImportReport, ImportError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     tx.execute_batch("PRAGMA defer_foreign_keys = ON")?;
@@ -185,7 +218,11 @@ fn import(
     }
     finish(&tx, width, &report)?;
     check_cancelled(cancellation)?;
-    tx.commit()?;
+    if apply {
+        tx.commit()?;
+    } else {
+        tx.rollback()?;
+    }
     Ok(report)
 }
 

@@ -401,6 +401,7 @@ async fn run(env: &Environment, args: &[&str], shutdown: &CancellationToken) -> 
             stdout: String::new(),
             stderr: "unexpected service launch\n".to_owned(),
             exit: Exit::Failure,
+            stdout_raw: Vec::new(),
         },
     }
 }

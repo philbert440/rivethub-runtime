@@ -11,6 +11,7 @@ pub(super) struct Target {
 pub(super) fn usage(text: &'static str) -> Report {
     Report {
         stdout: String::new(),
+        stdout_raw: Vec::new(),
         stderr: text.to_owned(),
         exit: Exit::Failure,
     }
@@ -22,6 +23,7 @@ pub(super) fn ssh_refusal(value: &str) -> Option<Report> {
     } else {
         Some(Report {
             stdout: String::new(),
+            stdout_raw: Vec::new(),
             stderr: format!("❌ Refusing unsafe --ssh-user \"{value}\"\n"),
             exit: Exit::Failure,
         })

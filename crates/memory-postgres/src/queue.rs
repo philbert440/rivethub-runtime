@@ -12,6 +12,8 @@ use kernel::queue::JobName;
 use kernel::queue::JobQueue;
 use kernel::queue::JobQueueError;
 use kernel::queue::WorkerRole;
+use serde::Deserialize;
+use serde::Serialize;
 use sqlx::PgPool;
 
 #[derive(Debug)]
@@ -28,7 +30,7 @@ pub struct CronEntry {
     pub max_attempts: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueHealth {
     pub task: JobName,
     pub pending: u64,

@@ -1,3 +1,4 @@
+mod argv;
 pub mod ca;
 pub mod cert;
 mod configuration;
@@ -5,6 +6,8 @@ pub mod doctor;
 mod error;
 mod exit;
 mod local;
+pub mod logs;
+pub mod memory;
 pub mod mesh;
 mod process;
 mod roots;
@@ -27,6 +30,7 @@ pub struct Report {
     pub stdout: String,
     pub stderr: String,
     pub exit: Exit,
+    pub stdout_raw: Vec<u8>,
 }
 
 impl Report {
@@ -35,6 +39,7 @@ impl Report {
             stdout: stdout.into(),
             stderr: String::new(),
             exit: Exit::Ok,
+            stdout_raw: Vec::new(),
         }
     }
 
@@ -43,12 +48,15 @@ impl Report {
             stdout: String::new(),
             stderr: format!("Error: {error}\n"),
             exit: Exit::Failure,
+            stdout_raw: Vec::new(),
         }
     }
 
     pub fn write(self) -> Result<Exit, std::io::Error> {
         use std::io::Write;
-        std::io::stdout().lock().write_all(self.stdout.as_bytes())?;
+        let mut stdout = std::io::stdout().lock();
+        stdout.write_all(self.stdout.as_bytes())?;
+        stdout.write_all(&self.stdout_raw)?;
         std::io::stderr().lock().write_all(self.stderr.as_bytes())?;
         Ok(self.exit)
     }
@@ -89,56 +97,9 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
             | Command::Service { .. }
             | Command::Start { .. }
             | Command::Local { .. }
+            | Command::Logs { .. }
     );
-    let operation = async {
-        match command {
-            Command::Start { config } => {
-                return supervise::Supervision::production()
-                    .run(env, config, shutdown)
-                    .await
-                    .map(Dispatch::Complete);
-            }
-            Command::Local { port, no_lan } => {
-                let prepared = local::prepare(env, port, no_lan).await?;
-                if shutdown.is_cancelled() {
-                    prepared.release()?;
-                    return Ok(Dispatch::Complete(Report::success("")));
-                }
-                return Ok(Dispatch::Local(Box::new(prepared)));
-            }
-            Command::Gateway { check, config } => {
-                return Ok(Dispatch::Gateway { check, config });
-            }
-            Command::Worker {
-                role,
-                check,
-                config,
-            } => {
-                return Ok(Dispatch::Worker {
-                    role,
-                    check,
-                    config,
-                });
-            }
-            Command::Mcp { check, config } => return Ok(Dispatch::Mcp { check, config }),
-            Command::Agent { check, config } => return Ok(Dispatch::Agent { check, config }),
-            Command::Version => Ok(Report::success(version())),
-            Command::Config { command } => configuration::run(command, env).await,
-            Command::Doctor { json } => doctor::run(env, json).await,
-            Command::Status => Ok(status::run(env).await),
-            Command::Stop => process::stop(env).await,
-            Command::Service { command } => {
-                service::Scope::for_uid(nix::unistd::geteuid().as_raw())
-                    .run(command, env, shutdown)
-                    .await
-                    .map_err(Error::from)
-            }
-            Command::Ca(args) => ca::run(args, env, shutdown).await,
-            Command::Cert { command } => cert::run(command, env, shutdown).await,
-            Command::Mesh(args) => mesh::run(args, env, shutdown).await,
-        }
-        .map(Dispatch::Complete)
-    };
+    let operation = command_dispatch(command, env, shutdown);
     let result = if structured_shutdown {
         operation.await
     } else {
@@ -152,6 +113,74 @@ pub async fn dispatch(cli: Cli, env: &Environment, shutdown: &CancellationToken)
         Ok(dispatch) => dispatch,
         Err(error) => Dispatch::Complete(Report::failure(&error)),
     }
+}
+
+async fn command_dispatch(
+    command: Command,
+    env: &Environment,
+    shutdown: &CancellationToken,
+) -> Result<Dispatch, Error> {
+    match command {
+        Command::Start { config } => {
+            return supervise::Supervision::production()
+                .run(env, config, shutdown)
+                .await
+                .map(Dispatch::Complete);
+        }
+        Command::Local { port, no_lan } => {
+            let prepared = local::prepare(env, port, no_lan).await?;
+            if shutdown.is_cancelled() {
+                prepared.release()?;
+                return Ok(Dispatch::Complete(Report::success("")));
+            }
+            return Ok(Dispatch::Local(Box::new(prepared)));
+        }
+        Command::Gateway { check, config } => {
+            return Ok(Dispatch::Gateway { check, config });
+        }
+        Command::Worker {
+            role,
+            check,
+            config,
+        } => {
+            return Ok(Dispatch::Worker {
+                role,
+                check,
+                config,
+            });
+        }
+        Command::Mcp { check, config } => return Ok(Dispatch::Mcp { check, config }),
+        Command::Agent { check, config } => return Ok(Dispatch::Agent { check, config }),
+        Command::Version => Ok(Report::success(version())),
+        Command::Config { command } => configuration::run(command, env).await,
+        Command::Doctor { json } => doctor::run(env, json).await,
+        Command::Status => Ok(status::run(env).await),
+        Command::Stop => process::stop(env).await,
+        Command::Service { command } => service::Scope::for_uid(nix::unistd::geteuid().as_raw())
+            .run(command, env, shutdown)
+            .await
+            .map_err(Error::from),
+        Command::Ca(args) => ca::run(args, env, shutdown).await,
+        Command::Cert { command } => cert::run(command, env, shutdown).await,
+        Command::Mesh(args) => mesh::run(args, env, shutdown).await,
+        Command::Memory { args } => Ok(memory::execute(
+            &args,
+            env,
+            shutdown,
+            std::io::IsTerminal::is_terminal(&std::io::stdout()),
+        )
+        .await),
+        Command::Logs { args } => {
+            logs::execute(
+                service::Scope::for_uid(nix::unistd::geteuid().as_raw()),
+                &args,
+                env,
+                shutdown,
+            )
+            .await
+        }
+    }
+    .map(Dispatch::Complete)
 }
 
 fn version() -> String {

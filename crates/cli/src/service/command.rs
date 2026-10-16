@@ -56,6 +56,7 @@ pub(super) async fn capture(
                 stdout: String::from_utf8(stdout)?,
                 stderr: String::from_utf8(stderr)?,
                 exit: exit(status)?,
+                stdout_raw: Vec::new(),
             })
         }
     }
@@ -103,6 +104,7 @@ pub(super) async fn follow(
         stdout: String::new(),
         stderr: String::new(),
         exit,
+        stdout_raw: Vec::new(),
     })
 }
 

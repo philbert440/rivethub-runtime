@@ -142,4 +142,80 @@ pub enum Error {
     StatePath,
     #[error(transparent)]
     Registry(#[from] gateway::mesh::RegistryError),
+    #[error("RIVETHUB_PG_URL is required.")]
+    PostgresUrlRequired,
+    #[error("Unknown option: {0}")]
+    UnknownOption(String),
+    #[error("--task requires a task identifier (e.g. extract-wiki)")]
+    TaskRequired,
+    #[error("--error requires a substring to match against last_error")]
+    ErrorSubstringRequired,
+    #[error(
+        "At least one --task <identifier> is required (e.g. --task extract-wiki). Refusing to reset every dead job without an explicit task filter."
+    )]
+    RetryTaskFilter,
+    #[error(
+        "At least one --task <identifier> is required (e.g. --task extract-wiki). Refusing to requeue every dead job without an explicit task filter."
+    )]
+    RequeueTaskFilter,
+    #[error("--task {task} is not an allowed memory task ({allowed})")]
+    TaskNotAllowed { task: String, allowed: &'static str },
+    #[error("requeue accepts one --task")]
+    OneTask,
+    #[error("--limit requires a positive integer")]
+    LimitPositive,
+    #[error("--limit requires an integer")]
+    LimitInteger,
+    #[error("--out requires a file path")]
+    OutRequired,
+    #[error("--since requires an ISO timestamp")]
+    SinceRequired,
+    #[error("invalid --since timestamp: {0}")]
+    SinceInvalid(String),
+    #[error("refusing to write gzip to a TTY (redirect stdout or pass --out <file>)")]
+    GzipTty,
+    #[error("import requires a file path")]
+    ImportPath,
+    #[error("import accepts one file path")]
+    ImportOne,
+    #[error("--sqlite requires a file path")]
+    SqliteRequired,
+    #[error("unexpected argument: {0}")]
+    Unexpected(String),
+    #[error("output path is a symlink")]
+    OutputSymlink,
+    #[error("output directory does not exist")]
+    OutputDirectory,
+    #[error("output path has no file name")]
+    OutputName,
+    #[error("hostname is unavailable")]
+    HostUnavailable,
+    #[error("invalid RIVETHUB_PG_URL: {0}")]
+    MemoryUrl(url::ParseError),
+    #[error("RIVETHUB_PG_URL has no host")]
+    MemoryHost,
+    #[error("rh logs accepts one agent identifier")]
+    OneAgent,
+    #[error("--lines requires an integer")]
+    LinesInteger,
+    #[error("--level requires a syslog level")]
+    LevelRequired,
+    #[error("unknown syslog level: {0}")]
+    LevelUnknown(String),
+    #[error("--since requires a time")]
+    JournalSince,
+    #[error("--grep requires text")]
+    GrepRequired,
+    #[error("unknown export source: {0}")]
+    UnknownDumpSource(String),
+    #[error("memory dump is not UTF-8")]
+    DumpEncoding,
+    #[error("export host is empty")]
+    DumpHost,
+    #[error(transparent)]
+    MemoryPostgres(#[from] memory_postgres::Error),
+    #[error(transparent)]
+    MemorySqlite(#[from] memory_sqlite::SqliteError),
+    #[error(transparent)]
+    MemoryImport(#[from] memory_sqlite::import::ImportError),
 }

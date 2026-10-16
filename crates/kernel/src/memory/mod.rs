@@ -29,6 +29,7 @@ use wire::message::Role;
 use crate::BoxError;
 
 mod embed;
+mod origin;
 mod search;
 mod suggest;
 mod summary;
@@ -41,6 +42,8 @@ pub use embed::LoadedTarget;
 pub use embed::StoredChunk;
 pub use embed::StoredEmbedding;
 pub use embed::Unembeddable;
+pub use origin::DumpOrigin;
+pub use origin::DumpSource;
 pub use search::SearchOutcome;
 pub use suggest::TagJobContext;
 pub use suggest::TagOnEntity;

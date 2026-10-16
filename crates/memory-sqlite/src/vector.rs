@@ -24,3 +24,18 @@ pub(crate) fn pack(values: &[f32]) -> Vec<u8> {
         .flat_map(|value| value.to_le_bytes())
         .collect()
 }
+
+pub(crate) fn unpack(bytes: &[u8]) -> Result<Vec<f32>, ()> {
+    if !bytes.len().is_multiple_of(4) {
+        return Err(());
+    }
+    let mut values = Vec::with_capacity(bytes.len() / 4);
+    for chunk in bytes.as_chunks::<4>().0 {
+        let value = f32::from_le_bytes(*chunk);
+        if !value.is_finite() {
+            return Err(());
+        }
+        values.push(value);
+    }
+    Ok(values)
+}

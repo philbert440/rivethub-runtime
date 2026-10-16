@@ -8,8 +8,10 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+memory-postgres.workspace = true
 memory-sqlite.workspace = true
 base64.workspace = true
+flate2 = { workspace = true }
 kernel.workspace = true
 pki.workspace = true
 stepca.workspace = true
@@ -40,7 +42,6 @@ wire = { workspace = true }
 [dev-dependencies]
 rusqlite.workspace = true
 async-trait = { workspace = true }
-memory-postgres = { workspace = true }
 sqlx = { workspace = true, features = ["macros"] }
 uuid = { workspace = true }
 workers = { workspace = true }

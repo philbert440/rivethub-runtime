@@ -85,6 +85,16 @@ pub enum Command {
         #[arg(long)]
         no_lan: bool,
     },
+    #[command(about = "Administer memory", disable_help_flag = true)]
+    Memory {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    #[command(about = "Read the service journal", disable_help_flag = true)]
+    Logs {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     #[command(hide = true, about = "Supervise the configured service roots")]
     Start {
         #[arg(short = 'c', long = "config")]
@@ -135,6 +145,7 @@ impl Cli {
                     stdout: String::new(),
                     stderr: text,
                     exit: Exit::Failure,
+                    stdout_raw: Vec::new(),
                 })
             }
             Err(error) => Err(Report::success(error.to_string())),

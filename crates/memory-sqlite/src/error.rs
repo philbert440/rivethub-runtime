@@ -84,6 +84,8 @@ pub enum SqliteError {
     Regex(#[from] regex::Error),
     #[error("memory search cancelled")]
     SearchCancelled,
+    #[error("memory export cancelled")]
+    ExportCancelled,
     #[error("stored embedding is not a finite float32 vector of the query width")]
     StoredEmbedding,
     #[error("memory synthesis requires a configured summarizer endpoint")]
@@ -138,6 +140,7 @@ impl From<SqliteError> for MemoryStoreError {
             },
             SqliteError::TagTablesMissing => Self::TagTablesMissing,
             SqliteError::SearchCancelled
+            | SqliteError::ExportCancelled
             | SqliteError::Open { .. }
             | SqliteError::NotInitialised { .. }
             | SqliteError::SchemaBehind { .. }

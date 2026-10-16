@@ -20,6 +20,7 @@ fn main() -> ExitCode {
             stdout: String::new(),
             stderr: format!("Error: the tokio runtime failed to start: {error}\n"),
             exit: Exit::Runtime,
+            stdout_raw: Vec::new(),
         }),
     };
     exit.code()

@@ -269,7 +269,7 @@ impl Environment {
             .ok_or(crate::ConfigError::NodeName)
     }
 
-    pub(crate) fn postgres_url(&self) -> Option<String> {
+    pub fn postgres_url(&self) -> Option<String> {
         self.setting(Alias::PostgresUrl).map(str::to_owned)
     }
 
