@@ -17,6 +17,7 @@ mod submit;
 
 pub use catalog::Catalog;
 pub use client::GatewayClient;
+pub use delegate::DelegationTarget;
 pub use directory::Directory;
 pub use directory::LocalAgent;
 pub use directory::Prepared;

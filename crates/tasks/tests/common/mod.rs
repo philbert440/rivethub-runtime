@@ -143,6 +143,8 @@ pub(crate) fn task(goal: &str) -> NewTask {
 
 pub(crate) fn spec(session: &str, append: Option<&str>, working: Option<&str>) -> TaskSpec {
     TaskSpec {
+        delegation: None,
+        mesh_from: None,
         task_id: String::new(),
         agent_id: "worker".to_string(),
         goal: "ship it".to_string(),

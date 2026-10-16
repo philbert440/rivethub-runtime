@@ -22,8 +22,7 @@ use wire::gateway::agents::AgentPreset;
 use wire::task::TaskBudget;
 use wire::task::TaskCreateRequest;
 use wire::task::TaskExecutorKind;
-use wire::task::TaskPromptMode;
-use wire::task::TaskSpec;
+use wire::task_overrides::{TaskColumns, TaskOverrides};
 
 use crate::directory::Directory;
 use crate::directory::TargetInput;
@@ -34,6 +33,12 @@ use crate::submit::NewTask;
 struct Host {
     id: String,
     last_seen: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug)]
+pub struct DelegationTarget {
+    pub input: TargetInput,
+    preset: Option<(String, String)>,
 }
 
 impl Directory {
@@ -68,7 +73,7 @@ impl Directory {
         &self,
         target: &str,
         node: Option<&str>,
-    ) -> Result<TargetInput, Error> {
+    ) -> Result<DelegationTarget, Error> {
         if target.is_empty() {
             return Err(Error::AgentRequired);
         }
@@ -142,7 +147,7 @@ fn preset_input(
     key: &str,
     matches: &[&AgentPreset],
     affinity: Option<String>,
-) -> Result<TargetInput, Error> {
+) -> Result<DelegationTarget, Error> {
     let preset = one_preset(key, matches)?.ok_or_else(|| Error::UnknownTarget {
         agent: key.to_owned(),
     })?;
@@ -153,7 +158,7 @@ fn open_target(
     agent: &str,
     preset: Option<&AgentPreset>,
     hosts: &[Host],
-) -> Result<TargetInput, Error> {
+) -> Result<DelegationTarget, Error> {
     if let Some(preset) = preset
         && (preset.harness_id.is_some() || hosts.is_empty())
     {
@@ -172,7 +177,7 @@ fn pinned_target(
     preset: Option<&AgentPreset>,
     hosts: &[Host],
     pin: String,
-) -> Result<TargetInput, Error> {
+) -> Result<DelegationTarget, Error> {
     if hosts.iter().any(|host| host.id == pin) {
         return Ok(runtime_target(agent, &pin));
     }
@@ -191,25 +196,31 @@ fn pinned_target(
     }
 }
 
-fn preset_target(preset: &AgentPreset, affinity: Option<String>) -> TargetInput {
+fn preset_target(preset: &AgentPreset, affinity: Option<String>) -> DelegationTarget {
     let executor = match preset.harness_id {
         Some(_) => TaskExecutorKind::HarnessSession,
         None => TaskExecutorKind::ChatLoop,
     };
-    TargetInput {
-        executor,
-        executor_target: None,
-        node_affinity: affinity,
-        agent_id: preset.name.clone(),
+    DelegationTarget {
+        preset: Some((preset.id.clone(), preset.name.clone())),
+        input: TargetInput {
+            executor,
+            executor_target: None,
+            node_affinity: affinity,
+            agent_id: preset.name.clone(),
+        },
     }
 }
 
-fn runtime_target(agent: &str, node: &str) -> TargetInput {
-    TargetInput {
-        executor: TaskExecutorKind::ChatLoop,
-        executor_target: None,
-        node_affinity: Some(node.to_owned()),
-        agent_id: agent.to_owned(),
+fn runtime_target(agent: &str, node: &str) -> DelegationTarget {
+    DelegationTarget {
+        preset: None,
+        input: TargetInput {
+            executor: TaskExecutorKind::ChatLoop,
+            executor_target: None,
+            node_affinity: Some(node.to_owned()),
+            agent_id: agent.to_owned(),
+        },
     }
 }
 
@@ -289,15 +300,21 @@ where
             return Err(DelegationError::Cancelled);
         }
         let millis = wall_ms(request.timeout).map_err(classify)?;
-        let input = self
+        let target = self
             .directory
             .delegation_target(&request.target, request.node.as_deref())
             .map_err(classify)?;
-        let created = task_request(&request, &input, millis);
+        let prepared = self.directory.prepare(&target.input).map_err(classify)?;
+        let origin = if prepared.remote {
+            TaskOrigin::Mesh
+        } else {
+            TaskOrigin::Tool
+        };
+        let created = task_request(&request, target, millis, self.directory.local_node());
         let id = self
             .submit(NewTask {
                 request: created,
-                origin: TaskOrigin::Tool,
+                origin,
             })
             .await
             .map_err(classify)?;
@@ -315,43 +332,48 @@ fn wall_ms(timeout: Duration) -> Result<u64, Error> {
     u64::try_from(timeout.as_millis()).map_err(|_| Error::TimeoutRange)
 }
 
-fn task_request(request: &DelegateRequest, input: &TargetInput, millis: u64) -> TaskCreateRequest {
+fn task_request(
+    request: &DelegateRequest,
+    target: DelegationTarget,
+    millis: u64,
+    local_node: &str,
+) -> TaskCreateRequest {
+    let input = target.input;
     let budget = TaskBudget {
         max_wall_clock_ms: Some(millis),
         ..TaskBudget::default()
     };
+    let mut overrides = TaskOverrides {
+        model: request.model.clone(),
+        exclude_tools: Some(vec!["delegate_task".to_owned()]),
+        ..TaskOverrides::default()
+    };
+    if let Some((id, name)) = target.preset {
+        overrides.preset_id = Some(id);
+        overrides.preset_name = Some(name);
+    } else {
+        overrides.delegation = Some(true);
+        overrides.mesh_from = Some(local_node.to_owned());
+    }
+    let spec = overrides.into_spec(TaskColumns {
+        task_id: String::new(),
+        agent_id: input.agent_id.clone(),
+        goal: request.prompt.clone(),
+        resolved_context: Vec::new(),
+        acceptance_criteria: Vec::new(),
+        budget,
+        session: String::new(),
+    });
     TaskCreateRequest {
         goal: request.prompt.clone(),
-        agent_id: input.agent_id.clone(),
+        agent_id: input.agent_id,
         executor: Some(input.executor),
-        executor_target: input.executor_target.clone(),
-        requested_by: None,
+        executor_target: input.executor_target,
+        requested_by: request.requested_by.clone(),
         parent_task_id: None,
         chain_depth: None,
-        node_affinity: input.node_affinity.clone(),
-        spec: request.model.as_ref().map(|model| TaskSpec {
-            task_id: String::new(),
-            agent_id: input.agent_id.clone(),
-            goal: request.prompt.clone(),
-            resolved_context: Vec::new(),
-            acceptance_criteria: Vec::new(),
-            budget,
-            tools: None,
-            working_dir: None,
-            model: Some(model.clone()),
-            effort: None,
-            system_prompt_append: None,
-            isolation: None,
-            prompt_mode: Some(TaskPromptMode::Task),
-            exclude_tools: None,
-            resume_message: None,
-            session: String::new(),
-            permission_decisions: None,
-            preset_id: None,
-            preset_name: None,
-            audit_only: None,
-            extra: wire::Extra::default(),
-        }),
+        node_affinity: input.node_affinity,
+        spec: Some(spec),
         budget: Some(budget),
         context_refs: None,
         acceptance_criteria: None,

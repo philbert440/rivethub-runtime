@@ -383,6 +383,7 @@ async fn a_remote_delegation_without_a_certificate_is_rejected() {
         Duration::from_secs(2),
         engine.delegate(
             DelegateRequest {
+                requested_by: None,
                 target: "worker@edge".to_owned(),
                 prompt: "ship it".to_owned(),
                 model: None,

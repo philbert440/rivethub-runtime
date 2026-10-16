@@ -249,6 +249,8 @@ fn blank_spec(
     acceptance_criteria: Vec<AcceptanceCriterion>,
 ) -> TaskSpec {
     TaskSpec {
+        delegation: None,
+        mesh_from: None,
         task_id: id.to_string(),
         agent_id: accepted.agent_id.clone(),
         goal: accepted.goal.clone(),

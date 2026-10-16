@@ -130,6 +130,10 @@ pub enum TaskPromptMode {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskSpec {
+    #[serde(default)]
+    pub delegation: Option<bool>,
+    #[serde(default)]
+    pub mesh_from: Option<String>,
     pub task_id: String,
     pub agent_id: String,
     pub goal: String,

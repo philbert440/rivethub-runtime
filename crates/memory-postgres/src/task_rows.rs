@@ -6,14 +6,11 @@ use sqlx::types::Json;
 use uuid::Uuid;
 use wire::task::AcceptanceCriterion;
 use wire::task::ContextRef;
-use wire::task::CriterionReport;
-use wire::task::TaskArtifact;
 use wire::task::TaskBudget;
 use wire::task::TaskPermissionDecision;
 use wire::task::TaskResult;
 use wire::task::TaskStatus;
 use wire::task::TaskUsage;
-use wire::task::TaskVerdict;
 use wire::task::VerifierResult;
 use wire::task_overrides::TaskOverrides;
 
@@ -75,7 +72,7 @@ pub(crate) async fn insert_task(
         .bind(task.origin.to_string())
         .bind(task.parent_task_id)
         .bind(i32_in(task.chain_depth)?)
-        .bind(stored_json(&StoredBudget::from(task.budget))?)
+        .bind(stored_json(&task.budget)?)
         .bind(&task.node_affinity)
         .bind(&task.session_key)
         .bind(&task.pending_message)
@@ -126,11 +123,11 @@ pub(crate) async fn finish_task(
     finish: &Finish,
 ) -> Result<bool, TaskError> {
     let result_json = match &finish.result {
-        Some(result) => Some(stored_json(&StoredResult::from(result))?),
+        Some(result) => Some(stored_json(result)?),
         None => None,
     };
     let usage_json = match finish.usage {
-        Some(usage) => Some(stored_json(&StoredUsage::from(usage))?),
+        Some(usage) => Some(stored_json(&usage)?),
         None => None,
     };
     let result = sqlx::query(
@@ -406,79 +403,6 @@ pub(crate) async fn append_permission(
 
 fn stored_json<T: Serialize>(value: &T) -> Result<String, TaskError> {
     serde_json::to_string(value).map_err(|source| TaskError::Stored(source.to_string()))
-}
-
-#[derive(Serialize)]
-struct StoredBudget {
-    #[serde(rename = "maxUsd")]
-    usd: Option<f64>,
-    #[serde(rename = "maxTokens")]
-    tokens: Option<u64>,
-    #[serde(rename = "maxTurns")]
-    turns: Option<u32>,
-    #[serde(rename = "maxWallClockMs")]
-    wall_clock_ms: Option<u64>,
-}
-
-impl From<TaskBudget> for StoredBudget {
-    fn from(budget: TaskBudget) -> Self {
-        Self {
-            usd: budget.max_usd,
-            tokens: budget.max_tokens,
-            turns: budget.max_turns,
-            wall_clock_ms: budget.max_wall_clock_ms,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredUsage {
-    input_tokens: u64,
-    output_tokens: u64,
-    total_tokens: u64,
-    cost_usd: Option<f64>,
-    turns: u32,
-    wall_clock_ms: u64,
-}
-
-impl From<TaskUsage> for StoredUsage {
-    fn from(usage: TaskUsage) -> Self {
-        Self {
-            input_tokens: usage.input_tokens,
-            output_tokens: usage.output_tokens,
-            total_tokens: usage.total_tokens,
-            cost_usd: usage.cost_usd,
-            turns: usage.turns,
-            wall_clock_ms: usage.wall_clock_ms,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredResult<'a> {
-    verdict: TaskVerdict,
-    summary: &'a str,
-    output: Option<&'a str>,
-    artifacts: &'a [TaskArtifact],
-    criteria_self_report: Option<&'a [CriterionReport]>,
-    usage: StoredUsage,
-    error: Option<&'a str>,
-}
-
-impl<'a> From<&'a TaskResult> for StoredResult<'a> {
-    fn from(result: &'a TaskResult) -> Self {
-        Self {
-            verdict: result.verdict,
-            summary: &result.summary,
-            output: result.output.as_deref(),
-            artifacts: &result.artifacts,
-            criteria_self_report: result.criteria_self_report.as_deref(),
-            usage: StoredUsage::from(result.usage),
-            error: result.error.as_deref(),
-        }
-    }
 }
 
 fn i32_in(value: u32) -> Result<i32, TaskError> {

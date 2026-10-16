@@ -84,6 +84,7 @@ pub(crate) async fn task(
     required_text(&arguments.to_agent, "to_agent")?;
     required_text(&arguments.task, "task")?;
     let request = DelegateRequest {
+        requested_by: Some("mcp-sidecar".to_owned()),
         target: arguments.to_agent,
         prompt: prompt(&arguments.task, arguments.context),
         model: arguments.model,

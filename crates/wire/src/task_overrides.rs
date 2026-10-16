@@ -15,6 +15,8 @@ use crate::task::TaskSpec;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct TaskOverrides {
+    pub delegation: Option<bool>,
+    pub mesh_from: Option<String>,
     pub preset_id: Option<String>,
     pub preset_name: Option<String>,
     pub permission_decisions: Option<Vec<TaskPermissionDecision>>,
@@ -45,6 +47,8 @@ pub struct TaskColumns {
 impl TaskOverrides {
     pub fn from_spec(spec: &TaskSpec) -> Self {
         Self {
+            delegation: spec.delegation,
+            mesh_from: spec.mesh_from.clone(),
             preset_id: spec.preset_id.clone(),
             preset_name: spec.preset_name.clone(),
             permission_decisions: spec.permission_decisions.clone(),
@@ -63,6 +67,8 @@ impl TaskOverrides {
 
     pub fn into_spec(self, columns: TaskColumns) -> TaskSpec {
         TaskSpec {
+            delegation: self.delegation,
+            mesh_from: self.mesh_from,
             task_id: columns.task_id,
             agent_id: columns.agent_id,
             goal: columns.goal,

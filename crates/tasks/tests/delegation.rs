@@ -7,11 +7,13 @@
     reason = "a shared harness reports setup failure by panicking; the message names the step"
 )]
 mod common;
+mod delegation_store;
+
+use delegation_store::NotifyStore;
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use common::deadline;
@@ -23,9 +25,6 @@ use kernel::tasks::Delegation;
 use kernel::tasks::DelegationError;
 use kernel::tasks::PresetAgent;
 use kernel::tasks::RuntimeAgent;
-use kernel::tasks::TaskError;
-use kernel::tasks::TaskRecord;
-use kernel::tasks::TaskStore;
 use tasks::Directory;
 use tasks::Engine;
 use tasks::Error;
@@ -41,73 +40,7 @@ use wire::gateway::agents::AgentPreset;
 use wire::harness::HarnessId;
 use wire::mesh::MeshNodeStatus;
 use wire::task::TaskExecutorKind;
-use wire::task::TaskPermissionDecision;
 use wire::task::TaskStatus;
-
-#[derive(Debug)]
-struct NotifyStore {
-    inner: TaskMemory,
-    inserted: watch::Sender<Option<Uuid>>,
-}
-
-#[async_trait]
-impl TaskStore for NotifyStore {
-    async fn insert(&self, task: &TaskRecord) -> Result<(), TaskError> {
-        self.inner.insert(task).await?;
-        let _previous = self.inserted.send_replace(Some(task.id));
-        Ok(())
-    }
-
-    async fn load(&self, id: Uuid) -> Result<TaskRecord, TaskError> {
-        self.inner.load(id).await
-    }
-
-    async fn mark_running(
-        &self,
-        id: Uuid,
-        claimed_by: &str,
-        node: &str,
-        now: DateTime<Utc>,
-    ) -> Result<TaskRecord, TaskError> {
-        self.inner.mark_running(id, claimed_by, node, now).await
-    }
-
-    async fn finish(&self, id: Uuid, finish: &kernel::tasks::Finish) -> Result<bool, TaskError> {
-        self.inner.finish(id, finish).await
-    }
-
-    async fn sweep(&self, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError> {
-        self.inner.sweep(worker, now).await
-    }
-
-    async fn kill_queued_by_session(
-        &self,
-        session_key: &str,
-        now: DateTime<Utc>,
-    ) -> Result<(), TaskError> {
-        self.inner.kill_queued_by_session(session_key, now).await
-    }
-
-    async fn kill(&self, id: Uuid, now: DateTime<Utc>) -> Result<TaskStatus, TaskError> {
-        self.inner.kill(id, now).await
-    }
-
-    async fn set_pending(&self, id: Uuid, message: &str) -> Result<(), TaskError> {
-        self.inner.set_pending(id, message).await
-    }
-
-    async fn add_harness_session(&self, id: Uuid, session: &str) -> Result<(), TaskError> {
-        self.inner.add_harness_session(id, session).await
-    }
-
-    async fn append_permission(
-        &self,
-        id: Uuid,
-        decision: &TaskPermissionDecision,
-    ) -> Result<(), TaskError> {
-        self.inner.append_permission(id, decision).await
-    }
-}
 
 #[expect(
     clippy::expect_used,
@@ -154,6 +87,7 @@ fn host(directory: &mut Directory, id: &str, agents: &[&str], seen: i64, status:
 
 fn request(target: &str, timeout: Duration) -> DelegateRequest {
     DelegateRequest {
+        requested_by: None,
         target: target.to_owned(),
         prompt: "ship it".to_owned(),
         model: None,
@@ -167,7 +101,10 @@ fn request(target: &str, timeout: Duration) -> DelegateRequest {
     reason = "these callers assert the resolved target; a refusal is a broken fixture"
 )]
 fn chosen(directory: &Directory, target: &str, node: Option<&str>) -> TargetInput {
-    directory.delegation_target(target, node).expect("target")
+    directory
+        .delegation_target(target, node)
+        .expect("target")
+        .input
 }
 
 #[test]

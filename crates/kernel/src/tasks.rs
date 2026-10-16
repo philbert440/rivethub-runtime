@@ -279,6 +279,7 @@ pub struct AgentNode {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DelegateRequest {
+    pub requested_by: Option<String>,
     pub target: String,
     pub prompt: String,
     pub model: Option<String>,

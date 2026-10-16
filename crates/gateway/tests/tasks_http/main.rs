@@ -298,6 +298,8 @@ fn record(id: Uuid, agent: &str, at: DateTime<Utc>) -> TaskRecord {
         context_refs: Vec::new(),
         acceptance_criteria: Vec::new(),
         spec: TaskSpec {
+            delegation: None,
+            mesh_from: None,
             task_id: id.to_string(),
             agent_id: agent.to_owned(),
             goal: "goal".to_owned(),
@@ -471,6 +473,8 @@ fn spec_for(
     acceptance_criteria: Vec<AcceptanceCriterion>,
 ) -> TaskSpec {
     TaskSpec {
+        delegation: None,
+        mesh_from: None,
         task_id: "old".to_owned(),
         agent_id: agent_id.to_owned(),
         goal: "spec-goal".to_owned(),

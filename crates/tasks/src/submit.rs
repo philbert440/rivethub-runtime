@@ -221,6 +221,8 @@ fn spec_for(
     let acceptance_criteria = clone_criteria(request.acceptance_criteria.as_ref());
     match request.spec.clone() {
         None => Ok(TaskSpec {
+            delegation: None,
+            mesh_from: None,
             task_id: id.to_string(),
             agent_id: request.agent_id.clone(),
             goal: request.goal.clone(),
@@ -328,6 +330,8 @@ fn heartbeat_request(spec: &HeartbeatSpec, session_key: &str) -> TaskCreateReque
         chain_depth: Some(0),
         node_affinity: None,
         spec: Some(TaskSpec {
+            delegation: None,
+            mesh_from: None,
             task_id: String::new(),
             agent_id: spec.agent.clone(),
             goal: spec.goal.clone(),

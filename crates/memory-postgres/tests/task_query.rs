@@ -28,6 +28,8 @@ fn record(id: Uuid, agent: &str, created_offset_secs: i64) -> TaskRecord {
         context_refs: Vec::new(),
         acceptance_criteria: Vec::new(),
         spec: TaskSpec {
+            delegation: None,
+            mesh_from: None,
             task_id: id.to_string(),
             agent_id: agent.to_owned(),
             goal: agent.to_owned(),

@@ -284,6 +284,8 @@ fn runtime_record(id: Uuid) -> TaskRecord {
         context_refs: Vec::new(),
         acceptance_criteria: Vec::new(),
         spec: TaskSpec {
+            delegation: None,
+            mesh_from: None,
             task_id: id.to_string(),
             agent_id: "worker".to_owned(),
             goal: "ship it".to_owned(),

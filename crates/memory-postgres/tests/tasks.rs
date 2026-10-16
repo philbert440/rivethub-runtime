@@ -163,6 +163,8 @@ fn queued_record(id: Uuid, goal: &str) -> TaskRecord {
         context_refs: Vec::new(),
         acceptance_criteria: Vec::new(),
         spec: TaskSpec {
+            delegation: None,
+            mesh_from: None,
             task_id: id.to_string(),
             agent_id: "worker".to_string(),
             goal: goal.to_string(),
@@ -433,4 +435,36 @@ async fn failed_job(pool: &PgPool, postgres: &PostgresTasks, marker: &str) {
     let stored = postgres.read(queued).await.expect("read").expect("stored");
     assert_eq!(stored.attempts, 1);
     assert_eq!(stored.last_error.as_deref(), Some("boom"));
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn absent_limits_and_explicit_zero_limits_are_distinct(pool: PgPool) {
+    let store = PostgresTasks::from_pool(pool.clone());
+    let mut record = queued_record(Uuid::now_v7(), "limits");
+    store.insert(&record).await.expect("insert empty budget");
+    let stored: sqlx::types::Json<wire::JsonObject> =
+        sqlx::query_scalar("SELECT budget FROM rh_tasks WHERE id = $1")
+            .bind(record.id)
+            .fetch_one(&pool)
+            .await
+            .expect("budget");
+    assert_eq!(stored.0, wire::JsonObject::default());
+    record.id = Uuid::now_v7();
+    record.budget = TaskBudget {
+        max_usd: Some(0.0),
+        max_tokens: Some(0),
+        max_turns: Some(0),
+        max_wall_clock_ms: Some(0),
+    };
+    store.insert(&record).await.expect("insert zero limits");
+    let stored: sqlx::types::Json<wire::JsonObject> =
+        sqlx::query_scalar("SELECT budget FROM rh_tasks WHERE id = $1")
+            .bind(record.id)
+            .fetch_one(&pool)
+            .await
+            .expect("budget");
+    let expected: wire::JsonObject =
+        serde_json::from_str(r#"{"maxUsd":0.0,"maxTokens":0,"maxTurns":0,"maxWallClockMs":0}"#)
+            .expect("zero limits");
+    assert_eq!(stored.0, expected);
 }

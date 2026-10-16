@@ -2,6 +2,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use chrono::Utc;
+use kernel::memory::MemoryStore;
 use kernel::tasks::TaskOrigin;
 use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskStore;
@@ -134,6 +135,8 @@ fn queued(id: Uuid, pending: Option<&str>) -> TaskRecord {
         context_refs: Vec::new(),
         acceptance_criteria: Vec::new(),
         spec: TaskSpec {
+            delegation: None,
+            mesh_from: None,
             task_id: id.to_string(),
             agent_id: "main".to_owned(),
             goal: "finish the ledger".to_owned(),
@@ -210,5 +213,54 @@ async fn mark_running_returns_the_previous_pending_message() -> TestResult {
 async fn sweep_on_an_empty_task_table_succeeds() -> TestResult {
     let fixture = fixture()?;
     fixture.store.sweep("node:agent", Utc::now()).await?;
+    Ok(())
+}
+
+#[derive(serde::Deserialize)]
+struct CompletedColumns {
+    usage: wire::task::TaskUsage,
+    result: wire::task::TaskResult,
+}
+
+#[tokio::test]
+async fn task_json_writes_omit_absent_fields() -> TestResult {
+    let fixture = fixture()?;
+    let id = Uuid::now_v7();
+    let mut record = queued(id, None);
+    let completed_text = include_str!("../../testkit/tests/fixtures/tasks/completed-columns.json");
+    let completed: CompletedColumns = serde_json::from_str(completed_text)?;
+    let eval_text = include_str!("../../testkit/tests/fixtures/tasks/eval-column.json");
+    record.eval = Some(serde_json::from_str(eval_text)?);
+    record.usage = Some(completed.usage);
+    record.result = Some(completed.result);
+    fixture.store.insert(&record).await?;
+    let stored = cell(
+        &fixture.path,
+        "SELECT json_object('usage', json(usage), 'result', json(result)) FROM rh_tasks WHERE id = ?1",
+        &id.to_string(),
+    )?;
+    assert_eq!(
+        serde_json::from_str::<wire::JsonObject>(&stored)?,
+        serde_json::from_str::<wire::JsonObject>(completed_text)?
+    );
+    let stored = cell(
+        &fixture.path,
+        "SELECT eval FROM rh_tasks WHERE id = ?1",
+        &id.to_string(),
+    )?;
+    assert_eq!(
+        serde_json::from_str::<wire::JsonObject>(&stored)?,
+        serde_json::from_str::<wire::JsonObject>(eval_text)?
+    );
+    let stored = cell(
+        &fixture.path,
+        "SELECT budget FROM rh_tasks WHERE id = ?1",
+        &id.to_string(),
+    )?;
+    assert_eq!(
+        serde_json::from_str::<wire::JsonObject>(&stored)?,
+        wire::JsonObject::default()
+    );
+    fixture.store.close().await?;
     Ok(())
 }

@@ -155,6 +155,7 @@ async fn delegate_task_joins_context_and_applies_the_default_timeout() {
     assert_eq!(parsed, port.outcome);
     let request = port.requests.lock().await.first().expect("request").clone();
     assert_eq!(request.target, "worker");
+    assert_eq!(request.requested_by.as_deref(), Some("mcp-sidecar"));
     assert_eq!(request.prompt, "ship it\none\n");
     assert_eq!(request.model, None);
     assert_eq!(request.node, None);
