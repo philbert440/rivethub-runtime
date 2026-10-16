@@ -1,9 +1,15 @@
-use kernel::memory::jobs::{MemoryJobError, MemoryJobStore};
+use kernel::memory::jobs::{ChunkWrite, MemoryJobError, MemoryJobStore, UnchunkedMessage};
 use kernel::memory::{EmbedTable, EmbedTarget};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use tokio_util::sync::CancellationToken;
 
-use crate::{WorkerError, embed_key};
+use crate::{WorkerError, compose_message, embed_key, split_embed_text};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WikiSweep {
+    pub revived: u64,
+    pub added: usize,
+}
 
 pub async fn handle_enqueue_unembedded(
     store: &dyn MemoryJobStore,
@@ -76,10 +82,62 @@ pub async fn handle_enqueue_unchunked(
     if !settings.chunks_enabled {
         return Ok(0);
     }
+    let selected = tokio::select! {
+        biased;
+        () = cancel.cancelled() => return Err(WorkerError::Cancelled),
+        result = store.unchunked(limit, settings.chars_per_chunk, settings.tool_result_cap) => result,
+    };
+    let messages = match selected {
+        Ok(messages) => messages,
+        Err(error) => {
+            tracing::warn!("[enqueue-unchunked] sweep failed: {error}");
+            return Ok(0);
+        }
+    };
+    let mut enqueued = 0;
+    for message in &messages {
+        match chunk_message(store, queue, settings, message, max_attempts, cancel).await {
+            Ok(count) => enqueued += count,
+            Err(WorkerError::Cancelled) => return Err(WorkerError::Cancelled),
+            Err(error) => {
+                tracing::warn!("[enqueue-unchunked] message {} failed: {error}", message.id);
+            }
+        }
+    }
+    Ok(enqueued)
+}
+
+async fn chunk_message(
+    store: &dyn MemoryJobStore,
+    queue: &dyn JobQueue,
+    settings: crate::EmbedSettings,
+    message: &UnchunkedMessage,
+    max_attempts: u32,
+    cancel: &CancellationToken,
+) -> Result<usize, WorkerError> {
+    let cap = usize::try_from(settings.tool_result_cap).map_err(|_| WorkerError::TextTooLong)?;
+    let window = usize::try_from(settings.chars_per_chunk).map_err(|_| WorkerError::TextTooLong)?;
+    let text = compose_message(&message.content, message.tool_result.as_deref(), cap);
+    if text.chars().count() <= window {
+        return Ok(0);
+    }
+    let chunks = split_embed_text(&text, window)?
+        .iter()
+        .enumerate()
+        .map(|(index, piece)| crate::embed::stored_chunk(index, piece, None))
+        .collect::<Result<Vec<_>, _>>()?;
+    let written = tokio::select! {
+        biased;
+        () = cancel.cancelled() => return Err(WorkerError::Cancelled),
+        result = store.write_chunks(message.id, chunks) => result?,
+    };
+    if written == ChunkWrite::Skipped {
+        return Ok(0);
+    }
     let targets = tokio::select! {
         biased;
         () = cancel.cancelled() => return Err(WorkerError::Cancelled),
-        result = store.unchunked(limit, settings.chars_per_chunk, settings.tool_result_cap) => result?,
+        result = store.unembedded_chunks(message.id) => result?,
     };
     enqueue(queue, targets, max_attempts, cancel).await
 }
@@ -88,23 +146,60 @@ pub async fn handle_enqueue_stale_wiki(
     store: &dyn MemoryJobStore,
     queue: &dyn JobQueue,
     enabled: bool,
-    limit: u32,
+    cap: u32,
     cancel: &CancellationToken,
-) -> Result<usize, WorkerError> {
-    if !enabled {
-        return Ok(0);
+) -> Result<WikiSweep, WorkerError> {
+    let mut sweep = WikiSweep {
+        revived: 0,
+        added: 0,
+    };
+    if !enabled || cap == 0 {
+        return Ok(sweep);
+    }
+    sweep.revived = tokio::select! {
+        biased;
+        () = cancel.cancelled() => return Err(WorkerError::Cancelled),
+        result = store.revive_dead_wiki(cap) => result?,
+    };
+    if sweep.revived > 0 {
+        tracing::info!(
+            "[reschedule-dead] revived {} dead extract-wiki job(s)",
+            sweep.revived
+        );
+    }
+    let left = u64::from(cap)
+        .checked_sub(sweep.revived)
+        .ok_or(WorkerError::Count)?;
+    let missing_cap = u32::try_from(left).map_err(|_| WorkerError::Count)?;
+    if missing_cap == 0 {
+        return Ok(sweep);
     }
     let jobs = tokio::select! {
         biased;
         () = cancel.cancelled() => return Err(WorkerError::Cancelled),
-        result = store.stale_wiki(limit) => result?,
+        result = store.missing_wiki(missing_cap) => result?,
     };
     for job in &jobs {
-        tokio::select! {
+        let added = tokio::select! {
             biased;
             () = cancel.cancelled() => return Err(WorkerError::Cancelled),
-            result = queue.enqueue(crate::wiki_builder::extract_wiki_job(job)?) => { result.map_err(WorkerError::Queue)?; }
+            result = queue.enqueue(crate::wiki_builder::extract_wiki_job(job)?) => result,
+        };
+        if let Err(error) = added {
+            tracing::warn!(
+                "[enqueue-stale-wiki] addJob failed after re-adding {}/{} missing job(s)",
+                sweep.added,
+                jobs.len()
+            );
+            return Err(WorkerError::Queue(error));
         }
+        sweep.added += 1;
     }
-    Ok(jobs.len())
+    if sweep.added > 0 {
+        tracing::info!(
+            "[enqueue-stale-wiki] re-added {} missing job(s)",
+            sweep.added
+        );
+    }
+    Ok(sweep)
 }

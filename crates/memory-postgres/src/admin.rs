@@ -58,12 +58,12 @@ impl PostgresMemory {
         if limit == 0 {
             return Err(Error::DumpMessage("requeue limit must be positive".into()));
         }
-        let ids = requeue_ids(&self.pool, task, limit.min(1000)).await?;
-        if dry_run || ids.is_empty() {
+        let queue = GraphileQueue::new(self.pool.clone());
+        let ids = queue.dead_job_ids(task, limit.min(1000)).await?;
+        if dry_run {
             return Ok(u64::try_from(ids.len())?);
         }
-        unlock_stale(&self.pool, &ids).await?;
-        reschedule(&self.pool, &ids).await
+        queue.reschedule(&ids, 10).await
     }
 
     pub async fn backfill_tool_synth(
@@ -171,35 +171,6 @@ async fn count_rows(
     u64::try_from(row.count).map_err(|source| Error::protocol(source.to_string()))
 }
 
-async fn requeue_ids(pool: &sqlx::PgPool, task: &JobName, limit: u32) -> Result<Vec<i64>, Error> {
-    let rows: Vec<IdRow> = sqlx::query_as(REQUEUE_IDS)
-        .bind(task.to_string())
-        .bind(i64::from(limit))
-        .fetch_all(pool)
-        .await
-        .map_err(|source| Error::operation("requeue", source))?;
-    Ok(rows.into_iter().map(|row| row.id).collect())
-}
-
-async fn unlock_stale(pool: &sqlx::PgPool, ids: &[i64]) -> Result<(), Error> {
-    sqlx::query(UNLOCK_STALE)
-        .bind(ids)
-        .execute(pool)
-        .await
-        .map_err(|source| Error::operation("requeue unlock", source))?;
-    Ok(())
-}
-
-async fn reschedule(pool: &sqlx::PgPool, ids: &[i64]) -> Result<u64, Error> {
-    let row: CountRow = sqlx::query_as(RESCHEDULE)
-        .bind(ids)
-        .bind(10_i32)
-        .fetch_one(pool)
-        .await
-        .map_err(|source| Error::operation("requeue", source))?;
-    u64::try_from(row.count).map_err(|source| Error::protocol(source.to_string()))
-}
-
 async fn tool_messages(pool: &sqlx::PgPool, limit: Option<i64>) -> Result<Vec<Uuid>, Error> {
     let rows: Vec<MessageRow> = sqlx::query_as(TOOL_MESSAGES)
         .bind(limit)
@@ -235,11 +206,6 @@ async fn insert_rule(pool: &sqlx::PgPool, id: Uuid, tag: &ProjectTag) -> Result<
 #[derive(Debug, sqlx::FromRow)]
 struct CountRow {
     count: i64,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct IdRow {
-    id: i64,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -285,28 +251,6 @@ UPDATE graphile_worker._private_jobs j
        locked_by = NULL
   FROM chosen
  WHERE j.id = chosen.id";
-
-const REQUEUE_IDS: &str = "\
-SELECT j.id
-  FROM graphile_worker._private_jobs j
-  JOIN graphile_worker._private_tasks t ON t.id = j.task_id
- WHERE t.identifier = $1
-   AND j.attempts >= j.max_attempts
-   AND j.key IS NOT NULL
-   AND j.updated_at < now() - interval '24 hours'
-   AND (j.locked_at IS NULL OR j.locked_at < now() - interval '4 hours')
- ORDER BY j.run_at ASC
- LIMIT $2";
-
-const UNLOCK_STALE: &str = "\
-UPDATE graphile_worker._private_jobs
-   SET locked_at = NULL, locked_by = NULL
- WHERE id = ANY($1::bigint[])
-   AND locked_at < now() - interval '4 hours'";
-
-const RESCHEDULE: &str = "\
-SELECT count(*)::bigint AS count
-  FROM graphile_worker.reschedule_jobs($1::bigint[], now(), $2, 0)";
 
 const TOOL_MESSAGES: &str = "\
 SELECT m.id

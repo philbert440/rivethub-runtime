@@ -1,12 +1,17 @@
 use async_trait::async_trait;
-use kernel::memory::jobs::{MemoryJobError, MemoryJobStore, ToolCallMessage};
-use kernel::memory::{EmbedTable, EmbedTarget};
+use kernel::memory::jobs::{
+    ChunkWrite, MemoryJobError, MemoryJobStore, ToolCallMessage, UnchunkedMessage,
+};
+use kernel::memory::{EmbedTable, EmbedTarget, StoredChunk};
+use kernel::queue::{FixedJob, JobName};
+use kernel::wiki::builder::ExtractWiki;
 use serde::Deserialize;
 use sqlx::types::Json;
 use uuid::Uuid;
 use wire::JsonObject;
 
 use crate::PostgresMemory;
+use crate::graphile::GraphileQueue;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -22,6 +27,32 @@ struct ToolRow {
     tool_args: Option<Json<ToolArguments>>,
     content: String,
 }
+
+#[derive(sqlx::FromRow)]
+struct UnchunkedRow {
+    id: Uuid,
+    content: String,
+    tool_result: Option<String>,
+}
+
+const UNCHUNKED: &str = "SELECT m.id, m.content, m.tool_result FROM rh_messages m
+     CROSS JOIN LATERAL (SELECT
+         length(btrim(coalesce(m.content, ''), E' \\t\\n\\r\\f\\x0B')) AS content_chars,
+         length(btrim(coalesce(m.tool_result, ''), E' \\t\\n\\r\\f\\x0B')) AS tool_chars) l
+     WHERE NOT EXISTS (SELECT 1 FROM rh_message_chunks c WHERE c.message_id = m.id)
+       AND COALESCE(m.embed_status, '') <> 'unembeddable'
+       AND (CASE WHEN l.content_chars = 0 THEN least(l.tool_chars, $2)
+                 WHEN l.tool_chars = 0 THEN l.content_chars
+                 ELSE l.content_chars + least(l.tool_chars, $2) + 1 END) > $1
+     ORDER BY m.created_at DESC LIMIT $3";
+
+const MISSING_WIKI: &str = "SELECT s.id, s.conversation_id FROM rh_summaries s
+     LEFT JOIN rh_conversations c ON c.id = s.conversation_id
+     WHERE s.kind = 'leaf'
+       AND (c.id IS NULL OR c.session_key IS NULL OR c.session_key NOT LIKE 'heartbeat:%')
+       AND NOT EXISTS (SELECT 1 FROM rh_wiki_extractions e WHERE e.summary_id = s.id)
+       AND NOT EXISTS (SELECT 1 FROM graphile_worker._private_jobs j WHERE j.key = 'wiki-ext-' || s.id::text)
+     ORDER BY s.created_at ASC LIMIT $1";
 
 #[async_trait]
 impl MemoryJobStore for PostgresMemory {
@@ -63,58 +94,94 @@ impl MemoryJobStore for PostgresMemory {
     async fn unchunked(
         &self,
         limit: u32,
-        chunk_chars: u32,
+        chars_per_chunk: u32,
         tool_result_cap: u32,
+    ) -> Result<Vec<UnchunkedMessage>, MemoryJobError> {
+        let rows = sqlx::query_as::<_, UnchunkedRow>(UNCHUNKED)
+            .bind(i64::from(chars_per_chunk))
+            .bind(i64::from(tool_result_cap))
+            .bind(i64::from(limit))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(query_error)?;
+        Ok(rows
+            .into_iter()
+            .map(|row| UnchunkedMessage {
+                id: row.id,
+                content: row.content,
+                tool_result: row.tool_result,
+            })
+            .collect())
+    }
+
+    async fn write_chunks(
+        &self,
+        message_id: Uuid,
+        chunks: Vec<StoredChunk>,
+    ) -> Result<ChunkWrite, MemoryJobError> {
+        let rows = crate::embedding_store::prepare_chunks(&chunks)
+            .map_err(|error| MemoryJobError::Query(Box::new(error)))?;
+        let mut tx = self.pool.begin().await.map_err(query_error)?;
+        let unchunked = sqlx::query_scalar::<_, bool>(
+            "SELECT NOT EXISTS (SELECT 1 FROM rh_message_chunks c WHERE c.message_id = m.id)
+             FROM rh_messages m WHERE m.id = $1 FOR UPDATE",
+        )
+        .bind(message_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(query_error)?;
+        if unchunked != Some(true) {
+            return Ok(ChunkWrite::Skipped);
+        }
+        for row in &rows {
+            crate::embedding_store::insert_chunk(&mut tx, message_id, row)
+                .await
+                .map_err(|error| MemoryJobError::Query(Box::new(error)))?;
+        }
+        tx.commit().await.map_err(query_error)?;
+        Ok(ChunkWrite::Written)
+    }
+
+    async fn unembedded_chunks(
+        &self,
+        message_id: Uuid,
     ) -> Result<Vec<EmbedTarget>, MemoryJobError> {
-        let ids = sqlx::query_scalar::<_, Uuid>(
-            "SELECT m.id FROM rh_messages m WHERE m.embedding IS NOT NULL
-             AND m.embed_status IS NULL
-             AND length(concat_ws(E'\\n', NULLIF(btrim(m.content), ''),
-                 left(NULLIF(btrim(m.tool_result), ''), $2))) > $1
-             AND NOT EXISTS (SELECT 1 FROM rh_message_chunks c WHERE c.message_id = m.id)
-             ORDER BY m.created_at DESC, m.id LIMIT $3",
+        let ids = sqlx::query_scalar::<_, String>(
+            "SELECT id::text FROM rh_message_chunks
+             WHERE message_id = $1 AND embedding IS NULL ORDER BY idx",
         )
-        .bind(i64::from(chunk_chars))
-        .bind(
-            i32::try_from(tool_result_cap)
-                .map_err(|error| MemoryJobError::Arguments(Box::new(error)))?,
-        )
-        .bind(i64::from(limit))
+        .bind(message_id)
         .fetch_all(&self.pool)
         .await
         .map_err(query_error)?;
         Ok(ids
             .into_iter()
             .map(|id| EmbedTarget {
-                table: EmbedTable::Messages,
-                id: id.to_string(),
+                table: EmbedTable::MessageChunks,
+                id,
             })
             .collect())
     }
 
-    async fn stale_wiki(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<kernel::wiki::builder::ExtractWiki>, MemoryJobError> {
-        let rows = sqlx::query_as::<_, (Uuid, Option<Uuid>)>(
-            "SELECT s.id, s.conversation_id FROM rh_summaries s
-             JOIN rh_wiki_extractions e ON e.summary_id = s.id
-             WHERE e.status = 'done' AND e.pipeline_version < $1
-             ORDER BY s.created_at, s.id LIMIT $2",
-        )
-        .bind(kernel::wiki::builder::WIKI_PIPELINE_VERSION)
-        .bind(i64::from(limit))
-        .fetch_all(&self.pool)
-        .await
-        .map_err(query_error)?;
+    async fn revive_dead_wiki(&self, limit: u32) -> Result<u64, MemoryJobError> {
+        GraphileQueue::new(self.pool.clone())
+            .reschedule_dead(&JobName::Fixed(FixedJob::ExtractWiki), limit, 10)
+            .await
+            .map_err(|error| MemoryJobError::Query(Box::new(error)))
+    }
+
+    async fn missing_wiki(&self, limit: u32) -> Result<Vec<ExtractWiki>, MemoryJobError> {
+        let rows = sqlx::query_as::<_, (Uuid, Option<Uuid>)>(MISSING_WIKI)
+            .bind(i64::from(limit))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(query_error)?;
         Ok(rows
             .into_iter()
-            .map(
-                |(summary_id, conversation_id)| kernel::wiki::builder::ExtractWiki {
-                    summary_id,
-                    conversation_id,
-                },
-            )
+            .map(|(summary_id, conversation_id)| ExtractWiki {
+                summary_id,
+                conversation_id,
+            })
             .collect())
     }
 

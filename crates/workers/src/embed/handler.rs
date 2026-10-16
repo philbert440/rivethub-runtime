@@ -17,6 +17,7 @@ use super::pool::shared_length;
 use super::settings::EmbedSettings;
 use super::split::TextChunk;
 use super::split::split_embed_text;
+use super::split::stored_chunk;
 use super::target::ParsedTarget;
 use super::target::read_target;
 use super::text::compose;
@@ -163,14 +164,7 @@ fn chunk_rows(
             ));
         };
         if raw.len() == pooled_len {
-            let position = u32::try_from(index).map_err(|_| WorkerError::TextTooLong)?;
-            chunks.push(StoredChunk {
-                index: position,
-                char_start: piece.char_start,
-                char_end: piece.char_end,
-                content: piece.text.clone(),
-                vector: raw.clone(),
-            });
+            chunks.push(stored_chunk(index, piece, Some(raw.clone()))?);
         }
     }
     Ok(chunks)

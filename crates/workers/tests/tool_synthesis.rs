@@ -4,8 +4,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use kernel::memory::jobs::{MemoryJobError, MemoryJobStore, SynthesizeToolCall, ToolCallMessage};
-use kernel::memory::{EmbedTable, EmbedTarget};
+use kernel::memory::jobs::{
+    ChunkWrite, MemoryJobError, MemoryJobStore, SynthesizeToolCall, ToolCallMessage,
+    UnchunkedMessage,
+};
+use kernel::memory::{EmbedTable, EmbedTarget, StoredChunk};
 use kernel::model::{
     Embedding, ModelCallFailure, ModelProvider, ModelProviderError, ModelRequest, ModelStreamItem,
 };
@@ -50,23 +53,29 @@ impl MemoryJobStore for Store {
     }
     async fn unchunked(
         &self,
-        limit: u32,
-        chunk_chars: u32,
+        _limit: u32,
+        _chars_per_chunk: u32,
         _tool_result_cap: u32,
-    ) -> Result<Vec<EmbedTarget>, MemoryJobError> {
-        let row = self.0.lock().await;
-        Ok(
-            if limit > 0 && row.content.chars().count() > chunk_chars as usize {
-                vec![EmbedTarget {
-                    table: EmbedTable::Messages,
-                    id: row.id.to_string(),
-                }]
-            } else {
-                Vec::new()
-            },
-        )
+    ) -> Result<Vec<UnchunkedMessage>, MemoryJobError> {
+        Ok(Vec::new())
     }
-    async fn stale_wiki(
+    async fn write_chunks(
+        &self,
+        _message_id: Uuid,
+        _chunks: Vec<StoredChunk>,
+    ) -> Result<ChunkWrite, MemoryJobError> {
+        Ok(ChunkWrite::Skipped)
+    }
+    async fn unembedded_chunks(
+        &self,
+        _message_id: Uuid,
+    ) -> Result<Vec<EmbedTarget>, MemoryJobError> {
+        Ok(Vec::new())
+    }
+    async fn revive_dead_wiki(&self, _limit: u32) -> Result<u64, MemoryJobError> {
+        Ok(0)
+    }
+    async fn missing_wiki(
         &self,
         _limit: u32,
     ) -> Result<Vec<kernel::wiki::builder::ExtractWiki>, MemoryJobError> {

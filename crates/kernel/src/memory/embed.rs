@@ -33,7 +33,7 @@ pub struct StoredChunk {
     pub char_start: u32,
     pub char_end: u32,
     pub content: String,
-    pub vector: Vec<f32>,
+    pub vector: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,139 +1,248 @@
-use chrono::{DateTime, Utc};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue, WorkerRole};
 use kernel::wiki::builder::ExtractWiki;
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use wire::JsonObject;
-use workers::embedding_sweep::{handle_enqueue_stale_wiki, handle_enqueue_unchunked};
+use workers::WorkerError;
+use workers::embedding_sweep::{WikiSweep, handle_enqueue_stale_wiki};
 
-use super::support::{RecordingQueue, TestResult, message_id, seed};
+use super::support::{RecordingQueue, TestResult, seed};
+
+async fn summary(
+    pool: &PgPool,
+    id: u16,
+    kind: &str,
+    conversation: Option<Uuid>,
+) -> Result<Uuid, sqlx::Error> {
+    let offset = f64::from(id);
+    let id = Uuid::from_u128(u128::from(id));
+    sqlx::query(
+        "INSERT INTO rh_summaries (id, conversation_id, kind, content, created_at)
+         VALUES ($1, $2, $3, 'a summary', '2026-10-01T00:00:00Z'::timestamptz + make_interval(secs => $4))",
+    )
+    .bind(id)
+    .bind(conversation)
+    .bind(kind)
+    .bind(offset)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
+async fn conversation(pool: &PgPool, id: u128, key: &str) -> Result<Uuid, sqlx::Error> {
+    let id = Uuid::from_u128(id);
+    sqlx::query(
+        "INSERT INTO rh_conversations (id, session_key, agent, channel) VALUES ($1, $2, 'test', 'test')",
+    )
+    .bind(id)
+    .bind(key)
+    .execute(pool)
+    .await?;
+    Ok(id)
+}
+
+fn extract(summary_id: Uuid, conversation_id: Option<Uuid>) -> Result<Job, serde_json::Error> {
+    Ok(Job {
+        name: JobName::Fixed(FixedJob::ExtractWiki),
+        payload: JsonObject::from_serialize(&ExtractWiki {
+            summary_id,
+            conversation_id,
+        })?,
+        key: Some(format!("wiki-ext-{summary_id}")),
+        key_mode: JobKeyMode::KeepRunAt,
+        priority: 10,
+        run_at: None,
+        max_attempts: Some(2),
+    })
+}
+
+async fn dead_job(
+    queue: &RecordingQueue,
+    pool: &PgPool,
+    summary: Uuid,
+    idle_hours: i32,
+    locked_hours: Option<i32>,
+) -> TestResult {
+    let id = queue.inner.enqueue(extract(summary, None)?).await?;
+    sqlx::query(
+        "UPDATE graphile_worker._private_jobs
+            SET attempts = max_attempts, priority = 3,
+                run_at = now() - make_interval(hours => $2),
+                updated_at = now() - make_interval(hours => $2),
+                locked_at = now() - make_interval(hours => $3),
+                locked_by = CASE WHEN $3 IS NULL THEN NULL ELSE 'gone' END
+          WHERE id = $1",
+    )
+    .bind(i64::from(id))
+    .bind(idle_hours)
+    .bind(locked_hours)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn unchunked_repairs_long_embedded_messages_and_preserves_run_at(pool: PgPool) -> TestResult {
+async fn stale_wiki_re_adds_only_never_extracted_unqueued_leaves(pool: PgPool) -> TestResult {
     let store = seed(&pool).await;
     let queue = RecordingQueue::new(&pool).await;
-    sqlx::query("UPDATE rh_messages SET content = repeat('界', 21), embedding = array_fill(1::real, ARRAY[1024])::halfvec").execute(&pool).await?;
-    let settings = workers::EmbedSettings {
-        chars_per_chunk: 20,
-        ..workers::EmbedSettings::standard()
-    };
-    let target = kernel::memory::EmbedTarget {
-        table: kernel::memory::EmbedTable::Messages,
-        id: message_id().to_string(),
-    };
-    let expected = workers::embedding_sweep::embed_sweep_job(&target, 5)?;
-    let future: DateTime<Utc> = "2099-01-01T00:00:00Z".parse()?;
-    let mut scheduled = expected.clone();
-    scheduled.run_at = Some(future);
-    queue.enqueue(scheduled).await?;
-    queue.jobs.lock().clear();
     let cancel = CancellationToken::new();
-    assert_eq!(
-        handle_enqueue_unchunked(&store, &queue, settings, 100, 5, &cancel).await?,
-        1
-    );
-    assert_eq!(*queue.jobs.lock(), vec![expected.clone()]);
-    let actual: DateTime<Utc> =
-        sqlx::query_scalar("SELECT run_at FROM graphile_worker._private_jobs WHERE key = $1")
-            .bind(expected.key)
-            .fetch_one(&pool)
-            .await?;
-    assert_eq!(actual, future);
-    sqlx::query("INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content) VALUES ($1, 0, 0, 21, repeat('界',21))").bind(message_id()).execute(&pool).await?;
-    assert_eq!(
-        handle_enqueue_unchunked(&store, &queue, settings, 100, 5, &cancel).await?,
-        0
-    );
-    sqlx::query("DELETE FROM rh_message_chunks")
+    let heartbeat = conversation(&pool, 1, "heartbeat:main").await?;
+    let chat = conversation(&pool, 2, "chat:main").await?;
+    let near = conversation(&pool, 3, "agent:heartbeat:main").await?;
+    summary(&pool, 10, "leaf", Some(heartbeat)).await?;
+    let orphan = summary(&pool, 11, "leaf", None).await?;
+    let normal = summary(&pool, 12, "leaf", Some(chat)).await?;
+    let extracted = summary(&pool, 13, "leaf", Some(chat)).await?;
+    let queued = summary(&pool, 14, "leaf", Some(chat)).await?;
+    summary(&pool, 15, "branch", Some(chat)).await?;
+    let similar = summary(&pool, 16, "leaf", Some(near)).await?;
+    sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version) VALUES ($1, 'failed', 1)")
+        .bind(extracted)
         .execute(&pool)
         .await?;
-    sqlx::query("UPDATE rh_messages SET content = repeat('界',20)")
+    queue.inner.enqueue(extract(queued, Some(chat))?).await?;
+    sqlx::query("UPDATE graphile_worker._private_jobs SET attempts = max_attempts")
         .execute(&pool)
         .await?;
     assert_eq!(
-        handle_enqueue_unchunked(&store, &queue, settings, 100, 5, &cancel).await?,
-        0
-    );
-    sqlx::query("UPDATE rh_messages SET content = '', tool_result = repeat('界',21)")
-        .execute(&pool)
-        .await?;
-    assert_eq!(
-        handle_enqueue_unchunked(&store, &queue, settings, 100, 7, &cancel).await?,
-        1
+        handle_enqueue_stale_wiki(&store, &queue, false, 20, &cancel).await?,
+        WikiSweep {
+            revived: 0,
+            added: 0
+        }
     );
     assert_eq!(
-        handle_enqueue_unchunked(
-            &store,
-            &queue,
-            settings.with_chunks_enabled(false),
-            100,
-            5,
-            &cancel
-        )
-        .await?,
-        0
+        handle_enqueue_stale_wiki(&store, &queue, true, 0, &cancel).await?,
+        WikiSweep {
+            revived: 0,
+            added: 0
+        }
     );
-    sqlx::query("UPDATE rh_messages SET embedding = NULL")
-        .execute(&pool)
-        .await?;
+    assert!(queue.jobs.lock().is_empty());
     assert_eq!(
-        handle_enqueue_unchunked(&store, &queue, settings, 100, 5, &cancel).await?,
-        0
+        handle_enqueue_stale_wiki(&store, &queue, true, 20, &cancel).await?,
+        WikiSweep {
+            revived: 0,
+            added: 3
+        }
+    );
+    assert_eq!(
+        *queue.jobs.lock(),
+        vec![
+            extract(orphan, None)?,
+            extract(normal, Some(chat))?,
+            extract(similar, Some(near))?,
+        ]
+    );
+    let stored: (bool, String) = sqlx::query_as(
+        "SELECT payload::jsonb ? 'conversationId', payload::jsonb ->> 'summaryId'
+           FROM graphile_worker._private_jobs WHERE key = $1",
+    )
+    .bind(format!("wiki-ext-{orphan}"))
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(stored, (false, orphan.to_string()));
+    queue.jobs.lock().clear();
+    assert_eq!(
+        handle_enqueue_stale_wiki(&store, &queue, true, 20, &cancel).await?,
+        WikiSweep {
+            revived: 0,
+            added: 0
+        }
     );
     Ok(())
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn stale_wiki_queues_only_outdated_successes_when_enabled(pool: PgPool) -> TestResult {
+async fn stale_wiki_revives_dead_jobs_first_and_splits_the_cap(pool: PgPool) -> TestResult {
     let store = seed(&pool).await;
     let queue = RecordingQueue::new(&pool).await;
-    for (id, status, version) in [
-        (10, "done", 3),
-        (11, "done", 4),
-        (12, "failed", 3),
-        (13, "skipped", 3),
-    ] {
-        sqlx::query("INSERT INTO rh_summaries (id, content) VALUES ($1, 'a summary')")
-            .bind(Uuid::from_u128(id))
-            .execute(&pool)
-            .await?;
-        sqlx::query("INSERT INTO rh_wiki_extractions (summary_id,status,pipeline_version) VALUES ($1,$2,$3)").bind(Uuid::from_u128(id)).bind(status).bind(version).execute(&pool).await?;
-    }
-    let expected = Job {
-        name: JobName::Fixed(FixedJob::ExtractWiki),
-        payload: JsonObject::from_serialize(&ExtractWiki {
-            summary_id: Uuid::from_u128(10),
-            conversation_id: None,
-        })?,
-        key: Some(format!("wiki-ext-{}", Uuid::from_u128(10))),
-        key_mode: JobKeyMode::KeepRunAt,
-        priority: 10,
-        run_at: None,
-        max_attempts: Some(2),
-    };
     let cancel = CancellationToken::new();
-    assert_eq!(
-        handle_enqueue_stale_wiki(&store, &queue, false, 100, &cancel).await?,
-        0
-    );
-    assert!(queue.jobs.lock().is_empty());
-    let future: DateTime<Utc> = "2099-01-01T00:00:00Z".parse()?;
-    let mut scheduled = expected.clone();
-    scheduled.run_at = Some(future);
-    queue.enqueue(scheduled).await?;
+    let first = summary(&pool, 20, "leaf", None).await?;
+    summary(&pool, 21, "leaf", None).await?;
+    dead_job(&queue, &pool, Uuid::from_u128(30), 30, None).await?;
+    dead_job(&queue, &pool, Uuid::from_u128(31), 29, Some(5)).await?;
+    dead_job(&queue, &pool, Uuid::from_u128(32), 28, Some(1)).await?;
+    dead_job(&queue, &pool, Uuid::from_u128(33), 2, None).await?;
     queue.jobs.lock().clear();
     assert_eq!(
-        handle_enqueue_stale_wiki(&store, &queue, true, 100, &cancel).await?,
-        1
+        handle_enqueue_stale_wiki(&store, &queue, true, 3, &cancel).await?,
+        WikiSweep {
+            revived: 2,
+            added: 1
+        }
     );
-    assert_eq!(*queue.jobs.lock(), vec![expected.clone()]);
-    let actual: DateTime<Utc> =
-        sqlx::query_scalar("SELECT run_at FROM graphile_worker._private_jobs WHERE key = $1")
-            .bind(expected.key)
-            .fetch_one(&pool)
-            .await?;
-    assert_eq!(actual, future);
+    assert_eq!(*queue.jobs.lock(), vec![extract(first, None)?]);
+    let rows: Vec<(String, i16, i16, bool, bool)> = sqlx::query_as(
+        "SELECT key, attempts, priority, locked_at IS NULL AND locked_by IS NULL, run_at > now() - interval '1 minute'
+           FROM graphile_worker._private_jobs WHERE key LIKE 'wiki-ext-%' ORDER BY key",
+    )
+    .fetch_all(&pool)
+    .await?;
+    let key = |id: u128| format!("wiki-ext-{}", Uuid::from_u128(id));
+    assert_eq!(
+        rows,
+        vec![
+            (key(20), 0, 10, true, true),
+            (key(30), 0, 10, true, true),
+            (key(31), 0, 10, true, true),
+            (key(32), 2, 3, false, false),
+            (key(33), 2, 3, true, false),
+        ]
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn revived_counts_what_reschedule_jobs_returned(pool: PgPool) -> TestResult {
+    let store = seed(&pool).await;
+    let queue = RecordingQueue::new(&pool).await;
+    let cancel = CancellationToken::new();
+    for id in 40..43 {
+        dead_job(&queue, &pool, Uuid::from_u128(id), 30, None).await?;
+    }
+    sqlx::raw_sql(
+        "CREATE OR REPLACE FUNCTION graphile_worker.reschedule_jobs(job_ids bigint[], run_at timestamptz DEFAULT NULL,
+             priority integer DEFAULT NULL, attempts integer DEFAULT NULL, max_attempts integer DEFAULT NULL)
+           RETURNS SETOF graphile_worker._private_jobs LANGUAGE sql AS $$
+             UPDATE graphile_worker._private_jobs AS jobs
+                SET run_at = reschedule_jobs.run_at, priority = reschedule_jobs.priority::smallint,
+                    attempts = reschedule_jobs.attempts::smallint, updated_at = now()
+              WHERE jobs.id = job_ids[1]
+             RETURNING *
+           $$",
+    )
+    .execute(&pool)
+    .await?;
+    assert_eq!(
+        handle_enqueue_stale_wiki(&store, &queue, true, 1, &cancel).await?,
+        WikiSweep {
+            revived: 1,
+            added: 0
+        }
+    );
+    assert_eq!(
+        handle_enqueue_stale_wiki(&store, &queue, true, 5, &cancel).await?,
+        WikiSweep {
+            revived: 1,
+            added: 0
+        }
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_failed_add_fails_the_stale_wiki_job(pool: PgPool) -> TestResult {
+    let store = seed(&pool).await;
+    let queue = RecordingQueue::new(&pool).await;
+    let cancel = CancellationToken::new();
+    summary(&pool, 50, "leaf", None).await?;
+    sqlx::query("ALTER FUNCTION graphile_worker.add_job(text,json,text,timestamptz,int,text,int,text[],text) RENAME TO add_job_parked")
+        .execute(&pool)
+        .await?;
+    let failed = handle_enqueue_stale_wiki(&store, &queue, true, 20, &cancel).await;
+    assert!(matches!(failed, Err(WorkerError::Queue(_))), "{failed:?}");
     Ok(())
 }
 

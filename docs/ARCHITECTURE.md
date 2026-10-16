@@ -45,6 +45,14 @@ arrive with schema v8, alongside the sqlite-vec index after cutover.
 endpoint the standalone embedder worker uses. Without an endpoint, those modes answer with keyword results and
 `degraded: "embedding endpoint not configured"`.
 
+### Memory sweep settings
+
+The embedder's `embed-target` and `enqueue-unchunked` share one chunk window: `memory.postgres.chars_per_chunk` (optional,
+positive, default 6000 in `EmbedSettings`; the datahub runs 4000). Sweep limits come from the environment:
+`RIVETHUB_EMBED_SWEEP_LIMIT` (enqueue-unembedded, default 200), `RIVETHUB_CHUNK_BACKFILL_LIMIT` (enqueue-unchunked, default
+200), `RIVETHUB_EMBED_SWEEP_MAX_ATTEMPTS` (default 5), and `RIVETHUB_WIKI_SWEEP_LIMIT` (enqueue-stale-wiki, default 20,
+clamped to 0..=200, 0 disables it). The stale-wiki sweep runs only with `RIVETHUB_WIKI_EXTRACTION=1`.
+
 ## Process shape (Phil 2026-10-12)
 
 One process per service, each with one tokio multi-thread runtime built in its own composition root:

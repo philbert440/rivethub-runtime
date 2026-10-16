@@ -1,3 +1,5 @@
+use kernel::memory::StoredChunk;
+
 use crate::error::WorkerError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,6 +26,20 @@ pub fn split_embed_text(text: &str, max_chars: usize) -> Result<Vec<TextChunk>, 
         start = end;
     }
     Ok(chunks)
+}
+
+pub(crate) fn stored_chunk(
+    index: usize,
+    piece: &TextChunk,
+    vector: Option<Vec<f32>>,
+) -> Result<StoredChunk, WorkerError> {
+    Ok(StoredChunk {
+        index: u32::try_from(index).map_err(|_| WorkerError::TextTooLong)?,
+        char_start: piece.char_start,
+        char_end: piece.char_end,
+        content: piece.text.clone(),
+        vector,
+    })
 }
 
 fn window_end(chars: &[char], start: usize, max_chars: usize) -> usize {

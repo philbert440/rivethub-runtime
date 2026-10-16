@@ -152,7 +152,7 @@ async fn width_and_missing_chunk_storage_are_refused() -> TestResult {
                 char_start: 0,
                 char_end: 4,
                 content: "note".to_owned(),
-                vector: sample(),
+                vector: Some(sample()),
             }],
         ))
         .await;

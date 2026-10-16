@@ -157,29 +157,35 @@ async fn dispatch_sweep<Q: JobQueue>(
         .as_ref()
         .ok_or(WorkerError::MissingMemoryJobs)?;
     let store = store.as_ref();
-    let limit = env.settings.sweep_limit;
-    let attempts = env.settings.sweep_max_attempts;
+    let settings = env.settings;
     match sweep {
-        Sweep::Unembedded => {
-            crate::embedding_sweep::handle_enqueue_unembedded(store, queue, limit, attempts, cancel)
-                .await
-        }
-        Sweep::Unchunked => {
-            crate::embedding_sweep::handle_enqueue_unchunked(
-                store, queue, env.embed, limit, attempts, cancel,
-            )
-            .await
-        }
-        Sweep::StaleWiki => {
-            crate::embedding_sweep::handle_enqueue_stale_wiki(
-                store,
-                queue,
-                env.wiki_enabled,
-                100,
-                cancel,
-            )
-            .await
-        }
+        Sweep::Unembedded => crate::embedding_sweep::handle_enqueue_unembedded(
+            store,
+            queue,
+            settings.sweep_limit,
+            settings.sweep_max_attempts,
+            cancel,
+        )
+        .await
+        .map(|_| ()),
+        Sweep::Unchunked => crate::embedding_sweep::handle_enqueue_unchunked(
+            store,
+            queue,
+            env.embed,
+            settings.chunk_backfill_limit,
+            settings.sweep_max_attempts,
+            cancel,
+        )
+        .await
+        .map(|_| ()),
+        Sweep::StaleWiki => crate::embedding_sweep::handle_enqueue_stale_wiki(
+            store,
+            queue,
+            env.wiki_enabled,
+            settings.wiki_sweep_limit,
+            cancel,
+        )
+        .await
+        .map(|_| ()),
     }
-    .map(|_| ())
 }

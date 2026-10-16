@@ -19,6 +19,7 @@ pub use pool::mean_pool;
 pub use settings::EmbedSettings;
 pub use split::TextChunk;
 pub use split::split_embed_text;
+pub(crate) use split::stored_chunk;
 pub use target::ParsedTarget;
 pub use target::embed_key;
 pub(crate) use target::embed_payload;

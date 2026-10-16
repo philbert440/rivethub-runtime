@@ -48,6 +48,12 @@ fn postgres_section(out: &mut ValidationResult, postgres: &PostgresSection) {
             "\"embed_expected_dims\" must equal the embedding column width (1024); any other value bricks halfvec inserts and vector search",
         );
     }
+    if postgres.chars_per_chunk == Some(0) {
+        out.error(
+            "memory.postgres.chars_per_chunk",
+            "\"chars_per_chunk\" must be a positive integer",
+        );
+    }
     if let Some(embedded) = &postgres.embedded {
         embedded_section(out, embedded);
     }

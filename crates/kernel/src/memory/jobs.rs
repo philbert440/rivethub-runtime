@@ -4,8 +4,9 @@ use thiserror::Error;
 use uuid::Uuid;
 use wire::JsonObject;
 
-use super::{EmbedTable, EmbedTarget};
+use super::{EmbedTable, EmbedTarget, StoredChunk};
 use crate::BoxError;
+use crate::wiki::builder::ExtractWiki;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +20,19 @@ pub struct ToolCallMessage {
     pub tool_name: Option<String>,
     pub tool_args: JsonObject,
     pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnchunkedMessage {
+    pub id: Uuid,
+    pub content: String,
+    pub tool_result: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChunkWrite {
+    Written,
+    Skipped,
 }
 
 #[derive(Debug, Error)]
@@ -49,14 +63,22 @@ pub trait MemoryJobStore: Send + Sync {
     async fn unchunked(
         &self,
         limit: u32,
-        chunk_chars: u32,
+        chars_per_chunk: u32,
         tool_result_cap: u32,
-    ) -> Result<Vec<EmbedTarget>, MemoryJobError>;
+    ) -> Result<Vec<UnchunkedMessage>, MemoryJobError>;
 
-    async fn stale_wiki(
+    async fn write_chunks(
         &self,
-        limit: u32,
-    ) -> Result<Vec<crate::wiki::builder::ExtractWiki>, MemoryJobError>;
+        message_id: Uuid,
+        chunks: Vec<StoredChunk>,
+    ) -> Result<ChunkWrite, MemoryJobError>;
+
+    async fn unembedded_chunks(&self, message_id: Uuid)
+    -> Result<Vec<EmbedTarget>, MemoryJobError>;
+
+    async fn revive_dead_wiki(&self, limit: u32) -> Result<u64, MemoryJobError>;
+
+    async fn missing_wiki(&self, limit: u32) -> Result<Vec<ExtractWiki>, MemoryJobError>;
 
     async fn unembedded(
         &self,

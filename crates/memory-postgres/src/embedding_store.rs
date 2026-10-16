@@ -56,12 +56,12 @@ struct TextBody {
     content: String,
 }
 
-struct ChunkRow {
+pub(crate) struct ChunkRow {
     index: i32,
     char_start: i32,
     char_end: i32,
     content: String,
-    vector: HalfVector,
+    vector: Option<HalfVector>,
 }
 
 #[async_trait]
@@ -257,7 +257,7 @@ async fn write_message(pool: &PgPool, stored: StoredEmbedding) -> Result<(), Emb
     Ok(())
 }
 
-fn prepare_chunks(chunks: &[StoredChunk]) -> Result<Vec<ChunkRow>, EmbeddingStoreError> {
+pub(crate) fn prepare_chunks(chunks: &[StoredChunk]) -> Result<Vec<ChunkRow>, EmbeddingStoreError> {
     chunks.iter().map(prepare_chunk).collect()
 }
 
@@ -267,11 +267,11 @@ fn prepare_chunk(chunk: &StoredChunk) -> Result<ChunkRow, EmbeddingStoreError> {
         char_start: i32::try_from(chunk.char_start).map_err(|_| EmbeddingStoreError::ChunkIndex)?,
         char_end: i32::try_from(chunk.char_end).map_err(|_| EmbeddingStoreError::ChunkIndex)?,
         content: chunk.content.clone(),
-        vector: checked_vector(&chunk.vector)?,
+        vector: chunk.vector.as_deref().map(checked_vector).transpose()?,
     })
 }
 
-async fn insert_chunk(
+pub(crate) async fn insert_chunk(
     connection: &mut PgConnection,
     message_id: Uuid,
     chunk: &ChunkRow,

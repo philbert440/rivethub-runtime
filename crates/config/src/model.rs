@@ -191,6 +191,7 @@ pub struct PostgresSection {
     pub embed_expected_dims: Option<u32>,
     pub embed_query_instruction: Option<String>,
     pub embed_timeout_ms: Option<u64>,
+    pub chars_per_chunk: Option<u32>,
     pub hnsw_ef_search: Option<u64>,
     pub delegation_tracking: bool,
     pub embedded: Option<EmbeddedSection>,

@@ -213,7 +213,7 @@ impl GraphileQueue {
              order by j.run_at asc limit $2",
         )
         .bind(task.to_string())
-        .bind(i64::from(limit.min(200)))
+        .bind(i64::from(limit))
         .fetch_all(&self.pool)
         .await
         .map_err(|source| Error::operation("dead jobs", source))?;
@@ -227,10 +227,24 @@ impl GraphileQueue {
         priority: i16,
     ) -> Result<u64, Error> {
         let ids = self.dead_job_ids(task, limit).await?;
+        self.reschedule(&ids, priority).await
+    }
+
+    pub(crate) async fn reschedule(&self, ids: &[JobId], priority: i16) -> Result<u64, Error> {
         if ids.is_empty() {
             return Ok(0);
         }
         let raw: Vec<i64> = ids.iter().map(|id| i64::from(*id)).collect();
+        sqlx::query(
+            "update graphile_worker._private_jobs
+                set locked_at = null, locked_by = null
+              where id = any($1::bigint[])
+                and locked_at < now() - interval '4 hours'",
+        )
+        .bind(&raw)
+        .execute(&self.pool)
+        .await
+        .map_err(|source| Error::operation("reschedule unlock", source))?;
         let rescheduled: RescheduledJobs = sqlx::query_as(
             "select count(*)::bigint as rescheduled from graphile_worker.reschedule_jobs($1::bigint[], now(), $2, 0)",
         )

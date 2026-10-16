@@ -70,7 +70,7 @@ fn chunk(index: u32, content: &str) -> StoredChunk {
         char_start: index,
         char_end: index + 1,
         content: content.to_owned(),
-        vector: ones(),
+        vector: Some(ones()),
     }
 }
 

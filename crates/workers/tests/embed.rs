@@ -445,7 +445,12 @@ async fn a_consistent_short_pool_is_stored_and_a_mixed_pool_keeps_the_shared_len
         .expect("stored");
     assert!(same_bits(&stored.vector, &[3.0]));
     assert_eq!(stored.chunks.len(), 3);
-    assert!(stored.chunks.iter().all(|chunk| chunk.vector.len() == 1));
+    assert!(
+        stored
+            .chunks
+            .iter()
+            .all(|chunk| chunk.vector.as_ref().map(Vec::len) == Some(1))
+    );
     assert_eq!(store.failures(EmbedTable::Messages, "m").await, 0);
     assert!(
         store
@@ -473,7 +478,12 @@ async fn a_consistent_short_pool_is_stored_and_a_mixed_pool_keeps_the_shared_len
         .expect("stored");
     assert!(same_bits(&stored.vector, &[2.0; 8]));
     assert_eq!(stored.chunks.len(), 2);
-    assert!(stored.chunks.iter().all(|chunk| chunk.vector.len() == 8));
+    assert!(
+        stored
+            .chunks
+            .iter()
+            .all(|chunk| chunk.vector.as_ref().map(Vec::len) == Some(8))
+    );
     assert_eq!(mixed_store.failures(EmbedTable::Messages, "m").await, 0);
     assert!(
         mixed_store

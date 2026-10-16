@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use config::Config;
+use config::model::PostgresSection;
 
 use crate::error::WorkerError;
 
@@ -41,6 +42,13 @@ impl EmbedSettings {
             }
             settings.width = width;
         }
+        if let Some(chars) = postgres_section(config).and_then(|postgres| postgres.chars_per_chunk)
+        {
+            if chars == 0 {
+                return Err(WorkerError::ChunkWindow);
+            }
+            settings.chars_per_chunk = chars;
+        }
         if config.sqlite_selected() {
             settings.chunks_enabled = false;
         }
@@ -67,9 +75,12 @@ impl EmbedSettings {
 }
 
 fn postgres_width(config: &Config) -> Option<u32> {
+    postgres_section(config).and_then(|postgres| postgres.embed_expected_dims)
+}
+
+fn postgres_section(config: &Config) -> Option<&PostgresSection> {
     config
         .memory
         .as_ref()
         .and_then(|memory| memory.postgres.as_ref())
-        .and_then(|postgres| postgres.embed_expected_dims)
 }
