@@ -48,6 +48,8 @@ impl PostgresTasks {
     pub async fn connect(url: &str) -> Result<Self, TaskError> {
         let pool = PgPoolOptions::new()
             .max_connections(8)
+            .acquire_timeout(crate::ACQUIRE_TIMEOUT)
+            .test_before_acquire(true)
             .connect(url)
             .await
             .map_err(|source| TaskError::Unavailable(Box::new(source)))?;
@@ -283,6 +285,9 @@ async fn job_transaction<T>(
 }
 
 fn map_queue_sql(operation: &'static str, source: sqlx::Error) -> JobQueueError {
+    if crate::loss::unreachable(&source) {
+        return JobQueueError::Unavailable(Box::new(source));
+    }
     JobQueueError::Operation {
         operation,
         source: Box::new(source),

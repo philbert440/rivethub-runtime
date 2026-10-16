@@ -326,6 +326,8 @@ pub struct TagTaxonomyDecision {
 pub trait MemoryStore: Send + Sync {
     async fn close(&self) -> Result<(), MemoryStoreError>;
 
+    async fn probe(&self) -> Result<(), MemoryStoreError>;
+
     async fn wiki_topics(
         &self,
         filter: crate::wiki::WikiFilter,

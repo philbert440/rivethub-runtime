@@ -140,6 +140,10 @@ impl MemoryStore for FailingStore {
         Ok(())
     }
 
+    async fn probe(&self) -> Result<(), MemoryStoreError> {
+        unavailable()
+    }
+
     async fn wiki_topics(
         &self,
         _filter: kernel::wiki::WikiFilter,
@@ -320,6 +324,10 @@ impl Default for GatedStore {
 impl MemoryStore for GatedStore {
     async fn close(&self) -> Result<(), MemoryStoreError> {
         Ok(())
+    }
+
+    async fn probe(&self) -> Result<(), MemoryStoreError> {
+        MemoryStore::probe(&self.inner).await
     }
 
     async fn wiki_topics(

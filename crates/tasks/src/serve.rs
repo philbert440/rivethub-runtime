@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use chrono::Utc;
 use tokio_util::sync::CancellationToken;
@@ -25,8 +26,16 @@ where
                 incoming = notifications.recv() => match incoming {
                     Ok(()) => self.notify_jobs(),
                     Err(error) => {
-                        tracing::error!(%error, "job notification failed");
-                        break;
+                        tracing::warn!(%error, "job notification failed");
+                        if !retry_notification(&cancel).await {
+                            break;
+                        }
+                        match self.jobs.subscribe().await {
+                            Ok(replacement) => notifications = replacement,
+                            Err(error) => {
+                                tracing::warn!(%error, "job notification failed");
+                            }
+                        }
                     }
                 },
             }
@@ -62,5 +71,15 @@ where
                 }
             }
         }
+    }
+}
+
+const NOTIFY_RETRY: Duration = Duration::from_millis(200);
+
+async fn retry_notification(cancel: &CancellationToken) -> bool {
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => false,
+        () = tokio::time::sleep(NOTIFY_RETRY) => true,
     }
 }

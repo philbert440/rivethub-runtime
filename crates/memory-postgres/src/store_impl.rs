@@ -228,6 +228,10 @@ impl MemoryStore for crate::PostgresMemory {
             .map_err(|error| MemoryStoreError::Unavailable(Box::new(error)))
     }
 
+    async fn probe(&self) -> Result<(), MemoryStoreError> {
+        self.ping().await.map_err(Into::into)
+    }
+
     async fn wiki_topics(
         &self,
         filter: kernel::wiki::WikiFilter,

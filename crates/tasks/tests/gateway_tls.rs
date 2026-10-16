@@ -194,6 +194,7 @@ async fn health(State(gate): State<Gate>) -> axum::response::Response {
         sessions: 0,
         name: "gateway".to_owned(),
         node: "local".to_owned(),
+        degraded: None,
     })
 }
 

@@ -25,6 +25,7 @@ async fn status_reads_health_and_optional_version_and_uptime() {
                     sessions: 0,
                     name: "host".to_owned(),
                     node: "node".to_owned(),
+                    degraded: None,
                 },
                 version: "1.2.3",
                 uptime: 12.5,
@@ -87,6 +88,7 @@ async fn ordinary_redirects_reach_the_health_route() {
                         sessions: 0,
                         name: "host".to_owned(),
                         node: "node".to_owned(),
+                        degraded: None,
                     })
                 }),
             ),

@@ -22,6 +22,9 @@ use std::sync::Arc;
 use axum::Json;
 use axum::Router;
 use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use kernel::memory::MemoryStoreError;
 use wire::gateway::HealthzResponse;
 
 use crate::Gateway;
@@ -54,13 +57,45 @@ pub(crate) fn join_task<T>(joined: Result<T, tokio::task::JoinError>) -> Result<
     }
 }
 
-pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> Json<HealthzResponse> {
-    Json(HealthzResponse {
-        ok: true,
-        sessions: gateway.sessions().count() as u64,
-        name: gateway.settings().hostname.clone(),
-        node: gateway.settings().node.clone(),
-    })
+pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> axum::response::Response {
+    let sessions = gateway.sessions().count() as u64;
+    let name = gateway.settings().hostname.clone();
+    let node = gateway.settings().node.clone();
+    match gateway.store().probe().await {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(HealthzResponse {
+                ok: true,
+                sessions,
+                name,
+                node,
+                degraded: None,
+            }),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(HealthzResponse {
+                ok: false,
+                sessions,
+                name,
+                node,
+                degraded: Some(degraded_reason(&error)),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+fn degraded_reason(error: &MemoryStoreError) -> String {
+    let detail = match error {
+        MemoryStoreError::Unavailable(source) => source.to_string(),
+        MemoryStoreError::Query { message, .. } | MemoryStoreError::InvalidRequest { message } => {
+            message.clone()
+        }
+        MemoryStoreError::TagTablesMissing => error.to_string(),
+    };
+    format!("database unreachable: {detail}")
 }
 
 pub(crate) async fn not_found(

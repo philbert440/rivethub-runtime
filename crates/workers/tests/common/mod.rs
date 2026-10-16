@@ -359,6 +359,8 @@ impl JobQueue for Queue {
     async fn claim(&self, selector: &ClaimSelector) -> Result<Option<ClaimedJob>, JobQueueError> {
         let pending = self.claim_error.lock().await.take();
         if let Some(error) = pending {
+            self.claims.fetch_add(1, Ordering::Relaxed);
+            self.bump();
             return Err(error);
         }
         let claimed = {

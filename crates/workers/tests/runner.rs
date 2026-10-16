@@ -27,7 +27,6 @@ use common::width;
 use kernel::model::ModelProvider;
 use kernel::queue::FixedJob;
 use kernel::queue::JobName;
-use kernel::queue::JobQueueError;
 use kernel::queue::WorkerRole;
 use testkit::FakeProvider;
 use testkit::Script;
@@ -268,18 +267,13 @@ async fn shutdown_fails_every_in_flight_embed() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn a_claim_error_stops_the_runner() {
+async fn a_database_outage_keeps_the_runner_alive() {
     let rig = rig(ProcessRole::Embedder, 1, fnv_provider());
     rig.queue.fail_next_claim().await;
-    let error = rig
-        .runner
-        .run(CancellationToken::new())
-        .await
-        .expect_err("claim");
-    assert!(matches!(
-        error,
-        WorkerError::Queue(JobQueueError::Unavailable(_))
-    ));
+    let (cancel, run) = spawn(&rig);
+    rig.queue.wait_claims(1).await;
+    assert!(!run.is_finished());
+    finish(cancel, run).await;
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -20,6 +20,8 @@ pub struct HealthzResponse {
     pub sessions: u64,
     pub name: String,
     pub node: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub degraded: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]

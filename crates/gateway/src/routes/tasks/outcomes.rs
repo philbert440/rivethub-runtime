@@ -302,8 +302,8 @@ fn average(sum: u128, count: u64) -> Result<Option<u64>, TaskHttpError> {
 
 fn hidden(error: &TaskError) -> TaskHttpError {
     match error {
-        TaskError::Unavailable(_)
-        | TaskError::UnavailableCatalog(_)
+        TaskError::Unavailable(_) => TaskHttpError::Unavailable(error.to_string()),
+        TaskError::UnavailableCatalog(_)
         | TaskError::Operation { .. }
         | TaskError::QueueAbsent
         | TaskError::Cleanup { .. }

@@ -4,36 +4,37 @@ use kernel::tasks::TaskListFilter;
 use kernel::tasks::TaskQuery;
 use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskWatch;
-use sqlx::postgres::PgListener;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+use crate::listen::Listener;
+use crate::listen::Stopped;
 use crate::task_db::PostgresTasks;
 use crate::task_query::list_tasks;
-
-const DONE_CHANNEL: &str = "ros_task_done";
 
 impl PostgresTasks {
     pub async fn spawn_watch(
         &self,
         cancel: CancellationToken,
     ) -> Result<JoinHandle<Result<(), TaskError>>, TaskError> {
-        let mut listener = PgListener::connect_with(self.pool())
-            .await
-            .map_err(watch_error)?;
-        listener.listen(DONE_CHANNEL).await.map_err(watch_error)?;
+        let mut listener = Listener::connect(
+            self.pool().clone(),
+            &["ros_task_done"],
+            "task watch",
+            cancel.clone(),
+        )
+        .await
+        .map_err(watch_error)?;
         let events = self.events.clone();
         Ok(tokio::spawn(async move {
             loop {
-                tokio::select! {
-                    biased;
-                    () = cancel.cancelled() => return Ok(()),
-                    incoming = listener.recv() => {
-                        incoming.map_err(watch_error)?;
+                match listener.recv().await {
+                    Ok(()) => {
                         events.send_modify(|generation| {
                             *generation = generation.saturating_add(1);
                         });
                     }
+                    Err(Stopped) => return Ok(()),
                 }
             }
         }))
@@ -41,6 +42,9 @@ impl PostgresTasks {
 }
 
 fn watch_error(source: sqlx::Error) -> TaskError {
+    if crate::loss::unreachable(&source) {
+        return TaskError::Unavailable(Box::new(source));
+    }
     TaskError::Operation {
         operation: "task watch",
         source: Box::new(source),

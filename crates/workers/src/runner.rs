@@ -209,13 +209,25 @@ where
                 }
                 continue;
             }
-            let Some(job) = self.claim_one(roles).await? else {
-                drop(permit);
-                self.publish_idle(tasks.is_empty());
-                if !self.park(notifications, cancel).await? {
-                    return Ok(());
+            let job = match self.claim_one(roles).await {
+                Ok(Some(job)) => job,
+                Ok(None) => {
+                    drop(permit);
+                    self.publish_idle(tasks.is_empty());
+                    if !self.park(notifications, cancel).await? {
+                        return Ok(());
+                    }
+                    continue;
                 }
-                continue;
+                Err(error) if error.database_unreachable() => {
+                    drop(permit);
+                    self.publish_idle(tasks.is_empty());
+                    if !wait_outage(notifications, cancel).await? {
+                        return Ok(());
+                    }
+                    continue;
+                }
+                Err(error) => return Err(error),
             };
             self.note_open(job.id).await;
             self.spawn_job(tasks, permit, job, cancel.clone());
@@ -327,6 +339,7 @@ where
             };
             let error = match joined {
                 Ok(Ok(())) => None,
+                Ok(Err(error)) if error.database_unreachable() => None,
                 Ok(Err(error)) => Some(error),
                 Err(error) => Some(WorkerError::TaskEnded(error.to_string())),
             };
@@ -341,6 +354,7 @@ where
         if wait
             && let Err(error) = self.fail_open().await
             && first.is_none()
+            && !error.database_unreachable()
         {
             first = Some(error);
         }
@@ -367,6 +381,28 @@ where
             Some(error) => Err(error),
             None => Ok(()),
         }
+    }
+}
+
+async fn wait_outage(
+    notifications: &mut dyn JobNotifications,
+    cancel: &CancellationToken,
+) -> Result<bool, WorkerError> {
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => Ok(false),
+        incoming = notifications.recv() => match incoming {
+            Ok(()) => Ok(true),
+            Err(error) => {
+                let wrapped = WorkerError::queue(error);
+                if wrapped.database_unreachable() {
+                    Ok(crate::outage::wait(crate::outage::FLOOR, cancel).await)
+                } else {
+                    Err(wrapped)
+                }
+            }
+        },
+        () = tokio::time::sleep(crate::outage::FLOOR) => Ok(true),
     }
 }
 

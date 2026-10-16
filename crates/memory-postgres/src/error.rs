@@ -71,6 +71,9 @@ impl Error {
     }
 
     pub(crate) fn operation(operation: &'static str, source: sqlx::Error) -> Self {
+        if crate::loss::unreachable(&source) {
+            return Self::Connection(source);
+        }
         Self::Operation {
             operation,
             message: source.to_string(),
@@ -192,6 +195,35 @@ mod tests {
         };
         let typed = source.downcast::<Error>().expect("boxed typed error");
         assert_eq!(typed.to_string(), text);
+    }
+
+    #[test]
+    fn pool_timeout_is_unavailable() {
+        let error = Error::operation("probe", sqlx::Error::PoolTimedOut);
+        assert!(matches!(
+            MemoryStoreError::from(error),
+            MemoryStoreError::Unavailable(_)
+        ));
+        let error = Error::operation("probe", sqlx::Error::PoolTimedOut);
+        assert!(matches!(
+            JobQueueError::from(error),
+            JobQueueError::Unavailable(_)
+        ));
+    }
+
+    #[test]
+    fn ssl_request_garbage_is_unavailable() {
+        let error = Error::operation(
+            "claim",
+            sqlx::Error::Protocol(
+                "unexpected response from SSLRequest: 0x00 (sqlx_postgres::connection::tls:95)"
+                    .into(),
+            ),
+        );
+        assert!(matches!(
+            JobQueueError::from(error),
+            JobQueueError::Unavailable(_)
+        ));
     }
 
     fn assert_queue(error: Error) {

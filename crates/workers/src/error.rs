@@ -102,6 +102,10 @@ impl WorkerError {
         Self::Queue(source)
     }
 
+    pub(crate) fn database_unreachable(&self) -> bool {
+        matches!(self, Self::Queue(JobQueueError::Unavailable(_)))
+    }
+
     pub(crate) fn payload(source: serde_json::Error) -> Self {
         Self::Payload { source }
     }

@@ -125,6 +125,10 @@ impl MemoryStore for FakeMemoryStore {
         Ok(())
     }
 
+    async fn probe(&self) -> Result<(), MemoryStoreError> {
+        Ok(())
+    }
+
     async fn wiki_topics(
         &self,
         filter: kernel::wiki::WikiFilter,

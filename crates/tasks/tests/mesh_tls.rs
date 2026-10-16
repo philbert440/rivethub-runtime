@@ -203,6 +203,7 @@ async fn health(State(observed): State<Observed>, headers: HeaderMap) -> axum::r
         sessions: 0,
         name: "mesh".to_owned(),
         node: "local".to_owned(),
+        degraded: None,
     })
 }
 

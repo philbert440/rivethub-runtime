@@ -15,18 +15,25 @@ use kernel::queue::StoredJob;
 use kernel::tasks::TaskError;
 
 pub(crate) fn map_sql(operation: &'static str, source: sqlx::Error) -> TaskError {
-    if let Some(database) = source.as_database_error()
-        && database
-            .code()
-            .as_deref()
-            .is_some_and(|code| code == "42883" || code == "42P01" || code == "3F000")
-    {
+    if queue_absent(&source) {
         return TaskError::QueueAbsent;
+    }
+    if crate::loss::unreachable(&source) {
+        return TaskError::Unavailable(Box::new(source));
     }
     TaskError::Operation {
         operation,
         source: Box::new(source),
     }
+}
+
+fn queue_absent(source: &sqlx::Error) -> bool {
+    source.as_database_error().is_some_and(|database| {
+        database
+            .code()
+            .as_deref()
+            .is_some_and(|code| code == "42883" || code == "42P01" || code == "3F000")
+    })
 }
 
 pub(crate) async fn enqueue_job(
@@ -171,13 +178,11 @@ where
 }
 
 fn map_queue(operation: &'static str, source: sqlx::Error) -> JobQueueError {
-    if let Some(database) = source.as_database_error()
-        && database
-            .code()
-            .as_deref()
-            .is_some_and(|code| code == "42883" || code == "42P01" || code == "3F000")
-    {
+    if queue_absent(&source) {
         return JobQueueError::Absent;
+    }
+    if crate::loss::unreachable(&source) {
+        return JobQueueError::Unavailable(Box::new(source));
     }
     JobQueueError::Operation {
         operation,

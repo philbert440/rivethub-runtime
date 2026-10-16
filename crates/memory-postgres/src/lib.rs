@@ -8,6 +8,8 @@ mod embedding_store;
 pub mod error;
 mod graphile;
 mod graphile_sql;
+mod listen;
+mod loss;
 pub mod project;
 pub mod queue;
 pub mod read;
@@ -25,6 +27,9 @@ mod task_rows;
 mod task_watch;
 mod wiki;
 mod wiki_builder;
+
+#[cfg(test)]
+mod resilience;
 
 pub use task_db::PostgresTasks;
 
@@ -47,6 +52,7 @@ use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
 pub const SCHEMA_VERSION: i64 = 23;
+pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]
 pub struct PostgresMemory {
@@ -82,8 +88,9 @@ impl PostgresMemory {
     pub async fn connect(url: &str) -> Result<Self, Error> {
         let pool = PgPoolOptions::new()
             .max_connections(5)
-            .acquire_timeout(Duration::from_secs(10))
+            .acquire_timeout(ACQUIRE_TIMEOUT)
             .idle_timeout(Duration::from_secs(30))
+            .test_before_acquire(true)
             .connect(url)
             .await
             .map_err(Error::Connection)?;
@@ -111,6 +118,14 @@ impl PostgresMemory {
     #[must_use]
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    pub(crate) async fn ping(&self) -> Result<(), Error> {
+        sqlx::query("SELECT 1")
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(|source| Error::operation("probe", source))
     }
 
     pub async fn queue(&self) -> Result<PostgresQueue, Error> {

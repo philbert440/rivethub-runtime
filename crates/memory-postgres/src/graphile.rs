@@ -11,16 +11,17 @@ use sqlx::PgPool;
 use std::str::FromStr;
 use wire::JsonObject;
 
-struct Notifications(sqlx::postgres::PgListener);
+struct Notifications(crate::listen::Listener);
 
 #[async_trait::async_trait]
 impl kernel::queue::JobNotifications for Notifications {
     async fn recv(&mut self) -> Result<(), kernel::queue::JobQueueError> {
-        self.0
-            .recv()
-            .await
-            .map(|_| ())
-            .map_err(|source| kernel::queue::JobQueueError::Unavailable(Box::new(source)))
+        match self.0.recv().await {
+            Ok(()) => Ok(()),
+            Err(crate::listen::Stopped) => Err(kernel::queue::JobQueueError::Unavailable(
+                Box::new(crate::listen::Stopped),
+            )),
+        }
     }
 }
 
@@ -348,13 +349,14 @@ impl GraphileQueue {
 pub(crate) async fn listen(
     pool: &PgPool,
 ) -> Result<Box<dyn kernel::queue::JobNotifications>, Error> {
-    let mut listener = sqlx::postgres::PgListener::connect_with(pool)
-        .await
-        .map_err(|source| Error::operation("queue listen", source))?;
-    listener
-        .listen("jobs:insert")
-        .await
-        .map_err(|source| Error::operation("queue listen", source))?;
+    let listener = crate::listen::Listener::connect_resilient(
+        pool.clone(),
+        &["jobs:insert"],
+        "job notifications",
+        tokio_util::sync::CancellationToken::new(),
+    )
+    .await
+    .map_err(|source| Error::operation("queue listen", source))?;
     Ok(Box::new(Notifications(listener)))
 }
 

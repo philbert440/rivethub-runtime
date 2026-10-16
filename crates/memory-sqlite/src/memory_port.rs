@@ -47,6 +47,16 @@ impl MemoryStore for SqliteStore {
         Ok(())
     }
 
+    async fn probe(&self) -> Result<(), MemoryStoreError> {
+        self.with_conn(|conn| {
+            conn.query_row("SELECT 1", [], |row| row.get::<_, i32>(0))
+                .map(|_| ())
+                .map_err(SqliteError::query("probe"))
+        })
+        .await
+        .map_err(Into::into)
+    }
+
     async fn wiki_topics(&self, filter: WikiFilter) -> Result<WikiTopicList, MemoryStoreError> {
         self.read_wiki_topics(filter).await
     }

@@ -21,6 +21,8 @@ pub(super) enum TaskHttpError {
     #[error("harness \"{0}\" is not allowed on this node (den.allowed_harnesses)")]
     HarnessDenied(HarnessId),
     #[error("{0}")]
+    Unavailable(String),
+    #[error("{0}")]
     Failed(String),
     #[error("internal error")]
     Internal,
@@ -64,6 +66,9 @@ impl IntoResponse for TaskHttpError {
                 .code("harness_not_allowed");
                 body.harness_id = Some(harness);
                 return (StatusCode::FORBIDDEN, Json(body)).into_response();
+            }
+            Self::Unavailable(message) => {
+                (StatusCode::SERVICE_UNAVAILABLE, GatewayError::new(message))
             }
             Self::Failed(message) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
