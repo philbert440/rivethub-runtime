@@ -61,6 +61,7 @@ jobs:
   macos:
     name: macOS (rh build, cli tests)
     runs-on: macos-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.0
@@ -78,7 +79,7 @@ jobs:
       - name: Build rh
         run: cargo build --release --locked -p rivethub --bin rh
       - name: cli tests
-        run: cargo nextest run --locked -p cli --all-features
+        run: cargo nextest run --locked -p cli --all-features --profile macos --no-fail-fast
 
   rust:
     name: Tests (coverage) and build
