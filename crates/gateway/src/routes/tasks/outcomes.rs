@@ -186,7 +186,7 @@ fn included(task: &TaskRecord, query: &OutcomesQuery, bounds: &Bounds) -> bool {
     if !kernel::tasks::terminal(task.status) || task.origin == TaskOrigin::Eval {
         return false;
     }
-    if task.acceptance_criteria.is_empty() {
+    if task.acceptance_criteria.is_empty() || task.spec.audit_only == Some(true) {
         return false;
     }
     if let Some(agent) = &query.agent_id

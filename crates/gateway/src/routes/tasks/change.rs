@@ -15,6 +15,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 use wire::task::TaskApprovalAccepted;
 use wire::task::TaskKillResponse;
+use wire::task::TaskPermissionDecision;
+use wire::task::TaskPermissionOutcome;
 use wire::task::TaskSteerAccepted;
 
 use super::TasksApi;
@@ -111,14 +113,46 @@ pub(super) async fn approve(
     let body: DecisionBody = read_json(request).await?;
     let decision = decision_of(body.decision.as_deref())?;
     reject_if_terminal(&api, broker.as_ref(), id).await?;
+    let pending = broker
+        .pending(id)
+        .await
+        .map_err(|error| unknown_approval(&error))?;
+    let tool = pending
+        .into_iter()
+        .find_map(|item| (item.request_id == request_id).then_some(item.name));
     broker
         .resolve(id, &request_id, decision)
         .await
         .map_err(|error| unknown_approval(&error))?;
+    let Some(tool) = tool else {
+        return Err(TaskHttpError::Failed(
+            "approval request has no tool name".to_owned(),
+        ));
+    };
+    api.store
+        .append_permission(
+            id,
+            &TaskPermissionDecision {
+                request_id,
+                tool,
+                decision: permission_outcome(decision),
+                at: Utc::now(),
+                message: None,
+            },
+        )
+        .await
+        .map_err(|error| store_error(&error))?;
     Ok((
         StatusCode::ACCEPTED,
         Json(TaskApprovalAccepted { ok: true }),
     ))
+}
+
+fn permission_outcome(decision: ApprovalDecision) -> TaskPermissionOutcome {
+    match decision {
+        ApprovalDecision::Allow => TaskPermissionOutcome::Allow,
+        ApprovalDecision::Deny => TaskPermissionOutcome::Deny,
+    }
 }
 
 fn decision_of(raw: Option<&str>) -> Result<ApprovalDecision, TaskHttpError> {

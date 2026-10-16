@@ -2,6 +2,8 @@
 
 pub mod support;
 
+#[path = "cases/exclude.rs"]
+mod exclude;
 #[path = "cases/hooks.rs"]
 mod hooks;
 #[path = "cases/lifecycle.rs"]

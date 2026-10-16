@@ -266,6 +266,10 @@ fn blank_spec(
         resume_message: None,
         session: format!("task:{id}"),
         permission_decisions: None,
+        preset_id: None,
+        preset_name: None,
+        audit_only: None,
+        extra: wire::Extra::default(),
     }
 }
 

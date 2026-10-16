@@ -237,6 +237,21 @@ async fn excluded_rows_do_not_count() {
 }
 
 #[tokio::test]
+async fn audit_only_rows_stay_out_of_the_rollup() {
+    let setup = Setup::new();
+    let mut hidden = alpha();
+    hidden.id = Uuid::from_u128(40);
+    hidden.spec.audit_only = Some(true);
+    let mut visible = alpha();
+    visible.id = Uuid::from_u128(41);
+    visible.spec.audit_only = Some(false);
+    setup.memory.insert(&hidden).await.expect("hidden");
+    setup.memory.insert(&visible).await.expect("visible");
+    let body = outcomes(&setup, "").await;
+    assert_eq!(body.totals.tasks, 1);
+}
+
+#[tokio::test]
 async fn a_killed_task_counts_without_completed_or_failed() {
     let setup = Setup::new();
     let mut task = qualify(30, "alpha", 14);

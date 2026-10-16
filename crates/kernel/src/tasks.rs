@@ -22,6 +22,7 @@ use wire::task::ContextRef;
 use wire::task::TaskApprovalRequest;
 use wire::task::TaskBudget;
 use wire::task::TaskExecutorKind;
+use wire::task::TaskPermissionDecision;
 use wire::task::TaskResult;
 use wire::task::TaskSpec;
 use wire::task::TaskStatus;
@@ -229,6 +230,12 @@ pub trait TaskStore: std::fmt::Debug + Send + Sync {
     async fn set_pending(&self, id: Uuid, message: &str) -> Result<(), TaskError>;
 
     async fn add_harness_session(&self, id: Uuid, session: &str) -> Result<(), TaskError>;
+
+    async fn append_permission(
+        &self,
+        id: Uuid,
+        decision: &TaskPermissionDecision,
+    ) -> Result<(), TaskError>;
 }
 
 #[derive(Debug, Error)]

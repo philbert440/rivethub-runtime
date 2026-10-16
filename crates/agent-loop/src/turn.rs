@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use kernel::ToolContext;
-use kernel::agent::{StopReason, Turn, TurnResult};
+use kernel::agent::{StopReason, Turn, TurnResult, tool_permitted};
 use kernel::model::{ModelChunk, ModelProvider, ModelRequest};
 use kernel::tool::Tool;
 use tokio::sync::mpsc;
@@ -201,7 +201,9 @@ impl AgentLoop {
             tools: self
                 .tools
                 .iter()
-                .filter(|(name, _)| turn.authorized_tools.contains(*name))
+                .filter(|(name, _)| {
+                    tool_permitted(name, &turn.authorized_tools, &turn.excluded_tools)
+                })
                 .map(|(_, tool)| tool.definition())
                 .collect(),
             thinking: turn.request.thinking,
@@ -251,12 +253,13 @@ impl AgentLoop {
     ) -> Result<(), Error> {
         for (index, call) in calls.into_iter().enumerate() {
             let tool = self.tools.get(&call.name).cloned();
-            let authorized = turn.authorized_tools.contains(&call.name);
+            let permitted =
+                tool_permitted(&call.name, &turn.authorized_tools, &turn.excluded_tools);
             let hooks = Arc::clone(&self.hooks);
             let base = turn.context.clone();
             let context = turn.tool_context.clone();
             tasks.spawn(async move {
-                let completed = execute(tool, authorized, hooks, base, context, call).await?;
+                let completed = execute(tool, permitted, hooks, base, context, call).await?;
                 Ok::<_, Error>((index, completed))
             });
         }
@@ -277,13 +280,13 @@ impl AgentLoop {
 
 async fn execute(
     tool: Option<Arc<dyn Tool>>,
-    authorized: bool,
+    permitted: bool,
     hooks: Arc<HookPipeline>,
     base: HookContextBase,
     context: ToolContext,
     call: ToolCall,
 ) -> Result<(Message, Option<String>), Error> {
-    let blocked = !authorized || tool.is_none();
+    let blocked = !permitted || tool.is_none();
     let checked = hooks
         .run(HookContext {
             base: base.clone(),

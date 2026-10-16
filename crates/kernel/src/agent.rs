@@ -24,7 +24,25 @@ pub struct Turn {
     pub context: HookContextBase,
     pub tool_context: ToolContext,
     pub authorized_tools: BTreeSet<String>,
+    pub excluded_tools: BTreeSet<String>,
     pub limits: TurnLimits,
+}
+
+#[must_use]
+pub fn tool_permitted(
+    name: &str,
+    authorized: &BTreeSet<String>,
+    excluded: &BTreeSet<String>,
+) -> bool {
+    authorized.contains(name) && !excluded.contains(name)
+}
+
+#[must_use]
+pub fn excluded_names(names: Option<&[String]>) -> BTreeSet<String> {
+    match names {
+        Some(names) => names.iter().cloned().collect(),
+        None => BTreeSet::new(),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

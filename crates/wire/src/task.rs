@@ -1,3 +1,4 @@
+use crate::Extra;
 use crate::JsonObject;
 use crate::events::AgentEvent;
 use crate::session_id::SessionId;
@@ -157,6 +158,14 @@ pub struct TaskSpec {
     pub session: String,
     #[serde(default)]
     pub permission_decisions: Option<Vec<TaskPermissionDecision>>,
+    #[serde(default)]
+    pub preset_id: Option<String>,
+    #[serde(default)]
+    pub preset_name: Option<String>,
+    #[serde(default)]
+    pub audit_only: Option<bool>,
+    #[serde(flatten, default)]
+    pub extra: Extra,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

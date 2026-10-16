@@ -8,7 +8,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
 use chrono::Utc;
 use kernel::ToolContext;
-use kernel::agent::{StopReason, Turn, TurnLimits, TurnResult, TurnRunner};
+use kernel::agent::{StopReason, Turn, TurnLimits, TurnResult, TurnRunner, excluded_names};
 use kernel::model::{ModelChunk, ModelRequest};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::DropGuard;
@@ -221,6 +221,7 @@ fn turn(
             session: None,
         },
         authorized_tools: BTreeSet::new(),
+        excluded_tools: excluded_names(None),
         limits,
     }
 }

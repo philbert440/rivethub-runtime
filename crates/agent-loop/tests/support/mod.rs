@@ -9,6 +9,7 @@ use agent_loop::hooks::{HookError, HookPipeline};
 use agent_loop::shell::ShellDanger;
 use agent_loop::{Turn, TurnLimits};
 use kernel::ToolContext;
+use kernel::agent::excluded_names;
 use kernel::model::ModelRequest;
 use tempfile::TempDir;
 use tokio::task::JoinSet;
@@ -109,6 +110,7 @@ pub fn turn() -> Turn {
             session: None,
         },
         authorized_tools: BTreeSet::new(),
+        excluded_tools: excluded_names(None),
         limits: TurnLimits {
             steps: 3,
             timeout: Duration::from_secs(20),

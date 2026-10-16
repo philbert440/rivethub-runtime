@@ -5,7 +5,7 @@ use std::time::Duration;
 use chrono::{TimeDelta, Utc};
 use config::{Config, Environment};
 use gateway::mesh::{AgentCall, AgentChannel, ChannelSettings, Heartbeat, Registry};
-use kernel::agent::{Turn, TurnLimits, TurnRunner};
+use kernel::agent::{Turn, TurnLimits, TurnRunner, excluded_names};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -175,6 +175,7 @@ async fn run_call(id: String, model: String, runner: Arc<dyn TurnRunner>, call: 
             session: None,
         },
         authorized_tools: BTreeSet::new(),
+        excluded_tools: excluded_names(None),
         limits: TurnLimits {
             steps: 1,
             timeout: Duration::from_secs(120),

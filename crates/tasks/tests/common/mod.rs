@@ -161,6 +161,10 @@ pub(crate) fn spec(session: &str, append: Option<&str>, working: Option<&str>) -
         resume_message: None,
         session: session.to_string(),
         permission_decisions: None,
+        preset_id: None,
+        preset_name: None,
+        audit_only: None,
+        extra: wire::Extra::default(),
     }
 }
 

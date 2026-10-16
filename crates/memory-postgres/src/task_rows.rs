@@ -7,18 +7,15 @@ use uuid::Uuid;
 use wire::task::AcceptanceCriterion;
 use wire::task::ContextRef;
 use wire::task::CriterionReport;
-use wire::task::Effort;
 use wire::task::TaskArtifact;
 use wire::task::TaskBudget;
-use wire::task::TaskIsolation;
 use wire::task::TaskPermissionDecision;
-use wire::task::TaskPromptMode;
 use wire::task::TaskResult;
-use wire::task::TaskSpec;
 use wire::task::TaskStatus;
 use wire::task::TaskUsage;
 use wire::task::TaskVerdict;
 use wire::task::VerifierResult;
+use wire::task_overrides::TaskOverrides;
 
 use crate::task_jobs::cell;
 use crate::task_jobs::map_sql;
@@ -70,7 +67,7 @@ pub(crate) async fn insert_task(
         .bind(&task.goal)
         .bind(Json(&task.context_refs))
         .bind(Json(&task.acceptance_criteria))
-        .bind(stored_json(&StoredSpec::from(&task.spec))?)
+        .bind(crate::task_spec::bag_json(&task.spec)?)
         .bind(task.executor.to_string())
         .bind(&task.executor_target)
         .bind(&task.requested_by)
@@ -294,14 +291,30 @@ pub(crate) fn decode_task(
     row: &sqlx::postgres::PgRow,
     operation: &'static str,
 ) -> Result<TaskRecord, TaskError> {
+    let id: Uuid = cell(row, operation, "id")?;
+    let goal: String = cell(row, operation, "goal")?;
+    let agent_id: String = cell(row, operation, "agent_id")?;
     let context_refs: Json<Vec<ContextRef>> = cell(row, operation, "context_refs")?;
     let acceptance_criteria: Json<Vec<AcceptanceCriterion>> =
         cell(row, operation, "acceptance_criteria")?;
-    let spec: Json<TaskSpec> = cell(row, operation, "spec")?;
+    let overrides: Json<TaskOverrides> = cell(row, operation, "spec")?;
+    let budget: Json<TaskBudget> = cell(row, operation, "budget")?;
+    let session_key: Option<String> = cell(row, operation, "session_key")?;
+    let spec = crate::task_spec::assemble_spec(
+        &crate::task_spec::LoadedColumns {
+            id,
+            agent_id: &agent_id,
+            goal: &goal,
+            resolved_context: &context_refs.0,
+            acceptance_criteria: &acceptance_criteria.0,
+            budget: budget.0,
+            session_key: session_key.as_deref(),
+        },
+        overrides.0,
+    )?;
     let executor: String = cell(row, operation, "executor")?;
     let origin: String = cell(row, operation, "origin")?;
     let chain_depth: i32 = cell(row, operation, "chain_depth")?;
-    let budget: Json<TaskBudget> = cell(row, operation, "budget")?;
     let usage: Option<Json<TaskUsage>> = cell(row, operation, "usage")?;
     let status: String = cell(row, operation, "status")?;
     let attempt: i32 = cell(row, operation, "attempt")?;
@@ -311,15 +324,15 @@ pub(crate) fn decode_task(
     let eval: Option<Json<VerifierResult>> = cell(row, operation, "eval")?;
     let eval_attempt: i32 = cell(row, operation, "eval_attempt")?;
     Ok(TaskRecord {
-        id: cell(row, operation, "id")?,
-        goal: cell(row, operation, "goal")?,
+        id,
+        goal,
         context_refs: context_refs.0,
         acceptance_criteria: acceptance_criteria.0,
-        spec: spec.0,
+        spec,
         executor: parse_text(&executor)?,
         executor_target: cell(row, operation, "executor_target")?,
         requested_by: cell(row, operation, "requested_by")?,
-        agent_id: cell(row, operation, "agent_id")?,
+        agent_id,
         origin: parse_text(&origin)?,
         parent_task_id: cell(row, operation, "parent_task_id")?,
         chain_depth: u32_from(chain_depth)?,
@@ -332,7 +345,7 @@ pub(crate) fn decode_task(
         result: result.map(|result| result.0),
         error: cell(row, operation, "error")?,
         conversation_id: cell(row, operation, "conversation_id")?,
-        session_key: cell(row, operation, "session_key")?,
+        session_key,
         pending_message: cell(row, operation, "pending_message")?,
         claimed_by: cell(row, operation, "claimed_by")?,
         harness_session_ids: harness_session_ids.0,
@@ -344,6 +357,51 @@ pub(crate) fn decode_task(
         eval: eval.map(|eval| eval.0),
         eval_attempt: u32_from(eval_attempt)?,
     })
+}
+
+const APPEND_PERMISSION: &str = concat!(
+    "WITH target AS (",
+    "SELECT id, jsonb_typeof(spec) AS spec_type, ",
+    "CASE WHEN spec->'permissionDecisions' IS NULL THEN 'absent' ",
+    "ELSE jsonb_typeof(spec->'permissionDecisions') END AS decisions_type ",
+    "FROM rh_tasks WHERE id = $1",
+    "), updated AS (",
+    "UPDATE rh_tasks AS tasks SET spec = jsonb_set(",
+    "tasks.spec, '{permissionDecisions}', ",
+    "COALESCE(tasks.spec->'permissionDecisions', '[]'::jsonb) || jsonb_build_array($2::jsonb), ",
+    "true) FROM target WHERE tasks.id = target.id ",
+    "AND target.spec_type = 'object' ",
+    "AND target.decisions_type IN ('absent', 'array') ",
+    "RETURNING tasks.id",
+    ") SELECT target.spec_type, target.decisions_type, ",
+    "updated.id IS NOT NULL AS appended FROM target ",
+    "LEFT JOIN updated ON updated.id = target.id"
+);
+
+pub(crate) async fn append_permission(
+    conn: &mut PgConnection,
+    id: Uuid,
+    decision: &TaskPermissionDecision,
+) -> Result<(), TaskError> {
+    let encoded = stored_json(decision)?;
+    let row = sqlx::query(APPEND_PERMISSION)
+        .bind(id)
+        .bind(encoded)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|source| map_sql("append permission", source))?;
+    let Some(row) = row else {
+        return Err(TaskError::Missing { id });
+    };
+    let appended: bool = cell(&row, "append permission", "appended")?;
+    if appended {
+        return Ok(());
+    }
+    let spec_type: String = cell(&row, "append permission", "spec_type")?;
+    let decisions_type: String = cell(&row, "append permission", "decisions_type")?;
+    Err(TaskError::Stored(format!(
+        "permissionDecisions cannot be appended (spec {spec_type}, decisions {decisions_type})"
+    )))
 }
 
 fn stored_json<T: Serialize>(value: &T) -> Result<String, TaskError> {
@@ -419,52 +477,6 @@ impl<'a> From<&'a TaskResult> for StoredResult<'a> {
             criteria_self_report: result.criteria_self_report.as_deref(),
             usage: StoredUsage::from(result.usage),
             error: result.error.as_deref(),
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredSpec<'a> {
-    task_id: &'a str,
-    agent_id: &'a str,
-    goal: &'a str,
-    resolved_context: &'a [ContextRef],
-    acceptance_criteria: &'a [AcceptanceCriterion],
-    budget: StoredBudget,
-    tools: Option<&'a [String]>,
-    working_dir: Option<&'a str>,
-    model: Option<&'a str>,
-    effort: Option<Effort>,
-    system_prompt_append: Option<&'a str>,
-    isolation: Option<TaskIsolation>,
-    prompt_mode: Option<TaskPromptMode>,
-    exclude_tools: Option<&'a [String]>,
-    resume_message: Option<&'a str>,
-    session: &'a str,
-    permission_decisions: Option<&'a [TaskPermissionDecision]>,
-}
-
-impl<'a> From<&'a TaskSpec> for StoredSpec<'a> {
-    fn from(spec: &'a TaskSpec) -> Self {
-        Self {
-            task_id: &spec.task_id,
-            agent_id: &spec.agent_id,
-            goal: &spec.goal,
-            resolved_context: &spec.resolved_context,
-            acceptance_criteria: &spec.acceptance_criteria,
-            budget: StoredBudget::from(spec.budget),
-            tools: spec.tools.as_deref(),
-            working_dir: spec.working_dir.as_deref(),
-            model: spec.model.as_deref(),
-            effort: spec.effort,
-            system_prompt_append: spec.system_prompt_append.as_deref(),
-            isolation: spec.isolation,
-            prompt_mode: spec.prompt_mode,
-            exclude_tools: spec.exclude_tools.as_deref(),
-            resume_message: spec.resume_message.as_deref(),
-            session: &spec.session,
-            permission_decisions: spec.permission_decisions.as_deref(),
         }
     }
 }

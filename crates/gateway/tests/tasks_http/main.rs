@@ -315,6 +315,10 @@ fn record(id: Uuid, agent: &str, at: DateTime<Utc>) -> TaskRecord {
             resume_message: None,
             session: format!("task:{id}"),
             permission_decisions: None,
+            preset_id: None,
+            preset_name: None,
+            audit_only: None,
+            extra: wire::Extra::default(),
         },
         executor: TaskExecutorKind::ChatLoop,
         executor_target: None,
@@ -487,6 +491,10 @@ fn spec_for(
         resume_message: None,
         session: session.to_owned(),
         permission_decisions: None,
+        preset_id: None,
+        preset_name: None,
+        audit_only: None,
+        extra: wire::Extra::default(),
     }
 }
 

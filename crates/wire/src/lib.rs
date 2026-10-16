@@ -12,6 +12,7 @@ pub mod message;
 pub mod session_id;
 pub mod stream;
 pub mod task;
+pub mod task_overrides;
 pub mod time;
 
 pub use json::Extra;

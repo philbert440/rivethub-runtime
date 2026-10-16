@@ -19,6 +19,7 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 use tokio::sync::watch;
 use uuid::Uuid;
+use wire::task::TaskPermissionDecision;
 use wire::task::TaskStatus;
 
 mod query;
@@ -299,6 +300,20 @@ impl TaskStore for TaskMemory {
         let mut inner = self.inner.lock();
         let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
         task.harness_session_ids.push(session.to_string());
+        drop(inner);
+        self.touch();
+        Ok(())
+    }
+
+    async fn append_permission(
+        &self,
+        id: Uuid,
+        decision: &TaskPermissionDecision,
+    ) -> Result<(), TaskError> {
+        let mut inner = self.inner.lock();
+        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
+        let decisions = task.spec.permission_decisions.get_or_insert_with(Vec::new);
+        decisions.push(decision.clone());
         drop(inner);
         self.touch();
         Ok(())

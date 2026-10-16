@@ -27,6 +27,7 @@ use crate::task_jobs::fail_job;
 use crate::task_jobs::map_sql;
 use crate::task_jobs::read_job;
 use crate::task_rows::add_harness_session;
+use crate::task_rows::append_permission;
 use crate::task_rows::finish_task;
 use crate::task_rows::insert_task;
 use crate::task_rows::kill_queued_session;
@@ -168,6 +169,17 @@ impl TaskStore for PostgresTasks {
     async fn add_harness_session(&self, id: Uuid, session: &str) -> Result<(), TaskError> {
         in_transaction(&self.pool, async |conn| {
             add_harness_session(conn, id, session).await
+        })
+        .await
+    }
+
+    async fn append_permission(
+        &self,
+        id: Uuid,
+        decision: &wire::task::TaskPermissionDecision,
+    ) -> Result<(), TaskError> {
+        in_transaction(&self.pool, async |conn| {
+            append_permission(conn, id, decision).await
         })
         .await
     }

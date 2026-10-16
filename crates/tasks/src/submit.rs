@@ -238,6 +238,10 @@ fn spec_for(
             resume_message: None,
             session: format!("task:{id}"),
             permission_decisions: None,
+            preset_id: None,
+            preset_name: None,
+            audit_only: None,
+            extra: wire::Extra::default(),
         }),
         Some(mut spec) => {
             spec.task_id = id.to_string();
@@ -341,6 +345,10 @@ fn heartbeat_request(spec: &HeartbeatSpec, session_key: &str) -> TaskCreateReque
             resume_message: None,
             session: session_key.to_string(),
             permission_decisions: None,
+            preset_id: None,
+            preset_name: None,
+            audit_only: None,
+            extra: wire::Extra::default(),
         }),
         budget: None,
         context_refs: None,

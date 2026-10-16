@@ -41,6 +41,7 @@ use wire::gateway::agents::AgentPreset;
 use wire::harness::HarnessId;
 use wire::mesh::MeshNodeStatus;
 use wire::task::TaskExecutorKind;
+use wire::task::TaskPermissionDecision;
 use wire::task::TaskStatus;
 
 #[derive(Debug)]
@@ -97,6 +98,14 @@ impl TaskStore for NotifyStore {
 
     async fn add_harness_session(&self, id: Uuid, session: &str) -> Result<(), TaskError> {
         self.inner.add_harness_session(id, session).await
+    }
+
+    async fn append_permission(
+        &self,
+        id: Uuid,
+        decision: &TaskPermissionDecision,
+    ) -> Result<(), TaskError> {
+        self.inner.append_permission(id, decision).await
     }
 }
 
