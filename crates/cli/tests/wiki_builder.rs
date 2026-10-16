@@ -49,7 +49,8 @@ fn wiki_summary_replay_accounts_for_every_scenario() {
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_replays_every_recorded_summary_shape(pool: PgPool) -> TestResult {
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let cancel = CancellationToken::new();
     for scenario in fixture().scenarios {
         if SKIPPED.iter().any(|(name, _)| *name == scenario.name) {
@@ -119,7 +120,8 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
 ) -> TestResult {
     testkit::graphile_schema::install_graphile_worker(&pool).await?;
     let queue = PostgresQueue::connect(pool.clone()).await?;
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let model = provider(&[patch()]);
     let cancel = CancellationToken::new();
     let job = seed(&pool).await?;
@@ -168,6 +170,27 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
             .await?
             .is_none()
     );
+    let sha: (Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT t.git_sha, e.git_sha FROM rh_wiki_topics t JOIN rh_wiki_extractions e ON e.summary_id = $1 WHERE t.slug = 'acmekit-deploys'",
+    ).bind(job.summary_id).fetch_one(&pool).await?;
+    let output = tokio::process::Command::new("git")
+        .current_dir(wiki.path())
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .await?;
+    assert!(output.status.success());
+    let head = String::from_utf8(output.stdout)?.trim().to_owned();
+    assert_eq!(sha, (Some(head.clone()), Some(head)));
+    let markdown = tokio::fs::read_to_string(wiki.path().join("topics/acmekit-deploys.md")).await?;
+    let page = wire::wiki::parse_wiki_page(&markdown)?;
+    assert_eq!(
+        page.citations.first().ok_or("citation")?.note,
+        "Blue-green adopted"
+    );
+    assert_eq!(
+        page.frontmatter.sources.first().ok_or("source")?.ids,
+        vec![job.summary_id.to_string()]
+    );
     let source: (uuid::Uuid, uuid::Uuid) =
         sqlx::query_as("SELECT source_id, conversation_id FROM rh_wiki_provenance")
             .fetch_one(&pool)
@@ -204,7 +227,8 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
 ) -> TestResult {
     testkit::graphile_schema::install_graphile_worker(&pool).await?;
     let queue = PostgresQueue::connect(pool.clone()).await?;
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let model = provider(&[]);
     let cancel = CancellationToken::new();
     let mut expected = std::collections::BTreeSet::new();

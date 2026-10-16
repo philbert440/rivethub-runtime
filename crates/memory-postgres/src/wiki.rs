@@ -247,10 +247,16 @@ async fn read_markdown(directory: &std::path::Path, slug: &WikiSlug) -> Result<S
     let root = tokio::fs::canonicalize(directory)
         .await
         .map_err(Error::WikiIo)?;
-    let path = tokio::fs::canonicalize(root.join(format!("{}.md", slug.as_ref())))
+    let topics = tokio::fs::canonicalize(root.join("topics"))
         .await
         .map_err(Error::WikiIo)?;
-    if !path.starts_with(&root) {
+    if !topics.starts_with(&root) {
+        return Err(Error::WikiContainment);
+    }
+    let path = tokio::fs::canonicalize(topics.join(format!("{}.md", slug.as_ref())))
+        .await
+        .map_err(Error::WikiIo)?;
+    if !path.starts_with(&topics) {
         return Err(Error::WikiContainment);
     }
     tokio::fs::read_to_string(path).await.map_err(Error::WikiIo)

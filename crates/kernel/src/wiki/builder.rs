@@ -1,10 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
-use wire::gateway::wiki::{WikiHistoryEntry, WikiSlug};
 
 use crate::BoxError;
 
@@ -18,27 +16,7 @@ pub struct ExtractWiki {
     pub conversation_id: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum WikiAction {
-    Create,
-    Update,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct WikiPatch {
-    pub action: WikiAction,
-    pub slug: WikiSlug,
-    pub title: String,
-    pub aliases: Vec<WikiSlug>,
-    pub tags: Vec<String>,
-    pub entities: Vec<String>,
-    pub summary: String,
-    pub article: Option<String>,
-    pub related: Option<Vec<WikiSlug>>,
-    pub history_entry: Option<WikiHistoryEntry>,
-}
+pub use wire::wiki::{WikiAction, WikiPatch};
 
 #[must_use]
 pub fn extraction_schema() -> schemars::Schema {
@@ -60,6 +38,10 @@ pub enum WikiWork {
 
 #[derive(Debug, Error)]
 pub enum WikiStoreError {
+    #[error("wiki directory is not configured")]
+    DirectoryMissing,
+    #[error("wiki page write failed: {0}")]
+    Page(#[from] WikiWriteError),
     #[error("wiki store failed: {0}")]
     Query(#[source] BoxError),
     #[error("summary {0} is missing")]
@@ -93,4 +75,24 @@ pub trait WikiBuilderStore: Send + Sync {
         error: &str,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError>;
+}
+
+#[derive(Debug, Error)]
+pub enum WikiWriteError {
+    #[error("wiki filesystem: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("wiki page: {0}")]
+    Page(#[from] wire::wiki::WikiPageError),
+    #[error("wiki writer lock exhausted 200 attempts")]
+    LockTimeout,
+    #[error("wiki path escapes its repository: {0}")]
+    Containment(std::path::PathBuf),
+    #[error("wiki git {operation} failed: {message}")]
+    Git { operation: String, message: String },
+    #[error("wiki git output is not UTF-8: {0}")]
+    Utf8(#[from] std::string::FromUtf8Error),
+    #[error("wiki writer task failed: {0}")]
+    Task(#[from] tokio::task::JoinError),
+    #[error("wiki page slug does not match its file")]
+    SlugMismatch,
 }

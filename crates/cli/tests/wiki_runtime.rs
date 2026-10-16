@@ -26,7 +26,9 @@ use workers::{
 async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestResult {
     testkit::graphile_schema::install_graphile_worker(&pool).await?;
     let queue = Arc::new(PostgresQueue::connect(pool.clone()).await?);
-    let store = Arc::new(PostgresMemory::new(pool.clone()));
+    let wiki = tempfile::tempdir()?;
+    let store =
+        Arc::new(PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf()));
     let model = Arc::new(provider(&[patch()]));
     let source = seed(&pool).await?;
     queue
@@ -106,7 +108,8 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_queue_failure_retries_delivery_without_reextracting(pool: PgPool) -> TestResult {
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let model = provider(&[patch()]);
     let cancel = CancellationToken::new();
     let source = seed(&pool).await?;
@@ -152,7 +155,8 @@ async fn wiki_queue_failure_retries_delivery_without_reextracting(pool: PgPool) 
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_cancels_an_inflight_provider_request(pool: PgPool) -> TestResult {
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let job = seed(&pool).await?;
     let model = WaitingProvider {
         entered: tokio::sync::Notify::new(),

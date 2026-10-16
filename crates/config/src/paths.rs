@@ -232,3 +232,20 @@ fn metadata(path: &Path) -> Result<Option<std::fs::Metadata>, StateError> {
 }
 
 mod state_owner;
+
+impl crate::Config {
+    pub fn wiki_directory(&self, env: &Environment) -> PathBuf {
+        if let Some(path) = self
+            .memory
+            .as_ref()
+            .and_then(|memory| memory.sqlite.as_ref())
+            .and_then(|sqlite| sqlite.wiki_dir.as_ref())
+        {
+            return normalize(path);
+        }
+        if let Some(path) = env.get("WIKI_DIR") {
+            return normalize(Path::new(path));
+        }
+        shared_dir(env).join("wiki")
+    }
+}

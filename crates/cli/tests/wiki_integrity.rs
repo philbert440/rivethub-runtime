@@ -17,10 +17,9 @@ use workers::WorkerError;
 use workers::wiki_builder::{WikiBuilderEnv, extract_wiki_job, handle_extract_wiki};
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn wiki_alias_updates_and_unchanged_patches_keep_provenance_without_reembedding(
-    pool: PgPool,
-) -> TestResult {
-    let store = PostgresMemory::new(pool.clone());
+async fn wiki_alias_updates_and_new_sources_commit_provenance(pool: PgPool) -> TestResult {
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let first = seed(&pool).await?;
     assert_eq!(
         store.apply_wiki(&first, vec![patch()], now()).await?,
@@ -29,7 +28,7 @@ async fn wiki_alias_updates_and_unchanged_patches_keep_provenance_without_reembe
     let second = seed(&pool).await?;
     assert_eq!(
         store.apply_wiki(&second, vec![patch()], now()).await?,
-        Vec::<String>::new()
+        vec!["acmekit-deploys"]
     );
     let count: (i64,) = sqlx::query_as("SELECT count(*) FROM rh_wiki_provenance")
         .fetch_one(&pool)
@@ -54,7 +53,7 @@ async fn wiki_alias_updates_and_unchanged_patches_keep_provenance_without_reembe
     .await?;
     assert_eq!(row.0, update.summary);
     assert_eq!(row.1, patch().article.expect("article"));
-    assert_eq!(row.2, 2);
+    assert_eq!(row.2, 1);
     assert_eq!(row.3, None);
     let aliases: (Vec<String>,) = sqlx::query_as("SELECT aliases FROM rh_wiki_topics")
         .fetch_one(&pool)
@@ -65,7 +64,8 @@ async fn wiki_alias_updates_and_unchanged_patches_keep_provenance_without_reembe
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_conflicting_alias_rolls_back_every_patch(pool: PgPool) -> TestResult {
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let first = seed(&pool).await?;
     store.apply_wiki(&first, vec![patch()], now()).await?;
     let second = seed(&pool).await?;
@@ -101,7 +101,8 @@ async fn wiki_conflicting_alias_rolls_back_every_patch(pool: PgPool) -> TestResu
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_rejects_wrong_conversation_before_model_or_writes(pool: PgPool) -> TestResult {
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let mut job = seed(&pool).await?;
     job.conversation_id = Some(uuid::Uuid::new_v4());
     let model = provider(&[patch()]);
@@ -131,7 +132,8 @@ async fn wiki_rejects_wrong_conversation_before_model_or_writes(pool: PgPool) ->
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_bad_model_output_is_failed_and_retryable(pool: PgPool) -> TestResult {
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let queue = FakeJobQueue::default();
     let cancel = CancellationToken::new();
     for (text, finish) in [
@@ -178,7 +180,8 @@ async fn wiki_bad_model_output_is_failed_and_retryable(pool: PgPool) -> TestResu
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_duplicate_concurrent_commits_do_not_duplicate_history(pool: PgPool) -> TestResult {
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let job = seed(&pool).await?;
     let (left, right) = tokio::try_join!(
         store.apply_wiki(&job, vec![patch()], now()),
@@ -201,7 +204,8 @@ async fn wiki_duplicate_concurrent_commits_do_not_duplicate_history(pool: PgPool
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_cancellation_leaves_no_extraction(pool: PgPool) -> TestResult {
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let job = seed(&pool).await?;
     let model = FakeProvider::default();
     let queue = FakeJobQueue::default();
@@ -248,7 +252,8 @@ fn wiki_model_types_reject_bad_slugs_and_wrong_types() -> TestResult {
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_summary_without_conversation_preserves_absence(pool: PgPool) -> TestResult {
-    let store = PostgresMemory::new(pool.clone());
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let mut job = seed(&pool).await?;
     sqlx::query("UPDATE rh_summaries SET conversation_id = NULL WHERE id = $1")
         .bind(job.summary_id)
@@ -265,5 +270,74 @@ async fn wiki_summary_without_conversation_preserves_absence(pool: PgPool) -> Te
             .fetch_one(&pool)
             .await?;
     assert_eq!(row.0, None);
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn wiki_file_failure_marks_extraction_failed_and_retry_reconciles(
+    pool: PgPool,
+) -> TestResult {
+    let wiki = tempfile::tempdir()?;
+    let outside = tempfile::tempdir()?;
+    tokio::fs::symlink(outside.path(), wiki.path().join("topics")).await?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
+    let job = seed(&pool).await?;
+    let model = provider(&[patch()]);
+    let queue = FakeJobQueue::default();
+    let cancel = CancellationToken::new();
+    let env = WikiBuilderEnv {
+        store: &store,
+        provider: &model,
+        queue: &queue,
+        model: "fake-chat",
+        now: now(),
+        cancel: &cancel,
+    };
+    assert!(
+        handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload)
+            .await
+            .is_err()
+    );
+    let failure: (String, Option<String>) =
+        sqlx::query_as("SELECT status, error FROM rh_wiki_extractions WHERE summary_id = $1")
+            .bind(job.summary_id)
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(failure.0, "failed");
+    assert!(failure.1.is_some());
+    let count: (i64,) = sqlx::query_as("SELECT count(*) FROM rh_wiki_topics")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(count.0, 0);
+    assert!(std::fs::read_dir(outside.path())?.next().is_none());
+    assert!(!wiki.path().join(".wiki-writer.lock").exists());
+    tokio::fs::remove_file(wiki.path().join("topics")).await?;
+    let model = provider(&[patch()]);
+    let retry = WikiBuilderEnv {
+        provider: &model,
+        ..env
+    };
+    assert_eq!(
+        handle_extract_wiki(&retry, &extract_wiki_job(&job)?.payload).await?,
+        ["acmekit-deploys"]
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn index_only_completion_is_rebuilt_as_a_page(pool: PgPool) -> TestResult {
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
+    let job = seed(&pool).await?;
+    sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, topics_touched) VALUES ($1, 'done', $2, ARRAY['acmekit-deploys'])")
+        .bind(job.summary_id).bind(kernel::wiki::builder::WIKI_PIPELINE_VERSION).execute(&pool).await?;
+    assert!(store.wiki_backfill(100).await?.contains(&job));
+    assert!(matches!(
+        store.wiki_work(&job).await?,
+        kernel::wiki::builder::WikiWork::Pending(_)
+    ));
+    store.apply_wiki(&job, vec![patch()], now()).await?;
+    assert!(wiki.path().join("topics/acmekit-deploys.md").is_file());
+    assert!(!store.wiki_backfill(100).await?.contains(&job));
     Ok(())
 }

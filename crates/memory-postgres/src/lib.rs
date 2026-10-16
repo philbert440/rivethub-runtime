@@ -29,6 +29,7 @@ mod task_rows;
 mod task_watch;
 mod wiki;
 mod wiki_builder;
+pub mod wiki_writer;
 
 #[cfg(test)]
 mod resilience;

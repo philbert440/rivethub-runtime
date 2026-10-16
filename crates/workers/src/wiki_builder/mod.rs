@@ -113,11 +113,13 @@ async fn extract_and_apply(
 ) -> Result<Vec<String>, WorkerError> {
     let user = serde_json::to_string(summary).map_err(WorkerError::WikiJson)?;
     let patches = extract(env, user).await?;
-    tokio::select! {
-        biased;
-        () = env.cancel.cancelled() => Err(WorkerError::Cancelled),
-        result = env.store.apply_wiki(job, patches, env.now) => result.map_err(WorkerError::WikiStore),
+    if env.cancel.is_cancelled() {
+        return Err(WorkerError::Cancelled);
     }
+    env.store
+        .apply_wiki(job, patches, env.now)
+        .await
+        .map_err(WorkerError::WikiStore)
 }
 
 async fn extract(env: &WikiBuilderEnv<'_>, user: String) -> Result<Vec<WikiPatch>, WorkerError> {

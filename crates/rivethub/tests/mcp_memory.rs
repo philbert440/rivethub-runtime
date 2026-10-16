@@ -93,9 +93,13 @@ async fn seed(pool: &PgPool) -> TestResult {
 async fn recorded_memory_text(pool: PgPool) -> TestResult {
     seed(&pool).await?;
     let wiki = tempfile::tempdir()?;
+    std::fs::create_dir(wiki.path().join("topics"))?;
     for entry in std::fs::read_dir(testkit::recording("mcp-memory/shared/wiki/topics"))? {
         let entry = entry?;
-        std::fs::copy(entry.path(), wiki.path().join(entry.file_name()))?;
+        std::fs::copy(
+            entry.path(),
+            wiki.path().join("topics").join(entry.file_name()),
+        )?;
     }
     let shutdown = CancellationToken::new();
     let server = mcp::Server::builder(
@@ -269,7 +273,10 @@ async fn wiki_files_follow_redirects_and_refuse_sibling_traversal_and_symlinks(
         .await?;
     std::fs::write(directory.join(format!("{slug}.md")), "literal file")?;
     let server = mcp::Server::new(
-        Arc::new(memory_postgres::PostgresMemory::new(pool).with_wiki_directory(directory.clone())),
+        Arc::new(
+            memory_postgres::PostgresMemory::new(pool)
+                .with_wiki_directory(root.path().to_path_buf()),
+        ),
         false,
         CancellationToken::new(),
     )?;

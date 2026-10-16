@@ -23,7 +23,7 @@ struct CompletedRow {
     topics_touched: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, sqlx::FromRow)]
 struct BackfillRow {
     id: Uuid,
     conversation_id: Option<Uuid>,
@@ -41,16 +41,15 @@ impl WikiBuilderStore for PostgresMemory {
     }
 
     async fn wiki_backfill(&self, limit: u32) -> Result<Vec<ExtractWiki>, WikiStoreError> {
-        let rows = sqlx::query_as!(
-            BackfillRow,
+        let rows = sqlx::query_as::<_, BackfillRow>(
             "SELECT s.id, s.conversation_id FROM rh_summaries s
              LEFT JOIN rh_wiki_extractions e ON e.summary_id = s.id
              WHERE e.summary_id IS NULL OR e.status = 'failed'
-                OR (e.status = 'done' AND e.pipeline_version < $1)
+                OR (e.status = 'done' AND (e.pipeline_version < $1 OR (cardinality(e.topics_touched) > 0 AND e.git_sha IS NULL)))
              ORDER BY s.created_at, s.id LIMIT $2",
-            WIKI_PIPELINE_VERSION,
-            i64::from(limit),
         )
+        .bind(WIKI_PIPELINE_VERSION)
+        .bind(i64::from(limit))
         .fetch_all(&self.pool)
         .await
         .map_err(query_error)?;
@@ -65,6 +64,56 @@ impl WikiBuilderStore for PostgresMemory {
 
     async fn apply_wiki(
         &self,
+        job: &ExtractWiki,
+        patches: Vec<WikiPatch>,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<String>, WikiStoreError> {
+        let directory = self
+            .wiki_directory
+            .as_ref()
+            .ok_or(WikiStoreError::DirectoryMissing)?;
+        let (applied, released) = {
+            let mut repository = crate::wiki_writer::WikiRepository::new(directory.clone())
+                .lock()
+                .await?;
+            let applied = self.apply_pages(&mut repository, job, patches, now).await;
+            (applied, repository.release().await)
+        };
+        match (applied, released) {
+            (Ok(topics), Ok(())) => Ok(topics),
+            (Err(error), Ok(())) => Err(error),
+            (Ok(_), Err(error)) => Err(error.into()),
+            (Err(error), Err(release)) => {
+                tracing::error!(%release, "wiki writer lock release failed");
+                Err(error)
+            }
+        }
+    }
+
+    async fn fail_wiki(
+        &self,
+        summary_id: Uuid,
+        error: &str,
+        now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError> {
+        sqlx::query(
+            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, error, extracted_at)
+             VALUES ($1, 'failed', $2, $3, $4)
+             ON CONFLICT (summary_id) DO UPDATE SET status = 'failed', pipeline_version = EXCLUDED.pipeline_version,
+                error = EXCLUDED.error, extracted_at = EXCLUDED.extracted_at
+             WHERE rh_wiki_extractions.status = 'failed' OR rh_wiki_extractions.pipeline_version < $2
+                OR (rh_wiki_extractions.status = 'done' AND rh_wiki_extractions.git_sha IS NULL AND cardinality(rh_wiki_extractions.topics_touched) > 0)",
+        )
+        .bind(summary_id).bind(WIKI_PIPELINE_VERSION).bind(error).bind(now)
+        .execute(&self.pool).await.map_err(query_error)?;
+        Ok(())
+    }
+}
+
+impl PostgresMemory {
+    async fn apply_pages(
+        &self,
+        repository: &mut crate::wiki_writer::LockedRepository,
         job: &ExtractWiki,
         mut patches: Vec<WikiPatch>,
         now: DateTime<Utc>,
@@ -83,43 +132,36 @@ impl WikiBuilderStore for PostgresMemory {
             return Ok(topics);
         }
         lock_slugs(&mut tx, &patches).await?;
+        for patch in &patches {
+            topics::canonical(&mut tx, patch).await?;
+        }
+        let date: DateTime<Utc> =
+            sqlx::query_scalar("SELECT created_at FROM rh_summaries WHERE id = $1")
+                .bind(job.summary_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(query_error)?;
         patches.sort_by(|left, right| left.slug.as_ref().cmp(right.slug.as_ref()));
         let mut touched = Vec::new();
+        let mut last_sha = None;
         for patch in patches {
-            if let Some(slug) = topics::apply(&mut tx, &summary, patch, now).await? {
-                touched.push(slug);
-            }
+            let (slug, sha) =
+                topics::apply(&mut tx, repository, &summary, date, patch, now).await?;
+            touched.push(slug);
+            last_sha = Some(sha);
         }
         touched.sort();
         touched.dedup();
         sqlx::query(
-            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, topics_touched, extracted_at)
-             VALUES ($1, 'done', $2, $3, $4)
+            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, topics_touched, extracted_at, git_sha)
+             VALUES ($1, 'done', $2, $3, $4, $5)
              ON CONFLICT (summary_id) DO UPDATE SET status = 'done', pipeline_version = EXCLUDED.pipeline_version,
-                topics_touched = EXCLUDED.topics_touched, error = NULL, extracted_at = EXCLUDED.extracted_at",
+                topics_touched = EXCLUDED.topics_touched, error = NULL, extracted_at = EXCLUDED.extracted_at, git_sha = EXCLUDED.git_sha",
         )
-        .bind(job.summary_id).bind(WIKI_PIPELINE_VERSION).bind(&touched).bind(now)
+        .bind(job.summary_id).bind(WIKI_PIPELINE_VERSION).bind(&touched).bind(now).bind(last_sha)
         .execute(&mut *tx).await.map_err(query_error)?;
         tx.commit().await.map_err(query_error)?;
         Ok(touched)
-    }
-
-    async fn fail_wiki(
-        &self,
-        summary_id: Uuid,
-        error: &str,
-        now: DateTime<Utc>,
-    ) -> Result<(), WikiStoreError> {
-        sqlx::query(
-            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, error, extracted_at)
-             VALUES ($1, 'failed', $2, $3, $4)
-             ON CONFLICT (summary_id) DO UPDATE SET status = 'failed', pipeline_version = EXCLUDED.pipeline_version,
-                error = EXCLUDED.error, extracted_at = EXCLUDED.extracted_at
-             WHERE rh_wiki_extractions.status = 'failed' OR rh_wiki_extractions.pipeline_version < $2",
-        )
-        .bind(summary_id).bind(WIKI_PIPELINE_VERSION).bind(error).bind(now)
-        .execute(&self.pool).await.map_err(query_error)?;
-        Ok(())
     }
 }
 
@@ -158,13 +200,13 @@ async fn completed(
     connection: &mut PgConnection,
     summary_id: Uuid,
 ) -> Result<Option<Vec<String>>, WikiStoreError> {
-    let row = sqlx::query_as!(
-        CompletedRow,
+    let row = sqlx::query_as::<_, CompletedRow>(
         "SELECT topics_touched FROM rh_wiki_extractions WHERE summary_id = $1
-         AND status IN ('done', 'skipped') AND pipeline_version >= $2",
-        summary_id,
-        WIKI_PIPELINE_VERSION,
+         AND status IN ('done', 'skipped') AND pipeline_version >= $2
+         AND (status = 'skipped' OR cardinality(topics_touched) = 0 OR git_sha IS NOT NULL)",
     )
+    .bind(summary_id)
+    .bind(WIKI_PIPELINE_VERSION)
     .fetch_optional(connection)
     .await
     .map_err(query_error)?;
