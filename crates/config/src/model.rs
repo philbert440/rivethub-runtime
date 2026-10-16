@@ -445,6 +445,18 @@ impl Config {
     }
 
     #[must_use]
+    pub fn mesh_advertise_host(&self, env: &Environment) -> String {
+        self.mesh
+            .as_ref()
+            .and_then(|mesh| mesh.advertise_host.as_deref())
+            .map(str::trim)
+            .filter(|host| !host.is_empty())
+            .map(str::to_owned)
+            .or_else(|| env.advertised_host())
+            .unwrap_or_else(|| "127.0.0.1".to_owned())
+    }
+
+    #[must_use]
     pub fn memory_embed_endpoint(&self, env: &Environment) -> Option<String> {
         self.postgres_memory_text(|postgres| postgres.embed_endpoint.as_deref())
             .or_else(|| env.embed_url())

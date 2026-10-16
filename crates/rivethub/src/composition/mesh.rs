@@ -21,19 +21,16 @@ pub(super) async fn start(
     shutdown: &CancellationToken,
 ) -> Result<JoinSet<Result<(), ComposeError>>, ComposeError> {
     let mut tasks = JoinSet::new();
-    let Some(mesh) = config
+    if config
         .mesh
         .as_ref()
-        .filter(|mesh| mesh.enabled == Some(true))
-    else {
+        .is_none_or(|mesh| mesh.enabled != Some(true))
+    {
         return Ok(tasks);
-    };
+    }
     let (port, settings, name) = channel_settings(config, env).await?;
     let registry = Registry::open(config::shared_dir(env), "mesh.json".into()).await?;
-    let host = mesh
-        .advertise_host
-        .clone()
-        .ok_or_else(|| ComposeError::Invalid("mesh.advertise_host is required".into()))?;
+    let host = config.mesh_advertise_host(env);
     let agent_ids = agents.keys().cloned().collect();
     let mut mailboxes = BTreeMap::new();
     for (id, binding) in agents {

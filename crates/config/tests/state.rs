@@ -335,3 +335,18 @@ fn fresh_lock_directory(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
     assert!(!home.join(".rivethub").exists());
     Ok(())
 }
+
+#[test]
+fn the_advertised_host_falls_back_like_the_den() -> Result<(), Box<dyn std::error::Error>> {
+    let config: config::Config = serde_yaml_ng::from_str("mesh:\n  enabled: true\n")?;
+    let none = Environment::from_vars(Vec::<(String, String)>::new());
+    assert_eq!(config.mesh_advertise_host(&none), "127.0.0.1");
+    let host = Environment::from_vars([("RIVETOS_HOST".to_owned(), "192.0.2.17".to_owned())]);
+    assert_eq!(config.mesh_advertise_host(&host), "192.0.2.17");
+    let name = Environment::from_vars([("HOSTNAME".to_owned(), "example-node".to_owned())]);
+    assert_eq!(config.mesh_advertise_host(&name), "example-node");
+    let set: config::Config =
+        serde_yaml_ng::from_str("mesh:\n  enabled: true\n  advertise_host: node.mesh\n")?;
+    assert_eq!(set.mesh_advertise_host(&host), "node.mesh");
+    Ok(())
+}

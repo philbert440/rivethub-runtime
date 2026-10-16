@@ -103,6 +103,7 @@ enum Alias {
     PostgresUrl,
     EmbedUrl,
     EmbedModel,
+    Host,
     UsersFile,
     SharedDir,
     InstallRoot,
@@ -123,13 +124,14 @@ enum Alias {
 }
 
 impl Alias {
-    const ALL: [Self; 23] = [
+    const ALL: [Self; 24] = [
         Self::LogLevel,
         Self::NodeName,
         Self::NodeId,
         Self::PostgresUrl,
         Self::EmbedUrl,
         Self::EmbedModel,
+        Self::Host,
         Self::UsersFile,
         Self::SharedDir,
         Self::InstallRoot,
@@ -157,6 +159,7 @@ impl Alias {
             Self::PostgresUrl => (POSTGRES_URL_VARIABLE, "RIVETOS_PG_URL"),
             Self::EmbedUrl => ("RIVETHUB_EMBED_URL", "RIVETOS_EMBED_URL"),
             Self::EmbedModel => ("RIVETHUB_EMBED_MODEL", "RIVETOS_EMBED_MODEL"),
+            Self::Host => ("RIVETHUB_HOST", "RIVETOS_HOST"),
             Self::UsersFile => ("RIVETHUB_USERS_FILE", "RIVETOS_USERS_FILE"),
             Self::SharedDir => ("RIVETHUB_SHARED_DIR", "RIVETOS_SHARED_DIR"),
             Self::InstallRoot => ("RIVETHUB_INSTALL_ROOT", "RIVETOS_INSTALL_ROOT"),
@@ -298,6 +301,12 @@ impl Environment {
 
     pub fn embed_model(&self) -> Option<String> {
         self.setting(Alias::EmbedModel).map(str::to_owned)
+    }
+
+    pub(crate) fn advertised_host(&self) -> Option<String> {
+        self.setting(Alias::Host)
+            .map(str::to_owned)
+            .or_else(|| self.trimmed("HOSTNAME").map(str::to_owned))
     }
 
     pub(crate) fn configured_shared_dir(&self) -> Option<&str> {
