@@ -82,31 +82,31 @@ impl ModelFactory {
         let Some(memory) = &config.memory else {
             return Ok(None);
         };
+        let text = |value: Option<&String>| {
+            value
+                .map(|text| text.trim())
+                .filter(|text| !text.is_empty())
+                .map(str::to_owned)
+        };
         let settings = if config.sqlite_selected() {
-            memory.sqlite.as_ref().and_then(|section| {
-                section.embed_endpoint.as_ref().map(|endpoint| {
-                    Ok::<_, providers::BuildError>(providers::embed::EmbedConfig {
-                        endpoint: endpoint.clone(),
-                        model: section
-                            .embed_model
-                            .clone()
-                            .ok_or(providers::BuildError::MissingEmbedModel)?,
-                        api_key: section.embed_api_key.clone(),
-                        api_prefix: None,
-                        expected_dims: None,
-                        timeout_ms: None,
-                        query_instruction: None,
-                    })
+            let section = memory.sqlite.as_ref();
+            let endpoint = text(section.and_then(|section| section.embed_endpoint.as_ref()))
+                .or_else(|| self.embed_endpoint.clone());
+            let model = text(section.and_then(|section| section.embed_model.as_ref()))
+                .or_else(|| self.embed_model.clone());
+            endpoint.map(|endpoint| {
+                Ok::<_, providers::BuildError>(providers::embed::EmbedConfig {
+                    endpoint,
+                    model: model.ok_or(providers::BuildError::MissingEmbedModel)?,
+                    api_key: section.and_then(|section| section.embed_api_key.clone()),
+                    api_prefix: None,
+                    expected_dims: None,
+                    timeout_ms: None,
+                    query_instruction: None,
                 })
             })
         } else {
             let section = memory.postgres.as_ref();
-            let text = |value: Option<&String>| {
-                value
-                    .map(|text| text.trim())
-                    .filter(|text| !text.is_empty())
-                    .map(str::to_owned)
-            };
             let endpoint = text(section.and_then(|section| section.embed_endpoint.as_ref()))
                 .or_else(|| self.embed_endpoint.clone());
             let model = text(section.and_then(|section| section.embed_model.as_ref()))

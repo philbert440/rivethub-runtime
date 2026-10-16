@@ -1,3 +1,5 @@
+#[path = "local/embed.rs"]
+mod embed;
 #[path = "local/import.rs"]
 mod import;
 

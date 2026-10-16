@@ -1,5 +1,6 @@
 use std::io;
 use std::sync::Arc;
+use std::time::Duration;
 
 use config::Config;
 use config::Environment;
@@ -20,6 +21,8 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 use crate::Exit;
+
+const SQLITE_QUERY_EMBED_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Debug, Error)]
 pub enum StartupError {
@@ -45,6 +48,10 @@ pub enum StartupError {
         "memory.postgres.embed_model (or RIVETHUB_EMBED_MODEL) is required when an embedding endpoint is set"
     )]
     EmbedModel,
+    #[error(
+        "memory.sqlite.embed_model (or RIVETHUB_EMBED_MODEL) is required when an embedding endpoint is set"
+    )]
+    SqliteEmbedModel,
     #[error(transparent)]
     EmbedProvider(#[from] providers::BuildError),
     #[error(transparent)]
@@ -99,24 +106,67 @@ fn query_embed(
         .memory
         .as_ref()
         .and_then(|memory| memory.postgres.as_ref());
+    let provider = embed_provider(
+        endpoint,
+        model,
+        section.and_then(|section| section.embed_api_key.clone()),
+        shutdown,
+        activities,
+    )?;
+    Ok(Some(memory_postgres::QueryEmbed::new(
+        provider,
+        section.and_then(|section| section.embed_query_instruction.clone()),
+        section.and_then(|section| section.embed_timeout_ms),
+        section.and_then(|section| section.hnsw_ef_search),
+    )))
+}
+
+pub(crate) fn sqlite_query_embed(
+    config: &Config,
+    env: &Environment,
+    shutdown: &CancellationToken,
+    activities: &Activities,
+) -> Result<Option<memory_sqlite::QueryEmbed>, StartupError> {
+    let Some(endpoint) = config.sqlite_embed_endpoint(env) else {
+        return Ok(None);
+    };
+    let model = config
+        .sqlite_embed_model(env)
+        .ok_or(StartupError::SqliteEmbedModel)?;
+    let api_key = config
+        .memory
+        .as_ref()
+        .and_then(|memory| memory.sqlite.as_ref())
+        .and_then(|section| section.embed_api_key.clone());
+    let provider = embed_provider(endpoint, model, api_key, shutdown, activities)?;
+    Ok(Some(memory_sqlite::QueryEmbed::new(
+        provider,
+        kernel::memory_core::DEFAULT_EMBED_QUERY_INSTRUCTION.to_owned(),
+        SQLITE_QUERY_EMBED_TIMEOUT,
+        shutdown.child_token(),
+    )))
+}
+
+fn embed_provider(
+    endpoint: String,
+    model: String,
+    api_key: Option<String>,
+    shutdown: &CancellationToken,
+    activities: &Activities,
+) -> Result<Arc<dyn kernel::model::ModelProvider>, StartupError> {
     let provider = providers::OpenAiCompatible::build(
         config::ProviderType::OpenaiCompatible,
         &config::provider::OpenaiProvider {
             base_url: Some(endpoint),
             model: Some(model),
-            api_key: section.and_then(|section| section.embed_api_key.clone()),
+            api_key,
             probe_models: Some(false),
             ..config::provider::OpenaiProvider::default()
         },
     )?
     .with_shutdown(shutdown.child_token())
     .with_activities(activities.clone());
-    Ok(Some(memory_postgres::QueryEmbed::new(
-        Arc::new(provider),
-        section.and_then(|section| section.embed_query_instruction.clone()),
-        section.and_then(|section| section.embed_timeout_ms),
-        section.and_then(|section| section.hnsw_ef_search),
-    )))
+    Ok(Arc::new(provider))
 }
 
 pub async fn connect(
@@ -462,6 +512,70 @@ mod embed_tests {
             ),
         ]);
         assert!(searched(&config("")?, &env)?.is_some());
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod sqlite_embed_tests {
+    use super::*;
+
+    fn searched(
+        memory: &str,
+        env: &Environment,
+    ) -> Result<Option<memory_sqlite::QueryEmbed>, Box<dyn std::error::Error>> {
+        let text = format!(
+            "runtime:\n  workspace: /tmp\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\nmemory:\n  backend: sqlite\n  sqlite:\n    path: /tmp/memory.sqlite\n{memory}"
+        );
+        let config = Config::from_str(&Environment::default(), &text)?.config;
+        Ok(sqlite_query_embed(
+            &config,
+            env,
+            &CancellationToken::new(),
+            &Activities::new(),
+        )?)
+    }
+
+    #[test]
+    fn without_an_endpoint_sqlite_search_stays_keyword_only()
+    -> Result<(), Box<dyn std::error::Error>> {
+        assert!(searched("", &Environment::default())?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn a_sqlite_endpoint_without_a_model_is_refused() {
+        let refused = searched(
+            "    embed_endpoint: http://127.0.0.1:9\n",
+            &Environment::default(),
+        );
+        assert!(
+            refused
+                .err()
+                .and_then(|error| error.downcast::<StartupError>().ok())
+                .is_some_and(|error| matches!(*error, StartupError::SqliteEmbedModel))
+        );
+    }
+
+    #[test]
+    fn the_sqlite_section_or_the_environment_arms_the_query_embedder()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let configured = searched(
+            "    embed_endpoint: http://127.0.0.1:9\n    embed_model: qwen3-embedding-0.6b\n",
+            &Environment::default(),
+        )?;
+        assert!(configured.is_some());
+        let env = Environment::from_vars([
+            (
+                "RIVETHUB_EMBED_URL".to_owned(),
+                "http://127.0.0.1:9".to_owned(),
+            ),
+            (
+                "RIVETHUB_EMBED_MODEL".to_owned(),
+                "qwen3-embedding-0.6b".to_owned(),
+            ),
+        ]);
+        assert!(searched("", &env)?.is_some());
         Ok(())
     }
 }

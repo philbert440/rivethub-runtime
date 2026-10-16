@@ -14,7 +14,7 @@ use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::shutdown::Activities;
 use kernel::tasks::Delegation;
 use kernel::wiki::builder::WikiBuilderStore;
-use memory_sqlite::SqliteStore;
+use memory_sqlite::{QueryEmbed, SqliteStore};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -164,7 +164,8 @@ async fn run(
     activities: Activities,
 ) -> Result<(), LocalError> {
     let _guard = shutdown.clone().drop_guard();
-    let store = open_store(database).await?;
+    let embed = crate::service::sqlite_query_embed(config, env, &shutdown, &activities)?;
+    let store = open_store(database, embed).await?;
     import::pending(&store, config, &shutdown).await?;
     let switches = config.service_switches(env);
     let node = bind_node(&store, &switches, config, env, &shutdown, &activities).await?;
@@ -439,9 +440,15 @@ fn note_serve(result: Result<(), StartupError>) {
     }
 }
 
-async fn open_store(path: PathBuf) -> Result<Arc<SqliteStore>, LocalError> {
+async fn open_store(
+    path: PathBuf,
+    embed: Option<QueryEmbed>,
+) -> Result<Arc<SqliteStore>, LocalError> {
     let store = tokio::task::spawn_blocking(move || SqliteStore::open(path)).await??;
-    Ok(Arc::new(store))
+    Ok(Arc::new(match embed {
+        Some(embed) => store.with_query_embed(embed),
+        None => store,
+    }))
 }
 
 async fn build_runners(

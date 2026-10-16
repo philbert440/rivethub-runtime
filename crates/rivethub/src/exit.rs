@@ -15,6 +15,7 @@ impl StartupError {
             | Self::StateTask(_)
             | Self::Voice(_)
             | Self::EmbedModel
+            | Self::SqliteEmbedModel
             | Self::EmbedProvider(_) => Exit::Failure,
             Self::Memory(_) | Self::Close(_) => Exit::Memory,
             Self::Bind(_) => Exit::Bind,

@@ -40,6 +40,10 @@ reach sessions over the HTTP API), `Env` (config owns the environment), `Fs` (di
 v7 has no message-chunk table, so `EmbeddingStore` refuses chunked embeddings (`EmbedTable::MessageChunks`, or a
 `StoredEmbedding` with chunks) with a typed error. Standalone nodes run the embedder with chunking disabled. Chunks
 arrive with schema v8, alongside the sqlite-vec index after cutover.
+`rh local` arms vector and hybrid search with a query embedder built from `memory.sqlite.embed_endpoint`,
+`embed_model` and `embed_api_key`, falling back to `RIVETHUB_EMBED_URL` / `RIVETHUB_EMBED_MODEL`, the same
+endpoint the standalone embedder worker uses. Without an endpoint, those modes answer with keyword results and
+`degraded: "embedding endpoint not configured"`.
 
 ## Process shape (Phil 2026-10-12)
 
