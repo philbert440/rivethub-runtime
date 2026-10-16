@@ -111,7 +111,7 @@ impl ModelProvider for CliBacked {
         let spec = SessionSpec {
             session: SessionId::new(self.harness_id, &uuid::Uuid::new_v4().to_string()),
             harness: self.harness_id,
-            model: Some(request.model),
+            model: requested_model(request.model),
             effort: request.thinking.or_else(|| {
                 self.config
                     .reasoning_effort
@@ -198,5 +198,29 @@ const fn thinking(effort: Effort) -> ThinkingLevel {
         Effort::Low => ThinkingLevel::Low,
         Effort::Medium => ThinkingLevel::Medium,
         Effort::High => ThinkingLevel::High,
+    }
+}
+
+fn requested_model(model: String) -> Option<String> {
+    let trimmed = model.trim();
+    if trimmed.is_empty() || trimmed == "default" {
+        None
+    } else {
+        Some(model)
+    }
+}
+
+#[cfg(test)]
+mod model_tests {
+    use super::requested_model;
+
+    #[test]
+    fn the_default_placeholder_leaves_the_harness_model_unpinned() {
+        assert_eq!(requested_model("default".into()), None);
+        assert_eq!(requested_model(String::new()), None);
+        assert_eq!(
+            requested_model("gpt-6.1-sol".into()),
+            Some("gpt-6.1-sol".into())
+        );
     }
 }
