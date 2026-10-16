@@ -153,10 +153,30 @@ fn entry_for(config: &Config, harness: HarnessId) -> LaunchEntry {
             "claude-agent-acp",
             Vec::new(),
         ))),
-        HarnessId::Codex => unverified(config, harness, "codex-acp", Vec::new()),
-        HarnessId::Opencode => unverified(config, harness, "opencode", vec!["acp".to_owned()]),
-        HarnessId::Hermes => unverified(config, harness, "hermes", Vec::new()),
-        HarnessId::KimiCode => unverified(config, harness, "kimi", Vec::new()),
+        HarnessId::Codex => LaunchEntry::Launch(AcpLaunch::Adapter(acp_command(
+            config,
+            harness,
+            "codex-acp",
+            Vec::new(),
+        ))),
+        HarnessId::Opencode => LaunchEntry::Launch(AcpLaunch::Native(acp_command(
+            config,
+            harness,
+            "opencode",
+            vec!["acp".to_owned()],
+        ))),
+        HarnessId::Hermes => LaunchEntry::Launch(AcpLaunch::Native(acp_command(
+            config,
+            harness,
+            "hermes",
+            vec!["acp".to_owned()],
+        ))),
+        HarnessId::KimiCode => LaunchEntry::Launch(AcpLaunch::Native(acp_command(
+            config,
+            harness,
+            "kimi",
+            vec!["acp".to_owned()],
+        ))),
         HarnessId::QwenCode => unverified(config, harness, "qwen", Vec::new()),
     }
 }
