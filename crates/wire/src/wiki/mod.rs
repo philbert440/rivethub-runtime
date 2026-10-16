@@ -2,6 +2,7 @@ mod article;
 mod citations;
 mod extraction;
 mod frontmatter;
+mod identity;
 mod limits;
 mod lines;
 mod parse;
@@ -25,6 +26,7 @@ pub use article::{
 };
 pub use citations::{parse_citations, parse_see_also};
 pub use extraction::{WikiAction, WikiPatch};
+pub use identity::{find_stem_match, is_slug_variant};
 pub use parse::parse_wiki_page;
 pub use patch::{PagePatch, apply_patch};
 pub use read::{FullPageRefused, READ_LIMIT, ReadSection, format_wiki_read};

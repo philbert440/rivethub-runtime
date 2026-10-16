@@ -22,14 +22,6 @@ pub(crate) const UNPORTED: &[(&str, &str)] = &[
         "no production caller: identity.js:entitiesOverlap",
     ),
     (
-        "find_stem_match",
-        "no production caller: identity.js:findStemMatch",
-    ),
-    (
-        "is_slug_variant",
-        "no production caller: identity.js:isSlugVariant",
-    ),
-    (
         "merge_article_bodies",
         "no production caller: page.js:mergeArticleBodies",
     ),

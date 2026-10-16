@@ -210,14 +210,10 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
             Some("Decided to deploy blue-green.".to_owned())
         )
     );
-    let redirect: (String, String) =
-        sqlx::query_as("SELECT from_slug, to_slug FROM rh_wiki_redirects")
-            .fetch_one(&pool)
-            .await?;
-    assert_eq!(
-        redirect,
-        ("acmekit-rollout".to_owned(), "acmekit-deploys".to_owned())
-    );
+    let redirects: (i64,) = sqlx::query_as("SELECT count(*) FROM rh_wiki_redirects")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(redirects.0, 0);
     Ok(())
 }
 

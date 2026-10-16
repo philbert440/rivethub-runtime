@@ -2,9 +2,9 @@ use std::convert::Infallible;
 
 use wire::wiki::{
     ArticlePatch, ArticleSection, ArticleSections, CappedSummary, PageCitation,
-    apply_article_patches, cap_summary, demote_h2_headings, extract_wiki_links,
-    join_article_sections, merge_summary_text, normalize_slug, parse_citations, parse_see_also,
-    split_article_sections,
+    apply_article_patches, cap_summary, demote_h2_headings, extract_wiki_links, find_stem_match,
+    is_slug_variant, join_article_sections, merge_summary_text, normalize_slug, parse_citations,
+    parse_see_also, split_article_sections,
 };
 
 use crate::harness::{TestResult, never_thrown, replay};
@@ -20,6 +20,8 @@ pub(crate) const REPLAYED: &[&str] = &[
     "parse_citations",
     "merge_summary_text",
     "cap_summary",
+    "is_slug_variant",
+    "find_stem_match",
 ];
 
 #[derive(serde::Deserialize)]
@@ -158,6 +160,32 @@ fn cap_summary_replays() -> TestResult {
             "cap_summary",
             pure(|CapArgs(text, limit)| -> CappedSummary {
                 cap_summary(&text, limit.unwrap_or(wire::wiki::SUMMARY_LIMIT))
+            }),
+            never_thrown,
+        ),
+    )
+}
+
+#[test]
+fn is_slug_variant_replays() -> TestResult {
+    report(
+        "is_slug_variant",
+        replay(
+            "is_slug_variant",
+            pure(|(left, right): (String, String)| is_slug_variant(&left, &right)),
+            never_thrown,
+        ),
+    )
+}
+
+#[test]
+fn find_stem_match_replays() -> TestResult {
+    report(
+        "find_stem_match",
+        replay(
+            "find_stem_match",
+            pure(|(proposed, existing): (String, Vec<String>)| {
+                find_stem_match(&proposed, &existing)
             }),
             never_thrown,
         ),

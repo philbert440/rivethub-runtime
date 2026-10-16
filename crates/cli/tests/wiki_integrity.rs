@@ -66,7 +66,7 @@ async fn wiki_alias_updates_and_new_sources_commit_provenance(pool: PgPool) -> T
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn wiki_conflicting_alias_rolls_back_every_patch(pool: PgPool) -> TestResult {
+async fn wiki_alias_of_another_topic_no_longer_loses_the_other_patches(pool: PgPool) -> TestResult {
     let wiki = tempfile::tempdir()?;
     let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let first = seed(&pool).await?;
@@ -74,31 +74,55 @@ async fn wiki_conflicting_alias_rolls_back_every_patch(pool: PgPool) -> TestResu
     let second = seed(&pool).await?;
     let mut other = patch();
     other.slug = slug("other");
+    other.title = "Quarterly planning".to_owned();
+    other.summary = "Planning happens each quarter.".to_owned();
+    other.article = None;
+    other.history_entry = None;
     other.aliases = vec![slug("other-alias")];
+    other.entities.clear();
     store.apply_wiki(&second, vec![other], now()).await?;
     let third = seed(&pool).await?;
     let mut conflict = patch();
     conflict.aliases.push(slug("other-alias"));
+    conflict.aliases.push(slug("other"));
     let mut fresh = patch();
     fresh.slug = slug("a-fresh-topic");
     fresh.aliases.clear();
-    assert!(matches!(
-        store.apply_wiki(&third, vec![fresh, conflict], now()).await,
-        Err(WikiStoreError::SlugConflict(_))
-    ));
+    fresh.entities.clear();
+    assert_eq!(
+        store
+            .apply_wiki(&third, vec![fresh, conflict], now())
+            .await?,
+        vec!["a-fresh-topic", "acmekit-deploys"]
+    );
     let topics: Vec<(String,)> = sqlx::query_as("SELECT slug FROM rh_wiki_topics ORDER BY slug")
         .fetch_all(&pool)
         .await?;
     assert_eq!(
         topics,
-        vec![("acmekit-deploys".to_owned(),), ("other".to_owned(),)]
+        vec![
+            ("a-fresh-topic".to_owned(),),
+            ("acmekit-deploys".to_owned(),),
+            ("other".to_owned(),)
+        ]
     );
-    let extraction: (i64,) =
-        sqlx::query_as("SELECT count(*) FROM rh_wiki_extractions WHERE summary_id = $1")
-            .bind(third.summary_id)
-            .fetch_one(&pool)
-            .await?;
-    assert_eq!(extraction.0, 0);
+    let extraction: (String, Vec<String>) = sqlx::query_as(
+        "SELECT status, topics_touched FROM rh_wiki_extractions WHERE summary_id = $1",
+    )
+    .bind(third.summary_id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(
+        extraction,
+        (
+            "done".to_owned(),
+            vec!["a-fresh-topic".to_owned(), "acmekit-deploys".to_owned()]
+        )
+    );
+    let redirects: (i64,) = sqlx::query_as("SELECT count(*) FROM rh_wiki_redirects")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(redirects.0, 0);
     Ok(())
 }
 

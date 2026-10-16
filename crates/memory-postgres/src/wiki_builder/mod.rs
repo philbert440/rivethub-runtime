@@ -1,3 +1,4 @@
+mod gate;
 mod topics;
 
 use async_trait::async_trait;
@@ -136,16 +137,12 @@ impl PostgresMemory {
             return Ok(topics);
         }
         lock_slugs(&mut tx, &patches).await?;
-        for patch in &patches {
-            topics::canonical(&mut tx, patch).await?;
-        }
         let date: DateTime<Utc> =
             sqlx::query_scalar("SELECT created_at FROM rh_summaries WHERE id = $1")
                 .bind(job.summary_id)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(query_error)?;
-        patches.sort_by(|left, right| left.slug.as_ref().cmp(right.slug.as_ref()));
         let mut touched = Vec::new();
         let mut last_sha = None;
         for patch in patches {
@@ -230,12 +227,17 @@ async fn lock_slugs(
     slugs.sort_unstable();
     slugs.dedup();
     for slug in slugs {
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-            .bind(slug)
-            .execute(&mut **tx)
-            .await
-            .map_err(query_error)?;
+        lock_slug(tx, slug).await?;
     }
+    Ok(())
+}
+
+async fn lock_slug(tx: &mut Transaction<'_, Postgres>, slug: &str) -> Result<(), WikiStoreError> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(slug)
+        .execute(&mut **tx)
+        .await
+        .map_err(query_error)?;
     Ok(())
 }
 
