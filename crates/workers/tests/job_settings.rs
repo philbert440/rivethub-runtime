@@ -59,3 +59,23 @@ fn environment_overrides_are_typed_and_the_wiki_cap_is_clamped() -> Result<(), W
     }
     Ok(())
 }
+
+#[test]
+fn worker_concurrency_is_unset_by_default_and_must_be_a_positive_count() -> Result<(), WorkerError>
+{
+    let concurrency = |value: &str| {
+        workers::worker_concurrency(&Environment::from_vars([(
+            "RIVETHUB_WORKER_CONCURRENCY",
+            value,
+        )]))
+    };
+    assert_eq!(workers::worker_concurrency(&Environment::default())?, None);
+    assert_eq!(concurrency("2")?, Some(2));
+    for refused in ["0", "-1", "two", "4294967296"] {
+        assert!(
+            matches!(concurrency(refused), Err(WorkerError::JobSetting { ref name }) if name == "RIVETHUB_WORKER_CONCURRENCY"),
+            "{refused}"
+        );
+    }
+    Ok(())
+}

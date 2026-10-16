@@ -136,6 +136,12 @@ where
     }
 
     #[must_use]
+    pub fn with_concurrency(mut self, concurrency: u32) -> Self {
+        self.config.concurrency = concurrency;
+        self
+    }
+
+    #[must_use]
     pub fn with_activities(mut self, activities: Activities) -> Self {
         self.activities = activities;
         self

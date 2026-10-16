@@ -60,6 +60,18 @@ impl MemoryJobSettings {
     }
 }
 
+pub fn worker_concurrency(env: &Environment) -> Result<Option<u32>, WorkerError> {
+    let name = "RIVETHUB_WORKER_CONCURRENCY";
+    let invalid = || WorkerError::JobSetting {
+        name: name.to_owned(),
+    };
+    match number(env, name)? {
+        None => Ok(None),
+        Some(parsed) if parsed > 0 => u32::try_from(parsed).map(Some).map_err(|_| invalid()),
+        Some(_) => Err(invalid()),
+    }
+}
+
 fn number(env: &Environment, name: &str) -> Result<Option<i64>, WorkerError> {
     let invalid = || WorkerError::JobSetting {
         name: name.to_owned(),

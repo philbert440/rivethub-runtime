@@ -89,6 +89,7 @@ async fn check_role(env: &Environment, role: ProcessRole) -> Result<(), RootErro
     let model = binding.model;
     EmbedSettings::from_config(&config)?;
     workers::MemoryJobSettings::from_environment(env)?;
+    workers::worker_concurrency(env)?;
     SummarySettings::standard(model)?;
     crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
     Ok(())
@@ -132,6 +133,9 @@ async fn run(
             .with_memory_jobs(memory.clone())
             .with_job_settings(workers::MemoryJobSettings::from_environment(env)?)
             .with_schedules(env.text("RIVETHUB_WIKI_EXTRACTION") == Some("1"));
+        if let Some(concurrency) = workers::worker_concurrency(env)? {
+            runner.runner = runner.runner.with_concurrency(concurrency);
+        }
         tracing::info!("worker running {role}");
         drive(runner, shutdown.clone()).await
     }
