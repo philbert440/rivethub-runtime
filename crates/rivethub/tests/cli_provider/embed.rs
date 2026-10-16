@@ -84,3 +84,55 @@ async fn embeddings_use_the_selected_memory_backend_endpoint_model_and_key() -> 
     server.close().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn an_openai_provider_embeds_through_the_memory_endpoint_not_its_chat_server() -> TestResult {
+    async fn embed(
+        axum::Json(request): axum::Json<wire::stream::openai::EmbeddingRequest>,
+    ) -> axum::Json<wire::stream::openai::EmbeddingResponse> {
+        assert_eq!(request.model, "embedding-model");
+        axum::Json(wire::stream::openai::EmbeddingResponse {
+            data: vec![wire::stream::openai::EmbeddingRow {
+                index: 0,
+                embedding: vec![0.25, 0.5],
+            }],
+        })
+    }
+    let chat = testkit::stub_server(axum::Router::new()).await?;
+    let embeddings = testkit::stub_server(
+        axum::Router::new().route("/v1/embeddings", axum::routing::post(embed)),
+    )
+    .await?;
+    for backend in [
+        config::MemoryBackend::Postgres,
+        config::MemoryBackend::Sqlite,
+    ] {
+        let home = tempfile::tempdir()?;
+        let path = match backend {
+            config::MemoryBackend::Sqlite => "    path: ':memory:'\n",
+            config::MemoryBackend::Postgres => "",
+        };
+        let text = format!(
+            "runtime:\n  workspace: {home}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://{chat}\n    model: chat-model\n    probe_models: false\nmemory:\n  backend: {backend}\n  {backend}:\n    embed_endpoint: http://{embed}\n    embed_model: embedding-model\n{path}",
+            home = home.path().display(),
+            chat = chat.addr,
+            embed = embeddings.addr,
+        );
+        let env = config::Environment::default();
+        let config = config::Config::from_str(&env, &text)?.config;
+        let cancel = CancellationToken::new();
+        let binding = ModelFactory::default().build(&config, "p", None, &cancel)?;
+        assert!(binding.embeddings);
+        assert_eq!(
+            binding.provider.embed(vec!["input".into()]).await?,
+            vec![Embedding {
+                vector: vec![0.25, 0.5]
+            }],
+            "{backend}"
+        );
+        cancel.cancel();
+    }
+    chat.close().await?;
+    embeddings.close().await?;
+    Ok(())
+}

@@ -70,6 +70,12 @@ pub struct OpenAiCompatible {
 }
 
 impl OpenAiCompatible {
+    #[must_use]
+    pub fn with_embedder(mut self, embedder: embed::Embedder) -> Self {
+        self.embedder = embedder;
+        self
+    }
+
     pub fn build(kind: ProviderType, provider: &OpenaiProvider) -> Result<Self, BuildError> {
         let variant = Variant::of(kind).ok_or(BuildError::NotOpenaiCompatible)?;
         let model = provider.model.clone().ok_or(BuildError::MissingModel)?;

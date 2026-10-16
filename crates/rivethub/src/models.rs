@@ -242,9 +242,12 @@ impl ModelFactory {
         let kind = slot.kind.ok_or_else(|| ModelError::Type(id.into()))?;
         match &slot.body {
             ProviderBody::Openai(body) => {
-                let provider = providers::OpenAiCompatible::build(kind, body)?
+                let mut provider = providers::OpenAiCompatible::build(kind, body)?
                     .with_shutdown(shutdown.child_token())
                     .with_activities(self.activities.clone());
+                if let Some(embedder) = self.embedder(config)? {
+                    provider = provider.with_embedder(embedder);
+                }
                 let model = match model {
                     Some(model) => model.to_owned(),
                     None => provider.model().to_owned(),
