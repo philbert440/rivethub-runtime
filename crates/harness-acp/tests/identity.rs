@@ -92,6 +92,28 @@ fn hermes_accepts_stamped_ids_and_rejects_unknown_prefixed_ones() {
 }
 
 #[test]
+fn hermes_accepts_acp_uuid_sessions() {
+    let native = "a73e7e03-185c-4a17-88db-d5ab15bff69d";
+    let parsed = NativeSession::parse(HarnessId::Hermes, native).expect("hermes ACP uuid");
+    assert_eq!(
+        parsed.canonical().as_str(),
+        &canonical(HarnessId::Hermes, native)
+    );
+    for native in [
+        "A73E7E03-185C-4A17-88DB-D5AB15BFF69D",
+        "a73e7e03185c4a1788dbd5ab15bff69d",
+    ] {
+        assert!(
+            matches!(
+                NativeSession::parse(HarnessId::Hermes, native),
+                Err(IdentityError::Shape { .. })
+            ),
+            "hermes must reject {native:?}"
+        );
+    }
+}
+
+#[test]
 fn kimi_accepts_session_prefixed_uuids_only() {
     let native = "session_00000000-0000-4000-8000-000000000000";
     let parsed = NativeSession::parse(HarnessId::KimiCode, native).expect("kimi shape");

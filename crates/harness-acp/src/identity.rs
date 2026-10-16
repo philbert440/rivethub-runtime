@@ -78,7 +78,7 @@ fn matches_shape(harness: HarnessId, native: &str) -> Result<(), IdentityError> 
         | HarnessId::Cowork
         | HarnessId::Codex
         | HarnessId::GrokBuild => is_uuid(native),
-        HarnessId::Hermes => is_hermes(native)?,
+        HarnessId::Hermes => is_uuid(native) || is_hermes(native)?,
         HarnessId::KimiCode => is_kimi(native),
         HarnessId::Opencode => is_opencode(native),
     };
