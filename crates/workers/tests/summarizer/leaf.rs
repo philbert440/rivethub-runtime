@@ -302,3 +302,41 @@ async fn assert_backoff(id: Uuid) {
     assert_eq!(view.attempt, 1);
     assert_eq!(view.error.as_deref(), Some("LLM HTTP 503"));
 }
+
+#[tokio::test]
+async fn configured_token_caps_bound_the_leaf_request() {
+    let id = Uuid::parse_str("00000000-0000-4000-8000-000000000003").expect("id");
+    let store = Arc::new(MemStore::new(vec![window(
+        id,
+        "cli:s1",
+        "Session cli:s1",
+        messages(at("2026-10-10T12:00:00Z"), 10),
+    )]));
+    let script = Arc::new(Scripted::success());
+    let jobs = Arc::new(Seen::default());
+    let settings = settings()
+        .with_max_tokens(4096, 6144, 8192)
+        .expect("positive caps");
+    let token = cancel();
+    let env = bind(
+        &store,
+        &script,
+        &jobs,
+        &settings,
+        at("2026-10-10T12:10:00Z"),
+        &token,
+    );
+    handle_summarize(&env, &payload_of(id, SummaryTrigger::Threshold))
+        .await
+        .expect("summarize");
+    let caps: Vec<_> = script
+        .calls
+        .lock()
+        .await
+        .iter()
+        .map(|call| call.max_tokens)
+        .collect();
+    assert_ne!(caps.len(), 0);
+    assert!(caps.iter().all(|cap| *cap == Some(4096)), "{caps:?}");
+    assert!(settings.clone().with_max_tokens(0, 1, 1).is_err());
+}

@@ -5,6 +5,8 @@ pub mod embedding_sweep;
 mod error;
 mod job_settings;
 pub use job_settings::MemoryJobSettings;
+pub use job_settings::tuned_embed;
+pub use job_settings::tuned_summary;
 pub use job_settings::worker_concurrency;
 mod outage;
 mod role;

@@ -106,10 +106,10 @@ async fn check_role(env: &Environment, role: ProcessRole) -> Result<(), RootErro
     let binding = binding?;
     check_embeddings(role, &binding)?;
     let model = binding.model;
-    EmbedSettings::from_config(&config)?;
+    workers::tuned_embed(EmbedSettings::from_config(&config)?, env)?;
     workers::MemoryJobSettings::from_environment(env)?;
     workers::worker_concurrency(env)?;
-    SummarySettings::standard(model)?;
+    workers::tuned_summary(SummarySettings::standard(model)?, env)?;
     crate::identity::announce_resolved("worker", &config, env).map_err(StartupError::from)?;
     Ok(())
 }
@@ -152,6 +152,7 @@ async fn run(
             .with_memory_jobs(memory.clone())
             .with_job_settings(workers::MemoryJobSettings::from_environment(env)?)
             .with_schedules(wiki_extraction(env));
+        runner.runner = runner.runner.tuned(env)?;
         if let Some(concurrency) = workers::worker_concurrency(env)? {
             runner.runner = runner.runner.with_concurrency(concurrency);
         }

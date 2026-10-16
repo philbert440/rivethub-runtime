@@ -6,7 +6,7 @@
 The implemented commands include `version`, `config path`, `config show`, `config validate [path]`, `doctor [--json]`,
 `status`, `stop`, `gateway`, `agent`, `worker`, `mcp`, and `local [--port <n>] [--no-lan]`. One typed `cli::Exit` owns exit codes, including the existing service startup codes.
 
-`rh gateway` serves the gateway. `rh agent` runs the task engine. `rh worker --role <role>` runs one worker role, claiming up to four jobs at a time, or `RIVETHUB_WORKER_CONCURRENCY` (a positive count) when set. `rh mcp` runs the MCP sidecar.
+`rh gateway` serves the gateway. `rh agent` runs the task engine. `rh worker --role <role>` runs one worker role, claiming up to four jobs at a time, or `RIVETHUB_WORKER_CONCURRENCY` (a positive count) when set. `RIVETHUB_SUMMARY_LEAF_TOKENS`, `RIVETHUB_SUMMARY_BRANCH_TOKENS` and `RIVETHUB_SUMMARY_ROOT_TOKENS` cap each summary request (defaults 7000, 14000, 20000), and `RIVETHUB_EMBED_TIMEOUT_MS` bounds each embedding request (default 30000). `rh mcp` runs the MCP sidecar.
 `rh start` stays hidden from help and is the systemd unit's `ExecStart`. It supervises one child of this binary per
 configured service root (`gateway`, `agent` when Postgres memory would start, each sqlite worker role, and `mcp` when that transport has a host or socket),
 restarts an unexpected exit with backoff, and forwards SIGTERM. Deployments previously invoking bare `rh` to launch the gateway must use `rh gateway`. The

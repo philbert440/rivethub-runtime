@@ -13,7 +13,6 @@ use super::llm::chat;
 use super::llm::require_text;
 use super::prompt::LEAF_SYSTEM_PROMPT;
 use super::prompt::leaf_user;
-use super::settings::LEAF_MAX_TOKENS;
 use super::settings::SummaryTrigger;
 use crate::error::WorkerError;
 
@@ -40,7 +39,7 @@ pub(super) async fn write_leaves(
                 .ok_or(WorkerError::Count)?;
             leaf_user(&window.conversation, messages)?
         };
-        let response = chat(env, LEAF_SYSTEM_PROMPT, &user, LEAF_MAX_TOKENS).await?;
+        let response = chat(env, LEAF_SYSTEM_PROMPT, &user, env.settings.leaf_max_tokens).await?;
         if response.finish_reason == Some(FinishReason::Length) {
             batch = shrink_batch(batch)?;
             continue;

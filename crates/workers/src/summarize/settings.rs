@@ -15,9 +15,9 @@ pub(super) const MIN_BRANCHES_FOR_ROOT: u32 = 3;
 pub(super) const IDLE_MINUTES: u32 = 15;
 pub(super) const STALE_MINUTES: u32 = 5_760;
 pub(super) const STALE_MIN_BATCH: u32 = 2;
-pub(super) const LEAF_MAX_TOKENS: u32 = 7_000;
-pub(super) const BRANCH_MAX_TOKENS: u32 = 14_000;
-pub(super) const ROOT_MAX_TOKENS: u32 = 20_000;
+const LEAF_MAX_TOKENS: u32 = 7_000;
+const BRANCH_MAX_TOKENS: u32 = 14_000;
+const ROOT_MAX_TOKENS: u32 = 20_000;
 pub const DEAD_REST: TimeDelta = TimeDelta::minutes(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +43,9 @@ pub struct SummarySettings {
     pub max_leaf_rounds: u32,
     pub pipeline_version: i32,
     pub session_tagging: bool,
+    pub leaf_max_tokens: u32,
+    pub branch_max_tokens: u32,
+    pub root_max_tokens: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,7 +109,25 @@ impl SummarySettings {
             max_leaf_rounds: parts.max_leaf_rounds,
             pipeline_version: parts.pipeline_version,
             session_tagging: parts.session_tagging,
+            leaf_max_tokens: LEAF_MAX_TOKENS,
+            branch_max_tokens: BRANCH_MAX_TOKENS,
+            root_max_tokens: ROOT_MAX_TOKENS,
         })
+    }
+
+    pub fn with_max_tokens(
+        mut self,
+        leaf: u32,
+        branch: u32,
+        root: u32,
+    ) -> Result<Self, WorkerError> {
+        require_positive("leaf max tokens", leaf)?;
+        require_positive("branch max tokens", branch)?;
+        require_positive("root max tokens", root)?;
+        self.leaf_max_tokens = leaf;
+        self.branch_max_tokens = branch;
+        self.root_max_tokens = root;
+        Ok(self)
     }
 
     #[must_use]

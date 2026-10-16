@@ -135,6 +135,12 @@ where
         }
     }
 
+    pub fn tuned(mut self, env: &config::Environment) -> Result<Self, WorkerError> {
+        self.summary = crate::tuned_summary(self.summary, env)?;
+        self.embed = crate::tuned_embed(self.embed, env)?;
+        Ok(self)
+    }
+
     #[must_use]
     pub fn with_concurrency(mut self, concurrency: u32) -> Self {
         self.config.concurrency = concurrency;

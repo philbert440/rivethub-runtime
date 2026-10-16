@@ -60,8 +60,28 @@ impl MemoryJobSettings {
     }
 }
 
-pub fn worker_concurrency(env: &Environment) -> Result<Option<u32>, WorkerError> {
-    let name = "RIVETHUB_WORKER_CONCURRENCY";
+pub fn tuned_summary(
+    settings: crate::SummarySettings,
+    env: &Environment,
+) -> Result<crate::SummarySettings, WorkerError> {
+    let leaf = positive(env, "RIVETHUB_SUMMARY_LEAF_TOKENS")?.unwrap_or(settings.leaf_max_tokens);
+    let branch =
+        positive(env, "RIVETHUB_SUMMARY_BRANCH_TOKENS")?.unwrap_or(settings.branch_max_tokens);
+    let root = positive(env, "RIVETHUB_SUMMARY_ROOT_TOKENS")?.unwrap_or(settings.root_max_tokens);
+    settings.with_max_tokens(leaf, branch, root)
+}
+
+pub fn tuned_embed(
+    settings: crate::EmbedSettings,
+    env: &Environment,
+) -> Result<crate::EmbedSettings, WorkerError> {
+    Ok(match positive(env, "RIVETHUB_EMBED_TIMEOUT_MS")? {
+        Some(ms) => settings.with_timeout(std::time::Duration::from_millis(u64::from(ms))),
+        None => settings,
+    })
+}
+
+fn positive(env: &Environment, name: &str) -> Result<Option<u32>, WorkerError> {
     let invalid = || WorkerError::JobSetting {
         name: name.to_owned(),
     };
@@ -70,6 +90,10 @@ pub fn worker_concurrency(env: &Environment) -> Result<Option<u32>, WorkerError>
         Some(parsed) if parsed > 0 => u32::try_from(parsed).map(Some).map_err(|_| invalid()),
         Some(_) => Err(invalid()),
     }
+}
+
+pub fn worker_concurrency(env: &Environment) -> Result<Option<u32>, WorkerError> {
+    positive(env, "RIVETHUB_WORKER_CONCURRENCY")
 }
 
 fn number(env: &Environment, name: &str) -> Result<Option<i64>, WorkerError> {

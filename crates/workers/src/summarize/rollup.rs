@@ -16,8 +16,6 @@ use super::prompt::BRANCH_SYSTEM_PROMPT;
 use super::prompt::ROOT_SYSTEM_PROMPT;
 use super::prompt::branch_user;
 use super::prompt::root_user;
-use super::settings::BRANCH_MAX_TOKENS;
-use super::settings::ROOT_MAX_TOKENS;
 use crate::error::WorkerError;
 
 struct RollupSpec<'a> {
@@ -40,7 +38,7 @@ pub(super) async fn write_branch(
             minimum: env.settings.min_leaves_for_branch,
             batch: env.settings.branch_batch,
             system: BRANCH_SYSTEM_PROMPT,
-            max_tokens: BRANCH_MAX_TOKENS,
+            max_tokens: env.settings.branch_max_tokens,
         },
     )
     .await
@@ -58,7 +56,7 @@ pub(super) async fn write_root(
             minimum: env.settings.min_branches_for_root,
             batch: env.settings.root_batch,
             system: ROOT_SYSTEM_PROMPT,
-            max_tokens: ROOT_MAX_TOKENS,
+            max_tokens: env.settings.root_max_tokens,
         },
     )
     .await
