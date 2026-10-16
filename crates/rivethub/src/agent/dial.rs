@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use config::Config;
 use gateway::server::BindSource;
+use gateway::server::is_bind_loopback;
 use rustls_pki_types::CertificateDer;
 use rustls_pki_types::pem::PemObject;
 use x509_parser::certificate::X509Certificate;
@@ -27,10 +28,17 @@ struct Names {
 struct Files {
     cert: PathBuf,
     bind: String,
-    advertise: Option<String>,
     port: u16,
     ca: Option<PathBuf>,
-    client: Option<(PathBuf, PathBuf)>,
+}
+
+#[derive(Clone, Copy)]
+enum Class {
+    V4,
+    V6,
+    Localhost,
+    WildV4,
+    WildV6,
 }
 
 pub(super) async fn endpoint(config: &Config) -> Result<GatewayEndpoint, AgentError> {
@@ -41,18 +49,11 @@ pub(super) async fn endpoint(config: &Config) -> Result<GatewayEndpoint, AgentEr
             trust: None,
         });
     };
-    let client = client_files(config)?;
-    let ca = present(source.tls_ca);
-    if client.is_some() && ca.is_none() {
-        return Err(AgentError::GatewayCa);
-    }
     let files = Files {
         cert,
         bind: source.host,
-        advertise: advertise(config),
         port: source.port,
-        ca,
-        client,
+        ca: present(source.tls_ca),
     };
     match tokio::task::spawn_blocking(move || load(&files)).await {
         Ok(result) => result,
@@ -60,107 +61,91 @@ pub(super) async fn endpoint(config: &Config) -> Result<GatewayEndpoint, AgentEr
     }
 }
 
-pub(super) fn choose(pem: &str, bind: &str, advertise: Option<&str>) -> Result<String, AgentError> {
-    let names = leaf_names(pem)?;
-    if let Some(host) = advertise {
-        return named(&names, host).ok_or(AgentError::AdvertiseHost);
-    }
-    if dialable_bind(bind)
-        && let Some(host) = named(&names, bind)
-    {
-        return Ok(host);
-    }
-    sole(&names)
+pub(super) fn choose(pem: &str, bind: &str) -> Result<String, AgentError> {
+    dial_name(pem, classify(bind)?)
 }
 
 fn load(files: &Files) -> Result<GatewayEndpoint, AgentError> {
-    let pem = std::fs::read_to_string(&files.cert)?;
-    let host = choose(&pem, &files.bind, files.advertise.as_deref())?;
+    let host = choose(&std::fs::read_to_string(&files.cert)?, &files.bind)?;
     let url = https_url(&host, files.port)?;
     let trust = match &files.ca {
         Some(path) => {
             let ca_pem = std::fs::read_to_string(path)?;
-            Some(trust(&ca_pem, files.client.as_ref())?)
+            Some(anchor(&ca_pem)?)
         }
         None => None,
     };
     Ok(GatewayEndpoint { url, trust })
 }
 
-fn trust(
-    ca_pem: &str,
-    client: Option<&(PathBuf, PathBuf)>,
-) -> Result<tasks::MeshIdentity, AgentError> {
-    let anchor =
-        tasks::MeshIdentity::from_ca(ca_pem).map_err(|_| AgentError::GatewayCertificate)?;
-    let Some((cert, key)) = client else {
-        return Ok(anchor);
-    };
-    let certificate = std::fs::read_to_string(cert)?;
-    let private_key = std::fs::read_to_string(key)?;
-    Ok(tasks::MeshIdentity::from_pem(
-        &certificate,
-        &private_key,
-        ca_pem,
-    )?)
+fn anchor(ca_pem: &str) -> Result<tasks::MeshIdentity, AgentError> {
+    tasks::MeshIdentity::from_ca(ca_pem).map_err(|_| AgentError::GatewayCertificate)
 }
 
-fn advertise(config: &Config) -> Option<String> {
-    config
-        .mesh
-        .as_ref()
-        .and_then(|mesh| mesh.advertise_host.clone())
-}
-
-fn client_files(config: &Config) -> Result<Option<(PathBuf, PathBuf)>, AgentError> {
-    let Some(mesh) = config.mesh.as_ref() else {
-        return Ok(None);
-    };
-    if mesh.enabled != Some(true) {
-        return Ok(None);
+fn classify(bind: &str) -> Result<Class, AgentError> {
+    let bare = strip_brackets(bind.trim());
+    if let Some(ip) = ip_literal(bare)
+        && ip.is_unspecified()
+    {
+        return Ok(if ip.is_ipv4() {
+            Class::WildV4
+        } else {
+            Class::WildV6
+        });
     }
-    match &mesh.tls {
-        config::model::MeshTls::Enabled(true) => {
-            let source = BindSource::from_config(config);
-            Ok(Some((
-                required(source.tls_cert)?,
-                required(source.tls_key)?,
-            )))
-        }
-        config::model::MeshTls::Enabled(false) => Err(tasks::Error::MeshTlsRequired.into()),
-        config::model::MeshTls::Paths(paths) => Ok(Some((
-            required(paths.cert_path.clone())?,
-            required(paths.key_path.clone())?,
-        ))),
+    if is_bind_loopback(bare) {
+        return Ok(loopback_class(bare));
+    }
+    Err(AgentError::GatewayBind {
+        host: bind.trim().to_owned(),
+    })
+}
+
+fn loopback_class(bare: &str) -> Class {
+    if bare.eq_ignore_ascii_case("localhost") {
+        Class::Localhost
+    } else if bare.eq_ignore_ascii_case("::1") {
+        Class::V6
+    } else {
+        Class::V4
     }
 }
 
-fn required(path: Option<PathBuf>) -> Result<PathBuf, AgentError> {
-    path.filter(|item| !item.as_os_str().is_empty())
-        .ok_or_else(|| tasks::Error::MeshTlsRequired.into())
+fn dial_name(pem: &str, class: Class) -> Result<String, AgentError> {
+    let names = leaf_names(pem)?;
+    let host = match class {
+        Class::V4 => find_ip(&names, IpAddr::V4(Ipv4Addr::LOCALHOST)),
+        Class::V6 => find_ip(&names, IpAddr::V6(Ipv6Addr::LOCALHOST)),
+        Class::Localhost => find_dns(&names, "localhost"),
+        Class::WildV4 => find_ip(&names, IpAddr::V4(Ipv4Addr::LOCALHOST))
+            .or_else(|| find_dns(&names, "localhost")),
+        Class::WildV6 => find_ip(&names, IpAddr::V6(Ipv6Addr::LOCALHOST))
+            .or_else(|| find_dns(&names, "localhost")),
+    };
+    host.ok_or(AgentError::GatewayName)
+}
+
+fn plain_host(bind: &str) -> Result<String, AgentError> {
+    Ok(match classify(bind)? {
+        Class::V4 | Class::WildV4 => Ipv4Addr::LOCALHOST.to_string(),
+        Class::V6 | Class::WildV6 => dial_form(&IpAddr::V6(Ipv6Addr::LOCALHOST)),
+        Class::Localhost => "localhost".to_owned(),
+    })
 }
 
 fn present(path: Option<PathBuf>) -> Option<PathBuf> {
     path.filter(|item| !item.as_os_str().is_empty())
 }
 
-fn sole(names: &Names) -> Result<String, AgentError> {
-    match (names.dns.as_slice(), names.ips.as_slice()) {
-        ([host], _) => Ok(host.clone()),
-        ([], [ip]) => Ok(dial_form(ip)),
-        _ => Err(AgentError::GatewayName),
-    }
+fn find_ip(names: &Names, ip: IpAddr) -> Option<String> {
+    names.ips.contains(&ip).then(|| dial_form(&ip))
 }
 
-fn named(names: &Names, host: &str) -> Option<String> {
-    let bare = strip_brackets(host);
-    if let Some(ip) = ip_literal(bare) {
-        return names.ips.iter().find(|item| *item == &ip).map(dial_form);
-    }
+fn find_dns(names: &Names, host: &str) -> Option<String> {
     names
         .dns
         .iter()
-        .find(|item| item.eq_ignore_ascii_case(bare))
+        .find(|item| item.eq_ignore_ascii_case(host))
         .cloned()
 }
 
@@ -222,14 +207,6 @@ fn san_ip(bytes: &[u8]) -> Result<Option<IpAddr>, AgentError> {
     }
 }
 
-fn dialable_bind(host: &str) -> bool {
-    let bare = strip_brackets(host);
-    if let Some(ip) = ip_literal(bare) {
-        return !ip.is_unspecified();
-    }
-    dialable_dns(bare)
-}
-
 fn dialable_dns(name: &str) -> bool {
     !name.is_empty() && !name.as_bytes().contains(&b'*')
 }
@@ -266,11 +243,7 @@ fn https_url(host: &str, port: u16) -> Result<url::Url, AgentError> {
 }
 
 fn http_url(source: &BindSource) -> Result<url::Url, AgentError> {
-    with_host(
-        "http://127.0.0.1/",
-        strip_brackets(&source.host),
-        source.port,
-    )
+    with_host("http://127.0.0.1/", &plain_host(&source.host)?, source.port)
 }
 
 fn with_host(base: &str, host: &str, port: u16) -> Result<url::Url, AgentError> {

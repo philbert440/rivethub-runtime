@@ -51,6 +51,12 @@ struct Observed {
     hits: Arc<AtomicUsize>,
 }
 
+#[derive(Clone)]
+struct Gate {
+    hits: Arc<AtomicUsize>,
+    presented: bool,
+}
+
 struct Peer {
     port: u16,
     observed: Observed,
@@ -77,11 +83,11 @@ async fn start(material: &mesh_support::Material, require_client: bool) -> Peer 
         hits: Arc::new(AtomicUsize::new(0)),
     };
     let acceptor = acceptor(material, require_client);
-    let router = gateway(observed.clone());
     let cancel = CancellationToken::new();
     let stop = cancel.clone();
+    let counts = observed.clone();
     let task = tokio::spawn(async move {
-        listen(listener, acceptor, router, stop).await;
+        listen(listener, acceptor, counts, stop).await;
     });
     Peer {
         port,
@@ -128,10 +134,17 @@ fn acceptor(material: &mesh_support::Material, require_client: bool) -> TlsAccep
     TlsAcceptor::from(Arc::new(config))
 }
 
+fn presented(tls: &tokio_rustls::server::TlsStream<tokio::net::TcpStream>) -> bool {
+    tls.get_ref()
+        .1
+        .peer_certificates()
+        .is_some_and(|certs| !certs.is_empty())
+}
+
 async fn listen(
     listener: TcpListener,
     acceptor: TlsAcceptor,
-    router: Router,
+    observed: Observed,
     cancel: CancellationToken,
 ) {
     let mut connections = tokio::task::JoinSet::new();
@@ -142,9 +155,10 @@ async fn listen(
             accepted = listener.accept() => {
                 let Ok((stream, _)) = accepted else { break };
                 let acceptor = acceptor.clone();
-                let router = router.clone();
+                let observed = observed.clone();
                 connections.spawn(async move {
                     if let Ok(tls) = acceptor.accept(stream).await {
+                        let router = gateway(observed, presented(&tls));
                         let served = hyper::server::conn::http1::Builder::new()
                             .serve_connection(
                                 hyper_util::rt::TokioIo::new(tls),
@@ -163,15 +177,18 @@ async fn listen(
     connections.abort_all();
 }
 
-fn gateway(observed: Observed) -> Router {
+fn gateway(observed: Observed, presented: bool) -> Router {
     Router::new()
         .route("/healthz", get(health))
         .route("/api/sessions/{session}/messages", post(message))
-        .with_state(observed)
+        .with_state(Gate {
+            hits: observed.hits,
+            presented,
+        })
 }
 
-async fn health(State(observed): State<Observed>) -> axum::response::Response {
-    observed.hits.fetch_add(1, Ordering::SeqCst);
+async fn health(State(gate): State<Gate>) -> axum::response::Response {
+    gate.hits.fetch_add(1, Ordering::SeqCst);
     json_response(&HealthzResponse {
         ok: true,
         sessions: 0,
@@ -181,12 +198,29 @@ async fn health(State(observed): State<Observed>) -> axum::response::Response {
 }
 
 async fn message(
-    State(observed): State<Observed>,
+    State(gate): State<Gate>,
     Path(_session): Path<String>,
     _body: Bytes,
 ) -> axum::response::Response {
-    observed.hits.fetch_add(1, Ordering::SeqCst);
+    gate.hits.fetch_add(1, Ordering::SeqCst);
+    if gate.presented {
+        return unauthorized();
+    }
     json_response(&reply())
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "the unauthorized document is a fixed fixture"
+)]
+fn unauthorized() -> axum::response::Response {
+    let bytes = serde_json::to_vec(&wire::gateway::GatewayError::new("unauthorized"))
+        .expect("unauthorized json");
+    axum::response::Response::builder()
+        .status(StatusCode::UNAUTHORIZED)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(axum::body::Body::from(bytes))
+        .expect("unauthorized response")
 }
 
 #[expect(
@@ -256,10 +290,12 @@ fn chain_contains(error: &Error, needle: &str) -> bool {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_chat_loop_completes_through_the_mesh_ca() {
+async fn a_chat_loop_completes_as_the_loopback_owner() {
     let material = mesh_support::mint("node.example.test");
-    let peer = start(&material, true).await;
-    let engine = engine(peer.port, Some(material.identity(&material.ca.pem)));
+    let peer = start(&material, false).await;
+    let trust = MeshIdentity::from_ca(&material.ca.pem).expect("ca");
+    assert!(!trust.presents_certificate());
+    let engine = engine(peer.port, Some(trust));
     let id = engine
         .submit(common::task("ship it"))
         .await
@@ -274,6 +310,39 @@ async fn a_chat_loop_completes_through_the_mesh_ca() {
     assert_eq!(
         loaded.result.as_ref().map(|result| result.summary.as_str()),
         Some("done")
+    );
+    assert_eq!(peer.observed.hits.load(Ordering::SeqCst), 2);
+    peer.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn presenting_the_node_certificate_is_unauthorized() {
+    let material = mesh_support::mint("node.example.test");
+    let peer = start(&material, false).await;
+    let trust = material.identity(&material.ca.pem);
+    assert!(trust.presents_certificate());
+    let engine = engine(peer.port, Some(trust));
+    let id = engine
+        .submit(common::task("ship it"))
+        .await
+        .expect("submit");
+    let error = tokio::time::timeout(Duration::from_secs(5), engine.run_one())
+        .await
+        .expect("deadline")
+        .expect_err("node certificate");
+    assert!(
+        matches!(
+            &error,
+            Error::Rejected {
+                status: 401,
+                error: Some(body),
+            } if body.error == "unauthorized"
+        ),
+        "{error}"
+    );
+    assert_eq!(
+        engine.load(id).await.expect("load").status,
+        TaskStatus::Failed
     );
     assert_eq!(peer.observed.hits.load(Ordering::SeqCst), 2);
     peer.shutdown().await;

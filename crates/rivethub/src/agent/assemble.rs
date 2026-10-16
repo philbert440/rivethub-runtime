@@ -57,12 +57,14 @@ pub enum AgentError {
     Pricing(String),
     #[error("gateway url is invalid")]
     GatewayUrl,
-    #[error("gateway certificate has no dialable name")]
+    #[error(
+        "gateway certificate has no loopback name (127.0.0.1, ::1, or localhost); reissue the node certificate with a loopback subject alternative name"
+    )]
     GatewayName,
-    #[error("mesh advertise host is not a name on the gateway certificate")]
-    AdvertiseHost,
-    #[error("gateway CA is not configured")]
-    GatewayCa,
+    #[error(
+        "gateway is bound only to {host}; bind the gateway host to 127.0.0.1, ::1, localhost, 0.0.0.0, or :: so the agent can dial it as the loopback owner"
+    )]
+    GatewayBind { host: String },
     #[error("gateway certificate is invalid")]
     GatewayCertificate,
     #[error("agents.json escapes the state directory")]
@@ -96,8 +98,7 @@ impl AgentError {
             | Self::Pricing(_)
             | Self::GatewayUrl
             | Self::GatewayName
-            | Self::AdvertiseHost
-            | Self::GatewayCa
+            | Self::GatewayBind { .. }
             | Self::GatewayCertificate
             | Self::Escape
             | Self::Invalid(_)

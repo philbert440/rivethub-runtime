@@ -159,32 +159,24 @@ async fn open_plan(text: &str) -> Result<Plan, AgentError> {
 }
 
 #[test]
-fn recorded_certificate_sans_select_the_dial_host() {
+fn a_recorded_node_certificate_without_a_loopback_name_is_refused() {
     let pem = recorded_crt();
-    assert_eq!(
-        choose(&pem, "0.0.0.0", Some("rec-node.example.test")).expect("dns"),
-        "rec-node.example.test"
-    );
-    assert_eq!(
-        choose(&pem, "0.0.0.0", Some("REC-NODE.EXAMPLE.TEST")).expect("case"),
-        "rec-node.example.test"
-    );
-    assert_eq!(
-        choose(&pem, "0.0.0.0", Some("192.0.2.15")).expect("ip"),
-        "192.0.2.15"
-    );
     assert!(matches!(
-        choose(&pem, "0.0.0.0", Some("127.0.0.1")),
-        Err(AgentError::AdvertiseHost)
+        choose(&pem, "0.0.0.0"),
+        Err(AgentError::GatewayName)
     ));
-    assert_eq!(
-        choose(&pem, "0.0.0.0", None).expect("sole dns"),
-        "rec-node.example.test"
-    );
-    assert_eq!(
-        choose(&pem, "192.0.2.15", None).expect("bind ip"),
-        "192.0.2.15"
-    );
+    let missing = choose(&pem, "0.0.0.0").expect_err("san");
+    let missing_text = missing.to_string();
+    assert!(missing_text.contains("127.0.0.1"), "{missing_text}");
+    assert!(missing_text.contains("reissue"), "{missing_text}");
+    let remote = choose(&pem, "192.0.2.55").expect_err("bind");
+    let remote_text = remote.to_string();
+    assert!(matches!(
+        remote,
+        AgentError::GatewayBind { host } if host == "192.0.2.55"
+    ));
+    assert!(remote_text.contains("loopback owner"), "{remote_text}");
+    assert!(remote_text.contains("127.0.0.1"), "{remote_text}");
 }
 
 #[test]
@@ -201,55 +193,52 @@ fn out_of_slice_scenarios_are_named_with_a_reason() {
 }
 
 #[test]
-fn generated_names_follow_advertise_bind_and_a_single_san() {
-    let both = mint(&["only.example.test", "192.0.2.20"]);
+fn wildcard_and_loopback_binds_dial_a_name_on_the_certificate() {
+    let both = mint(&["only.example.test", "127.0.0.1", "localhost"]);
+    assert_eq!(choose(&both.cert, "0.0.0.0").expect("wild"), "127.0.0.1");
+    assert_eq!(choose(&both.cert, "127.0.0.1").expect("bind"), "127.0.0.1");
     assert_eq!(
-        choose(&both.cert, "0.0.0.0", None).expect("dns"),
-        "only.example.test"
-    );
-    assert_eq!(
-        choose(&both.cert, "127.0.0.1", Some("only.example.test")).expect("advertise"),
-        "only.example.test"
-    );
-    let loopback = mint(&["node.example.test", "127.0.0.1"]);
-    assert_eq!(
-        choose(&loopback.cert, "127.0.0.1", None).expect("loopback"),
+        choose(&both.cert, "::ffff:127.0.0.1").expect("mapped"),
         "127.0.0.1"
     );
-    let ip = mint(&["2001:db8::15"]);
-    assert_eq!(choose(&ip.cert, "::", None).expect("v6"), "[2001:db8::15]");
+    let name = mint(&["localhost", "node.example.test"]);
+    assert_eq!(choose(&name.cert, "LocalHost").expect("dns"), "localhost");
     assert_eq!(
-        choose(&ip.cert, "[2001:db8::15]", None).expect("bracket"),
-        "[2001:db8::15]"
+        choose(&name.cert, "0.0.0.0").expect("fallback"),
+        "localhost"
     );
-}
-
-#[test]
-fn a_certificate_without_one_dialable_name_is_refused() {
-    let wild = mint(&["*.example.test"]);
+    let v6 = mint(&["::1", "node.example.test"]);
+    assert_eq!(choose(&v6.cert, "::").expect("wild6"), "[::1]");
+    assert_eq!(choose(&v6.cert, "[::1]").expect("bind6"), "[::1]");
+    let local_only = mint(&["localhost"]);
+    assert_eq!(
+        choose(&local_only.cert, "::").expect("v6 name"),
+        "localhost"
+    );
+    let public = mint(&["only.example.test", "192.0.2.20"]);
     assert!(matches!(
-        choose(&wild.cert, "0.0.0.0", None),
+        choose(&public.cert, "0.0.0.0"),
         Err(AgentError::GatewayName)
     ));
-    let many = mint(&["a.example.test", "b.example.test"]);
     assert!(matches!(
-        choose(&many.cert, "0.0.0.0", None),
+        choose(&public.cert, "127.0.0.1"),
         Err(AgentError::GatewayName)
     ));
-    assert_eq!(
-        choose(&many.cert, "0.0.0.0", Some("b.example.test")).expect("one name"),
-        "b.example.test"
-    );
     assert!(matches!(
-        choose(&many.cert, "192.0.2.8", Some("127.0.0.1")),
-        Err(AgentError::AdvertiseHost)
+        choose(&v6.cert, "0.0.0.0"),
+        Err(AgentError::GatewayName)
+    ));
+    let remote = choose(&both.cert, "192.0.2.55").expect_err("remote");
+    assert!(matches!(
+        remote,
+        AgentError::GatewayBind { host } if host == "192.0.2.55"
     ));
 }
 
 #[tokio::test]
-async fn an_advertise_host_on_the_certificate_becomes_the_gateway_url() {
+async fn an_advertise_host_is_not_the_own_gateway() {
     let dir = tempfile::tempdir().expect("dir");
-    let leaf = mint(&["rec-node.example.test", "192.0.2.15"]);
+    let leaf = mint(&["rec-node.example.test", "127.0.0.1"]);
     let cert = store(dir.path(), "cert.pem", &leaf.cert);
     let key = store(dir.path(), "key.pem", &leaf.key);
     let ca = store(dir.path(), "ca.pem", &leaf.ca);
@@ -258,54 +247,61 @@ async fn an_advertise_host_on_the_certificate_becomes_the_gateway_url() {
         &mesh_true("rec-node.example.test"),
     );
     let plan = open_plan(&text).await.expect("plan");
-    assert_eq!(plan.gateway.as_str(), "https://rec-node.example.test:8443/");
+    assert_eq!(plan.gateway.as_str(), "https://127.0.0.1:8443/");
     let trust = plan.gateway_trust.expect("trust");
-    assert!(trust.presents_certificate());
-    assert_eq!(
+    assert!(!trust.presents_certificate());
+    assert_eq!(trust, tasks::MeshIdentity::from_ca(&leaf.ca).expect("ca"));
+    assert_ne!(
         trust,
-        tasks::MeshIdentity::from_pem(&leaf.cert, &leaf.key, &leaf.ca).expect("identity")
+        tasks::MeshIdentity::from_pem(&leaf.cert, &leaf.key, &leaf.ca).expect("node")
     );
 }
 
 #[tokio::test]
-async fn an_advertise_host_off_the_certificate_is_refused() {
+async fn a_non_loopback_bind_is_a_startup_error() {
     let dir = tempfile::tempdir().expect("dir");
-    let leaf = mint(&["rec-node.example.test"]);
+    let leaf = mint(&["rec-node.example.test", "127.0.0.1", "192.0.2.55"]);
     let cert = store(dir.path(), "cert.pem", &leaf.cert);
     let key = store(dir.path(), "key.pem", &leaf.key);
     let ca = store(dir.path(), "ca.pem", &leaf.ca);
     let text = document(
-        &gateway_block("0.0.0.0", &cert, &key, Some(&ca)),
-        &mesh_true("127.0.0.1"),
+        &gateway_block("192.0.2.55", &cert, &key, Some(&ca)),
+        &mesh_true("192.0.2.55"),
     );
-    let error = open_plan(&text).await.expect_err("advertise");
-    assert!(matches!(error, AgentError::AdvertiseHost));
+    let error = open_plan(&text).await.expect_err("bind");
+    let message = error.to_string();
+    assert!(matches!(
+        error,
+        AgentError::GatewayBind { host } if host == "192.0.2.55"
+    ));
+    assert!(message.contains("loopback owner"), "{message}");
 }
 
 #[tokio::test]
-async fn a_gateway_without_a_ca_keeps_the_san_and_carries_no_trust() {
+async fn a_gateway_without_a_ca_dials_loopback_and_carries_no_trust() {
     let dir = tempfile::tempdir().expect("dir");
-    let leaf = mint(&["rec-node.example.test"]);
+    let leaf = mint(&["rec-node.example.test", "127.0.0.1"]);
     let cert = store(dir.path(), "cert.pem", &leaf.cert);
     let key = store(dir.path(), "key.pem", &leaf.key);
     let text = document(&gateway_block("0.0.0.0", &cert, &key, None), "");
     let plan = open_plan(&text).await.expect("plan");
-    assert_eq!(plan.gateway.as_str(), "https://rec-node.example.test:8443/");
+    assert_eq!(plan.gateway.as_str(), "https://127.0.0.1:8443/");
     assert!(plan.gateway_trust.is_none());
 }
 
 #[tokio::test]
-async fn mesh_client_material_without_a_gateway_ca_is_refused() {
+async fn mesh_client_material_without_a_gateway_ca_is_not_presented() {
     let dir = tempfile::tempdir().expect("dir");
-    let leaf = mint(&["rec-node.example.test"]);
+    let leaf = mint(&["rec-node.example.test", "127.0.0.1"]);
     let cert = store(dir.path(), "cert.pem", &leaf.cert);
     let key = store(dir.path(), "key.pem", &leaf.key);
     let text = document(
         &gateway_block("0.0.0.0", &cert, &key, None),
         &mesh_true("rec-node.example.test"),
     );
-    let error = open_plan(&text).await.expect_err("ca");
-    assert!(matches!(error, AgentError::GatewayCa));
+    let plan = open_plan(&text).await.expect("plan");
+    assert_eq!(plan.gateway.as_str(), "https://127.0.0.1:8443/");
+    assert!(plan.gateway_trust.is_none());
 }
 
 #[tokio::test]
@@ -321,32 +317,48 @@ async fn an_invalid_gateway_certificate_is_refused() {
 }
 
 #[tokio::test]
-async fn http_keeps_the_bind_host_and_carries_no_trust() {
-    let plan = open_plan(&document("den:\n  host: 127.0.0.1\n  port: 5174\n", "")).await;
-    let plan = plan.expect("plan");
+async fn http_dials_loopback_and_refuses_an_off_loopback_bind() {
+    let plan = open_plan(&document("den:\n  host: 127.0.0.1\n  port: 5174\n", ""))
+        .await
+        .expect("plan");
     assert_eq!(plan.gateway.as_str(), "http://127.0.0.1:5174/");
     assert!(plan.gateway_trust.is_none());
+    let wild = open_plan(&document("den:\n  host: 0.0.0.0\n  port: 5174\n", ""))
+        .await
+        .expect("wild");
+    assert_eq!(wild.gateway.as_str(), "http://127.0.0.1:5174/");
+    let v6 = open_plan(&document("den:\n  host: \"::\"\n  port: 5174\n", ""))
+        .await
+        .expect("v6");
+    assert_eq!(v6.gateway.as_str(), "http://[::1]:5174/");
+    let error = open_plan(&document("den:\n  host: 192.0.2.55\n  port: 5174\n", ""))
+        .await
+        .expect_err("remote");
+    assert!(matches!(
+        error,
+        AgentError::GatewayBind { host } if host == "192.0.2.55"
+    ));
 }
 
 #[tokio::test]
-async fn one_ipv6_san_is_dialled_with_brackets_and_ca_only_trust() {
+async fn one_ipv6_loopback_san_is_dialled_with_brackets_and_ca_only_trust() {
     let dir = tempfile::tempdir().expect("dir");
-    let leaf = mint(&["2001:db8::15"]);
+    let leaf = mint(&["::1"]);
     let cert = store(dir.path(), "cert.pem", &leaf.cert);
     let key = store(dir.path(), "key.pem", &leaf.key);
     let ca = store(dir.path(), "ca.pem", &leaf.ca);
-    let text = document(&gateway_block("0.0.0.0", &cert, &key, Some(&ca)), "");
+    let text = document(&gateway_block("\"::\"", &cert, &key, Some(&ca)), "");
     let plan = open_plan(&text).await.expect("plan");
-    assert_eq!(plan.gateway.as_str(), "https://[2001:db8::15]:8443/");
+    assert_eq!(plan.gateway.as_str(), "https://[::1]:8443/");
     let trust = plan.gateway_trust.expect("trust");
     assert!(!trust.presents_certificate());
     assert_eq!(trust, tasks::MeshIdentity::from_ca(&leaf.ca).expect("ca"));
 }
 
 #[tokio::test]
-async fn mesh_client_material_trusts_the_gateway_ca() {
+async fn mesh_client_material_is_not_presented_on_the_own_gateway() {
     let dir = tempfile::tempdir().expect("dir");
-    let server = mint(&["rec-node.example.test"]);
+    let server = mint(&["rec-node.example.test", "127.0.0.1"]);
     let client = mint(&["client.example.test"]);
     let foreign = mint(&["other.example.test"]);
     let server_cert = store(dir.path(), "server.pem", &server.cert);
@@ -365,14 +377,19 @@ async fn mesh_client_material_trusts_the_gateway_ca() {
         ),
     );
     let plan = open_plan(&text).await.expect("plan");
+    assert_eq!(plan.gateway.as_str(), "https://127.0.0.1:8443/");
     let trust = plan.gateway_trust.expect("trust");
-    assert!(trust.presents_certificate());
+    assert!(!trust.presents_certificate());
     assert_eq!(
         trust,
-        tasks::MeshIdentity::from_pem(&client.cert, &client.key, &server.ca).expect("gateway ca")
+        tasks::MeshIdentity::from_ca(&server.ca).expect("gateway ca")
     );
     assert_ne!(
         trust,
-        tasks::MeshIdentity::from_pem(&client.cert, &client.key, &foreign.ca).expect("other ca")
+        tasks::MeshIdentity::from_pem(&client.cert, &client.key, &server.ca).expect("node cert")
+    );
+    assert_ne!(
+        trust,
+        tasks::MeshIdentity::from_ca(&foreign.ca).expect("mesh ca")
     );
 }
