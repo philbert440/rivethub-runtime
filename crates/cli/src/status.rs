@@ -1,9 +1,14 @@
+use std::net::{IpAddr, SocketAddr};
+use std::path::Path;
 use std::time::Duration;
 
 use config::Environment;
 use gateway::server::BindSource;
+use rustls_pki_types::CertificateDer;
+use rustls_pki_types::pem::PemObject;
 use serde::Deserialize;
 use wire::gateway::HealthzResponse;
+use x509_parser::extensions::GeneralName;
 
 use crate::{Error, Report, configuration, process};
 
@@ -67,10 +72,14 @@ async fn health(env: &Environment) -> Result<Report, Error> {
     }
     url.set_port(Some(source.port))
         .map_err(|()| Error::Address)?;
-    let client = reqwest::Client::builder()
+    let builder = reqwest::Client::builder()
         .no_proxy()
-        .timeout(Duration::from_secs(3))
-        .build()?;
+        .timeout(Duration::from_secs(3));
+    let client = match (&source.tls_cert, &source.tls_ca) {
+        (Some(cert), Some(ca)) => verified(builder, &mut url, cert, ca, source.port)?,
+        _ => builder,
+    }
+    .build()?;
     let health: Health = client
         .get(url)
         .send()
@@ -100,6 +109,54 @@ async fn health(env: &Environment) -> Result<Report, Error> {
     let mut report = Report::success(parts.join(""));
     report.stderr = configuration::notices(&loaded);
     Ok(report)
+}
+
+fn verified(
+    builder: reqwest::ClientBuilder,
+    url: &mut url::Url,
+    cert: &Path,
+    ca: &Path,
+    port: u16,
+) -> Result<reqwest::ClientBuilder, Error> {
+    let roots = reqwest::Certificate::from_pem_bundle(&std::fs::read(ca)?)?;
+    let builder = builder.tls_certs_only(roots);
+    let Some(name) = served_name(cert)? else {
+        return Ok(builder);
+    };
+    let address = match url.host() {
+        Some(url::Host::Ipv4(address)) => IpAddr::V4(address),
+        Some(url::Host::Ipv6(address)) => IpAddr::V6(address),
+        Some(url::Host::Domain(_)) | None => return Ok(builder),
+    };
+    url.set_host(Some(&name))?;
+    Ok(builder.resolve(&name, SocketAddr::new(address, port)))
+}
+
+fn served_name(cert: &Path) -> Result<Option<String>, Error> {
+    let der = CertificateDer::from_pem_file(cert)
+        .map_err(|_| Error::PkiInput("gateway certificate is not a PEM certificate"))?;
+    let (_, parsed) = x509_parser::parse_x509_certificate(&der)
+        .map_err(|_| Error::PkiInput("gateway certificate does not parse"))?;
+    let names = parsed
+        .subject_alternative_name()
+        .map_err(|_| Error::PkiInput("invalid gateway certificate SAN"))?;
+    Ok(names.and_then(|san| {
+        san.value
+            .general_names
+            .iter()
+            .find_map(|general| match general {
+                GeneralName::DNSName(name) => Some((*name).to_owned()),
+                GeneralName::OtherName(_, _)
+                | GeneralName::RFC822Name(_)
+                | GeneralName::X400Address(_)
+                | GeneralName::DirectoryName(_)
+                | GeneralName::EDIPartyName(_)
+                | GeneralName::URI(_)
+                | GeneralName::IPAddress(_)
+                | GeneralName::RegisteredID(_)
+                | GeneralName::Invalid(_, _) => None,
+            })
+    }))
 }
 
 fn host_name() -> Result<String, Error> {
