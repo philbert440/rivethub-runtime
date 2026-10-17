@@ -1,0 +1,6 @@
+style = "conventional"
+subject_capitalized = false
+imperative_subject = false
+line_length = 0
+allowed_types = ["fix", "feat", "chore", "docs", "style", "refactor", "perf", "test", "ci", "build"]
+subject_length = 0

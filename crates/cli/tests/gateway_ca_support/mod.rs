@@ -153,7 +153,7 @@ impl Lab {
         let mut builder = reqwest::Client::builder()
             .no_proxy()
             .https_only(true)
-            .add_root_certificate(self.root.clone())
+            .tls_certs_only([self.root.clone()])
             .timeout(Duration::from_secs(30));
         if let Some(identity) = identity {
             builder = builder.identity(identity);

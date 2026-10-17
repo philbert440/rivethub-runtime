@@ -2,7 +2,7 @@ use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use config::{Config, Environment, Paths};
-use nix::sys::statvfs::statvfs;
+use nix::sys::statvfs::{Statvfs, statvfs};
 use nix::unistd::{AccessFlags, access};
 use serde::{Deserialize, Serialize};
 
@@ -168,14 +168,21 @@ fn state_checks(path: &Path) -> Vec<Check> {
             Err(error) => Check::fail(CheckName::StateDirectory, error),
         };
     let disk = match statvfs(path) {
-        Ok(stats) => disk_check(
-            stats
-                .blocks_available()
-                .saturating_mul(stats.fragment_size()),
-        ),
+        Ok(stats) => disk_check(available_bytes(&stats)),
         Err(error) => Check::fail(CheckName::DiskSpace, error),
     };
     vec![writable, disk]
+}
+
+#[cfg_attr(
+    target_os = "linux",
+    expect(
+        clippy::useless_conversion,
+        reason = "fsblkcnt_t is u64 on Linux but u32 on macOS"
+    )
+)]
+fn available_bytes(stats: &Statvfs) -> u64 {
+    u64::from(stats.blocks_available()).saturating_mul(stats.fragment_size())
 }
 
 fn disk_check(bytes: u64) -> Check {
