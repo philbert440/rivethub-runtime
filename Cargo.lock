@@ -4874,7 +4874,9 @@ dependencies = [
 name = "wire"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
+ "percent-encoding",
  "schemars 1.2.3",
  "serde",
  "serde_json",
