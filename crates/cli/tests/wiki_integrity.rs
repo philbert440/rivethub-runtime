@@ -95,9 +95,10 @@ async fn wiki_alias_of_another_topic_no_longer_loses_the_other_patches(pool: PgP
             .await?,
         vec!["a-fresh-topic", "acmekit-deploys"]
     );
-    let topics: Vec<(String,)> = sqlx::query_as("SELECT slug FROM rh_wiki_topics ORDER BY slug")
-        .fetch_all(&pool)
-        .await?;
+    let topics: Vec<(String,)> =
+        sqlx::query_as("SELECT slug FROM rh_wiki_topics ORDER BY slug COLLATE \"C\"")
+            .fetch_all(&pool)
+            .await?;
     assert_eq!(
         topics,
         vec![
