@@ -235,6 +235,7 @@ pub struct Gateway {
     sessions: Arc<sessions::SessionRegistry>,
     terminal: Option<Arc<term::TerminalService>>,
     transcript: Option<Arc<dyn kernel::transcript::TranscriptReader>>,
+    session_lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
     uploads: Option<uploads::UploadService>,
     presets: routes::agents::AgentRegistry,
     certificate_authority: Option<Arc<dyn kernel::ca::CertificateAuthority>>,
@@ -269,6 +270,7 @@ impl Gateway {
             )),
             terminal: None,
             transcript: None,
+            session_lister: None,
             uploads: None,
             presets,
             certificate_authority: None,
@@ -400,6 +402,20 @@ impl Gateway {
     ) -> Self {
         self.transcript = Some(reader);
         self
+    }
+
+    #[must_use]
+    pub fn with_session_lister(
+        mut self,
+        lister: Arc<dyn kernel::transcript::SessionLister>,
+    ) -> Self {
+        self.session_lister = Some(lister);
+        self
+    }
+
+    #[must_use]
+    pub fn session_lister(&self) -> Option<&Arc<dyn kernel::transcript::SessionLister>> {
+        self.session_lister.as_ref()
     }
 
     pub async fn close(&self) {

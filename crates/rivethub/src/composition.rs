@@ -2,7 +2,10 @@ mod devices;
 mod identities;
 mod mesh;
 mod models;
+mod stores;
 mod terminals;
+
+pub use stores::store_roots;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -161,6 +164,9 @@ impl Composition {
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
         gateway = gateway.with_transcript_reader(transcripts(env)?);
+        gateway = gateway.with_session_lister(Arc::new(capture::listing::StoreSessionLister::new(
+            store_roots(env),
+        )));
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let background = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {

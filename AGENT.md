@@ -68,3 +68,16 @@ pipes) retry under the factory's `TaskTracker` and child `CancellationToken` wit
 kernel `ProviderHealth` watch the gateway shows under `/healthz` `degradedProviders` and `rh status` prints.
 `providers.<id>.discovery_timeout_ms` bounds discovery (default `harness_acp::DEFAULT_DISCOVERY_TIMEOUT`, 30 s);
 `timeout_ms` bounds turns only.
+
+## capture listing: on-disk harness sessions (2026-10-17)
+
+`kernel::transcript::SessionLister` (list / describe / store_cwd) is implemented by `capture::listing::StoreSessionLister`
+over `StoreRoots` (resolved in `rivethub::composition::store_roots` from `config::Environment`); the gateway holds it via
+`Gateway::with_session_lister` / `session_lister()`. No routes yet. Rows are the kernel's `StoreSession` (native id, harness,
+title, epoch-ms times, labels); `StoreSession::summary(cwd, now)` maps one row to `HarnessSessionSummary`, and
+`ListLimit::from_query` parses `?limit=`. `list` runs harnesses in the fixed claude, grok, hermes, kimi, codex, opencode, pi,
+qwen, cursor, cowork order, a failing harness lists as empty, then a stable global `updatedAt` sort and `with_ancestors`.
+Disk JSON is read key by key through `listing::field::Field` (a `Box<RawValue>`), so a wrong-typed key never fails a line.
+Walks skip unreadable or refused entries instead of failing the harness. Grok keeps a per-file `updates.jsonl` cursor.
+Reader fixes: kimi reads `session_<uuid>` listing ids, pi lists flat `sessions/*.jsonl`, pi ids need a hyphenated UUID.
+Not here: delegated-task nesting (5.4), `capabilities.listSessions`, the codex protocol exclusion (routes slice).
