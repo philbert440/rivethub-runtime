@@ -78,7 +78,9 @@ pub(super) async fn build(
         )
         .await?
         .with_shutdown(shutdown.child_token())
-        .with_harness(Arc::new(harness_acp::AcpHarnessAdapter::new(config))),
+        .with_harness(Arc::new(
+            harness_acp::AcpHarnessAdapter::new(config).with_search_paths(paths),
+        )),
     );
     claim_adopted(&service, &mux, owner, &mut adopted)?;
     Ok(service)

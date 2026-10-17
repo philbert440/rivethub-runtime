@@ -183,7 +183,24 @@ impl AcpHarnessAdapter {
     }
 
     fn launch_command(&self, harness: HarnessId) -> Result<AcpCommand, HarnessAdapterError> {
-        self.launch.verified_command(harness).map_err(port)
+        let command = self.launch.verified_command(harness).map_err(port)?;
+        self.located(command)
+    }
+
+    fn located(&self, mut command: AcpCommand) -> Result<AcpCommand, HarnessAdapterError> {
+        if self.search_paths.is_empty() {
+            return Ok(command);
+        }
+        let found = resolve_program(&command.program, &self.search_paths).map_err(|error| {
+            HarnessAdapterError::Failed {
+                message: "install probe failed".into(),
+                source: Box::new(error),
+            }
+        })?;
+        if let Some(path) = found {
+            command.program = path;
+        }
+        Ok(command)
     }
 
     fn resume_dir(&self, command: &AcpCommand) -> Result<PathBuf, HarnessAdapterError> {
@@ -435,7 +452,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
             } else {
                 let launch = self.launch.launch(fact.harness).map_err(port)?;
                 if launch.is_verified() {
-                    let command = launch.command();
+                    let command = &self.located(launch.command().clone())?;
                     if let Some(cwd) = command
                         .working_dir
                         .as_ref()

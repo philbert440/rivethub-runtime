@@ -105,6 +105,15 @@ fn requirement_disabled(value: &str) -> bool {
     )
 }
 
+pub(crate) fn mesh_ca(
+    section: Option<&config::model::GatewaySection>,
+    env: &config::Environment,
+    shared_dir: &Path,
+) -> Option<PathBuf> {
+    let path = resolve_ca(section, env, shared_dir, &mut Vec::new());
+    path.is_file().then_some(path)
+}
+
 fn resolve_ca(
     section: Option<&config::model::GatewaySection>,
     env: &config::Environment,

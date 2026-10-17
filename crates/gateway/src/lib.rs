@@ -90,6 +90,8 @@ impl Settings {
                 None => paths.state_dir(),
             },
         );
+        let shared_dir = canonical_dir(config::shared_dir(env));
+        let mesh_ca = tls_resolve::mesh_ca(Some(&section), env, &shared_dir);
         Ok(Self {
             hostname,
             node,
@@ -112,14 +114,14 @@ impl Settings {
             directory_root: state_dir.join("agents"),
             state_dir,
             mesh_file: configured_path(env, "RIVETHUB_MESH_FILE", "RIVETOS_DEN_MESH_FILE"),
-            shared_dir: canonical_dir(config::shared_dir(env)),
+            shared_dir,
             legacy_mesh_dir: paths.legacy_home(),
             allowed_harnesses: section
                 .allowed_harnesses
                 .map(|entries| entries.iter().filter_map(known_harness).collect()),
             devices_enabled: section.devices.enabled == Some(true),
             probe_timeout: DEFAULT_PROBE_TIMEOUT,
-            mesh_ca: section.tls_ca,
+            mesh_ca,
             mesh_cache_ttl: mesh_cache_ttl(env)?,
         })
     }

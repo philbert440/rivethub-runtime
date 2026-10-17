@@ -324,3 +324,52 @@ fn bind_error_lines_carry_the_recorded_text() {
         "[rivethub-gateway] TLS CA chain missing at /tmp/golden/chain.pem — cannot verify device client certs"
     );
 }
+
+#[test]
+fn mesh_peers_are_probed_against_the_shared_rivet_ca_when_the_gateway_names_none() {
+    let shared = tempdir().expect("shared dir");
+    let chain = shared.path().join("rivet-ca").join("intermediate");
+    std::fs::create_dir_all(&chain).expect("ca dir");
+    std::fs::write(chain.join("chain.pem"), b"pem").expect("chain");
+    let config: config::Config = serde_yaml_ng::from_str("den:\n  port: 5174\n").expect("config");
+    let shared_text = shared.path().to_str().expect("utf-8 path");
+    let settings = |vars: Vec<(&str, &str)>| {
+        gateway::Settings::from_config_in(
+            &config,
+            &config::Environment::from_vars(vars),
+            "gold-host".to_string(),
+            "golden-node".to_string(),
+        )
+        .expect("settings")
+    };
+
+    let fallback = settings(vec![
+        ("HOME", "/tmp/golden/home"),
+        ("RIVETHUB_SHARED_DIR", shared_text),
+    ]);
+    assert_eq!(
+        fallback.mesh_ca.as_deref(),
+        Some(
+            fallback
+                .shared_dir
+                .join("rivet-ca/intermediate/chain.pem")
+                .as_path()
+        )
+    );
+
+    let named = shared.path().join("named.pem");
+    std::fs::write(&named, b"pem").expect("named chain");
+    let named_text = named.to_str().expect("utf-8 path");
+    let chosen = settings(vec![
+        ("HOME", "/tmp/golden/home"),
+        ("RIVETHUB_SHARED_DIR", shared_text),
+        ("RIVET_CA_CHAIN", named_text),
+    ]);
+    assert_eq!(chosen.mesh_ca.as_deref(), Some(named.as_path()));
+
+    let missing = settings(vec![
+        ("HOME", "/tmp/golden/home"),
+        ("RIVETHUB_SHARED_DIR", "/tmp/golden/no-such-shared"),
+    ]);
+    assert_eq!(missing.mesh_ca, None);
+}
