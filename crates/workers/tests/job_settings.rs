@@ -123,3 +123,8 @@ fn summary_caps_and_embed_timeout_follow_the_environment() -> Result<(), WorkerE
     );
     Ok(())
 }
+
+#[test]
+fn wiki_extraction_leaves_the_model_the_same_room_as_the_den() {
+    assert_eq!(workers::wiki_builder::WIKI_EXTRACT_MAX_TOKENS, 32_000);
+}

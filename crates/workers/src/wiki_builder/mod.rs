@@ -122,6 +122,8 @@ async fn extract_and_apply(
         .map_err(WorkerError::WikiStore)
 }
 
+pub const WIKI_EXTRACT_MAX_TOKENS: u32 = 32_000;
+
 async fn extract(env: &WikiBuilderEnv<'_>, user: String) -> Result<Vec<WikiPatch>, WorkerError> {
     let schema = serde_json::to_string(&extraction_schema()).map_err(WorkerError::WikiJson)?;
     let request = ModelRequest {
@@ -136,7 +138,7 @@ async fn extract(env: &WikiBuilderEnv<'_>, user: String) -> Result<Vec<WikiPatch
         ],
         tools: Vec::new(),
         thinking: None,
-        max_tokens: Some(7000),
+        max_tokens: Some(WIKI_EXTRACT_MAX_TOKENS),
     };
     let response = tokio::select! {
         biased;
