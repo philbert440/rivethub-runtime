@@ -269,11 +269,20 @@ impl Fixture {
     pub(crate) async fn with_harness(
         harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
     ) -> Self {
+        Self::with_registry(
+            harness,
+            gateway::sessions::SessionRegistry::new(Duration::from_secs(1)),
+        )
+        .await
+    }
+
+    pub(crate) async fn with_registry(
+        harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
+        registry: gateway::sessions::SessionRegistry,
+    ) -> Self {
         let directory = tempfile::tempdir().expect("temporary terminal directory");
         let root = directory.path().to_path_buf();
-        let registry = Arc::new(gateway::sessions::SessionRegistry::new(
-            Duration::from_secs(1),
-        ));
+        let registry = Arc::new(registry);
         let mux = Arc::new(Mux::default());
         let commands = [
             ("echo", "Acme Echo", true, None),

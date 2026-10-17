@@ -167,15 +167,14 @@ impl TerminalService {
     ) -> Result<TermSpawnResponse, ApiError> {
         let session = match (&request.session, &request.resume) {
             (Some(session), Some(resume)) => {
-                let resumed = self.registry.authorize(user, resume)?;
-                if crate::sessions::session_key(session)? != resumed {
+                if crate::sessions::session_key(session)? != crate::sessions::session_key(resume)? {
                     return Err(ApiError::Conflict(
                         "resume must retain the registered session id".into(),
                     ));
                 }
-                resumed
+                self.registry.claim(user, resume)?
             }
-            (None, Some(resume)) => self.registry.authorize(user, resume)?,
+            (None, Some(resume)) => self.registry.claim(user, resume)?,
             (Some(session), None) => session.clone(),
             (None, None) => format!("rivethub-{}", uuid::Uuid::new_v4()),
         };

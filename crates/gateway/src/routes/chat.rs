@@ -64,7 +64,7 @@ async fn transcript(
     Path(session): Path<String>,
 ) -> Result<Json<wire::gateway::sessions::TranscriptResponse>, ApiError> {
     require(&gateway)?;
-    gateway.sessions.authorize(&user, &session)?;
+    gateway.sessions.authorize_visible(&user, &session)?;
     let reader = gateway
         .transcript
         .as_ref()

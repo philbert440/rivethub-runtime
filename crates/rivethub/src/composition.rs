@@ -98,6 +98,20 @@ fn transcripts(
     )))
 }
 
+async fn session_registry(
+    owners: std::path::PathBuf,
+    node_owner: Option<gateway::tenancy::UserId>,
+) -> Result<SessionRegistry, ComposeError> {
+    let registry = tokio::task::spawn_blocking(move || {
+        SessionRegistry::new(Duration::from_secs(300)).with_owners_file(owners)
+    })
+    .await?;
+    Ok(match node_owner {
+        Some(owner) => registry.with_node_owner(owner),
+        None => registry,
+    })
+}
+
 impl Composition {
     pub async fn validate_users(config: &Config, env: &Environment) -> Result<(), ComposeError> {
         identities::load(config, env).await?;
@@ -151,10 +165,15 @@ impl Composition {
             )
         })
         .await?;
-        let sessions = Arc::new(
-            SessionRegistry::new(Duration::from_secs(300)).with_shutdown(shutdown.child_token()),
-        );
         let identity = identities::load(config, env).await?;
+        let sessions = Arc::new(
+            session_registry(
+                gateway::sessions::owners_file(&settings.state_dir),
+                identity.tenancy.local_user().cloned(),
+            )
+            .await?
+            .with_shutdown(shutdown.child_token()),
+        );
         let mut gateway = Gateway::new(store, settings)
             .with_provider_health(factory.health())
             .with_uploads(crate::service::uploads(env)?)
