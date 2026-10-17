@@ -44,7 +44,7 @@ async fn apply(
 }
 
 async fn slugs(pool: &PgPool) -> Result<Vec<String>, sqlx::Error> {
-    sqlx::query_scalar("SELECT slug FROM rh_wiki_topics ORDER BY slug")
+    sqlx::query_scalar("SELECT slug FROM rh_wiki_topics ORDER BY slug COLLATE \"C\"")
         .fetch_all(pool)
         .await
 }
