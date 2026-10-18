@@ -143,7 +143,7 @@ fn success_payload(
             ));
         }
         "/term/harness-sessions" | "/api/terminal/harness-sessions" => {
-            errors.push_result(roundtrip_as::<wire::harness::HarnessStoreSessionList>(
+            errors.push_result(roundtrip_as::<wire::harness::HarnessSessionList>(
                 label, body,
             ));
         }

@@ -1,8 +1,5 @@
 use crate::events::ContextSource;
-use crate::harness::{HarnessId, HarnessSessionSummary};
-use crate::json::JsonObject;
 use crate::message::Role;
-use crate::session_id::SessionId;
 use crate::stream::StreamEvent;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -29,88 +26,10 @@ pub struct TranscriptResponse {
     pub command: String,
     pub turns: Vec<TranscriptTurn>,
     pub context_window: Option<u64>,
-    pub compact_at: Option<u64>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub compact_at: Option<DateTime<Utc>>,
     pub context_source: Option<ContextSource>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TranscriptBlock {
-    Thinking,
-    Text,
-    ToolUse,
-    ToolResult,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum TranscriptToolStatus {
-    Running,
-    Done,
-    Error,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessTranscriptTool {
-    pub name: String,
-    pub status: TranscriptToolStatus,
-    pub args: Option<JsonObject>,
-    pub id: Option<String>,
-    pub input: Option<JsonObject>,
-    pub result_text: Option<String>,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessTranscriptTurn {
-    pub role: SessionMessageRole,
-    pub text: String,
-    pub thinking: Option<String>,
-    pub tools: Option<Vec<HarnessTranscriptTool>>,
-    pub usage: Option<MessageUsage>,
-    pub model: Option<String>,
-    pub stop_reason: Option<String>,
-    pub last_block: Option<TranscriptBlock>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub complete: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub compact: bool,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessSessionTranscriptResponse {
-    pub session_id: SessionId,
-    pub harness_id: HarnessId,
-    pub turns: Vec<HarnessTranscriptTurn>,
-    pub context_window: u64,
-    pub compact_at: u64,
-    pub context_source: ContextSource,
-    pub redirected_to: Option<SessionId>,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessTurnAccepted {
-    pub ok: bool,
-    pub session_id: SessionId,
-    pub redirected_to: Option<SessionId>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub dismissed_dialog: bool,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessSessionResponse {
-    #[serde(flatten)]
-    pub summary: HarnessSessionSummary,
-    pub redirected_to: Option<SessionId>,
 }
 
 #[serde_as]
@@ -227,35 +146,13 @@ pub enum SessionWsFrame {
 
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(tag = "kind", rename = "transcript", rename_all = "camelCase")]
 pub struct TranscriptWsFrame {
     pub session: String,
     pub rev: u64,
     pub from: u64,
-    pub turns: Vec<HarnessTranscriptTurn>,
+    pub turns: u64,
     pub total: u64,
     pub command: String,
     pub truncated_before: Option<bool>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HarnessSocketRefusalCode {
-    InvalidSessionId,
-    Forbidden,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "kebab-case")]
-pub enum HarnessSocketRefusal {
-    Error {
-        code: HarnessSocketRefusalCode,
-        message: String,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "kebab-case")]
-pub enum HarnessSocketMessage {
-    Sync,
 }

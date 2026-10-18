@@ -140,8 +140,4 @@ impl HarnessAdapter for Harness {
     async fn offerings(&self) -> Result<Vec<HarnessOffering>, HarnessAdapterError> {
         Ok(Vec::new())
     }
-
-    async fn commands(&self) -> Result<Vec<kernel::harness::HarnessCommands>, HarnessAdapterError> {
-        Ok(Vec::new())
-    }
 }

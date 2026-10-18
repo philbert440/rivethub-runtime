@@ -227,13 +227,8 @@ pub(crate) fn cell<'a, T>(
 where
     T: sqlx::Decode<'a, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
 {
-    row.try_get(name).map_err(|error| {
-        if let sqlx::Error::ColumnDecode { index, source } = error {
-            TaskError::Stored(format!("{operation}: column {index}: {source}"))
-        } else {
-            map_sql(operation, error)
-        }
-    })
+    row.try_get(name)
+        .map_err(|source| map_sql(operation, source))
 }
 
 fn key_mode_text(mode: JobKeyMode) -> &'static str {

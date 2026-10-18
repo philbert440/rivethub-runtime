@@ -18,7 +18,6 @@ struct Session {
 #[derive(Debug)]
 pub(crate) struct Harness {
     sessions: Mutex<BTreeMap<SessionId, Session>>,
-    offered: Mutex<Vec<wire::harness::HarnessOffering>>,
     pub(crate) trace: watch::Sender<Vec<String>>,
     pub(crate) finish: Semaphore,
 }
@@ -27,7 +26,6 @@ impl Default for Harness {
     fn default() -> Self {
         Self {
             sessions: Mutex::new(BTreeMap::new()),
-            offered: Mutex::new(Vec::new()),
             trace: watch::channel(Vec::new()).0,
             finish: Semaphore::new(0),
         }
@@ -35,12 +33,6 @@ impl Default for Harness {
 }
 
 impl Harness {
-    pub(crate) fn offering(harnesses: &[wire::harness::HarnessId]) -> Self {
-        let harness = Self::default();
-        *harness.offered.lock() = harnesses.iter().copied().map(offered).collect();
-        harness
-    }
-
     fn opened(&self, id: SessionId) {
         let (sender, receiver) = mpsc::channel(16);
         assert!(
@@ -163,40 +155,6 @@ impl HarnessAdapter for Harness {
     }
 
     async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError> {
-        Ok(self.offered.lock().clone())
-    }
-
-    async fn commands(&self) -> Result<Vec<kernel::harness::HarnessCommands>, HarnessAdapterError> {
         Ok(Vec::new())
-    }
-}
-
-fn offered(harness_id: wire::harness::HarnessId) -> wire::harness::HarnessOffering {
-    use wire::harness::{
-        HarnessCapabilities, HarnessControlCapabilities, HarnessObservationCapabilities,
-    };
-    wire::harness::HarnessOffering {
-        harness_id,
-        chat: true,
-        capabilities: HarnessCapabilities {
-            control: HarnessControlCapabilities {
-                interrupt: true,
-                resume: true,
-                approvals: false,
-            },
-            observation: HarnessObservationCapabilities {
-                live_stream: true,
-                list_sessions: false,
-                drive: None,
-            },
-            turn_options: None,
-            launch_model: None,
-            image_attachments: None,
-            models: None,
-            models_source: None,
-            efforts: None,
-            model_flag: None,
-            effort_flag: None,
-        },
     }
 }

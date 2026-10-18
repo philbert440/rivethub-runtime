@@ -1,7 +1,6 @@
 pub mod batch;
 pub mod event_id;
 pub mod hook;
-pub mod listing;
 pub mod payload;
 pub mod readers;
 pub mod records;

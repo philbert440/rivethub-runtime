@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
-use kernel::harness::HarnessAdapter;
 use kernel::tasks::CatalogList;
 use kernel::tasks::CatalogSource;
 use kernel::tasks::TaskError;
@@ -17,43 +14,19 @@ use wire::task::TaskExecutorKind;
 use crate::directory::Directory;
 use crate::executors;
 
+#[derive(Debug)]
 pub struct Catalog {
     agents: Vec<CatalogAgent>,
     mesh: bool,
     tools: Vec<String>,
-    harness: Option<Arc<dyn HarnessAdapter>>,
-}
-
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        manualderive,
-        reason = "the harness port is not Debug (kernel ports intentionally do not require Debug), so the impl omits it"
-    )
-)]
-impl std::fmt::Debug for Catalog {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("Catalog")
-            .field("agents", &self.agents)
-            .field("mesh", &self.mesh)
-            .field("tools", &self.tools)
-            .finish_non_exhaustive()
-    }
 }
 
 impl Catalog {
-    pub fn new(
-        directory: &Directory,
-        mesh: bool,
-        tools: Vec<String>,
-        harness: Option<Arc<dyn HarnessAdapter>>,
-    ) -> Self {
+    pub fn new(directory: &Directory, mesh: bool, tools: Vec<String>) -> Self {
         Self {
             agents: listed_agents(directory),
             mesh,
             tools,
-            harness,
         }
     }
 }
@@ -123,39 +96,10 @@ impl CatalogSource for Catalog {
     }
 
     async fn skills(&self) -> Result<Vec<CatalogSkillEntry>, TaskError> {
-        Ok(Vec::new())
+        Err(TaskError::UnavailableCatalog(CatalogList::Skills))
     }
 
-    async fn commands(&self, executor: &str) -> Result<Vec<CatalogCommand>, TaskError> {
-        let kind = executor
-            .parse::<TaskExecutorKind>()
-            .map_err(|_| TaskError::UnavailableCatalog(CatalogList::Commands))?;
-        let harness = match (kind, &self.harness) {
-            (TaskExecutorKind::HarnessSession, Some(harness)) => harness,
-            (TaskExecutorKind::HarnessSession, None)
-            | (TaskExecutorKind::ChatLoop | TaskExecutorKind::Mesh, _) => return Ok(Vec::new()),
-        };
-        let discovered = harness
-            .commands()
-            .await
-            .map_err(|error| TaskError::Operation {
-                operation: "harness commands",
-                source: Box::new(error),
-            })?;
-        Ok(discovered
-            .into_iter()
-            .flat_map(|listed| {
-                let source = listed.harness.to_string();
-                listed
-                    .commands
-                    .into_iter()
-                    .map(move |command| CatalogCommand {
-                        name: command.name,
-                        description: command.description,
-                        arg_hint: None,
-                        source: source.clone(),
-                    })
-            })
-            .collect())
+    async fn commands(&self, _executor: &str) -> Result<Vec<CatalogCommand>, TaskError> {
+        Err(TaskError::UnavailableCatalog(CatalogList::Commands))
     }
 }

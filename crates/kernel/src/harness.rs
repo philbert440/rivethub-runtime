@@ -89,12 +89,6 @@ pub struct Command {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HarnessCommands {
-    pub harness: HarnessId,
-    pub commands: Vec<Command>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionEvent {
     UserMessageChunk { text: String },
     AgentMessageChunk { text: String },
@@ -160,6 +154,4 @@ pub trait HarnessAdapter: Send + Sync {
     ) -> Result<Receiver<SessionEvent>, HarnessAdapterError>;
 
     async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError>;
-
-    async fn commands(&self) -> Result<Vec<HarnessCommands>, HarnessAdapterError>;
 }

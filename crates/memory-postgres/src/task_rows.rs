@@ -6,12 +6,12 @@ use sqlx::types::Json;
 use uuid::Uuid;
 use wire::task::AcceptanceCriterion;
 use wire::task::ContextRef;
-use wire::task::EvalOutcome;
 use wire::task::TaskBudget;
 use wire::task::TaskPermissionDecision;
 use wire::task::TaskResult;
 use wire::task::TaskStatus;
 use wire::task::TaskUsage;
+use wire::task::VerifierResult;
 use wire::task_overrides::TaskOverrides;
 
 use crate::task_jobs::cell;
@@ -334,7 +334,7 @@ pub(crate) fn decode_task(
     let max_attempts: i32 = cell(row, operation, "max_attempts")?;
     let result: Option<Json<TaskResult>> = cell(row, operation, "result")?;
     let harness_session_ids: Json<Vec<String>> = cell(row, operation, "harness_session_ids")?;
-    let eval: Option<Json<EvalOutcome>> = cell(row, operation, "eval")?;
+    let eval: Option<Json<VerifierResult>> = cell(row, operation, "eval")?;
     let eval_attempt: i32 = cell(row, operation, "eval_attempt")?;
     Ok(TaskRecord {
         id,

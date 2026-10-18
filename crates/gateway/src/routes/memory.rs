@@ -18,16 +18,12 @@ use serde::Serialize;
 use uuid::Uuid;
 use wire::capture::CaptureResult;
 use wire::gateway::OkReply;
-use wire::gateway::memory::EmbedHealth;
-use wire::gateway::memory::EmbedStatus;
 use wire::gateway::memory::MemoryAppendToolArgs;
 use wire::gateway::memory::MemoryBrowseMessage;
 use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryBrowseResponse;
 use wire::gateway::memory::MemoryBrowseToolArgs;
 use wire::gateway::memory::MemoryGetFullToolArgs;
-use wire::gateway::memory::MemoryHealthResponse;
-use wire::gateway::memory::MemoryHealthStatus;
 use wire::gateway::memory::MemoryIngestSessionToolArgs;
 use wire::gateway::memory::MemoryScope;
 use wire::gateway::memory::MemorySearchHit;
@@ -69,10 +65,6 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route(
             "/stats",
             routing::get(stats).fallback(super::method_not_allowed),
-        )
-        .route(
-            "/health",
-            routing::get(health).fallback(super::method_not_allowed),
         )
         .route("/tool/memory_search", tool_route(tool_search))
         .route("/tool/memory_browse", tool_route(tool_browse))
@@ -245,40 +237,6 @@ fn browse_message(entry: MemoryEntry) -> MemoryBrowseMessage {
 
 async fn stats(State(gateway): State<Arc<Gateway>>) -> Result<Json<MemoryStatsResponse>, ApiError> {
     Ok(Json(gateway.store().stats().await?))
-}
-
-async fn health(
-    State(gateway): State<Arc<Gateway>>,
-) -> Result<Json<MemoryHealthResponse>, ApiError> {
-    let store = gateway.store();
-    let counts = store.stats().await?;
-    let embeddings = if store.embeddings_armed() {
-        EmbedStatus::Ok
-    } else {
-        EmbedStatus::Unavailable
-    };
-    let overall = if embeddings == EmbedStatus::Ok && counts.failed_embeddings == 0 {
-        MemoryHealthStatus::Ok
-    } else {
-        MemoryHealthStatus::Degraded
-    };
-    Ok(Json(MemoryHealthResponse {
-        observed_at: None,
-        queue_status: None,
-        queues: None,
-        summarizer: None,
-        failed_embeddings: None,
-        skipped_embeddings: None,
-        capture: None,
-        status: overall,
-        embeddings: EmbedHealth {
-            status: embeddings,
-            error: None,
-            impact: None,
-            checked_at: None,
-        },
-        embed_queue_depth: counts.embed_queue_depth,
-    }))
 }
 
 async fn tool_search(

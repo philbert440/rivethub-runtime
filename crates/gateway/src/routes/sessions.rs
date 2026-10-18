@@ -42,7 +42,7 @@ fn requested_session(query: Option<&str>) -> Result<String, ApiError> {
     }
 }
 
-pub(crate) fn form_text(raw: &str) -> Result<String, ApiError> {
+fn form_text(raw: &str) -> Result<String, ApiError> {
     let spaced = raw.replace('+', " ");
     match percent_encoding::percent_decode_str(&spaced).decode_utf8() {
         Ok(text) => Ok(text.into_owned()),

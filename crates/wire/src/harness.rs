@@ -1,6 +1,4 @@
 use crate::Extra;
-use crate::events::ContextSource;
-use crate::gateway::sessions::HarnessTranscriptTurn;
 use crate::json::JsonObject;
 use crate::session_id::SessionId;
 use chrono::{DateTime, Utc};
@@ -115,72 +113,6 @@ pub enum RosterCommand {
     Cowork,
 }
 
-impl From<HarnessId> for RosterCommand {
-    fn from(harness: HarnessId) -> Self {
-        match harness {
-            HarnessId::ClaudeCode => Self::Claude,
-            HarnessId::GrokBuild => Self::Grok,
-            HarnessId::KimiCode => Self::Kimi,
-            HarnessId::Hermes => Self::Hermes,
-            HarnessId::Codex => Self::Codex,
-            HarnessId::Opencode => Self::Opencode,
-            HarnessId::Pi => Self::Pi,
-            HarnessId::QwenCode => Self::Qwen,
-            HarnessId::Cursor => Self::Cursor,
-            HarnessId::Cowork => Self::Cowork,
-        }
-    }
-}
-
-impl From<RosterCommand> for HarnessId {
-    fn from(command: RosterCommand) -> Self {
-        match command {
-            RosterCommand::Claude => Self::ClaudeCode,
-            RosterCommand::Grok => Self::GrokBuild,
-            RosterCommand::Kimi => Self::KimiCode,
-            RosterCommand::Hermes => Self::Hermes,
-            RosterCommand::Codex => Self::Codex,
-            RosterCommand::Opencode => Self::Opencode,
-            RosterCommand::Pi => Self::Pi,
-            RosterCommand::Qwen => Self::QwenCode,
-            RosterCommand::Cursor => Self::Cursor,
-            RosterCommand::Cowork => Self::Cowork,
-        }
-    }
-}
-
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, EnumString, EnumIter,
-)]
-#[serde(rename_all = "snake_case")]
-#[strum(serialize_all = "snake_case")]
-pub enum HarnessCode {
-    InvalidSessionId,
-    BadRequest,
-    SessionIdCollision,
-    TurnInFlight,
-    CapabilityUnsupported,
-    UnknownApproval,
-    UnknownPrompt,
-}
-
-impl HarnessCode {
-    #[must_use]
-    pub const fn status(self) -> u16 {
-        match self {
-            Self::InvalidSessionId | Self::BadRequest => 400,
-            Self::UnknownApproval | Self::UnknownPrompt => 404,
-            Self::SessionIdCollision | Self::TurnInFlight => 409,
-            Self::CapabilityUnsupported => 501,
-        }
-    }
-
-    #[must_use]
-    pub const fn retryable(self) -> bool {
-        matches!(self, Self::TurnInFlight)
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ApprovalDecision {
@@ -276,7 +208,7 @@ pub enum HarnessEvent {
     #[serde(rename_all = "camelCase")]
     SessionCreated {
         session_id: SessionId,
-        summary: Box<HarnessSessionSummary>,
+        summary: String,
         supersedes: Option<SessionId>,
     },
     #[serde(rename_all = "camelCase")]
@@ -296,77 +228,8 @@ pub enum HarnessEvent {
     #[serde(rename_all = "camelCase")]
     SessionUpdated {
         session_id: SessionId,
-        status: HarnessSessionStatus,
         previous_session_id: Option<SessionId>,
-        supersedes: Option<SessionId>,
-        blocked: Option<bool>,
     },
-    #[serde(rename_all = "camelCase")]
-    Transcript {
-        session_id: SessionId,
-        rev: u64,
-        from: u64,
-        total: u64,
-        turns: Vec<HarnessTranscriptTurn>,
-        command: RosterCommand,
-        truncated_before: Option<bool>,
-        context_window: Option<u64>,
-        compact_at: Option<u64>,
-        context_source: Option<ContextSource>,
-    },
-    Status(HarnessStatusFrame),
-    #[serde(rename_all = "camelCase")]
-    Prompt {
-        session_id: SessionId,
-        prompt_id: String,
-        kind: PromptKind,
-        tool_name: String,
-        questions: Vec<PromptQuestion>,
-        resolved: Option<PromptResolution>,
-        screen: Option<PromptScreen>,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum PromptKind {
-    AskUser,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptQuestion {
-    pub question: Option<String>,
-    pub header: Option<String>,
-    pub multi_select: bool,
-    pub free_text: Option<bool>,
-    pub options: Vec<PromptOption>,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptOption {
-    pub label: String,
-    pub description: Option<String>,
-}
-
-#[serde_as]
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptResolution {
-    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
-    pub at: DateTime<Utc>,
-    pub answer_text: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptScreen {
-    pub current: u32,
-    pub total: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -379,7 +242,7 @@ pub struct ApprovalOption {
 #[serde_as]
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(tag = "type", rename = "status", rename_all = "camelCase")]
 pub struct HarnessStatusFrame {
     pub session_id: SessionId,
     pub status: HarnessStatus,
@@ -472,7 +335,6 @@ pub enum HarnessSessionStatus {
     Error,
 }
 
-#[serde_as]
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -481,9 +343,7 @@ pub struct HarnessSessionSummary {
     pub harness_id: HarnessId,
     pub title: Option<String>,
     pub cwd: Option<String>,
-    #[serde_as(as = "crate::time::Millis")]
     pub created_at: DateTime<Utc>,
-    #[serde_as(as = "crate::time::Millis")]
     pub updated_at: DateTime<Utc>,
     pub status: HarnessSessionStatus,
     pub blocked: Option<bool>,
@@ -508,30 +368,6 @@ pub enum Transport {
 #[serde(rename_all = "camelCase")]
 pub struct HarnessSessionList {
     pub sessions: Vec<HarnessSessionSummary>,
-}
-
-#[serde_as]
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessStoreSession {
-    pub id: String,
-    pub command: RosterCommand,
-    pub title: String,
-    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
-    pub updated_at: DateTime<Utc>,
-    #[serde(skip)]
-    pub created_at: Option<DateTime<Utc>>,
-    pub parent_session_id: Option<String>,
-    pub agent_name: Option<String>,
-    pub model: Option<String>,
-    pub task_id: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HarnessStoreSessionList {
-    pub sessions: Vec<HarnessStoreSession>,
 }
 
 #[serde_with::skip_serializing_none]

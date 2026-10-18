@@ -7,7 +7,6 @@ use chrono::Utc;
 use kernel::memory_core::HYBRID_MIN_CONTENT_LEN;
 use kernel::memory_core::hybrid_pool;
 use kernel::memory_core::recency_boost;
-use kernel::memory_core::should_trigram_fallback;
 use pgvector::HalfVector;
 use sqlx::QueryBuilder;
 use std::collections::BTreeMap;
@@ -107,88 +106,6 @@ fn push_agent_condition(query: &mut QueryBuilder<sqlx::Postgres>, agent: &str, i
         );
         query.push_bind(agent.to_owned());
         query.push(")");
-    }
-}
-
-fn literal_tokens(text: &str) -> Vec<String> {
-    let mut tokens: Vec<String> = Vec::new();
-    for token in text.split_whitespace() {
-        if should_trigram_fallback(token) && !tokens.iter().any(|seen| seen == token) {
-            tokens.push(token.to_owned());
-        }
-    }
-    let whole = text.trim();
-    if tokens.is_empty() && !whole.is_empty() {
-        tokens.push(whole.to_owned());
-    }
-    tokens
-}
-
-fn like_escaped(token: &str) -> String {
-    let mut escaped = String::with_capacity(token.len());
-    for character in token.chars() {
-        if matches!(character, '\\' | '%' | '_') {
-            escaped.push('\\');
-        }
-        escaped.push(character);
-    }
-    escaped
-}
-
-fn push_contains(query: &mut QueryBuilder<sqlx::Postgres>, column: &str, token: &str) {
-    query.push(format!("{column} ILIKE '%' || "));
-    query.push_bind(like_escaped(token));
-    query.push(" || '%' ESCAPE '\\'");
-}
-
-fn push_any_contains(query: &mut QueryBuilder<sqlx::Postgres>, column: &str, tokens: &[String]) {
-    query.push("(");
-    for (index, token) in tokens.iter().enumerate() {
-        if index > 0 {
-            query.push(" OR ");
-        }
-        push_contains(query, column, token);
-    }
-    query.push(")");
-}
-
-fn push_literal_score(
-    query: &mut QueryBuilder<sqlx::Postgres>,
-    tokens: &[String],
-    is_message: bool,
-) {
-    query.push("((0");
-    for token in tokens {
-        query.push(" + (CASE WHEN ");
-        if is_message {
-            push_contains(query, "m.content", token);
-            query.push(" OR ");
-            push_contains(query, "coalesce(m.tool_result, '')", token);
-        } else {
-            push_contains(query, "s.content", token);
-        }
-        query.push(" THEN 1 ELSE 0 END)");
-    }
-    query.push(format!(")::float8 / {})", tokens.len()));
-}
-
-fn push_literal_match(
-    query: &mut QueryBuilder<sqlx::Postgres>,
-    tokens: &[String],
-    is_message: bool,
-) {
-    if is_message {
-        query.push(" AND m.id IN (SELECT hit.id FROM rh_messages hit WHERE ");
-        push_any_contains(query, "hit.content", tokens);
-        query.push(
-            " UNION SELECT hit.id FROM rh_messages hit \
-             WHERE hit.tool_result IS NOT NULL AND length(hit.tool_result) > 0 AND ",
-        );
-        push_any_contains(query, "hit.tool_result", tokens);
-        query.push(")");
-    } else {
-        query.push(" AND ");
-        push_any_contains(query, "s.content", tokens);
     }
 }
 
@@ -300,14 +217,7 @@ impl crate::PostgresMemory {
         if matches!(options.scope, MemoryScope::Summaries | MemoryScope::Both) {
             rows.extend(self.arm_table(&context, kind, false, query_vector).await?);
         }
-        rows.sort_by(|a, b| {
-            let by_score = b.arm_score.total_cmp(&a.arm_score);
-            if kind == ArmKind::Trigram {
-                by_score.then_with(|| b.created_at.cmp(&a.created_at))
-            } else {
-                by_score
-            }
-        });
+        rows.sort_by(|a, b| b.arm_score.total_cmp(&a.arm_score));
         Ok(rows)
     }
 
@@ -323,14 +233,6 @@ impl crate::PostgresMemory {
         let tag_filter = context.tag_filter;
         let pool = hybrid_pool(options.limit);
         let alias = if is_message { "m" } else { "s" };
-        let tokens = if kind == ArmKind::Trigram {
-            literal_tokens(&options.text)
-        } else {
-            Vec::new()
-        };
-        if kind == ArmKind::Trigram && tokens.is_empty() {
-            return Ok(Vec::new());
-        }
         let mut query = QueryBuilder::new("");
         push_select_prefix(&mut query, is_message, false);
         match kind {
@@ -345,7 +247,19 @@ impl crate::PostgresMemory {
                     "))::float8"
                 });
             }
-            ArmKind::Trigram => push_literal_score(&mut query, &tokens, is_message),
+            ArmKind::Trigram => {
+                if is_message {
+                    query.push("GREATEST(similarity(m.content, ");
+                    query.push_bind(options.text.clone());
+                    query.push("), similarity(coalesce(m.tool_result, ''), ");
+                    query.push_bind(options.text.clone());
+                    query.push("))::float8");
+                } else {
+                    query.push("similarity(s.content, ");
+                    query.push_bind(options.text.clone());
+                    query.push(")::float8");
+                }
+            }
             ArmKind::Regex => {
                 query.push("1.0::float8");
             }
@@ -379,7 +293,18 @@ impl crate::PostgresMemory {
                 query.push_bind(options.text.clone());
                 query.push(")");
             }
-            ArmKind::Trigram => push_literal_match(&mut query, &tokens, is_message),
+            ArmKind::Trigram => {
+                query.push(" AND (similarity(");
+                query.push(format!("{alias}.content, "));
+                query.push_bind(options.text.clone());
+                query.push(") > 0.3");
+                if is_message {
+                    query.push(" OR similarity(coalesce(m.tool_result, ''), ");
+                    query.push_bind(options.text.clone());
+                    query.push(") > 0.3");
+                }
+                query.push(")");
+            }
             ArmKind::Regex => {
                 query.push(" AND ");
                 if is_message {
@@ -411,13 +336,7 @@ impl crate::PostgresMemory {
         if let Some(agent) = &options.agent {
             push_agent_condition(&mut query, agent, is_message);
         }
-        if kind == ArmKind::Trigram {
-            query.push(format!(
-                " ORDER BY score DESC, {alias}.created_at DESC LIMIT {pool}"
-            ));
-        } else {
-            query.push(format!(" ORDER BY score DESC LIMIT {pool}"));
-        }
+        query.push(format!(" ORDER BY score DESC LIMIT {pool}"));
         let fetched = if matches!(kind, ArmKind::Trigram | ArmKind::Regex) {
             let mut tx = self
                 .pool

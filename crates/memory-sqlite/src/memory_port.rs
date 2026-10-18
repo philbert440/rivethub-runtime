@@ -105,10 +105,6 @@ impl MemoryStore for SqliteStore {
             .map_err(MemoryStoreError::from)
     }
 
-    fn embeddings_armed(&self) -> bool {
-        self.embed_armed()
-    }
-
     async fn stats(&self) -> Result<MemoryStatsResponse, MemoryStoreError> {
         self.stats_for(None).await.map_err(MemoryStoreError::from)
     }

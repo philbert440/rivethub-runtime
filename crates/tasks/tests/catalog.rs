@@ -1,9 +1,5 @@
-use std::sync::Arc;
-
 use chrono::DateTime;
 use chrono::Utc;
-use kernel::harness::Command;
-use kernel::harness::HarnessCommands;
 use kernel::tasks::CatalogList;
 use kernel::tasks::CatalogSource;
 use kernel::tasks::TaskError;
@@ -13,7 +9,6 @@ use tasks::LocalAgent;
 use url::Url;
 use wire::gateway::agents::AgentPreset;
 use wire::gateway::catalog::CatalogAgent;
-use wire::gateway::catalog::CatalogCommand;
 use wire::gateway::catalog::CatalogExecutorEntry;
 use wire::harness::HarnessId;
 use wire::task::HarnessExecutorCapabilities;
@@ -70,50 +65,26 @@ async fn each_offered_executor_declares_the_session_runner() {
 }
 
 #[tokio::test]
-async fn tools_are_the_registry_and_harness_commands_come_from_discovery() {
+async fn tools_are_the_registry_and_unsourced_lists_fail() {
     let named = catalog(false, vec!["zeta".to_owned(), "alpha".to_owned()]);
     assert_eq!(
         named.tools().await.expect("tools"),
         vec!["zeta".to_owned(), "alpha".to_owned()]
     );
-    assert_eq!(named.skills().await.expect("skills"), Vec::new());
-    for key in ["chat-loop", "harness-session", "mesh"] {
-        assert_eq!(named.commands(key).await.expect(key), Vec::new());
-    }
-    let missing = named
-        .commands("missing")
-        .await
-        .expect_err("unknown executor");
-    assert_eq!(missing.to_string(), "harness commands are unavailable");
+    let skills = named.skills().await.expect_err("skills");
+    assert_eq!(skills.to_string(), "skills are unavailable");
     assert!(matches!(
-        missing,
-        TaskError::UnavailableCatalog(CatalogList::Commands)
+        skills,
+        TaskError::UnavailableCatalog(CatalogList::Skills)
     ));
-    let harness = Arc::new(testkit::FakeHarness::new(Vec::new()));
-    harness.set_commands(vec![HarnessCommands {
-        harness: HarnessId::ClaudeCode,
-        commands: vec![Command {
-            name: "review".to_owned(),
-            description: "review the change".to_owned(),
-        }],
-    }]);
-    let discovered = Catalog::new(&sample(), false, Vec::new(), Some(harness));
-    assert_eq!(
-        discovered
-            .commands("harness-session")
-            .await
-            .expect("harness"),
-        vec![CatalogCommand {
-            name: "review".to_owned(),
-            description: "review the change".to_owned(),
-            arg_hint: None,
-            source: "claude-code".to_owned(),
-        }]
-    );
-    assert_eq!(
-        discovered.commands("chat-loop").await.expect("chat"),
-        Vec::new()
-    );
+    for key in ["chat-loop", "harness-session", "mesh", "missing"] {
+        let commands = named.commands(key).await.expect_err("commands");
+        assert_eq!(commands.to_string(), "harness commands are unavailable");
+        assert!(matches!(
+            commands,
+            TaskError::UnavailableCatalog(CatalogList::Commands)
+        ));
+    }
     assert_eq!(
         catalog(false, Vec::new())
             .tools()
@@ -124,7 +95,7 @@ async fn tools_are_the_registry_and_harness_commands_come_from_discovery() {
 }
 
 fn catalog(mesh: bool, tools: Vec<String>) -> Catalog {
-    Catalog::new(&sample(), mesh, tools, None)
+    Catalog::new(&sample(), mesh, tools)
 }
 
 fn keys(entries: &[CatalogExecutorEntry]) -> Vec<&str> {

@@ -13,7 +13,6 @@ use uuid::Uuid;
 use wire::JsonObject;
 use wire::task::AcceptanceCriterion;
 use wire::task::ContextRef;
-use wire::task::EvalOutcome;
 use wire::task::TaskBudget;
 use wire::task::TaskExecutorKind;
 use wire::task::TaskPermissionDecision;
@@ -23,6 +22,7 @@ use wire::task::TaskResult;
 use wire::task::TaskSpec;
 use wire::task::TaskStatus;
 use wire::task::TaskUsage;
+use wire::task::VerifierResult;
 use wire::task_overrides::TaskOverrides;
 
 const SKIPS: [&str; 4] = [
@@ -95,7 +95,7 @@ pub(super) struct StoredRow {
     pub last_heartbeat_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub duration_ms: Option<i32>,
-    pub eval: Option<EvalOutcome>,
+    pub eval: Option<VerifierResult>,
     pub eval_attempt: i32,
 }
 

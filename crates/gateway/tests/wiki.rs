@@ -86,36 +86,19 @@ async fn seeded() -> (axum::Router, Arc<testkit::FakeMemoryStore>) {
 #[tokio::test]
 async fn api_page_keeps_the_typed_store_payload() {
     let (app, store) = seeded().await;
-    for path in ["/api/wiki/release", "/api/wiki/page?slug=release"] {
+    for path in ["/api/wiki/page/release", "/api/wiki/page?slug=release"] {
         let response = answer(&app, request("GET", path)).await;
         assert_eq!(response.status, 200);
         let actual: WikiPageResponse = serde_json::from_slice(&response.body).unwrap();
         assert_eq!(actual, page());
     }
-    let response = answer(&app, request("GET", "/api/wiki/release/raw")).await;
-    assert_eq!(response.status, 200);
-    assert!(
-        response
-            .headers
-            .iter()
-            .any(|(name, value)| name == "content-type" && value == "text/markdown; charset=utf-8")
-    );
-    assert_eq!(response.body, page().markdown.into_bytes());
     assert_eq!(
         store.requests().await,
         vec![
             testkit::MemoryRequest::WikiPage("release".to_owned()),
             testkit::MemoryRequest::WikiPage("release".to_owned()),
-            testkit::MemoryRequest::WikiPage("release".to_owned()),
         ]
     );
-    for retired in ["/api/wiki/page/release", "/api/wiki/gaps"] {
-        assert_eq!(
-            answer(&app, request("GET", retired)).await.status,
-            404,
-            "{retired}"
-        );
-    }
 }
 
 #[tokio::test]
@@ -166,11 +149,10 @@ async fn wrong_query_types_and_unsafe_slugs_are_refused_before_store_access() {
         "/api/wiki/page?slug=..",
         "/api/wiki/page?slug=../sibling",
         "/api/wiki/page?slug=",
-        "/api/wiki/%2E%2E",
-        "/api/wiki/%2Fetc",
-        "/api/wiki/a%5Cb",
-        "/api/wiki/%00",
-        "/api/wiki/%2E%2E/raw",
+        "/api/wiki/page/%2E%2E",
+        "/api/wiki/page/%2Fetc",
+        "/api/wiki/page/a%5Cb",
+        "/api/wiki/page/%00",
     ] {
         let response = answer(&app, request("GET", path)).await;
         assert_eq!(response.status, 400, "{path}");
@@ -187,7 +169,7 @@ async fn redirects_are_local_and_preserve_ordinary_slug_characters() {
     store
         .insert_wiki_redirect("old".to_owned(), target.slug.clone())
         .await;
-    for prefix in ["/wiki/", "/api/wiki/"] {
+    for prefix in ["/wiki/", "/api/wiki/page/"] {
         let response = answer(&app, request("GET", &format!("{prefix}old"))).await;
         assert_eq!(response.status, 308);
         let location = &response
@@ -199,7 +181,7 @@ async fn redirects_are_local_and_preserve_ordinary_slug_characters() {
         assert!(location.starts_with(prefix));
         let followed = answer(&app, request("GET", location)).await;
         assert_eq!(followed.status, 200);
-        if prefix == "/api/wiki/" {
+        if prefix == "/api/wiki/page/" {
             let actual: WikiPageResponse = serde_json::from_slice(&followed.body).unwrap();
             assert_eq!(actual, target);
         }
@@ -223,12 +205,12 @@ async fn redirects_are_local_and_preserve_ordinary_slug_characters() {
 #[tokio::test]
 async fn missing_pages_and_gaps_have_typed_responses() {
     let (app, _) = seeded().await;
-    let response = answer(&app, request("GET", "/api/wiki/guide")).await;
+    let response = answer(&app, request("GET", "/api/wiki/page/guide")).await;
     assert_eq!(response.status, 404);
     let actual: WikiMissBody = serde_json::from_slice(&response.body).unwrap();
     assert_eq!(actual.suggestions.len(), 1);
     assert_eq!(actual.suggestions.first().unwrap().slug, "release");
-    let response = answer(&app, request("GET", "/api/wiki/_gaps")).await;
+    let response = answer(&app, request("GET", "/api/wiki/gaps")).await;
     assert_eq!(response.status, 200);
     let actual: WikiGapsResponse = serde_json::from_slice(&response.body).unwrap();
     assert_eq!(actual.stalest, ["release"]);
@@ -280,7 +262,11 @@ async fn html_escapes_stored_content_and_search_text_and_head_has_no_body() {
 #[tokio::test]
 async fn auth_origin_preflight_and_methods_use_existing_gateway_policy() {
     let (app, store) = seeded().await;
-    for path in ["/api/wiki/topics", "/api/wiki/release", "/wiki/release"] {
+    for path in [
+        "/api/wiki/topics",
+        "/api/wiki/page/release",
+        "/wiki/release",
+    ] {
         let mut remote = request("GET", path);
         remote.via = Some("remote".to_owned());
         remote
@@ -308,8 +294,8 @@ async fn store_failures_never_become_empty_successes() {
     let app = common::failing_gateway().router(false);
     for path in [
         "/api/wiki/topics",
-        "/api/wiki/_gaps",
-        "/api/wiki/release",
+        "/api/wiki/gaps",
+        "/api/wiki/page/release",
         "/wiki",
         "/wiki/release",
     ] {

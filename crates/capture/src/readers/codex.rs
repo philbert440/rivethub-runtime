@@ -146,7 +146,7 @@ fn rollout_files(root: &Root) -> Result<Vec<(String, PathBuf)>, TranscriptReader
     Ok(found)
 }
 
-pub(crate) fn codex_id(stem: &str) -> Option<String> {
+fn codex_id(stem: &str) -> Option<String> {
     let rest = stem.strip_prefix("rollout-")?;
     let split_at = rest.len().checked_sub(36)?;
     let (prefix, uuid) = rest.split_at(split_at);

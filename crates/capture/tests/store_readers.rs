@@ -225,25 +225,6 @@ async fn kimi_wire_pairs_tool_calls_and_ignores_the_index() -> Result<(), Box<dy
 }
 
 #[tokio::test]
-async fn kimi_reads_listing_ids_that_keep_the_session_prefix()
--> Result<(), Box<dyn std::error::Error>> {
-    let dir = tempfile::tempdir()?;
-    place(
-        dir.path(),
-        &format!("sessions/wd_demo_hash/session_{SESSION}/agents/main/wire.jsonl"),
-        "capture/stores/kimi-wire.jsonl",
-    )?;
-    let reader = open(HarnessId::KimiCode, dir.path())?;
-    let listed = SessionId::new(HarnessId::KimiCode, &format!("session_{SESSION}"));
-    let prefixed = reader.messages(&listed, 0).await?;
-    let bare = reader.messages(&session(HarnessId::KimiCode), 0).await?;
-    if prefixed.messages.is_empty() || prefixed.messages.len() != bare.messages.len() {
-        return Err(format!("{} vs {}", prefixed.messages.len(), bare.messages.len()).into());
-    }
-    Ok(())
-}
-
-#[tokio::test]
 async fn pi_jsonl_skips_the_session_header() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempfile::tempdir()?;
     place(

@@ -304,7 +304,7 @@ async fn run(
         () = shutdown.cancelled() => return Ok(()),
         memory = postgres(&config, env, &shutdown, &activities) => Arc::new(memory?),
     };
-    let result = run_gateway(&config, env, &memory, &shutdown, &activities).await;
+    let result = run_gateway(&config, env, memory.clone(), &shutdown, &activities).await;
     shutdown.cancel();
     let closed = memory.close().await;
     closed?;
@@ -316,13 +316,12 @@ async fn run(
 async fn run_gateway(
     config: &Config,
     env: &Environment,
-    memory: &Arc<PostgresMemory>,
+    store: Arc<dyn MemoryStore>,
     shutdown: &CancellationToken,
     activities: &Activities,
 ) -> Result<(), StartupError> {
     let mut composition =
-        crate::composition::Composition::on_postgres(config, env, memory, shutdown, activities)
-            .await?;
+        crate::composition::Composition::build(config, env, store, shutdown, activities).await?;
     let listening = async {
         let (listener, tls) = listen(config, env).await?;
         let addr = listener.local_addr()?;

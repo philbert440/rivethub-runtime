@@ -16,9 +16,9 @@ use serde::Deserialize;
 use wire::gateway::catalog::OutcomeBucket;
 use wire::gateway::catalog::OutcomesFilter;
 use wire::gateway::catalog::OutcomesResponse;
-use wire::task::EvalVerdict;
 use wire::task::TaskStatus;
 use wire::task::TaskVerdict;
+use wire::task::VerifierVerdict;
 
 use crate::extract::Query;
 use crate::extract::parse_enum;
@@ -47,7 +47,6 @@ struct Tally {
     failed: u64,
     verified: u64,
     refuted: u64,
-    escalated: u64,
     diverged: u64,
     cost_usd: Option<f64>,
     duration_sum: u128,
@@ -259,7 +258,7 @@ fn bucket(tally: &Tally) -> Result<OutcomeBucket, TaskHttpError> {
         failed: tally.failed,
         verified: tally.verified,
         refuted: tally.refuted,
-        escalated: tally.escalated,
+        escalated: 0,
         diverged: tally.diverged,
         divergence_rate: rate(tally.diverged, tally.tasks)?,
         total_cost_usd: tally.cost_usd,
@@ -313,10 +312,7 @@ fn hidden(error: &TaskError) -> TaskHttpError {
         | TaskError::Missing { .. }
         | TaskError::MissingJob { .. }
         | TaskError::Conflict { .. }
-        | TaskError::Clock => {
-            tracing::error!(%error, "task outcomes failed");
-            TaskHttpError::Internal
-        }
+        | TaskError::Clock => TaskHttpError::Internal,
     }
 }
 
@@ -328,7 +324,6 @@ impl Tally {
             failed: 0,
             verified: 0,
             refuted: 0,
-            escalated: 0,
             diverged: 0,
             cost_usd: None,
             duration_sum: 0,
@@ -345,9 +340,8 @@ impl Tally {
             self.failed = inc(self.failed)?;
         }
         match task.eval.as_ref().map(|eval| eval.verdict) {
-            Some(EvalVerdict::Verified) => self.verified = inc(self.verified)?,
-            Some(EvalVerdict::Refuted) => self.refuted = inc(self.refuted)?,
-            Some(EvalVerdict::Escalated) => self.escalated = inc(self.escalated)?,
+            Some(VerifierVerdict::Verified) => self.verified = inc(self.verified)?,
+            Some(VerifierVerdict::Refuted) => self.refuted = inc(self.refuted)?,
             None => {}
         }
         if diverged(task) {
@@ -398,7 +392,7 @@ fn diverged(task: &TaskRecord) -> bool {
     );
     let refuted = matches!(
         task.eval.as_ref().map(|eval| eval.verdict),
-        Some(EvalVerdict::Refuted)
+        Some(VerifierVerdict::Refuted)
     );
     completed && refuted
 }

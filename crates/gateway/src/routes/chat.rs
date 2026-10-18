@@ -36,6 +36,8 @@ struct Create {
 pub(crate) fn router() -> Router<Arc<Gateway>> {
     Router::new()
         .route("/api/harness-sessions", post(create).get(list))
+        .route("/term/harness-sessions", get(list))
+        .route("/api/terminal/harness-sessions", get(list))
         .route(
             "/term/harness-sessions/{session}/transcript",
             get(transcript),
@@ -62,7 +64,7 @@ async fn transcript(
     Path(session): Path<String>,
 ) -> Result<Json<wire::gateway::sessions::TranscriptResponse>, ApiError> {
     require(&gateway)?;
-    gateway.sessions.authorize_visible(&user, &session)?;
+    gateway.sessions.authorize(&user, &session)?;
     let reader = gateway
         .transcript
         .as_ref()

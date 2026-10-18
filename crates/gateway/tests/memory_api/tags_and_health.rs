@@ -1,7 +1,4 @@
 use super::*;
-use wire::gateway::memory::EmbedStatus;
-use wire::gateway::memory::MemoryHealthResponse;
-use wire::gateway::memory::MemoryHealthStatus;
 
 #[test]
 fn tags_read_routes_cover_the_port_surface() {
@@ -412,28 +409,13 @@ fn tags_non_object_and_invalid_bodies() {
 
 #[test]
 fn memory_fallback_and_health_shape() {
-    let (store, app) = seeded().expect("seed store");
+    let (_store, app) = seeded().expect("seed store");
     let call = |method: &str, target: &str| {
         block_on(answer(app.clone(), recorded(method, target, Vec::new())))
     };
     let response = call("GET", "/api/memory/health").expect("in-process answer");
-    assert_eq!(response.status, 200);
-    let health: MemoryHealthResponse =
-        serde_json::from_slice(&response.body).expect("health response");
-    assert_eq!(health.embeddings.status, EmbedStatus::Unavailable);
-    assert_eq!(health.status, MemoryHealthStatus::Degraded);
-    assert_eq!(health.embed_queue_depth, 0);
-
-    store.arm_embeddings();
-    let response = call("GET", "/api/memory/health").expect("in-process answer");
-    assert_eq!(response.status, 200);
-    let health: MemoryHealthResponse =
-        serde_json::from_slice(&response.body).expect("health response");
-    assert_eq!(health.embeddings.status, EmbedStatus::Ok);
-    assert_eq!(health.status, MemoryHealthStatus::Ok);
-
-    let response = call("POST", "/api/memory/health").expect("in-process answer");
-    assert_eq!(response.status, 405);
+    assert_eq!(response.status, 404);
+    assert_eq!(error_of(&response).error, "unknown memory resource");
 
     let response = call("GET", "/api/memory").expect("in-process answer");
     assert_eq!(response.status, 404);
@@ -526,10 +508,4 @@ fn store_failures_map_to_statuses() {
     .expect("in-process answer");
     assert_eq!(response.status, 503);
     assert_eq!(error_of(&response).error, "memory store unavailable");
-    let response = block_on(answer(
-        gateway.router(false),
-        recorded("GET", "/api/memory/health", Vec::new()),
-    ))
-    .expect("in-process answer");
-    assert_eq!(response.status, 503);
 }

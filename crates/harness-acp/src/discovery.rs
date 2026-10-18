@@ -3,8 +3,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_client_protocol::schema::v1 as acp;
-use kernel::harness::Command;
-use kernel::harness::SessionEvent;
 use wire::harness::HarnessModelsSource;
 use wire::harness::HarnessOffering;
 
@@ -17,7 +15,6 @@ use crate::options::SessionOptions;
 pub(crate) struct Advertisement {
     capabilities: acp::AgentCapabilities,
     options: Arc<SessionOptions>,
-    commands: Vec<Command>,
 }
 
 impl Advertisement {
@@ -25,12 +22,7 @@ impl Advertisement {
         Self {
             capabilities: agent.capabilities.clone(),
             options: Arc::clone(&agent.options),
-            commands: Vec::new(),
         }
-    }
-
-    pub(crate) fn commands(&self) -> &[Command] {
-        &self.commands
     }
 
     pub(crate) fn apply(
@@ -103,9 +95,8 @@ pub(crate) async fn discover(
     let agent = tokio::time::timeout(timeout, crate::connection::start_new(command, cwd))
         .await
         .map_err(|_| AcpError::DiscoveryTimeout { timeout })??;
-    let mut advertised = Advertisement::from_agent(&agent);
+    let advertised = Advertisement::from_agent(&agent);
     agent.shutdown.cancel();
-    let mut events = agent.events_rx;
     agent
         .reaped
         .await
@@ -117,11 +108,6 @@ pub(crate) async fn discover(
             source,
         })?;
     agent.tasks.wait().await;
-    while let Ok(event) = events.try_recv() {
-        if let SessionEvent::AvailableCommands(commands) = event {
-            advertised.commands = commands;
-        }
-    }
     Ok(advertised)
 }
 
@@ -153,7 +139,6 @@ mod tests {
         let advertisement = Advertisement {
             capabilities: acp::AgentCapabilities::new(),
             options,
-            commands: Vec::new(),
         };
         for (mode, source, ids) in [
             (

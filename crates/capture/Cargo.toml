@@ -16,7 +16,6 @@ chrono = { workspace = true }
 config = { workspace = true }
 hex = { workspace = true }
 kernel = { workspace = true }
-parking_lot = { workspace = true }
 regress = { workspace = true }
 reqwest = { workspace = true }
 rusqlite = { workspace = true }
@@ -34,6 +33,7 @@ wire = { workspace = true }
 [dev-dependencies]
 axum = { workspace = true }
 futures = { workspace = true }
+parking_lot = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 testkit = { workspace = true }

@@ -12,7 +12,6 @@ use async_trait::async_trait;
 use kernel::ToolContext;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::HarnessAdapterError;
-use kernel::harness::HarnessCommands;
 use kernel::harness::SessionEvent;
 use kernel::harness::SessionOption;
 use kernel::harness::SessionSpec;
@@ -40,7 +39,6 @@ pub struct FakeHarness {
     queued: Mutex<Vec<SessionEvent>>,
     sessions: Mutex<BTreeMap<SessionId, SessionStream>>,
     offerings: parking_lot::Mutex<Vec<wire::harness::HarnessOffering>>,
-    commands: parking_lot::Mutex<Vec<HarnessCommands>>,
 }
 
 impl FakeHarness {
@@ -49,16 +47,11 @@ impl FakeHarness {
             queued: Mutex::new(events),
             sessions: Mutex::new(BTreeMap::new()),
             offerings: parking_lot::Mutex::new(Vec::new()),
-            commands: parking_lot::Mutex::new(Vec::new()),
         }
     }
 
     pub fn set_offerings(&self, offerings: Vec<wire::harness::HarnessOffering>) {
         *self.offerings.lock() = offerings;
-    }
-
-    pub fn set_commands(&self, commands: Vec<HarnessCommands>) {
-        *self.commands.lock() = commands;
     }
 }
 
@@ -144,10 +137,6 @@ impl HarnessAdapter for FakeHarness {
 
     async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError> {
         Ok(self.offerings.lock().clone())
-    }
-
-    async fn commands(&self) -> Result<Vec<HarnessCommands>, HarnessAdapterError> {
-        Ok(self.commands.lock().clone())
     }
 }
 

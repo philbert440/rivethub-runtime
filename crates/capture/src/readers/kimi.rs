@@ -38,7 +38,6 @@ use crate::store_path::session_component;
 
 const FORMAT: &str = "kimi-wire";
 const PREFIX: &str = "kimi-code:";
-const DIR_PREFIX: &str = "session_";
 
 #[derive(Debug)]
 pub struct KimiTranscriptReader {
@@ -109,11 +108,10 @@ fn load(
     offset: u64,
 ) -> Result<TranscriptSlice, TranscriptReaderError> {
     session_component(native_id)?;
-    let wanted = native_id.strip_prefix(DIR_PREFIX).unwrap_or(native_id);
     let root = Root::open(store)?;
     let Some(dir) = session_dirs(&root)?
         .into_iter()
-        .find_map(|(id, path)| (id == wanted).then_some(path))
+        .find_map(|(id, path)| (id == native_id).then_some(path))
     else {
         return Ok(TranscriptSlice::empty(offset));
     };
@@ -141,7 +139,7 @@ fn session_dirs(root: &Root) -> Result<Vec<(String, PathBuf)>, TranscriptReaderE
             let Some(name) = dir_name(&session_dir)? else {
                 continue;
             };
-            let Some(id) = name.strip_prefix(DIR_PREFIX) else {
+            let Some(id) = name.strip_prefix("session_") else {
                 continue;
             };
             if uuid::Uuid::parse_str(id).is_err() {

@@ -145,18 +145,17 @@ pub(crate) fn name_free(
     name: &str,
     except: Option<&str>,
 ) -> Result<(), AgentError> {
-    if name_taken(agents, name, except) {
-        Err(AgentError::name_taken(name))
+    let key = name_key(name);
+    let taken = agents
+        .iter()
+        .any(|agent| except != Some(agent.id.as_str()) && name_key(&agent.name) == key);
+    if taken {
+        Err(AgentError::conflict(format!(
+            "an agent named \"{name}\" already exists"
+        )))
     } else {
         Ok(())
     }
-}
-
-pub(crate) fn name_taken(agents: &[AgentPreset], name: &str, except: Option<&str>) -> bool {
-    let key = name_key(name);
-    agents
-        .iter()
-        .any(|agent| except != Some(agent.id.as_str()) && name_key(&agent.name) == key)
 }
 
 pub(crate) fn foreign<'a>(agent: &'a AgentPreset, here: &str) -> Option<&'a str> {

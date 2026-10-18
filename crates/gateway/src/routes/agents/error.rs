@@ -2,7 +2,6 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::response::Response;
-use kernel::agent_presets::AgentPresetStoreError;
 use wire::gateway::GatewayError;
 use wire::harness::HarnessId;
 
@@ -27,18 +26,8 @@ pub(crate) enum AgentError {
 }
 
 impl AgentError {
-    pub(crate) fn name_taken(name: &str) -> Self {
-        Self::Conflict(format!("an agent named \"{name}\" already exists"))
-    }
-
-    pub(crate) fn from_store(error: AgentPresetStoreError) -> Self {
-        match error {
-            AgentPresetStoreError::NameTaken { name } => Self::name_taken(&name),
-            AgentPresetStoreError::Unavailable(source) => {
-                tracing::warn!(error = %source, "agent preset store failed");
-                Self::Unavailable
-            }
-        }
+    pub(crate) fn conflict(message: String) -> Self {
+        Self::Conflict(message)
     }
 
     fn status_and_body(&self) -> (StatusCode, GatewayError) {

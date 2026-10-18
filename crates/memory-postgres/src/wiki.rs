@@ -207,15 +207,15 @@ impl PostgresMemory {
     pub(crate) async fn read_wiki_gaps(&self, limit: u32) -> Result<WikiGapsResponse, Error> {
         let limit = i64::from(limit.clamp(1, 200));
         let red_links = sqlx::query!(
-            "WITH known AS (
-                 SELECT lower(slug) AS name FROM rh_wiki_topics
-                 UNION SELECT lower(title) FROM rh_wiki_topics
-                 UNION SELECT lower(alias) FROM rh_wiki_topics CROSS JOIN LATERAL unnest(aliases) alias
-                 UNION SELECT lower(from_slug) FROM rh_wiki_redirects
-             )
-             SELECT entity AS \"entity!\", array_agg(DISTINCT t.slug ORDER BY t.slug) AS \"referenced_by!\"
+            "SELECT entity AS \"entity!\", array_agg(DISTINCT t.slug ORDER BY t.slug) AS \"referenced_by!\"
              FROM rh_wiki_topics t CROSS JOIN LATERAL unnest(t.entities) entity
-             WHERE NOT EXISTS (SELECT 1 FROM known WHERE known.name = lower(entity))
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM rh_wiki_topics known
+                 WHERE lower(known.slug) = lower(entity) OR lower(known.title) = lower(entity)
+                 OR EXISTS (SELECT 1 FROM unnest(known.aliases) alias WHERE lower(alias) = lower(entity))
+             ) AND NOT EXISTS (
+                 SELECT 1 FROM rh_wiki_redirects r WHERE lower(r.from_slug) = lower(entity)
+             )
              GROUP BY entity ORDER BY count(DISTINCT t.slug) DESC, entity LIMIT $1",
             limit
         )

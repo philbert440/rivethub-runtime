@@ -4,7 +4,6 @@ use kernel::transcript::TranscriptReaderError;
 use rusqlite::Connection;
 use rusqlite::OpenFlags;
 use rusqlite::Row;
-use rusqlite::types::Value as SqlValue;
 use thiserror::Error;
 use wire::message::Role;
 
@@ -15,23 +14,6 @@ SELECT rowid, session_id, role, content, timestamp \
 FROM messages \
 WHERE session_id = ?1 AND rowid > ?2 \
 ORDER BY timestamp ASC, rowid ASC";
-
-const HERMES_SESSION_ROWS: &str = "\
-SELECT s.id AS id, s.started_at AS started_at, s.ended_at AS ended_at, \
-       (SELECT m.content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' \
-        ORDER BY m.timestamp ASC LIMIT 1) AS title \
-FROM sessions s";
-
-const RECENT_HERMES: &str = " ORDER BY COALESCE(s.ended_at, s.started_at) DESC LIMIT ?1";
-const ONE_HERMES: &str =
-    " WHERE s.id = ?1 ORDER BY COALESCE(s.ended_at, s.started_at) DESC LIMIT 1";
-
-const OPENCODE_SESSION_ROWS: &str =
-    "SELECT id, title, model, time_created, time_updated FROM session";
-const OPENCODE_SESSION_ROWS_WITHOUT_MODEL: &str =
-    "SELECT id, title, NULL AS model, time_created, time_updated FROM session";
-const RECENT_OPENCODE: &str = " ORDER BY time_updated DESC LIMIT ?1";
-const ONE_OPENCODE: &str = " WHERE id = ?1 ORDER BY time_updated DESC LIMIT 1";
 
 const OPENCODE_SESSIONS: &str = "SELECT DISTINCT session_id FROM message ORDER BY session_id";
 
@@ -101,116 +83,6 @@ pub(crate) struct OpencodePart {
     pub(crate) tool_arguments: Option<String>,
     pub(crate) tool_result: Option<String>,
     pub(crate) at: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SessionQuery<'a> {
-    Recent(usize),
-    One(&'a str),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct HermesSessionRow {
-    pub(crate) id: SqlValue,
-    pub(crate) started_at: SqlValue,
-    pub(crate) ended_at: SqlValue,
-    pub(crate) title: SqlValue,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct OpencodeSessionRow {
-    pub(crate) id: SqlValue,
-    pub(crate) title: SqlValue,
-    pub(crate) model: SqlValue,
-    pub(crate) time_created: SqlValue,
-    pub(crate) time_updated: SqlValue,
-}
-
-pub(crate) fn hermes_session_rows(
-    path: &Path,
-    query: SessionQuery<'_>,
-) -> Result<DbRows<HermesSessionRow>, HarnessDbError> {
-    let Opened::Ready(connection) = open_read(path) else {
-        return Ok(DbRows::Unreadable);
-    };
-    let rows = session_rows(
-        &connection,
-        HERMES_SESSION_ROWS,
-        RECENT_HERMES,
-        ONE_HERMES,
-        query,
-        |row| {
-            Ok(HermesSessionRow {
-                id: row.get("id")?,
-                started_at: row.get("started_at")?,
-                ended_at: row.get("ended_at")?,
-                title: row.get("title")?,
-            })
-        },
-    );
-    rows.map(DbRows::Ready)
-        .map_err(|error| query_error(&error.to_string(), Box::new(error)))
-}
-
-pub(crate) fn opencode_session_rows(
-    path: &Path,
-    query: SessionQuery<'_>,
-) -> Result<DbRows<OpencodeSessionRow>, HarnessDbError> {
-    let Opened::Ready(connection) = open_read(path) else {
-        return Ok(DbRows::Unreadable);
-    };
-    let read = |row: &Row<'_>| {
-        Ok(OpencodeSessionRow {
-            id: row.get("id")?,
-            title: row.get("title")?,
-            model: row.get("model")?,
-            time_created: row.get("time_created")?,
-            time_updated: row.get("time_updated")?,
-        })
-    };
-    let rows = match session_rows(
-        &connection,
-        OPENCODE_SESSION_ROWS,
-        RECENT_OPENCODE,
-        ONE_OPENCODE,
-        query,
-        read,
-    ) {
-        Ok(rows) => Ok(rows),
-        Err(error) => {
-            tracing::debug!(%error, "opencode session table read failed, retrying without the model column");
-            session_rows(
-                &connection,
-                OPENCODE_SESSION_ROWS_WITHOUT_MODEL,
-                RECENT_OPENCODE,
-                ONE_OPENCODE,
-                query,
-                read,
-            )
-        }
-    };
-    rows.map(DbRows::Ready)
-        .map_err(|error| query_error(&error.to_string(), Box::new(error)))
-}
-
-fn session_rows<T>(
-    connection: &Connection,
-    select: &str,
-    recent: &str,
-    one: &str,
-    query: SessionQuery<'_>,
-    read: impl Fn(&Row<'_>) -> rusqlite::Result<T>,
-) -> rusqlite::Result<Vec<T>> {
-    match query {
-        SessionQuery::Recent(limit) => connection
-            .prepare(&format!("{select}{recent}"))?
-            .query_map(rusqlite::params![limit], read)?
-            .collect(),
-        SessionQuery::One(id) => connection
-            .prepare(&format!("{select}{one}"))?
-            .query_map(rusqlite::params![id], read)?
-            .collect(),
-    }
 }
 
 #[derive(Debug)]

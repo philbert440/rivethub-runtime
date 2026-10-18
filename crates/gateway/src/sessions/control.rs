@@ -5,10 +5,8 @@ use kernel::harness::{HarnessAdapter, SessionEvent, TurnInput};
 use tokio::sync::{mpsc, oneshot};
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::gateway::term::TermSpawnResponse;
-use wire::harness::HarnessSessionStatus;
 use wire::session_id::SessionId;
 
-use super::fanout::ToolNames;
 use crate::error::ApiError;
 use crate::tenancy::UserId;
 use crate::term::{Launch, TerminalService};
@@ -96,7 +94,6 @@ pub(crate) struct ChatActor {
     queued: VecDeque<String>,
     events: Option<mpsc::Receiver<SessionEvent>>,
     closing: Option<oneshot::Sender<Result<(), ApiError>>>,
-    tools: ToolNames,
 }
 
 impl ChatActor {
@@ -126,7 +123,6 @@ impl ChatActor {
             queued: VecDeque::new(),
             events,
             closing: None,
-            tools: ToolNames::default(),
         };
         service.track(async move {
             if let Err(error) = actor.run(requests).await {
@@ -139,10 +135,6 @@ impl ChatActor {
     async fn run(mut self, mut requests: mpsc::Receiver<Request>) -> Result<(), ApiError> {
         let mut turn = tokio::task::JoinSet::new();
         let outcome = self.drive(&mut requests, &mut turn).await;
-        if outcome.is_err() {
-            self.service
-                .set_live_status(&self.key, &self.session, HarnessSessionStatus::Error);
-        }
         turn.abort_all();
         while let Some(result) = turn.join_next().await {
             match result {
@@ -265,8 +257,6 @@ impl ChatActor {
         }
         if let Some(text) = self.queued.pop_front() {
             self.turn_ended = false;
-            self.service
-                .set_live_status(&self.key, &self.session, HarnessSessionStatus::Active);
             self.publish(SessionEvent::UserMessageChunk { text: text.clone() })?;
             let harness = self.harness.clone();
             let session = self.session.clone();
@@ -280,23 +270,7 @@ impl ChatActor {
         Ok(())
     }
 
-    fn fan_out(&mut self, event: &SessionEvent) {
-        if let Some(harness_event) = self.tools.harness_event(&self.session, event) {
-            self.service.publish_harness(&self.key, harness_event);
-        }
-        let status = if matches!(event, SessionEvent::TurnEnded) {
-            HarnessSessionStatus::Idle
-        } else if matches!(event, SessionEvent::Exited { .. }) {
-            HarnessSessionStatus::Ended
-        } else {
-            return;
-        };
-        self.service
-            .set_live_status(&self.key, &self.session, status);
-    }
-
-    fn publish(&mut self, event: SessionEvent) -> Result<(), ApiError> {
-        self.fan_out(&event);
+    fn publish(&self, event: SessionEvent) -> Result<(), ApiError> {
         let ts = Some(chrono::Utc::now());
         let kind = match event {
             SessionEvent::UserMessageChunk { text } => AgentEventKind::MessageUser { text, ts },

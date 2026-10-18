@@ -234,10 +234,6 @@ impl MemoryStore for crate::PostgresMemory {
         self.ping().await.map_err(Into::into)
     }
 
-    fn embeddings_armed(&self) -> bool {
-        self.embed.is_some()
-    }
-
     async fn wiki_topics(
         &self,
         filter: kernel::wiki::WikiFilter,

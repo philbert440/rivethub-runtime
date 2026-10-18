@@ -110,13 +110,7 @@ pub(crate) async fn attach(
     }
     let connected = assemble::connect(config, env).await?;
     let directory = connected.roster.directory(&connected.plan)?;
-    let harness = gateway.terminal().and_then(|terminal| terminal.adapter());
-    let catalog = Arc::new(tasks::Catalog::new(
-        &directory,
-        connected.plan.mesh,
-        tools,
-        harness,
-    ));
+    let catalog = Arc::new(tasks::Catalog::new(&directory, connected.plan.mesh, tools));
     let api = ports::api(
         Arc::clone(&connected.roster),
         catalog,

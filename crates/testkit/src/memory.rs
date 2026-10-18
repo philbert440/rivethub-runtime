@@ -83,15 +83,9 @@ pub struct FakeMemoryStore {
     wiki_error: Mutex<Option<MemoryStoreError>>,
     tag_context: Mutex<Option<TagJobContext>>,
     tag_entities: Mutex<BTreeMap<String, Uuid>>,
-    embeddings_armed: std::sync::atomic::AtomicBool,
 }
 
 impl FakeMemoryStore {
-    pub fn arm_embeddings(&self) {
-        self.embeddings_armed
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-    }
-
     pub async fn script_session_entity(&self, session: String, entity: Uuid) {
         self.tag_entities.lock().await.insert(session, entity);
     }
@@ -133,11 +127,6 @@ impl MemoryStore for FakeMemoryStore {
 
     async fn probe(&self) -> Result<(), MemoryStoreError> {
         Ok(())
-    }
-
-    fn embeddings_armed(&self) -> bool {
-        self.embeddings_armed
-            .load(std::sync::atomic::Ordering::SeqCst)
     }
 
     async fn wiki_topics(

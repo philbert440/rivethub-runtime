@@ -4,15 +4,6 @@ use std::path::{Component, Path, PathBuf};
 use crate::environment::Environment;
 
 const DEFAULT_SHARED_DIR: &str = "/rivet-shared";
-const SESSION_OWNERS_DIR: &str = "den";
-pub const SESSION_OWNERS_FILE_NAME: &str = "session-owners.json";
-
-#[must_use]
-pub fn session_owners_file(state_dir: &Path) -> PathBuf {
-    state_dir
-        .join(SESSION_OWNERS_DIR)
-        .join(SESSION_OWNERS_FILE_NAME)
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigLocation {
@@ -108,10 +99,6 @@ impl Paths {
 
     pub fn state_dir(&self) -> PathBuf {
         self.hub_home()
-    }
-
-    pub fn session_owners_file(&self) -> PathBuf {
-        session_owners_file(&self.state_dir())
     }
 
     pub fn ca_dir(&self) -> PathBuf {

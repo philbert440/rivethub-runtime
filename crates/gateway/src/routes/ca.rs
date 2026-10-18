@@ -54,7 +54,6 @@ impl From<ApiError> for CaRouteError {
     fn from(error: ApiError) -> Self {
         match error {
             ApiError::BadRequest(_)
-            | ApiError::Code(_, _)
             | ApiError::Unprocessable(_)
             | ApiError::BodyMustBeObject
             | ApiError::Serialize(_) => Self::BadRequest,
@@ -76,7 +75,6 @@ impl From<ApiError> for CaRouteError {
             | ApiError::Forbidden(_)
             | ApiError::Conflict(_)
             | ApiError::NotFound(_)
-            | ApiError::Missing(_)
             | ApiError::MeshParse(_) => Self::Forbidden,
         }
     }

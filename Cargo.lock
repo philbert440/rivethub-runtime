@@ -1338,7 +1338,6 @@ dependencies = [
  "serde_yaml_ng",
  "sha2 0.10.9",
  "similar-asserts",
- "strum 0.27.2",
  "subtle",
  "tempfile",
  "testkit",
@@ -4875,9 +4874,7 @@ dependencies = [
 name = "wire"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
  "chrono",
- "percent-encoding",
  "schemars 1.2.3",
  "serde",
  "serde_json",

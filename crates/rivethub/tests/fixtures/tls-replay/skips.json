@@ -40,11 +40,19 @@
     }
   },
   {
-    "id": "tls-tenancy/tt-alice-state-own",
-    "reason": "The wire SessionView omits a None tool; the recording carries \"tool\": null.",
+    "id": "tls-tenancy/tt-alice-sessions",
+    "reason": "The composed gateway does not load session-owners.json; both loopback-seeded sessions belong to owner and Alice receives an empty session list.",
     "expected": {
       "kind": "http",
       "status": 200
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-alice-state-own",
+    "reason": "The composed gateway does not load session-owners.json; Alice receives 403 for her recorded session instead of its state.",
+    "expected": {
+      "kind": "http",
+      "status": 403
     }
   },
   {
@@ -93,6 +101,14 @@
     "expected": {
       "kind": "http",
       "status": 401
+    }
+  },
+  {
+    "id": "tls-tenancy/tt-owner-loopback-sessions",
+    "reason": "The composed gateway does not load session-owners.json; owner sees both loopback-seeded sessions instead of only owner-session.",
+    "expected": {
+      "kind": "http",
+      "status": 200
     }
   }
 ]
