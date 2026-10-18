@@ -22,6 +22,7 @@ use thiserror::Error;
     Hash,
     Serialize,
     Deserialize,
+    schemars::JsonSchema,
     Display,
     EnumString,
     EnumIter,
@@ -41,7 +42,19 @@ pub enum HarnessId {
     Cowork,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+)]
 #[serde(try_from = "String", into = "String")]
 pub enum SessionHarness {
     Harness(HarnessId),
@@ -97,6 +110,7 @@ impl From<HarnessId> for SessionHarness {
     Hash,
     Serialize,
     Deserialize,
+    schemars::JsonSchema,
     Display,
     EnumString,
 )]
@@ -150,7 +164,18 @@ impl From<RosterCommand> for HarnessId {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, EnumString, EnumIter,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    Display,
+    EnumString,
+    EnumIter,
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
@@ -181,7 +206,7 @@ impl HarnessCode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ApprovalDecision {
     Allow,
@@ -189,7 +214,7 @@ pub enum ApprovalDecision {
     AllowSession,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ApprovalOutcome {
     Allow,
@@ -198,7 +223,7 @@ pub enum ApprovalOutcome {
     External,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum HarnessStatus {
     Working,
@@ -206,7 +231,7 @@ pub enum HarnessStatus {
     Idle,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum StatusPhase {
     Thinking,
@@ -215,7 +240,7 @@ pub enum StatusPhase {
     Prompt,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum StatusSource {
     Herdr,
@@ -225,7 +250,7 @@ pub enum StatusSource {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum HarnessEvent {
     #[serde(rename_all = "camelCase")]
@@ -327,14 +352,14 @@ pub enum HarnessEvent {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum PromptKind {
     AskUser,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptQuestion {
     pub question: Option<String>,
@@ -345,7 +370,7 @@ pub struct PromptQuestion {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptOption {
     pub label: String,
@@ -354,7 +379,7 @@ pub struct PromptOption {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptResolution {
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
@@ -362,14 +387,14 @@ pub struct PromptResolution {
     pub answer_text: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptScreen {
     pub current: u32,
     pub total: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalOption {
     pub key: String,
@@ -378,7 +403,7 @@ pub struct ApprovalOption {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessStatusFrame {
     pub session_id: SessionId,
@@ -392,7 +417,7 @@ pub struct HarnessStatusFrame {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusTool {
     pub name: String,
@@ -400,7 +425,7 @@ pub struct StatusTool {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessCapabilities {
     #[serde(flatten)]
@@ -417,7 +442,7 @@ pub struct HarnessCapabilities {
     pub effort_flag: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessControlCapabilities {
     pub interrupt: bool,
@@ -426,7 +451,7 @@ pub struct HarnessControlCapabilities {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessObservationCapabilities {
     pub live_stream: bool,
@@ -435,7 +460,7 @@ pub struct HarnessObservationCapabilities {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct EffortOption {
     pub id: String,
@@ -443,7 +468,7 @@ pub struct EffortOption {
     pub is_default: Option<bool>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum HarnessModelsSource {
     Discovered,
@@ -453,7 +478,7 @@ pub enum HarnessModelsSource {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessModelOption {
     pub input_modalities: Option<Vec<String>>,
@@ -463,7 +488,7 @@ pub struct HarnessModelOption {
     pub efforts: Option<Vec<EffortOption>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum HarnessSessionStatus {
     Active,
@@ -474,7 +499,7 @@ pub enum HarnessSessionStatus {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessSessionSummary {
     pub session_id: SessionId,
@@ -498,13 +523,13 @@ pub struct HarnessSessionSummary {
     pub extra: Extra,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum Transport {
     Protocol,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessSessionList {
     pub sessions: Vec<HarnessSessionSummary>,
@@ -512,7 +537,7 @@ pub struct HarnessSessionList {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessStoreSession {
     pub id: String,
@@ -528,14 +553,14 @@ pub struct HarnessStoreSession {
     pub task_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessStoreSessionList {
     pub sessions: Vec<HarnessStoreSession>,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessOffering {
     pub harness_id: HarnessId,
@@ -543,7 +568,7 @@ pub struct HarnessOffering {
     pub capabilities: HarnessCapabilities,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessOfferingList {
     pub harnesses: Vec<HarnessOffering>,

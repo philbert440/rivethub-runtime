@@ -6,6 +6,7 @@ use serde::Deserializer;
 use serde::Serializer;
 use serde_with::DeserializeAs;
 use serde_with::SerializeAs;
+use serde_with::schemars_1::JsonSchemaAs;
 
 #[derive(Debug)]
 pub struct Millis;
@@ -28,5 +29,15 @@ impl<'de> DeserializeAs<'de, DateTime<Utc>> for Millis {
         DateTime::parse_from_rfc3339(&raw)
             .map(|parsed| parsed.with_timezone(&Utc))
             .map_err(serde::de::Error::custom)
+    }
+}
+
+impl JsonSchemaAs<DateTime<Utc>> for Millis {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Millis".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({ "type": "string", "format": "date-time" })
     }
 }

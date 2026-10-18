@@ -100,7 +100,7 @@ pub fn harness_for_roster_key(key: &str) -> Option<HarnessId> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RosterFile {
     pub default: String,
@@ -111,7 +111,7 @@ pub struct RosterFile {
     pub commands: BTreeMap<String, RosterEntry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RosterEntry {
     pub label: String,

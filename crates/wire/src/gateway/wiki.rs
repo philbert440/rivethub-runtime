@@ -2,7 +2,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct WikiQuery {
     pub q: Option<String>,
     pub tag: Option<String>,
@@ -10,14 +10,13 @@ pub struct WikiQuery {
     pub offset: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct WikiPageQuery {
     pub slug: WikiSlug,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "String", into = "String")]
-#[derive(schemars::JsonSchema)]
 pub struct WikiSlug(String);
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -52,9 +51,8 @@ impl From<WikiSlug> for String {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[derive(schemars::JsonSchema)]
 pub struct WikiHistoryEntry {
     #[schemars(with = "String")]
     pub date: NaiveDate,
@@ -64,7 +62,7 @@ pub struct WikiHistoryEntry {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiCitation {
     pub summary_id: String,
@@ -76,7 +74,7 @@ pub struct WikiCitation {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiSource {
     pub kind: WikiSourceKind,
@@ -85,7 +83,17 @@ pub struct WikiSource {
     pub span: Option<WikiSourceSpan>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumString)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    strum::EnumString,
+)]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum WikiSourceKind {
@@ -98,7 +106,7 @@ pub enum WikiSourceKind {
 }
 
 #[serde_as]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiSourceSpan {
     #[serde_as(as = "crate::time::Millis")]
@@ -109,7 +117,7 @@ pub struct WikiSourceSpan {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiPageResponse {
     pub slug: String,
@@ -133,28 +141,28 @@ pub struct WikiPageResponse {
     pub related: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiMissSuggestion {
     pub slug: String,
     pub title: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiMissBody {
     pub error: String,
     pub suggestions: Vec<WikiMissSuggestion>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiRedLink {
     pub entity: String,
     pub referenced_by: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiGapsResponse {
     pub red_links: Vec<WikiRedLink>,
@@ -162,7 +170,7 @@ pub struct WikiGapsResponse {
 }
 
 #[serde_as]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiTopic {
     pub slug: String,
@@ -174,7 +182,7 @@ pub struct WikiTopic {
     pub excerpt: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiTopicList {
     pub topics: Vec<WikiTopic>,

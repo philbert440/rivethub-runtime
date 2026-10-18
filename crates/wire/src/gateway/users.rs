@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 pub const DEFAULT_OWNER_ID: &str = "owner";
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UsersRegistry {
     pub owner_user_id: String,
@@ -32,7 +32,7 @@ impl Default for UsersRegistry {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UserRecord {
     pub id: Option<String>,

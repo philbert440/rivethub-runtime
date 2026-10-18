@@ -6,7 +6,7 @@ use serde_with::serde_as;
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CaptureBatchRequest {
     pub session_key: String,
     pub agent: String,
@@ -26,7 +26,7 @@ pub struct CaptureBatchRequest {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CaptureMessage {
     pub event_id: String,
     pub role: Role,
@@ -62,7 +62,7 @@ impl CaptureBatchRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CaptureResult {
     pub ok: bool,
     pub conversation_id: String,

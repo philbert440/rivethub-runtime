@@ -40,6 +40,7 @@ pub fn checks() -> &'static [&'static str] {
         "AUTHORSHIP",
         "BASELINE",
         "COMMENT",
+        "CONTRACT",
         "DEPS",
         "DUPFIXTURE",
         "ENV",

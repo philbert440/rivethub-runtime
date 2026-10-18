@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub const SUMMARY_LIMIT: usize = 2400;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CappedSummary {
     pub kept: String,
     pub overflow: String,

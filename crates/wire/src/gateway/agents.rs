@@ -10,7 +10,7 @@ use thiserror::Error;
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentPreset {
     pub id: String,
@@ -39,7 +39,7 @@ pub struct AgentPreset {
     pub extra: Extra,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "String", into = "String")]
 pub struct KnownHarness(HarnessId);
 
@@ -76,14 +76,14 @@ impl From<HarnessId> for KnownHarness {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AgentsFile {
     pub agents: Vec<AgentPreset>,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, Default)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct AgentPresetCreateRequest {
     pub name: String,
@@ -100,12 +100,13 @@ pub struct AgentPresetCreateRequest {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, Default)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 pub struct AgentPresetUpdate {
     pub name: Option<String>,
     pub color: Option<String>,
     #[serde(default, with = "::serde_with::rust::double_option")]
+    #[schemars(with = "Option<Option<KnownHarness>>")]
     pub harness_id: Option<Option<KnownHarness>>,
     pub model: Option<String>,
     pub effort: Option<String>,
@@ -115,10 +116,11 @@ pub struct AgentPresetUpdate {
     pub shared_link: Option<bool>,
     pub node_base_url: Option<String>,
     #[serde(default, with = "::serde_with::rust::double_option")]
+    #[schemars(with = "Option<Option<u32>>")]
     pub sort_order: Option<Option<u32>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum AgentStoreBackend {
     Postgres,
@@ -126,7 +128,7 @@ pub enum AgentStoreBackend {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentListResponse {
     pub agents: Vec<AgentPreset>,
@@ -136,21 +138,21 @@ pub struct AgentListResponse {
     pub backend: Option<AgentStoreBackend>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentResponse {
     pub agent: AgentPreset,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessDescriptor {
     pub installed: Option<bool>,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DelegatedSessionLink {
     pub task_id: String,
@@ -164,7 +166,7 @@ pub struct DelegatedSessionLink {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UserTurnAttachment {
     pub mime: String,
@@ -173,7 +175,7 @@ pub struct UserTurnAttachment {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UserTurn {
     pub delivery_id: Option<String>,
@@ -186,7 +188,7 @@ pub struct UserTurn {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SendUserTurnResult {
     pub dismissed_dialog: Option<bool>,

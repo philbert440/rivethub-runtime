@@ -2,6 +2,7 @@ mod ast;
 pub mod baseline;
 pub mod check;
 pub mod code;
+pub mod contract;
 pub mod dupfixture;
 pub mod env_scan;
 pub mod error;

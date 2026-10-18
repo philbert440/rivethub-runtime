@@ -6,7 +6,7 @@ use serde_with::TryFromInto;
 use serde_with::serde_as;
 
 #[serde_as]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshFile {
     pub version: u32,
@@ -32,14 +32,14 @@ impl MeshFile {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum MeshRole {
     Agent,
     Datahub,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum MeshNodeStatus {
     Online,
@@ -50,7 +50,7 @@ pub enum MeshNodeStatus {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MeshNode {
     pub id: String,
@@ -78,7 +78,7 @@ pub struct MeshNode {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, Default)]
 pub struct MeshMetadata {
     #[serde(default, rename = "denUrl")]
     pub gateway_url: Option<url::Url>,
@@ -114,7 +114,7 @@ fn is_cutover_decimal(text: &str) -> bool {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
 enum CutoverPort {
     Number(u16),
@@ -138,7 +138,7 @@ impl TryFrom<CutoverPort> for u16 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum MeshNodeEventType {
     NodeJoined,
@@ -148,7 +148,7 @@ pub enum MeshNodeEventType {
     NodeDegraded,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub enum MeshParseCode {
     #[serde(rename = "MESH_INVALID_SHAPE")]
     InvalidShape,

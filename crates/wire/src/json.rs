@@ -3,7 +3,7 @@ use serde::Serialize;
 use serde_json::Map;
 use serde_json::Value;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(transparent)]
 pub struct Extra(Map<String, Value>);
 
@@ -18,7 +18,7 @@ impl Extra {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(transparent)]
 pub struct JsonObject(Map<String, Value>);
 
@@ -74,7 +74,7 @@ fn visit_strings(key: &str, value: &mut Value, visit: &mut impl FnMut(&str, &mut
 mod tests {
     use super::*;
 
-    #[derive(Serialize)]
+    #[derive(Serialize, schemars::JsonSchema)]
     struct Sample {
         name: &'static str,
         count: u32,
