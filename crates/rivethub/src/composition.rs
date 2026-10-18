@@ -150,10 +150,16 @@ impl Composition {
         tokio::select! {
             result = self.tasks.join_next(), if !self.tasks.is_empty() => {
                 if let Some(result) = result { result??; }
+                if self.cancel.is_cancelled() {
+                    return std::future::pending().await;
+                }
                 Err(ComposeError::Invalid("mesh task stopped unexpectedly".into()))
             }
             result = self.audit_tasks.join_next(), if !self.audit_tasks.is_empty() => {
                 if let Some(result) = result { result??; }
+                if self.audit_cancel.is_cancelled() {
+                    return std::future::pending().await;
+                }
                 Err(ComposeError::Invalid("audit task stopped unexpectedly".into()))
             }
             else => std::future::pending().await,
