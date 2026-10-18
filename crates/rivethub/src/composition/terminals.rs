@@ -48,18 +48,21 @@ pub(super) async fn build(
         None => Vec::new(),
     };
     let plan = terminal::mux::resolve(
-        config::TermMuxChoice {
-            setting: config::TermMuxSetting::Herdr,
-            ignored: None,
-        },
+        env.term_mux_choice(),
         &paths,
         env.home().map(std::path::Path::new),
         &state_dir,
         gateway.port,
     )
     .await;
-    if let terminal::MuxPlan::Unavailable(unavailable) = &plan {
-        return Err(unavailable.reason.to_error().into());
+    match &plan {
+        terminal::MuxPlan::Unavailable(unavailable) => {
+            return Err(unavailable.reason.to_error().into());
+        }
+        terminal::MuxPlan::Herdr(setup) => {
+            terminal::herdr::ui::write_ui_config(&setup.config_home).await?;
+        }
+        terminal::MuxPlan::Direct => {}
     }
     let mux = Arc::new(terminal::TerminalManager::new(settings, plan));
     mux.run_tracked(shutdown.child_token(), tasks);

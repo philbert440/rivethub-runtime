@@ -7,6 +7,7 @@ use axum::Router;
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::http::header;
 use axum::response::IntoResponse;
 use axum::response::Redirect;
 use axum::response::Response;
@@ -64,7 +65,7 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             get(topics).fallback(super::method_not_allowed),
         )
         .route(
-            "/api/wiki/gaps",
+            "/api/wiki/_gaps",
             get(gaps).fallback(super::method_not_allowed),
         )
         .route(
@@ -72,8 +73,12 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             get(page_query).fallback(super::method_not_allowed),
         )
         .route(
-            "/api/wiki/page/{slug}",
+            "/api/wiki/{slug}",
             get(page).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/wiki/{slug}/raw",
+            get(raw).fallback(super::method_not_allowed),
         )
         .route("/wiki", get(index).fallback(super::method_not_allowed))
         .route("/wiki/", get(index).fallback(super::method_not_allowed))
@@ -106,14 +111,21 @@ async fn page(
     State(gateway): State<Arc<Gateway>>,
     Path(slug): Path<String>,
 ) -> Result<Response, WikiError> {
-    respond(&gateway, requested_slug(slug)?, false).await
+    respond(&gateway, requested_slug(slug)?, Format::Json).await
+}
+
+async fn raw(
+    State(gateway): State<Arc<Gateway>>,
+    Path(slug): Path<String>,
+) -> Result<Response, WikiError> {
+    respond(&gateway, requested_slug(slug)?, Format::Raw).await
 }
 
 async fn page_query(
     State(gateway): State<Arc<Gateway>>,
     Query(query): Query<WikiPageQuery>,
 ) -> Result<Response, WikiError> {
-    respond(&gateway, query.slug, false).await
+    respond(&gateway, query.slug, Format::Json).await
 }
 
 async fn index(
@@ -136,29 +148,52 @@ async fn article(
     State(gateway): State<Arc<Gateway>>,
     Path(slug): Path<String>,
 ) -> Result<Response, WikiError> {
-    respond(&gateway, requested_slug(slug)?, true).await
+    respond(&gateway, requested_slug(slug)?, Format::Html).await
 }
 
 fn requested_slug(slug: String) -> Result<WikiSlug, ApiError> {
     WikiSlug::try_from(slug).map_err(|error| ApiError::BadRequest(error.to_string()))
 }
 
-async fn respond(gateway: &Gateway, slug: WikiSlug, html: bool) -> Result<Response, WikiError> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Format {
+    Json,
+    Raw,
+    Html,
+}
+
+impl Format {
+    fn location(self, slug: &WikiSlug) -> Result<String, WikiError> {
+        match self {
+            Self::Json => page_url("/api/wiki/", slug),
+            Self::Raw => Ok(format!("{}/raw", page_url("/api/wiki/", slug)?)),
+            Self::Html => page_url("/wiki/", slug),
+        }
+    }
+}
+
+async fn respond(gateway: &Gateway, slug: WikiSlug, format: Format) -> Result<Response, WikiError> {
     match gateway
         .store()
         .wiki_page(&slug)
         .await
         .map_err(ApiError::from)?
     {
-        WikiLookup::Page(page) if html => Ok(html::response(StatusCode::OK, html::article(&page)?)),
-        WikiLookup::Page(page) => Ok(Json(*page).into_response()),
+        WikiLookup::Page(page) => match format {
+            Format::Json => Ok(Json(*page).into_response()),
+            Format::Raw => Ok((
+                [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
+                page.markdown,
+            )
+                .into_response()),
+            Format::Html => Ok(html::response(StatusCode::OK, html::article(&page)?)),
+        },
         WikiLookup::Redirect(target) => {
             let target = WikiSlug::try_from(target)?;
             if target == slug {
                 return Err(WikiError::StoredSlug(WikiSlugError));
             }
-            let prefix = if html { "/wiki/" } else { "/api/wiki/page/" };
-            Ok(Redirect::permanent(&page_url(prefix, &target)?).into_response())
+            Ok(Redirect::permanent(&format.location(&target)?).into_response())
         }
         WikiLookup::Missing => {
             let matches = gateway
@@ -182,10 +217,11 @@ async fn respond(gateway: &Gateway, slug: WikiSlug, html: bool) -> Result<Respon
                     })
                     .collect(),
             };
-            if html {
-                Ok(html::response(StatusCode::NOT_FOUND, html::missing(&body)?))
-            } else {
-                Ok((StatusCode::NOT_FOUND, Json(body)).into_response())
+            match format {
+                Format::Html => Ok(html::response(StatusCode::NOT_FOUND, html::missing(&body)?)),
+                Format::Json | Format::Raw => {
+                    Ok((StatusCode::NOT_FOUND, Json(body)).into_response())
+                }
             }
         }
     }

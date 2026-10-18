@@ -42,6 +42,10 @@ pub enum ApiError {
     Unprocessable(String),
     #[error("{0}")]
     NotFound(&'static str),
+    #[error("{0}")]
+    Missing(String),
+    #[error("{1}")]
+    Code(wire::harness::HarnessCode, String),
     #[error("method not allowed")]
     MethodNotAllowed,
     #[error("body too large")]
@@ -111,6 +115,8 @@ impl ApiError {
                 (StatusCode::UNPROCESSABLE_ENTITY, GatewayError::new(message))
             }
             Self::NotFound(message) => (StatusCode::NOT_FOUND, GatewayError::new(message)),
+            Self::Missing(message) => (StatusCode::NOT_FOUND, GatewayError::new(message)),
+            Self::Code(code, message) => harness_error(code, message),
             Self::MethodNotAllowed => (
                 StatusCode::METHOD_NOT_ALLOWED,
                 GatewayError::new("method not allowed"),
@@ -148,6 +154,26 @@ impl ApiError {
                 GatewayError::new(error.to_string()),
             ),
         }
+    }
+}
+
+fn harness_error(code: wire::harness::HarnessCode, message: String) -> (StatusCode, GatewayError) {
+    (
+        harness_status(code),
+        GatewayError::new(message)
+            .code(code.to_string())
+            .retryable(code.retryable()),
+    )
+}
+
+#[must_use]
+pub fn harness_status(code: wire::harness::HarnessCode) -> StatusCode {
+    use wire::harness::HarnessCode;
+    match code {
+        HarnessCode::InvalidSessionId | HarnessCode::BadRequest => StatusCode::BAD_REQUEST,
+        HarnessCode::UnknownApproval | HarnessCode::UnknownPrompt => StatusCode::NOT_FOUND,
+        HarnessCode::SessionIdCollision | HarnessCode::TurnInFlight => StatusCode::CONFLICT,
+        HarnessCode::CapabilityUnsupported => StatusCode::NOT_IMPLEMENTED,
     }
 }
 

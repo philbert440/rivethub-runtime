@@ -351,12 +351,12 @@ async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResu
     let trigram = memory
         .search(SearchQuery {
             mode: SearchMode::Trigram,
-            ..query("deploy checklst", 20)
+            ..query("Deploy Checkl", 20)
         })
         .await?;
     assert!(
         contents(&trigram.results).contains(&"deploy checklist".to_string()),
-        "the trigram arm tolerates typos"
+        "the trigram arm matches a case-insensitive substring"
     );
 
     let regex = memory

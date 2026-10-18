@@ -26,8 +26,11 @@ CREATE TABLE graphile_worker._private_jobs (
     updated_at timestamptz NOT NULL DEFAULT now(),
     key text UNIQUE,
     locked_at timestamptz,
-    locked_by text
+    locked_by text,
+    is_available boolean GENERATED ALWAYS AS (((locked_at IS NULL) AND (attempts < max_attempts))) STORED NOT NULL
 );
+
+CREATE INDEX jobs_main_index ON graphile_worker._private_jobs USING btree (priority, run_at) INCLUDE (id, task_id, job_queue_id) WHERE (is_available = true);
 
 CREATE FUNCTION graphile_worker.add_job(
     p_identifier text,

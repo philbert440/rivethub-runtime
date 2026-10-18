@@ -2,7 +2,10 @@ mod devices;
 mod identities;
 mod mesh;
 mod models;
+mod stores;
 mod terminals;
+
+pub use stores::store_roots;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,7 +13,9 @@ use std::time::Duration;
 use config::{Config, Environment};
 use gateway::Gateway;
 use gateway::sessions::SessionRegistry;
+use kernel::agent_presets::AgentPresetStore;
 use kernel::memory::MemoryStore;
+use memory_postgres::PostgresMemory;
 use thiserror::Error;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -57,6 +62,17 @@ pub enum ComposeError {
     Pki(#[from] pki::Error),
     #[error(transparent)]
     Tasks(#[from] crate::agent::AgentError),
+    #[error(transparent)]
+    Memory(#[from] memory_postgres::Error),
+}
+
+pub async fn agent_presets(
+    memory: &PostgresMemory,
+) -> Result<Option<Arc<dyn AgentPresetStore>>, ComposeError> {
+    Ok(memory
+        .agent_presets()
+        .await?
+        .map(|store| Arc::new(store) as Arc<dyn AgentPresetStore>))
 }
 
 #[expect(
@@ -95,6 +111,35 @@ fn transcripts(
     )))
 }
 
+fn with_presets(gateway: Gateway, presets: Option<Arc<dyn AgentPresetStore>>) -> Gateway {
+    match presets {
+        Some(presets) => gateway.with_agent_presets(presets),
+        None => gateway,
+    }
+}
+
+fn with_session_stores(gateway: Gateway, env: &Environment) -> Result<Gateway, ComposeError> {
+    Ok(gateway
+        .with_transcript_reader(transcripts(env)?)
+        .with_session_lister(Arc::new(capture::listing::StoreSessionLister::new(
+            store_roots(env),
+        ))))
+}
+
+async fn session_registry(
+    owners: std::path::PathBuf,
+    node_owner: Option<gateway::tenancy::UserId>,
+) -> Result<SessionRegistry, ComposeError> {
+    let registry = tokio::task::spawn_blocking(move || {
+        SessionRegistry::new(Duration::from_secs(300)).with_owners_file(owners)
+    })
+    .await?;
+    Ok(match node_owner {
+        Some(owner) => registry.with_node_owner(owner),
+        None => registry,
+    })
+}
+
 impl Composition {
     pub async fn validate_users(config: &Config, env: &Environment) -> Result<(), ComposeError> {
         identities::load(config, env).await?;
@@ -105,10 +150,16 @@ impl Composition {
         tokio::select! {
             result = self.tasks.join_next(), if !self.tasks.is_empty() => {
                 if let Some(result) = result { result??; }
+                if self.cancel.is_cancelled() {
+                    return std::future::pending().await;
+                }
                 Err(ComposeError::Invalid("mesh task stopped unexpectedly".into()))
             }
             result = self.audit_tasks.join_next(), if !self.audit_tasks.is_empty() => {
                 if let Some(result) = result { result??; }
+                if self.audit_cancel.is_cancelled() {
+                    return std::future::pending().await;
+                }
                 Err(ComposeError::Invalid("audit task stopped unexpectedly".into()))
             }
             else => std::future::pending().await,
@@ -127,10 +178,36 @@ impl Composition {
         Self::with_models(config, env, store, shutdown, &factory).await
     }
 
+    pub async fn on_postgres(
+        config: &Config,
+        env: &Environment,
+        memory: &Arc<PostgresMemory>,
+        shutdown: &CancellationToken,
+        activities: &kernel::shutdown::Activities,
+    ) -> Result<Self, ComposeError> {
+        let presets = agent_presets(memory).await?;
+        let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
+            .await?
+            .with_activities(activities.clone());
+        let store: Arc<dyn MemoryStore> = memory.clone();
+        Self::compose(config, env, store, presets, shutdown, &factory).await
+    }
+
     pub async fn with_models(
         config: &Config,
         env: &Environment,
         store: Arc<dyn MemoryStore>,
+        shutdown: &CancellationToken,
+        factory: &crate::models::ModelFactory,
+    ) -> Result<Self, ComposeError> {
+        Self::compose(config, env, store, None, shutdown, factory).await
+    }
+
+    async fn compose(
+        config: &Config,
+        env: &Environment,
+        store: Arc<dyn MemoryStore>,
+        presets: Option<Arc<dyn AgentPresetStore>>,
         shutdown: &CancellationToken,
         factory: &crate::models::ModelFactory,
     ) -> Result<Self, ComposeError> {
@@ -148,10 +225,15 @@ impl Composition {
             )
         })
         .await?;
-        let sessions = Arc::new(
-            SessionRegistry::new(Duration::from_secs(300)).with_shutdown(shutdown.child_token()),
-        );
         let identity = identities::load(config, env).await?;
+        let sessions = Arc::new(
+            session_registry(
+                gateway::sessions::owners_file(&settings.state_dir),
+                identity.tenancy.local_user().cloned(),
+            )
+            .await?
+            .with_shutdown(shutdown.child_token()),
+        );
         let mut gateway = Gateway::new(store, settings)
             .with_provider_health(factory.health())
             .with_uploads(crate::service::uploads(env)?)
@@ -160,7 +242,7 @@ impl Composition {
             .with_client_certificate_required(bind.require_client)
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
-        gateway = gateway.with_transcript_reader(transcripts(env)?);
+        gateway = with_presets(with_session_stores(gateway, env)?, presets);
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let background = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {

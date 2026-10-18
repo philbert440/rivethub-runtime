@@ -11,6 +11,7 @@ rust-version.workspace = true
 x509-parser.workspace = true
 futures.workspace = true
 tempfile.workspace = true
+async-trait = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
@@ -32,6 +33,7 @@ rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+strum = { workspace = true }
 subtle = { workspace = true }
 serde_urlencoded = { workspace = true }
 thiserror = { workspace = true }
@@ -47,7 +49,6 @@ wire = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
-async-trait = { workspace = true }
 libtest-mimic = { workspace = true }
 rcgen = { workspace = true }
 reqwest = { workspace = true }

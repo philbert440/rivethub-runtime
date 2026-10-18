@@ -150,6 +150,7 @@ pub struct AgentUsage {
 pub enum ContextSource {
     Spawn,
     Default,
+    Observed,
 }
 
 #[serde_as]
@@ -165,9 +166,7 @@ pub struct SessionSummary {
     pub last_event_ts: Option<DateTime<Utc>>,
     pub pty: Option<String>,
     pub context_window: Option<u64>,
-    #[serde(default)]
-    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
-    pub compact_at: Option<DateTime<Utc>>,
+    pub compact_at: Option<u64>,
     pub context_source: Option<ContextSource>,
 }
 

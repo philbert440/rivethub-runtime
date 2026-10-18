@@ -16,8 +16,8 @@
     {"input":{"delegation":true,"meshFrom":"local","permissionDecisions":[{"requestId":"req","tool":"bash","decision":"deny","at":1760000001000,"message":null}]},"expected":{"delegation":true,"meshFrom":"local","permissionDecisions":[{"requestId":"req","tool":"bash","decision":"deny","at":1760000001000}]}}
   ],
   "eval": [
-    {"input":{"verdict":"verified","summary":"ok","criteriaReport":[],"refutation":null},"expected":{"verdict":"verified","summary":"ok","criteriaReport":[]}},
-    {"input":{"verdict":"refuted","summary":"no","criteriaReport":[],"refutation":"missing output"},"expected":{"verdict":"refuted","summary":"no","criteriaReport":[],"refutation":"missing output"}}
+    {"input":{"verdict":"verified","attempts":1,"verifierTaskIds":["v-1"],"criteriaReport":[],"diverged":false},"expected":{"verdict":"verified","attempts":1,"verifierTaskIds":["v-1"],"criteriaReport":[],"diverged":false}},
+    {"input":{"verdict":"escalated","attempts":2,"verifierTaskIds":["v-1","v-2"],"criteriaReport":[{"id":"a","met":false,"evidence":"missing output"}],"diverged":true,"escalatedAt":"2026-10-15T23:08:20.507Z"},"expected":{"verdict":"escalated","attempts":2,"verifierTaskIds":["v-1","v-2"],"criteriaReport":[{"id":"a","met":false,"evidence":"missing output"}],"diverged":true,"escalatedAt":"2026-10-15T23:08:20.507Z"}}
   ],
   "context_refs": [
     {"input":[{"kind":"file","ref":"answer.txt","note":null}],"expected":[{"kind":"file","ref":"answer.txt"}]}

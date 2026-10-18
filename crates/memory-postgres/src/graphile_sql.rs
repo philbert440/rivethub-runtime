@@ -1,10 +1,9 @@
-pub(crate) const CLAIM: &str = "WITH selected AS MATERIALIZED (
-    SELECT j.id, j.job_queue_id FROM graphile_worker._private_jobs j
+pub(crate) const CLAIM: &str = "WITH available AS MATERIALIZED (
+    SELECT j.id, j.job_queue_id, j.priority, j.run_at FROM graphile_worker._private_jobs j
     JOIN graphile_worker._private_tasks t ON t.id = j.task_id
     WHERE t.identifier = ANY($1)
       AND ($2::bigint IS NULL OR j.id = $2)
-      AND j.attempts < j.max_attempts
-      AND (j.locked_at IS NULL OR j.locked_at < now() - interval '4 hours')
+      AND j.is_available = true
       AND j.run_at <= now()
       AND (j.job_queue_id IS NULL OR EXISTS (
           SELECT 1 FROM graphile_worker._private_job_queues q
@@ -14,6 +13,27 @@ pub(crate) const CLAIM: &str = "WITH selected AS MATERIALIZED (
       ))
     ORDER BY j.priority, j.run_at, j.id
     LIMIT 1 FOR UPDATE OF j SKIP LOCKED
+), stale AS MATERIALIZED (
+    SELECT j.id, j.job_queue_id, j.priority, j.run_at FROM graphile_worker._private_jobs j
+    JOIN graphile_worker._private_tasks t ON t.id = j.task_id
+    WHERE t.identifier = ANY($1)
+      AND ($2::bigint IS NULL OR j.id = $2)
+      AND j.locked_at < now() - interval '4 hours'
+      AND j.attempts < j.max_attempts
+      AND j.run_at <= now()
+      AND (j.job_queue_id IS NULL OR EXISTS (
+          SELECT 1 FROM graphile_worker._private_job_queues q
+          WHERE q.id = j.job_queue_id
+            AND (q.locked_at IS NULL OR q.locked_at < now() - interval '4 hours')
+          FOR UPDATE SKIP LOCKED
+      ))
+    ORDER BY j.priority, j.run_at, j.id
+    LIMIT 1 FOR UPDATE OF j SKIP LOCKED
+), selected AS MATERIALIZED (
+    SELECT candidate.id, candidate.job_queue_id
+    FROM (SELECT * FROM available UNION ALL SELECT * FROM stale) candidate
+    ORDER BY candidate.priority, candidate.run_at, candidate.id
+    LIMIT 1
 ), locked_queue AS (
     UPDATE graphile_worker._private_job_queues q
     SET locked_at = now(), locked_by = $3

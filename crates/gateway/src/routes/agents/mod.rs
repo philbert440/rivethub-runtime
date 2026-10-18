@@ -1,6 +1,9 @@
+mod changes;
 mod check;
 mod error;
+mod launch;
 mod paths;
+mod registry;
 mod store;
 
 use std::path::Path;
@@ -25,7 +28,6 @@ use wire::gateway::agents::AgentListResponse;
 use wire::gateway::agents::AgentPresetCreateRequest;
 use wire::gateway::agents::AgentPresetUpdate;
 use wire::gateway::agents::AgentResponse;
-use wire::gateway::agents::AgentStoreBackend;
 
 use crate::Gateway;
 use crate::error::ApiError;
@@ -35,9 +37,11 @@ use crate::extract::Query;
 use crate::extract::limited_bytes;
 
 use error::AgentError;
-use store::Registry;
+use kernel::agent_presets::AgentPresetStore;
+use store::FilePresets;
 
-pub(crate) use store::Registry as AgentRegistry;
+pub(crate) use launch::resolve as launch_preset;
+pub(crate) use registry::Registry as AgentRegistry;
 
 pub(crate) fn router() -> Router<Arc<Gateway>> {
     Router::new()
@@ -59,7 +63,17 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
 }
 
 pub(crate) fn open(settings: &crate::Settings) -> AgentRegistry {
-    Registry::new(settings)
+    AgentRegistry::new(
+        settings,
+        Arc::new(FilePresets::new(settings.state_dir.clone())),
+    )
+}
+
+pub(crate) fn backed_by(
+    settings: &crate::Settings,
+    store: Arc<dyn AgentPresetStore>,
+) -> AgentRegistry {
+    AgentRegistry::new(settings, store)
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -68,7 +82,7 @@ struct ListQuery {
     node: Option<String>,
 }
 
-enum Failure {
+pub(crate) enum Failure {
     Api(ApiError),
     Agent(AgentError),
 }
@@ -104,7 +118,7 @@ async fn list(
         node: gateway.settings().node.clone(),
         directory_root: Some(path_text(&gateway.settings().directory_root)?),
         shared_dir: Some(path_text(&gateway.settings().shared_dir)?),
-        backend: Some(AgentStoreBackend::File),
+        backend: Some(gateway.presets().backend()),
     }))
 }
 

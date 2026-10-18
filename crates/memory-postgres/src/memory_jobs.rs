@@ -35,13 +35,19 @@ struct UnchunkedRow {
     tool_result: Option<String>,
 }
 
-const UNCHUNKED: &str = "SELECT m.id, m.content, m.tool_result FROM rh_messages m
+const UNCHUNKED: &str = "SELECT m.id, m.content, m.tool_result FROM (
+         SELECT m.id, m.content, m.tool_result, m.created_at FROM rh_messages m
+         WHERE NOT EXISTS (SELECT 1 FROM rh_message_chunks c WHERE c.message_id = m.id)
+           AND COALESCE(m.embed_status, '') <> 'unembeddable'
+           AND coalesce(octet_length(m.content), 0)
+               + least(coalesce(octet_length(m.tool_result), 0), $2) + 1 > $1
+         ORDER BY m.created_at DESC
+         OFFSET 0
+     ) m
      CROSS JOIN LATERAL (SELECT
          length(btrim(coalesce(m.content, ''), E' \\t\\n\\r\\f\\x0B')) AS content_chars,
          length(btrim(coalesce(m.tool_result, ''), E' \\t\\n\\r\\f\\x0B')) AS tool_chars) l
-     WHERE NOT EXISTS (SELECT 1 FROM rh_message_chunks c WHERE c.message_id = m.id)
-       AND COALESCE(m.embed_status, '') <> 'unembeddable'
-       AND (CASE WHEN l.content_chars = 0 THEN least(l.tool_chars, $2)
+     WHERE (CASE WHEN l.content_chars = 0 THEN least(l.tool_chars, $2)
                  WHEN l.tool_chars = 0 THEN l.content_chars
                  ELSE l.content_chars + least(l.tool_chars, $2) + 1 END) > $1
      ORDER BY m.created_at DESC LIMIT $3";
