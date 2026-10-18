@@ -19,6 +19,7 @@ use wire::gateway::catalog::CatalogSkillEntry;
 use wire::harness::HarnessId;
 use wire::task::AcceptanceCriterion;
 use wire::task::ContextRef;
+use wire::task::EvalOutcome;
 use wire::task::TaskApprovalRequest;
 use wire::task::TaskBudget;
 use wire::task::TaskExecutorKind;
@@ -27,7 +28,6 @@ use wire::task::TaskResult;
 use wire::task::TaskSpec;
 use wire::task::TaskStatus;
 use wire::task::TaskUsage;
-use wire::task::VerifierResult;
 
 use crate::BoxError;
 use crate::queue::JobQueueError;
@@ -53,14 +53,12 @@ impl std::fmt::Display for ConflictAction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CatalogList {
-    Skills,
     Commands,
 }
 
 impl std::fmt::Display for CatalogList {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
-            Self::Skills => "skills",
             Self::Commands => "harness commands",
         })
     }
@@ -173,7 +171,7 @@ pub struct TaskRecord {
     pub last_heartbeat_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub duration_ms: Option<i32>,
-    pub eval: Option<VerifierResult>,
+    pub eval: Option<EvalOutcome>,
     pub eval_attempt: u32,
 }
 

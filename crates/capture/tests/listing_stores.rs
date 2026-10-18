@@ -1,0 +1,680 @@
+use std::fs;
+use std::path::Path;
+use std::path::PathBuf;
+use std::time::Duration;
+use std::time::SystemTime;
+
+use capture::listing::StoreRoots;
+use capture::listing::StoreSessionLister;
+use capture::listing::with_ancestors;
+use kernel::transcript::ListLimit;
+use kernel::transcript::SessionLister;
+use kernel::transcript::StoreSession;
+use rusqlite::Connection;
+use wire::harness::HarnessId;
+
+type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+const U1: &str = "00000000-0000-4000-8000-000000000001";
+const U2: &str = "00000000-0000-4000-8000-000000000002";
+
+fn write(root: &Path, relative: &str, content: &str) -> Result<PathBuf, std::io::Error> {
+    let path = root.join(relative);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&path, content)?;
+    Ok(path)
+}
+
+fn set_mtime(path: &Path, ms: u64) -> Result<(), std::io::Error> {
+    fs::File::options()
+        .write(true)
+        .open(path)?
+        .set_modified(SystemTime::UNIX_EPOCH + Duration::from_millis(ms))
+}
+
+fn lister(roots: StoreRoots) -> StoreSessionLister {
+    StoreSessionLister::new(roots)
+}
+
+async fn only(lister: &StoreSessionLister, harness: HarnessId) -> Vec<StoreSession> {
+    lister.list(&[harness], ListLimit::DEFAULT).await
+}
+
+fn summary(row: &StoreSession) -> (&str, &str, i64) {
+    (row.id.as_str(), row.title.as_str(), row.updated_at)
+}
+
+fn hermes_db(root: &Path) -> Result<Connection, Box<dyn std::error::Error>> {
+    fs::create_dir_all(root)?;
+    let connection = Connection::open(root.join("state.db"))?;
+    connection.execute_batch(
+        "CREATE TABLE sessions (id TEXT PRIMARY KEY, started_at, ended_at);\
+         CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT, timestamp);",
+    )?;
+    Ok(connection)
+}
+
+#[tokio::test]
+async fn hermes_lists_the_sessions_table_with_the_first_user_message() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let connection = hermes_db(dir.path())?;
+    connection.execute_batch(
+        "INSERT INTO sessions VALUES ('h1', 1700000000, NULL);\
+         INSERT INTO sessions VALUES ('h2', 1700000000123, NULL);\
+         INSERT INTO sessions VALUES ('h3', 1600000000, 1600000500);\
+         INSERT INTO messages VALUES ('h1', 'assistant', 'not me', 1);\
+         INSERT INTO messages VALUES ('h1', 'user', '  hi ', 2);\
+         INSERT INTO messages VALUES ('h1', 'user', 'later', 3);",
+    )?;
+    let lister = lister(StoreRoots {
+        hermes: Some(dir.path().to_path_buf()),
+        ..StoreRoots::default()
+    });
+    let rows = only(&lister, HarnessId::Hermes).await;
+    let brief: Vec<_> = rows.iter().map(summary).collect();
+    assert_eq!(
+        brief,
+        vec![
+            ("h2", "h2", 1_700_000_000_123),
+            ("h1", "hi", 1_700_000_000_000),
+            ("h3", "h3", 1_600_000_500_000),
+        ]
+    );
+    assert!(rows.iter().all(|row| row.created_at.is_none()));
+    let described = lister
+        .describe(HarnessId::Hermes, "h3", None)
+        .await?
+        .ok_or("h3")?;
+    assert_eq!(described.created_at, Some(1_600_000_000_000));
+    Ok(())
+}
+
+#[tokio::test]
+async fn hermes_without_user_message_titles_by_id_and_missing_db_is_empty() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let connection = hermes_db(&dir.path().join("present"))?;
+    connection.execute("INSERT INTO sessions VALUES ('h1', 1700000000, NULL)", [])?;
+    let present = lister(StoreRoots {
+        hermes: Some(dir.path().join("present")),
+        ..StoreRoots::default()
+    });
+    let rows = only(&present, HarnessId::Hermes).await;
+    assert_eq!(
+        rows.iter().map(summary).collect::<Vec<_>>(),
+        vec![("h1", "h1", 1_700_000_000_000)]
+    );
+    let missing = lister(StoreRoots {
+        hermes: Some(dir.path().join("missing")),
+        ..StoreRoots::default()
+    });
+    assert_eq!(
+        only(&missing, HarnessId::Hermes).await,
+        Vec::<StoreSession>::new()
+    );
+    Ok(())
+}
+
+fn opencode_db(root: &Path, with_model: bool) -> Result<Connection, Box<dyn std::error::Error>> {
+    fs::create_dir_all(root)?;
+    let connection = Connection::open(root.join("opencode.db"))?;
+    let model = if with_model { "model TEXT," } else { "" };
+    connection.execute_batch(&format!(
+        "CREATE TABLE session (id TEXT PRIMARY KEY, title TEXT, {model} time_created, time_updated);"
+    ))?;
+    Ok(connection)
+}
+
+#[tokio::test]
+async fn opencode_reads_the_session_table_and_labels_models() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let connection = opencode_db(dir.path(), true)?;
+    connection.execute_batch(
+        "INSERT INTO session VALUES ('ses_a', 'T  x', '{\"providerID\":\"anthropic\",\"id\":\"claude\"}', 1690000000, 1700000000);\
+         INSERT INTO session VALUES ('ses_b', '', 'gpt-5', 1600000000000, 0);\
+         INSERT INTO session VALUES ('ses_c', NULL, '{\"id\":\"only-id\"}', NULL, 1500000000);",
+    )?;
+    let lister = lister(StoreRoots {
+        opencode: Some(dir.path().to_path_buf()),
+        ..StoreRoots::default()
+    });
+    let rows = only(&lister, HarnessId::Opencode).await;
+    let brief: Vec<_> = rows
+        .iter()
+        .map(|row| {
+            (
+                row.id.as_str(),
+                row.title.as_str(),
+                row.updated_at,
+                row.model.as_deref(),
+                row.created_at,
+            )
+        })
+        .collect();
+    assert_eq!(
+        brief,
+        vec![
+            (
+                "ses_a",
+                "T x",
+                1_700_000_000_000,
+                Some("anthropic/claude"),
+                Some(1_690_000_000_000)
+            ),
+            (
+                "ses_b",
+                "ses_b",
+                1_600_000_000_000,
+                Some("gpt-5"),
+                Some(1_600_000_000_000)
+            ),
+            ("ses_c", "ses_c", 1_500_000_000_000, Some("only-id"), None),
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn opencode_without_a_model_column_still_lists_rows() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let connection = opencode_db(dir.path(), false)?;
+    connection.execute(
+        "INSERT INTO session VALUES ('ses_a', 'T', 1690000000, 1700000000)",
+        [],
+    )?;
+    let lister = lister(StoreRoots {
+        opencode: Some(dir.path().to_path_buf()),
+        ..StoreRoots::default()
+    });
+    let rows = only(&lister, HarnessId::Opencode).await;
+    assert_eq!(
+        rows.iter().map(summary).collect::<Vec<_>>(),
+        vec![("ses_a", "T", 1_700_000_000_000)]
+    );
+    assert_eq!(rows.first().and_then(|row| row.model.clone()), None);
+    let described = lister
+        .describe(HarnessId::Opencode, "ses_a", None)
+        .await?
+        .ok_or("ses_a")?;
+    assert_eq!(described.title, "T");
+    Ok(())
+}
+
+fn kimi_lister(root: &Path) -> StoreSessionLister {
+    lister(StoreRoots {
+        kimi: Some(root.to_path_buf()),
+        ..StoreRoots::default()
+    })
+}
+
+fn kimi_append(kind: &str, content: &str) -> String {
+    format!(
+        r#"{{"type":"context.append_message","message":{{"role":"user","origin":{{"kind":"{kind}"}},"content":{content}}}}}"#
+    )
+}
+
+#[tokio::test]
+async fn kimi_keeps_the_session_prefix_and_skips_injected_turns() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        "sessions/wd_x/session_ab12/state.json",
+        r#"{"updatedAt":1760000000000}"#,
+    )?;
+    write(
+        dir.path(),
+        "sessions/wd_x/session_ab12/agents/main/wire.jsonl",
+        &[
+            kimi_append("injection", r#""banner""#),
+            kimi_append("user", r#"[{"type":"text","text":"real ask"}]"#),
+        ]
+        .join("\n"),
+    )?;
+    let rows = only(&kimi_lister(dir.path()), HarnessId::KimiCode).await;
+    assert_eq!(
+        rows.iter().map(summary).collect::<Vec<_>>(),
+        vec![("session_ab12", "real ask", 1_760_000_000_000)]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn kimi_state_title_collapses_and_times_fall_back_to_mtime() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        "sessions/wd_x/session_a/state.json",
+        r#"{"title":"a\n\n b","updatedAt":"2026-10-01T00:00:00Z","createdAt":"2026-09-30"}"#,
+    )?;
+    let state = write(
+        dir.path(),
+        "sessions/wd_x/session_b/state.json",
+        r#"{"lastPrompt":"  prompt "}"#,
+    )?;
+    set_mtime(&state, 1_000_000_000_000)?;
+    write(dir.path(), "sessions/wd_x/session_c/state.json", "broken")?;
+    write(dir.path(), "sessions/wd_x/other/state.json", "{}")?;
+    let rows = only(&kimi_lister(dir.path()), HarnessId::KimiCode).await;
+    let mut brief: Vec<_> = rows
+        .iter()
+        .map(|row| (summary(row), row.created_at))
+        .collect();
+    brief.sort_unstable();
+    assert_eq!(
+        brief,
+        vec![
+            (
+                ("session_a", "a b", 1_790_812_800_000),
+                Some(1_790_726_400_000)
+            ),
+            (("session_b", "prompt", 1_000_000_000_000), None),
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn kimi_wire_title_skips_system_reminders() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        "sessions/wd_x/session_a/state.json",
+        r#"{"updatedAt":5}"#,
+    )?;
+    write(
+        dir.path(),
+        "sessions/wd_x/session_a/agents/main/wire.jsonl",
+        &[
+            kimi_append("user", r#""<system-reminder>be nice</system-reminder>""#),
+            kimi_append("user", r#""<user_query> the human turn </user_query>""#),
+        ]
+        .join("\n"),
+    )?;
+    let lister = kimi_lister(dir.path());
+    let rows = only(&lister, HarnessId::KimiCode).await;
+    assert_eq!(
+        rows.first().map(|row| row.title.as_str()),
+        Some("the human turn")
+    );
+    let described = lister
+        .describe(HarnessId::KimiCode, "session_a", None)
+        .await?
+        .ok_or("described")?;
+    assert_eq!(described.title, "the human turn");
+    Ok(())
+}
+
+fn codex_line(text: &str) -> String {
+    format!(
+        r#"{{"type":"response_item","payload":{{"type":"message","role":"user","content":[{{"type":"input_text","text":"{text}"}}]}}}}"#
+    )
+}
+
+#[tokio::test]
+async fn codex_titles_skip_environment_context_and_ignore_bad_date_dirs() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        &format!("sessions/2026/10/01/rollout-2026-10-01T00-00-00-{U1}.jsonl"),
+        &[
+            r#"{"type":"session_meta","payload":{}}"#.to_owned(),
+            codex_line("<environment_context>cwd</environment_context>"),
+            codex_line("do   x"),
+        ]
+        .join("\n"),
+    )?;
+    write(
+        dir.path(),
+        &format!("sessions/2026/1/01/rollout-2026-10-01T00-00-00-{U2}.jsonl"),
+        &codex_line("hidden"),
+    )?;
+    let lister = lister(StoreRoots {
+        codex: Some(dir.path().to_path_buf()),
+        ..StoreRoots::default()
+    });
+    let rows = only(&lister, HarnessId::Codex).await;
+    assert_eq!(
+        rows.iter()
+            .map(|row| (row.id.as_str(), row.title.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(U1, "do x")]
+    );
+    assert!(lister.describe(HarnessId::Codex, U1, None).await?.is_some());
+    assert_eq!(lister.describe(HarnessId::Codex, U2, None).await?, None);
+    Ok(())
+}
+
+fn pi_lister(root: &Path) -> StoreSessionLister {
+    lister(StoreRoots {
+        pi: Some(root.to_path_buf()),
+        ..StoreRoots::default()
+    })
+}
+
+fn pi_user(text: &str) -> String {
+    format!(
+        r#"{{"type":"message","message":{{"role":"user","content":[{{"type":"text","text":"{text}"}}]}}}}"#
+    )
+}
+
+#[tokio::test]
+async fn pi_lists_flat_files_and_keeps_the_newest_copy() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let flat = write(
+        dir.path(),
+        &format!("agent/sessions/2026-10-01T00-00-00_{U1}.jsonl"),
+        &pi_user("flat"),
+    )?;
+    let bucketed = write(
+        dir.path(),
+        &format!("agent/sessions/--work--/2026-09-01T00-00-00_{U1}.jsonl"),
+        &pi_user("bucketed"),
+    )?;
+    write(
+        dir.path(),
+        &format!("agent/sessions/.hidden/x_{U2}.jsonl"),
+        &pi_user("hidden"),
+    )?;
+    set_mtime(&flat, 2_000_000)?;
+    set_mtime(&bucketed, 1_000_000)?;
+    let rows = only(&pi_lister(dir.path()), HarnessId::Pi).await;
+    assert_eq!(
+        rows.iter().map(summary).collect::<Vec<_>>(),
+        vec![(U1, "flat", 2_000_000)]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn pi_session_name_wins_over_earlier_user_messages() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        &format!("agent/sessions/--work--/p_{U1}.jsonl"),
+        &[
+            pi_user("<command-x>wrapped"),
+            r#"{"type":"session_name","session_name":"Named"}"#.to_owned(),
+        ]
+        .join("\n"),
+    )?;
+    write(
+        dir.path(),
+        &format!("agent/sessions/--work--/p_{U2}.jsonl"),
+        &pi_user("<command-x>wrapped"),
+    )?;
+    let lister = pi_lister(dir.path());
+    let rows = only(&lister, HarnessId::Pi).await;
+    let mut titles: Vec<_> = rows
+        .iter()
+        .map(|row| (row.id.as_str(), row.title.as_str()))
+        .collect();
+    titles.sort_unstable();
+    assert_eq!(titles, vec![(U1, "Named"), (U2, "<command-x>wrapped")]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn pi_reader_reads_a_flat_session_file() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        &format!("agent/sessions/2026-10-01T00-00-00_{U1}.jsonl"),
+        &pi_user("flat"),
+    )?;
+    let reader = capture::readers::StoreReader::open(HarnessId::Pi, dir.path().to_path_buf())
+        .ok_or("reader")?;
+    let sessions = kernel::transcript::TranscriptReader::sessions(&reader, dir.path()).await?;
+    assert_eq!(
+        sessions,
+        vec![wire::session_id::SessionId::new(HarnessId::Pi, U1)]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn qwen_title_needs_a_real_user_and_reports_the_cwd() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        &format!("projects/bucket/chats/{U1}.jsonl"),
+        &[
+            r#"{"type":"user","provenance":"tool","message":{"parts":[{"text":"tool"}]},"cwd":"/w"}"#,
+            r#"{"type":"user","provenance":"real_user","message":{"parts":[{"text":"q1"}]},"cwd":"/x"}"#,
+        ]
+        .join("\n"),
+    )?;
+    write(
+        dir.path(),
+        &format!("projects/bucket/chats/{U2}.runtime.json"),
+        "{}",
+    )?;
+    let lister = lister(StoreRoots {
+        qwen: Some(dir.path().to_path_buf()),
+        ..StoreRoots::default()
+    });
+    let rows = only(&lister, HarnessId::QwenCode).await;
+    let brief: Vec<_> = rows
+        .iter()
+        .map(|row| (row.id.as_str(), row.title.as_str(), row.cwd.as_deref()))
+        .collect();
+    assert_eq!(brief, vec![(U1, "q1", Some("/w"))]);
+    assert_eq!(
+        lister.store_cwd(HarnessId::QwenCode, U1).await?.as_deref(),
+        Some("/w")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn cursor_title_collapses_whitespace() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        &format!("projects/slug/agent-transcripts/{U1}/{U1}.jsonl"),
+        r#"{"role":"user","message":{"content":[{"type":"text","text":"  hi\nthere "}]}}"#,
+    )?;
+    write(
+        dir.path(),
+        "projects/slug/agent-transcripts/not-a-uuid/not-a-uuid.jsonl",
+        "{}",
+    )?;
+    let lister = lister(StoreRoots {
+        cursor: Some(dir.path().to_path_buf()),
+        ..StoreRoots::default()
+    });
+    let rows = only(&lister, HarnessId::Cursor).await;
+    assert_eq!(
+        rows.iter()
+            .map(|row| (row.id.as_str(), row.title.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(U1, "hi there")]
+    );
+    assert!(rows.iter().all(|row| row.created_at.is_some()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn cowork_lists_archived_tasks_and_skips_invalid_metadata() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        "local-agent-mode-sessions/a/b/local_x.json",
+        r#"{"cliSessionId":"c1","sessionId":"local_1","title":"T","createdAt":"1700000000000","lastActivityAt":1700000001000,"archived":true,"cwd":" /home/user/w "}"#,
+    )?;
+    write(
+        dir.path(),
+        "claude-code-sessions/local_y.json",
+        r#"{"cliSessionId":"c2","title":"no created"}"#,
+    )?;
+    write(
+        dir.path(),
+        "claude-code-sessions/local_z.json",
+        r#"{"cliSessionId":"../x","createdAt":1}"#,
+    )?;
+    write(
+        dir.path(),
+        "claude-code-sessions/1/2/3/4/5/6/7/local_deep.json",
+        r#"{"cliSessionId":"deep","createdAt":1}"#,
+    )?;
+    let lister = lister(StoreRoots {
+        cowork: vec![dir.path().to_path_buf(), dir.path().to_path_buf()],
+        ..StoreRoots::default()
+    });
+    let rows = only(&lister, HarnessId::Cowork).await;
+    let mut expected = StoreSession::new(HarnessId::Cowork, "c1", 1_700_000_001_000);
+    expected.title = "T".to_owned();
+    expected.created_at = Some(1_700_000_000_000);
+    expected.cwd = Some("/home/user/w".to_owned());
+    assert_eq!(rows, vec![expected]);
+    assert_eq!(
+        lister.store_cwd(HarnessId::Cowork, "c1").await?.as_deref(),
+        Some("/home/user/w")
+    );
+    Ok(())
+}
+
+fn row(harness: HarnessId, id: &str, updated_at: i64, parent: Option<&str>) -> StoreSession {
+    let mut row = StoreSession::new(harness, id, updated_at);
+    row.parent_session_id = parent.map(str::to_owned);
+    row
+}
+
+fn ids(rows: &[StoreSession]) -> Vec<&str> {
+    rows.iter().map(|row| row.id.as_str()).collect()
+}
+
+#[test]
+fn with_ancestors_appends_a_parent_outside_the_cap() {
+    let ranked = vec![
+        row(HarnessId::ClaudeCode, "c", 10, Some("p")),
+        row(HarnessId::ClaudeCode, "x", 9, None),
+        row(HarnessId::ClaudeCode, "p", 1, None),
+    ];
+    assert_eq!(ids(&with_ancestors(ranked, 2)), vec!["c", "x", "p"]);
+}
+
+#[test]
+fn with_ancestors_stays_inside_one_harness() {
+    let ranked = vec![
+        row(HarnessId::ClaudeCode, "c", 10, Some("p")),
+        row(HarnessId::ClaudeCode, "x", 9, None),
+        row(HarnessId::GrokBuild, "p", 1, None),
+    ];
+    assert_eq!(ids(&with_ancestors(ranked, 2)), vec!["c", "x"]);
+}
+
+#[test]
+fn with_ancestors_follows_at_most_eight_links() {
+    let mut ranked = vec![row(HarnessId::ClaudeCode, "leaf", 100, Some("a1"))];
+    for depth in 1..=10 {
+        let parent = format!("a{}", depth + 1);
+        ranked.push(row(
+            HarnessId::ClaudeCode,
+            &format!("a{depth}"),
+            50 - depth,
+            Some(&parent),
+        ));
+    }
+    let kept = with_ancestors(ranked, 1);
+    assert_eq!(kept.len(), 9);
+    assert_eq!(
+        ids(&kept),
+        vec!["leaf", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"]
+    );
+}
+
+#[test]
+fn with_ancestors_terminates_on_cycles() {
+    let ranked = vec![
+        row(HarnessId::ClaudeCode, "a", 10, Some("b")),
+        row(HarnessId::ClaudeCode, "z", 9, None),
+        row(HarnessId::ClaudeCode, "b", 1, Some("a")),
+    ];
+    assert_eq!(ids(&with_ancestors(ranked, 2)), vec!["a", "z", "b"]);
+    let unchanged = vec![row(HarnessId::ClaudeCode, "a", 1, Some("a"))];
+    assert_eq!(ids(&with_ancestors(unchanged, 0)), vec!["a"]);
+}
+
+fn mixed_fixture(root: &Path) -> Result<StoreRoots, Box<dyn std::error::Error>> {
+    let claude = write(
+        root,
+        "claude/projects/-home-a/tied.jsonl",
+        r#"{"type":"user","message":{"content":"c"}}"#,
+    )?;
+    set_mtime(&claude, 1_700_000_000_000)?;
+    let connection = hermes_db(&root.join("hermes"))?;
+    connection.execute_batch(
+        "INSERT INTO sessions VALUES ('h-tied', 1700000000, NULL);\
+         INSERT INTO sessions VALUES ('h-new', 1800000000, NULL);",
+    )?;
+    for index in 0..7_u64 {
+        let rollout = write(
+            root,
+            &format!(
+                "codex/sessions/2026/10/01/rollout-x-00000000-0000-4000-8000-00000000000{index}.jsonl"
+            ),
+            "",
+        )?;
+        set_mtime(&rollout, 1_600_000_000_000 + index)?;
+    }
+    Ok(StoreRoots {
+        claude: Some(root.join("claude")),
+        hermes: Some(root.join("hermes")),
+        codex: Some(root.join("codex")),
+        ..StoreRoots::default()
+    })
+}
+
+#[tokio::test]
+async fn assembly_sorts_globally_and_breaks_ties_by_harness_order() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let lister = lister(mixed_fixture(dir.path())?);
+    let rows = lister
+        .list(
+            &[HarnessId::Hermes, HarnessId::ClaudeCode],
+            ListLimit::DEFAULT,
+        )
+        .await;
+    assert_eq!(ids(&rows), vec!["h-new", "tied", "h-tied"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn assembly_scans_only_the_roster_harnesses() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let lister = lister(mixed_fixture(dir.path())?);
+    let rows = lister
+        .list(
+            &[HarnessId::ClaudeCode, HarnessId::Hermes],
+            ListLimit::DEFAULT,
+        )
+        .await;
+    assert!(rows.iter().all(|row| row.harness != HarnessId::Codex));
+    let everything = lister
+        .list(&capture::listing::LISTING_ORDER, ListLimit::DEFAULT)
+        .await;
+    assert_eq!(
+        everything
+            .iter()
+            .filter(|row| row.harness == HarnessId::Codex)
+            .count(),
+        7
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn assembly_applies_the_limit_and_the_per_harness_route_ignores_query_limits() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let lister = lister(mixed_fixture(dir.path())?);
+    let limited = lister
+        .list(&[HarnessId::Codex], ListLimit::from_query(Some("5")))
+        .await;
+    assert_eq!(limited.len(), 5);
+    let per_harness = lister
+        .list(&[HarnessId::Codex], ListLimit::per_harness_route())
+        .await;
+    assert_eq!(per_harness.len(), 7);
+    Ok(())
+}

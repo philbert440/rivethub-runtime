@@ -29,6 +29,7 @@ pub(crate) enum Call {
     Spawn {
         session: SessionId,
         argv: Vec<String>,
+        cwd: PathBuf,
         size: TermSize,
     },
     Input(Vec<u8>),
@@ -101,7 +102,7 @@ impl TerminalMux for Mux {
         &self,
         session: &SessionId,
         argv: Vec<String>,
-        _cwd: &Path,
+        cwd: &Path,
         _env: &BTreeMap<String, String>,
         size: TermSize,
     ) -> Result<TerminalId, TerminalMuxError> {
@@ -122,6 +123,7 @@ impl TerminalMux for Mux {
             calls.push(Call::Spawn {
                 session: session.clone(),
                 argv,
+                cwd: cwd.to_path_buf(),
                 size,
             });
         });
@@ -269,11 +271,29 @@ impl Fixture {
     pub(crate) async fn with_harness(
         harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
     ) -> Self {
+        Self::with_registry(
+            harness,
+            gateway::sessions::SessionRegistry::new(Duration::from_secs(1)),
+        )
+        .await
+    }
+
+    pub(crate) async fn with_registry(
+        harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
+        registry: gateway::sessions::SessionRegistry,
+    ) -> Self {
+        Self::with_lister(harness, registry, None, &[]).await
+    }
+
+    pub(crate) async fn with_lister(
+        harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
+        registry: gateway::sessions::SessionRegistry,
+        lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
+        extra: &[(&str, HarnessId)],
+    ) -> Self {
         let directory = tempfile::tempdir().expect("temporary terminal directory");
         let root = directory.path().to_path_buf();
-        let registry = Arc::new(gateway::sessions::SessionRegistry::new(
-            Duration::from_secs(1),
-        ));
+        let registry = Arc::new(registry);
         let mux = Arc::new(Mux::default());
         let commands = [
             ("echo", "Acme Echo", true, None),
@@ -285,6 +305,11 @@ impl Fixture {
             ("missing", "Missing Binary", false, None),
         ]
         .into_iter()
+        .chain(
+            extra
+                .iter()
+                .map(|(id, harness)| (*id, *id, true, Some(*harness))),
+        )
         .map(|(id, label, session, harness)| launch(&root, id, label, session, harness))
         .collect();
         let service = TerminalService::new(
@@ -306,33 +331,35 @@ impl Fixture {
         let tenancy = Tenancy::local(user("owner"))
             .with_token("alice-test-token", user("alice"))
             .expect("token");
-        let gateway = Arc::new(
-            gateway::Gateway::new(
-                Arc::new(testkit::FakeMemoryStore::default()),
-                gateway::Settings {
-                    hostname: "gold-host".into(),
-                    node: "golden-node".into(),
-                    allowed_hosts: vec![],
-                    allowed_origins: vec![],
-                    files_root: None,
-                    static_dir: None,
-                    root_redirect: None,
-                    state_dir: PathBuf::from("/tmp/rr-gateway-unused-agents/state"),
-                    directory_root: PathBuf::from("/tmp/rr-gateway-unused-agents/agents"),
-                    mesh_file: Some(PathBuf::from("/no-such-gateway-mesh/mesh.json")),
-                    shared_dir: PathBuf::from("/tmp/rr-gateway-unused-agents/shared"),
-                    legacy_mesh_dir: PathBuf::from("/no-such-gateway-legacy"),
-                    allowed_harnesses: None,
-                    devices_enabled: false,
-                    probe_timeout: Duration::from_millis(200),
-                    mesh_cache_ttl: Duration::ZERO,
-                    mesh_ca: None,
-                },
-            )
-            .with_tenancy(tenancy)
-            .with_sessions(registry.clone())
-            .with_terminal(service.clone()),
-        );
+        let gateway = gateway::Gateway::new(
+            Arc::new(testkit::FakeMemoryStore::default()),
+            gateway::Settings {
+                hostname: "gold-host".into(),
+                node: "golden-node".into(),
+                allowed_hosts: vec![],
+                allowed_origins: vec![],
+                files_root: None,
+                static_dir: None,
+                root_redirect: None,
+                state_dir: PathBuf::from("/tmp/rr-gateway-unused-agents/state"),
+                directory_root: PathBuf::from("/tmp/rr-gateway-unused-agents/agents"),
+                mesh_file: Some(PathBuf::from("/no-such-gateway-mesh/mesh.json")),
+                shared_dir: PathBuf::from("/tmp/rr-gateway-unused-agents/shared"),
+                legacy_mesh_dir: PathBuf::from("/no-such-gateway-legacy"),
+                allowed_harnesses: None,
+                devices_enabled: false,
+                probe_timeout: Duration::from_millis(200),
+                mesh_cache_ttl: Duration::ZERO,
+                mesh_ca: None,
+            },
+        )
+        .with_tenancy(tenancy)
+        .with_sessions(registry.clone())
+        .with_terminal(service.clone());
+        let gateway = Arc::new(match lister {
+            Some(lister) => gateway.with_session_lister(lister),
+            None => gateway,
+        });
         Self {
             gateway,
             service,

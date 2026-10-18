@@ -1,5 +1,6 @@
 pub mod actor;
 mod chat;
+mod live;
 pub mod socket;
 
 use std::collections::BTreeMap;
@@ -14,7 +15,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use wire::gateway::term::{
     Mux, PtyInfo, PtyState, TermCommand, TermConfig, TermSpawnRequest, TermSpawnResponse,
 };
-use wire::harness::HarnessId;
+use wire::harness::{HarnessId, RosterCommand};
 use wire::session_id::SessionId;
 
 use crate::error::ApiError;
@@ -57,6 +58,31 @@ pub(crate) struct Launch {
     pub(crate) effort: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct AgentLaunch {
+    pub(crate) name: String,
+    pub(crate) directory: PathBuf,
+    pub(crate) harness: Option<HarnessId>,
+    pub(crate) model: String,
+    pub(crate) effort: String,
+}
+
+impl AgentLaunch {
+    fn stored(&self, label: &str, value: &str) -> Result<Option<String>, ApiError> {
+        if value.is_empty() {
+            return Ok(None);
+        }
+        if valid_token(value) {
+            Ok(Some(value.to_owned()))
+        } else {
+            Err(ApiError::BadRequest(format!(
+                "agent \"{}\" {label} must be a 1-64 token",
+                self.name
+            )))
+        }
+    }
+}
+
 #[expect(
     missing_debug_implementations,
     reason = "kernel ports intentionally do not require Debug"
@@ -73,6 +99,8 @@ pub struct TerminalService {
     pub(crate) chats: RwLock<BTreeMap<String, crate::sessions::control::ChatHandle>>,
     harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
     summaries: RwLock<BTreeMap<String, wire::harness::HarnessSessionSummary>>,
+    harness_events:
+        RwLock<BTreeMap<String, tokio::sync::broadcast::Sender<wire::harness::HarnessEvent>>>,
 }
 
 impl TerminalService {
@@ -101,6 +129,7 @@ impl TerminalService {
             chats: RwLock::new(BTreeMap::new()),
             harness: None,
             summaries: RwLock::new(BTreeMap::new()),
+            harness_events: RwLock::new(BTreeMap::new()),
         })
     }
 
@@ -110,39 +139,55 @@ impl TerminalService {
         self
     }
 
-    pub(crate) fn adapter(&self) -> Option<Arc<dyn kernel::harness::HarnessAdapter>> {
+    #[must_use]
+    pub fn adapter(&self) -> Option<Arc<dyn kernel::harness::HarnessAdapter>> {
         self.harness.clone()
     }
 
-    pub(crate) fn launch(&self, request: TermSpawnRequest) -> Result<Launch, ApiError> {
-        if request.agent_id.is_some() {
+    pub(crate) fn launch(
+        &self,
+        request: TermSpawnRequest,
+        preset: Option<AgentLaunch>,
+    ) -> Result<Launch, ApiError> {
+        if request.agent_id.is_some() && preset.is_none() {
             return Err(ApiError::NotFound("agent not found"));
         }
-        let key = match request.command {
-            Some(key) => key,
-            None => self.options.default.clone(),
+        let key = match (request.command, &preset) {
+            (Some(key), _) => key,
+            (None, None) => self.options.default.clone(),
+            (None, Some(preset)) => match preset.harness {
+                Some(harness) => RosterCommand::from(harness).to_string(),
+                None => {
+                    return Err(ApiError::BadRequest(
+                        "agent has no harness and no command was given".into(),
+                    ));
+                }
+            },
         };
-        let command = self
+        let mut command = self
             .options
             .commands
             .iter()
             .find(|command| command.id == key)
             .cloned()
             .ok_or_else(|| ApiError::UnknownCommand(key))?;
-        for (label, value) in [("model", &request.model), ("effort", &request.effort)] {
-            if let Some(value) = value
-                && (value.is_empty()
-                    || value.chars().count() > 64
-                    || value.contains("..")
-                    || !value
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':')))
-            {
-                return Err(ApiError::BadRequest(format!(
-                    "{label} must be a 1-64 token"
-                )));
+        token("model", request.model.as_deref())?;
+        token("effort", request.effort.as_deref())?;
+        let (model, effort) = match preset {
+            Some(preset) => {
+                let model = match request.model {
+                    Some(model) => Some(model),
+                    None => preset.stored("model", &preset.model)?,
+                };
+                let effort = match request.effort {
+                    Some(effort) => Some(effort),
+                    None => preset.stored("effort", &preset.effort)?,
+                };
+                command.cwd = preset.directory;
+                (model, effort)
             }
-        }
+            None => (request.model, request.effort),
+        };
         let cols = match request.cols {
             Some(cols) => cols.clamp(20, 400),
             None => 80,
@@ -155,8 +200,8 @@ impl TerminalService {
             command,
             size: TermSize { cols, rows },
             resume: request.resume,
-            model: request.model,
-            effort: request.effort,
+            model,
+            effort,
         })
     }
 
@@ -165,22 +210,30 @@ impl TerminalService {
         user: &UserId,
         request: TermSpawnRequest,
     ) -> Result<TermSpawnResponse, ApiError> {
+        self.spawn_from(user, request, None).await
+    }
+
+    pub(crate) async fn spawn_from(
+        self: &Arc<Self>,
+        user: &UserId,
+        request: TermSpawnRequest,
+        preset: Option<AgentLaunch>,
+    ) -> Result<TermSpawnResponse, ApiError> {
         let session = match (&request.session, &request.resume) {
             (Some(session), Some(resume)) => {
-                let resumed = self.registry.authorize(user, resume)?;
-                if crate::sessions::session_key(session)? != resumed {
+                if crate::sessions::session_key(session)? != crate::sessions::session_key(resume)? {
                     return Err(ApiError::Conflict(
                         "resume must retain the registered session id".into(),
                     ));
                 }
-                resumed
+                self.registry.claim(user, resume)?
             }
-            (None, Some(resume)) => self.registry.authorize(user, resume)?,
+            (None, Some(resume)) => self.registry.claim(user, resume)?,
             (Some(session), None) => session.clone(),
             (None, None) => format!("rivethub-{}", uuid::Uuid::new_v4()),
         };
         let session = self.registry.claim(user, &session)?;
-        let launch = self.launch(request)?;
+        let launch = self.launch(request, preset)?;
         let chat = self.chats.read().get(&session).cloned();
         if let Some(chat) = chat {
             return chat.terminal(launch).await;
@@ -421,6 +474,24 @@ impl TerminalService {
             None => SessionId::new(HarnessId::Cowork, session),
         })
     }
+}
+
+fn token(label: &str, value: Option<&str>) -> Result<(), ApiError> {
+    match value {
+        Some(value) if !valid_token(value) => Err(ApiError::BadRequest(format!(
+            "{label} must be a 1-64 token"
+        ))),
+        _ => Ok(()),
+    }
+}
+
+fn valid_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().count() <= 64
+        && !value.contains("..")
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':'))
 }
 
 fn validate_options(mut options: TerminalOptions) -> Result<TerminalOptions, ApiError> {

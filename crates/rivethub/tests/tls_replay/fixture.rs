@@ -66,10 +66,11 @@ fn prepare_files(remote: IpAddr, url: &str, kind: RunKind) -> Result<Fixture, Er
         }
         std::fs::write(state.join("users.json"), serde_json::to_vec(&users)?)?;
         let owners = std::collections::BTreeMap::from([("alice-session", "alice")]);
-        std::fs::write(
-            state.join("session-owners.json"),
-            serde_json::to_vec(&owners)?,
-        )?;
+        let owners_file = config::paths::session_owners_file(&state);
+        if let Some(parent) = owners_file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(owners_file, serde_json::to_vec(&owners)?)?;
         writeln!(config, "  users_file: {}/users.json", state.display())?;
     }
     std::fs::write(state.join("config.yaml"), config)?;

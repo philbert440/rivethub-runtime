@@ -6,7 +6,8 @@ use async_trait::async_trait;
 use config::Config;
 use config::provider::CliProvider;
 use kernel::harness::{
-    HarnessAdapter, HarnessAdapterError, SessionEvent, SessionOption, SessionSpec, TurnInput,
+    HarnessAdapter, HarnessAdapterError, HarnessCommands, SessionEvent, SessionOption, SessionSpec,
+    TurnInput,
 };
 use kernel::model::{Degradation, ProviderHealth, ProviderStatus};
 use tokio::sync::mpsc::Receiver;
@@ -271,5 +272,9 @@ impl HarnessAdapter for HeadlessHarness {
 
     async fn offerings(&self) -> Result<Vec<HarnessOffering>, HarnessAdapterError> {
         self.ready()?.offerings().await
+    }
+
+    async fn commands(&self) -> Result<Vec<HarnessCommands>, HarnessAdapterError> {
+        self.ready()?.commands().await
     }
 }

@@ -128,27 +128,30 @@ fn transcripts(root: &Root) -> Result<Vec<(String, PathBuf)>, TranscriptReaderEr
     if dir_state(root, &sessions)? == DirState::Absent {
         return Ok(Vec::new());
     }
-    let mut found = Vec::new();
+    let mut found = session_files(root, &sessions)?;
     for encoded in root.directories(&sessions)? {
-        for file in root.files(&encoded)? {
-            if !jsonl(&file) {
-                continue;
-            }
-            let stem = utf8_stem(&file)?;
-            let Some(id) = pi_id(&stem) else {
-                continue;
-            };
+        found.extend(session_files(root, &encoded)?);
+    }
+    Ok(found)
+}
+
+fn session_files(root: &Root, dir: &Path) -> Result<Vec<(String, PathBuf)>, TranscriptReaderError> {
+    let mut found = Vec::new();
+    for file in root.files(dir)? {
+        if !jsonl(&file) {
+            continue;
+        }
+        if let Some((_, id)) = pi_id(&utf8_stem(&file)?) {
             found.push((id, file));
         }
     }
     Ok(found)
 }
 
-fn pi_id(stem: &str) -> Option<String> {
-    let (_, uuid) = stem.rsplit_once('_')?;
-    uuid::Uuid::parse_str(uuid)
-        .is_ok()
-        .then_some(uuid.to_owned())
+pub(crate) fn pi_id(stem: &str) -> Option<(String, String)> {
+    let (prefix, uuid) = stem.rsplit_once('_')?;
+    let hyphenated = uuid.len() == 36 && uuid::Uuid::try_parse(uuid).is_ok();
+    (!prefix.is_empty() && hyphenated).then(|| (prefix.to_owned(), uuid.to_owned()))
 }
 
 fn map_text(

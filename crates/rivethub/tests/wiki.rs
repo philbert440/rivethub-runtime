@@ -9,6 +9,7 @@ use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+use wire::gateway::wiki::WikiGapsResponse;
 use wire::gateway::wiki::WikiPageResponse;
 use wire::gateway::wiki::WikiSlug;
 use wire::gateway::wiki::WikiSourceKind;
@@ -95,7 +96,7 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
         .timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
-    let response = get(&client, &base, "/api/wiki/page/release").await?;
+    let response = get(&client, &base, "/api/wiki/release").await?;
     assert_eq!(response.status().as_u16(), 200);
     let actual: WikiPageResponse = response.json().await?;
     assert_eq!(actual.slug, "release");
@@ -125,6 +126,24 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
     assert_eq!(source.kind, WikiSourceKind::Summary);
     assert_eq!(source.ids, ["00000000-0000-4000-8000-000000000001"]);
     assert!(actual.markdown.starts_with("# Release guide\n"));
+    let response = get(&client, &base, "/api/wiki/release/raw").await?;
+    assert_eq!(response.status().as_u16(), 200);
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .ok_or("raw content type")?
+            .to_str()?,
+        "text/markdown; charset=utf-8"
+    );
+    assert_eq!(response.text().await?, actual.markdown);
+    let response = get(&client, &base, "/api/wiki/_gaps?limit=5").await?;
+    assert_eq!(response.status().as_u16(), 200);
+    let gaps: WikiGapsResponse = response.json().await?;
+    assert_eq!(gaps.stalest, ["release", "known"]);
+    for retired in ["/api/wiki/page/release", "/api/wiki/gaps"] {
+        assert_eq!(get(&client, &base, retired).await?.status().as_u16(), 404);
+    }
     let response = get(&client, &base, "/api/wiki/topics?tag=project%3AAcmeKit").await?;
     let topics: WikiTopicList = response.json().await?;
     assert_eq!(topics.total, 1);
@@ -137,16 +156,21 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
     let html = response.text().await?;
     assert!(html.contains("Article with &lt;script&gt; and quotes"));
     assert!(html.contains("Ship it"));
-    let response = get(&client, &base, "/api/wiki/page/legacy").await?;
-    assert_eq!(response.status().as_u16(), 308);
-    assert_eq!(
-        response
-            .headers()
-            .get("location")
-            .ok_or("redirect location")?
-            .to_str()?,
-        "/api/wiki/page/release"
-    );
+    for (target, location) in [
+        ("/api/wiki/legacy", "/api/wiki/release"),
+        ("/api/wiki/legacy/raw", "/api/wiki/release/raw"),
+    ] {
+        let response = get(&client, &base, target).await?;
+        assert_eq!(response.status().as_u16(), 308);
+        assert_eq!(
+            response
+                .headers()
+                .get("location")
+                .ok_or("redirect location")?
+                .to_str()?,
+            location
+        );
+    }
     drop(shutdown_guard);
     tokio::time::timeout(Duration::from_secs(30), servers.join_next())
         .await?
