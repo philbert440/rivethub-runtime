@@ -160,3 +160,129 @@ async fn gateway_startup_adopts_only_its_namespace() -> TestResult {
     tokio::time::timeout(Duration::from_secs(10), composition.close()).await??;
     Ok(())
 }
+
+struct Lab {
+    home: tempfile::TempDir,
+    bin: PathBuf,
+    state: PathBuf,
+}
+
+fn lab(with_herdr: bool) -> TestResult<Lab> {
+    let home = tempfile::Builder::new()
+        .prefix("")
+        .rand_bytes(1)
+        .tempdir()?;
+    let work = home.path().join("work");
+    let bin = home.path().join("bin");
+    let state = home.path().join(".rivethub");
+    std::fs::create_dir_all(&work)?;
+    std::fs::create_dir_all(&bin)?;
+    std::fs::create_dir_all(&state)?;
+    if with_herdr {
+        herdr_script(&bin)?;
+    }
+    write_config(home.path(), &work, &state)?;
+    Ok(Lab { home, bin, state })
+}
+
+async fn compose(lab: &Lab, mux: Option<&str>) -> TestResult<Composition> {
+    let mut vars = vec![
+        ("HOME", lab.home.path().to_str().ok_or("home")?),
+        ("PATH", lab.bin.to_str().ok_or("path")?),
+    ];
+    if let Some(mux) = mux {
+        vars.push(("RIVETHUB_TERM_MUX", mux));
+    }
+    let env = config::Environment::from_vars(vars);
+    let loaded = config::Config::load(
+        &env,
+        &config::ConfigLocation::Current(lab.state.join("config.yaml")),
+        config::Profile::Node,
+    )?;
+    let store: Arc<dyn MemoryStore> = Arc::new(testkit::FakeMemoryStore::default());
+    let composition = tokio::time::timeout(
+        Duration::from_secs(30),
+        Composition::build(
+            &loaded.config,
+            &env,
+            store,
+            &CancellationToken::new(),
+            &Activities::new(),
+        ),
+    )
+    .await??;
+    Ok(composition)
+}
+
+fn ui_keys(text: &str) -> TestResult<Vec<(String, String)>> {
+    let mut lines = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'));
+    assert_eq!(lines.next(), Some("[ui]"));
+    lines
+        .map(|line| {
+            let (key, value) = line.split_once(" = ").ok_or("not a key/value line")?;
+            Ok((key.to_owned(), value.to_owned()))
+        })
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn terminal_startup_writes_the_herdr_ui_config_every_time() -> TestResult {
+    let lab = lab(true)?;
+    let config_home = paths::resolve_config_home(&lab.state, 5974);
+    let file = terminal::herdr::ui::ui_config_path(&config_home);
+    let expected = ui_keys(
+        r#"
+[ui]
+sidebar_start_collapsed = true
+sidebar_collapsed_mode = "hidden"
+hide_tab_bar_when_single_tab = true
+prompt_new_tab_name = false
+confirm_close = false
+pane_outer_borders = false
+pane_scrollbars = false
+pane_gaps = false
+window_title = "{terminal_title}"
+mobile_width_threshold = 0
+"#,
+    )?;
+    let first = compose(&lab, None).await?;
+    assert_eq!(ui_keys(&std::fs::read_to_string(&file)?)?, expected);
+    tokio::time::timeout(Duration::from_secs(10), first.close()).await??;
+    std::fs::write(&file, "[ui]\nconfirm_close = true\n")?;
+    let second = compose(&lab, None).await?;
+    let rewritten = std::fs::read_to_string(&file)?;
+    assert_eq!(rewritten, terminal::herdr::ui::UI_CONFIG);
+    assert_eq!(ui_keys(&rewritten)?, expected);
+    tokio::time::timeout(Duration::from_secs(10), second.close()).await??;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_term_mux_setting_reaches_the_mux_resolver() -> TestResult {
+    let direct = lab(true)?;
+    let config_home = paths::resolve_config_home(&direct.state, 5974);
+    let namespace_id = namespace::namespace_id(&config_home)?;
+    plant_owned(&config_home, &namespace_id, "owned-session", "owner")?;
+    let composition = compose(&direct, Some("none")).await?;
+    let owner = gateway::tenancy::UserId::new("owner".to_owned())?;
+    let service = composition
+        .gateway()
+        .terminal()
+        .ok_or("terminal service missing")?
+        .clone();
+    assert_eq!(service.list(&owner).len(), 0);
+    assert!(!terminal::herdr::ui::ui_config_path(&config_home).exists());
+    tokio::time::timeout(Duration::from_secs(10), composition.close()).await??;
+
+    let missing = lab(false)?;
+    let auto = compose(&missing, None).await?;
+    assert!(auto.gateway().terminal().is_some());
+    tokio::time::timeout(Duration::from_secs(10), auto.close()).await??;
+    let forced = compose(&missing, Some("herdr")).await;
+    let error = forced.err().ok_or("herdr without a binary must fail")?;
+    assert!(error.to_string().contains("herdr not found"), "{error}");
+    Ok(())
+}

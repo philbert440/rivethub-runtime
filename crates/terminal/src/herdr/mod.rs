@@ -2,6 +2,7 @@ pub mod client;
 pub mod codec;
 pub mod namespace;
 pub mod paths;
+pub mod ui;
 
 use serde::Deserialize;
 use serde::Serialize;
