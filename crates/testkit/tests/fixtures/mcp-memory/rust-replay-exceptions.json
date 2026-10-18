@@ -226,5 +226,17 @@
     "note": "presets from ros_agent_presets plus the runtime roster from mesh.json",
     "kind": "unresolved",
     "reason": "Unfinished: real directory loading and roster order need replay coverage. The typed renderer is tested separately; the seed uses the legacy grok harness identifier."
+  },
+  {
+    "tool": "memory_search",
+    "note": "trigram on a token inside a long tool_result: whole-string similarity stays under 0.3, so no hit",
+    "kind": "unresolved",
+    "reason": "The recording pins the TypeScript trigram arm (whole-string similarity > 0.3). The Rust trigram arm is a literal-token ILIKE substring match over the GIN trigram indexes, so this query now returns the row that contains it instead of no results."
+  },
+  {
+    "tool": "memory_search",
+    "note": "non-ASCII query",
+    "kind": "unresolved",
+    "reason": "The recording pins the TypeScript trigram arm (whole-string similarity > 0.3). The Rust trigram arm is a literal-token ILIKE substring match over the GIN trigram indexes, so this query now returns the row that contains it instead of no results."
   }
 ]
