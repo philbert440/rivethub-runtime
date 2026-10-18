@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use super::check;
 use super::error::AgentError;
 use super::paths;
-use super::store;
+use super::registry;
 use crate::Gateway;
 use crate::term::AgentLaunch;
 
@@ -26,13 +26,13 @@ pub(crate) async fn resolve(gateway: &Gateway, id: String) -> Result<AgentLaunch
         .filter(|directory| !directory.is_empty())
         .map(str::to_owned)
     else {
-        return Err(AgentError::conflict(format!(
+        return Err(AgentError::Conflict(format!(
             "agent \"{}\" has no directory",
             preset.name
         )));
     };
     let shared = gateway.settings().shared_dir.clone();
-    let link = store::wants_link(preset.shared_link);
+    let link = registry::wants_link(preset.shared_link);
     let directory = tokio::task::spawn_blocking(move || prepare(&raw, &shared, link))
         .await
         .map_err(|error| AgentError::Directory(std::io::Error::other(error)))?

@@ -97,7 +97,7 @@ async fn start_gateway(home: &std::path::Path) -> TestResult<Started> {
 }
 
 #[sqlx::test(migrations = false)]
-async fn phone_pairing_without_an_authority_stays_unavailable_and_agents_stay_on_the_file_store(
+async fn phone_pairing_without_an_authority_stays_unavailable_and_agents_come_from_the_memory_database(
     pool: PgPool,
 ) -> TestResult {
     migrate::postgres_pool(&pool).await?;
@@ -139,7 +139,7 @@ async fn phone_pairing_without_an_authority_stays_unavailable_and_agents_stay_on
         .error_for_status()?
         .json::<AgentListResponse>()
         .await?;
-    assert_eq!(agents.backend, Some(AgentStoreBackend::File));
+    assert_eq!(agents.backend, Some(AgentStoreBackend::Postgres));
     let catalog = client
         .get(format!("{base}/api/catalog"))
         .send()

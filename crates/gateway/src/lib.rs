@@ -287,6 +287,15 @@ impl Gateway {
     }
 
     #[must_use]
+    pub fn with_agent_presets(
+        mut self,
+        store: Arc<dyn kernel::agent_presets::AgentPresetStore>,
+    ) -> Self {
+        self.presets = routes::agents::backed_by(&self.settings, store);
+        self
+    }
+
+    #[must_use]
     pub fn with_provider_health(mut self, providers: Vec<kernel::model::ProviderHealth>) -> Self {
         self.providers = providers;
         self

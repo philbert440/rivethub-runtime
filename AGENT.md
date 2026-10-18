@@ -97,3 +97,13 @@ Not here: resume/turns/interrupt (b6-b8), the legacy `/api/sessions/ws` (b9), th
 protocol exclusion (inert), `installed`. The old `/term/harness-sessions/{session}/transcript` still uses the Claude-only
 `TranscriptReader` (its golden replays pin the old shape).
 Gotcha: test files that use `expect` in helpers start with `#![cfg(test)]`; non-wire tests cannot use `json!`/`Value`.
+
+## gateway: agent presets from the memory database (2026-10-17)
+
+`/api/agents` runs over the kernel port `kernel::agent_presets::AgentPresetStore`. The gateway `Registry`
+(`routes/agents/registry.rs`) keeps every validation, directory and `rivet-shared` link rule and calls the port; the
+agents.json thread is now one adapter (`FilePresets`), `memory_postgres::PostgresPresets` the other. Composition passes
+`rivethub::composition::agent_presets(&PostgresMemory)` into `Composition::build` on a Postgres node: Postgres when
+`rh_agent_presets` exists, otherwise (and on SQLite nodes) the file store. The list `backend` field names the store.
+Gotcha: the unique name index kept its pre-0021 name `idx_ros_agent_presets_name`; its violation maps to the same 409 the
+file store gives. The task agent roster (`rivethub/src/agent/assemble.rs`) still reads agents.json.
