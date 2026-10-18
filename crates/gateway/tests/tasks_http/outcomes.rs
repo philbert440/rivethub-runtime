@@ -9,13 +9,13 @@ use wire::gateway::catalog::OutcomeBucket;
 use wire::gateway::catalog::OutcomesResponse;
 use wire::task::AcceptanceCriterion;
 use wire::task::CriterionKind;
+use wire::task::EvalOutcome;
+use wire::task::EvalVerdict;
 use wire::task::TaskExecutorKind;
 use wire::task::TaskResult;
 use wire::task::TaskStatus;
 use wire::task::TaskUsage;
 use wire::task::TaskVerdict;
-use wire::task::VerifierResult;
-use wire::task::VerifierVerdict;
 
 use super::Setup;
 use super::call;
@@ -56,12 +56,14 @@ fn result(verdict: TaskVerdict) -> TaskResult {
     }
 }
 
-fn verdict(kind: VerifierVerdict) -> VerifierResult {
-    VerifierResult {
+fn verdict(kind: EvalVerdict) -> EvalOutcome {
+    EvalOutcome {
         verdict: kind,
-        summary: "v".to_owned(),
+        attempts: 1,
+        verifier_task_ids: vec!["verifier".to_owned()],
         criteria_report: Vec::new(),
-        refutation: None,
+        diverged: kind == EvalVerdict::Refuted,
+        escalated_at: None,
     }
 }
 
@@ -78,7 +80,7 @@ fn alpha() -> TaskRecord {
     let mut task = qualify(10, "alpha", 14);
     task.usage = Some(usage(1.5));
     task.duration_ms = Some(100);
-    task.eval = Some(verdict(VerifierVerdict::Refuted));
+    task.eval = Some(verdict(EvalVerdict::Refuted));
     task
 }
 
@@ -87,7 +89,7 @@ fn beta() -> TaskRecord {
     task.executor = TaskExecutorKind::Mesh;
     task.usage = Some(usage(0.5));
     task.duration_ms = Some(300);
-    task.eval = Some(verdict(VerifierVerdict::Verified));
+    task.eval = Some(verdict(EvalVerdict::Verified));
     task
 }
 

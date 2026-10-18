@@ -12,10 +12,6 @@
     "reason": "TaskSpec has no auditOnly flag, so an audit-only row cannot be excluded."
   },
   {
-    "id": "escalated-outcome-counter",
-    "reason": "VerifierResult is verified or refuted only. The escalated counter stays zero."
-  },
-  {
     "id": "sqlite-local-queue-node",
     "reason": "localQueueNode belongs to the sqlite engine. This router does not choose a store."
   }

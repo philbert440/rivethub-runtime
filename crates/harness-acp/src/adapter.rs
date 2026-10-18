@@ -10,8 +10,10 @@ use std::sync::atomic::Ordering;
 use agent_client_protocol::schema::v1 as acp;
 use async_trait::async_trait;
 use config::Config;
+use kernel::harness::Command;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::HarnessAdapterError;
+use kernel::harness::HarnessCommands;
 use kernel::harness::SessionEvent;
 use kernel::harness::SessionOption;
 use kernel::harness::SessionSpec;
@@ -76,6 +78,7 @@ pub struct AcpHarnessAdapter {
     sheets: BTreeMap<HarnessId, SheetInput>,
     search_paths: Vec<PathBuf>,
     advertised: Mutex<BTreeMap<HarnessId, crate::discovery::Advertisement>>,
+    discovered_commands: Mutex<BTreeMap<HarnessId, Vec<Command>>>,
 }
 
 impl AcpHarnessAdapter {
@@ -95,6 +98,9 @@ impl AcpHarnessAdapter {
         harness: HarnessId,
         advertisement: crate::discovery::Advertisement,
     ) -> Self {
+        self.discovered_commands
+            .get_mut()
+            .insert(harness, advertisement.commands().to_vec());
         self.advertised.get_mut().insert(harness, advertisement);
         self
     }
@@ -111,6 +117,7 @@ impl AcpHarnessAdapter {
             sheets: sheet_inputs(config),
             search_paths: Vec::new(),
             advertised: Mutex::new(BTreeMap::new()),
+            discovered_commands: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -123,6 +130,7 @@ impl AcpHarnessAdapter {
             sheets: BTreeMap::new(),
             search_paths: Vec::new(),
             advertised: Mutex::new(BTreeMap::new()),
+            discovered_commands: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -468,6 +476,9 @@ impl HarnessAdapter for AcpHarnessAdapter {
                         advertised
                             .apply(&mut offering, self.sheets.get(&fact.harness))
                             .map_err(port)?;
+                        self.discovered_commands
+                            .lock()
+                            .insert(fact.harness, advertised.commands().to_vec());
                         self.advertised.lock().insert(fact.harness, advertised);
                     }
                 }
@@ -475,6 +486,22 @@ impl HarnessAdapter for AcpHarnessAdapter {
             offerings.push(offering);
         }
         Ok(offerings)
+    }
+
+    async fn commands(&self) -> Result<Vec<HarnessCommands>, HarnessAdapterError> {
+        let offered = self.offerings().await?;
+        let discovered = self.discovered_commands.lock();
+        Ok(offered
+            .iter()
+            .filter_map(|offering| {
+                discovered
+                    .get(&offering.harness_id)
+                    .map(|commands| HarnessCommands {
+                        harness: offering.harness_id,
+                        commands: commands.clone(),
+                    })
+            })
+            .collect())
     }
 }
 

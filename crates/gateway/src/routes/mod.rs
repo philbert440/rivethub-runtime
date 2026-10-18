@@ -7,6 +7,7 @@ pub mod chat;
 pub mod devices;
 pub mod files;
 pub mod harnesses;
+mod history;
 pub mod memory;
 pub mod sessions;
 pub mod tags;
@@ -42,6 +43,7 @@ pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
         .nest("/api/agents", agents::router())
         .merge(devices::router())
         .merge(ca::router())
+        .merge(history::router())
 }
 
 pub(crate) fn mount(router: Router<Arc<Gateway>>) -> Router<Arc<Gateway>> {

@@ -16,7 +16,6 @@ use wire::gateway::uploads::UploadList;
 use wire::harness::HarnessOfferingList;
 
 use super::sessions::Accepted;
-use super::terminal::service;
 use crate::Gateway;
 use crate::error::ApiError;
 use crate::tenancy::UserId;
@@ -53,15 +52,9 @@ fn routes() -> Router<Arc<Gateway>> {
 async fn list_harnesses(
     State(gateway): State<Arc<Gateway>>,
 ) -> Result<Json<HarnessOfferingList>, ApiError> {
-    let adapter = service(&gateway)?
-        .adapter()
-        .ok_or_else(|| ApiError::Unavailable("chat harness unavailable".to_owned()))?;
-    let mut harnesses = adapter.offerings().await?;
-    let images = gateway.uploads().is_some();
-    for offering in &mut harnesses {
-        offering.capabilities.image_attachments = Some(images);
-    }
-    Ok(Json(HarnessOfferingList { harnesses }))
+    Ok(Json(HarnessOfferingList {
+        harnesses: crate::history::offerings(&gateway).await?,
+    }))
 }
 
 async fn list_uploads(

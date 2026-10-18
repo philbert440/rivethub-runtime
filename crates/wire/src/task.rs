@@ -218,6 +218,7 @@ pub struct TaskArtifact {
 pub struct CriterionReport {
     pub id: String,
     pub met: bool,
+    #[serde(default)]
     pub evidence: String,
 }
 
@@ -235,24 +236,6 @@ pub struct TaskResult {
     pub usage: TaskUsage,
     #[serde(default)]
     pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum VerifierVerdict {
-    Verified,
-    Refuted,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VerifierResult {
-    pub verdict: VerifierVerdict,
-    pub summary: String,
-    pub criteria_report: Vec<CriterionReport>,
-    #[serde(default)]
-    pub refutation: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -449,7 +432,7 @@ pub struct TaskWire {
     pub session_key: Option<String>,
     pub harness_session_ids: Vec<String>,
     #[serde(default)]
-    pub eval: Option<VerifierResult>,
+    pub eval: Option<EvalOutcome>,
     pub eval_attempt: u32,
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
     pub created_at: DateTime<Utc>,

@@ -1,9 +1,7 @@
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use wire::task::{
-    AcceptanceCriterion, ContextRef, TaskBudget, TaskResult, TaskUsage, VerifierResult,
-};
+use wire::task::{AcceptanceCriterion, ContextRef, EvalOutcome, TaskBudget, TaskResult, TaskUsage};
 use wire::task_overrides::TaskOverrides;
 
 #[derive(Deserialize)]
@@ -45,7 +43,7 @@ fn task_json_columns_omit_absent_members_and_keep_present_limits() {
     replay::<TaskUsage>(&fixture.usage);
     replay::<TaskResult>(&fixture.result);
     replay::<TaskOverrides>(&fixture.spec);
-    replay::<VerifierResult>(&fixture.eval);
+    replay::<EvalOutcome>(&fixture.eval);
     replay::<Vec<ContextRef>>(&fixture.context_refs);
     replay::<Vec<AcceptanceCriterion>>(&fixture.acceptance_criteria);
 }

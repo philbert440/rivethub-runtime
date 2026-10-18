@@ -1,16 +1,16 @@
 mod claude;
-mod codex;
+pub(crate) mod codex;
 mod cursor;
 mod grok;
-mod harness_db;
+pub(crate) mod harness_db;
 mod hermes;
 mod kimi;
 mod message;
 mod opencode;
-mod pi;
+pub(crate) mod pi;
 mod qwen;
 mod scan;
-mod sqlite;
+pub(crate) mod sqlite;
 
 use std::path::PathBuf;
 
@@ -27,6 +27,7 @@ pub(crate) use claude::from_parsed;
 pub use message::SkipRule;
 pub use message::SkippedRecord;
 pub use message::TranscriptSlice;
+pub(crate) use message::blocking;
 pub(crate) use message::report;
 
 pub const OUT_OF_SLICE: &[(&str, &str)] = &[

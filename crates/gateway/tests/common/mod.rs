@@ -144,6 +144,10 @@ impl MemoryStore for FailingStore {
         unavailable()
     }
 
+    fn embeddings_armed(&self) -> bool {
+        false
+    }
+
     async fn wiki_topics(
         &self,
         _filter: kernel::wiki::WikiFilter,
@@ -335,6 +339,10 @@ impl MemoryStore for GatedStore {
 
     async fn probe(&self) -> Result<(), MemoryStoreError> {
         MemoryStore::probe(&self.inner).await
+    }
+
+    fn embeddings_armed(&self) -> bool {
+        self.inner.embeddings_armed()
     }
 
     async fn wiki_topics(

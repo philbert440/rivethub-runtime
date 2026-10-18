@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH known AS (\n                 SELECT lower(slug) AS name FROM rh_wiki_topics\n                 UNION SELECT lower(title) FROM rh_wiki_topics\n                 UNION SELECT lower(alias) FROM rh_wiki_topics CROSS JOIN LATERAL unnest(aliases) alias\n                 UNION SELECT lower(from_slug) FROM rh_wiki_redirects\n             )\n             SELECT entity AS \"entity!\", array_agg(DISTINCT t.slug ORDER BY t.slug) AS \"referenced_by!\"\n             FROM rh_wiki_topics t CROSS JOIN LATERAL unnest(t.entities) entity\n             WHERE NOT EXISTS (SELECT 1 FROM known WHERE known.name = lower(entity))\n             GROUP BY entity ORDER BY count(DISTINCT t.slug) DESC, entity LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "referenced_by!",
+        "type_info": "TextArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "4132e2cd883043b76f8411633334fdf5c8b9bb7eedf441723a23af5d191b09e1"
+}

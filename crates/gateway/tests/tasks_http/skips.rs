@@ -9,11 +9,10 @@ struct Skip {
     reason: String,
 }
 
-const REQUIRED: [&str; 5] = [
+const REQUIRED: [&str; 4] = [
     "clamp-wait-ms-source-bounds",
     "date-parse-legacy-forms",
     "audit-only-outcome-rows",
-    "escalated-outcome-counter",
     "sqlite-local-queue-node",
 ];
 

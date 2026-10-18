@@ -11,6 +11,7 @@ use super::sessions::Accepted;
 use crate::Gateway;
 use crate::error::ApiError;
 use crate::extract::{Body, Query};
+use crate::routes::agents::Failure;
 use crate::tenancy::UserId;
 use crate::term::TerminalService;
 
@@ -54,7 +55,7 @@ async fn spawn(
     State(gateway): State<Arc<Gateway>>,
     user: UserId,
     body: Result<Body<TermSpawnRequest>, ApiError>,
-) -> Result<(axum::http::StatusCode, Json<TermSpawnResponse>), ApiError> {
+) -> Result<(axum::http::StatusCode, Json<TermSpawnResponse>), Failure> {
     let service = require(&gateway)?;
     let Body(request) = body.map_err(|error| {
         if matches!(error, ApiError::BodyMustBeObject) {
@@ -63,9 +64,13 @@ async fn spawn(
             error
         }
     })?;
+    let preset = match request.agent_id.clone() {
+        Some(id) => Some(crate::routes::agents::launch_preset(&gateway, id).await?),
+        None => None,
+    };
     Ok((
         axum::http::StatusCode::CREATED,
-        Json(service.spawn(&user, request).await?),
+        Json(service.spawn_from(&user, request, preset).await?),
     ))
 }
 

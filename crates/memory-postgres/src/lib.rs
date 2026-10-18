@@ -1,5 +1,6 @@
 mod access;
 pub mod admin;
+mod agent_presets;
 pub mod capture;
 mod conversation;
 pub mod dump;
@@ -34,6 +35,7 @@ pub mod wiki_writer;
 #[cfg(test)]
 mod resilience;
 
+pub use agent_presets::PostgresPresets;
 pub use task_db::PostgresTasks;
 
 use std::cmp::Ordering;

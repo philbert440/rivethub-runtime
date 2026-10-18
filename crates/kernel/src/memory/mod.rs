@@ -330,6 +330,8 @@ pub trait MemoryStore: Send + Sync {
 
     async fn probe(&self) -> Result<(), MemoryStoreError>;
 
+    fn embeddings_armed(&self) -> bool;
+
     async fn wiki_topics(
         &self,
         filter: crate::wiki::WikiFilter,

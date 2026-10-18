@@ -71,6 +71,8 @@ fn body_error(error: ApiError) -> TaskHttpError {
         }
         ApiError::RequestTimeout => TaskHttpError::BadRequest("request timeout".to_owned()),
         ApiError::NotFound(message) => TaskHttpError::NotFound(message.to_owned()),
+        ApiError::Missing(message) => TaskHttpError::NotFound(message),
+        ApiError::Code(_, message) => TaskHttpError::BadRequest(message),
         ApiError::MethodNotAllowed => TaskHttpError::MethodNotAllowed,
         ApiError::Conflict(message) => TaskHttpError::Conflict(message),
         ApiError::Forbidden(message) | ApiError::Unavailable(message) => {
