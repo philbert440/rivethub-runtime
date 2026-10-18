@@ -571,7 +571,7 @@ fn chosen_color(color: Option<String>) -> Result<String, AgentError> {
     clippy::manual_unwrap_or,
     reason = "an omitted sharedLink is on, so a new preset links the shared directory (CONTRACT B11, gateway-api §8.1)"
 )]
-fn wants_link(flag: Option<bool>) -> bool {
+pub(super) fn wants_link(flag: Option<bool>) -> bool {
     match flag {
         Some(value) => value,
         None => true,

@@ -1,5 +1,6 @@
 mod check;
 mod error;
+mod launch;
 mod paths;
 mod store;
 
@@ -37,6 +38,7 @@ use crate::extract::limited_bytes;
 use error::AgentError;
 use store::Registry;
 
+pub(crate) use launch::resolve as launch_preset;
 pub(crate) use store::Registry as AgentRegistry;
 
 pub(crate) fn router() -> Router<Arc<Gateway>> {
@@ -68,7 +70,7 @@ struct ListQuery {
     node: Option<String>,
 }
 
-enum Failure {
+pub(crate) enum Failure {
     Api(ApiError),
     Agent(AgentError),
 }

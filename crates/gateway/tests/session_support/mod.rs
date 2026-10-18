@@ -29,6 +29,7 @@ pub(crate) enum Call {
     Spawn {
         session: SessionId,
         argv: Vec<String>,
+        cwd: PathBuf,
         size: TermSize,
     },
     Input(Vec<u8>),
@@ -101,7 +102,7 @@ impl TerminalMux for Mux {
         &self,
         session: &SessionId,
         argv: Vec<String>,
-        _cwd: &Path,
+        cwd: &Path,
         _env: &BTreeMap<String, String>,
         size: TermSize,
     ) -> Result<TerminalId, TerminalMuxError> {
@@ -122,6 +123,7 @@ impl TerminalMux for Mux {
             calls.push(Call::Spawn {
                 session: session.clone(),
                 argv,
+                cwd: cwd.to_path_buf(),
                 size,
             });
         });
