@@ -4,7 +4,7 @@ use super::{LastVerified, PageSource, WikiMeta};
 use crate::Extra;
 use crate::gateway::wiki::WikiSlug;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub(super) struct StoredFrontmatter {
     pub title: Option<String>,
     pub slug: Option<String>,
@@ -23,7 +23,7 @@ pub(super) struct StoredFrontmatter {
     pub extra: Extra,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, schemars::JsonSchema)]
 pub(super) struct WrittenFrontmatter<'a> {
     #[serde(flatten)]
     pub extra: &'a Extra,

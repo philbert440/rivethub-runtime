@@ -35,7 +35,7 @@ pub use serialize::serialize_wiki_page;
 pub use slug::{extract_wiki_links, normalize_slug};
 pub use summary::{CappedSummary, SUMMARY_LIMIT, cap_summary, merge_summary_text};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiPage {
     pub meta: WikiMeta,
@@ -50,7 +50,7 @@ pub struct WikiPage {
     pub extra_sections: Vec<ArticleSection>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiMeta {
     pub title: String,
@@ -66,7 +66,7 @@ pub struct WikiMeta {
     pub extra: Extra,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "String", into = "String")]
 pub struct LastVerified(String);
 
@@ -104,7 +104,7 @@ impl AsRef<str> for LastVerified {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PageSource {
     pub kind: WikiSourceKind,
@@ -115,7 +115,7 @@ pub struct PageSource {
     pub extra: Extra,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PageCitation {
     pub summary_id: String,
@@ -128,7 +128,16 @@ pub struct PageCitation {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumIter, strum::Display,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    strum::EnumIter,
+    strum::Display,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]

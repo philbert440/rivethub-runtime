@@ -11,7 +11,7 @@ use crate::Extra;
 use crate::gateway::wiki::{WikiHistoryEntry, WikiSlug, WikiSlugError};
 
 #[serde_as]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PagePatch {
     pub action: WikiAction,

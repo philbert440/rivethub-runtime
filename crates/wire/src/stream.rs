@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use strum::{Display, EnumIter, EnumString};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum StreamEventKind {
     Text,
@@ -19,7 +19,7 @@ pub enum StreamEventKind {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StreamEvent {
     pub r#type: StreamEventKind,
@@ -27,7 +27,7 @@ pub struct StreamEvent {
     pub metadata: Option<JsonObject>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenUsage {
     pub agent: String,
@@ -39,7 +39,7 @@ pub struct TokenUsage {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DelegationRequest {
     pub from_agent: String,
@@ -51,7 +51,7 @@ pub struct DelegationRequest {
     pub model: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum DelegationStatus {
     Completed,
@@ -60,7 +60,7 @@ pub enum DelegationStatus {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DelegationResult {
     pub status: DelegationStatus,
@@ -72,7 +72,7 @@ pub struct DelegationResult {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmUsage {
     pub prompt_tokens: u64,
@@ -83,7 +83,7 @@ pub struct LlmUsage {
     pub cache_read_tokens: Option<u64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmResponseKind {
     Text,
@@ -91,7 +91,7 @@ pub enum LlmResponseKind {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmResponse {
     pub r#type: LlmResponseKind,
@@ -102,7 +102,7 @@ pub struct LlmResponse {
     pub finish_reason: Option<openai::FinishReason>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmChunkKind {
     Text,
@@ -116,7 +116,7 @@ pub enum LlmChunkKind {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PartialToolCall {
     pub index: Option<u32>,
@@ -126,7 +126,7 @@ pub struct PartialToolCall {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmChunk {
     pub r#type: LlmChunkKind,
@@ -138,7 +138,17 @@ pub struct LlmChunk {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumString, EnumIter,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    Display,
+    EnumString,
+    EnumIter,
 )]
 #[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]
@@ -152,7 +162,7 @@ pub enum ThinkingLevel {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionContext {
     pub session_token: String,
@@ -172,7 +182,7 @@ pub struct SessionContext {
     pub trace_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ErrorSeverity {
     Fatal,
@@ -182,7 +192,7 @@ pub enum ErrorSeverity {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RivetError {
     pub name: String,
@@ -201,7 +211,7 @@ pub mod openai {
     use crate::message::Role;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     #[serde(tag = "type", rename_all = "camelCase")]
     pub enum Tool {
         #[serde(rename = "function")]
@@ -209,7 +219,7 @@ pub mod openai {
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct FunctionDef {
         pub name: String,
         pub description: Option<String>,
@@ -217,13 +227,13 @@ pub mod openai {
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct FunctionDelta {
         pub name: Option<String>,
         pub arguments: Option<String>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     #[serde(tag = "type", rename_all = "camelCase")]
     pub enum MessageToolCall {
         #[serde(rename = "function")]
@@ -231,7 +241,8 @@ pub mod openai {
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+    #[schemars(rename = "OpenAiMessage")]
     pub struct Message {
         pub role: Role,
         #[serialize_always]
@@ -241,18 +252,18 @@ pub mod openai {
         pub tool_call_id: Option<String>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct StreamOptions {
         pub include_usage: bool,
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct ChatTemplateKwargs {
         pub enable_thinking: bool,
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct ChatCompletionRequest {
         pub temperature: Option<f64>,
         pub enable_thinking: Option<bool>,
@@ -267,7 +278,7 @@ pub mod openai {
         pub think: Option<bool>,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     #[serde(rename_all = "snake_case")]
     pub enum FinishReason {
         Stop,
@@ -277,7 +288,7 @@ pub mod openai {
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     #[serde(rename_all = "camelCase")]
     pub struct StreamedPlainToolCall {
         pub index: Option<u32>,
@@ -285,14 +296,14 @@ pub mod openai {
         pub function: FunctionDelta,
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     #[serde(tag = "type", rename_all = "camelCase")]
     pub enum FunctionToolCallTag {
         #[serde(rename = "function")]
         Function(StreamedPlainToolCall),
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     #[serde(untagged)]
     pub enum StreamedToolCall {
         Function(FunctionToolCallTag),
@@ -300,7 +311,7 @@ pub mod openai {
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct Delta {
         pub role: Option<Role>,
         pub content: Option<String>,
@@ -309,7 +320,7 @@ pub mod openai {
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct Choice {
         pub index: Option<u64>,
         pub delta: Delta,
@@ -318,18 +329,18 @@ pub mod openai {
         pub stop_reason: Option<String>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct PromptTokensDetails {
         pub cached_tokens: u64,
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct CompletionTokensDetails {
         pub reasoning_tokens: u64,
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct Usage {
         pub prompt_tokens: u64,
         pub completion_tokens: u64,
@@ -339,7 +350,7 @@ pub mod openai {
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct Timings {
         pub cache_n: u64,
         pub prompt_n: u64,
@@ -353,7 +364,7 @@ pub mod openai {
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct ChatCompletionChunk {
         pub id: String,
         pub object: String,
@@ -365,14 +376,14 @@ pub mod openai {
         pub timings: Option<Timings>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct ModelList {
         pub object: String,
         pub data: Vec<Model>,
     }
 
     #[serde_with::skip_serializing_none]
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct Model {
         pub id: String,
         pub object: String,
@@ -385,18 +396,18 @@ pub mod openai {
         pub permission: Option<Vec<JsonObject>>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct EmbeddingRequest {
         pub model: String,
         pub input: Vec<String>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct EmbeddingResponse {
         pub data: Vec<EmbeddingRow>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
     pub struct EmbeddingRow {
         pub embedding: Vec<f32>,
         pub index: usize,

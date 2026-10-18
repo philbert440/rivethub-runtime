@@ -12,7 +12,7 @@ use crate::task::TaskPromptMode;
 use crate::task::TaskSpec;
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct TaskOverrides {
     pub delegation: Option<bool>,

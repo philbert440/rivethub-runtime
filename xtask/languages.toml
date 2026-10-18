@@ -5,6 +5,8 @@ paths = [
   ".github/CODEOWNERS",
   ".gitignore",
   "Cargo.lock",
+  "contract/accepted.schema.json",
+  "contract/sent.schema.json",
   "LICENSE",
   "coverage-floor.txt",
   "lints/Cargo.lock",

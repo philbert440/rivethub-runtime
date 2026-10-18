@@ -9,7 +9,7 @@ pub struct ArticleSection {
     pub body: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct ArticleSections {
     pub lead: String,
     pub sections: Vec<ArticleSection>,

@@ -5,6 +5,7 @@ use tempfile::TempDir;
 use xtask::baseline;
 use xtask::check;
 use xtask::code;
+use xtask::contract;
 use xtask::dupfixture;
 use xtask::env_scan;
 use xtask::jsnames;
@@ -1673,5 +1674,45 @@ fn a_second_ast_occurrence_in_the_same_file_exceeds_the_baseline()
     )?;
     assert_eq!(hits.len(), 1);
     assert!(hits.first().is_some_and(|hit| hit.contains("occurrence 2")));
+    Ok(())
+}
+
+#[test]
+fn contract_fires_on_missing_schema_and_missing_root() -> Result<(), Box<dyn std::error::Error>> {
+    let repo = Repo::new()?;
+    repo.write(
+        "crates/wire/src/contract.rs",
+        "const ROOTS: &[Root] = &[SchemaGenerator::subschema_for::<crate::events::Listed>];\n",
+    )?;
+    repo.write(
+        "crates/wire/src/events.rs",
+        "#[derive(Serialize, schemars::JsonSchema)]\npub struct Listed;\n#[derive(Serialize, schemars::JsonSchema)]\npub struct Unlisted;\n#[derive(Deserialize)]\npub struct Bare;\n",
+    )?;
+    repo.write(
+        "crates/wire/src/stream.rs",
+        "#[derive(Serialize, JsonSchema)]\npub struct Outside;\nmod inner {\n    #[derive(Serialize)]\n    pub struct Nested;\n}\n",
+    )?;
+    repo.track()?;
+    let mut findings = Vec::new();
+    contract::check(repo.root(), &mut findings)?;
+    assert_eq!(findings.len(), 3, "{findings:?}");
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("events.rs:4: Unlisted is missing from ROOTS")),
+        "{findings:?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("events.rs:6: Bare derives serde but not")),
+        "{findings:?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.contains("stream.rs:5: Nested derives serde but not")),
+        "{findings:?}"
+    );
     Ok(())
 }

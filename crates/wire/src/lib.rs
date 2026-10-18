@@ -1,5 +1,6 @@
 pub mod ca;
 pub mod capture;
+pub mod contract;
 pub mod events;
 pub mod gateway;
 pub mod harness;

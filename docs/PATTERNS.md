@@ -247,6 +247,15 @@ derives; `#[serde(try_from = "String", into = "String")]` with `TryFrom`/`From` 
 `with = "::serde_with::rust::double_option"` where the contract distinguishes absent from `null`). Check: dylint
 `customserde`.
 
+## CONTRACT
+Anti-pattern: a public serde type in `wire` without `schemars::JsonSchema`, or a type in a module the contract covers that
+is missing from `ROOTS`, so clients hand-write the DTO and drift (Android's harness list without `cowork`). Pattern: every
+public serde type in `wire` derives `schemars::JsonSchema`; every type in a contract module is a root in
+`crates/wire/src/contract.rs`; `contract/sent.schema.json` (what the runtime sends) and `contract/accepted.schema.json`
+(what it accepts) are generated from those roots and committed, and clients generate their types from them. Two types
+with one schema name get a `#[schemars(rename)]`. Check: xtask `CONTRACT`; the `wire` test `contract` regenerates a stale
+schema and fails.
+
 ## DUPNAMES
 Anti-pattern: a `match` table mapping each variant to its string (`Self::ClaudeCode => "claude-code"`) beside serde's own
 renames, plus `FromStr` that round-trips through a deserializer. Pattern: one naming rule on the enum —

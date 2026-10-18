@@ -37,6 +37,7 @@ pub enum SearchMode {
     Hash,
     Serialize,
     Deserialize,
+    schemars::JsonSchema,
     strum::Display,
     strum::EnumString,
 )]
@@ -92,14 +93,14 @@ mod summary_kind_tests {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CaptureStatus {
     Unknown,
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct MemorySearchToolArgs {
     pub since: Option<DateTime<Utc>>,
     pub before: Option<DateTime<Utc>>,
@@ -122,7 +123,7 @@ pub enum MemoryScope {
     Both,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum MemoryHitSource {
     Message,
@@ -130,7 +131,7 @@ pub enum MemoryHitSource {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MemorySearchHit {
     pub chunk: Option<crate::memory::MemoryChunkMatch>,
@@ -149,13 +150,13 @@ pub struct MemorySearchHit {
     pub tags: Option<Vec<TagWire>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum MemoryFallback {
     Trigram,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryDegraded {
     pub reason: String,
@@ -163,7 +164,7 @@ pub struct MemoryDegraded {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MemorySearchResponse {
     pub query: String,

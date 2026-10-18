@@ -5,7 +5,7 @@ use serde_with::serde_as;
 use std::collections::BTreeMap;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "u8", into = "u8")]
 pub enum ProtocolVersion {
     V1,
@@ -33,7 +33,7 @@ impl From<ProtocolVersion> for u8 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct AgentEvent {
     pub v: ProtocolVersion,
     pub session: String,
@@ -45,7 +45,7 @@ pub struct AgentEvent {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum AgentEventKind {
     #[serde(rename = "session.start", rename_all = "camelCase")]
@@ -124,7 +124,7 @@ pub enum AgentEventKind {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Activity {
     Idle,
@@ -137,7 +137,7 @@ pub enum Activity {
     Toolbox,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentUsage {
     pub prompt_tokens: u64,
@@ -145,7 +145,7 @@ pub struct AgentUsage {
     pub cached_tokens: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum ContextSource {
     Spawn,
@@ -155,8 +155,9 @@ pub enum ContextSource {
 
 #[serde_as]
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
+#[schemars(rename = "LiveSessionSummary")]
 pub struct SessionSummary {
     pub id: String,
     pub name: String,
@@ -170,7 +171,7 @@ pub struct SessionSummary {
     pub context_source: Option<ContextSource>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionLogLine {
     pub who: String,
@@ -178,7 +179,7 @@ pub struct SessionLogLine {
 }
 
 #[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionView {
     pub title: String,
@@ -192,20 +193,21 @@ pub struct SessionView {
     pub ended: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
+#[schemars(rename = "LiveSessionList")]
 pub struct SessionList {
     pub sessions: Vec<SessionSummary>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StateResponse {
     pub session: String,
     pub state: SessionView,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename = "snapshot", rename_all = "camelCase")]
 pub struct Snapshot {
     pub v: ProtocolVersion,
@@ -214,14 +216,14 @@ pub struct Snapshot {
     pub views: BTreeMap<String, SessionView>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename = "session.removed", rename_all = "camelCase")]
 pub struct SessionRemoved {
     pub v: ProtocolVersion,
     pub session: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(untagged)]
 pub enum SessionBroadcast {
     Snapshot(Snapshot),

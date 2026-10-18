@@ -185,6 +185,7 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
     crate::patterns::check(root, &mut findings)?;
     crate::dupfixture::check(root, &mut findings)?;
     crate::labpath::check(root, &mut findings)?;
+    crate::contract::check(root, &mut findings)?;
     crate::lang::privacy_and_secrets(root, &mut findings)?;
     let baseline = crate::baseline::Baseline::load(root)?;
     crate::baseline::validate(&baseline, &mut findings);
