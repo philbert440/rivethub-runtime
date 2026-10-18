@@ -196,10 +196,11 @@ impl TerminalService {
             Some(rows) => rows.clamp(10, 200),
             None => 24,
         };
+        let resume = request.resume.map(|value| native_id(&value).to_owned());
         Ok(Launch {
             command,
             size: TermSize { cols, rows },
-            resume: request.resume,
+            resume,
             model,
             effort,
         })
@@ -544,4 +545,11 @@ fn contained_directory(
         ));
     }
     Ok(directory)
+}
+
+fn native_id(value: &str) -> &str {
+    match value.split_once(':') {
+        Some((prefix, native)) if prefix.parse::<HarnessId>().is_ok() => native,
+        _ => value,
+    }
 }

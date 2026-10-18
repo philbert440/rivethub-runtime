@@ -488,3 +488,37 @@ async fn generated_shell_sessions_use_unique_rivethub_uuids() {
     }
     fixture.gateway.close().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn terminal_resume_passes_the_native_id_to_the_harness() {
+    let fixture = Fixture::new().await;
+    let native = "8922b6dd-d60f-42d9-9690-51b0d6e63176";
+    let canonical = format!("claude-code:{native}");
+    fixture
+        .registry
+        .claim(&user("owner"), native)
+        .expect("resume owner seed");
+    let mut request = spawn(&canonical);
+    request.command = Some("claude".into());
+    request.resume = Some(canonical.clone());
+    fixture
+        .service
+        .spawn(&user("owner"), request)
+        .await
+        .expect("resume spawn");
+    let spawned = fixture
+        .mux
+        .calls
+        .borrow()
+        .iter()
+        .find_map(|call| match call {
+            Call::Spawn { argv, .. } => Some(argv.clone()),
+            Call::Input(_) | Call::Resize(_) | Call::Kill => None,
+        })
+        .expect("one spawn");
+    assert!(
+        spawned.ends_with(&["--resume".into(), native.into()]),
+        "argv was {spawned:?}"
+    );
+    assert!(!spawned.iter().any(|arg| arg.contains("claude-code:")));
+}
