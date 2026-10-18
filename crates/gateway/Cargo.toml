@@ -32,6 +32,7 @@ rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+strum = { workspace = true }
 subtle = { workspace = true }
 serde_urlencoded = { workspace = true }
 thiserror = { workspace = true }

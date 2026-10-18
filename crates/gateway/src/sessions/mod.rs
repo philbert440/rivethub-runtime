@@ -1,4 +1,5 @@
 pub mod control;
+mod fanout;
 mod owners;
 mod view;
 

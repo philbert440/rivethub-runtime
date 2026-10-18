@@ -7,6 +7,7 @@ mod databases;
 mod field;
 mod files;
 mod grok;
+mod history;
 mod kimi;
 mod pi;
 mod qwen;
@@ -21,6 +22,7 @@ use async_trait::async_trait;
 use kernel::transcript::ListLimit;
 use kernel::transcript::SessionLister;
 use kernel::transcript::StoreSession;
+use kernel::transcript::TranscriptRead;
 use kernel::transcript::TranscriptReaderError;
 use wire::harness::HarnessId;
 
@@ -53,6 +55,23 @@ pub struct StoreRoots {
     pub qwen: Option<PathBuf>,
     pub cursor: Option<PathBuf>,
     pub cowork: Vec<PathBuf>,
+}
+
+impl StoreRoots {
+    fn single(&self, harness: HarnessId) -> Option<&Path> {
+        match harness {
+            HarnessId::ClaudeCode => self.claude.as_deref(),
+            HarnessId::GrokBuild => self.grok.as_deref(),
+            HarnessId::Hermes => self.hermes.as_deref(),
+            HarnessId::KimiCode => self.kimi.as_deref(),
+            HarnessId::Codex => self.codex.as_deref(),
+            HarnessId::Opencode => self.opencode.as_deref(),
+            HarnessId::Pi => self.pi.as_deref(),
+            HarnessId::QwenCode => self.qwen.as_deref(),
+            HarnessId::Cursor => self.cursor.as_deref(),
+            HarnessId::Cowork => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -226,5 +245,13 @@ impl SessionLister for StoreSessionLister {
         let roots = Arc::clone(&self.roots);
         let native = native.to_owned();
         blocking(move || store_cwd_of(&roots, harness, &native)).await
+    }
+
+    async fn transcript(
+        &self,
+        harness: HarnessId,
+        native: &str,
+    ) -> Result<TranscriptRead, TranscriptReaderError> {
+        history::transcript(&self.roots, harness, native).await
     }
 }

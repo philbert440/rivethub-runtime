@@ -98,6 +98,14 @@ fn transcripts(
     )))
 }
 
+fn with_session_stores(gateway: Gateway, env: &Environment) -> Result<Gateway, ComposeError> {
+    Ok(gateway
+        .with_transcript_reader(transcripts(env)?)
+        .with_session_lister(Arc::new(capture::listing::StoreSessionLister::new(
+            store_roots(env),
+        ))))
+}
+
 async fn session_registry(
     owners: std::path::PathBuf,
     node_owner: Option<gateway::tenancy::UserId>,
@@ -182,10 +190,7 @@ impl Composition {
             .with_client_certificate_required(bind.require_client)
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
-        gateway = gateway.with_transcript_reader(transcripts(env)?);
-        gateway = gateway.with_session_lister(Arc::new(capture::listing::StoreSessionLister::new(
-            store_roots(env),
-        )));
+        gateway = with_session_stores(gateway, env)?;
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let background = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {

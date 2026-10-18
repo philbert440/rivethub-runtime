@@ -144,7 +144,7 @@ pub(crate) fn head(path: &Path, limit: u64) -> Option<String> {
 
 pub(crate) fn tail_window(path: &Path) -> Option<String> {
     match read_tail(path) {
-        Ok(text) => Some(text),
+        Ok(window) => Some(window.text),
         Err(error) => {
             unreadable(path, &error);
             None
@@ -152,13 +152,22 @@ pub(crate) fn tail_window(path: &Path) -> Option<String> {
     }
 }
 
-fn read_tail(path: &Path) -> io::Result<String> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Window {
+    pub(crate) text: String,
+    pub(crate) truncated: bool,
+}
+
+pub(crate) fn read_tail(path: &Path) -> io::Result<Window> {
     let mut file = File::open(path)?;
     let length = file.metadata()?.len();
     let mut bytes = Vec::new();
     if length <= TAIL_WINDOW {
         file.read_to_end(&mut bytes)?;
-        return Ok(String::from_utf8_lossy(&bytes).into_owned());
+        return Ok(Window {
+            text: String::from_utf8_lossy(&bytes).into_owned(),
+            truncated: false,
+        });
     }
     file.seek(SeekFrom::Start(length - TAIL_WINDOW))?;
     file.read_to_end(&mut bytes)?;
@@ -166,7 +175,10 @@ fn read_tail(path: &Path) -> io::Result<String> {
         .iter()
         .position(|byte| *byte == b'\n')
         .map_or(bytes.len(), |newline| newline + 1);
-    Ok(String::from_utf8_lossy(bytes.get(start..).unwrap_or_default()).into_owned())
+    Ok(Window {
+        text: String::from_utf8_lossy(bytes.get(start..).unwrap_or_default()).into_owned(),
+        truncated: true,
+    })
 }
 
 pub(crate) fn complete_lines(bytes: &[u8]) -> &[u8] {
@@ -209,7 +221,7 @@ pub(crate) fn first_cwd(path: &Path) -> Result<Option<String>, TranscriptReaderE
     }
 }
 
-fn read_failure(path: &Path, error: io::Error) -> TranscriptReaderError {
+pub(crate) fn read_failure(path: &Path, error: io::Error) -> TranscriptReaderError {
     TranscriptReaderError::Read {
         message: format!("session store file {}: {error}", path.display()),
         source: Box::new(error),

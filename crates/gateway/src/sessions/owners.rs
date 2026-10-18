@@ -12,12 +12,12 @@ use wire::harness::HarnessId;
 use super::session_key;
 use crate::tenancy::UserId;
 
-pub const OWNERS_FILE_NAME: &str = "session-owners.json";
+pub use config::paths::SESSION_OWNERS_FILE_NAME as OWNERS_FILE_NAME;
 const OWNERS_FILE_MODE: u32 = 0o600;
 
 #[must_use]
 pub fn owners_file(state_dir: &Path) -> PathBuf {
-    state_dir.join(OWNERS_FILE_NAME)
+    config::paths::session_owners_file(state_dir)
 }
 
 #[derive(Debug, thiserror::Error)]

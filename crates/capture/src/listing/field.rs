@@ -18,6 +18,22 @@ impl Field {
             .flatten()
     }
 
+    pub(crate) fn count(&self) -> Option<u64> {
+        self.0
+            .get()
+            .starts_with(|first: char| first.is_ascii_digit())
+            .then(|| typed(self.0.get()))
+            .flatten()
+    }
+
+    pub(crate) fn flag(&self) -> bool {
+        self.0.get() == "true"
+    }
+
+    pub(crate) fn raw(&self) -> &str {
+        self.0.get()
+    }
+
     pub(crate) fn items(&self) -> Option<Vec<Self>> {
         self.0
             .get()

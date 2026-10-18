@@ -237,3 +237,25 @@ pub struct TranscriptWsFrame {
     pub command: String,
     pub truncated_before: Option<bool>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HarnessSocketRefusalCode {
+    InvalidSessionId,
+    Forbidden,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum HarnessSocketRefusal {
+    Error {
+        code: HarnessSocketRefusalCode,
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum HarnessSocketMessage {
+    Sync,
+}

@@ -33,6 +33,7 @@ fn ids(rows: &[Row]) -> Vec<&'static str> {
 fn state() -> (tempfile::TempDir, PathBuf) {
     let directory = tempfile::tempdir().expect("state directory");
     let path = owners_file(directory.path());
+    std::fs::create_dir_all(path.parent().expect("owners directory")).expect("owners directory");
     (directory, path)
 }
 
@@ -66,8 +67,28 @@ fn error_text(body: &[u8]) -> String {
 fn the_owners_file_lives_in_the_state_directory() {
     assert_eq!(
         owners_file(Path::new("/state")),
-        PathBuf::from("/state/session-owners.json")
+        PathBuf::from("/state/den/session-owners.json")
     );
+}
+
+#[test]
+fn a_registry_built_from_paths_reads_the_installed_owners_file() {
+    let home = tempfile::tempdir().expect("home");
+    let installed = home.path().join(".rivethub").join("den");
+    std::fs::create_dir_all(&installed).expect("state directory");
+    std::fs::write(
+        installed.join("session-owners.json"),
+        r#"{"claude-code:aaa":"phil","bbb":"coco"}"#,
+    )
+    .expect("seed");
+    let env =
+        config::Environment::from_vars([(std::ffi::OsStr::new("HOME"), home.path().as_os_str())]);
+    let paths = config::Paths::new(&env).expect("paths");
+    let registry = registry(&paths.session_owners_file()).with_node_owner(user("phil"));
+    assert_eq!(registry.owner("aaa").expect("key"), Some(user("phil")));
+    assert_eq!(registry.owner("bbb").expect("key"), Some(user("coco")));
+    assert!(!registry.visible(&user("phil"), "bbb", None).expect("key"));
+    assert!(registry.visible(&user("coco"), "bbb", None).expect("key"));
 }
 
 #[test]

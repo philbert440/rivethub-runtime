@@ -1338,6 +1338,7 @@ dependencies = [
  "serde_yaml_ng",
  "sha2 0.10.9",
  "similar-asserts",
+ "strum 0.27.2",
  "subtle",
  "tempfile",
  "testkit",

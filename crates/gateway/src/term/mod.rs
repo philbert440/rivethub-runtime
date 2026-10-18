@@ -1,5 +1,6 @@
 pub mod actor;
 mod chat;
+mod live;
 pub mod socket;
 
 use std::collections::BTreeMap;
@@ -73,6 +74,8 @@ pub struct TerminalService {
     pub(crate) chats: RwLock<BTreeMap<String, crate::sessions::control::ChatHandle>>,
     harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
     summaries: RwLock<BTreeMap<String, wire::harness::HarnessSessionSummary>>,
+    harness_events:
+        RwLock<BTreeMap<String, tokio::sync::broadcast::Sender<wire::harness::HarnessEvent>>>,
 }
 
 impl TerminalService {
@@ -101,6 +104,7 @@ impl TerminalService {
             chats: RwLock::new(BTreeMap::new()),
             harness: None,
             summaries: RwLock::new(BTreeMap::new()),
+            harness_events: RwLock::new(BTreeMap::new()),
         })
     }
 

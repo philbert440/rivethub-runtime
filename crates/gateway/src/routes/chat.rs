@@ -36,8 +36,6 @@ struct Create {
 pub(crate) fn router() -> Router<Arc<Gateway>> {
     Router::new()
         .route("/api/harness-sessions", post(create).get(list))
-        .route("/term/harness-sessions", get(list))
-        .route("/api/terminal/harness-sessions", get(list))
         .route(
             "/term/harness-sessions/{session}/transcript",
             get(transcript),

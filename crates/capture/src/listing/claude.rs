@@ -386,19 +386,7 @@ pub(crate) fn describe(
             return Ok(None);
         }
     }
-    let mut matches = Vec::new();
-    for slug in slugs(&store) {
-        for session in directories(&store, &slug.path) {
-            if session.name.contains('.') || parent.is_some_and(|parent| parent != session.name) {
-                continue;
-            }
-            matches.extend(
-                agent_files(&store, &session.path, &session.name)
-                    .into_iter()
-                    .filter(|transcript| transcript.id == id),
-            );
-        }
-    }
+    let matches = agent_matches(&store, id, parent);
     let parents: HashSet<&Option<String>> = matches
         .iter()
         .map(|transcript| &transcript.parent)
@@ -406,13 +394,52 @@ pub(crate) fn describe(
     if parent.is_none() && parents.len() > 1 {
         return Ok(None);
     }
-    let newest = matches
+    Ok(newest(&matches).map(described))
+}
+
+fn agent_matches(store: &Root, id: &str, parent: Option<&str>) -> Vec<Transcript> {
+    let mut matches = Vec::new();
+    for slug in slugs(store) {
+        for session in directories(store, &slug.path) {
+            if session.name.contains('.') || parent.is_some_and(|parent| parent != session.name) {
+                continue;
+            }
+            matches.extend(
+                agent_files(store, &session.path, &session.name)
+                    .into_iter()
+                    .filter(|transcript| transcript.id == id),
+            );
+        }
+    }
+    matches
+}
+
+fn newest(matches: &[Transcript]) -> Option<&Transcript> {
+    matches
         .iter()
         .fold(None::<&Transcript>, |newest, candidate| match newest {
             Some(current) if current.times.mtime >= candidate.times.mtime => Some(current),
             Some(_) | None => Some(candidate),
-        });
-    Ok(newest.map(described))
+        })
+}
+
+pub(crate) fn transcript_file(
+    root: &Path,
+    id: &str,
+) -> Result<Option<PathBuf>, TranscriptReaderError> {
+    if !segment_safe(id) {
+        return Ok(None);
+    }
+    let Some(store) = projects(root)? else {
+        return Ok(None);
+    };
+    if let Some(file) = top_level_file(&store, id) {
+        return Ok(Some(file.path));
+    }
+    if is_uuid(id) {
+        return Ok(None);
+    }
+    Ok(newest(&agent_matches(&store, id, None)).map(|file| file.path.clone()))
 }
 
 fn described(file: &Transcript) -> StoreSession {

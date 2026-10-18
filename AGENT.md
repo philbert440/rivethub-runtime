@@ -81,3 +81,19 @@ Disk JSON is read key by key through `listing::field::Field` (a `Box<RawValue>`)
 Walks skip unreadable or refused entries instead of failing the harness. Grok keeps a per-file `updates.jsonl` cursor.
 Reader fixes: kimi reads `session_<uuid>` listing ids, pi lists flat `sessions/*.jsonl`, pi ids need a hyphenated UUID.
 Not here: delegated-task nesting (5.4), `capabilities.listSessions`, the codex protocol exclusion (routes slice).
+
+## session history routes (2026-10-17)
+
+Served from `gateway::routes::history` over the `SessionLister` port, which now also has `transcript(harness, native)`
+(`TranscriptRead::Read(StoreTranscript)` or `NoSource`). `capture::listing::history` holds the Claude JSONL folder (tail
+window, sidechains, compact markers, tools, usage) and text-only `{role,text}` turns for the other stores through
+`StoreReader`; cowork has no source (501). `gateway::history` does `:enc` resolve (bare UUIDs probed in offering order and
+memoized), `ensure_nested_owner`, the store→summary mapping and the context stamp (learned compactAt per window, in memory).
+`GET /api/harnesses` forces `listSessions` when a lister is wired. Live chats publish `HarnessEvent`s per native key through
+`TerminalService::publish_harness` (fan-out in `sessions::fanout`), and their summary status follows active/idle/ended/error.
+`HarnessSessionSummary` times serialize as ISO millis `Z` (`wire::time::Millis`). The owners file is
+`<state_dir>/den/session-owners.json` (`config::paths::session_owners_file`).
+Not here: resume/turns/interrupt (b6-b8), the legacy `/api/sessions/ws` (b9), the registry WS (b11), the codex
+protocol exclusion (inert), `installed`. The old `/term/harness-sessions/{session}/transcript` still uses the Claude-only
+`TranscriptReader` (its golden replays pin the old shape).
+Gotcha: test files that use `expect` in helpers start with `#![cfg(test)]`; non-wire tests cannot use `json!`/`Value`.

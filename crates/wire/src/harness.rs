@@ -472,6 +472,7 @@ pub enum HarnessSessionStatus {
     Error,
 }
 
+#[serde_as]
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -480,7 +481,9 @@ pub struct HarnessSessionSummary {
     pub harness_id: HarnessId,
     pub title: Option<String>,
     pub cwd: Option<String>,
+    #[serde_as(as = "crate::time::Millis")]
     pub created_at: DateTime<Utc>,
+    #[serde_as(as = "crate::time::Millis")]
     pub updated_at: DateTime<Utc>,
     pub status: HarnessSessionStatus,
     pub blocked: Option<bool>,

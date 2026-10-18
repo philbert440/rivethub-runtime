@@ -50,7 +50,7 @@ fn summary_of_an_untitled_zero_time_row() {
     assert_eq!(summary.updated_at, now());
     let json = serde_json::to_string(&summary).unwrap_or_default();
     assert!(
-        json.contains(r#""createdAt":"1970-01-01T00:00:00Z""#),
+        json.contains(r#""createdAt":"1970-01-01T00:00:00.000Z""#),
         "{json}"
     );
     assert!(json.contains(r#""status":"ended""#), "{json}");

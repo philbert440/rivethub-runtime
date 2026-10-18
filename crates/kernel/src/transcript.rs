@@ -3,9 +3,12 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
+use wire::gateway::sessions::HarnessTranscriptTurn;
 use wire::harness::HarnessId;
 use wire::harness::HarnessSessionStatus;
 use wire::harness::HarnessSessionSummary;
+use wire::harness::HarnessStoreSession;
+use wire::harness::RosterCommand;
 use wire::message::Role;
 use wire::session_id::SessionId;
 
@@ -72,6 +75,21 @@ impl StoreSession {
             agent_name: None,
             model: None,
             task_id: None,
+        }
+    }
+
+    #[must_use]
+    pub fn legacy_row(&self) -> HarnessStoreSession {
+        HarnessStoreSession {
+            id: self.id.clone(),
+            command: RosterCommand::from(self.harness),
+            title: self.title.clone(),
+            updated_at: epoch_ms(self.updated_at),
+            created_at: self.created_at.map(epoch_ms),
+            parent_session_id: self.parent_session_id.clone(),
+            agent_name: self.agent_name.clone(),
+            model: self.model.clone(),
+            task_id: self.task_id.clone(),
         }
     }
 
@@ -176,6 +194,18 @@ impl LeadingInteger {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct StoreTranscript {
+    pub turns: Vec<HarnessTranscriptTurn>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TranscriptRead {
+    Read(StoreTranscript),
+    NoSource,
+}
+
 #[async_trait]
 pub trait SessionLister: Send + Sync {
     async fn list(&self, harnesses: &[HarnessId], limit: ListLimit) -> Vec<StoreSession>;
@@ -192,4 +222,10 @@ pub trait SessionLister: Send + Sync {
         harness: HarnessId,
         native: &str,
     ) -> Result<Option<String>, TranscriptReaderError>;
+
+    async fn transcript(
+        &self,
+        harness: HarnessId,
+        native: &str,
+    ) -> Result<TranscriptRead, TranscriptReaderError>;
 }
