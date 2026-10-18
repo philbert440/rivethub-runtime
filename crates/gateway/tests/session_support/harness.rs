@@ -165,6 +165,10 @@ impl HarnessAdapter for Harness {
     async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError> {
         Ok(self.offered.lock().clone())
     }
+
+    async fn commands(&self) -> Result<Vec<kernel::harness::HarnessCommands>, HarnessAdapterError> {
+        Ok(Vec::new())
+    }
 }
 
 fn offered(harness_id: wire::harness::HarnessId) -> wire::harness::HarnessOffering {

@@ -274,6 +274,10 @@ impl HarnessAdapter for Harness {
         self.check(Fault::Offerings)?;
         Ok(self.offerings.clone())
     }
+
+    async fn commands(&self) -> Result<Vec<kernel::harness::HarnessCommands>, HarnessAdapterError> {
+        Ok(Vec::new())
+    }
 }
 
 pub(crate) async fn action(actions: &mut mpsc::UnboundedReceiver<Action>) -> Action {

@@ -139,7 +139,8 @@ impl TerminalService {
         self
     }
 
-    pub(crate) fn adapter(&self) -> Option<Arc<dyn kernel::harness::HarnessAdapter>> {
+    #[must_use]
+    pub fn adapter(&self) -> Option<Arc<dyn kernel::harness::HarnessAdapter>> {
         self.harness.clone()
     }
 

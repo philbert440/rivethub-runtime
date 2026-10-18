@@ -5,10 +5,10 @@ use sqlx::ConnectOptions as _;
 use sqlx::PgPool;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use wire::gateway::GatewayError;
 use wire::gateway::agents::AgentListResponse;
 use wire::gateway::agents::AgentStoreBackend;
 use wire::gateway::catalog::CatalogAgentsResponse;
+use wire::gateway::catalog::CatalogSheet;
 use wire::gateway::catalog::OutcomesResponse;
 use wire::gateway::devices::PhonePairingAvailability;
 use wire::task::TasksListResponse;
@@ -140,10 +140,14 @@ async fn phone_pairing_without_an_authority_stays_unavailable_and_agents_stay_on
         .json::<AgentListResponse>()
         .await?;
     assert_eq!(agents.backend, Some(AgentStoreBackend::File));
-    let catalog = client.get(format!("{base}/api/catalog")).send().await?;
-    assert_eq!(catalog.status(), reqwest::StatusCode::INTERNAL_SERVER_ERROR);
-    let catalog_error = catalog.json::<GatewayError>().await?;
-    assert_eq!(catalog_error.error, "harness commands are unavailable");
+    let catalog = client
+        .get(format!("{base}/api/catalog"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<CatalogSheet>()
+        .await?;
+    assert!(catalog.skills.is_empty(), "{catalog:?}");
     let agents = client
         .get(format!("{base}/api/catalog/agents"))
         .send()
