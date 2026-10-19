@@ -5,7 +5,10 @@
 mod common;
 #[path = "search_support/fts_seed.rs"]
 mod seed;
+#[path = "search_support/superseded.rs"]
+mod superseded;
 use seed::{seed_fts, seed_tag_pool};
+use superseded::Superseded;
 
 use std::str::FromStr as _;
 
@@ -45,8 +48,27 @@ const LEAF_ID: &str = "00000000-0000-4000-8000-400000000001";
 const BRANCH_ID: &str = "00000000-0000-4000-8000-400000000002";
 const LEAF: &str = "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.";
 const BRANCH: &str = "Branch: staging deploys and database migration plans for AcmeKit";
+const FILLER_RELEASE: &str = "zz0 zz1 zz2 zz3 zz4 zz5 zz6 zz7 zz8 zz9 zz10 zz11 zz12 zz13 zz14 zz15 zz16 zz17 zz18 zz19 zz20 zz21 zz22 zz23 zz24 zz25 zz26 zz27 zz28 zz29 release";
 const TAGGED_NOTE: &str =
     "a long note that mentions the rollback only once among many other unrelated words here";
+
+const SUPERSEDED: &[Superseded] = &[
+    Superseded {
+        query: "deploy release",
+        hits: &[
+            "run the deploy script from the release branch, then watch the health check",
+            "",
+            "how do we deploy the AcmeKit service to staging",
+            FILLER_RELEASE,
+            LEAF,
+            BRANCH,
+        ],
+    },
+    Superseded {
+        query: "\"unbalanced AND (",
+        hits: &[BRANCH, LEAF],
+    },
+];
 
 const IN_SCOPE: &[&str] = &["runtime", "fts_only", "tag_pool_widening", "hybrid"];
 
@@ -189,6 +211,10 @@ async fn replay_memory(
     let cases = array(fts, "memorySearch")?;
     for case in cases {
         let text = field_str(case, "query")?;
+        if let Some(superseded) = superseded::find(SUPERSEDED, text) {
+            expect_superseded(store, case, clock, ids, superseded).await?;
+            continue;
+        }
         let outcome = store
             .search_at(
                 recorded_query(text, case.get("options").ok_or("options")?)?,
@@ -205,6 +231,41 @@ async fn replay_memory(
             &format!("memory {text}"),
         )?;
     }
+    Ok(())
+}
+
+async fn expect_superseded(
+    store: &SqliteStore,
+    case: &Json,
+    clock: DateTime<Utc>,
+    ids: &Ids,
+    superseded: &Superseded,
+) -> TestResult {
+    let mut recorded = Vec::new();
+    for hit in array(case, "hits")? {
+        let id = field_str(hit, "id")?;
+        recorded.push(if common::generated(id) {
+            ids.actual(id)?
+        } else {
+            id.to_owned()
+        });
+    }
+    superseded::reinforce(store, recorded, clock).await?;
+    let fresh = seed_fts().await?;
+    let query = recorded_query(superseded.query, case.get("options").ok_or("options")?)?;
+    let outcome = fresh.store.search_at(query, clock, &Utc).await?;
+    let contents: Vec<&str> = outcome
+        .results
+        .iter()
+        .map(|hit| hit.content.as_str())
+        .collect();
+    assert_eq!(
+        contents,
+        superseded.hits,
+        "{}: {}",
+        superseded.query,
+        superseded::OR_SUPERSEDES_AND
+    );
     Ok(())
 }
 

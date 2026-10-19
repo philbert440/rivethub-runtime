@@ -317,3 +317,21 @@ async fn configured_instruction_and_short_literals_reach_the_search_arms() -> Te
     assert!((hit.relevance_score - expected).abs() < 1e-12);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_question_finds_rows_that_hold_only_some_of_its_words() -> TestResult {
+    let now = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
+    for (provider, mode) in [
+        (None, SearchMode::Hybrid),
+        (None, SearchMode::Fts),
+        (Some(provider()), SearchMode::Fts),
+    ] {
+        let (_dir, store) = seeded(provider).await?;
+        let response = store
+            .search_at(query("where did the alpha summary go", mode), now, &Utc)
+            .await?;
+        let found: Vec<&str> = response.results.iter().map(|hit| hit.id.as_str()).collect();
+        assert_eq!(found, ["s", "a", "b"], "{mode}");
+    }
+    Ok(())
+}

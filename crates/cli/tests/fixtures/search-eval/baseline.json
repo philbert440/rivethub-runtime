@@ -1,9 +1,9 @@
 {
   "limit": 10,
-  "query_count": 12,
-  "recall_at_k": 0.773,
-  "mrr": 0.682,
-  "must_contain_total": 9,
-  "must_contain_passed": 8,
-  "must_contain_pass_rate": 0.889
+  "query_count": 15,
+  "recall_at_k": 0.964,
+  "mrr": 0.702,
+  "must_contain_total": 12,
+  "must_contain_passed": 12,
+  "must_contain_pass_rate": 1.0
 }
