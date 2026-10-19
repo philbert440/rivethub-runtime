@@ -15,6 +15,7 @@ use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskStore;
 use sqlx::PgConnection;
 use sqlx::PgPool;
+use tokio::sync::broadcast;
 use tokio::sync::watch;
 use uuid::Uuid;
 use wire::task::TaskStatus;
@@ -37,11 +38,14 @@ use crate::task_rows::mark_running;
 use crate::task_rows::set_pending;
 use crate::task_rows::sweep_tasks;
 
+const FINISHED_BUFFER: usize = 256;
+
 #[derive(Clone, Debug)]
 pub struct PostgresTasks {
     pool: PgPool,
     worker: String,
     pub(crate) events: watch::Sender<u64>,
+    pub(crate) finished: broadcast::Sender<Uuid>,
 }
 
 impl PostgresTasks {
@@ -59,6 +63,7 @@ impl PostgresTasks {
             pool,
             worker: Uuid::new_v4().to_string(),
             events,
+            finished: broadcast::channel(FINISHED_BUFFER).0,
         }
     }
 

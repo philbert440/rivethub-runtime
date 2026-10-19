@@ -286,6 +286,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::harness::HarnessStoreSessionList>,
     SchemaGenerator::subschema_for::<crate::task::TaskExecutorKind>,
     SchemaGenerator::subschema_for::<crate::task::TaskStatus>,
+    SchemaGenerator::subschema_for::<crate::gateway::notifications::TaskDoneNotification>,
     SchemaGenerator::subschema_for::<crate::task::TaskVerdict>,
     SchemaGenerator::subschema_for::<crate::task::ContextRefKind>,
     SchemaGenerator::subschema_for::<crate::task::ContextRef>,

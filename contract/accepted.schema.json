@@ -10764,6 +10764,26 @@
         "mesh"
       ]
     },
+    "task.done": {
+      "type": "object",
+      "properties": {
+        "taskId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/TaskStatus"
+        },
+        "ts": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "taskId",
+        "status",
+        "ts"
+      ]
+    },
     "TaskVerdict": {
       "type": "string",
       "enum": [

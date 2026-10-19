@@ -9,6 +9,7 @@ use serde::Serialize;
 use strum::Display;
 use strum::EnumString;
 use thiserror::Error;
+use tokio::sync::broadcast;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -328,6 +329,8 @@ pub trait TaskQuery: Debug + Send + Sync {
 
 pub trait TaskWatch: Debug + Send + Sync {
     fn subscribe(&self) -> watch::Receiver<u64>;
+
+    fn finished(&self) -> broadcast::Receiver<Uuid>;
 }
 
 #[async_trait]
