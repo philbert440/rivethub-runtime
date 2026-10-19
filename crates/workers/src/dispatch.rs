@@ -7,7 +7,8 @@ use crate::summarize::{
     handle_summarize,
 };
 use crate::wiki_builder::{
-    WikiBuilderDeps, WikiBuilderEnv, handle_extract_wiki, handle_wiki_backfill,
+    WikiBuilderDeps, WikiBuilderEnv, handle_consolidate_wiki, handle_extract_wiki,
+    handle_wiki_backfill,
 };
 use chrono::Utc;
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
@@ -100,7 +101,10 @@ pub(crate) async fn dispatch<Q: JobQueue>(
             };
             handle_suggest(&categorize, &job.payload).await.map(|_| ())
         }
-        JobName::Fixed(FixedJob::ConsolidateWiki | FixedJob::RecompileWiki | FixedJob::RunTask)
+        JobName::Fixed(FixedJob::ConsolidateWiki) => {
+            dispatch_consolidate(queue, env, job, cancel).await
+        }
+        JobName::Fixed(FixedJob::RecompileWiki | FixedJob::RunTask)
         | JobName::Heartbeat { .. }
         | JobName::RunTaskOn { .. } => Err(WorkerError::Unhandled {
             name: job.name.to_string(),
@@ -135,6 +139,24 @@ async fn dispatch_wiki<Q: JobQueue>(
     } else {
         handle_wiki_backfill(&wiki_env).await.map(|_| ())
     }
+}
+
+async fn dispatch_consolidate<Q: JobQueue>(
+    queue: &Q,
+    env: &JobEnv,
+    job: &ClaimedJob,
+    cancel: &CancellationToken,
+) -> Result<(), WorkerError> {
+    let store = env
+        .wiki
+        .as_ref()
+        .and_then(|wiki| wiki.consolidate.as_ref())
+        .ok_or_else(|| WorkerError::Unhandled {
+            name: job.name.to_string(),
+        })?;
+    handle_consolidate_wiki(store.as_ref(), queue, &job.payload, Utc::now(), cancel)
+        .await
+        .map(|_| ())
 }
 
 enum Sweep {

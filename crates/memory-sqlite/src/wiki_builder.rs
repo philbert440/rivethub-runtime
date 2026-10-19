@@ -54,7 +54,7 @@ impl WikiBuilderStore for SqliteStore {
     }
 }
 
-async fn blocking<T, F>(store: &SqliteStore, body: F) -> Result<T, WikiStoreError>
+pub(crate) async fn blocking<T, F>(store: &SqliteStore, body: F) -> Result<T, WikiStoreError>
 where
     T: Send + 'static,
     F: FnOnce(&mut Connection) -> Result<T, WikiStoreError> + Send + 'static,
@@ -266,6 +266,6 @@ fn time_stamp(now: DateTime<Utc>) -> String {
     crate::time::stamp(now)
 }
 
-fn query(source: rusqlite::Error) -> WikiStoreError {
+pub(crate) fn query(source: rusqlite::Error) -> WikiStoreError {
     WikiStoreError::Query(Box::new(source))
 }

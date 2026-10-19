@@ -487,6 +487,7 @@ async fn all_claims_every_role_that_has_a_handler() {
     rig.runner = Arc::new(
         runner.with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
             store: Arc::new(wiki::WikiStore::default()),
+            consolidate: None,
             model: "wiki-model".to_owned(),
         }),
     );

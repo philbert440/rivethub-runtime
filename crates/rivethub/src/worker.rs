@@ -5,6 +5,7 @@ use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::JobQueue;
 use kernel::shutdown::Activities;
 use kernel::wiki::builder::WikiBuilderStore;
+use kernel::wiki::consolidate::WikiConsolidateStore;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 use workers::{
@@ -140,6 +141,7 @@ async fn run(
                 summaries,
                 memory: store,
                 wiki,
+                consolidate: None,
             },
             &config,
             env,
@@ -178,6 +180,7 @@ pub struct WorkerPorts<Q> {
     pub summaries: Arc<dyn SummaryStore>,
     pub memory: Arc<dyn MemoryStore>,
     pub wiki: Arc<dyn WikiBuilderStore>,
+    pub consolidate: Option<Arc<dyn WikiConsolidateStore>>,
 }
 
 pub async fn build_runner<Q: JobQueue + 'static>(
@@ -225,6 +228,7 @@ pub fn with_models<Q: JobQueue + 'static>(
     )
     .with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
         store: ports.wiki,
+        consolidate: ports.consolidate,
         model,
     })
     .with_activities(activities.clone());
