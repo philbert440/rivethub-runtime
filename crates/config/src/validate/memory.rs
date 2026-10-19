@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 use regress::Regex;
@@ -5,6 +6,7 @@ use regress::Regex;
 use crate::model::{
     EmbeddedSection, MemorySection, PostgresSection, RedactionSection, SqliteSection,
 };
+use crate::provider::{ProviderBody, ProviderSlot};
 use crate::report::ValidationResult;
 
 use super::looks_like_api_key;
@@ -70,6 +72,84 @@ fn embed_api_key(postgres: &PostgresSection, out: &mut ValidationResult) {
         "memory.postgres.embed_api_key",
         "memory.postgres.embed_api_key appears hardcoded — prefer environment variables",
     );
+}
+
+pub(super) fn embed_provider_references(
+    out: &mut ValidationResult,
+    memory: &MemorySection,
+    providers: Option<&BTreeMap<String, ProviderSlot>>,
+) {
+    if let Some(postgres) = &memory.postgres
+        && let Some(id) = &postgres.embed_provider
+    {
+        let section = EmbedSection {
+            path: "memory.postgres.embed_provider",
+            endpoint: postgres.embed_endpoint.is_some(),
+            api_key: postgres.embed_api_key.is_some(),
+        };
+        embed_provider(out, &section, id, providers);
+    }
+    if let Some(sqlite) = &memory.sqlite
+        && let Some(id) = &sqlite.embed_provider
+    {
+        let section = EmbedSection {
+            path: "memory.sqlite.embed_provider",
+            endpoint: sqlite.embed_endpoint.is_some(),
+            api_key: sqlite.embed_api_key.is_some(),
+        };
+        embed_provider(out, &section, id, providers);
+    }
+}
+
+struct EmbedSection {
+    path: &'static str,
+    endpoint: bool,
+    api_key: bool,
+}
+
+fn embed_provider(
+    out: &mut ValidationResult,
+    section: &EmbedSection,
+    id: &str,
+    providers: Option<&BTreeMap<String, ProviderSlot>>,
+) {
+    let path = section.path;
+    if section.endpoint {
+        out.error(
+            path,
+            "\"embed_provider\" and \"embed_endpoint\" cannot both be set — the provider's base_url is the embeddings endpoint",
+        );
+    }
+    if section.api_key {
+        out.error(
+            path,
+            "\"embed_provider\" and \"embed_api_key\" cannot both be set — the provider's api_key or token_command authenticates embeddings",
+        );
+    }
+    let Some(slot) = providers.and_then(|providers| providers.get(id)) else {
+        let names: Vec<&str> = providers
+            .into_iter()
+            .flatten()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        out.error(
+            path,
+            format!(
+                "Provider \"{id}\" referenced by {path} is not defined in [providers]. Available: {}",
+                super::available_list(&names)
+            ),
+        );
+        return;
+    };
+    match &slot.body {
+        ProviderBody::Openai(_) => {}
+        ProviderBody::Cli(_) | ProviderBody::Unknown(_) | ProviderBody::Removed(_) => out.error(
+            path,
+            format!(
+                "Provider \"{id}\" referenced by {path} cannot serve embeddings — use an openai-compatible or vllm provider"
+            ),
+        ),
+    }
 }
 
 fn embedded_section(out: &mut ValidationResult, embedded: &EmbeddedSection) {

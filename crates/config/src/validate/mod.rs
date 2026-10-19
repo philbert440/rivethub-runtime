@@ -516,6 +516,9 @@ fn cross_references(config: &Config, out: &mut ValidationResult) {
             agent_provider_cross_ref(out, name, agent, &provider_names);
         }
     }
+    if let Some(memory) = &config.memory {
+        memory::embed_provider_references(out, memory, config.providers.as_ref());
+    }
     if let Some(runtime) = &config.runtime {
         for (index, heartbeat) in runtime.heartbeats.iter().enumerate() {
             let Some(agent) = heartbeat.agent.as_deref() else {

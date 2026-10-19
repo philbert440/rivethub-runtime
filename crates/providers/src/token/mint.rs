@@ -4,6 +4,7 @@ use std::sync::atomic::AtomicU64;
 #[cfg(test)]
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use std::time::SystemTime;
 
 use parking_lot::Mutex;
 use tokio::io::AsyncReadExt;
@@ -11,6 +12,7 @@ use tokio::sync::watch;
 
 use crate::error::BuildError;
 use crate::error::TokenError;
+use crate::token::jwt;
 
 const DEFAULT_TTL_MS: u64 = 300_000;
 const DEFAULT_TIMEOUT_MS: u64 = 5_000;
@@ -34,7 +36,7 @@ struct Inner {
 
 struct Cached {
     token: String,
-    minted: tokio::time::Instant,
+    expires: tokio::time::Instant,
 }
 
 struct Flight {
@@ -123,7 +125,7 @@ impl TokenSource {
 
     fn role(&self) -> Role {
         let mut inner = self.inner.lock();
-        if let Some(token) = fresh_token(&inner, self.ttl) {
+        if let Some(token) = fresh_token(&inner) {
             return Role::Ready(token);
         }
         if let Some(flight) = inner.flight.clone() {
@@ -145,10 +147,12 @@ impl TokenSource {
         let mut inner = self.inner.lock();
         let published = match minted {
             Ok(token) => {
-                if inner.generation == flight.generation {
+                if inner.generation == flight.generation
+                    && let Some(expires) = cache_until(&token, self.ttl)
+                {
                     inner.cache = Some(Cached {
                         token: token.clone(),
-                        minted: tokio::time::Instant::now(),
+                        expires,
                     });
                 }
                 Ok(token)
@@ -176,14 +180,36 @@ enum Role {
     Wait(Arc<Flight>),
 }
 
-fn fresh_token(inner: &Inner, ttl: Duration) -> Option<String> {
+fn fresh_token(inner: &Inner) -> Option<String> {
     let cached = inner.cache.as_ref()?;
-    let age = tokio::time::Instant::now().saturating_duration_since(cached.minted);
-    if age < ttl {
+    if tokio::time::Instant::now() < cached.expires {
         Some(cached.token.clone())
     } else {
         None
     }
+}
+
+fn cache_until(token: &str, ttl: Duration) -> Option<tokio::time::Instant> {
+    let lifetime = cache_lifetime(token, ttl);
+    if lifetime.is_zero() {
+        return None;
+    }
+    tokio::time::Instant::now().checked_add(lifetime)
+}
+
+fn cache_lifetime(token: &str, ttl: Duration) -> Duration {
+    #[cfg_attr(
+        dylint_lib = "rr_lints",
+        expect(
+            fallback,
+            reason = "CONTRACT B8: a bearer without a readable JWT exp claim is opaque and is cached for token_ttl_ms"
+        )
+    )]
+    let lifetime = match jwt::lifetime(token, SystemTime::now()) {
+        Ok(lifetime) => lifetime,
+        Err(_) => ttl,
+    };
+    lifetime
 }
 
 async fn wait_for(flight: &Flight) -> Result<String, TokenError> {

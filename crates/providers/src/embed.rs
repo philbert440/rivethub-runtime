@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use config::provider::OpenaiProvider;
 use kernel::model::Embedding;
 use kernel::model::ModelProviderError;
 use thiserror::Error;
@@ -103,6 +104,11 @@ impl Embedder {
             query_instruction: config.query_instruction,
             client,
         })
+    }
+
+    pub fn with_provider_auth(mut self, provider: &OpenaiProvider) -> Result<Self, BuildError> {
+        self.auth = Arc::new(Auth::from_provider(provider)?);
+        Ok(self)
     }
 
     pub(crate) fn sharing(
