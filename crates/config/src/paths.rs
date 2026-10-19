@@ -146,13 +146,20 @@ impl Paths {
     }
 }
 
-pub(crate) fn expand_home(env: &Environment, path: &Path) -> Option<PathBuf> {
-    let rest = path.strip_prefix("~").ok()?;
-    let paths = Paths::new(env).ok()?;
+pub(crate) fn expand_home(
+    env: &Environment,
+    path: &Path,
+) -> Result<Option<PathBuf>, crate::ConfigError> {
+    let mut components = path.components();
+    if components.next() != Some(Component::Normal(OsStr::new("~"))) {
+        return Ok(None);
+    }
+    let home = Paths::new(env)?.home().to_path_buf();
+    let rest = components.as_path();
     if rest.as_os_str().is_empty() {
-        Some(paths.home().to_path_buf())
+        Ok(Some(home))
     } else {
-        Some(paths.home().join(rest))
+        Ok(Some(home.join(rest)))
     }
 }
 

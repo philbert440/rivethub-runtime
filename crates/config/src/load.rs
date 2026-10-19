@@ -250,7 +250,7 @@ impl Config {
             });
         }
         let mut typed = type_document(&document)?;
-        expand_workspace(env, &mut typed.config);
+        expand_workspace(env, &mut typed.config)?;
         let notices = notices(env, &document, &typed.config);
         Ok(Loaded {
             config: typed.config,
@@ -260,15 +260,16 @@ impl Config {
     }
 }
 
-fn expand_workspace(env: &Environment, config: &mut Config) {
+fn expand_workspace(env: &Environment, config: &mut Config) -> Result<(), ConfigError> {
     if let Some(workspace) = config
         .runtime
         .as_mut()
         .and_then(|runtime| runtime.workspace.as_mut())
-        && let Some(expanded) = expand_home(env, workspace)
+        && let Some(expanded) = expand_home(env, workspace)?
     {
         *workspace = expanded;
     }
+    Ok(())
 }
 
 fn notices(env: &Environment, document: &serde_yaml_ng::Value, config: &Config) -> Vec<String> {

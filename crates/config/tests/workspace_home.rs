@@ -53,10 +53,9 @@ fn another_users_tilde_is_not_expanded() -> Result<(), config::ConfigError> {
 }
 
 #[test]
-fn without_home_the_tilde_is_kept() -> Result<(), config::ConfigError> {
-    assert_eq!(
-        workspace(&Environment::default(), "~/work")?,
-        Some(PathBuf::from("~/work"))
-    );
-    Ok(())
+fn without_home_a_tilde_workspace_is_refused() {
+    assert!(matches!(
+        workspace(&Environment::default(), "~/work"),
+        Err(config::ConfigError::Home)
+    ));
 }
