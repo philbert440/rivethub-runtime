@@ -11,6 +11,13 @@ use wire::session_id::SessionId;
 use super::{LaunchCommand, TerminalService};
 
 const HARNESS_EVENT_BUFFER: usize = 256;
+pub(crate) const REGISTRY_EVENT_BUFFER: usize = 256;
+
+#[derive(Debug, Clone)]
+pub(crate) struct RegistryEvent {
+    pub(crate) key: String,
+    pub(crate) event: HarnessEvent,
+}
 
 fn serves(command: &LaunchCommand, harness: HarnessId) -> bool {
     command.harness == Some(harness) || command.id == RosterCommand::from(harness).to_string()
@@ -83,6 +90,20 @@ impl TerminalService {
         }
     }
 
+    pub(crate) fn subscribe_registry(&self) -> broadcast::Receiver<RegistryEvent> {
+        self.registry_events.subscribe()
+    }
+
+    pub(crate) fn publish_registry(&self, key: String, event: HarnessEvent) {
+        if self
+            .registry_events
+            .send(RegistryEvent { key, event })
+            .is_err()
+        {
+            tracing::trace!("registry event has no live harness socket");
+        }
+    }
+
     pub(crate) fn set_live_status(
         &self,
         key: &str,
@@ -93,15 +114,14 @@ impl TerminalService {
             summary.status = status;
             summary.updated_at = chrono::Utc::now();
         }
-        self.publish_harness(
-            key,
-            HarnessEvent::SessionUpdated {
-                session_id: session.clone(),
-                status,
-                previous_session_id: None,
-                supersedes: None,
-                blocked: None,
-            },
-        );
+        let event = HarnessEvent::SessionUpdated {
+            session_id: session.clone(),
+            status,
+            previous_session_id: None,
+            supersedes: None,
+            blocked: None,
+        };
+        self.publish_harness(key, event.clone());
+        self.publish_registry(key.to_owned(), event);
     }
 }

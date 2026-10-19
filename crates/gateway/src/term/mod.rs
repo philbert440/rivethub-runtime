@@ -1,7 +1,7 @@
 pub mod actor;
 mod chat;
 mod inject;
-mod live;
+pub(crate) mod live;
 pub mod socket;
 
 use std::collections::BTreeMap;
@@ -102,6 +102,7 @@ pub struct TerminalService {
     summaries: RwLock<BTreeMap<String, wire::harness::HarnessSessionSummary>>,
     harness_events:
         RwLock<BTreeMap<String, tokio::sync::broadcast::Sender<wire::harness::HarnessEvent>>>,
+    registry_events: tokio::sync::broadcast::Sender<live::RegistryEvent>,
     injecting: tokio::sync::Mutex<()>,
 }
 
@@ -132,6 +133,7 @@ impl TerminalService {
             harness: None,
             summaries: RwLock::new(BTreeMap::new()),
             harness_events: RwLock::new(BTreeMap::new()),
+            registry_events: tokio::sync::broadcast::channel(live::REGISTRY_EVENT_BUFFER).0,
             injecting: tokio::sync::Mutex::new(()),
         })
     }

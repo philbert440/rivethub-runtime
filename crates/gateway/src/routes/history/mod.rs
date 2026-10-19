@@ -1,3 +1,4 @@
+mod registry;
 mod socket;
 
 use std::collections::HashSet;
@@ -24,6 +25,7 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route("/term/harness-sessions", get(legacy))
         .route("/api/terminal/harness-sessions", get(legacy))
         .route("/api/harnesses/{harness}/sessions", get(plane))
+        .route("/api/harnesses/ws", get(registry::upgrade))
         .route("/api/harness-sessions/ws", get(socket::upgrade))
         .route(
             "/api/harness-sessions/{session}",
