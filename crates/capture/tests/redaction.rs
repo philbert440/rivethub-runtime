@@ -114,7 +114,7 @@ fn builtins_replace_secret_spans() -> Result<(), Box<dyn std::error::Error>> {
 fn scan_covers_only_the_head_of_long_text() -> Result<(), Box<dyn std::error::Error>> {
     let redaction = redaction(true, true, &[]).expect("resolves");
     let tail_secret = "Bearer abcdefghijklmnop1234";
-    let content = "x".repeat(17000) + tail_secret;
+    let content = "x".repeat(30000) + tail_secret;
     let mut tail_case = message(&content, "{}")?;
     let spans = redaction.redact_message(&mut tail_case);
     assert_eq!(spans, 0);

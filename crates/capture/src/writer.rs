@@ -156,10 +156,7 @@ impl<T: CaptureTransport> CaptureWriter<T> {
             .await?;
         let mut prepared = batch.clone();
         if let Some(redaction) = &self.redaction {
-            let mut spans = 0;
-            for message in &mut prepared.messages {
-                spans += redaction.redact_message(message);
-            }
+            let spans = redaction.redact_batch(&mut prepared);
             if spans > 0 {
                 tracing::info!("redacted {spans} spans");
             }
