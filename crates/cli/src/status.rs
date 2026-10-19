@@ -2,7 +2,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::time::Duration;
 
-use config::Environment;
+use config::{Config, Environment};
 use gateway::server::BindSource;
 use rustls_pki_types::CertificateDer;
 use rustls_pki_types::pem::PemObject;
@@ -38,11 +38,49 @@ pub(crate) async fn run(env: &Environment) -> Report {
     }
 }
 
+pub(crate) struct Endpoint {
+    pub(crate) url: url::Url,
+    pub(crate) client: reqwest::Client,
+}
+
 async fn health(env: &Environment) -> Result<Report, Error> {
     let (_, loaded) = configuration::load(env).await?;
+    let Endpoint { url, client } = endpoint(env, &loaded.config).await?;
+    let health: Health = client
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let text = if health.response.ok {
+        "RivetHub is running".to_owned()
+    } else {
+        "RivetHub is not running".to_owned()
+    };
+    let mut parts = vec![text];
+    if let Some(version) = health.version {
+        parts.push(format!(" (v{version})"));
+    }
+    if let Some(uptime) = health.uptime {
+        parts.push(format!("; uptime {uptime}s"));
+    }
+    parts.push("\n".to_owned());
+    for provider in &health.response.degraded_providers {
+        parts.push(format!(
+            "Provider {} is degraded ({}): {}\n",
+            provider.id, provider.recovery, provider.reason
+        ));
+    }
+    let mut report = Report::success(parts.join(""));
+    report.stderr = configuration::notices(&loaded);
+    Ok(report)
+}
+
+pub(crate) async fn endpoint(env: &Environment, config: &Config) -> Result<Endpoint, Error> {
     let hostname = host_name()?;
-    let node = config::resolve_node_name(&loaded.config, env, &hostname)?;
-    let section = loaded.config.gateway.clone();
+    let node = config::resolve_node_name(config, env, &hostname)?;
+    let section = config.gateway.clone();
     let tls_env = env.clone();
     let shared = config::shared_dir(&tls_env);
     let source = tokio::task::spawn_blocking(move || {
@@ -80,35 +118,7 @@ async fn health(env: &Environment) -> Result<Report, Error> {
         _ => builder,
     }
     .build()?;
-    let health: Health = client
-        .get(url)
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
-    let text = if health.response.ok {
-        "RivetHub is running".to_owned()
-    } else {
-        "RivetHub is not running".to_owned()
-    };
-    let mut parts = vec![text];
-    if let Some(version) = health.version {
-        parts.push(format!(" (v{version})"));
-    }
-    if let Some(uptime) = health.uptime {
-        parts.push(format!("; uptime {uptime}s"));
-    }
-    parts.push("\n".to_owned());
-    for provider in &health.response.degraded_providers {
-        parts.push(format!(
-            "Provider {} is degraded ({}): {}\n",
-            provider.id, provider.recovery, provider.reason
-        ));
-    }
-    let mut report = Report::success(parts.join(""));
-    report.stderr = configuration::notices(&loaded);
-    Ok(report)
+    Ok(Endpoint { url, client })
 }
 
 fn verified(

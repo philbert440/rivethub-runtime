@@ -36,12 +36,40 @@ fn clap_parses_port_and_no_lan_and_rejects_unknown_flags() {
         parsed.command,
         Some(Command::Local {
             port: Some(9),
-            no_lan: true
+            no_lan: true,
+            ensure: false,
+            wait: 2,
         })
     ));
     let unknown = Cli::parse_args(["rh", "local", "--yes"].map(Into::into)).expect_err("flag");
     assert_eq!(unknown.exit, Exit::Failure);
     assert!(!unknown.stderr.starts_with("Unknown command:"));
+}
+
+#[test]
+fn clap_parses_ensure_with_a_bounded_wait() {
+    let parsed = Cli::parse_args(
+        [
+            "rh", "local", "--ensure", "--wait", "7", "--port", "9", "--no-lan",
+        ]
+        .map(Into::into),
+    )
+    .expect("flags");
+    assert!(matches!(
+        parsed.command,
+        Some(Command::Local {
+            port: Some(9),
+            no_lan: true,
+            ensure: true,
+            wait: 7,
+        })
+    ));
+    let alone = Cli::parse_args(["rh", "local", "--wait", "7"].map(Into::into)).expect_err("wait");
+    assert_eq!(alone.exit, Exit::Failure);
+    assert!(alone.stderr.contains("--ensure"), "{}", alone.stderr);
+    let zero = Cli::parse_args(["rh", "local", "--ensure", "--wait", "0"].map(Into::into))
+        .expect_err("zero wait");
+    assert_eq!(zero.exit, Exit::Failure);
 }
 
 #[tokio::test]

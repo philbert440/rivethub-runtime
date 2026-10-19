@@ -88,6 +88,19 @@ pub enum Command {
         port: Option<u16>,
         #[arg(long)]
         no_lan: bool,
+        #[arg(
+            long,
+            help = "Start the node in the background unless one already answers its health check"
+        )]
+        ensure: bool,
+        #[arg(
+            long,
+            requires = "ensure",
+            default_value_t = 2,
+            value_parser = clap::value_parser!(u64).range(1..=300),
+            help = "Seconds --ensure waits for the node to answer"
+        )]
+        wait: u64,
     },
     #[command(about = "Administer memory", disable_help_flag = true)]
     Memory {
