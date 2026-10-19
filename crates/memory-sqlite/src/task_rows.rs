@@ -14,10 +14,12 @@ use uuid::Uuid;
 use wire::task::TaskStatus;
 
 mod decode;
+mod list;
 mod permission;
 mod sweep;
 
 use decode::{map_row, record_from};
+pub(crate) use list::list_tasks;
 pub(crate) use permission::append_permission;
 
 const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS rh_tasks (
@@ -53,7 +55,13 @@ const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS rh_tasks (
     duration_ms INTEGER,
     eval TEXT,
     eval_attempt INTEGER NOT NULL
-);";
+);
+CREATE TEMP TRIGGER IF NOT EXISTS rh_task_done AFTER UPDATE OF status ON main.rh_tasks
+WHEN NEW.status IN ('completed','failed','killed','timeout')
+    AND OLD.status NOT IN ('completed','failed','killed','timeout')
+BEGIN
+    SELECT rh_task_done();
+END;";
 
 const LOAD: &str =
     "SELECT id, goal, context_refs, acceptance_criteria, spec, executor, executor_target,

@@ -1,6 +1,6 @@
 # Operator CLI: B9, B10, B16
 
-`Config::load` with `Profile::Node`, and `rh config validate`, still require `runtime`, `agents`, and `providers`. `rh local` never invents an agent, a provider, or an endpoint. When no config resolves it writes only `memory.backend: sqlite`, the database path under the state directory, and the gateway bind, then loads that file with `Profile::Standalone`, which does not require those sections. The task engine (`rh agent`) needs Postgres and is not part of `rh local`.
+`Config::load` with `Profile::Node`, and `rh config validate`, still require `runtime`, `agents`, and `providers`. `rh local` never invents an agent, a provider, or an endpoint. When no config resolves it writes only `memory.backend: sqlite`, the database path under the state directory, and the gateway bind, then loads that file with `Profile::Standalone`, which does not require those sections. `rh agent` needs Postgres. `rh local` runs the task engine on the SQLite store unless `tasks.enabled` is false; it serves `/api/tasks`, `/api/catalog` and `/api/outcomes` and backs MCP delegation with the same engine. Its directory holds the configured agents and the presets in `agents.json`, read at start.
 
 `rh` dispatches through the `cli` composition crate. Bare invocation, `rh help` and `rh --help` print the derived clap
 command list, and `rh <command> --help` prints one command's arguments. One typed `cli::Exit` owns exit codes, including

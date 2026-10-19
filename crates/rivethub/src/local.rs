@@ -154,6 +154,7 @@ struct GatewayNode {
     listener: tokio::net::TcpListener,
     tls: Option<gateway::tls::TlsPaths>,
     runners: Vec<(ProcessRole, ComposedRunner<SqliteStore>)>,
+    tasks: Option<crate::agent::LocalTasks>,
     activities: Activities,
 }
 
@@ -190,24 +191,27 @@ async fn bind_node(
         activities,
     )
     .await?;
-    let composition =
-        crate::composition::Composition::on_sqlite(config, env, store, shutdown, activities)
-            .await
-            .map_err(StartupError::from)?;
-    let (listener, tls) = match listen(config, env).await {
-        Ok(bound) => bound,
-        Err(error) => {
-            if let Err(close) = composition.close().await {
-                tracing::error!("composition close failed: {close}");
-            }
-            return Err(error.into());
-        }
-    };
+    let (listener, tls) = listen(config, env).await?;
+    let addr = listener.local_addr().map_err(StartupError::from)?;
+    let gateway = loopback_url(addr, tls.is_some())?;
+    let tasks =
+        crate::agent::LocalTasks::open(config, env, store.as_ref(), gateway, activities).await?;
+    let composition = crate::composition::Composition::on_sqlite(
+        config,
+        env,
+        store,
+        tasks.as_ref(),
+        shutdown,
+        activities,
+    )
+    .await
+    .map_err(StartupError::from)?;
     Ok(GatewayNode {
         composition,
         listener,
         tls,
         runners,
+        tasks,
         activities: activities.clone(),
     })
 }
@@ -225,6 +229,7 @@ async fn supervise(
         listener,
         tls,
         runners,
+        tasks,
         activities,
     } = node;
     let addr = listener.local_addr().map_err(StartupError::from)?;
@@ -243,9 +248,8 @@ async fn supervise(
         env,
         store: &store,
         shutdown: &shutdown,
-        activities: &activities,
     })
-    .start(runners, loopback_url(addr, secure)?)
+    .start(runners, tasks)
     .await
     {
         shutdown.cancel();
@@ -281,60 +285,41 @@ struct NodeBoot<'a> {
     env: &'a Environment,
     store: &'a Arc<SqliteStore>,
     shutdown: &'a CancellationToken,
-    activities: &'a Activities,
 }
 
 impl NodeBoot<'_> {
     async fn start(
         &self,
         runners: Vec<(ProcessRole, ComposedRunner<SqliteStore>)>,
-        gateway: url::Url,
+        tasks: Option<crate::agent::LocalTasks>,
     ) -> Result<(), LocalError> {
         if self.switches.contains(&ServiceSwitch::Wiki) {
             enqueue_backfill(self.store).await?;
             enqueue_consolidate(self.store).await?;
         }
         spawn_workers(self.tracker, self.failed, self.shutdown, runners);
-        let delegation = if self.switches.contains(&ServiceSwitch::Mcp) {
-            self.delegation(gateway).await?
-        } else {
-            None
-        };
+        let delegation = tasks.map(|tasks| self.serve_tasks(tasks));
         self.spawn_mcp(delegation)
     }
 
-    async fn delegation(
-        &self,
-        gateway: url::Url,
-    ) -> Result<Option<Arc<dyn Delegation>>, LocalError> {
-        if self
-            .config
-            .tasks
-            .as_ref()
-            .is_some_and(|tasks| tasks.enabled == Some(false))
-        {
-            return Ok(None);
-        }
-        let (directory, settings) =
-            crate::agent::standalone_tasks(self.config, self.env, gateway).await?;
-        let engine = Arc::new(
-            tasks::Engine::new(
-                self.store.as_ref().clone(),
-                self.store.as_ref().clone(),
-                directory,
-                settings,
-            )?
-            .with_activities(self.activities.clone()),
-        );
-        let port: Arc<dyn Delegation> = engine.clone();
+    fn serve_tasks(&self, tasks: crate::agent::LocalTasks) -> Arc<dyn Delegation> {
+        let engine = tasks.engine();
         let failed = self.failed.clone();
         let token = self.shutdown.child_token();
+        let serving = Arc::clone(&engine);
         self.tracker.spawn(async move {
-            if let Err(error) = engine.serve(token).await {
+            if let Err(error) = serving.serve(token).await {
                 deliver(&failed, LocalError::Tasks(error));
             }
         });
-        Ok(Some(port))
+        let failed = self.failed.clone();
+        let token = self.shutdown.child_token();
+        self.tracker.spawn(async move {
+            if let Err(error) = tasks.wake_on_changes(token).await {
+                deliver(&failed, LocalError::Agent(error));
+            }
+        });
+        engine
     }
 
     fn spawn_mcp(&self, delegation: Option<Arc<dyn Delegation>>) -> Result<(), LocalError> {

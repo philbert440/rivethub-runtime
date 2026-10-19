@@ -115,17 +115,35 @@ fn transcripts(
 }
 
 #[derive(Default)]
-struct StoreBacking {
+struct Backing<'tasks> {
     presets: Option<Arc<dyn AgentPresetStore>>,
     export: Option<Arc<dyn MemoryExport>>,
+    tasks: Option<&'tasks crate::agent::LocalTasks>,
 }
 
-fn with_backing(gateway: Gateway, backing: StoreBacking) -> Gateway {
-    let gateway = match backing.presets {
+async fn attach_tasks(
+    gateway: Gateway,
+    config: &Config,
+    env: &Environment,
+    shutdown: &CancellationToken,
+    tools: Vec<String>,
+    local: Option<&crate::agent::LocalTasks>,
+) -> Result<crate::agent::Attached, crate::agent::AgentError> {
+    match local {
+        Some(local) => Ok(crate::agent::Attached {
+            gateway: local.mount(gateway, tools),
+            watch: None,
+        }),
+        None => Box::pin(crate::agent::attach(gateway, config, env, shutdown, tools)).await,
+    }
+}
+
+fn with_backing(gateway: Gateway, backing: &Backing<'_>) -> Gateway {
+    let gateway = match backing.presets.clone() {
         Some(presets) => gateway.with_agent_presets(presets),
         None => gateway,
     };
-    match backing.export {
+    match backing.export.clone() {
         Some(export) => gateway.with_memory_export(export),
         None => gateway,
     }
@@ -201,9 +219,10 @@ impl Composition {
         let url = config.memory_postgres_url(env).ok_or_else(|| {
             ComposeError::Invalid("no Postgres URL for the memory database".into())
         })?;
-        let backing = StoreBacking {
+        let backing = Backing {
             presets: agent_presets(memory).await?,
             export: Some(Arc::new(MemoryExporter::postgres(Arc::clone(memory), url))),
+            tasks: None,
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
@@ -212,16 +231,18 @@ impl Composition {
         Self::compose(config, env, store, backing, shutdown, &factory).await
     }
 
-    pub async fn on_sqlite(
+    pub(crate) async fn on_sqlite(
         config: &Config,
         env: &Environment,
         store: &Arc<SqliteStore>,
+        tasks: Option<&crate::agent::LocalTasks>,
         shutdown: &CancellationToken,
         activities: &kernel::shutdown::Activities,
     ) -> Result<Self, ComposeError> {
-        let backing = StoreBacking {
+        let backing = Backing {
             presets: None,
             export: Some(Arc::new(MemoryExporter::sqlite(Arc::clone(store)))),
+            tasks,
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
@@ -237,22 +258,14 @@ impl Composition {
         shutdown: &CancellationToken,
         factory: &crate::models::ModelFactory,
     ) -> Result<Self, ComposeError> {
-        Self::compose(
-            config,
-            env,
-            store,
-            StoreBacking::default(),
-            shutdown,
-            factory,
-        )
-        .await
+        Self::compose(config, env, store, Backing::default(), shutdown, factory).await
     }
 
     async fn compose(
         config: &Config,
         env: &Environment,
         store: Arc<dyn MemoryStore>,
-        backing: StoreBacking,
+        backing: Backing<'_>,
         shutdown: &CancellationToken,
         factory: &crate::models::ModelFactory,
     ) -> Result<Self, ComposeError> {
@@ -287,7 +300,7 @@ impl Composition {
             .with_client_certificate_required(bind.require_client)
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
-        gateway = with_backing(with_session_stores(gateway, env)?, backing);
+        gateway = with_backing(with_session_stores(gateway, env)?, &backing);
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let background = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {
@@ -314,7 +327,7 @@ impl Composition {
         };
         let mut tasks = mesh::start(config, env, agents, identity.tenancy, shutdown).await?;
         let crate::agent::Attached { gateway, watch } =
-            crate::agent::attach(gateway, config, env, shutdown, tool_names).await?;
+            attach_tasks(gateway, config, env, shutdown, tool_names, backing.tasks).await?;
         if let Some(watch) = watch {
             tasks.spawn(async move {
                 match watch.await {
