@@ -28,7 +28,6 @@ pub(crate) mod embed;
 mod fts;
 pub(crate) mod functions;
 mod ranked;
-use fts::fts_match;
 pub(crate) use fts::fts_or;
 
 const KEYWORD_EFFECT: &str = "Keyword / FTS ranking only \u{2014} not meaning-based.";
@@ -183,7 +182,7 @@ impl Plan {
         {
             return Err(SqliteError::InvertedRange);
         }
-        let pattern = fts_match(&query.text);
+        let pattern = fts_or(&query.text);
         let limit = i64::from(query.limit.get());
         let fetch_limit = if query.tag.is_some() {
             hybrid_pool(query.limit.get())

@@ -1,17 +1,9 @@
-pub(super) fn fts_match(text: &str) -> Option<String> {
-    join_tokens(text, " AND ")
-}
-
 pub(crate) fn fts_or(text: &str) -> Option<String> {
-    join_tokens(text, " OR ")
-}
-
-fn join_tokens(text: &str, separator: &str) -> Option<String> {
     let tokens: Vec<String> = text.split_whitespace().filter_map(fts_token).collect();
     if tokens.is_empty() {
         None
     } else {
-        Some(tokens.join(separator))
+        Some(tokens.join(" OR "))
     }
 }
 
@@ -30,26 +22,26 @@ const fn stripped(ch: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::fts_match;
+    use super::fts_or;
 
     #[test]
-    fn recorded_fts_match_strings() {
-        assert_eq!(fts_match("deploy").as_deref(), Some("\"deploy\""));
+    fn recorded_queries_build_or_match_strings() {
+        assert_eq!(fts_or("deploy").as_deref(), Some("\"deploy\""));
         assert_eq!(
-            fts_match("deploy release").as_deref(),
-            Some("\"deploy\" AND \"release\"")
+            fts_or("deploy release").as_deref(),
+            Some("\"deploy\" OR \"release\"")
         );
         assert_eq!(
-            fts_match("\"unbalanced AND (").as_deref(),
-            Some("\"unbalanced\" AND \"AND\"")
+            fts_or("\"unbalanced AND (").as_deref(),
+            Some("\"unbalanced\" OR \"AND\"")
         );
-        assert_eq!(fts_match("*** ^~ ()::''"), None);
+        assert_eq!(fts_or("*** ^~ ()::''"), None);
         assert_eq!(
-            fts_match("api.example.com:8443").as_deref(),
+            fts_or("api.example.com:8443").as_deref(),
             Some("\"api.example.com8443\"")
         );
-        assert_eq!(fts_match("zzzzqqq").as_deref(), Some("\"zzzzqqq\""));
-        assert_eq!(fts_match("staging").as_deref(), Some("\"staging\""));
-        assert_eq!(fts_match("rollback").as_deref(), Some("\"rollback\""));
+        assert_eq!(fts_or("zzzzqqq").as_deref(), Some("\"zzzzqqq\""));
+        assert_eq!(fts_or("staging").as_deref(), Some("\"staging\""));
+        assert_eq!(fts_or("rollback").as_deref(), Some("\"rollback\""));
     }
 }

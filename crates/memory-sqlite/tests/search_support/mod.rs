@@ -1,3 +1,5 @@
+pub(crate) mod superseded;
+
 use chrono::{DateTime, Utc};
 use kernel::memory::{Limit, SearchMode, SearchQuery};
 use memory_sqlite::{QueryEmbed, SqliteStore};

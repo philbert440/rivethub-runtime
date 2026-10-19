@@ -70,6 +70,24 @@
       "id": "empty-result-list",
       "query": "stray word empties",
       "must_contain": ["empties the result list"]
+    },
+    {
+      "id": "question-backup-location",
+      "query": "where did the nightly backups end up",
+      "relevant": ["00000000-0000-4000-8000-000000000006", "00000000-0000-4000-8000-400000000002"],
+      "must_contain": ["backup bucket"]
+    },
+    {
+      "id": "question-traffic-on-failed-check",
+      "query": "what happens to traffic when the health check fails during a rollout",
+      "relevant": ["00000000-0000-4000-8000-000000000004", "00000000-0000-4000-8000-400000000001"],
+      "must_contain": ["switches traffic back", "rolls traffic back"]
+    },
+    {
+      "id": "question-one-table-back",
+      "query": "how can I get one table back from last night snapshot",
+      "relevant": ["00000000-0000-4000-8000-000000000008"],
+      "must_contain": ["pg_restore"]
     }
   ]
 }

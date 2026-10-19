@@ -108,7 +108,7 @@ pub(crate) struct Ids {
     actual_to_recorded: HashMap<String, String>,
 }
 
-fn generated(text: &str) -> bool {
+pub(crate) fn generated(text: &str) -> bool {
     text.strip_prefix("00000000-0000-4000-8000-0000")
         .is_some_and(|tail| tail.len() == 8 && tail.bytes().all(|byte| byte.is_ascii_digit()))
 }

@@ -69,6 +69,20 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> TestResult {
     Ok(())
 }
 
+fn with_a_missing_query(queries: &Path, dir: &Path) -> TestResult<PathBuf> {
+    let mut set: QuerySet = read_json(queries)?;
+    set.queries.push(EvalQuery {
+        id: "no-row-holds-it".to_owned(),
+        query: "zebra xylophone".to_owned(),
+        mode: None,
+        relevant: vec!["00000000-0000-4000-8000-000000000012".to_owned()],
+        must_contain: vec!["chrony".to_owned()],
+    });
+    let path = dir.join("queries.json");
+    write_json(&path, &set)?;
+    Ok(path)
+}
+
 fn committed() -> [PathBuf; 3] {
     [
         fixture("corpus.json"),
@@ -83,10 +97,10 @@ fn the_committed_fixture_meets_its_saved_baseline() -> TestResult {
     let output = eval(&[&corpus, &queries, &baseline], &["--check"])?;
     let text = stdout(&output);
     assert_eq!(output.status.code(), Some(0), "{text}");
-    assert!(text.contains("SUMMARY (12 queries)"), "{text}");
-    assert!(text.contains("recall@10=0.773  mrr=0.682"), "{text}");
+    assert!(text.contains("SUMMARY (15 queries)"), "{text}");
+    assert!(text.contains("recall@10=0.964  mrr=0.702"), "{text}");
     assert!(
-        text.contains("must_contain: 8 pass / 1 fail (0.889)"),
+        text.contains("must_contain: 12 pass / 0 fail (1.000)"),
         "{text}"
     );
     assert!(text.contains("all metrics within tolerance"), "{text}");
@@ -113,17 +127,19 @@ fn every_metric_below_the_baseline_fails_the_check_by_name() -> TestResult {
     let dir = tempfile::tempdir()?;
     let raised = dir.path().join("baseline.json");
     let mut perfect: Baseline = read_json(&baseline)?;
+    perfect.query_count += 1;
     perfect.recall_at_k = 1.0;
     perfect.mrr = 1.0;
     perfect.must_contain_pass_rate = 1.0;
     write_json(&raised, &perfect)?;
-    let output = eval(&[&corpus, &queries, &raised], &["--check"])?;
+    let missing = with_a_missing_query(&queries, dir.path())?;
+    let output = eval(&[&corpus, &missing, &raised], &["--check"])?;
     let text = stdout(&output);
     assert_eq!(output.status.code(), Some(1), "{text}");
     for line in [
-        "FAIL recall@k: 0.773 is 0.227 below baseline 1.000",
-        "FAIL mrr: 0.682 is 0.318 below baseline 1.000",
-        "FAIL must_contain_pass_rate: 0.889 is 0.111 below baseline 1.000",
+        "FAIL recall@k: 0.900 is 0.100 below baseline 1.000",
+        "FAIL mrr: 0.656 is 0.344 below baseline 1.000",
+        "FAIL must_contain_pass_rate: 0.923 is 0.077 below baseline 1.000",
     ] {
         assert!(text.contains(line), "{line} missing from {text}");
     }
@@ -162,7 +178,7 @@ fn a_baseline_saved_for_another_query_set_is_stale() -> TestResult {
     let text = stdout(&output);
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(
-        text.contains("FAIL baseline was saved for 11 queries at limit 10; this run has 12 queries at limit 10 (regenerate it with --save-baseline)"),
+        text.contains("FAIL baseline was saved for 11 queries at limit 10; this run has 15 queries at limit 10 (regenerate it with --save-baseline)"),
         "{text}"
     );
     Ok(())
@@ -172,17 +188,20 @@ fn a_baseline_saved_for_another_query_set_is_stale() -> TestResult {
 fn a_plain_run_fails_only_when_a_query_misses_its_expectations() -> TestResult {
     let [corpus, queries, _] = committed();
     let output = eval(&[&corpus, &queries], &[])?;
+    assert_eq!(output.status.code(), Some(0), "{}", stdout(&output));
+    let dir = tempfile::tempdir()?;
+    let missing = with_a_missing_query(&queries, dir.path())?;
+    let output = eval(&[&corpus, &missing], &[])?;
     let text = stdout(&output);
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(
-        text.contains("[clock-skew-fix] \"clock skew\" (hybrid)"),
+        text.contains("[no-row-holds-it] \"zebra xylophone\" (hybrid)"),
         "{text}"
     );
     assert!(
         text.contains("relevant: 0/1 found, none in the results\n  must_contain: FAIL"),
         "{text}"
     );
-    let dir = tempfile::tempdir()?;
     let mut passing: QuerySet = read_json(&queries)?;
     passing.queries.retain(|query| query.id == "deploy-staging");
     let passing_path = dir.path().join("queries.json");
