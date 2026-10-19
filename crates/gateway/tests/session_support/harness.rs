@@ -134,9 +134,11 @@ impl HarnessAdapter for Harness {
     async fn answer_permission(
         &self,
         _session: &SessionId,
-        _request_id: &str,
-        _decision: ApprovalDecision,
+        request_id: &str,
+        decision: ApprovalDecision,
     ) -> Result<(), HarnessAdapterError> {
+        self.trace
+            .send_modify(|trace| trace.push(format!("answer:{request_id}:{decision:?}")));
         Ok(())
     }
 

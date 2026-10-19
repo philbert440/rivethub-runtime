@@ -27,6 +27,7 @@ enum Request {
     },
     Prompt {
         text: String,
+        system_prompt: Option<String>,
         reply: oneshot::Sender<Result<(), ApiError>>,
     },
     Terminal {
@@ -56,9 +57,18 @@ impl ChatHandle {
         result.await.map_err(|_| closed())?
     }
 
-    pub async fn prompt(&self, text: String) -> Result<(), ApiError> {
+    pub async fn prompt(
+        &self,
+        text: String,
+        system_prompt: Option<String>,
+    ) -> Result<(), ApiError> {
         let (reply, result) = oneshot::channel();
-        self.send(Request::Prompt { text, reply }).await?;
+        self.send(Request::Prompt {
+            text,
+            system_prompt,
+            reply,
+        })
+        .await?;
         result.await.map_err(|_| closed())?
     }
 
@@ -72,9 +82,29 @@ impl ChatHandle {
         self.send(Request::TurnEnd).await
     }
 
+    pub(crate) fn is_closed(&self) -> bool {
+        self.commands.is_closed()
+    }
+
     async fn send(&self, request: Request) -> Result<(), ApiError> {
         self.commands.send(request).await.map_err(|_| closed())
     }
+}
+
+const SYSTEM_PROMPT_HEADING: &str = "[System instructions]";
+const SYSTEM_PROMPT_MAX_CHARS: usize = 16_384;
+
+fn with_system_prompt(system_prompt: Option<&str>, text: String) -> String {
+    let prompt: String = system_prompt
+        .unwrap_or_default()
+        .trim()
+        .chars()
+        .take(SYSTEM_PROMPT_MAX_CHARS)
+        .collect();
+    if prompt.is_empty() {
+        return text;
+    }
+    format!("{SYSTEM_PROMPT_HEADING}\n{prompt}\n\n{text}")
 }
 
 fn closed() -> ApiError {
@@ -93,7 +123,7 @@ pub(crate) struct ChatActor {
     terminal_busy: bool,
     turn_ended: bool,
     pending: Option<PendingTerminal>,
-    queued: VecDeque<String>,
+    queued: VecDeque<(String, Option<String>)>,
     events: Option<mpsc::Receiver<SessionEvent>>,
     closing: Option<oneshot::Sender<Result<(), ApiError>>>,
     tools: ToolNames,
@@ -107,6 +137,31 @@ impl ChatActor {
         session: SessionId,
         events: Option<mpsc::Receiver<SessionEvent>>,
     ) -> Result<ChatHandle, ApiError> {
+        let surface = if events.is_some() {
+            Surface::Chat
+        } else {
+            Surface::Terminal
+        };
+        Self::spawn(service, harness, user, session, events, surface)
+    }
+
+    pub(crate) fn idle(
+        service: &Arc<TerminalService>,
+        harness: Arc<dyn HarnessAdapter>,
+        user: UserId,
+        session: SessionId,
+    ) -> Result<ChatHandle, ApiError> {
+        Self::spawn(service, harness, user, session, None, Surface::Idle)
+    }
+
+    fn spawn(
+        service: &Arc<TerminalService>,
+        harness: Arc<dyn HarnessAdapter>,
+        user: UserId,
+        session: SessionId,
+        events: Option<mpsc::Receiver<SessionEvent>>,
+        surface: Surface,
+    ) -> Result<ChatHandle, ApiError> {
         let key = service.registry.authorize(&user, session.as_str())?;
         let (commands, requests) = mpsc::channel(64);
         let actor = Self {
@@ -115,12 +170,8 @@ impl ChatActor {
             user,
             session,
             key,
-            surface: if events.is_some() {
-                Surface::Chat
-            } else {
-                Surface::Terminal
-            },
-            terminal_busy: events.is_none(),
+            surface,
+            terminal_busy: surface == Surface::Terminal,
             turn_ended: true,
             pending: None,
             queued: VecDeque::new(),
@@ -183,10 +234,10 @@ impl ChatActor {
                     let Some(request) = request else { return Ok(()); };
                     match request {
                         Request::Close { reply } => { self.closing = Some(reply); return Ok(()); }
-                        Request::Prompt { text, reply } => {
+                        Request::Prompt { text, system_prompt, reply } => {
                             let result = if self.queued.len() >= 64 { Err(ApiError::Conflict("session message queue full".into())) }
                             else if text.trim().is_empty() { Err(ApiError::BadRequest("text required".into())) }
-                            else { self.queued.push_back(text); Ok(()) };
+                            else { self.queued.push_back((text, system_prompt)); Ok(()) };
                             respond(reply, result);
                         }
                         Request::Terminal { launch, reply } => {
@@ -263,16 +314,17 @@ impl ChatActor {
             self.surface = Surface::Chat;
             self.events = Some(self.harness.events(&self.session).await?);
         }
-        if let Some(text) = self.queued.pop_front() {
+        if let Some((text, system_prompt)) = self.queued.pop_front() {
             self.turn_ended = false;
             self.service
                 .set_live_status(&self.key, &self.session, HarnessSessionStatus::Active);
             self.publish(SessionEvent::UserMessageChunk { text: text.clone() })?;
+            let delivered = with_system_prompt(system_prompt.as_deref(), text);
             let harness = self.harness.clone();
             let session = self.session.clone();
             turn.spawn(async move {
                 harness
-                    .prompt(&session, TurnInput::Text(text))
+                    .prompt(&session, TurnInput::Text(delivered))
                     .await
                     .map_err(ApiError::from)
             });

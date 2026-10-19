@@ -36,6 +36,8 @@ struct FakeArgs {
     list_sessions: bool,
 }
 
+const REPLAYED_CHUNKS: usize = 300;
+
 #[derive(Clone, Copy, clap::ValueEnum)]
 enum OnLoad {
     None,
@@ -134,12 +136,14 @@ fn on_load(
             responder.respond_with_error(acp::Error::invalid_params().data("session not found"))
         }
         OnLoad::Replay => {
-            connection.send_notification(acp::SessionNotification::new(
-                session_id(state),
-                acp::SessionUpdate::AgentMessageChunk(acp::ContentChunk::new(
-                    acp::ContentBlock::from("restored"),
-                )),
-            ))?;
+            for _ in 0..REPLAYED_CHUNKS {
+                connection.send_notification(acp::SessionNotification::new(
+                    session_id(state),
+                    acp::SessionUpdate::AgentMessageChunk(acp::ContentChunk::new(
+                        acp::ContentBlock::from("restored"),
+                    )),
+                ))?;
+            }
             responder
                 .respond(acp::LoadSessionResponse::new().config_options(current_options(state)))
         }
