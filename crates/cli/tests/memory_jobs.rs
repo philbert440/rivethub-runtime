@@ -56,6 +56,7 @@ async fn every_role_claim_is_dispatched_by_the_real_runner(pool: PgPool) -> supp
         },
     )
     .with_memory_jobs(memory.clone())
+    .with_unembedded(memory.clone())
     .with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
         store: memory,
         consolidate: None,

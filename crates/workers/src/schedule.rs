@@ -34,16 +34,30 @@ pub async fn enqueue_due(
     Ok(())
 }
 
+#[must_use]
+pub fn claimed_entries(
+    queue: &dyn JobQueue,
+    roles: &[WorkerRole],
+    wiki_enabled: bool,
+) -> Vec<CronEntry> {
+    roles
+        .iter()
+        .flat_map(|role| {
+            let claimed = queue.task_names(*role);
+            role.crontab(wiki_enabled)
+                .into_iter()
+                .filter(move |entry| claimed.contains(&entry.task))
+        })
+        .collect()
+}
+
 pub(crate) async fn run(
     queue: &dyn JobQueue,
     roles: &[WorkerRole],
     wiki_enabled: bool,
     cancel: &CancellationToken,
 ) -> Result<(), WorkerError> {
-    let entries: Vec<_> = roles
-        .iter()
-        .flat_map(|role| role.crontab(wiki_enabled))
-        .collect();
+    let entries = claimed_entries(queue, roles, wiki_enabled);
     loop {
         let now = Utc::now();
         let millis = 60_000 - now.timestamp_millis().rem_euclid(60_000);

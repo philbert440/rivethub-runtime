@@ -1,3 +1,5 @@
+#[path = "local/backfill.rs"]
+mod backfill;
 #[path = "local/capture.rs"]
 mod capture;
 #[path = "local/consolidate.rs"]

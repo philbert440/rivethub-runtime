@@ -156,10 +156,20 @@ impl SqliteStore {
         let Some(key) = job.key.clone() else {
             return Err(unavailable(SqliteError::InsertRejected));
         };
-        if job.key_mode == JobKeyMode::Replace {
-            self.replace_job(key.clone(), payload, run_at, now)
+        match job.key_mode {
+            JobKeyMode::Replace => self
+                .replace_job(key.clone(), payload, run_at, now)
                 .await
-                .map_err(unavailable)?;
+                .map_err(unavailable)?,
+            JobKeyMode::KeepRunAt => {
+                if self
+                    .revive(key.clone(), payload, now)
+                    .await
+                    .map_err(unavailable)?
+                {
+                    self.notifications.send_replace(());
+                }
+            }
         }
         let key_for_lookup = key;
         self.with_conn(move |conn| id_for_key(conn, &key_for_lookup))
@@ -337,7 +347,10 @@ fn object_payload(payload: JobPayload) -> Result<JsonObject, JobQueueError> {
 
 fn tasks_for(role: WorkerRole) -> Vec<JobName> {
     match role {
-        WorkerRole::Embedder => vec![fixed(FixedJob::EmbedTarget)],
+        WorkerRole::Embedder => vec![
+            fixed(FixedJob::EmbedTarget),
+            fixed(FixedJob::EnqueueUnembedded),
+        ],
         WorkerRole::Summarizer => vec![
             fixed(FixedJob::SummarizeConversation),
             fixed(FixedJob::SynthesizeToolCall),

@@ -79,7 +79,10 @@ pub trait MemoryJobStore: Send + Sync {
     async fn revive_dead_wiki(&self, limit: u32) -> Result<u64, MemoryJobError>;
 
     async fn missing_wiki(&self, limit: u32) -> Result<Vec<ExtractWiki>, MemoryJobError>;
+}
 
+#[async_trait]
+pub trait UnembeddedStore: Send + Sync {
     async fn unembedded(
         &self,
         table: EmbedTable,

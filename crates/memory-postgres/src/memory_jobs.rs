@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use kernel::memory::jobs::{
-    ChunkWrite, MemoryJobError, MemoryJobStore, ToolCallMessage, UnchunkedMessage,
+    ChunkWrite, MemoryJobError, MemoryJobStore, ToolCallMessage, UnchunkedMessage, UnembeddedStore,
 };
 use kernel::memory::{EmbedTable, EmbedTarget, StoredChunk};
 use kernel::queue::{FixedJob, JobName};
@@ -190,7 +190,10 @@ impl MemoryJobStore for PostgresMemory {
             })
             .collect())
     }
+}
 
+#[async_trait]
+impl UnembeddedStore for PostgresMemory {
     async fn unembedded(
         &self,
         table: EmbedTable,

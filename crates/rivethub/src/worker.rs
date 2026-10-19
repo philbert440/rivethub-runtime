@@ -152,6 +152,7 @@ async fn run(
         runner.runner = runner
             .runner
             .with_memory_jobs(memory.clone())
+            .with_unembedded(memory.clone())
             .with_job_settings(workers::MemoryJobSettings::from_environment(env)?)
             .with_schedules(wiki_extraction(env));
         runner.runner = runner.runner.tuned(env)?;
