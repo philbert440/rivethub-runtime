@@ -168,15 +168,33 @@ pub(crate) async fn start_loaded(
     working_dir: &Path,
     native: &acp::SessionId,
 ) -> Result<AgentConnection, AcpError> {
-    let connected = connect(command, working_dir).await?;
-    let response = request(&connected.commands, |reply| SessionCommand::LoadSession {
+    let mut connected = connect(command, working_dir).await?;
+    let load = request(&connected.commands, |reply| SessionCommand::LoadSession {
         native: native.clone(),
         cwd: working_dir.to_path_buf(),
         reply,
-    })
-    .await
-    .map_err(|failure| port_failure(failure, "session/load"))?;
+    });
+    let response = discard_replay(&mut connected.events_rx, load)
+        .await
+        .map_err(|failure| port_failure(failure, "session/load"))?;
     Ok(connected.finish(native.clone(), stored_options(response.config_options)))
+}
+
+async fn discard_replay<T>(
+    events: &mut mpsc::Receiver<SessionEvent>,
+    load: impl Future<Output = T>,
+) -> T {
+    tokio::pin!(load);
+    loop {
+        tokio::select! {
+            biased;
+            Some(_) = events.recv() => {}
+            response = &mut load => {
+                while events.try_recv().is_ok() {}
+                return response;
+            }
+        }
+    }
 }
 
 pub async fn initialize_handshake(

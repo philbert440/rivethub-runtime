@@ -292,7 +292,7 @@ fn cancel_ends_a_hanging_turn() {
 }
 
 #[test]
-fn resume_replays_a_loaded_session_on_a_fresh_agent() {
+fn resume_discards_the_load_replay_on_a_fresh_agent() {
     run(async {
         let cwd = tempdir().expect("cwd");
         let session = {
@@ -318,9 +318,6 @@ fn resume_replays_a_loaded_session_on_a_fresh_agent() {
             .await
             .expect("events before turn end");
         let expected = vec![
-            SessionEvent::AgentMessageChunk {
-                text: "restored".to_owned(),
-            },
             SessionEvent::AgentMessageChunk {
                 text: "after".to_owned(),
             },

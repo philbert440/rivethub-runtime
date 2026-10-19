@@ -803,6 +803,114 @@ async fn a_live_turn_streams_deltas_then_a_committed_snapshot() {
     stop.cancel();
 }
 
+async fn created_chat(setup: &Setup) -> SessionId {
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        "/api/harness-sessions",
+        r#"{"harness":"claude-code"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    parsed::<wire::harness::HarnessSessionSummary>(&body).session_id
+}
+
+#[tokio::test]
+async fn a_turn_on_a_session_this_runtime_did_not_start_resumes_it() {
+    let setup = setup("{}", one_claude_row()).await;
+    let session = claude(U1);
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!("/api/harness-sessions/{session}/turn"),
+        r#"{"text":"hi"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup.harness.traced("resume").await;
+    setup.harness.traced("prompt:hi").await;
+    setup.harness.finish.add_permits(1);
+    setup.harness.traced("ended").await;
+}
+
+#[tokio::test]
+async fn another_users_session_is_not_resumed() {
+    let setup = setup(
+        &format!(r#"{{"claude-code:{U1}":"owner"}}"#),
+        one_claude_row(),
+    )
+    .await;
+    let (status, _) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!("/api/harness-sessions/{}/turn", claude(U1)),
+        r#"{"text":"hi"}"#,
+        ALICE,
+    )
+    .await;
+    assert_eq!(status, 403);
+    assert!(setup.harness.trace.borrow().is_empty());
+}
+
+#[tokio::test]
+async fn a_system_prompt_rides_ahead_of_the_turn_text() {
+    let setup = setup("{}", Stores::default()).await;
+    let session = created_chat(&setup).await;
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!("/api/harness-sessions/{session}/turn"),
+        r#"{"text":"hi","systemPrompt":"  be brief "}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup
+        .harness
+        .traced("prompt:[System instructions]\nbe brief\n\nhi")
+        .await;
+    setup.harness.finish.add_permits(1);
+    setup.harness.traced("ended").await;
+}
+
+#[tokio::test]
+async fn an_approval_answer_reaches_the_harness_and_is_broadcast() {
+    let setup = setup("{}", Stores::default()).await;
+    let session = created_chat(&setup).await;
+    let segment = encode_segment(&session);
+    let (mut socket, stop) = socket(&setup, &segment, None).await;
+    silent(&mut socket).await;
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!("/api/harness-sessions/{segment}/approvals/req-1"),
+        r#"{"decision":"allow-session"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup.harness.traced("answer:req-1:AllowSession").await;
+    let HarnessEvent::ApprovalResolved {
+        session_id,
+        request_id,
+        decision,
+    } = event(&mut socket).await
+    else {
+        panic!("approval-resolved expected");
+    };
+    assert_eq!(
+        (session_id, request_id.as_str(), decision),
+        (
+            session,
+            "req-1",
+            wire::harness::ApprovalOutcome::AllowSession
+        )
+    );
+    stop.cancel();
+}
+
 #[test]
 fn harness_codes_map_to_their_statuses() {
     use strum::IntoEnumIterator as _;

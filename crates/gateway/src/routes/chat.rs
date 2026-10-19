@@ -15,7 +15,7 @@ use uuid::Uuid;
 use wire::gateway::sessions::{
     SessionMessage, SessionMessageRole, SessionPostAccepted, SessionPostReply, SessionPostRequest,
 };
-use wire::harness::{HarnessId, HarnessSessionSummary};
+use wire::harness::{ApprovalDecision, HarnessId, HarnessSessionSummary};
 use wire::hooks::HookContextBase;
 use wire::message::{Message, MessageContent, Role};
 
@@ -46,6 +46,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         )
         .route("/api/harness-sessions/{session}/turn", post(prompt))
         .route("/api/harness-sessions/{session}/stop", post(stop))
+        .route(
+            "/api/harness-sessions/{session}/approvals/{request}",
+            post(approve),
+        )
         .route("/api/sessions/{session}/messages", post(prompt))
 }
 
@@ -143,7 +147,7 @@ async fn accept(
 ) -> Result<Response, ApiError> {
     service(&gateway)?
         .chat(&user, &session)?
-        .prompt(request.text)
+        .prompt(request.text, request.system_prompt)
         .await?;
     Ok(Json(SessionPostAccepted {
         accepted: true,
@@ -273,5 +277,27 @@ async fn stop(
     Path(session): Path<String>,
 ) -> Result<Json<Accepted>, ApiError> {
     service(&gateway)?.chat(&user, &session)?.stop().await?;
+    Ok(Json(Accepted { ok: true }))
+}
+
+#[derive(Debug, Deserialize)]
+struct Approval {
+    decision: ApprovalDecision,
+}
+
+async fn approve(
+    State(gateway): State<Arc<Gateway>>,
+    user: UserId,
+    Path((segment, request)): Path<(String, String)>,
+    Body(approval): Body<Approval>,
+) -> Result<Json<Accepted>, ApiError> {
+    let decoded = wire::session_id::decode_segment(&segment)
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let wire::session_id::SessionRef::Canonical(session) = decoded.session else {
+        return Err(ApiError::BadRequest("canonical session required".into()));
+    };
+    service(&gateway)?
+        .answer_approval(&user, &session, &request, approval.decision)
+        .await?;
     Ok(Json(Accepted { ok: true }))
 }

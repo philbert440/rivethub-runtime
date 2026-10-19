@@ -314,7 +314,9 @@ async fn handoff_waits_for_turn_end_releases_then_resumes_and_delivers_queued_ch
         .service
         .chat(&user("owner"), session.session_id.as_str())
         .expect("chat");
-    chat.prompt("first".into()).await.expect("prompt accepted");
+    chat.prompt("first".into(), None)
+        .await
+        .expect("prompt accepted");
     harness.traced("prompt:first").await;
     let service = fixture.service.clone();
     let id = session.session_id.clone();
@@ -328,13 +330,7 @@ async fn handoff_waits_for_turn_end_releases_then_resumes_and_delivers_queued_ch
             .await
             .is_err()
     );
-    assert!(
-        !harness
-            .trace
-            .borrow()
-            .iter()
-            .any(|entry| entry == "release")
-    );
+    assert!(!harness.trace.borrow().contains(&"release".to_owned()));
     harness.finish.add_permits(1);
     let terminal = tokio::time::timeout(WAIT, switching)
         .await
@@ -353,7 +349,9 @@ async fn handoff_waits_for_turn_end_releases_then_resumes_and_delivers_queued_ch
         .expect("canonical")
         .1;
     assert!(fixture.mux.calls.borrow().iter().any(|call| matches!(call, Call::Spawn { argv, .. } if argv.ends_with(&["--resume".into(), native.into()]))));
-    chat.prompt("queued".into()).await.expect("queued chat");
+    chat.prompt("queued".into(), None)
+        .await
+        .expect("queued chat");
     assert!(
         !fixture
             .mux
@@ -398,7 +396,7 @@ async fn terminal_first_session_queues_chat_until_the_hook_and_delete_releases_c
             "claude-code:11111111-2222-4333-8444-555555555555",
         )
         .expect("registered session");
-    chat.prompt("queued".into()).await.expect("queued");
+    chat.prompt("queued".into(), None).await.expect("queued");
     assert_eq!(*harness.trace.borrow(), Vec::<String>::new());
     chat.turn_end().await.expect("hook");
     harness.traced("prompt:queued").await;

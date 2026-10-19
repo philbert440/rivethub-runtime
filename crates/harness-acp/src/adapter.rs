@@ -466,13 +466,21 @@ impl HarnessAdapter for AcpHarnessAdapter {
                         .as_ref()
                         .or(self.default_working_dir.as_ref())
                     {
-                        let advertised = crate::discovery::discover(
+                        let discovered = crate::discovery::discover(
                             command,
                             cwd,
                             crate::discovery::DEFAULT_DISCOVERY_TIMEOUT,
                         )
-                        .await
-                        .map_err(port)?;
+                        .await;
+                        let advertised = match discovered {
+                            Ok(advertised) => advertised,
+                            Err(error) => {
+                                tracing::warn!(harness = %fact.harness, %error, "harness discovery failed; offering it without chat");
+                                offering.chat = false;
+                                offerings.push(offering);
+                                continue;
+                            }
+                        };
                         advertised
                             .apply(&mut offering, self.sheets.get(&fact.harness))
                             .map_err(port)?;

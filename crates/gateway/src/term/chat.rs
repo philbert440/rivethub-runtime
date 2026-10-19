@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use kernel::harness::SessionSpec;
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
-use wire::harness::{HarnessId, HarnessSessionStatus, HarnessSessionSummary, Transport};
+use wire::harness::{
+    ApprovalDecision, ApprovalOutcome, HarnessEvent, HarnessId, HarnessSessionStatus,
+    HarnessSessionSummary, Transport,
+};
 use wire::session_id::SessionId;
 
 use super::TerminalService;
@@ -114,13 +117,82 @@ impl TerminalService {
         Ok(())
     }
 
-    pub fn chat(&self, user: &UserId, session: &str) -> Result<ChatHandle, ApiError> {
-        let key = self.registry.authorize(user, session)?;
+    pub fn chat(self: &Arc<Self>, user: &UserId, session: &str) -> Result<ChatHandle, ApiError> {
+        let key = self.registry.authorize_visible(user, session)?;
+        if let Some(chat) = self.live_chat(&key) {
+            return Ok(chat);
+        }
+        let harness = self
+            .harness
+            .clone()
+            .ok_or_else(|| ApiError::Unavailable("chat harness unavailable".into()))?;
+        let canonical = session
+            .parse::<SessionId>()
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        let (prefix, _) = canonical
+            .as_str()
+            .split_once(':')
+            .ok_or_else(|| ApiError::BadRequest("canonical session required".into()))?;
+        let harness_id = prefix
+            .parse::<HarnessId>()
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        if !self
+            .options
+            .commands
+            .iter()
+            .any(|command| command.harness == Some(harness_id))
+        {
+            return Err(ApiError::BadRequest(
+                "harness is not allowed on this node".into(),
+            ));
+        }
+        self.registry.claim(user, canonical.as_str())?;
+        let mut chats = self.chats.write();
+        if let Some(chat) = chats.get(&key).filter(|chat| !chat.is_closed()) {
+            return Ok(chat.clone());
+        }
+        let chat = ChatActor::idle(self, harness, user.clone(), canonical)?;
+        chats.insert(key, chat.clone());
+        drop(chats);
+        Ok(chat)
+    }
+
+    fn live_chat(&self, key: &str) -> Option<ChatHandle> {
         self.chats
             .read()
-            .get(&key)
+            .get(key)
+            .filter(|chat| !chat.is_closed())
             .cloned()
-            .ok_or(ApiError::NotFound("unknown chat session"))
+    }
+
+    pub async fn answer_approval(
+        &self,
+        user: &UserId,
+        session: &SessionId,
+        request_id: &str,
+        decision: ApprovalDecision,
+    ) -> Result<(), ApiError> {
+        let key = self.registry.authorize(user, session.as_str())?;
+        let harness = self
+            .harness
+            .clone()
+            .ok_or_else(|| ApiError::Unavailable("chat harness unavailable".into()))?;
+        harness
+            .answer_permission(session, request_id, decision)
+            .await?;
+        self.publish_harness(
+            &key,
+            HarnessEvent::ApprovalResolved {
+                session_id: session.clone(),
+                request_id: request_id.to_owned(),
+                decision: match decision {
+                    ApprovalDecision::Allow => ApprovalOutcome::Allow,
+                    ApprovalDecision::Deny => ApprovalOutcome::Deny,
+                    ApprovalDecision::AllowSession => ApprovalOutcome::AllowSession,
+                },
+            },
+        );
+        Ok(())
     }
 
     pub fn harness_sessions(&self, user: &UserId) -> wire::harness::HarnessSessionList {
