@@ -527,11 +527,11 @@ async fn out_of_slice_names_are_the_scenarios_this_slice_does_not_read() {
         "pi",
         "qwen-code",
         "cursor",
+        "cowork",
     ] {
         assert!(!names.contains(&harness), "{harness}");
     }
-    assert!(names.contains(&"cowork"));
-    assert!(StoreReader::open(HarnessId::Cowork, std::path::PathBuf::new()).is_none());
+    assert!(StoreReader::open(HarnessId::Cowork, std::path::PathBuf::new()).is_some());
     assert!(StoreReader::open(HarnessId::Codex, std::path::PathBuf::new()).is_some());
 }
 

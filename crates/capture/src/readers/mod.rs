@@ -1,5 +1,6 @@
 mod claude;
 pub(crate) mod codex;
+mod cowork;
 mod cursor;
 mod grok;
 pub(crate) mod harness_db;
@@ -31,10 +32,6 @@ pub(crate) use message::blocking;
 pub(crate) use message::report;
 
 pub const OUT_OF_SLICE: &[(&str, &str)] = &[
-    (
-        "cowork",
-        "inventory section 3 names no cowork transcript store",
-    ),
     (
         "claude-subagent-merge",
         "inventory names the subagent directory and not a mapping into the parent session",
@@ -72,6 +69,7 @@ pub enum StoreReader {
     Pi(pi::PiTranscriptReader),
     Qwen(qwen::QwenTranscriptReader),
     Cursor(cursor::CursorTranscriptReader),
+    Cowork(cowork::CoworkTranscriptReader),
 }
 
 impl StoreReader {
@@ -89,7 +87,7 @@ impl StoreReader {
             HarnessId::Pi => Self::Pi(pi::PiTranscriptReader::new(root)),
             HarnessId::QwenCode => Self::Qwen(qwen::QwenTranscriptReader::new(root)),
             HarnessId::Cursor => Self::Cursor(cursor::CursorTranscriptReader::new(root)),
-            HarnessId::Cowork => return None,
+            HarnessId::Cowork => Self::Cowork(cowork::CoworkTranscriptReader::new(root)),
         })
     }
 
@@ -108,6 +106,7 @@ impl StoreReader {
             Self::Pi(reader) => reader.messages(session, offset).await,
             Self::Qwen(reader) => reader.messages(session, offset).await,
             Self::Cursor(reader) => reader.messages(session, offset).await,
+            Self::Cowork(reader) => reader.messages(session, offset).await,
         }
     }
 }
@@ -128,6 +127,7 @@ impl TranscriptReader for StoreReader {
             Self::Pi(reader) => reader.sessions(store).await,
             Self::Qwen(reader) => reader.sessions(store).await,
             Self::Cursor(reader) => reader.sessions(store).await,
+            Self::Cowork(reader) => reader.sessions(store).await,
         }
     }
 
@@ -142,6 +142,7 @@ impl TranscriptReader for StoreReader {
             Self::Pi(reader) => reader.read(session).await,
             Self::Qwen(reader) => reader.read(session).await,
             Self::Cursor(reader) => reader.read(session).await,
+            Self::Cowork(reader) => reader.read(session).await,
         }
     }
 
@@ -160,6 +161,7 @@ impl TranscriptReader for StoreReader {
             Self::Pi(reader) => reader.tail(session, since).await,
             Self::Qwen(reader) => reader.tail(session, since).await,
             Self::Cursor(reader) => reader.tail(session, since).await,
+            Self::Cowork(reader) => reader.tail(session, since).await,
         }
     }
 }

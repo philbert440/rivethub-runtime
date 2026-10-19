@@ -18,6 +18,7 @@ use wire::JsonObject;
 pub enum OccurrenceKind {
     Tool,
     Assistant,
+    User,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

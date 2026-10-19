@@ -1,7 +1,7 @@
 mod ancestors;
 mod claude;
 mod codex;
-mod cowork;
+pub(crate) mod cowork;
 mod cursor;
 mod databases;
 mod field;
