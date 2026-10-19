@@ -36,6 +36,7 @@ mod origin;
 mod search;
 mod suggest;
 mod summary;
+mod title;
 
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;
@@ -68,6 +69,8 @@ pub use summary::SummarySource;
 pub use summary::SummaryStore;
 pub use summary::SummaryStoreError;
 pub use summary::WindowMessage;
+pub use title::SUMMARY_TITLE_MAX_CHARS;
+pub use title::summary_title;
 
 #[derive(Debug, Error)]
 pub enum MemoryStoreError {

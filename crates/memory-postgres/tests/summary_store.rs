@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+mod common;
+
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::NewSummary;
@@ -164,6 +166,91 @@ async fn summary_writes_link_children_and_let_the_embed_trigger_fire(pool: PgPoo
     assert_eq!(payload.target_table, "ros_summaries");
     assert_eq!(payload.target_id, leaf_id.to_string());
     Ok(())
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct StoredTitle {
+    title: Option<String>,
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_first_leaf_titles_only_untitled_conversations(pool: PgPool) -> TestResult {
+    common::install_graphile(&pool).await?;
+    let memory = PostgresMemory::new(pool.clone());
+    let untitled = seed_untitled(&pool, "cli:untitled").await?;
+    let named = seed_conversation(&pool, "cli:named", "Named by the hook").await?;
+    memory
+        .write_summary(titled_leaf(
+            untitled,
+            "Moved the build to the new host. Then slept.",
+        ))
+        .await?;
+    memory
+        .write_summary(titled_leaf(untitled, "A later leaf about something else."))
+        .await?;
+    memory
+        .write_summary(titled_leaf(named, "Moved the build to the new host."))
+        .await?;
+    assert_eq!(
+        stored_title(&pool, untitled).await?.as_deref(),
+        Some("Moved the build to the new host.")
+    );
+    assert_eq!(
+        stored_title(&pool, named).await?.as_deref(),
+        Some("Named by the hook")
+    );
+    sqlx::query("update rh_conversations set title = null where id = $1")
+        .bind(untitled)
+        .execute(&pool)
+        .await?;
+    assert_eq!(memory.backfill_titles(true).await?, 1);
+    assert_eq!(stored_title(&pool, untitled).await?, None);
+    assert_eq!(memory.backfill_titles(false).await?, 1);
+    assert_eq!(
+        stored_title(&pool, untitled).await?.as_deref(),
+        Some("Moved the build to the new host.")
+    );
+    assert_eq!(memory.backfill_titles(false).await?, 0);
+    Ok(())
+}
+
+fn titled_leaf(conversation: Uuid, content: &str) -> NewSummary {
+    NewSummary {
+        id: Uuid::new_v4(),
+        conversation_id: conversation,
+        kind: SummaryKind::Leaf,
+        depth: SummaryKind::Leaf.depth(),
+        content: content.to_owned(),
+        message_count: 0,
+        earliest_at: Utc::now(),
+        latest_at: Utc::now(),
+        model: "fake-chat".to_owned(),
+        pipeline_version: 5,
+        created_at: Utc::now(),
+        sources: Vec::new(),
+        child_ids: Vec::new(),
+    }
+}
+
+async fn seed_untitled(pool: &PgPool, session: &str) -> Result<Uuid, sqlx::Error> {
+    let mut tx = deferred(pool).await?;
+    let id = sqlx::query_scalar(
+        "insert into rh_conversations (session_key, agent, channel)
+         values ($1, 'rivet', 'cli') returning id",
+    )
+    .bind(session)
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(id)
+}
+
+async fn stored_title(pool: &PgPool, id: Uuid) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query_as::<_, StoredTitle>("select title from rh_conversations where id = $1")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+    Ok(row.title)
 }
 
 async fn seed_conversation(pool: &PgPool, session: &str, title: &str) -> Result<Uuid, sqlx::Error> {
