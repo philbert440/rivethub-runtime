@@ -8,7 +8,7 @@ use kernel::memory::jobs::{
     ChunkWrite, MemoryJobError, MemoryJobStore, SynthesizeToolCall, ToolCallMessage,
     UnchunkedMessage,
 };
-use kernel::memory::{EmbedTable, EmbedTarget, StoredChunk};
+use kernel::memory::{EmbedTarget, StoredChunk};
 use kernel::model::{
     Embedding, ModelCallFailure, ModelProvider, ModelProviderError, ModelRequest, ModelStreamItem,
 };
@@ -80,23 +80,6 @@ impl MemoryJobStore for Store {
         _limit: u32,
     ) -> Result<Vec<kernel::wiki::builder::ExtractWiki>, MemoryJobError> {
         Ok(Vec::new())
-    }
-    async fn unembedded(
-        &self,
-        table: EmbedTable,
-        limit: u32,
-    ) -> Result<Vec<EmbedTarget>, MemoryJobError> {
-        let row = self.0.lock().await;
-        Ok(
-            if table == EmbedTable::Messages && limit > 0 && row.content.chars().count() > 20 {
-                vec![EmbedTarget {
-                    table,
-                    id: row.id.to_string(),
-                }]
-            } else {
-                Vec::new()
-            },
-        )
     }
 }
 

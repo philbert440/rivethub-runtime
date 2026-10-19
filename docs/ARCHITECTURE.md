@@ -46,6 +46,11 @@ endpoint the standalone embedder worker uses. Without an endpoint, those modes a
 `degraded: "embedding endpoint not configured"`. `memory.sqlite.embed_query_instruction` sets the text prepended to
 each search query before it is embedded, as `memory.postgres.embed_query_instruction` does for Postgres: absent keeps
 the default retrieval instruction, an empty string embeds the bare query (for embedding models trained without one).
+With workers on, `rh local` also runs the `enqueue-unembedded` sweep on SQLite: once at start and then every ten
+minutes, the embedder queues an `embed-target` job for each message, summary and wiki topic that has no vector and
+no embed status (rows captured before an endpoint was configured, or whose last job died), heals rows whose embedding
+came back null, and revives a dead `embed-target` job under the same key, as graphile does on Postgres. Cron entries
+are only scheduled for tasks the queue claims, so SQLite never schedules `enqueue-unchunked`.
 
 ### Memory sweep settings
 

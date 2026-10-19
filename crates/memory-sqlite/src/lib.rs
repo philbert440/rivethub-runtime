@@ -26,6 +26,7 @@ mod task_rows;
 mod task_store;
 mod taxonomy;
 mod time;
+mod unembedded;
 mod vector;
 mod wiki_builder;
 mod wiki_consolidate;

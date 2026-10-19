@@ -21,6 +21,7 @@ pub(crate) struct JobEnv {
     pub(crate) settings: crate::MemoryJobSettings,
     pub(crate) wiki_enabled: bool,
     pub(crate) memory_jobs: Option<Arc<dyn kernel::memory::jobs::MemoryJobStore>>,
+    pub(crate) unembedded: Option<Arc<dyn kernel::memory::jobs::UnembeddedStore>>,
     pub(crate) wiki: Option<WikiBuilderDeps>,
     pub(crate) targets: Arc<dyn EmbeddingStore>,
     pub(crate) summaries: Arc<dyn SummaryStore>,
@@ -60,7 +61,7 @@ pub(crate) async fn dispatch<Q: JobQueue>(
             .await
         }
         JobName::Fixed(FixedJob::EnqueueUnembedded) => {
-            dispatch_sweep(queue, env, Sweep::Unembedded, cancel).await
+            dispatch_unembedded(queue, env, cancel).await
         }
         JobName::Fixed(FixedJob::EnqueueUnchunked) => {
             dispatch_sweep(queue, env, Sweep::Unchunked, cancel).await
@@ -159,8 +160,27 @@ async fn dispatch_consolidate<Q: JobQueue>(
         .map(|_| ())
 }
 
+async fn dispatch_unembedded<Q: JobQueue>(
+    queue: &Q,
+    env: &JobEnv,
+    cancel: &CancellationToken,
+) -> Result<(), WorkerError> {
+    let store = env
+        .unembedded
+        .as_ref()
+        .ok_or(WorkerError::MissingMemoryJobs)?;
+    crate::embedding_sweep::handle_enqueue_unembedded(
+        store.as_ref(),
+        queue,
+        env.settings.sweep_limit,
+        env.settings.sweep_max_attempts,
+        cancel,
+    )
+    .await
+    .map(|_| ())
+}
+
 enum Sweep {
-    Unembedded,
     Unchunked,
     StaleWiki,
 }
@@ -181,15 +201,6 @@ async fn dispatch_sweep<Q: JobQueue>(
     let store = store.as_ref();
     let settings = env.settings;
     match sweep {
-        Sweep::Unembedded => crate::embedding_sweep::handle_enqueue_unembedded(
-            store,
-            queue,
-            settings.sweep_limit,
-            settings.sweep_max_attempts,
-            cancel,
-        )
-        .await
-        .map(|_| ()),
         Sweep::Unchunked => crate::embedding_sweep::handle_enqueue_unchunked(
             store,
             queue,

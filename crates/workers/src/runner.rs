@@ -86,6 +86,7 @@ pub struct Runner<Q> {
     schedules: bool,
     wiki_enabled: bool,
     memory_jobs: Option<Arc<dyn kernel::memory::jobs::MemoryJobStore>>,
+    unembedded: Option<Arc<dyn kernel::memory::jobs::UnembeddedStore>>,
     wiki: Option<WikiBuilderDeps>,
     queue: Arc<Q>,
     targets: Arc<dyn EmbeddingStore>,
@@ -116,6 +117,7 @@ where
             schedules: false,
             wiki_enabled: true,
             memory_jobs: None,
+            unembedded: None,
             wiki: None,
             queue,
             targets: deps.targets,
@@ -172,6 +174,15 @@ where
         store: Arc<dyn kernel::memory::jobs::MemoryJobStore>,
     ) -> Self {
         self.memory_jobs = Some(store);
+        self
+    }
+
+    #[must_use]
+    pub fn with_unembedded(
+        mut self,
+        store: Arc<dyn kernel::memory::jobs::UnembeddedStore>,
+    ) -> Self {
+        self.unembedded = Some(store);
         self
     }
 
@@ -323,6 +334,7 @@ where
             settings: self.job_settings,
             wiki_enabled: self.wiki_enabled,
             memory_jobs: self.memory_jobs.clone(),
+            unembedded: self.unembedded.clone(),
             wiki: self.wiki.clone(),
             targets: Arc::clone(&self.targets),
             summaries: Arc::clone(&self.summaries),

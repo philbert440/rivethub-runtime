@@ -1,4 +1,6 @@
-use kernel::memory::jobs::{ChunkWrite, MemoryJobError, MemoryJobStore, UnchunkedMessage};
+use kernel::memory::jobs::{
+    ChunkWrite, MemoryJobError, MemoryJobStore, UnchunkedMessage, UnembeddedStore,
+};
 use kernel::memory::{EmbedTable, EmbedTarget};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use tokio_util::sync::CancellationToken;
@@ -12,7 +14,7 @@ pub struct WikiSweep {
 }
 
 pub async fn handle_enqueue_unembedded(
-    store: &dyn MemoryJobStore,
+    store: &dyn UnembeddedStore,
     queue: &dyn JobQueue,
     limit: u32,
     max_attempts: u32,

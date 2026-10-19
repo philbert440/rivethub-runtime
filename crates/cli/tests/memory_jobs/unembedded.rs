@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use kernel::memory::jobs::MemoryJobStore;
+use kernel::memory::jobs::UnembeddedStore;
 use kernel::memory::{EmbedTable, EmbedTarget};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use sqlx::PgPool;

@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::worker::ComposedRunner;
 use config::{Config, Environment, ServiceSwitch};
 use gateway::server::ServeOptions;
+use kernel::memory::jobs::UnembeddedStore;
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::shutdown::Activities;
@@ -290,9 +291,24 @@ impl NodeBoot<'_> {
         runners: Vec<(ProcessRole, ComposedRunner<SqliteStore>)>,
         gateway: url::Url,
     ) -> Result<(), LocalError> {
+        if self.switches.contains(&ServiceSwitch::Workers) {
+            enqueue_sweep(
+                self.store,
+                FixedJob::EnqueueUnembedded,
+                "unembedded-sweep",
+                0,
+            )
+            .await?;
+        }
         if self.switches.contains(&ServiceSwitch::Wiki) {
-            enqueue_backfill(self.store).await?;
-            enqueue_consolidate(self.store).await?;
+            enqueue_sweep(
+                self.store,
+                FixedJob::EnqueueWikiBackfill,
+                "wiki-backfill",
+                5,
+            )
+            .await?;
+            enqueue_sweep(self.store, FixedJob::ConsolidateWiki, "wiki-consolidate", 5).await?;
         }
         spawn_workers(self.tracker, self.failed, self.shutdown, runners);
         let delegation = if self.switches.contains(&ServiceSwitch::Mcp) {
@@ -358,29 +374,19 @@ impl NodeBoot<'_> {
     }
 }
 
-async fn enqueue_backfill(store: &SqliteStore) -> Result<(), LocalError> {
+async fn enqueue_sweep(
+    store: &SqliteStore,
+    sweep: FixedJob,
+    key: &str,
+    priority: i16,
+) -> Result<(), LocalError> {
     store
         .enqueue(Job {
-            name: JobName::Fixed(FixedJob::EnqueueWikiBackfill),
+            name: JobName::Fixed(sweep),
             payload: wire::JsonObject::default(),
-            key: Some("wiki-backfill".to_owned()),
+            key: Some(key.to_owned()),
             key_mode: JobKeyMode::Replace,
-            priority: 5,
-            run_at: None,
-            max_attempts: None,
-        })
-        .await?;
-    Ok(())
-}
-
-async fn enqueue_consolidate(store: &SqliteStore) -> Result<(), LocalError> {
-    store
-        .enqueue(Job {
-            name: JobName::Fixed(FixedJob::ConsolidateWiki),
-            payload: wire::JsonObject::default(),
-            key: Some("wiki-consolidate".to_owned()),
-            key_mode: JobKeyMode::Replace,
-            priority: 5,
+            priority,
             run_at: None,
             max_attempts: None,
         })
@@ -481,10 +487,15 @@ async fn build_runners(
             wiki: Arc::clone(store) as Arc<dyn WikiBuilderStore>,
             consolidate: Some(Arc::clone(store) as Arc<dyn WikiConsolidateStore>),
         };
-        built.push((
-            role,
-            worker::build_runner(role, ports, config, env, shutdown, activities).await?,
-        ));
+        let mut runner =
+            worker::build_runner(role, ports, config, env, shutdown, activities).await?;
+        if role == ProcessRole::Embedder {
+            runner.runner = runner
+                .runner
+                .with_unembedded(Arc::clone(store) as Arc<dyn UnembeddedStore>)
+                .with_schedules(true);
+        }
+        built.push((role, runner));
     }
     Ok(built)
 }
