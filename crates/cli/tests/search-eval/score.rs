@@ -1,11 +1,12 @@
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use kernel::memory::SearchMode;
-use kernel::memory::SearchOutcome;
 
 use crate::Failure;
 use crate::set::Baseline;
 use crate::set::EvalQuery;
+use crate::shown::Ranking;
 
 const NEEDLE_DEPTH: usize = 3;
 const PERCENT: usize = 100;
@@ -40,42 +41,40 @@ pub(crate) struct Metrics {
 impl Scored {
     pub(crate) fn new(
         query: &EvalQuery,
-        outcome: &SearchOutcome,
+        ranking: &Ranking,
+        contents: &BTreeMap<String, String>,
         latency: Duration,
     ) -> Result<Self, Failure> {
-        let ids: Vec<&str> = outcome.results.iter().map(|hit| hit.id.as_str()).collect();
+        let hits = &ranking.hits;
         let relevant_found = query
             .relevant
             .iter()
-            .filter(|id| ids.contains(&id.as_str()))
+            .filter(|id| hits.iter().any(|hit| hit.is(id, contents)))
             .count();
-        let first_relevant = ids
+        let first_relevant = hits
             .iter()
-            .position(|id| query.relevant.iter().any(|wanted| wanted == id))
+            .position(|hit| query.relevant.iter().any(|id| hit.is(id, contents)))
             .map(|index| u32::try_from(index + 1))
             .transpose()?;
         let needle = (!query.must_contain.is_empty()).then(|| {
-            outcome.results.iter().take(NEEDLE_DEPTH).any(|hit| {
+            hits.iter().take(NEEDLE_DEPTH).any(|hit| {
                 query
                     .must_contain
                     .iter()
-                    .any(|needle| hit.content.contains(needle.as_str()))
+                    .any(|needle| hit.text.contains(needle.as_str()))
             })
         });
         Ok(Self {
             id: query.id.clone(),
             query: query.query.clone(),
             mode: query.mode,
-            top: outcome.results.first().map(|hit| hit.content.clone()),
+            top: hits.first().map(|hit| hit.text.clone()),
             relevant_total: u32::try_from(query.relevant.len())?,
             relevant_found: u32::try_from(relevant_found)?,
             first_relevant,
             needle,
             latency,
-            degraded: outcome
-                .degraded
-                .as_ref()
-                .map(|degraded| degraded.reason.clone()),
+            degraded: ranking.degraded.clone(),
         })
     }
 

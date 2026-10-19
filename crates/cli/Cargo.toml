@@ -29,9 +29,12 @@ chrono = { workspace = true }
 clap = { workspace = true }
 config = { workspace = true }
 gateway = { workspace = true }
+mcp = { workspace = true }
 migrate = { workspace = true }
 nix = { workspace = true, features = ["hostname"] }
+regex = { workspace = true }
 reqwest = { workspace = true }
+rmcp = { workspace = true, features = ["client", "transport-child-process"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }
@@ -64,6 +67,10 @@ path = "src/bin/rivethub-migrate.rs"
 [[bin]]
 name = "search-eval"
 path = "tests/search-eval/eval.rs"
+
+[[bin]]
+name = "search-eval-server"
+path = "tests/search-eval/server.rs"
 
 [lints]
 workspace = true

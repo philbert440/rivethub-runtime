@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::Path;
 use std::path::PathBuf;
@@ -15,9 +16,12 @@ use crate::read;
 
 const STORE_FILE: &str = "memory.sqlite";
 const WAL_SUFFIX: &str = "-wal";
+const CONTENT_SQL: &str = "SELECT content FROM ros_messages WHERE id = ?1 \
+     UNION ALL SELECT content FROM ros_summaries WHERE id = ?1";
 
 pub(crate) struct Opened {
     _scratch: TempDir,
+    pub(crate) path: PathBuf,
     pub(crate) store: SqliteStore,
 }
 
@@ -70,6 +74,7 @@ pub(crate) async fn seeded(corpus: &Path) -> Result<Opened, Failure> {
         .await?;
     Ok(Opened {
         _scratch: scratch,
+        path,
         store,
     })
 }
@@ -85,8 +90,36 @@ pub(crate) fn pinned(source: &Path) -> Result<Opened, Failure> {
     let store = SqliteStore::open(&path)?;
     Ok(Opened {
         _scratch: scratch,
+        path,
         store,
     })
+}
+
+pub(crate) async fn contents(
+    store: &SqliteStore,
+    ids: Vec<String>,
+) -> Result<BTreeMap<String, String>, Failure> {
+    Ok(store
+        .with_conn(move |conn| {
+            let failed = |source| SqliteError::Query {
+                operation: "read the relevant rows",
+                source,
+            };
+            let mut statement = conn.prepare(CONTENT_SQL).map_err(failed)?;
+            let mut contents = BTreeMap::new();
+            for id in ids {
+                let found: Vec<String> = statement
+                    .query_map([&id], |row| row.get(0))
+                    .map_err(failed)?
+                    .collect::<Result<_, _>>()
+                    .map_err(failed)?;
+                if let Some(content) = found.into_iter().next() {
+                    contents.insert(id, content);
+                }
+            }
+            Ok(contents)
+        })
+        .await?)
 }
 
 fn copy(from: &Path, to: &Path) -> Result<(), Failure> {
