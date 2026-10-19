@@ -29,10 +29,17 @@ pub(crate) async fn run(
     mut socket: WebSocket,
     service: Arc<TerminalService>,
     mut handle: Handle,
+    device: String,
 ) -> Result<(), TerminalSocketError> {
     let client = uuid::Uuid::new_v4();
     let (reply, result) = oneshot::channel();
-    handle.send(Command::Join { client, reply }).await?;
+    handle
+        .send(Command::Join {
+            client,
+            device,
+            reply,
+        })
+        .await?;
     result
         .await
         .map_err(|_| ApiError::Unavailable("terminal actor closed".into()))??;
@@ -81,8 +88,8 @@ async fn stream(
             exit_code: state.exit_code,
             mux: state.mux,
             owner: owner.map(|owner| DeviceOwner {
-                device: Some("another device".into()),
                 self_owner: owner.client == client,
+                device: Some(owner.device),
             }),
         },
     )
@@ -102,7 +109,7 @@ async fn stream(
             changed = handle.ownership.changed() => {
                 changed.map_err(|_| ApiError::Unavailable("terminal owner channel closed".into()))?;
                 let owner = handle.ownership.borrow_and_update().clone();
-                send(socket, &TermServerFrame::Owner { device: owner.as_ref().map(|_| "another device".to_owned()), self_owner: owner.as_ref().is_some_and(|owner| owner.client == client), since: owner.map(|owner| owner.since) }).await?;
+                send(socket, &TermServerFrame::Owner { device: owner.as_ref().map(|owner| owner.device.clone()), self_owner: owner.as_ref().is_some_and(|owner| owner.client == client), since: owner.map(|owner| owner.since) }).await?;
             }
             output = attached.output.recv() => {
                 if let Some(bytes) = output {

@@ -24,6 +24,7 @@ pub(super) enum Command {
     },
     Join {
         client: uuid::Uuid,
+        device: String,
         reply: Reply<()>,
     },
     Leave {
@@ -40,7 +41,14 @@ pub(super) enum Command {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Owner {
     pub(super) client: uuid::Uuid,
+    pub(super) device: String,
     pub(super) since: chrono::DateTime<Utc>,
+}
+
+#[derive(Debug)]
+struct Viewer {
+    size: TermSize,
+    device: String,
 }
 
 #[derive(Debug, Clone)]
@@ -65,7 +73,7 @@ pub(super) struct TerminalActor {
     session: String,
     status: watch::Sender<Option<PtyInfo>>,
     ownership: watch::Sender<Option<Owner>>,
-    clients: BTreeMap<uuid::Uuid, TermSize>,
+    clients: BTreeMap<uuid::Uuid, Viewer>,
     permit: Option<tokio::sync::OwnedSemaphorePermit>,
 }
 
@@ -104,10 +112,10 @@ impl TerminalActor {
                             respond(reply, result);
                         }
                         Command::Kill { reply } => respond(reply, self.kill().await),
-                        Command::Join { client, reply } => {
+                        Command::Join { client, device, reply } => {
                             let state = self.status.borrow().clone().ok_or(ApiError::NotFound("unknown pty"))?;
                             let size = TermSize { cols: state.cols.ok_or(ApiError::NotFound("terminal size"))?, rows: state.rows.ok_or(ApiError::NotFound("terminal size"))? };
-                            self.clients.insert(client, size);
+                            self.clients.insert(client, Viewer { size, device });
                             self.attached();
                             respond(reply, Ok(()));
                         }
@@ -117,8 +125,8 @@ impl TerminalActor {
                             if self.ownership.borrow().as_ref().is_some_and(|owner| owner.client == client) {
                                 self.ownership.send_replace(None);
                                 if self.clients.len() == 1
-                                    && let Some((&client, &size)) = self.clients.first_key_value()
-                                { self.resize(client, Some(size), true).await?; }
+                                    && let Some((&client, viewer)) = self.clients.first_key_value()
+                                { let size = viewer.size; self.resize(client, Some(size), true).await?; }
                             }
                         }
                         Command::Size { client, size, claim, reply } => respond(reply, self.resize(client, size, claim).await),
@@ -298,22 +306,24 @@ impl TerminalActor {
         size: Option<TermSize>,
         claim: bool,
     ) -> Result<(), ApiError> {
-        let stored = self
+        let viewer = self
             .clients
             .get_mut(&client)
             .ok_or(ApiError::Unauthorized)?;
         if let Some(size) = size {
-            *stored = TermSize {
+            viewer.size = TermSize {
                 cols: size.cols.clamp(20, 400),
                 rows: size.rows.clamp(10, 200),
             };
         }
-        let size = *stored;
+        let size = viewer.size;
+        let device = viewer.device.clone();
         let owner = self.ownership.borrow().clone();
         if claim || owner.is_none() {
             if owner.as_ref().is_none_or(|owner| owner.client != client) {
                 self.ownership.send_replace(Some(Owner {
                     client,
+                    device,
                     since: Utc::now(),
                 }));
             }

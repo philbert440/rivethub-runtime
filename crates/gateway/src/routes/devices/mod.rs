@@ -221,6 +221,10 @@ impl DeviceRuntime {
         self.enrollment.is_some()
     }
 
+    fn names_devices(&self) -> bool {
+        self.enrollment.is_some() || matches!(self.phone, PhoneService::Issuer(_))
+    }
+
     fn phone_gate(&self) -> PhoneGate {
         if self.owner == OwnerGate::Refused {
             return PhoneGate::NotOwner;
@@ -494,6 +498,20 @@ async fn phone_status(State(gateway): State<Arc<Gateway>>, request: Request) -> 
         Ok(status) => Json(status).into_response(),
         Err(error) => error.into_response(),
     }
+}
+
+pub(super) async fn display_name(
+    gateway: &Gateway,
+    device: &str,
+) -> Result<Option<String>, DeviceError> {
+    if !gateway.devices().names_devices() {
+        return Ok(None);
+    }
+    ask_result(gateway, |reply| actor::Command::Name {
+        device: device.to_owned(),
+        reply,
+    })
+    .await
 }
 
 fn cli_missing_availability() -> PhonePairingAvailability {

@@ -120,6 +120,16 @@ pub(super) fn state(issuer: &PhoneIssuer, name: &str) -> Result<PhonePairingStat
     })
 }
 
+pub(super) fn claimed_name(
+    issuer: &PhoneIssuer,
+    device_id: &str,
+) -> Result<Option<String>, DeviceError> {
+    Ok(load_dir(&issuer.pairing_dir.join("claimed"))?
+        .into_iter()
+        .find(|record| record.device_id == device_id)
+        .map(|record| record.name))
+}
+
 pub(super) struct PreparedRedeem {
     pub(super) device_id: String,
 }

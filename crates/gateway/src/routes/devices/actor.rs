@@ -59,6 +59,10 @@ pub(super) enum Command {
         csr: Option<String>,
         reply: oneshot::Sender<Result<PairRedeemResponse, DeviceError>>,
     },
+    Name {
+        device: String,
+        reply: oneshot::Sender<Result<Option<String>, DeviceError>>,
+    },
 }
 
 #[derive(Debug)]
@@ -117,6 +121,7 @@ async fn dispatch(config: &ActorConfig, command: Command) {
         Command::Redeem { token, csr, reply } => {
             reply_with(reply, redeem(config, token, csr).await);
         }
+        Command::Name { device, reply } => reply_with(reply, name(config, device).await),
     }
 }
 
@@ -147,6 +152,23 @@ fn authority_of(config: &ActorConfig) -> Result<&dyn CertificateAuthority, Devic
         tracing::warn!("device certificate authority is not configured");
         Err(DeviceError::unavailable(super::CA_UNUSABLE))
     }
+}
+
+async fn name(config: &ActorConfig, device: String) -> Result<Option<String>, DeviceError> {
+    let enrollment = config.enrollment.clone();
+    let phone = config.phone.clone();
+    blocking_result(move || {
+        if let Some(enrollment) = &enrollment
+            && let Some(name) = store::roster_name(enrollment, &device)?
+        {
+            return Ok(Some(name));
+        }
+        match &phone {
+            Some(issuer) => pairing::claimed_name(issuer, &device),
+            None => Ok(None),
+        }
+    })
+    .await
 }
 
 async fn list(config: &ActorConfig) -> Result<DeviceListResponse, DeviceError> {
