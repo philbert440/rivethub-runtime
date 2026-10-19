@@ -341,3 +341,65 @@ async fn an_unsafe_token_is_not_written_as_a_path() {
     let status: PhonePairingStatus = body(&call(&app, "GET", "/api/phone-pairing/pixel", "").await);
     assert_eq!(status.state, PhonePairingState::Expired);
 }
+
+#[tokio::test]
+async fn a_token_as_long_as_a_step_ca_one_time_token_still_pairs() {
+    let dir = TempDir::new().expect("temp");
+    let pairing = dir.path().join("pairing");
+    let token = format!("{}.{}.{}", "h".repeat(36), "p".repeat(548), "s".repeat(86));
+    let (app, fake) = phone_app(
+        &pairing,
+        Arc::new(FakeCa::new(FakeMode::Ready).token(token.clone())),
+    );
+    let started = call(&app, "POST", "/api/phone-pairing", r#"{"name":"pixel"}"#).await;
+    assert_eq!(
+        started.status,
+        200,
+        "{}",
+        String::from_utf8_lossy(&started.body)
+    );
+    let started: PhonePairingCode = body(&started);
+    assert_eq!(started.qr_text, token);
+    let redeemed = call(&app, "POST", "/api/devices/pair", &pair_body(&token)).await;
+    assert_eq!(
+        redeemed.status,
+        200,
+        "{}",
+        String::from_utf8_lossy(&redeemed.body)
+    );
+    let redeemed: PairRedeemResponse = body(&redeemed);
+    assert_eq!(redeemed.device_id, started.device_id);
+    assert_eq!(fake.snapshot().await.revoked.len(), 0);
+}
+
+#[tokio::test]
+async fn status_answers_for_the_device_id_the_code_carries() {
+    let dir = TempDir::new().expect("temp");
+    let pairing = dir.path().join("pairing");
+    let (app, _) = phone_app(&pairing, Arc::new(FakeCa::new(FakeMode::Ready)));
+    let started: PhonePairingCode =
+        body(&call(&app, "POST", "/api/phone-pairing", r#"{"name":"pixel"}"#).await);
+    let target = format!("/api/phone-pairing/{}", started.device_id);
+    let pending: PhonePairingStatus = body(&call(&app, "GET", &target, "").await);
+    assert_eq!(pending.state, PhonePairingState::Pending);
+    let redeemed = call(
+        &app,
+        "POST",
+        "/api/devices/pair",
+        &pair_body(&started.qr_text),
+    )
+    .await;
+    assert_eq!(redeemed.status, 200);
+    let paired: PhonePairingStatus = body(&call(&app, "GET", &target, "").await);
+    assert_eq!(paired.state, PhonePairingState::Paired);
+    let other: PhonePairingStatus = body(
+        &call(
+            &app,
+            "GET",
+            "/api/phone-pairing/d00000000000000000000000000000000",
+            "",
+        )
+        .await,
+    );
+    assert_eq!(other.state, PhonePairingState::Expired);
+}
