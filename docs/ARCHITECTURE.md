@@ -53,6 +53,15 @@ positive, default 6000 in `EmbedSettings`; the datahub runs 4000). Sweep limits 
 200), `RIVETHUB_EMBED_SWEEP_MAX_ATTEMPTS` (default 5), and `RIVETHUB_WIKI_SWEEP_LIMIT` (enqueue-stale-wiki, default 20,
 clamped to 0..=200, 0 disables it). The stale-wiki sweep runs only with `RIVETHUB_WIKI_EXTRACTION=1`.
 
+### Wiki consolidation on SQLite
+
+The SQLite wiki builder claims `consolidate-wiki` (payload `{ dryRun?, limitClusters? (50), minClusterSize? (2) }`), and
+`rh local` queues one each time it starts with a wiki directory. It folds session-variant topics into their parent with no
+model: topics are grouped by their first two slug tokens, the group's stem topic (or else its shortest slug) is the parent,
+and only true hyphen-boundary variants of that parent are folded. The child slug and its aliases become parent aliases and
+`ros_wiki_redirects` rows (served as 308s), citations and provenance move to the parent, the denser summary and article win,
+and the text not kept is appended to the parent's article under `Superseded parent text` / `Merged from <slug>` headings.
+
 ## Process shape (Phil 2026-10-12)
 
 One process per service, each with one tokio multi-thread runtime built in its own composition root:

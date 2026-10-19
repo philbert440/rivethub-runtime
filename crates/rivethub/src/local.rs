@@ -14,6 +14,7 @@ use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::shutdown::Activities;
 use kernel::tasks::Delegation;
 use kernel::wiki::builder::WikiBuilderStore;
+use kernel::wiki::consolidate::WikiConsolidateStore;
 use memory_sqlite::{QueryEmbed, SqliteStore};
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -296,6 +297,7 @@ impl NodeBoot<'_> {
     ) -> Result<(), LocalError> {
         if self.switches.contains(&ServiceSwitch::Wiki) {
             enqueue_backfill(self.store).await?;
+            enqueue_consolidate(self.store).await?;
         }
         spawn_workers(self.tracker, self.failed, self.shutdown, runners);
         let delegation = if self.switches.contains(&ServiceSwitch::Mcp) {
@@ -367,6 +369,21 @@ async fn enqueue_backfill(store: &SqliteStore) -> Result<(), LocalError> {
             name: JobName::Fixed(FixedJob::EnqueueWikiBackfill),
             payload: wire::JsonObject::default(),
             key: Some("wiki-backfill".to_owned()),
+            key_mode: JobKeyMode::Replace,
+            priority: 5,
+            run_at: None,
+            max_attempts: None,
+        })
+        .await?;
+    Ok(())
+}
+
+async fn enqueue_consolidate(store: &SqliteStore) -> Result<(), LocalError> {
+    store
+        .enqueue(Job {
+            name: JobName::Fixed(FixedJob::ConsolidateWiki),
+            payload: wire::JsonObject::default(),
+            key: Some("wiki-consolidate".to_owned()),
             key_mode: JobKeyMode::Replace,
             priority: 5,
             run_at: None,
@@ -467,6 +484,7 @@ async fn build_runners(
             summaries: Arc::clone(store) as Arc<dyn SummaryStore>,
             memory: Arc::clone(store) as Arc<dyn MemoryStore>,
             wiki: Arc::clone(store) as Arc<dyn WikiBuilderStore>,
+            consolidate: Some(Arc::clone(store) as Arc<dyn WikiConsolidateStore>),
         };
         built.push((
             role,

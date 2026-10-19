@@ -68,6 +68,7 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
     )
     .with_wiki_builder(WikiBuilderDeps {
         store,
+        consolidate: None,
         model: "fake-chat".to_owned(),
     });
     let mut idle = runner.idle();

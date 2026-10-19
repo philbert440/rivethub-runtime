@@ -27,6 +27,7 @@ mod taxonomy;
 mod time;
 mod vector;
 mod wiki_builder;
+mod wiki_consolidate;
 mod wiki_read;
 mod wiki_topics;
 
