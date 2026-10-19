@@ -4,7 +4,7 @@ These files are the replay inputs for the capture store readers. They are not co
 
 `codex-rollout.jsonl` is one Codex rollout. A user turn comes from `event_msg` / `user_message`. An assistant turn comes from `response_item` / `message`. A `function_call` is paired with `function_call_output` into one tool message on the output line; `arguments` is a JSON string. `session_meta`, `agent_message`, `token_count`, a user `response_item`, `turn_context`, and `compacted` are known non-turns. The filename in a store is `sessions/YYYY/MM/DD/rollout-<stamp>-<uuid>.jsonl`.
 
-`grok-chat-history.jsonl`, `grok-summary.json`, and `grok-updates.jsonl` sit in `sessions/<encoded-cwd>/<uuid>/`. Chat lines are `message` or `tool`. `summary.json` repeats the directory id. `updates.jsonl` `parent` links are not turns.
+`grok-updates-open.jsonl` sits at `sessions/<encoded-cwd>/<uuid>/updates.jsonl`. Its lines follow the shape of real Grok Build `session/update` records with sanitized content: `params._meta` carries `agentTimestampMs` and, for turn events, `promptId`; `params.update.sessionUpdate` names the record. A web search result carries a `rawOutput` with no `type` and is kept as its JSON. The first turn is closed by `turn_completed`. The second turn has no `turn_completed` and the file ends in a partly written line, so the reader holds that turn back. `grok-updates-rest.jsonl` is the remainder of that line plus the closing `turn_completed`; appending it releases the held turn.
 
 `kimi-wire.jsonl` and `kimi-index.jsonl` sit in `sessions/<work-dir>/session_<uuid>/`. The transcript is `agents/main/wire.jsonl` (`user`, `assistant`, `tool_call`, `tool_result`). `session_index.jsonl` records the session id and is not a turn. Live deltas are out of slice.
 

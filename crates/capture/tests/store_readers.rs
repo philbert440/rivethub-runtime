@@ -174,34 +174,6 @@ async fn codex_rollout_maps_events_and_paired_tools() -> Result<(), Box<dyn std:
 }
 
 #[tokio::test]
-async fn grok_chat_history_keeps_parent_links_out_of_the_turns()
--> Result<(), Box<dyn std::error::Error>> {
-    let dir = tempfile::tempdir()?;
-    let folder = format!("sessions/-work-demo/{SESSION}");
-    place(
-        dir.path(),
-        &format!("{folder}/chat_history.jsonl"),
-        "capture/stores/grok-chat-history.jsonl",
-    )?;
-    place(
-        dir.path(),
-        &format!("{folder}/summary.json"),
-        "capture/stores/grok-summary.json",
-    )?;
-    place(
-        dir.path(),
-        &format!("{folder}/updates.jsonl"),
-        "capture/stores/grok-updates.jsonl",
-    )?;
-    replay(
-        &open(HarnessId::GrokBuild, dir.path())?,
-        HarnessId::GrokBuild,
-        dir.path(),
-    )
-    .await
-}
-
-#[tokio::test]
 async fn kimi_wire_pairs_tool_calls_and_ignores_the_index() -> Result<(), Box<dyn std::error::Error>>
 {
     let dir = tempfile::tempdir()?;
