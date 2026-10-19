@@ -131,13 +131,18 @@ async fn command_dispatch(
                 .await
                 .map(Dispatch::Complete);
         }
-        Command::Local { port, no_lan } => {
-            let prepared = local::prepare(env, port, no_lan).await?;
-            if shutdown.is_cancelled() {
-                prepared.release()?;
-                return Ok(Dispatch::Complete(Report::success("")));
-            }
-            return Ok(Dispatch::Local(Box::new(prepared)));
+        Command::Local {
+            port,
+            no_lan,
+            ensure,
+            wait,
+        } => {
+            let request = local::Ensure {
+                port,
+                no_lan,
+                wait_seconds: wait,
+            };
+            return run_local(env, request, ensure, shutdown).await;
         }
         Command::Gateway { check, config } => {
             return Ok(Dispatch::Gateway { check, config });
@@ -187,6 +192,23 @@ async fn command_dispatch(
         }
     }
     .map(Dispatch::Complete)
+}
+
+async fn run_local(
+    env: &Environment,
+    request: local::Ensure,
+    ensure: bool,
+    shutdown: &CancellationToken,
+) -> Result<Dispatch, Error> {
+    if ensure {
+        return local::ensure(env, request).await.map(Dispatch::Complete);
+    }
+    let prepared = local::prepare(env, request.port, request.no_lan).await?;
+    if shutdown.is_cancelled() {
+        prepared.release()?;
+        return Ok(Dispatch::Complete(Report::success("")));
+    }
+    Ok(Dispatch::Local(Box::new(prepared)))
 }
 
 fn version() -> String {

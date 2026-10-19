@@ -1,3 +1,5 @@
+mod ensure;
+
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -5,6 +7,8 @@ use config::model::GatewaySection;
 use config::{Config, ConfigLocation, Environment};
 
 use crate::Error;
+
+pub(crate) use ensure::{Ensure, ensure};
 
 const DEFAULT_GATEWAY_PORT: u16 = 5174;
 

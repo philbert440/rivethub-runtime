@@ -78,6 +78,15 @@ pub enum Error {
     LocalDatabase,
     #[error("rh local --port must be between 1 and 65535")]
     GatewayPort,
+    #[error(
+        "RivetHub local node did not answer at {origin} within {seconds}s; its output is in {}",
+        log.display()
+    )]
+    LocalStart {
+        origin: String,
+        seconds: u64,
+        log: std::path::PathBuf,
+    },
     #[error("refusing to replace the config at {}", path.display())]
     ConfigPresent { path: std::path::PathBuf },
     #[error("the node claim was already released")]

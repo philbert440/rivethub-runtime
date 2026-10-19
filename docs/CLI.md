@@ -19,7 +19,7 @@ the existing service startup codes. Every visible command:
 | `rh agent` | `[--check] [-c, --config FILE]` | Run the task engine |
 | `rh worker` | `--role embedder\|summarizer\|categorizer\|wiki-builder\|all [--check] [-c, --config FILE]` | Run a memory worker for one role |
 | `rh mcp` | `[--check] [-c, --config FILE]` | Run the MCP sidecar |
-| `rh local` | `[--port N] [--no-lan]` | Run a standalone node on SQLite |
+| `rh local` | `[--port N] [--no-lan] [--ensure [--wait SECONDS]]` | Run a standalone node on SQLite, or start one in the background with `--ensure` |
 | `rh update` | `[--channel stable\|beta\|nightly] [--version TAG] [--no-restart] [--mesh] [--ssh-user USER]` | Update this node or the mesh |
 | `rh db migrate` | `[-c, --config FILE] [--url URL \| --path FILE]` | Apply database migrations |
 | `rh db status` | `[-c, --config FILE] [--url URL \| --path FILE]` | Report schema status read-only |
@@ -50,6 +50,8 @@ The `rh ca` commands also take `--ca-url URL`, `--root FILE`, `--provisioner-pas
 `--provisioner-password-file FILE` and `--roster FILE`, and every `rh mesh`
 command takes `--json` and `--ssh-user USER`. `--check` on a service root validates its configuration and exits
 without serving.
+
+`rh local --ensure` starts a standalone node on demand for launchers and capture hooks that run without a service manager. It adopts legacy state as `rh local` does, resolves the address `rh local` would serve with the same `--port` and `--no-lan` (the resolved config, or the bind it would generate), and exits 0 when anything answers that address's `/healthz`, a degraded 503 included. Otherwise it takes a non-blocking lock at `~/.rivethub/run/local-start.lock`, starts `rh local` with the same flags in its own process group with stdin closed and output appended to `~/.rivethub/logs/local.log`, and waits up to `--wait` seconds (default 2, 1 to 300) for health; a caller that finds the lock held only waits. When nothing answers in time it exits 1 naming the address and the log, so a capture hook can spool its batch. The node still refuses a second instance through its pid-file claim.
 
 `rh gateway` serves the gateway. `rh agent` runs the task engine. `rh worker --role <role>` runs one worker role, claiming up to four jobs at a time, or `RIVETHUB_WORKER_CONCURRENCY` (a positive count) when set. `RIVETHUB_SUMMARY_LEAF_TOKENS`, `RIVETHUB_SUMMARY_BRANCH_TOKENS` and `RIVETHUB_SUMMARY_ROOT_TOKENS` cap each summary request (defaults 7000, 14000, 20000), and `RIVETHUB_EMBED_TIMEOUT_MS` bounds each embedding request (default 30000). `rh mcp` runs the MCP sidecar.
 `rh start` stays hidden from help and is the systemd unit's `ExecStart`. It supervises one child of this binary per
