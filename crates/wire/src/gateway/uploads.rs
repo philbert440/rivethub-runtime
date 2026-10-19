@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct UploadCreated {
     pub id: String,
+    pub uri: String,
     pub name: String,
     pub bytes: u64,
     pub media_type: String,

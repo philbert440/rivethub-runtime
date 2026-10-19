@@ -1,5 +1,6 @@
 pub mod actor;
 mod chat;
+mod inject;
 mod live;
 pub mod socket;
 
@@ -101,6 +102,7 @@ pub struct TerminalService {
     summaries: RwLock<BTreeMap<String, wire::harness::HarnessSessionSummary>>,
     harness_events:
         RwLock<BTreeMap<String, tokio::sync::broadcast::Sender<wire::harness::HarnessEvent>>>,
+    injecting: tokio::sync::Mutex<()>,
 }
 
 impl TerminalService {
@@ -130,6 +132,7 @@ impl TerminalService {
             harness: None,
             summaries: RwLock::new(BTreeMap::new()),
             harness_events: RwLock::new(BTreeMap::new()),
+            injecting: tokio::sync::Mutex::new(()),
         })
     }
 

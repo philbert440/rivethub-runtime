@@ -108,9 +108,24 @@ impl HarnessAdapter for Harness {
             .expect("live session")
             .sender
             .clone();
-        let TurnInput::Text(text) = input;
-        self.trace
-            .send_modify(|trace| trace.push(format!("prompt:{text}")));
+        let traced = match input {
+            TurnInput::Text(text) => format!("prompt:{text}"),
+            TurnInput::Attached { text, attachments } => {
+                let attached: Vec<String> = attachments
+                    .iter()
+                    .map(|attachment| {
+                        format!(
+                            "{}:{}:{}",
+                            attachment.name,
+                            attachment.media_type,
+                            attachment.path.display()
+                        )
+                    })
+                    .collect();
+                format!("prompt:{text}|attached:{}", attached.join(","))
+            }
+        };
+        self.trace.send_modify(|trace| trace.push(traced));
         self.finish.acquire().await.expect("finish turn").forget();
         sender
             .send(SessionEvent::AgentMessageChunk {

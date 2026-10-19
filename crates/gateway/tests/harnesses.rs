@@ -177,15 +177,22 @@ fn created(bytes: &[u8]) -> UploadCreated {
 async fn uploads_round_trip_legitimate_names_and_refuse_danger() {
     let root = tempfile::tempdir().expect("root");
     let gateway = opened(root.path(), 64, Duration::from_secs(60));
-    for (name, media_type) in [
-        ("notes.md", "text/plain; charset=utf-8"),
-        ("café.png", "image/png"),
-        ("foo..bar", "image/svg+xml"),
+    for (name, media_type, extension) in [
+        ("notes.md", "text/plain; charset=utf-8", "md"),
+        ("café.PNG", "image/png", "png"),
+        ("foo..bar", "image/svg+xml", "bar"),
+        ("README", "text/plain", "bin"),
     ] {
         let (status, body) = post_upload(&gateway, name, media_type, None, b"hello", None).await;
         assert_eq!(status, 201, "{name}: {}", String::from_utf8_lossy(&body));
         let upload = created(&body);
         assert_eq!(upload.name, name);
+        assert!(
+            upload.uri.ends_with(&format!("/{}.{extension}", upload.id)),
+            "{name}: {}",
+            upload.uri
+        );
+        assert_eq!(std::fs::read(&upload.uri).expect("stored file"), b"hello");
         assert_eq!(upload.media_type, media_type);
         assert_eq!(upload.bytes, 5);
         assert!(upload.session.is_none());
@@ -202,6 +209,20 @@ async fn uploads_round_trip_legitimate_names_and_refuse_danger() {
         assert_eq!(bytes, b"hello");
         assert_eq!(content_type.as_deref(), Some(media_type));
     }
+}
+
+#[tokio::test]
+async fn reopening_the_store_keeps_uploads_with_their_extensions() {
+    let root = tempfile::tempdir().expect("root");
+    let first = opened(root.path(), 64, Duration::from_secs(60));
+    let (status, body) = post_upload(&first, "shot.png", "image/png", None, b"pixels", None).await;
+    assert_eq!(status, 201, "{}", String::from_utf8_lossy(&body));
+    let upload = created(&body);
+    let reopened = opened(root.path(), 64, Duration::from_secs(60));
+    let (status, body, _) = call(&reopened, "GET", "/api/uploads", Vec::new(), None).await;
+    assert_eq!(status, 200);
+    let list: UploadList = serde_json::from_slice(&body).expect("list");
+    assert_eq!(list.uploads, vec![upload]);
 }
 
 #[tokio::test]
@@ -420,7 +441,7 @@ async fn upload_paths_refuse_symlinks_siblings_and_stray_entries() {
     .await;
     assert_eq!(status, 201, "{}", String::from_utf8_lossy(&body));
     let upload = created(&body);
-    let bin = find_one(&root, ".bin");
+    let bin = find_one(&root, ".md");
     std::fs::remove_file(&bin).expect("remove");
     std::os::unix::fs::symlink(sibling.join("secret"), &bin).expect("symlink");
     let (status, body, _) = call(

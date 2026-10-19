@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use kernel::harness::{HarnessAdapter, SessionEvent, TurnInput};
+use kernel::harness::{HarnessAdapter, SessionEvent, TurnAttachment, TurnInput};
 use tokio::sync::{mpsc, oneshot};
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::gateway::term::TermSpawnResponse;
@@ -26,8 +26,7 @@ enum Request {
         reply: oneshot::Sender<Result<(), ApiError>>,
     },
     Prompt {
-        text: String,
-        system_prompt: Option<String>,
+        turn: Queued,
         reply: oneshot::Sender<Result<(), ApiError>>,
     },
     Terminal {
@@ -61,14 +60,15 @@ impl ChatHandle {
         &self,
         text: String,
         system_prompt: Option<String>,
+        attachments: Vec<TurnAttachment>,
     ) -> Result<(), ApiError> {
         let (reply, result) = oneshot::channel();
-        self.send(Request::Prompt {
+        let turn = Queued {
             text,
             system_prompt,
-            reply,
-        })
-        .await?;
+            attachments,
+        };
+        self.send(Request::Prompt { turn, reply }).await?;
         result.await.map_err(|_| closed())?
     }
 
@@ -88,6 +88,26 @@ impl ChatHandle {
 
     async fn send(&self, request: Request) -> Result<(), ApiError> {
         self.commands.send(request).await.map_err(|_| closed())
+    }
+}
+
+#[derive(Debug)]
+struct Queued {
+    text: String,
+    system_prompt: Option<String>,
+    attachments: Vec<TurnAttachment>,
+}
+
+impl Queued {
+    fn input(self) -> TurnInput {
+        let text = with_system_prompt(self.system_prompt.as_deref(), self.text);
+        if self.attachments.is_empty() {
+            return TurnInput::Text(text);
+        }
+        TurnInput::Attached {
+            text,
+            attachments: self.attachments,
+        }
     }
 }
 
@@ -123,7 +143,7 @@ pub(crate) struct ChatActor {
     terminal_busy: bool,
     turn_ended: bool,
     pending: Option<PendingTerminal>,
-    queued: VecDeque<(String, Option<String>)>,
+    queued: VecDeque<Queued>,
     events: Option<mpsc::Receiver<SessionEvent>>,
     closing: Option<oneshot::Sender<Result<(), ApiError>>>,
     tools: ToolNames,
@@ -234,10 +254,10 @@ impl ChatActor {
                     let Some(request) = request else { return Ok(()); };
                     match request {
                         Request::Close { reply } => { self.closing = Some(reply); return Ok(()); }
-                        Request::Prompt { text, system_prompt, reply } => {
+                        Request::Prompt { turn, reply } => {
                             let result = if self.queued.len() >= 64 { Err(ApiError::Conflict("session message queue full".into())) }
-                            else if text.trim().is_empty() { Err(ApiError::BadRequest("text required".into())) }
-                            else { self.queued.push_back((text, system_prompt)); Ok(()) };
+                            else if turn.text.trim().is_empty() && turn.attachments.is_empty() { Err(ApiError::BadRequest("text required".into())) }
+                            else { self.queued.push_back(turn); Ok(()) };
                             respond(reply, result);
                         }
                         Request::Terminal { launch, reply } => {
@@ -314,17 +334,19 @@ impl ChatActor {
             self.surface = Surface::Chat;
             self.events = Some(self.harness.events(&self.session).await?);
         }
-        if let Some((text, system_prompt)) = self.queued.pop_front() {
+        if let Some(queued) = self.queued.pop_front() {
             self.turn_ended = false;
             self.service
                 .set_live_status(&self.key, &self.session, HarnessSessionStatus::Active);
-            self.publish(SessionEvent::UserMessageChunk { text: text.clone() })?;
-            let delivered = with_system_prompt(system_prompt.as_deref(), text);
+            self.publish(SessionEvent::UserMessageChunk {
+                text: queued.text.clone(),
+            })?;
+            let input = queued.input();
             let harness = self.harness.clone();
             let session = self.session.clone();
             turn.spawn(async move {
                 harness
-                    .prompt(&session, TurnInput::Text(delivered))
+                    .prompt(&session, input)
                     .await
                     .map_err(ApiError::from)
             });

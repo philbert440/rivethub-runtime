@@ -14,6 +14,7 @@ use tokio::sync::Notify;
 
 mod script;
 
+use script::Chunk;
 use script::Selection;
 use script::Step;
 
@@ -34,6 +35,8 @@ struct FakeArgs {
     hang_until_cancel: bool,
     #[arg(long)]
     list_sessions: bool,
+    #[arg(long, default_value = "plain")]
+    prompt: PromptMode,
 }
 
 const REPLAYED_CHUNKS: usize = 300;
@@ -43,6 +46,13 @@ enum OnLoad {
     None,
     Replay,
     Reject,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum PromptMode {
+    Plain,
+    Echo,
+    EchoImages,
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -59,6 +69,7 @@ struct AgentState {
     crash_on: Option<CrashPoint>,
     hang_until_cancel: bool,
     list_sessions: bool,
+    prompt: PromptMode,
     cancelled: AtomicBool,
     cancel_notify: Notify,
     selection: Mutex<Selection>,
@@ -83,6 +94,7 @@ fn prepare(args: FakeArgs) -> Option<AgentState> {
         crash_on: args.crash_on,
         hang_until_cancel: args.hang_until_cancel,
         list_sessions: args.list_sessions,
+        prompt: args.prompt,
         cancelled: AtomicBool::new(false),
         cancel_notify: Notify::new(),
         selection: Mutex::new(Selection::initial()),
@@ -106,6 +118,9 @@ fn on_initialize(
         acp::InitializeResponse::new(request.protocol_version).agent_capabilities(
             acp::AgentCapabilities::new()
                 .load_session(!matches!(state.on_load, OnLoad::None))
+                .prompt_capabilities(
+                    acp::PromptCapabilities::new().image(state.prompt == PromptMode::EchoImages),
+                )
                 .session_capabilities(
                     acp::SessionCapabilities::new()
                         .list(state.list_sessions.then(acp::SessionListCapabilities::new)),
@@ -184,11 +199,40 @@ fn spawn_prompt(
     let task_connection = connection.clone();
     connection.spawn(async move {
         let session_id = request.session_id;
+        if state.prompt != PromptMode::Plain {
+            for block in &request.prompt {
+                script::emit_text(
+                    &task_connection,
+                    &session_id,
+                    &described(block),
+                    Chunk::Agent,
+                )?;
+            }
+        }
         match execute_prompt(&state, &task_connection, &session_id).await {
             Ok(stop) => responder.respond(acp::PromptResponse::new(stop)),
             Err(error) => responder.respond_with_error(error),
         }
     })
+}
+
+fn described(block: &acp::ContentBlock) -> String {
+    match block {
+        acp::ContentBlock::Text(text) => format!("text:{}", text.text),
+        acp::ContentBlock::Image(image) => format!(
+            "image:{}:{}:{}",
+            image.mime_type,
+            image.data.len(),
+            image.uri.as_deref().unwrap_or_default()
+        ),
+        acp::ContentBlock::ResourceLink(link) => format!(
+            "link:{}:{}:{}",
+            link.name,
+            link.mime_type.as_deref().unwrap_or_default(),
+            link.uri
+        ),
+        acp::ContentBlock::Audio(_) | acp::ContentBlock::Resource(_) | _ => "other".to_owned(),
+    }
 }
 
 async fn execute_prompt(

@@ -263,6 +263,14 @@ fn launch(
     }
 }
 
+fn uploads(directory: &Path) -> gateway::uploads::UploadService {
+    gateway::uploads::UploadService::new(gateway::uploads::UploadOptions {
+        root: directory.join("uploads"),
+        max_bytes: 1024 * 1024,
+        ttl: Duration::from_secs(600),
+    })
+}
+
 impl Fixture {
     pub(crate) async fn new() -> Self {
         Self::with_harness(None).await
@@ -355,7 +363,8 @@ impl Fixture {
         )
         .with_tenancy(tenancy)
         .with_sessions(registry.clone())
-        .with_terminal(service.clone());
+        .with_terminal(service.clone())
+        .with_uploads(uploads(directory.path()));
         let gateway = Arc::new(match lister {
             Some(lister) => gateway.with_session_lister(lister),
             None => gateway,

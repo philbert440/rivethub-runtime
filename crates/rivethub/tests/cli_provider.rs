@@ -104,6 +104,17 @@ fn every_provider_recording_is_replayed_or_explicitly_skipped() -> TestResult {
     Ok(())
 }
 
+fn say_hi() -> wire::gateway::sessions::SessionPostRequest {
+    wire::gateway::sessions::SessionPostRequest {
+        text: "Say hi.".into(),
+        system_prompt: None,
+        user_id: None,
+        exclude_tools: None,
+        agent: None,
+        thinking: None,
+        attachments: None,
+    }
+}
 #[tokio::test]
 async fn each_cli_provider_starts_gateway_and_replays_chat_and_task_turn() -> TestResult {
     for &kind in KINDS {
@@ -149,14 +160,7 @@ async fn each_cli_provider_starts_gateway_and_replays_chat_and_task_turn() -> Te
             Some(expected.as_str()),
             "{kind}"
         );
-        let request = wire::gateway::sessions::SessionPostRequest {
-            text: "Say hi.".into(),
-            system_prompt: None,
-            user_id: None,
-            exclude_tools: None,
-            agent: None,
-            thinking: None,
-        };
+        let request = say_hi();
         let reply: wire::gateway::sessions::SessionPostReply = client
             .post(format!(
                 "http://{}/api/sessions/task-test/messages?wait=1",

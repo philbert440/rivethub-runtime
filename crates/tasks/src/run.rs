@@ -141,6 +141,7 @@ where
             agent: Some(task.agent_id.clone()),
             thinking: None,
             system_prompt: target.system_prompt.clone(),
+            attachments: None,
         };
         client
             .post_message(

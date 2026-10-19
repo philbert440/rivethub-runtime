@@ -59,6 +59,11 @@ pub enum AcpError {
     },
     #[error("the agent behind {method} is gone")]
     Closed { method: &'static str },
+    #[error("failed to read attachment {path}: {source}")]
+    Attachment {
+        path: std::path::PathBuf,
+        source: std::io::Error,
+    },
     #[error("session {session} is already active")]
     SessionActive {
         session: wire::session_id::SessionId,
@@ -129,6 +134,7 @@ impl AcpError {
             | Self::UnknownPermission { .. }
             | Self::UnanswerablePermission { .. }
             | Self::ToolInput { .. }
+            | Self::Attachment { .. }
             | Self::WorkingDir => ProviderRecovery::Permanent,
         }
     }

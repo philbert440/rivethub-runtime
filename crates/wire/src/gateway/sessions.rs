@@ -178,6 +178,7 @@ pub struct SessionPostRequest {
     pub agent: Option<String>,
     pub thinking: Option<crate::stream::ThinkingLevel>,
     pub system_prompt: Option<String>,
+    pub attachments: Option<Vec<super::agents::UserTurnAttachment>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
