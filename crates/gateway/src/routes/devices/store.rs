@@ -149,6 +149,18 @@ pub(super) fn list(enrollment: &Enrollment) -> Result<DeviceListResponse, Device
     })
 }
 
+pub(super) fn roster_name(
+    enrollment: &Enrollment,
+    id: &str,
+) -> Result<Option<String>, DeviceError> {
+    Ok(load(enrollment)?
+        .devices
+        .into_iter()
+        .find(|device| device.id == id)
+        .map(|device| device.name.trim().to_owned())
+        .filter(|name| !name.is_empty()))
+}
+
 pub(super) fn prepare_create(
     enrollment: &Enrollment,
     requested_name: Option<&str>,

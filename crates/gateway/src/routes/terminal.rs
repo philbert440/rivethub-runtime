@@ -12,8 +12,10 @@ use crate::Gateway;
 use crate::error::ApiError;
 use crate::extract::{Body, Query};
 use crate::routes::agents::Failure;
-use crate::tenancy::UserId;
+use crate::tenancy::{PeerCertificate, UserId};
 use crate::term::TerminalService;
+
+const UNNAMED_DEVICE: &str = "another device";
 
 #[derive(Debug, Deserialize)]
 struct Selection {
@@ -157,11 +159,26 @@ async fn upgrade(
         Ok(pair) => pair,
         Err(error) => return error.into_response(),
     };
+    let device = device_label(&gateway, parts.extensions.get::<PeerCertificate>()).await;
     upgrade
         .on_upgrade(move |socket| async move {
-            if let Err(error) = crate::term::socket::run(socket, service, handle).await {
+            if let Err(error) = crate::term::socket::run(socket, service, handle, device).await {
                 tracing::debug!(%error, "terminal websocket ended");
             }
         })
         .into_response()
+}
+
+async fn device_label(gateway: &Gateway, peer: Option<&PeerCertificate>) -> String {
+    let Some(PeerCertificate::Device { device, .. }) = peer else {
+        return UNNAMED_DEVICE.to_owned();
+    };
+    match crate::routes::devices::display_name(gateway, device).await {
+        Ok(Some(name)) => name,
+        Ok(None) => device.clone(),
+        Err(error) => {
+            tracing::warn!(%error, device, "device name lookup failed; showing the device id");
+            device.clone()
+        }
+    }
 }
