@@ -1,5 +1,7 @@
 mod search;
+mod summaries;
 pub use search::*;
+pub use summaries::*;
 
 use std::collections::BTreeMap;
 

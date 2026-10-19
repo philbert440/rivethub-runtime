@@ -313,6 +313,13 @@ impl MemoryStore for crate::PostgresMemory {
             .map_err(MemoryStoreError::from)
     }
 
+    async fn summary_dag(
+        &self,
+        session: &str,
+    ) -> Result<Vec<wire::gateway::memory::MemorySummaryNode>, MemoryStoreError> {
+        self.read_summary_dag(session).await
+    }
+
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError> {
         self.tags_list(&query).await
     }

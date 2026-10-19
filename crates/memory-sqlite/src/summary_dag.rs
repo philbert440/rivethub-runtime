@@ -1,0 +1,123 @@
+use kernel::memory::MemoryStoreError;
+use rusqlite::Row;
+use rusqlite::Statement;
+use rusqlite::params_from_iter;
+use rusqlite::types::Type;
+use rusqlite::types::Value;
+use wire::gateway::memory::MemorySummaryNode;
+use wire::gateway::memory::SummaryKind;
+
+use crate::SqliteStore;
+use crate::error::SqliteError;
+use crate::time;
+
+const DAG_SQL: &str = "WITH RECURSIVE conversation(id) AS ( \
+        SELECT id FROM ros_conversations WHERE session_key = ?1 AND active = 1 \
+         ORDER BY updated_at DESC, id LIMIT 1), \
+    dag(id, level) AS ( \
+        SELECT s.id, 0 FROM ros_summaries s JOIN conversation c ON s.conversation_id = c.id \
+        UNION \
+        SELECT s.parent_id, dag.level + 1 FROM ros_summaries s JOIN dag ON dag.id = s.id \
+         WHERE s.parent_id IS NOT NULL) \
+    SELECT s.id, s.parent_id, max(dag.level) AS level, s.kind, s.content, s.message_count, \
+           s.earliest_at, s.latest_at, s.created_at \
+      FROM dag JOIN ros_summaries s ON s.id = dag.id \
+     GROUP BY s.id \
+     ORDER BY level DESC, s.latest_at, s.id";
+
+const SOURCES_SQL: &str =
+    "SELECT message_id FROM ros_summary_sources WHERE summary_id = ?1 ORDER BY ordinal";
+
+struct DagRow {
+    id: String,
+    parent_id: Option<String>,
+    level: i64,
+    kind: SummaryKind,
+    content: String,
+    message_count: i64,
+    earliest_at: Option<String>,
+    latest_at: Option<String>,
+    created_at: String,
+}
+
+impl SqliteStore {
+    pub(crate) async fn read_summary_dag(
+        &self,
+        session: &str,
+    ) -> Result<Vec<MemorySummaryNode>, MemoryStoreError> {
+        let session = session.to_owned();
+        self.with_conn(move |conn| summary_dag(conn, session))
+            .await
+            .map_err(MemoryStoreError::from)
+    }
+}
+
+fn summary_dag(
+    conn: &rusqlite::Connection,
+    session: String,
+) -> Result<Vec<MemorySummaryNode>, SqliteError> {
+    let mut statement = conn
+        .prepare(DAG_SQL)
+        .map_err(SqliteError::query("summary dag"))?;
+    let rows = statement
+        .query_map(params_from_iter([Value::Text(session)]), dag_row)
+        .map_err(SqliteError::query("summary dag"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(SqliteError::query("summary dag"))?;
+    let mut sources = conn
+        .prepare(SOURCES_SQL)
+        .map_err(SqliteError::query("summary dag sources"))?;
+    rows.into_iter()
+        .map(|row| summary_node(&mut sources, row))
+        .collect()
+}
+
+fn dag_row(row: &Row<'_>) -> rusqlite::Result<DagRow> {
+    let kind = row.get::<_, String>(3)?;
+    Ok(DagRow {
+        id: row.get(0)?,
+        parent_id: row.get(1)?,
+        level: row.get(2)?,
+        kind: kind.parse::<SummaryKind>().map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(3, Type::Text, Box::new(error))
+        })?,
+        content: row.get(4)?,
+        message_count: row.get(5)?,
+        earliest_at: row.get(6)?,
+        latest_at: row.get(7)?,
+        created_at: row.get(8)?,
+    })
+}
+
+fn summary_node(
+    sources: &mut Statement<'_>,
+    row: DagRow,
+) -> Result<MemorySummaryNode, SqliteError> {
+    let source_message_ids = sources
+        .query_map(params_from_iter([Value::Text(row.id.clone())]), |source| {
+            source.get::<_, String>(0)
+        })
+        .map_err(SqliteError::query("summary dag sources"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(SqliteError::query("summary dag sources"))?;
+    Ok(MemorySummaryNode {
+        id: row.id,
+        parent_id: row.parent_id,
+        level: u32::try_from(row.level).map_err(SqliteError::Count)?,
+        kind: row.kind,
+        content: row.content,
+        message_count: u32::try_from(row.message_count).map_err(SqliteError::Count)?,
+        earliest_at: row
+            .earliest_at
+            .as_deref()
+            .map(|text| time::stored(text, "earliest_at"))
+            .transpose()?,
+        latest_at: row
+            .latest_at
+            .as_deref()
+            .map(|text| time::stored(text, "latest_at"))
+            .transpose()?,
+        created_at: time::stored(&row.created_at, "created_at")?,
+        source_message_ids,
+    })
+}

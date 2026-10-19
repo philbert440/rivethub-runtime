@@ -17,6 +17,7 @@ mod search;
 pub use search::embed::QueryEmbed;
 pub mod rule;
 mod stats;
+mod summary_dag;
 mod summary_port;
 mod tags;
 mod tags_suggest;

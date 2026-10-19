@@ -1,3 +1,4 @@
+mod export;
 mod io;
 mod parse;
 mod run;
@@ -7,6 +8,8 @@ use config::Environment;
 use tokio_util::sync::CancellationToken;
 
 use crate::Report;
+
+pub use export::MemoryExporter;
 
 pub async fn execute(
     args: &[String],

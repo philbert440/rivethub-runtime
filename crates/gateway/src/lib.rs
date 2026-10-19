@@ -247,6 +247,7 @@ pub struct Gateway {
     voice: VoiceProxy,
     tasks: Option<Arc<routes::tasks::TasksApi>>,
     providers: Vec<kernel::model::ProviderHealth>,
+    memory_export: Option<Arc<dyn kernel::memory::MemoryExport>>,
 }
 
 impl Gateway {
@@ -283,6 +284,7 @@ impl Gateway {
             voice: VoiceProxy::unconfigured(),
             tasks: None,
             providers: Vec::new(),
+            memory_export: None,
         }
     }
 
@@ -293,6 +295,16 @@ impl Gateway {
     ) -> Self {
         self.presets = routes::agents::backed_by(&self.settings, store);
         self
+    }
+
+    #[must_use]
+    pub fn with_memory_export(mut self, export: Arc<dyn kernel::memory::MemoryExport>) -> Self {
+        self.memory_export = Some(export);
+        self
+    }
+
+    pub(crate) fn memory_export(&self) -> Option<&Arc<dyn kernel::memory::MemoryExport>> {
+        self.memory_export.as_ref()
     }
 
     #[must_use]

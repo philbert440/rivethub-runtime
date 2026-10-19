@@ -9,6 +9,7 @@ pub mod files;
 pub mod harnesses;
 mod history;
 pub mod memory;
+mod memory_archive;
 pub mod sessions;
 pub mod tags;
 pub mod tasks;

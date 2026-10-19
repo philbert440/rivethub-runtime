@@ -216,6 +216,13 @@ impl MemoryStore for FailingStore {
         unavailable()
     }
 
+    async fn summary_dag(
+        &self,
+        _session: &str,
+    ) -> Result<Vec<wire::gateway::memory::MemorySummaryNode>, MemoryStoreError> {
+        unavailable()
+    }
+
     async fn list_tags(
         &self,
         _query: kernel::memory::TagListQuery,
@@ -410,6 +417,13 @@ impl MemoryStore for GatedStore {
         now: chrono::DateTime<chrono::Utc>,
     ) -> Result<String, MemoryStoreError> {
         self.inner.context(session, now).await
+    }
+
+    async fn summary_dag(
+        &self,
+        session: &str,
+    ) -> Result<Vec<wire::gateway::memory::MemorySummaryNode>, MemoryStoreError> {
+        self.inner.summary_dag(session).await
     }
 
     async fn list_tags(

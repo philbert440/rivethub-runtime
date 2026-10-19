@@ -6,6 +6,8 @@ mod consolidate;
 mod embed;
 #[path = "local/import.rs"]
 mod import;
+#[path = "local/memory_http.rs"]
+mod memory_http;
 
 use std::net::SocketAddr;
 use std::path::Path;

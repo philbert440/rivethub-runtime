@@ -14,6 +14,7 @@ use wire::gateway::memory::BrowseWindow;
 use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryScope;
 use wire::gateway::memory::MemoryStatsResponse;
+use wire::gateway::memory::MemorySummaryNode;
 use wire::gateway::memory::PendingTagWire;
 pub use wire::gateway::memory::SearchMode;
 use wire::gateway::memory::TagCount;
@@ -30,6 +31,7 @@ use wire::message::Role;
 use crate::BoxError;
 
 mod embed;
+mod export;
 mod origin;
 mod search;
 mod suggest;
@@ -43,6 +45,7 @@ pub use embed::LoadedTarget;
 pub use embed::StoredChunk;
 pub use embed::StoredEmbedding;
 pub use embed::Unembeddable;
+pub use export::MemoryExport;
 pub use origin::DumpOrigin;
 pub use origin::DumpSource;
 pub use search::SearchOutcome;
@@ -363,6 +366,8 @@ pub trait MemoryStore: Send + Sync {
     async fn get_full(&self, id: &str) -> Result<Option<MemoryEntry>, MemoryStoreError>;
 
     async fn context(&self, session: &str, now: DateTime<Utc>) -> Result<String, MemoryStoreError>;
+
+    async fn summary_dag(&self, session: &str) -> Result<Vec<MemorySummaryNode>, MemoryStoreError>;
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError>;
 
