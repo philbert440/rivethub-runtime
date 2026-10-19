@@ -538,9 +538,19 @@ fn contained_directory(
             "invalid terminal command or directory".into(),
         ));
     }
-    let directory = directory.canonicalize().map_err(ApiError::Io)?;
+    let directory = match directory.canonicalize() {
+        Ok(directory) => directory,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(ApiError::BadRequest(
+                "working directory does not exist".into(),
+            ));
+        }
+        Err(error) => return Err(ApiError::Io(error)),
+    };
     if !directory.starts_with(root) {
-        return Err(ApiError::SessionForbidden);
+        return Err(ApiError::Forbidden(
+            "working directory is outside the terminal root".into(),
+        ));
     }
     if !directory.is_dir() {
         return Err(ApiError::BadRequest(

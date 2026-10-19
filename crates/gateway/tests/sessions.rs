@@ -8,7 +8,7 @@ mod session_support;
 use std::sync::Arc;
 
 use futures::SinkExt as _;
-use kernel::terminal::TerminalId;
+use kernel::terminal::{TermSize, TerminalId};
 use session_support::{Call, Fixture, WAIT, frame, http, user};
 use tokio_tungstenite::tungstenite::Message;
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion, SessionBroadcast, Snapshot};
@@ -296,6 +296,36 @@ async fn roster_commands_may_start_outside_the_files_root_but_must_be_absolute()
     fixture.gateway.close().await;
 }
 
+#[tokio::test]
+async fn a_chat_directory_outside_the_root_or_missing_is_named_in_the_refusal() {
+    let harness = Arc::new(session_support::harness::Harness::default());
+    let fixture = Fixture::with_harness(Some(harness)).await;
+    let outside = tempfile::tempdir().expect("outside directory");
+    for (cwd, refusal) in [
+        (
+            outside.path().to_path_buf(),
+            "working directory is outside the terminal root",
+        ),
+        (
+            fixture.directory.path().join("missing"),
+            "working directory does not exist",
+        ),
+    ] {
+        let error = fixture
+            .service
+            .create_chat(
+                &user("owner"),
+                wire::harness::HarnessId::ClaudeCode,
+                None,
+                Some(cwd),
+            )
+            .await
+            .expect_err("refused directory");
+        assert_eq!(error.to_string(), refusal);
+    }
+    fixture.gateway.close().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn handoff_waits_for_turn_end_releases_then_resumes_and_delivers_queued_chat() {
     let harness = Arc::new(session_support::harness::Harness::default());
@@ -447,6 +477,61 @@ async fn malformed_controls_are_rejected_without_writing_to_the_terminal() {
             .any(|call| matches!(call, Call::Resize(_) | Call::Input(_)))
     );
     drop(socket);
+    stop.cancel();
+    tokio::time::timeout(WAIT, server)
+        .await
+        .expect("shutdown")
+        .expect("task")
+        .expect("server");
+}
+
+async fn viewer(address: std::net::SocketAddr) -> session_support::Socket {
+    let (mut socket, _) = tokio_tungstenite::connect_async(format!("ws://{address}/term?id=pty-1"))
+        .await
+        .expect("connect");
+    assert!(matches!(frame(&mut socket).await, Message::Text(_)));
+    assert!(matches!(frame(&mut socket).await, Message::Binary(_)));
+    socket
+}
+
+#[tokio::test]
+async fn when_the_owner_leaves_the_other_viewers_learn_nobody_owns_the_terminal() {
+    let fixture = Fixture::new().await;
+    fixture
+        .service
+        .spawn(&user("owner"), spawn("owned"))
+        .await
+        .expect("spawn");
+    let (address, stop, server) = fixture.serve().await;
+    let mut owner = viewer(address).await;
+    owner
+        .send(Message::text(r#"{"type":"resize","cols":90,"rows":30}"#))
+        .await
+        .expect("resize");
+    fixture
+        .mux
+        .called(|calls| calls.contains(&Call::Resize(TermSize { cols: 90, rows: 30 })))
+        .await;
+    let mut first = viewer(address).await;
+    let mut second = viewer(address).await;
+    owner.close(None).await.expect("owner leaves");
+    for socket in [&mut first, &mut second] {
+        let released: TermServerFrame =
+            serde_json::from_str(&frame(socket).await.into_text().expect("owner text"))
+                .expect("owner frame");
+        assert!(
+            matches!(
+                released,
+                TermServerFrame::Owner {
+                    device: None,
+                    self_owner: false,
+                    ..
+                }
+            ),
+            "{released:?}"
+        );
+    }
+    drop((first, second));
     stop.cancel();
     tokio::time::timeout(WAIT, server)
         .await
