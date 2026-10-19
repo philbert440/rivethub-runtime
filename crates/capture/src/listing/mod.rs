@@ -13,6 +13,7 @@ mod pi;
 mod qwen;
 mod text;
 mod time;
+mod transcripts;
 
 use std::path::Path;
 use std::path::PathBuf;
@@ -27,6 +28,7 @@ use kernel::transcript::TranscriptReaderError;
 use wire::harness::HarnessId;
 
 pub use ancestors::with_ancestors;
+pub use transcripts::StoreTranscriptReader;
 
 use crate::readers::blocking;
 

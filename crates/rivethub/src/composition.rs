@@ -103,17 +103,6 @@ fn gateway_settings(config: &Config, env: &Environment) -> Result<gateway::Setti
     )?)
 }
 
-fn transcripts(
-    env: &Environment,
-) -> Result<Arc<capture::transcript::ClaudeTranscriptReader>, ComposeError> {
-    let home = env
-        .home()
-        .ok_or_else(|| ComposeError::Invalid("HOME is required".into()))?;
-    Ok(Arc::new(capture::transcript::ClaudeTranscriptReader::new(
-        std::path::Path::new(home).join(".claude"),
-    )))
-}
-
 #[derive(Default)]
 struct Backing<'tasks> {
     presets: Option<Arc<dyn AgentPresetStore>>,
@@ -149,12 +138,13 @@ fn with_backing(gateway: Gateway, backing: &Backing<'_>) -> Gateway {
     }
 }
 
-fn with_session_stores(gateway: Gateway, env: &Environment) -> Result<Gateway, ComposeError> {
-    Ok(gateway
-        .with_transcript_reader(transcripts(env)?)
-        .with_session_lister(Arc::new(capture::listing::StoreSessionLister::new(
-            store_roots(env),
-        ))))
+fn with_session_stores(gateway: Gateway, env: &Environment) -> Gateway {
+    let roots = store_roots(env);
+    gateway
+        .with_transcript_reader(Arc::new(capture::listing::StoreTranscriptReader::new(
+            roots.clone(),
+        )))
+        .with_session_lister(Arc::new(capture::listing::StoreSessionLister::new(roots)))
 }
 
 async fn session_registry(
@@ -300,7 +290,7 @@ impl Composition {
             .with_client_certificate_required(bind.require_client)
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
-        gateway = with_backing(with_session_stores(gateway, env)?, &backing);
+        gateway = with_backing(with_session_stores(gateway, env), &backing);
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let background = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {
