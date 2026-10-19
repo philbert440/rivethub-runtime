@@ -142,6 +142,11 @@ async fn token_spawn_failures_share_the_original_os_error() {
     let ModelProviderError::Request { source, .. } = error else {
         panic!("token failure is a request error");
     };
+    let Some(kernel::model::ModelCallFailure::Credentials { source }) =
+        source.downcast_ref::<kernel::model::ModelCallFailure>()
+    else {
+        panic!("token failure is a credentials failure");
+    };
     let error = source
         .downcast_ref::<providers::error::TokenError>()
         .expect("typed token error");

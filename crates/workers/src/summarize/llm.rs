@@ -59,12 +59,11 @@ fn text_message(role: Role, text: &str) -> Message {
 }
 
 pub(crate) fn llm_error(error: ModelProviderError) -> WorkerError {
-    let unreachable = crate::outage::provider_unreachable(&error);
+    if let Some(outage) = crate::outage::provider_outage(&error) {
+        return outage;
+    }
     let text = error.to_string();
     let _owned = error;
-    if unreachable {
-        return WorkerError::ProviderUnreachable;
-    }
     match http_status(&text) {
         Some(status) if permanent(status) => WorkerError::Llm {
             message: format!("LLM HTTP {status} (not retrying)"),

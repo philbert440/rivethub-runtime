@@ -1,4 +1,6 @@
 use super::*;
+use kernel::model::ModelCallFailure;
+use workers::OutageCause;
 use workers::WorkerError;
 
 const REPLAYED: &[&str] = &[
@@ -175,7 +177,13 @@ async fn a_refused_model_is_not_a_failed_summary() {
     let error = handle_summarize(&env, &payload_of(id, SummaryTrigger::SessionStale))
         .await
         .expect_err("refused");
-    assert!(matches!(error, WorkerError::ProviderUnreachable));
+    assert!(matches!(
+        error,
+        WorkerError::ProviderOutage {
+            cause: OutageCause::Unreachable,
+            retry_after: None
+        }
+    ));
     let shaped = ChatFailure {
         message: "connection refused",
         kind: std::io::ErrorKind::Other,
@@ -191,7 +199,115 @@ async fn a_refused_model_is_not_a_failed_summary() {
     let error = handle_summarize(&env, &payload_of(id, SummaryTrigger::SessionIdle))
         .await
         .expect_err("shaped");
-    assert!(matches!(error, WorkerError::ProviderUnreachable));
+    assert!(matches!(
+        error,
+        WorkerError::ProviderOutage {
+            cause: OutageCause::Unreachable,
+            retry_after: None
+        }
+    ));
+}
+
+#[tokio::test]
+async fn auth_throttling_and_server_errors_are_outages_not_failed_summaries() {
+    let hint = Some(std::time::Duration::from_secs(30));
+    let cases = [
+        (Some(401), None, Some((OutageCause::Credentials, None))),
+        (Some(403), None, Some((OutageCause::Credentials, None))),
+        (None, None, Some((OutageCause::Credentials, None))),
+        (Some(429), hint, Some((OutageCause::Throttled, hint))),
+        (Some(500), None, Some((OutageCause::ServerError, None))),
+        (Some(503), hint, Some((OutageCause::ServerError, hint))),
+        (Some(400), None, None),
+    ];
+    for (status, retry_after, expected) in cases {
+        let error = summarize_against(&StatusChat {
+            status,
+            retry_after,
+        })
+        .await;
+        match (expected, error) {
+            (
+                Some((cause, hint)),
+                WorkerError::ProviderOutage {
+                    cause: got,
+                    retry_after: got_hint,
+                },
+            ) => {
+                assert_eq!(got, cause, "{status:?}");
+                assert_eq!(got_hint, hint, "{status:?}");
+            }
+            (None, WorkerError::Llm { message }) => {
+                assert_eq!(message, "LLM HTTP 400 (not retrying)");
+            }
+            (expected, error) => panic!("{status:?}: expected {expected:?}, got {error:?}"),
+        }
+    }
+}
+
+async fn summarize_against(provider: &StatusChat) -> WorkerError {
+    let id = wired_id();
+    let now = at("2026-10-10T12:00:00Z");
+    let store = Arc::new(MemStore::new(vec![sample(id, now, WindowCase::Full)]));
+    let jobs = Arc::new(Seen::default());
+    let settings = settings();
+    let token = cancel();
+    let env = SummarizeEnv {
+        store: store.as_ref(),
+        provider,
+        queue: jobs.as_ref(),
+        settings: &settings,
+        now,
+        cancel: &token,
+    };
+    handle_summarize(&env, &payload_of(id, SummaryTrigger::Explicit))
+        .await
+        .expect_err("the model fails")
+}
+
+struct StatusChat {
+    status: Option<u16>,
+    retry_after: Option<std::time::Duration>,
+}
+
+impl StatusChat {
+    fn error(&self) -> ModelProviderError {
+        let source = Box::new(std::io::Error::other("synthetic"));
+        let failure = match self.status {
+            Some(status) => ModelCallFailure::Http {
+                status,
+                retry_after: self.retry_after,
+                source,
+            },
+            None => ModelCallFailure::Credentials { source },
+        };
+        ModelProviderError::Request {
+            message: failure.to_string(),
+            source: Box::new(failure),
+        }
+    }
+}
+
+#[async_trait]
+impl ModelProvider for StatusChat {
+    async fn chat(&self, _request: ModelRequest) -> Result<LlmResponse, ModelProviderError> {
+        Err(self.error())
+    }
+
+    async fn stream(
+        &self,
+        _request: ModelRequest,
+    ) -> Result<Receiver<ModelStreamItem>, ModelProviderError> {
+        Err(self.error())
+    }
+
+    async fn embed(&self, _texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
+        Err(self.error())
+    }
+
+    async fn list_models(&self) -> Result<Vec<String>, ModelProviderError> {
+        Ok(Vec::new())
+    }
 }
 
 fn trigger_file() -> TriggerFile {

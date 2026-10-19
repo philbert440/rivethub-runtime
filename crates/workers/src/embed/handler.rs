@@ -171,10 +171,9 @@ fn chunk_rows(
 }
 
 fn embed_error(error: &ModelProviderError) -> WorkerError {
-    if crate::outage::provider_unreachable(error) {
-        WorkerError::ProviderUnreachable
-    } else {
-        WorkerError::Embed(error.to_string())
+    match crate::outage::provider_outage(error) {
+        Some(outage) => outage,
+        None => WorkerError::Embed(error.to_string()),
     }
 }
 

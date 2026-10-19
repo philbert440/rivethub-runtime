@@ -2,6 +2,7 @@ pub mod body;
 pub mod cli;
 pub mod embed;
 pub mod error;
+mod retry_after;
 pub mod sse;
 mod token;
 
@@ -194,9 +195,18 @@ pub(crate) async fn check_status(
     if status.is_success() {
         return Ok(response);
     }
+    let retry_after = retry_after::hint(response.headers(), chrono::Utc::now());
     match response.text().await {
-        Ok(body) => Err(StatusError::Body { status, body }),
-        Err(source) => Err(StatusError::Unreadable { status, source }),
+        Ok(body) => Err(StatusError::Body {
+            status,
+            retry_after,
+            body,
+        }),
+        Err(source) => Err(StatusError::Unreadable {
+            status,
+            retry_after,
+            source,
+        }),
     }
 }
 

@@ -224,6 +224,7 @@ async fn a_non_2xx_status_carries_the_status_and_body() {
     let EmbedError::Status(StatusError::Body {
         status,
         body: received,
+        ..
     }) = error
     else {
         common::halt(&format!("a non-2xx status is a status error: {error:?}"));

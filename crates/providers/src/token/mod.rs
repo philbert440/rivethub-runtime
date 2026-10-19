@@ -24,10 +24,7 @@ pub(crate) enum CallError {
 impl From<CallError> for kernel::model::ModelProviderError {
     fn from(error: CallError) -> Self {
         match error {
-            CallError::Token(error) => Self::Request {
-                message: error.to_string(),
-                source: Box::new(error),
-            },
+            CallError::Token(error) => error.into(),
             CallError::Status(error) => error.into(),
             CallError::Transport { source } => crate::request_error(source),
         }

@@ -77,8 +77,11 @@ pub enum WorkerError {
     Summary(#[source] SummaryStoreError),
     #[error("{message}")]
     Llm { message: String },
-    #[error("the model provider is unreachable")]
-    ProviderUnreachable,
+    #[error("the model provider is {cause}")]
+    ProviderOutage {
+        cause: crate::outage::OutageCause,
+        retry_after: Option<std::time::Duration>,
+    },
     #[error("conversation {id} is not in the summary store")]
     ConversationMissing { id: Uuid },
     #[error("a truncated leaf batch cannot shrink further")]
