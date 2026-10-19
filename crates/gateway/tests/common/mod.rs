@@ -148,6 +148,12 @@ impl MemoryStore for FailingStore {
         false
     }
 
+    async fn embed_model_mismatch(
+        &self,
+    ) -> Result<Option<kernel::memory::EmbedModelMismatch>, MemoryStoreError> {
+        unavailable()
+    }
+
     async fn wiki_topics(
         &self,
         _filter: kernel::wiki::WikiFilter,
@@ -350,6 +356,12 @@ impl MemoryStore for GatedStore {
 
     fn embeddings_armed(&self) -> bool {
         self.inner.embeddings_armed()
+    }
+
+    async fn embed_model_mismatch(
+        &self,
+    ) -> Result<Option<kernel::memory::EmbedModelMismatch>, MemoryStoreError> {
+        self.inner.embed_model_mismatch().await
     }
 
     async fn wiki_topics(

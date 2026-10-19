@@ -10,9 +10,11 @@ pub mod import;
 mod insert;
 mod memory_port;
 mod message;
+mod meta;
 mod port;
 mod queue;
 mod read;
+mod reembed;
 mod search;
 pub use search::embed::QueryEmbed;
 pub mod rule;
@@ -27,6 +29,7 @@ mod task_store;
 mod task_watch;
 mod taxonomy;
 mod time;
+mod title;
 mod unembedded;
 mod vector;
 mod wiki_builder;
@@ -57,6 +60,7 @@ pub use queue::JobInsert;
 pub use queue::JobPayload;
 pub use queue::JobState;
 pub use queue::retry_delay_ms;
+pub use reembed::ReembedReport;
 
 #[derive(Clone)]
 struct SharedClock(Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>);
@@ -104,6 +108,7 @@ pub struct SqliteStore {
     claims: Arc<ClaimIds>,
     clock: SharedClock,
     query_embed: Option<QueryEmbed>,
+    embed_model: Option<String>,
     notifications: tokio::sync::watch::Sender<()>,
     task_events: tokio::sync::watch::Sender<u64>,
     task_finished: tokio::sync::broadcast::Sender<uuid::Uuid>,
@@ -142,6 +147,12 @@ impl SqliteStore {
     #[must_use]
     pub fn with_query_embed(mut self, embed: QueryEmbed) -> Self {
         self.query_embed = Some(embed);
+        self
+    }
+
+    #[must_use]
+    pub fn with_embed_model(mut self, model: &str) -> Self {
+        self.embed_model = Some(model.to_owned());
         self
     }
 
@@ -260,6 +271,7 @@ fn from_conn(
         claims: Arc::new(ClaimIds::default()),
         clock,
         query_embed: None,
+        embed_model: None,
         notifications: tokio::sync::watch::channel(()).0,
         task_events,
         task_finished,

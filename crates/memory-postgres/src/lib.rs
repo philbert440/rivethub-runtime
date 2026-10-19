@@ -29,6 +29,7 @@ mod task_jobs;
 mod task_query;
 mod task_rows;
 mod task_watch;
+mod title;
 mod wiki;
 mod wiki_builder;
 pub mod wiki_writer;

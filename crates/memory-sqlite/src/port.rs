@@ -311,7 +311,8 @@ fn claim_message(error: &SqliteError) -> Option<String> {
         | SqliteError::MissingTable { .. }
         | SqliteError::TagTablesMissing
         | SqliteError::Invalid { .. }
-        | SqliteError::Width { .. } => None,
+        | SqliteError::Width { .. }
+        | SqliteError::EmbedModel { .. } => None,
     }
 }
 

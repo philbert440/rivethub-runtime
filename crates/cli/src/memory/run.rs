@@ -56,6 +56,12 @@ pub(super) async fn run(
             sqlite,
         } => import(path, dry_run, sqlite, env, shutdown).await,
         MemoryCommand::Rules { since, sqlite } => rules(since, sqlite, env).await,
+        MemoryCommand::Titles {
+            dry_run,
+            json,
+            sqlite,
+        } => titles(dry_run, json, sqlite, env).await,
+        MemoryCommand::Reembed { dry_run, sqlite } => reembed(dry_run, sqlite, env).await,
     }
 }
 
@@ -202,6 +208,57 @@ async fn rules(
     )))
 }
 
+async fn titles(
+    dry_run: bool,
+    json: bool,
+    sqlite: Option<PathBuf>,
+    env: &Environment,
+) -> Result<Report, Error> {
+    let titled = match resolve(env, sqlite, Kind::Either)? {
+        Target::Postgres(url) => {
+            PostgresMemory::connect(&url)
+                .await?
+                .backfill_titles(dry_run)
+                .await?
+        }
+        Target::Sqlite(path) => open_sqlite(&path).await?.backfill_titles(dry_run).await?,
+    };
+    if json {
+        return Ok(Report::success(format!(
+            "{}\n",
+            serde_json::to_string(&TitlesBody { titled, dry_run })?
+        )));
+    }
+    if dry_run {
+        Ok(Report::success(format!(
+            "would title {titled} conversation(s)\n"
+        )))
+    } else {
+        Ok(Report::success(format!(
+            "titled {titled} conversation(s)\n"
+        )))
+    }
+}
+
+async fn reembed(
+    dry_run: bool,
+    sqlite: Option<PathBuf>,
+    env: &Environment,
+) -> Result<Report, Error> {
+    let Target::Sqlite(path) = resolve(env, sqlite, Kind::Either)? else {
+        return Err(Error::ReembedSqlite);
+    };
+    let report = open_sqlite(&path).await?.reembed(!dry_run).await?;
+    let (cleared, queued) = (report.cleared, report.queued);
+    Ok(Report::success(if dry_run {
+        format!("would clear {cleared} stored vector(s) and queue {queued} embed job(s)\n")
+    } else {
+        format!(
+            "cleared {cleared} stored vector(s) and queued {queued} embed job(s); the next embedding records the configured model\n"
+        )
+    }))
+}
+
 async fn import_postgres(
     url: &str,
     text: &str,
@@ -335,5 +392,11 @@ struct RequeueBody {
 #[derive(serde::Serialize)]
 struct SynthBody {
     enqueued: u64,
+    dry_run: bool,
+}
+
+#[derive(serde::Serialize)]
+struct TitlesBody {
+    titled: u64,
     dry_run: bool,
 }

@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::BrowseFilter;
+use kernel::memory::EmbedModelMismatch;
 use kernel::memory::Limit;
 use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
@@ -108,6 +109,10 @@ impl MemoryStore for SqliteStore {
 
     fn embeddings_armed(&self) -> bool {
         self.embed_armed()
+    }
+
+    async fn embed_model_mismatch(&self) -> Result<Option<EmbedModelMismatch>, MemoryStoreError> {
+        self.embed_mismatch().await.map_err(MemoryStoreError::from)
     }
 
     async fn stats(&self) -> Result<MemoryStatsResponse, MemoryStoreError> {

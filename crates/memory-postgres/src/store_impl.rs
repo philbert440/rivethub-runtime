@@ -238,6 +238,12 @@ impl MemoryStore for crate::PostgresMemory {
         self.embed.is_some()
     }
 
+    async fn embed_model_mismatch(
+        &self,
+    ) -> Result<Option<kernel::memory::EmbedModelMismatch>, MemoryStoreError> {
+        Ok(None)
+    }
+
     async fn wiki_topics(
         &self,
         filter: kernel::wiki::WikiFilter,

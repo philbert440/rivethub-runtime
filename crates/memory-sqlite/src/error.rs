@@ -98,6 +98,10 @@ pub enum SqliteError {
     Invalid { message: String },
     #[error("embedding width is {got}, the column is {expected}")]
     Width { got: usize, expected: usize },
+    #[error(
+        "stored vectors were written by embedding model {stored}, the configured model is {configured}; run rh memory reembed"
+    )]
+    EmbedModel { stored: String, configured: String },
 }
 
 impl SqliteError {
@@ -113,7 +117,8 @@ impl From<SqliteError> for MemoryStoreError {
             | SqliteError::Regex(_)
             | SqliteError::SynthesisUnconfigured
             | SqliteError::Invalid { .. }
-            | SqliteError::Width { .. } => Self::InvalidRequest {
+            | SqliteError::Width { .. }
+            | SqliteError::EmbedModel { .. } => Self::InvalidRequest {
                 message: error.to_string(),
             },
             SqliteError::StoredEmbedding

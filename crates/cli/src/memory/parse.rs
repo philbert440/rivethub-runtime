@@ -51,6 +51,15 @@ pub(super) enum MemoryCommand {
         since: Option<DateTime<Utc>>,
         sqlite: Option<PathBuf>,
     },
+    Titles {
+        dry_run: bool,
+        json: bool,
+        sqlite: Option<PathBuf>,
+    },
+    Reembed {
+        dry_run: bool,
+        sqlite: Option<PathBuf>,
+    },
 }
 
 enum Verb {
@@ -61,6 +70,8 @@ enum Verb {
     Export,
     Import,
     Tags,
+    Titles,
+    Reembed,
 }
 
 fn verb(text: &str) -> Option<Verb> {
@@ -72,6 +83,8 @@ fn verb(text: &str) -> Option<Verb> {
         "export" => Some(Verb::Export),
         "import" => Some(Verb::Import),
         "tags" => Some(Verb::Tags),
+        "backfill-titles" => Some(Verb::Titles),
+        "reembed" => Some(Verb::Reembed),
         _ => None,
     }
 }
@@ -97,6 +110,8 @@ pub(super) fn parse(args: &[String]) -> Result<Option<MemoryCommand>, Error> {
         Verb::Export => export(rest).map(Some),
         Verb::Import => import(rest).map(Some),
         Verb::Tags => tags(rest),
+        Verb::Titles => titles(rest).map(Some),
+        Verb::Reembed => reembed(rest).map(Some),
     }
 }
 
@@ -369,6 +384,59 @@ fn rules(args: &[String]) -> Result<MemoryCommand, Error> {
         return Err(reject(&scan));
     }
     Ok(MemoryCommand::Rules { since, sqlite })
+}
+
+fn titles(args: &[String]) -> Result<MemoryCommand, Error> {
+    let mut scan = Scan::new(args);
+    let mut dry_run = false;
+    let mut json = false;
+    let mut sqlite = None;
+    while scan.current().is_some() {
+        match scan.option("--sqlite", None) {
+            Taken::Value(value) => {
+                sqlite = Some(nonempty(&value, Error::SqliteRequired)?);
+                continue;
+            }
+            Taken::Missing => return Err(Error::SqliteRequired),
+            Taken::Absent => {}
+        }
+        if scan.flag("--dry-run") {
+            dry_run = true;
+            continue;
+        }
+        if scan.flag("--json") {
+            json = true;
+            continue;
+        }
+        return Err(reject(&scan));
+    }
+    Ok(MemoryCommand::Titles {
+        dry_run,
+        json,
+        sqlite,
+    })
+}
+
+fn reembed(args: &[String]) -> Result<MemoryCommand, Error> {
+    let mut scan = Scan::new(args);
+    let mut dry_run = false;
+    let mut sqlite = None;
+    while scan.current().is_some() {
+        match scan.option("--sqlite", None) {
+            Taken::Value(value) => {
+                sqlite = Some(nonempty(&value, Error::SqliteRequired)?);
+                continue;
+            }
+            Taken::Missing => return Err(Error::SqliteRequired),
+            Taken::Absent => {}
+        }
+        if scan.flag("--dry-run") {
+            dry_run = true;
+            continue;
+        }
+        return Err(reject(&scan));
+    }
+    Ok(MemoryCommand::Reembed { dry_run, sqlite })
 }
 
 fn reject(scan: &Scan<'_>) -> Error {
