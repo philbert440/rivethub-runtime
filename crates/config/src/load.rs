@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 use crate::enums::MemoryBackend;
 use crate::environment::Environment;
 use crate::model::Config;
-use crate::paths::{ConfigLocation, Paths};
+use crate::paths::{ConfigLocation, Paths, expand_home};
 use crate::provider::{
     CliProvider, OpenaiProvider, ProviderBody, ProviderSlot, ProviderType, RemovedProviderType,
     UnknownProvider,
@@ -249,13 +249,25 @@ impl Config {
                 },
             });
         }
-        let typed = type_document(&document)?;
+        let mut typed = type_document(&document)?;
+        expand_workspace(env, &mut typed.config);
         let notices = notices(env, &document, &typed.config);
         Ok(Loaded {
             config: typed.config,
             warnings: result.warnings,
             notices,
         })
+    }
+}
+
+fn expand_workspace(env: &Environment, config: &mut Config) {
+    if let Some(workspace) = config
+        .runtime
+        .as_mut()
+        .and_then(|runtime| runtime.workspace.as_mut())
+        && let Some(expanded) = expand_home(env, workspace)
+    {
+        *workspace = expanded;
     }
 }
 

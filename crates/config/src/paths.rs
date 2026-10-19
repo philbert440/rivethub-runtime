@@ -146,6 +146,16 @@ impl Paths {
     }
 }
 
+pub(crate) fn expand_home(env: &Environment, path: &Path) -> Option<PathBuf> {
+    let rest = path.strip_prefix("~").ok()?;
+    let paths = Paths::new(env).ok()?;
+    if rest.as_os_str().is_empty() {
+        Some(paths.home().to_path_buf())
+    } else {
+        Some(paths.home().join(rest))
+    }
+}
+
 pub const PID_FILE_NAME: &str = "rivethub.pid";
 
 #[derive(Debug, thiserror::Error)]
