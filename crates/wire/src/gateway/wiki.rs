@@ -166,7 +166,7 @@ pub struct WikiRedLink {
 #[serde(rename_all = "camelCase")]
 pub struct WikiGapsResponse {
     pub red_links: Vec<WikiRedLink>,
-    pub stalest: Vec<String>,
+    pub stalest: Vec<WikiTopic>,
 }
 
 #[serde_as]

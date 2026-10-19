@@ -387,6 +387,7 @@ impl Candidate {
                 agent: Some(agent),
                 relevance_score,
                 created_at: self.created_at,
+                session_id: None,
             },
             Kind::Summary { .. } => MemorySearchResult {
                 chunk: None,
@@ -397,6 +398,7 @@ impl Candidate {
                 agent: Some(SUMMARY_AGENT.to_owned()),
                 relevance_score,
                 created_at: self.created_at,
+                session_id: None,
             },
         }
     }

@@ -17,6 +17,10 @@ use wire::gateway::wiki::WikiTopicList;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
+fn slugs(topics: &[wire::gateway::wiki::WikiTopic]) -> Vec<&str> {
+    topics.iter().map(|topic| topic.slug.as_str()).collect()
+}
+
 async fn seed(pool: &PgPool) -> TestResult {
     sqlx::query(
         "INSERT INTO rh_wiki_topics (slug, title, aliases, tags, entities, current_state, article,
@@ -140,7 +144,7 @@ async fn wiki_routes_read_pages_and_metadata_from_postgres(pool: PgPool) -> Test
     let response = get(&client, &base, "/api/wiki/_gaps?limit=5").await?;
     assert_eq!(response.status().as_u16(), 200);
     let gaps: WikiGapsResponse = response.json().await?;
-    assert_eq!(gaps.stalest, ["release", "known"]);
+    assert_eq!(slugs(&gaps.stalest), ["release", "known"]);
     for retired in ["/api/wiki/page/release", "/api/wiki/gaps"] {
         assert_eq!(get(&client, &base, retired).await?.status().as_u16(), 404);
     }
@@ -228,8 +232,8 @@ async fn gaps_resolve_titles_aliases_and_redirects_and_deduplicate_references(
     let missing = gaps.red_links.first().ok_or("one red link")?;
     assert_eq!(missing.entity, "missing");
     assert_eq!(missing.referenced_by, ["known", "release"]);
-    assert_eq!(gaps.stalest, ["release", "known"]);
-    assert_eq!(store.wiki_gaps(1).await?.stalest, ["release"]);
+    assert_eq!(slugs(&gaps.stalest), ["release", "known"]);
+    assert_eq!(slugs(&store.wiki_gaps(1).await?.stalest), ["release"]);
     Ok(())
 }
 

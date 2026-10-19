@@ -6960,7 +6960,7 @@
         "stalest": {
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/WikiTopic"
           }
         }
       },
@@ -12100,6 +12100,12 @@
         "createdAt": {
           "type": "string",
           "format": "date-time"
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

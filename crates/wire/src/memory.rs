@@ -33,6 +33,8 @@ pub struct MemorySearchResult {
     pub agent: Option<String>,
     pub relevance_score: f64,
     pub created_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

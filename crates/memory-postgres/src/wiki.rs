@@ -26,6 +26,17 @@ struct TopicRow {
     updated_at: DateTime<Utc>,
 }
 
+fn topic_wire(row: TopicRow) -> WikiTopic {
+    WikiTopic {
+        slug: row.slug,
+        title: row.title,
+        tags: row.tags,
+        entities: row.entities,
+        updated_at: row.updated_at,
+        excerpt: row.current_state.chars().take(240).collect(),
+    }
+}
+
 fn topic_query(columns: &str, filter: &WikiFilter) -> QueryBuilder<Postgres> {
     let mut query = QueryBuilder::new(format!("SELECT {columns} FROM rh_wiki_topics WHERE true"));
     if let Some(text) = &filter.query {
@@ -77,17 +88,7 @@ impl PostgresMemory {
             .await
             .map_err(|source| Error::operation("wiki read snapshot", source))?;
         Ok(WikiTopicList {
-            topics: rows
-                .into_iter()
-                .map(|row| WikiTopic {
-                    slug: row.slug,
-                    title: row.title,
-                    tags: row.tags,
-                    entities: row.entities,
-                    updated_at: row.updated_at,
-                    excerpt: row.current_state.chars().take(240).collect(),
-                })
-                .collect(),
+            topics: rows.into_iter().map(topic_wire).collect(),
             total: u64::try_from(total).map_err(|error| Error::protocol(error.to_string()))?,
         })
     }
@@ -205,7 +206,7 @@ impl PostgresMemory {
     }
 
     pub(crate) async fn read_wiki_gaps(&self, limit: u32) -> Result<WikiGapsResponse, Error> {
-        let limit = i64::from(limit.clamp(1, 200));
+        let limit = i64::from(limit.clamp(1, kernel::wiki::WIKI_LIMIT_MAX));
         let red_links = sqlx::query!(
             "WITH known AS (
                  SELECT lower(slug) AS name FROM rh_wiki_topics
@@ -222,11 +223,11 @@ impl PostgresMemory {
         .fetch_all(&self.pool)
         .await
         .map_err(|source| Error::operation("wiki red links", source))?;
-        let stalest = sqlx::query!(
-            "SELECT slug FROM rh_wiki_topics
+        let stalest: Vec<TopicRow> = sqlx::query_as(
+            "SELECT slug, title, tags, entities, current_state, updated_at FROM rh_wiki_topics
              ORDER BY coalesce(last_verified_at, updated_at), slug LIMIT $1",
-            limit
         )
+        .bind(limit)
         .fetch_all(&self.pool)
         .await
         .map_err(|source| Error::operation("wiki stale topics", source))?;
@@ -238,7 +239,7 @@ impl PostgresMemory {
                     referenced_by: row.referenced_by,
                 })
                 .collect(),
-            stalest: stalest.into_iter().map(|row| row.slug).collect(),
+            stalest: stalest.into_iter().map(topic_wire).collect(),
         })
     }
 }

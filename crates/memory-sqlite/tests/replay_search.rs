@@ -374,6 +374,7 @@ fn project_hit(hit: &Json) -> TestResult<MemorySearchResult> {
         },
         relevance_score,
         created_at: instant(field_str(hit, "createdAt")?)?,
+        session_id: None,
     })
 }
 

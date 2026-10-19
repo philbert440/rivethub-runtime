@@ -268,10 +268,16 @@ async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
         (
             deploy_message.source,
             deploy_message.role,
-            deploy_message.agent.as_deref()
+            deploy_message.agent.as_deref(),
+            deploy_message.session_id.as_deref()
         ),
-        (MemoryHitSource::Message, Some(Role::User), Some("rivet")),
-        "a message hit carries its role and agent"
+        (
+            MemoryHitSource::Message,
+            Some(Role::User),
+            Some("rivet"),
+            Some("claude-code:seed")
+        ),
+        "a message hit carries its role, agent and session"
     );
     let deploy_summary = deploy
         .results
@@ -282,10 +288,11 @@ async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
         (
             deploy_summary.source,
             deploy_summary.role,
-            deploy_summary.agent.as_deref()
+            deploy_summary.agent.as_deref(),
+            deploy_summary.session_id.as_deref()
         ),
-        (MemoryHitSource::Summary, None, None),
-        "a summary hit carries neither role nor agent"
+        (MemoryHitSource::Summary, None, None, None),
+        "a summary hit carries no role, agent or session"
     );
 
     let staging = memory.search(query("staging database", 5)).await?;
