@@ -152,33 +152,56 @@ impl<T: CaptureTransport> CaptureWriter<T> {
         now: DateTime<Utc>,
     ) -> Result<Totals, WriteError> {
         self.spool
-            .replay(DEFAULT_REPLAY_MAX, |body| self.transport.post(body))
+            .replay(DEFAULT_REPLAY_MAX, now, |body| self.transport.post(body))
             .await?;
         let mut prepared = batch.clone();
         if let Some(redaction) = &self.redaction {
-            let mut spans = 0;
-            for message in &mut prepared.messages {
-                spans += redaction.redact_message(message);
-            }
-            if spans > 0 {
-                tracing::info!("redacted {spans} spans");
-            }
+            redact_batch(redaction, &mut prepared);
         }
         cap_batch(&mut prepared)?;
         let chunks = split_chunks(&prepared, self.max_chunk_bytes)?;
         let mut totals = Totals::default();
-        for chunk in chunks {
-            let body = body_text(&chunk)?;
+        let mut rejected = None;
+        let mut pending = chunks.iter();
+        while let Some(chunk) = pending.next() {
+            let body = body_text(chunk)?;
             match self.transport.post(body.clone()).await {
                 Ok(result) => totals.add(&result),
-                Err(error @ PostError::Client { .. }) => return Err(error.into()),
+                Err(error @ PostError::Client { .. }) => {
+                    let moved = self.spool.dead_letter_body(&body, now).await?;
+                    tracing::warn!(
+                        "capture server rejected a batch for {} ({error}); moved it to {}",
+                        chunk.session_key,
+                        moved.display()
+                    );
+                    rejected.get_or_insert(error);
+                }
                 Err(error) => {
                     self.spool.spool(&body, now).await?;
+                    for rest in pending {
+                        self.spool.spool(&body_text(rest)?, now).await?;
+                    }
                     return Err(error.into());
                 }
             }
         }
-        Ok(totals)
+        match rejected {
+            Some(error) => Err(error.into()),
+            None => Ok(totals),
+        }
+    }
+}
+
+fn redact_batch(redaction: &Redaction, batch: &mut CaptureBatchRequest) {
+    let mut spans = 0;
+    if let Some(title) = &mut batch.title {
+        spans += redaction.redact_title(title);
+    }
+    for message in &mut batch.messages {
+        spans += redaction.redact_message(message);
+    }
+    if spans > 0 {
+        tracing::info!("redacted {spans} spans");
     }
 }
 
