@@ -30,6 +30,13 @@ pub(crate) fn lines(text: &str) -> Result<(Vec<RawLine>, u64), TranscriptReaderE
     Ok((records, last))
 }
 
+pub(crate) fn terminated_lines(text: &str) -> Result<(Vec<RawLine>, u64), TranscriptReaderError> {
+    match text.rfind('\n').and_then(|end| text.get(..end)) {
+        Some(complete) => lines(complete),
+        None => Ok((Vec::new(), 0)),
+    }
+}
+
 pub(crate) fn read_optional(
     root: &Root,
     path: &Path,
