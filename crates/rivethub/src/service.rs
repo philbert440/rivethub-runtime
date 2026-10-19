@@ -136,11 +136,14 @@ pub(crate) fn sqlite_query_embed(
     let model = config
         .sqlite_embed_model(env)
         .ok_or(StartupError::SqliteEmbedModel)?;
-    let api_key = config
+    let section = config
         .memory
         .as_ref()
-        .and_then(|memory| memory.sqlite.as_ref())
-        .and_then(|section| section.embed_api_key.clone());
+        .and_then(|memory| memory.sqlite.as_ref());
+    let api_key = section.and_then(|section| section.embed_api_key.clone());
+    let instruction = section
+        .and_then(|section| section.embed_query_instruction.clone())
+        .unwrap_or_else(|| kernel::memory_core::DEFAULT_EMBED_QUERY_INSTRUCTION.to_owned());
     let provider = embed_provider(
         config.embed_provider(config::MemoryBackend::Sqlite),
         api_key,
@@ -151,7 +154,7 @@ pub(crate) fn sqlite_query_embed(
     )?;
     Ok(Some(memory_sqlite::QueryEmbed::new(
         provider,
-        kernel::memory_core::DEFAULT_EMBED_QUERY_INSTRUCTION.to_owned(),
+        instruction,
         SQLITE_QUERY_EMBED_TIMEOUT,
         shutdown.child_token(),
     )))

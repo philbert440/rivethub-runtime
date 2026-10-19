@@ -43,7 +43,9 @@ arrive with schema v8, alongside the sqlite-vec index after cutover.
 `rh local` arms vector and hybrid search with a query embedder built from `memory.sqlite.embed_endpoint`,
 `embed_model` and `embed_api_key` (or the provider `embed_provider` names), falling back to `RIVETHUB_EMBED_URL` / `RIVETHUB_EMBED_MODEL`, the same
 endpoint the standalone embedder worker uses. Without an endpoint, those modes answer with keyword results and
-`degraded: "embedding endpoint not configured"`.
+`degraded: "embedding endpoint not configured"`. `memory.sqlite.embed_query_instruction` sets the text prepended to
+each search query before it is embedded, as `memory.postgres.embed_query_instruction` does for Postgres: absent keeps
+the default retrieval instruction, an empty string embeds the bare query (for embedding models trained without one).
 
 ### Memory sweep settings
 

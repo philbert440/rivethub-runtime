@@ -224,6 +224,7 @@ pub struct SqliteSection {
     pub embed_model: Option<String>,
     pub embed_api_key: Option<String>,
     pub embed_provider: Option<String>,
+    pub embed_query_instruction: Option<String>,
     pub tagging: Option<bool>,
     pub workers: Option<bool>,
     pub wiki_dir: Option<PathBuf>,

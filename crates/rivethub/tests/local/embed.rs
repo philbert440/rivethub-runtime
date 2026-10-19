@@ -100,11 +100,41 @@ async fn local_vector_search_embeds_the_query_with_the_sqlite_endpoint() -> Test
     .await?;
     assert_eq!(response.degraded, None, "{response:?}");
     assert_eq!(calls.len(), 1, "{calls:?}");
+    let prefixed = format!(
+        "{}{QUERY}",
+        kernel::memory_core::DEFAULT_EMBED_QUERY_INSTRUCTION
+    );
     assert!(
         calls
             .iter()
-            .any(|call| call.input.iter().any(|input| input.contains(QUERY))),
+            .any(|call| call.input.iter().any(|input| input == &prefixed)),
         "{calls:?}"
+    );
+    Ok(())
+}
+
+async fn instructed_inputs(instruction: &str) -> TestResult<Vec<Vec<String>>> {
+    let (_, calls) = local_vector_search(|database, embed| {
+        format!(
+            "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    embed_endpoint: http://{embed}\n    embed_model: embedding-model\n    embed_query_instruction: \"{instruction}\"\n",
+            database.display()
+        )
+    })
+    .await?;
+    Ok(calls.into_iter().map(|call| call.input).collect())
+}
+
+#[tokio::test]
+async fn an_empty_sqlite_query_instruction_embeds_the_bare_query() -> TestResult {
+    assert_eq!(instructed_inputs("").await?, vec![vec![QUERY.to_owned()]]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_custom_sqlite_query_instruction_prefixes_the_query() -> TestResult {
+    assert_eq!(
+        instructed_inputs("query: ").await?,
+        vec![vec![format!("query: {QUERY}")]]
     );
     Ok(())
 }

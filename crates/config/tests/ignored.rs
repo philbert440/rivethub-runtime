@@ -71,3 +71,23 @@ fn ignored_paths_reach_the_chooser() -> Result<(), Box<dyn std::error::Error>> {
     );
     Ok(())
 }
+
+#[test]
+fn the_sqlite_query_instruction_is_a_known_key() -> Result<(), Box<dyn std::error::Error>> {
+    let lines = findings(&parsed(
+        "runtime:\n  workspace: /home/user/work\n  default_agent: main\nagents:\n  main:\n    provider: p\n    model: m\nproviders:\n  p:\n    model: m\nmemory:\n  sqlite:\n    path: ':memory:'\n    embed_query_instruction: \"\"\n    bogus: 1\n",
+    )?);
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("Unknown memory.sqlite key \"bogus\"")),
+        "{lines:?}"
+    );
+    assert!(
+        !lines
+            .iter()
+            .any(|line| line.contains("embed_query_instruction")),
+        "{lines:?}"
+    );
+    Ok(())
+}
