@@ -60,7 +60,7 @@ CREATE TEMP TRIGGER IF NOT EXISTS rh_task_done AFTER UPDATE OF status ON main.rh
 WHEN NEW.status IN ('completed','failed','killed','timeout')
     AND OLD.status NOT IN ('completed','failed','killed','timeout')
 BEGIN
-    SELECT rh_task_done();
+    SELECT rh_task_done(NEW.id);
 END;";
 
 const LOAD: &str =

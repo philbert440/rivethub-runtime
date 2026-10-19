@@ -169,3 +169,36 @@ async fn the_watch_moves_only_when_a_task_reaches_a_terminal_status() -> TestRes
     assert!(watch.has_changed()?);
     Ok(())
 }
+
+#[tokio::test]
+async fn finishing_a_task_names_it_to_finished_listeners() -> TestResult {
+    let (_dir, store) = open()?;
+    let mut finished = TaskWatch::finished(&store);
+    let record = queued("main", Utc::now());
+    store.insert(&record).await?;
+    store
+        .mark_running(record.id, "node:agent", "node", Utc::now())
+        .await?;
+    assert!(finished.try_recv().is_err());
+    let finish = Finish {
+        status: TaskStatus::Failed,
+        result: None,
+        error: Some("boom".to_owned()),
+        usage: None,
+        completed_at: Utc::now(),
+        duration_ms: Some(5),
+    };
+    assert!(store.finish(record.id, &finish).await?);
+    assert_eq!(finished.try_recv()?, record.id);
+    let killed = TaskRecord {
+        session_key: Some("heartbeat:main".to_owned()),
+        ..queued("main", Utc::now())
+    };
+    store.insert(&killed).await?;
+    store
+        .kill_queued_by_session("heartbeat:main", Utc::now())
+        .await?;
+    assert_eq!(finished.try_recv()?, killed.id);
+    assert!(finished.try_recv().is_err());
+    Ok(())
+}
