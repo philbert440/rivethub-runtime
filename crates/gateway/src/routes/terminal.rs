@@ -113,11 +113,14 @@ async fn inject(
     user: UserId,
     Body(request): Body<wire::gateway::term::TermInjectRequest>,
 ) -> Result<Json<wire::gateway::term::TermInjectResponse>, ApiError> {
-    require(&gateway)?;
+    let service = require(&gateway)?;
     gateway.sessions.authorize(&user, &request.session)?;
-    Err(ApiError::Conflict(
-        "chat messages use turn-end handoff; terminal injection is disabled".into(),
-    ))
+    let pty_id = service.inject(&user, request).await?;
+    Ok(Json(wire::gateway::term::TermInjectResponse {
+        ok: true,
+        pty_id,
+        dismissed_dialog: None,
+    }))
 }
 
 async fn missing(State(gateway): State<Arc<Gateway>>) -> Response {

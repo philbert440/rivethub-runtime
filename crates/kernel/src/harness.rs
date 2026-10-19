@@ -115,6 +115,17 @@ pub enum SessionEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TurnInput {
     Text(String),
+    Attached {
+        text: String,
+        attachments: Vec<TurnAttachment>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TurnAttachment {
+    pub path: std::path::PathBuf,
+    pub media_type: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

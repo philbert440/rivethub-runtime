@@ -10,6 +10,7 @@ pub mod launch;
 mod options;
 pub mod permissions;
 pub mod process;
+mod prompt;
 mod sheets;
 mod supervised;
 

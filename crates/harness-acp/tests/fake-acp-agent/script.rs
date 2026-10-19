@@ -216,13 +216,13 @@ pub(crate) async fn run_step(
 }
 
 #[derive(Clone, Copy)]
-enum Chunk {
+pub(crate) enum Chunk {
     Agent,
     Thought,
     User,
 }
 
-fn emit_text(
+pub(crate) fn emit_text(
     connection: &ConnectionTo<Client>,
     session_id: &acp::SessionId,
     text: &str,

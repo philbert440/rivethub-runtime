@@ -7,11 +7,13 @@ use axum::{Extension, Json, Router};
 use chrono::Utc;
 use kernel::ToolContext;
 use kernel::agent::{Turn, TurnError, TurnLimits, TurnResult, TurnRunner, excluded_names};
+use kernel::harness::TurnAttachment;
 use kernel::model::ModelRequest;
 use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+use wire::gateway::agents::UserTurnAttachment;
 use wire::gateway::sessions::{
     SessionMessage, SessionMessageRole, SessionPostAccepted, SessionPostReply, SessionPostRequest,
 };
@@ -145,15 +147,37 @@ async fn accept(
     session: String,
     request: SessionPostRequest,
 ) -> Result<Response, ApiError> {
+    let attachments = staged(&gateway, &user, request.attachments).await?;
     service(&gateway)?
         .chat(&user, &session)?
-        .prompt(request.text, request.system_prompt)
+        .prompt(request.text, request.system_prompt, attachments)
         .await?;
     Ok(Json(SessionPostAccepted {
         accepted: true,
         session,
     })
     .into_response())
+}
+
+async fn staged(
+    gateway: &Gateway,
+    user: &UserId,
+    attachments: Option<Vec<UserTurnAttachment>>,
+) -> Result<Vec<TurnAttachment>, ApiError> {
+    let Some(attachments) = attachments.filter(|list| !list.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let store = super::harnesses::open_store(gateway).await?;
+    let now = Utc::now();
+    let mut staged = Vec::with_capacity(attachments.len());
+    for attachment in attachments {
+        let found = store
+            .attachment(user, &attachment.path_or_uri, now)
+            .await
+            .map_err(super::harnesses::upload_error)?;
+        staged.push(found);
+    }
+    Ok(staged)
 }
 
 async fn waited(

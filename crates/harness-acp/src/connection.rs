@@ -42,7 +42,7 @@ pub(crate) enum SessionCommand {
     },
     Prompt {
         acp_session: acp::SessionId,
-        text: String,
+        content: Vec<acp::ContentBlock>,
         reply: oneshot::Sender<Result<acp::PromptResponse, acp::Error>>,
     },
     Cancel {
@@ -405,9 +405,9 @@ async fn command_loop(
                     }
                     SessionCommand::Prompt {
                         acp_session,
-                        text,
+                        content,
                         reply,
-                    } => spawn_prompt(&connection, acp_session, text, reply),
+                    } => spawn_prompt(&connection, acp_session, content, reply),
                     SessionCommand::SetConfig {
                         acp_session,
                         config_id,
@@ -475,16 +475,13 @@ async fn set_config(
 fn spawn_prompt(
     connection: &ConnectionTo<Agent>,
     acp_session: acp::SessionId,
-    text: String,
+    content: Vec<acp::ContentBlock>,
     reply: oneshot::Sender<Result<acp::PromptResponse, acp::Error>>,
 ) {
     let prompt_connection = connection.clone();
     if let Err(error) = connection.spawn(async move {
         let response = prompt_connection
-            .send_request(acp::PromptRequest::new(
-                acp_session,
-                vec![acp::ContentBlock::from(text)],
-            ))
+            .send_request(acp::PromptRequest::new(acp_session, content))
             .block_task()
             .await;
         deliver(reply, response);

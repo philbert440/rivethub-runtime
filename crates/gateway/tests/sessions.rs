@@ -314,7 +314,7 @@ async fn handoff_waits_for_turn_end_releases_then_resumes_and_delivers_queued_ch
         .service
         .chat(&user("owner"), session.session_id.as_str())
         .expect("chat");
-    chat.prompt("first".into(), None)
+    chat.prompt("first".into(), None, Vec::new())
         .await
         .expect("prompt accepted");
     harness.traced("prompt:first").await;
@@ -349,7 +349,7 @@ async fn handoff_waits_for_turn_end_releases_then_resumes_and_delivers_queued_ch
         .expect("canonical")
         .1;
     assert!(fixture.mux.calls.borrow().iter().any(|call| matches!(call, Call::Spawn { argv, .. } if argv.ends_with(&["--resume".into(), native.into()]))));
-    chat.prompt("queued".into(), None)
+    chat.prompt("queued".into(), None, Vec::new())
         .await
         .expect("queued chat");
     assert!(
@@ -396,7 +396,9 @@ async fn terminal_first_session_queues_chat_until_the_hook_and_delete_releases_c
             "claude-code:11111111-2222-4333-8444-555555555555",
         )
         .expect("registered session");
-    chat.prompt("queued".into(), None).await.expect("queued");
+    chat.prompt("queued".into(), None, Vec::new())
+        .await
+        .expect("queued");
     assert_eq!(*harness.trace.borrow(), Vec::<String>::new());
     chat.turn_end().await.expect("hook");
     harness.traced("prompt:queued").await;
@@ -519,4 +521,83 @@ async fn terminal_resume_passes_the_native_id_to_the_harness() {
         "argv was {spawned:?}"
     );
     assert!(!spawned.iter().any(|arg| arg.contains("claude-code:")));
+}
+
+fn inputs(fixture: &Fixture) -> Vec<Vec<u8>> {
+    fixture
+        .mux
+        .calls
+        .borrow()
+        .iter()
+        .filter_map(|call| match call {
+            Call::Input(bytes) => Some(bytes.clone()),
+            Call::Spawn { .. } | Call::Resize(_) | Call::Kill => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn an_inject_pastes_the_text_then_submits_it() {
+    let fixture = Fixture::new().await;
+    let (status, body) = http(
+        &fixture.gateway,
+        "POST",
+        "/api/terminal",
+        r#"{"session":"aaa"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 201, "{}", String::from_utf8_lossy(&body));
+    let (status, body) = http(
+        &fixture.gateway,
+        "POST",
+        "/api/terminal/inject",
+        r#"{"session":"aaa","text":"ls\u001b[201~ -la"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        inputs(&fixture),
+        vec![b"\x1b[200~ls[201~ -la\x1b[201~".to_vec(), b"\r".to_vec()]
+    );
+}
+
+#[tokio::test]
+async fn an_inject_without_submit_types_the_text_after_an_interrupt() {
+    let fixture = Fixture::new().await;
+    let (status, body) = http(
+        &fixture.gateway,
+        "POST",
+        "/api/terminal",
+        r#"{"session":"aaa"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 201, "{}", String::from_utf8_lossy(&body));
+    let (status, body) = http(
+        &fixture.gateway,
+        "POST",
+        "/api/terminal/inject",
+        r#"{"session":"aaa","text":"draft","submit":false,"interrupt":true}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(inputs(&fixture), vec![b"\x1b".to_vec(), b"draft".to_vec()]);
+}
+
+#[tokio::test]
+async fn an_inject_without_a_terminal_writes_nothing() {
+    let fixture = Fixture::new().await;
+    let (status, _) = http(
+        &fixture.gateway,
+        "POST",
+        "/api/terminal/inject",
+        r#"{"session":"aaa","text":"ls"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 404);
+    assert_eq!(inputs(&fixture), Vec::<Vec<u8>>::new());
 }

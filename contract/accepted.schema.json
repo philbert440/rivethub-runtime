@@ -4695,6 +4695,15 @@
             "string",
             "null"
           ]
+        },
+        "attachments": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/UserTurnAttachment"
+          }
         }
       },
       "required": [
@@ -5979,6 +5988,9 @@
         "id": {
           "type": "string"
         },
+        "uri": {
+          "type": "string"
+        },
         "name": {
           "type": "string"
         },
@@ -6003,6 +6015,7 @@
       },
       "required": [
         "id",
+        "uri",
         "name",
         "bytes",
         "mediaType",

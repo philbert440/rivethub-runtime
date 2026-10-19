@@ -25,6 +25,7 @@ use wire::gateway::GatewayError;
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTranscriptResponse, HarnessSocketRefusal,
     HarnessSocketRefusalCode, HarnessTranscriptTurn, MessageUsage, SessionMessageRole,
+    SessionPostRequest,
 };
 use wire::harness::{
     HarnessEvent, HarnessId, HarnessOfferingList, HarnessSessionList, HarnessSessionStatus,
@@ -873,6 +874,84 @@ async fn a_system_prompt_rides_ahead_of_the_turn_text() {
         .await;
     setup.harness.finish.add_permits(1);
     setup.harness.traced("ended").await;
+}
+
+async fn uploaded(setup: &Setup, name: &str, media_type: &str, token: Option<&str>) -> String {
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!("/api/uploads?name={name}&mediaType={media_type}"),
+        b"pixels".to_vec(),
+        token,
+    )
+    .await;
+    assert_eq!(status, 201, "{}", String::from_utf8_lossy(&body));
+    parsed::<wire::gateway::uploads::UploadCreated>(&body).uri
+}
+
+fn attached_turn(path: &str) -> String {
+    serde_json::to_string(&SessionPostRequest {
+        exclude_tools: None,
+        text: "look".to_owned(),
+        user_id: None,
+        agent: None,
+        thinking: None,
+        system_prompt: None,
+        attachments: Some(vec![wire::gateway::agents::UserTurnAttachment {
+            mime: "image/png".to_owned(),
+            path_or_uri: path.to_owned(),
+            name: Some("shot.png".to_owned()),
+        }]),
+    })
+    .expect("turn json")
+}
+
+#[tokio::test]
+async fn an_uploaded_attachment_reaches_the_harness_with_the_turn() {
+    let setup = setup("{}", Stores::default()).await;
+    let session = created_chat(&setup).await;
+    let uri = uploaded(&setup, "shot.png", "image/png", None).await;
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!("/api/harness-sessions/{session}/turn"),
+        attached_turn(&uri),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup
+        .harness
+        .traced(&format!("prompt:look|attached:shot.png:image/png:{uri}"))
+        .await;
+    setup.harness.finish.add_permits(1);
+    setup.harness.traced("ended").await;
+}
+
+#[tokio::test]
+async fn an_attachment_that_is_not_the_callers_upload_is_refused() {
+    let setup = setup("{}", Stores::default()).await;
+    let session = created_chat(&setup).await;
+    let theirs = uploaded(&setup, "theirs.png", "image/png", Some("alice-test-token")).await;
+    for path in ["/etc/passwd", theirs.as_str()] {
+        let (status, body) = http(
+            &setup.fixture.gateway,
+            "POST",
+            &format!("/api/harness-sessions/{session}/turn"),
+            attached_turn(path),
+            None,
+        )
+        .await;
+        assert_eq!(status, 404, "{path}: {}", String::from_utf8_lossy(&body));
+    }
+    assert!(
+        !setup
+            .harness
+            .trace
+            .borrow()
+            .iter()
+            .any(|line| line.starts_with("prompt:"))
+    );
 }
 
 #[tokio::test]

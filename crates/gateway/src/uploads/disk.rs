@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Component, Path};
 
@@ -31,7 +31,7 @@ pub(super) fn write_new(
     let user_dir = root.join(hash_owner(record.owner.as_str())?);
     std::fs::create_dir_all(&user_dir)?;
     contained_dir(root, &user_dir)?;
-    let bin = user_dir.join(format!("{id}.bin"));
+    let bin = user_dir.join(format!("{id}.{}", stored_extension(&record.name)));
     let meta_path = user_dir.join(format!("{id}.meta.json"));
     write_file(root, &user_dir, &bin, bytes)?;
     let meta = DiskMeta {
@@ -99,7 +99,7 @@ fn load_owner(
     index: &mut BTreeMap<String, Record>,
 ) -> Result<(), UploadError> {
     contained_dir(root, directory)?;
-    let mut bins = BTreeSet::new();
+    let mut bins = BTreeMap::new();
     let mut metas = Vec::new();
     for entry in std::fs::read_dir(directory)? {
         let entry = entry?;
@@ -109,20 +109,23 @@ fn load_owner(
             std::fs::remove_file(entry.path())?;
             continue;
         }
-        if let Some(id) = text.strip_suffix(".bin") {
-            bins.insert(id.to_owned());
+        if let Some(id) = text.strip_suffix(".meta.json") {
+            metas.push(id.to_owned());
             continue;
         }
-        let Some(id) = text.strip_suffix(".meta.json") else {
+        let Some((id, extension)) = text.split_once('.') else {
             return Err(UploadError::Escape);
         };
-        metas.push(id.to_owned());
-    }
-    for id in &metas {
-        if !bins.remove(id) {
+        if !valid_extension(extension) {
+            return Err(UploadError::Escape);
+        }
+        if bins.insert(id.to_owned(), text.to_owned()).is_some() {
             return Err(UploadError::Corrupt);
         }
-        if let Some(record) = read_record(root, directory, owner_hash, id, now)?
+    }
+    for id in &metas {
+        let bin = bins.remove(id).ok_or(UploadError::Corrupt)?;
+        if let Some(record) = read_record(root, directory, owner_hash, id, &bin, now)?
             && index.insert(id.clone(), record).is_some()
         {
             return Err(UploadError::Corrupt);
@@ -139,10 +142,11 @@ fn read_record(
     directory: &Path,
     owner_hash: &str,
     id: &str,
+    bin: &str,
     now: DateTime<Utc>,
 ) -> Result<Option<Record>, UploadError> {
     parse_id(id)?;
-    let bin = directory.join(format!("{id}.bin"));
+    let bin = directory.join(bin);
     let meta_path = directory.join(format!("{id}.meta.json"));
     contained_file(root, &bin)?;
     contained_file(root, &meta_path)?;
@@ -167,6 +171,24 @@ fn read_record(
         bin,
         meta: meta_path,
     }))
+}
+
+const STORED_EXTENSION_MAX: usize = 16;
+
+fn stored_extension(name: &str) -> String {
+    match Path::new(name)
+        .extension()
+        .and_then(|extension| extension.to_str())
+    {
+        Some(extension) if valid_extension(extension) => extension.to_ascii_lowercase(),
+        Some(_) | None => "bin".to_owned(),
+    }
+}
+
+fn valid_extension(extension: &str) -> bool {
+    !extension.is_empty()
+        && extension.len() <= STORED_EXTENSION_MAX
+        && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
 fn hash_owner(owner: &str) -> Result<String, UploadError> {

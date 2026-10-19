@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+use kernel::harness::TurnAttachment;
 use parking_lot::RwLock;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
@@ -252,6 +253,25 @@ impl Uploads {
         Ok(())
     }
 
+    pub(crate) async fn attachment(
+        &self,
+        owner: &UserId,
+        uri: &str,
+        now: DateTime<Utc>,
+    ) -> Result<TurnAttachment, UploadError> {
+        self.purge(now).await?;
+        let records = self.index.read();
+        records
+            .values()
+            .find(|record| &record.owner == owner && record.bin.as_os_str() == uri)
+            .map(|record| TurnAttachment {
+                path: record.bin.clone(),
+                media_type: record.media_type.clone(),
+                name: record.name.clone(),
+            })
+            .ok_or(UploadError::NotFound)
+    }
+
     async fn owned(
         &self,
         owner: &UserId,
@@ -351,6 +371,7 @@ fn clone_record(record: &Record) -> Record {
 fn created(id: &str, record: &Record) -> UploadCreated {
     UploadCreated {
         id: id.to_owned(),
+        uri: record.bin.display().to_string(),
         name: record.name.clone(),
         bytes: record.bytes,
         media_type: record.media_type.clone(),
