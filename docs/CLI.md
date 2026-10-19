@@ -2,15 +2,74 @@
 
 `Config::load` with `Profile::Node`, and `rh config validate`, still require `runtime`, `agents`, and `providers`. `rh local` never invents an agent, a provider, or an endpoint. When no config resolves it writes only `memory.backend: sqlite`, the database path under the state directory, and the gateway bind, then loads that file with `Profile::Standalone`, which does not require those sections. The task engine (`rh agent`) needs Postgres and is not part of `rh local`.
 
-`rh` dispatches through the `cli` composition crate. Bare invocation and help print the derived clap command list.
-The implemented commands include `version`, `config path`, `config show`, `config validate [path]`, `doctor [--json]`,
-`status`, `stop`, `gateway`, `agent`, `worker`, `mcp`, and `local [--port <n>] [--no-lan]`. One typed `cli::Exit` owns exit codes, including the existing service startup codes.
+`rh` dispatches through the `cli` composition crate. Bare invocation, `rh help` and `rh --help` print the derived clap
+command list, and `rh <command> --help` prints one command's arguments. One typed `cli::Exit` owns exit codes, including
+the existing service startup codes. Every visible command:
+
+| Command | Arguments | Does |
+|---|---|---|
+| `rh version` | | Print the RivetHub version |
+| `rh config path` | | Print the resolved configuration path |
+| `rh config show` | | Show a configuration summary without secrets |
+| `rh config validate` | `[PATH]` | Validate configuration and print findings |
+| `rh doctor` | `[--json]` | Check this node without applying migrations |
+| `rh status` | | Report gateway health |
+| `rh stop` | | Signal the running instance to stop |
+| `rh gateway` | `[--check] [-c, --config FILE]` | Run the composed gateway service |
+| `rh agent` | `[--check] [-c, --config FILE]` | Run the task engine |
+| `rh worker` | `--role embedder\|summarizer\|categorizer\|wiki-builder\|all [--check] [-c, --config FILE]` | Run a memory worker for one role |
+| `rh mcp` | `[--check] [-c, --config FILE]` | Run the MCP sidecar |
+| `rh local` | `[--port N] [--no-lan]` | Run a standalone node on SQLite |
+| `rh update` | `[--channel stable\|beta\|nightly] [--version TAG] [--no-restart] [--mesh] [--ssh-user USER]` | Update this node or the mesh |
+| `rh db migrate` | `[-c, --config FILE] [--url URL \| --path FILE]` | Apply database migrations |
+| `rh db status` | `[-c, --config FILE] [--url URL \| --path FILE]` | Report schema status read-only |
+| `rh service init` | | Write the systemd unit (system unit as root, user unit otherwise) |
+| `rh service start`, `rh service stop`, `rh service restart` | | Control the systemd unit |
+| `rh service status` | | Show the systemd unit status |
+| `rh service logs` | | Print the unit's journal |
+| `rh ca token node` | `NAME` | Mint a step-ca token for a node in the operator roster |
+| `rh ca token agent` | `NAME` | Mint a step-ca token for an agent in the operator roster |
+| `rh ca token device` | `NAME` | Mint a step-ca token for one device name |
+| `rh ca revoke` | `SERIAL` | Revoke one certificate by decimal serial |
+| `rh ca crl` | | Print the certificate revocation list |
+| `rh ca status` | | Show the certificate authority roots |
+| `rh cert renew` | `--principal P --ca-url URL --trust-root FILE [--token-file FILE] [--state DIR] [--once]` | Renew this holder's certificate |
+| `rh mesh list` | | List mesh nodes |
+| `rh mesh ping` | `[--timeout MS]` | Probe mesh nodes (default timeout 5000 ms) |
+| `rh mesh enroll` | `[TARGET] [--name NAME] [--advertise ADDR] [--hub-cmd CMD] [--state DIR]` | Enroll this node through step-ca and record it |
+| `rh mesh sync` | `[TARGET] [--hub-cmd CMD]` | Merge a hub mesh registry |
+| `rh mesh renew` | `[TARGET] [--name NAME] [--hub-cmd CMD] [--state DIR]` | Renew this node's holder certificate |
+| `rh mesh join` | `[HOST] [--manual] [--port N] [--name NAME] [--advertise ADDR]` | Join a mesh |
+| `rh mesh status` | | Show the mesh registry |
+| `rh mesh forget` | `[TARGET] [--force]` | Remove a mesh node |
+| `rh memory` | `queue-status`, `retry-failed`, `requeue`, `backfill-tool-synth`, `export`, `import`, `tags backfill-rule` | Administer memory; `rh memory --help` lists each command's flags |
+| `rh logs` | `[agent] [-f, --follow \| --no-follow] [-n, --lines N] [--since TIME] [--level NAME] [-g, --grep TEXT] [--json] [--bare-metal]` | Read the service journal |
+
+The `rh ca` commands also take `--ca-url URL`, `--root FILE`, `--provisioner-password-file FILE`, `--roster FILE` and
+`--crl-out FILE`; `rh mesh enroll` and `rh mesh renew` take `--ca-url URL` and `--root FILE`, `rh mesh enroll` also takes
+`--provisioner-password-file FILE` and `--roster FILE`, and every `rh mesh`
+command takes `--json` and `--ssh-user USER`. `--check` on a service root validates its configuration and exits
+without serving.
 
 `rh gateway` serves the gateway. `rh agent` runs the task engine. `rh worker --role <role>` runs one worker role, claiming up to four jobs at a time, or `RIVETHUB_WORKER_CONCURRENCY` (a positive count) when set. `RIVETHUB_SUMMARY_LEAF_TOKENS`, `RIVETHUB_SUMMARY_BRANCH_TOKENS` and `RIVETHUB_SUMMARY_ROOT_TOKENS` cap each summary request (defaults 7000, 14000, 20000), and `RIVETHUB_EMBED_TIMEOUT_MS` bounds each embedding request (default 30000). `rh mcp` runs the MCP sidecar.
 `rh start` stays hidden from help and is the systemd unit's `ExecStart`. It supervises one child of this binary per
 configured service root (`gateway`, `agent` when Postgres memory would start, each sqlite worker role, and `mcp` when that transport has a host or socket),
 restarts an unexpected exit with backoff, and forwards SIGTERM. Deployments previously invoking bare `rh` to launch the gateway must use `rh gateway`. The
 one-release compatibility binary dispatches through the same entry point.
+
+Browser origins: the gateway answers a request that carries an `Origin` header only when that origin is the
+gateway's own origin, the desktop app's built-in origin, or is listed in the gateway's `allowed_origins` setting (the `den` section of `config.yaml`, including the file
+`rh local` writes). Origins compare by scheme, host and port, so `localhost` and `127.0.0.1` are separate entries. A
+web client served by a Vite dev server on port 5273 that talks to the gateway needs that origin listed:
+
+```yaml
+den:
+  allowed_origins:
+    - http://127.0.0.1:5273
+    - http://localhost:5273
+```
+
+An unlisted origin is refused with `origin "<origin>" is not allowed (add it to the gateway allowed_origins setting)`.
 
 Platforms: `rh` targets Linux and macOS (Apple Silicon). CI builds `rh` and runs the
 `cli` tests on `macos-latest`. `rh service` and the restart step of `rh update` manage systemd units only. On macOS

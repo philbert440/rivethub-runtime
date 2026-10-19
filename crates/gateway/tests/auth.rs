@@ -296,3 +296,51 @@ fn remote_browsers_get_the_html_gate_off_api_paths() -> Result<(), Box<dyn std::
     assert!(text.contains("/healthz"));
     Ok(())
 }
+
+fn documented_origin_example(doc: &str) -> Option<&str> {
+    doc.split("```yaml\n")
+        .nth(1)
+        .and_then(|rest| rest.split("```").next())
+}
+
+fn loopback_check(origin: &str) -> OriginCheck<'_> {
+    OriginCheck {
+        origin: Some(origin),
+        host: Some("127.0.0.1:5174"),
+        caller_loopback: true,
+        plain_http: true,
+    }
+}
+
+#[test]
+fn the_documented_vite_dev_origin_example_admits_exactly_that_origin() {
+    let doc = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/CLI.md"))
+        .expect("CLI doc");
+    let example = documented_origin_example(&doc).expect("documented allowed_origins example");
+    let config: config::Config = serde_yaml_ng::from_str(example).expect("documented config");
+    let home = tempfile::tempdir().expect("home");
+    let env = config::Environment::from_vars([("HOME", home.path().to_str().expect("utf-8 home"))]);
+    let settings = gateway::Settings::from_config_in(
+        &config,
+        &env,
+        "gold-host".to_string(),
+        "golden-node".to_string(),
+    )
+    .expect("settings");
+    let policy = OriginPolicy::new(settings.allowed_origins, settings.allowed_hosts);
+    for origin in ["http://127.0.0.1:5273", "http://localhost:5273"] {
+        assert_eq!(
+            policy.evaluate(&loopback_check(origin)),
+            Decision::Allow {
+                echo: Some(origin.to_string())
+            }
+        );
+    }
+    assert_eq!(
+        policy.evaluate(&loopback_check("http://127.0.0.1:5274")),
+        Decision::Deny {
+            reason: "origin \"http://127.0.0.1:5274\" is not allowed (add it to the gateway allowed_origins setting)"
+                .to_string()
+        }
+    );
+}
