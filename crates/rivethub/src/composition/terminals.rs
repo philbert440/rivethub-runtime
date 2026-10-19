@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use config::{Config, Environment};
 use gateway::sessions::SessionRegistry;
-use gateway::term::{LaunchCommand, TerminalOptions, TerminalService};
+use gateway::term::{ClaudeTrust, LaunchCommand, TerminalOptions, TerminalService};
 use kernel::terminal::TerminalMux;
 use tokio_util::sync::CancellationToken;
 
@@ -68,25 +68,54 @@ pub(super) async fn build(
     mux.run_tracked(shutdown.child_token(), tasks);
     let mut adopted = mux.adopt_namespace(&state_dir, owner.as_str()).await?;
     let commands = launch_commands(roster.commands);
-    let service = Arc::new(
-        TerminalService::new(
-            Arc::clone(&mux) as Arc<dyn TerminalMux>,
-            sessions,
-            TerminalOptions {
-                root,
-                default: roster.default_id,
-                commands,
-                max_ptys,
-            },
-        )
-        .await?
-        .with_shutdown(shutdown.child_token())
-        .with_harness(Arc::new(
-            harness_acp::AcpHarnessAdapter::new(config).with_search_paths(paths),
-        )),
-    );
+    let built = TerminalService::new(
+        Arc::clone(&mux) as Arc<dyn TerminalMux>,
+        sessions,
+        TerminalOptions {
+            root,
+            default: roster.default_id,
+            commands,
+            max_ptys,
+        },
+    )
+    .await?
+    .with_shutdown(shutdown.child_token())
+    .with_harness(Arc::new(
+        harness_acp::AcpHarnessAdapter::new(config).with_search_paths(paths),
+    ));
+    let service = Arc::new(with_claude_trust(built, config, env));
     claim_adopted(&service, &mux, owner, &mut adopted)?;
     Ok(service)
+}
+
+fn with_claude_trust(
+    service: TerminalService,
+    config: &Config,
+    env: &Environment,
+) -> TerminalService {
+    let enabled = config
+        .gateway
+        .as_ref()
+        .and_then(|gateway| gateway.terminal.as_ref())
+        .is_some_and(|terminal| terminal.trust_claude_launch_dirs == Some(true));
+    match super::stores::claude_config_file(env) {
+        Some(file) if enabled => service.with_claude_trust(ClaudeTrust {
+            config: file,
+            roots: harness_directories(config),
+        }),
+        _ => service,
+    }
+}
+
+fn harness_directories(config: &Config) -> Vec<std::path::PathBuf> {
+    config
+        .tasks
+        .as_ref()
+        .and_then(|tasks| tasks.harnesses.as_ref())
+        .into_iter()
+        .flat_map(|harnesses| harnesses.values())
+        .filter_map(|entry| entry.cwd.clone())
+        .collect()
 }
 
 fn launch_commands(commands: Vec<terminal::ResolvedCommand>) -> Vec<LaunchCommand> {

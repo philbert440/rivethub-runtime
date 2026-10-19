@@ -198,6 +198,7 @@ impl TerminalActor {
         if let Some(effort) = launch.effort {
             argv.extend(["--effort".into(), effort]);
         }
+        self.service.trust_claude_directory(&launch.command).await?;
         let port_session = TerminalService::port_session(&launch.command, &self.session)?;
         let id = self
             .service
