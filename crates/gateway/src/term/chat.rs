@@ -79,7 +79,15 @@ impl TerminalService {
             extra: wire::Extra::default(),
         };
         let key = self.registry.authorize(user, summary.session_id.as_str())?;
-        self.summaries.write().insert(key, summary.clone());
+        self.summaries.write().insert(key.clone(), summary.clone());
+        self.publish_registry(
+            key,
+            HarnessEvent::SessionCreated {
+                session_id: summary.session_id.clone(),
+                summary: Box::new(summary.clone()),
+                supersedes: None,
+            },
+        );
         Ok(summary)
     }
 
