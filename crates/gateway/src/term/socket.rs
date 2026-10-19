@@ -102,7 +102,7 @@ async fn stream(
             changed = handle.ownership.changed() => {
                 changed.map_err(|_| ApiError::Unavailable("terminal owner channel closed".into()))?;
                 let owner = handle.ownership.borrow_and_update().clone();
-                send(socket, &TermServerFrame::Owner { device: Some("another device".into()), self_owner: owner.as_ref().is_some_and(|owner| owner.client == client), since: owner.map(|owner| owner.since) }).await?;
+                send(socket, &TermServerFrame::Owner { device: owner.as_ref().map(|_| "another device".to_owned()), self_owner: owner.as_ref().is_some_and(|owner| owner.client == client), since: owner.map(|owner| owner.since) }).await?;
             }
             output = attached.output.recv() => {
                 if let Some(bytes) = output {
