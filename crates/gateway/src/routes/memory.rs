@@ -193,7 +193,7 @@ fn search_hit(result: wire::memory::MemorySearchResult) -> MemorySearchHit {
         kind: None,
         tool_name: None,
         conversation_id: None,
-        session_id: None,
+        session_id: result.session_id,
         fallback: None,
         tags: None,
     }
@@ -263,7 +263,7 @@ async fn health(
         MemoryHealthStatus::Degraded
     };
     Ok(Json(MemoryHealthResponse {
-        observed_at: None,
+        observed_at: Some(chrono::Utc::now()),
         queue_status: None,
         queues: None,
         summarizer: None,

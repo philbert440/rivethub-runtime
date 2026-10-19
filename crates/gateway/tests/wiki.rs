@@ -149,7 +149,7 @@ async fn list_search_filters_and_pagination_reach_the_port() {
             kernel::wiki::WikiFilter {
                 query: None,
                 tag: None,
-                limit: 200,
+                limit: 500,
                 offset: 1,
             }
         ))
@@ -231,7 +231,12 @@ async fn missing_pages_and_gaps_have_typed_responses() {
     let response = answer(&app, request("GET", "/api/wiki/_gaps")).await;
     assert_eq!(response.status, 200);
     let actual: WikiGapsResponse = serde_json::from_slice(&response.body).unwrap();
-    assert_eq!(actual.stalest, ["release"]);
+    let stalest = actual.stalest.first().unwrap();
+    assert_eq!(actual.stalest.len(), 1);
+    assert_eq!(
+        (stalest.slug.as_str(), stalest.title.as_str()),
+        ("release", "Release <guide> & rollout")
+    );
     assert_eq!(actual.red_links.first().unwrap().entity, "unwritten");
     assert_eq!(actual.red_links.first().unwrap().referenced_by, ["release"]);
 }

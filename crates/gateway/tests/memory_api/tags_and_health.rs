@@ -422,6 +422,8 @@ fn memory_fallback_and_health_shape() {
         serde_json::from_slice(&response.body).expect("health response");
     assert_eq!(health.embeddings.status, EmbedStatus::Unavailable);
     assert_eq!(health.status, MemoryHealthStatus::Degraded);
+    let observed = health.observed_at.expect("observation time");
+    assert!((chrono::Utc::now() - observed).num_seconds().abs() < 60);
     assert_eq!(health.embed_queue_depth, 0);
 
     store.arm_embeddings();
@@ -442,6 +444,21 @@ fn memory_fallback_and_health_shape() {
     let response = call("GET", "/api/memory/bogus").expect("in-process answer");
     assert_eq!(response.status, 404);
     assert_eq!(error_of(&response).error, "unknown memory resource");
+}
+
+#[test]
+fn a_message_hit_carries_its_session() {
+    let (_, app) = seeded().expect("seed store");
+    let response = block_on(answer(
+        app,
+        recorded("GET", "/api/memory/search?q=hello", Vec::new()),
+    ))
+    .expect("in-process answer");
+    assert_eq!(response.status, 200);
+    let parsed: MemorySearchResponse =
+        serde_json::from_slice(&response.body).expect("search response");
+    let hit = parsed.results.first().expect("hello hit");
+    assert_eq!(hit.session_id.as_deref(), Some(SESSION));
 }
 
 #[test]

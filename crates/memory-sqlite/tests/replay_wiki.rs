@@ -259,12 +259,10 @@ fn projected_gaps(recorded: &Json) -> TestResult<WikiGapsResponse> {
         .get("stalest")
         .and_then(Json::as_array)
         .and_then(|rows| rows.first())
-        .and_then(|row| row.get("slug"))
-        .and_then(Json::as_str)
-        .ok_or("stalest slug")?;
+        .ok_or("stalest topic")?;
     Ok(WikiGapsResponse {
         red_links,
-        stalest: vec![stalest.to_owned()],
+        stalest: vec![project_topic(stalest)?],
     })
 }
 

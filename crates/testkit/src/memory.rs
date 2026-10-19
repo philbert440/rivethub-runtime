@@ -168,14 +168,7 @@ impl MemoryStore for FakeMemoryStore {
                         || page.markdown.to_lowercase().contains(&query)
                 })
             })
-            .map(|page| wire::gateway::wiki::WikiTopic {
-                slug: page.slug.clone(),
-                title: page.title.clone(),
-                tags: page.tags.clone(),
-                entities: page.entities.clone(),
-                updated_at: page.updated_at,
-                excerpt: page.current_state.chars().take(240).collect(),
-            })
+            .map(wiki_topic)
             .collect();
         topics.sort_by(|a, b| {
             b.updated_at
@@ -268,7 +261,7 @@ impl MemoryStore for FakeMemoryStore {
         let stalest = stalest
             .into_iter()
             .take(limit as usize)
-            .map(|page| page.slug.clone())
+            .map(wiki_topic)
             .collect();
         drop(pages);
         Ok(wire::gateway::wiki::WikiGapsResponse { red_links, stalest })
@@ -347,6 +340,7 @@ impl MemoryStore for FakeMemoryStore {
                         .ok_or_else(|| MemoryStoreError::InvalidRequest {
                             message: "scripted memory entry requires a timestamp".to_owned(),
                         })?,
+                    session_id: Some(e.session_id.clone()),
                 })
             })
             .collect::<Result<_, MemoryStoreError>>()?;
@@ -630,4 +624,15 @@ fn add_count(total: u64) -> Result<u64, MemoryStoreError> {
         .ok_or_else(|| MemoryStoreError::InvalidRequest {
             message: "tag suggestion count overflowed".to_owned(),
         })
+}
+
+fn wiki_topic(page: &wire::gateway::wiki::WikiPageResponse) -> wire::gateway::wiki::WikiTopic {
+    wire::gateway::wiki::WikiTopic {
+        slug: page.slug.clone(),
+        title: page.title.clone(),
+        tags: page.tags.clone(),
+        entities: page.entities.clone(),
+        updated_at: page.updated_at,
+        excerpt: page.current_state.chars().take(240).collect(),
+    }
 }

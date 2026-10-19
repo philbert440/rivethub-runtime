@@ -167,6 +167,7 @@ impl crate::PostgresMemory {
                     agent: hit.agent,
                     relevance_score: hit.score,
                     created_at: hit.created_at,
+                    session_id: hit.session_id,
                 })
                 .collect(),
             degraded: reason.map(|reason| MemoryDegraded {

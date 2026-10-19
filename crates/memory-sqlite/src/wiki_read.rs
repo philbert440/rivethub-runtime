@@ -213,7 +213,7 @@ fn redirect(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
 }
 
 fn gaps(conn: &Connection, limit: u32) -> Result<WikiGapsResponse, SqliteError> {
-    let limit = i64::from(limit.clamp(1, 200));
+    let limit = i64::from(limit.clamp(1, kernel::wiki::WIKI_LIMIT_MAX));
     let topics = all_topics(conn)?;
     let redirects = redirect_slugs(conn)?;
     let mut grouped: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -246,15 +246,19 @@ fn gaps(conn: &Connection, limit: u32) -> Result<WikiGapsResponse, SqliteError> 
     red_links.truncate(capped);
     let mut statement = conn
         .prepare(
-            "SELECT slug FROM ros_wiki_topics \
+            "SELECT slug, title, aliases, tags, entities, current_state, updated_at \
+               FROM ros_wiki_topics \
               ORDER BY coalesce(last_verified_at, updated_at), slug LIMIT ?1",
         )
         .map_err(SqliteError::query("wiki stale"))?;
     let stalest = statement
-        .query_map(params_from_iter([Value::Integer(limit)]), |row| row.get(0))
+        .query_map(params_from_iter([Value::Integer(limit)]), read_topic)
         .map_err(SqliteError::query("wiki stale"))?
-        .collect::<Result<Vec<String>, _>>()
-        .map_err(SqliteError::query("wiki stale"))?;
+        .collect::<Result<Vec<Topic>, _>>()
+        .map_err(SqliteError::query("wiki stale"))?
+        .into_iter()
+        .map(topic_wire)
+        .collect::<Result<Vec<WikiTopic>, _>>()?;
     Ok(WikiGapsResponse { red_links, stalest })
 }
 

@@ -48,6 +48,7 @@ pub(crate) struct ArmRow {
     pub(crate) kind: Option<kernel::memory::SummaryKind>,
     pub(crate) tool_name: Option<String>,
     pub(crate) conversation_id: Option<String>,
+    pub(crate) session_id: Option<String>,
     pub(crate) created_at: DateTime<Utc>,
     pub(crate) arm_score: f64,
     pub(crate) semantic: f64,
@@ -109,7 +110,7 @@ fn fuse(fts: &[ArmRow], vector: Option<&[ArmRow]>, trigram: Option<&[ArmRow]>) -
                     created_at: row.created_at,
                     score: fusion_score(ranked.rrf, row),
                     fallback: None,
-                    session_id: None,
+                    session_id: row.session_id.clone(),
                     tags: None,
                 },
             }
@@ -158,7 +159,7 @@ fn finish_rows(rows: Vec<ArmRow>, limit: u32) -> Result<Vec<MemorySearchHit>, Er
                 created_at: row.created_at,
                 score,
                 fallback: None,
-                session_id: None,
+                session_id: row.session_id,
                 tags: None,
             }
         })

@@ -3,6 +3,8 @@ pub mod builder;
 use wire::gateway::wiki::WikiPageResponse;
 use wire::gateway::wiki::WikiQuery;
 
+pub const WIKI_LIMIT_MAX: u32 = 500;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WikiFilter {
     pub query: Option<String>,
@@ -25,7 +27,7 @@ impl From<WikiQuery> for WikiFilter {
             query: query.q.filter(|text| !text.trim().is_empty()),
             tag: query.tag,
             limit: match query.limit {
-                Some(limit) => limit.clamp(1, 200),
+                Some(limit) => limit.clamp(1, WIKI_LIMIT_MAX),
                 None => 50,
             },
             offset,
