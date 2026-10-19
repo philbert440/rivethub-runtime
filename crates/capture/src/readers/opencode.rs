@@ -13,7 +13,9 @@ use wire::session_id::SessionId;
 
 use super::harness_db::DbRows;
 use super::harness_db::HarnessDb;
+use super::harness_db::OpencodeCursor;
 use super::harness_db::OpencodePart;
+use super::harness_db::OpencodeTranscript;
 use super::harness_db::PartKind;
 use super::harness_db::Speaker;
 use super::harness_db::read_error;
@@ -36,6 +38,7 @@ use super::message::row_position;
 use super::message::text_turn;
 use super::message::tool_turn;
 use super::message::unknown;
+use super::opencode_events;
 use super::sqlite::database_file;
 use super::sqlite::require_component;
 
@@ -67,15 +70,22 @@ impl OpencodeTranscriptReader {
         let Some(path) = blocking(move || located(&root, &native_owned)).await? else {
             return Ok(TranscriptSlice::empty(offset));
         };
-        let after = row_offset(offset)?;
-        let rows = HarnessDb::opencode_parts(&path, native_id, after)
+        let cursor = OpencodeCursor {
+            after_row: row_offset(offset)?,
+            from_seq: opencode_events::first_seq(offset)?,
+        };
+        let rows = HarnessDb::opencode_transcript(&path, native_id, cursor)
             .await
             .map_err(read_error)?;
-        let slice = match rows {
-            DbRows::Unreadable => TranscriptSlice::empty(offset),
-            DbRows::Ready(rows) => map_parts(session, &rows, offset)?,
+        let (format, slice) = match rows {
+            OpencodeTranscript::Unreadable => (FORMAT, TranscriptSlice::empty(offset)),
+            OpencodeTranscript::Parts(rows) => (FORMAT, map_parts(session, &rows, offset)?),
+            OpencodeTranscript::Events(rows) => (
+                opencode_events::FORMAT,
+                opencode_events::map_events(session, &rows, offset)?,
+            ),
         };
-        report(FORMAT, &slice.skipped);
+        report(format, &slice.skipped);
         Ok(slice)
     }
 }

@@ -35,6 +35,21 @@ const ONE_OPENCODE: &str = " WHERE id = ?1 ORDER BY time_updated DESC LIMIT 1";
 
 const OPENCODE_SESSIONS: &str = "SELECT DISTINCT session_id FROM message ORDER BY session_id";
 
+const OPENCODE_EVENT_SESSION_ROWS: &str =
+    "SELECT id, title, model, time_created, time_updated FROM session_v2";
+
+const OPENCODE_EVENT_SESSIONS: &str =
+    "SELECT DISTINCT session_id FROM session_message ORDER BY session_id";
+
+const OPENCODE_EVENT_MESSAGES: &str = "\
+SELECT seq, type, time_created, data \
+FROM session_message \
+WHERE session_id = ?1 AND seq >= ?2 \
+ORDER BY seq ASC";
+
+const OPENCODE_LAYOUT: &str =
+    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'";
+
 const OPENCODE_PARTS: &str = "\
 SELECT part.rowid AS rowid, \
        part.session_id AS session_id, \
@@ -103,6 +118,33 @@ pub(crate) struct OpencodePart {
     pub(crate) at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OpencodeEvent {
+    pub(crate) seq: i64,
+    pub(crate) record_type: String,
+    pub(crate) time_created: i64,
+    pub(crate) data: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum OpencodeTranscript {
+    Parts(Vec<OpencodePart>),
+    Events(Vec<OpencodeEvent>),
+    Unreadable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct OpencodeCursor {
+    pub(crate) after_row: i64,
+    pub(crate) from_seq: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OpencodeLayout {
+    Parts,
+    Events,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SessionQuery<'a> {
     Recent(usize),
@@ -168,19 +210,39 @@ pub(crate) fn opencode_session_rows(
             time_updated: row.get("time_updated")?,
         })
     };
-    let rows = match session_rows(
-        &connection,
+    let rows = opencode_layout(&connection).and_then(|layout| match layout {
+        OpencodeLayout::Events => session_rows(
+            &connection,
+            OPENCODE_EVENT_SESSION_ROWS,
+            RECENT_OPENCODE,
+            ONE_OPENCODE,
+            query,
+            read,
+        ),
+        OpencodeLayout::Parts => part_session_rows(&connection, query, read),
+    });
+    rows.map(DbRows::Ready)
+        .map_err(|error| query_error(&error.to_string(), Box::new(error)))
+}
+
+fn part_session_rows(
+    connection: &Connection,
+    query: SessionQuery<'_>,
+    read: impl Fn(&Row<'_>) -> rusqlite::Result<OpencodeSessionRow>,
+) -> rusqlite::Result<Vec<OpencodeSessionRow>> {
+    match session_rows(
+        connection,
         OPENCODE_SESSION_ROWS,
         RECENT_OPENCODE,
         ONE_OPENCODE,
         query,
-        read,
+        &read,
     ) {
         Ok(rows) => Ok(rows),
         Err(error) => {
             tracing::debug!(%error, "opencode session table read failed, retrying without the model column");
             session_rows(
-                &connection,
+                connection,
                 OPENCODE_SESSION_ROWS_WITHOUT_MODEL,
                 RECENT_OPENCODE,
                 ONE_OPENCODE,
@@ -188,9 +250,16 @@ pub(crate) fn opencode_session_rows(
                 read,
             )
         }
-    };
-    rows.map(DbRows::Ready)
-        .map_err(|error| query_error(&error.to_string(), Box::new(error)))
+    }
+}
+
+fn opencode_layout(connection: &Connection) -> rusqlite::Result<OpencodeLayout> {
+    let tables: i64 = connection.query_row(OPENCODE_LAYOUT, [], |row| row.get(0))?;
+    Ok(if tables > 0 {
+        OpencodeLayout::Events
+    } else {
+        OpencodeLayout::Parts
+    })
 }
 
 fn session_rows<T>(
@@ -236,17 +305,17 @@ impl HarnessDb {
         database: &Path,
     ) -> Result<DbRows<String>, HarnessDbError> {
         let database = database.to_path_buf();
-        spawn(move || read_ids(&database, OPENCODE_SESSIONS)).await
+        spawn(move || read_opencode_ids(&database)).await
     }
 
-    pub(crate) async fn opencode_parts(
+    pub(crate) async fn opencode_transcript(
         database: &Path,
         session_id: &str,
-        after_row: i64,
-    ) -> Result<DbRows<OpencodePart>, HarnessDbError> {
+        cursor: OpencodeCursor,
+    ) -> Result<OpencodeTranscript, HarnessDbError> {
         let database = database.to_path_buf();
         let session_id = session_id.to_owned();
-        spawn(move || read_opencode(&database, &session_id, after_row)).await
+        spawn_blocking(move || read_opencode(&database, &session_id, cursor)).await
     }
 }
 
@@ -283,6 +352,12 @@ fn open_read(path: &Path) -> Opened {
 async fn spawn<T: Send + 'static>(
     work: impl FnOnce() -> Result<DbRows<T>, HarnessDbError> + Send + 'static,
 ) -> Result<DbRows<T>, HarnessDbError> {
+    spawn_blocking(work).await
+}
+
+async fn spawn_blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, HarnessDbError> + Send + 'static,
+) -> Result<T, HarnessDbError> {
     match tokio::task::spawn_blocking(work).await {
         Ok(result) => result,
         Err(error) => Err(query_error(
@@ -296,12 +371,26 @@ fn read_ids(path: &Path, sql: &str) -> Result<DbRows<String>, HarnessDbError> {
     let Opened::Ready(connection) = open_read(path) else {
         return Ok(DbRows::Unreadable);
     };
-    let queried = connection.prepare(sql).and_then(|mut statement| {
+    rows_or_unreadable(session_ids(&connection, sql))
+}
+
+fn read_opencode_ids(path: &Path) -> Result<DbRows<String>, HarnessDbError> {
+    let Opened::Ready(connection) = open_read(path) else {
+        return Ok(DbRows::Unreadable);
+    };
+    let queried = opencode_layout(&connection).and_then(|layout| match layout {
+        OpencodeLayout::Parts => session_ids(&connection, OPENCODE_SESSIONS),
+        OpencodeLayout::Events => session_ids(&connection, OPENCODE_EVENT_SESSIONS),
+    });
+    rows_or_unreadable(queried)
+}
+
+fn session_ids(connection: &Connection, sql: &str) -> rusqlite::Result<Vec<String>> {
+    connection.prepare(sql).and_then(|mut statement| {
         statement
             .query_map([], |row| row.get::<_, String>("session_id"))?
             .collect::<Result<Vec<_>, _>>()
-    });
-    rows_or_unreadable(queried)
+    })
 }
 
 fn read_hermes(
@@ -336,19 +425,36 @@ fn hermes_row(row: &Row<'_>) -> rusqlite::Result<HermesMessage> {
 fn read_opencode(
     path: &Path,
     session_id: &str,
-    after_row: i64,
-) -> Result<DbRows<OpencodePart>, HarnessDbError> {
+    cursor: OpencodeCursor,
+) -> Result<OpencodeTranscript, HarnessDbError> {
     let Opened::Ready(connection) = open_read(path) else {
-        return Ok(DbRows::Unreadable);
+        return Ok(OpencodeTranscript::Unreadable);
     };
-    let queried = connection
-        .prepare(OPENCODE_PARTS)
-        .and_then(|mut statement| {
-            statement
-                .query_map(rusqlite::params![session_id, after_row], opencode_row)?
-                .collect::<Result<Vec<_>, _>>()
-        });
-    rows_or_unreadable(queried)
+    let queried = opencode_layout(&connection).and_then(|layout| match layout {
+        OpencodeLayout::Parts => connection
+            .prepare(OPENCODE_PARTS)?
+            .query_map(
+                rusqlite::params![session_id, cursor.after_row],
+                opencode_row,
+            )?
+            .collect::<Result<Vec<_>, _>>()
+            .map(OpencodeTranscript::Parts),
+        OpencodeLayout::Events => connection
+            .prepare(OPENCODE_EVENT_MESSAGES)?
+            .query_map(rusqlite::params![session_id, cursor.from_seq], event_row)?
+            .collect::<Result<Vec<_>, _>>()
+            .map(OpencodeTranscript::Events),
+    });
+    readable(queried, OpencodeTranscript::Unreadable)
+}
+
+fn event_row(row: &Row<'_>) -> rusqlite::Result<OpencodeEvent> {
+    Ok(OpencodeEvent {
+        seq: row.get("seq")?,
+        record_type: row.get("type")?,
+        time_created: row.get("time_created")?,
+        data: row.get("data")?,
+    })
 }
 
 fn opencode_row(row: &Row<'_>) -> rusqlite::Result<OpencodePart> {
@@ -399,11 +505,15 @@ fn speaker(role: Option<String>) -> Speaker {
 fn rows_or_unreadable<T>(
     result: Result<Vec<T>, rusqlite::Error>,
 ) -> Result<DbRows<T>, HarnessDbError> {
+    readable(result.map(DbRows::Ready), DbRows::Unreadable)
+}
+
+fn readable<T>(result: Result<T, rusqlite::Error>, unreadable: T) -> Result<T, HarnessDbError> {
     match result {
-        Ok(rows) => Ok(DbRows::Ready(rows)),
+        Ok(rows) => Ok(rows),
         Err(error) if not_a_database(&error) => {
             tracing::warn!(%error, "harness database is not a sqlite file");
-            Ok(DbRows::Unreadable)
+            Ok(unreadable)
         }
         Err(error) => Err(query_error(&error.to_string(), Box::new(error))),
     }

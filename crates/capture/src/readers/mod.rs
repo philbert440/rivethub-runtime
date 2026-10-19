@@ -8,6 +8,7 @@ mod hermes;
 mod kimi;
 mod message;
 mod opencode;
+mod opencode_events;
 pub(crate) mod pi;
 mod qwen;
 mod scan;
