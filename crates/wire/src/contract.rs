@@ -164,6 +164,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::gateway::sessions::TranscriptBlock>,
     SchemaGenerator::subschema_for::<crate::gateway::sessions::TranscriptToolStatus>,
     SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessTranscriptTool>,
+    SchemaGenerator::subschema_for::<crate::gateway::sessions::TranscriptAttachment>,
     SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessTranscriptTurn>,
     SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessSessionTranscriptResponse>,
     SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessTurnAccepted>,

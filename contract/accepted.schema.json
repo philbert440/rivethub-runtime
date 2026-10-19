@@ -4981,6 +4981,15 @@
             }
           ]
         },
+        "attachments": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/TranscriptAttachment"
+          }
+        },
         "complete": {
           "type": "boolean"
         },
@@ -5049,6 +5058,35 @@
         "text",
         "tool_use",
         "tool_result"
+      ]
+    },
+    "TranscriptAttachment": {
+      "type": "object",
+      "properties": {
+        "mediaType": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uploadId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "mediaType"
       ]
     },
     "TranscriptWsFrame": {

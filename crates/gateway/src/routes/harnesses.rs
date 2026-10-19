@@ -125,7 +125,7 @@ async fn delete_upload(
     Ok(Json(Accepted { ok: true }))
 }
 
-pub(super) async fn open_store(gateway: &Gateway) -> Result<Arc<Uploads>, ApiError> {
+pub(crate) async fn open_store(gateway: &Gateway) -> Result<Arc<Uploads>, ApiError> {
     let service = gateway
         .uploads()
         .ok_or_else(|| ApiError::Unavailable("uploads are not configured".to_owned()))?;
@@ -192,7 +192,7 @@ fn append_buf(collected: &mut Vec<u8>, mut data: impl Buf, max: u64) -> Result<(
     Ok(())
 }
 
-pub(super) fn upload_error(error: UploadError) -> ApiError {
+pub(crate) fn upload_error(error: UploadError) -> ApiError {
     match error {
         UploadError::TooLarge { .. } => ApiError::BodyTooLarge,
         UploadError::Empty => ApiError::BadRequest("upload is empty".to_owned()),

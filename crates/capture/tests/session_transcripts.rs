@@ -382,3 +382,34 @@ async fn other_harnesses_read_text_turns_from_their_stores() -> TestResult {
     );
     Ok(())
 }
+
+fn image_turn(text: Option<&str>) -> String {
+    let lead = text.map_or_else(String::new, |text| {
+        format!(
+            r#"{{"type":"text","text":{}}},"#,
+            serde_json::to_string(text).expect("text")
+        )
+    });
+    format!(
+        r#"{{"type":"user","message":{{"role":"user","content":[{lead}{{"type":"image","source":{{"type":"base64","media_type":"image/png","data":"iVBORw0K"}}}}]}}}}"#
+    )
+}
+
+#[tokio::test]
+async fn a_user_turn_carries_its_image_blocks_as_attachments() {
+    let meta = r#"{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"[Image: source: /tmp/images/1.png]"}]}}"#;
+    let done = assistant(r#"[{"type":"text","text":"Red"}]"#, "end_turn");
+    assert_eq!(
+        claude_json(&[&image_turn(Some("what color?")), meta, &done]).await,
+        r#"[{"role":"user","text":"what color?","attachments":[{"mediaType":"image/png"}]},{"role":"assistant","text":"Red","stopReason":"end_turn","lastBlock":"text","complete":true}]"#
+    );
+}
+
+#[tokio::test]
+async fn an_image_only_user_turn_is_kept_with_empty_text() {
+    let done = assistant(r#"[{"type":"text","text":"Red"}]"#, "end_turn");
+    assert_eq!(
+        claude_json(&[&image_turn(None), &done]).await,
+        r#"[{"role":"user","text":"","attachments":[{"mediaType":"image/png"}]},{"role":"assistant","text":"Red","stopReason":"end_turn","lastBlock":"text","complete":true}]"#
+    );
+}

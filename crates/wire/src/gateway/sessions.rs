@@ -65,6 +65,16 @@ pub struct HarnessTranscriptTool {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct TranscriptAttachment {
+    pub media_type: String,
+    pub name: Option<String>,
+    pub uri: Option<String>,
+    pub upload_id: Option<String>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct HarnessTranscriptTurn {
     pub role: SessionMessageRole,
     pub text: String,
@@ -74,6 +84,7 @@ pub struct HarnessTranscriptTurn {
     pub model: Option<String>,
     pub stop_reason: Option<String>,
     pub last_block: Option<TranscriptBlock>,
+    pub attachments: Option<Vec<TranscriptAttachment>>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub complete: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

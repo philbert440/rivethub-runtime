@@ -27,6 +27,7 @@ use crate::Gateway;
 use crate::error::ApiError;
 use crate::extract::Body;
 use crate::tenancy::UserId;
+use crate::uploads::AttachedTurn;
 
 #[derive(Debug, Deserialize)]
 struct Create {
@@ -148,9 +149,22 @@ async fn accept(
     request: SessionPostRequest,
 ) -> Result<Response, ApiError> {
     let attachments = staged(&gateway, &user, request.attachments).await?;
-    service(&gateway)?
-        .chat(&user, &session)?
-        .prompt(request.text, request.system_prompt, attachments)
+    let chat = service(&gateway)?.chat(&user, &session)?;
+    if !attachments.is_empty() {
+        let canonical = session
+            .parse::<wire::session_id::SessionId>()
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        let sent = crate::sessions::control::with_system_prompt(
+            request.system_prompt.as_deref(),
+            request.text.clone(),
+        );
+        super::harnesses::open_store(&gateway)
+            .await?
+            .record_turn(&canonical, AttachedTurn::new(&sent, &attachments))
+            .await
+            .map_err(super::harnesses::upload_error)?;
+    }
+    chat.prompt(request.text, request.system_prompt, attachments)
         .await?;
     Ok(Json(SessionPostAccepted {
         accepted: true,

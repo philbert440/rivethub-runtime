@@ -149,13 +149,21 @@ impl History {
         let lister = gateway
             .session_lister()
             .ok_or_else(|| no_source(resolved.harness))?;
-        let read = match lister
+        let mut read = match lister
             .transcript(resolved.harness, &resolved.native)
             .await?
         {
             TranscriptRead::Read(read) => read,
             TranscriptRead::NoSource => return Err(no_source(resolved.harness)),
         };
+        if gateway.uploads().is_some() {
+            let journal = crate::routes::harnesses::open_store(gateway)
+                .await?
+                .attached_turns(&resolved.session)
+                .await
+                .map_err(crate::routes::harnesses::upload_error)?;
+            crate::uploads::attach(&mut read.turns, &journal);
+        }
         let spawn_model = live_summary(gateway, &resolved.native).and_then(|live| live.model);
         let stamp = self.stamps.stamp(
             &resolved.session,

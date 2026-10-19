@@ -7,6 +7,7 @@ use wire::gateway::sessions::HarnessTranscriptTool;
 use wire::gateway::sessions::HarnessTranscriptTurn;
 use wire::gateway::sessions::MessageUsage;
 use wire::gateway::sessions::SessionMessageRole;
+use wire::gateway::sessions::TranscriptAttachment;
 use wire::gateway::sessions::TranscriptBlock;
 use wire::gateway::sessions::TranscriptToolStatus;
 
@@ -131,6 +132,22 @@ struct Block {
     tool_use_id: Option<Field>,
     is_error: Option<Field>,
     content: Option<Field>,
+    source: Option<Field>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImageSource {
+    media_type: Option<Field>,
+}
+
+fn image_attachment(block: &Block) -> Option<TranscriptAttachment> {
+    let source = block.source.as_ref()?.object::<ImageSource>()?;
+    Some(TranscriptAttachment {
+        media_type: text_of(source.media_type.as_ref())?,
+        name: None,
+        uri: None,
+        upload_id: None,
+    })
 }
 
 impl Block {
@@ -204,6 +221,7 @@ impl Draft {
             model: self.model,
             stop_reason: self.stop_reason,
             last_block: self.last_block,
+            attachments: None,
             complete,
             compact: false,
         })
@@ -275,26 +293,41 @@ impl Folder {
             .as_ref()
             .and_then(Field::items)
             .unwrap_or_default();
+        let mut images = Vec::new();
         for block in blocks.iter().filter_map(Field::object::<Block>) {
             if block.is("tool_result") {
                 self.tool_result(record, &block);
+            } else if block.is("image")
+                && let Some(image) = image_attachment(&block)
+            {
+                images.push(image);
             }
         }
-        if let Some(text) = body.content.as_ref().and_then(user_text) {
-            self.flush();
-            self.turns.push(HarnessTranscriptTurn {
-                role: SessionMessageRole::User,
-                text,
-                thinking: None,
-                tools: None,
-                usage: None,
-                model: None,
-                stop_reason: None,
-                last_block: None,
-                complete: false,
-                compact: false,
-            });
-        }
+        let text = match body.content.as_ref().and_then(user_text) {
+            Some(text) => text,
+            None if !images.is_empty()
+                && text_elements(&blocks)
+                    .iter()
+                    .all(|text| text.trim().is_empty()) =>
+            {
+                String::new()
+            }
+            None => return,
+        };
+        self.flush();
+        self.turns.push(HarnessTranscriptTurn {
+            role: SessionMessageRole::User,
+            text,
+            thinking: None,
+            tools: None,
+            usage: None,
+            model: None,
+            stop_reason: None,
+            last_block: None,
+            attachments: (!images.is_empty()).then_some(images),
+            complete: false,
+            compact: false,
+        });
     }
 
     fn tool_result(&mut self, record: &Record, block: &Block) {
@@ -515,6 +548,7 @@ fn compact_marker(record: &Record) -> HarnessTranscriptTurn {
         model: None,
         stop_reason: Some("end_turn".to_owned()),
         last_block: Some(TranscriptBlock::Text),
+        attachments: None,
         complete: true,
         compact: true,
     }
