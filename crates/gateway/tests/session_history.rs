@@ -25,7 +25,7 @@ use wire::gateway::GatewayError;
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTranscriptResponse, HarnessSocketRefusal,
     HarnessSocketRefusalCode, HarnessTranscriptTurn, MessageUsage, SessionMessageRole,
-    SessionPostRequest,
+    SessionPostRequest, TranscriptAttachment,
 };
 use wire::harness::{
     HarnessEvent, HarnessId, HarnessOfferingList, HarnessSessionList, HarnessSessionStatus,
@@ -125,6 +125,7 @@ fn turn(role: SessionMessageRole, text: &str) -> HarnessTranscriptTurn {
         model: None,
         stop_reason: None,
         last_block: None,
+        attachments: None,
         complete: false,
         compact: false,
     }
@@ -877,6 +878,15 @@ async fn a_system_prompt_rides_ahead_of_the_turn_text() {
 }
 
 async fn uploaded(setup: &Setup, name: &str, media_type: &str, token: Option<&str>) -> String {
+    staged(setup, name, media_type, token).await.uri
+}
+
+async fn staged(
+    setup: &Setup,
+    name: &str,
+    media_type: &str,
+    token: Option<&str>,
+) -> wire::gateway::uploads::UploadCreated {
     let (status, body) = http(
         &setup.fixture.gateway,
         "POST",
@@ -886,7 +896,7 @@ async fn uploaded(setup: &Setup, name: &str, media_type: &str, token: Option<&st
     )
     .await;
     assert_eq!(status, 201, "{}", String::from_utf8_lossy(&body));
-    parsed::<wire::gateway::uploads::UploadCreated>(&body).uri
+    parsed(&body)
 }
 
 fn attached_turn(path: &str) -> String {
@@ -926,6 +936,85 @@ async fn an_uploaded_attachment_reaches_the_harness_with_the_turn() {
         .await;
     setup.harness.finish.add_permits(1);
     setup.harness.traced("ended").await;
+}
+
+fn image_turn(text: &str) -> HarnessTranscriptTurn {
+    HarnessTranscriptTurn {
+        attachments: Some(vec![TranscriptAttachment {
+            media_type: "image/png".to_owned(),
+            name: None,
+            uri: None,
+            upload_id: None,
+        }]),
+        ..turn(SessionMessageRole::User, text)
+    }
+}
+
+async fn transcript_turns(setup: &Setup, session: &str) -> Vec<HarnessTranscriptTurn> {
+    let (status, body) = get(
+        setup,
+        &format!("/api/harness-sessions/{}/transcript", enc(session)),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    parsed::<HarnessSessionTranscriptResponse>(&body).turns
+}
+
+#[tokio::test]
+async fn a_reloaded_transcript_names_the_uploads_its_user_turn_carried() {
+    let mut stores = one_claude_row();
+    stores.transcripts.insert(
+        (HarnessId::ClaudeCode, U1.to_owned()),
+        vec![
+            turn(SessionMessageRole::User, "look"),
+            answered("hello", "claude-opus-4-1", 10),
+            image_turn("look"),
+        ],
+    );
+    let setup = setup("{}", stores).await;
+    let shot = staged(&setup, "shot.png", "image/png", None).await;
+    let session = claude(U1).to_string();
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!("/api/harness-sessions/{session}/turn"),
+        attached_turn(&shot.uri),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup.harness.finish.add_permits(1);
+    setup.harness.traced("ended").await;
+    let named = vec![TranscriptAttachment {
+        media_type: "image/png".to_owned(),
+        name: Some("shot.png".to_owned()),
+        uri: Some(shot.uri.clone()),
+        upload_id: Some(shot.id.clone()),
+    }];
+    let turns = transcript_turns(&setup, &session).await;
+    assert_eq!(
+        turns.first().and_then(|turn| turn.attachments.clone()),
+        None
+    );
+    assert_eq!(
+        turns.get(2).and_then(|turn| turn.attachments.clone()),
+        Some(named.clone())
+    );
+    let (status, _) = http(
+        &setup.fixture.gateway,
+        "DELETE",
+        &format!("/api/uploads/{}", shot.id),
+        Vec::new(),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200);
+    let turns = transcript_turns(&setup, &session).await;
+    assert_eq!(
+        turns.get(2).and_then(|turn| turn.attachments.clone()),
+        Some(named)
+    );
 }
 
 #[tokio::test]

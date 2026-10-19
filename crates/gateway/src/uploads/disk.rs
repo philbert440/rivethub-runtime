@@ -28,7 +28,7 @@ pub(super) fn write_new(
     record: &Record,
     bytes: &[u8],
 ) -> Result<Record, UploadError> {
-    let user_dir = root.join(hash_owner(record.owner.as_str())?);
+    let user_dir = root.join(sha256_hex(record.owner.as_str())?);
     std::fs::create_dir_all(&user_dir)?;
     contained_dir(root, &user_dir)?;
     let bin = user_dir.join(format!("{id}.{}", stored_extension(&record.name)));
@@ -81,6 +81,10 @@ pub(super) fn load(
         let text = name.to_str().ok_or(UploadError::Escape)?;
         if text.starts_with(".upload-") {
             std::fs::remove_file(entry.path())?;
+            continue;
+        }
+        if text == super::turns::TURNS_DIR {
+            contained_dir(root, &entry.path())?;
             continue;
         }
         if !is_hex64(text) {
@@ -152,7 +156,7 @@ fn read_record(
     contained_file(root, &meta_path)?;
     let meta: DiskMeta =
         serde_json::from_slice(&std::fs::read(&meta_path)?).map_err(|_| UploadError::Corrupt)?;
-    if hash_owner(&meta.owner)? != owner_hash || std::fs::metadata(&bin)?.len() != meta.bytes {
+    if sha256_hex(&meta.owner)? != owner_hash || std::fs::metadata(&bin)?.len() != meta.bytes {
         return Err(UploadError::Escape);
     }
     let owner = UserId::new(meta.owner).map_err(|_| UploadError::Corrupt)?;
@@ -191,8 +195,8 @@ fn valid_extension(extension: &str) -> bool {
         && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
-fn hash_owner(owner: &str) -> Result<String, UploadError> {
-    let digest = Sha256::digest(owner.as_bytes());
+pub(super) fn sha256_hex(value: &str) -> Result<String, UploadError> {
+    let digest = Sha256::digest(value.as_bytes());
     let mut encoded = String::with_capacity(digest.len() * 2);
     for byte in digest {
         encoded.push(hex_digit(byte >> 4)?);
@@ -213,7 +217,7 @@ fn is_hex64(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-fn contained_dir(root: &Path, path: &Path) -> Result<(), UploadError> {
+pub(super) fn contained_dir(root: &Path, path: &Path) -> Result<(), UploadError> {
     let metadata = std::fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err(UploadError::Escape);

@@ -69,6 +69,7 @@ fn text_turn(turn: Turn) -> Option<HarnessTranscriptTurn> {
         model: None,
         stop_reason: None,
         last_block: None,
+        attachments: None,
         complete: false,
         compact: false,
     })

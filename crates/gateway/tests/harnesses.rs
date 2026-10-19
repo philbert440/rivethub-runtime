@@ -226,6 +226,23 @@ async fn reopening_the_store_keeps_uploads_with_their_extensions() {
 }
 
 #[tokio::test]
+async fn the_turn_journal_beside_the_uploads_does_not_break_reopening() {
+    let root = tempfile::tempdir().expect("root");
+    let first = opened(root.path(), 64, Duration::from_secs(60));
+    let (status, body) = post_upload(&first, "shot.png", "image/png", None, b"pixels", None).await;
+    assert_eq!(status, 201, "{}", String::from_utf8_lossy(&body));
+    let upload = created(&body);
+    let journal = root.path().join("turns");
+    std::fs::create_dir_all(&journal).expect("journal directory");
+    std::fs::write(journal.join(format!("{}.json", "0".repeat(64))), b"[]").expect("journal");
+    let reopened = opened(root.path(), 64, Duration::from_secs(60));
+    let (status, body, _) = call(&reopened, "GET", "/api/uploads", Vec::new(), None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    let list: UploadList = serde_json::from_slice(&body).expect("list");
+    assert_eq!(list.uploads, vec![upload]);
+}
+
+#[tokio::test]
 async fn uploads_refuse_empty_oversize_bad_names_and_types() {
     let root = tempfile::tempdir().expect("root");
     let gateway = opened(root.path(), 64, Duration::from_secs(60));

@@ -1,4 +1,5 @@
 mod disk;
+mod turns;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -14,6 +15,9 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use uuid::Uuid;
 use wire::gateway::uploads::UploadCreated;
+use wire::session_id::SessionId;
+
+pub(crate) use turns::{AttachedTurn, attach};
 
 use crate::tenancy::UserId;
 
@@ -110,6 +114,7 @@ pub(crate) struct Uploads {
     tasks: TaskTracker,
     wake: Notify,
     started: AtomicBool,
+    journal: tokio::sync::Mutex<()>,
 }
 
 #[derive(Debug)]
@@ -146,6 +151,7 @@ impl Uploads {
             tasks: TaskTracker::new(),
             wake: Notify::new(),
             started: AtomicBool::new(false),
+            journal: tokio::sync::Mutex::new(()),
         })
     }
 
@@ -270,6 +276,29 @@ impl Uploads {
                 name: record.name.clone(),
             })
             .ok_or(UploadError::NotFound)
+    }
+
+    pub(crate) async fn record_turn(
+        &self,
+        session: &SessionId,
+        turn: AttachedTurn,
+    ) -> Result<(), UploadError> {
+        let root = self.root.clone();
+        let session = session.clone();
+        let writing = self.journal.lock().await;
+        let appended =
+            tokio::task::spawn_blocking(move || turns::append(&root, &session, turn)).await?;
+        drop(writing);
+        appended
+    }
+
+    pub(crate) async fn attached_turns(
+        &self,
+        session: &SessionId,
+    ) -> Result<Vec<AttachedTurn>, UploadError> {
+        let root = self.root.clone();
+        let session = session.clone();
+        tokio::task::spawn_blocking(move || turns::read(&root, &session)).await?
     }
 
     async fn owned(

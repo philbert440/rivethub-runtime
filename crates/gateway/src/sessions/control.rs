@@ -114,7 +114,7 @@ impl Queued {
 const SYSTEM_PROMPT_HEADING: &str = "[System instructions]";
 const SYSTEM_PROMPT_MAX_CHARS: usize = 16_384;
 
-fn with_system_prompt(system_prompt: Option<&str>, text: String) -> String {
+pub(crate) fn with_system_prompt(system_prompt: Option<&str>, text: String) -> String {
     let prompt: String = system_prompt
         .unwrap_or_default()
         .trim()
