@@ -426,3 +426,70 @@ fn provider_error(argv: Option<Vec<String>>, ttl: Option<u64>, timeout: Option<u
         Err(error) => error,
     }
 }
+
+#[tokio::test]
+async fn the_memory_embedder_sends_its_provider_bearer_and_remints_on_401() {
+    let server = scenario_server(vec![
+        Canned {
+            status: 200,
+            body: EMBEDDING.to_owned(),
+        },
+        Canned {
+            status: 401,
+            body: "expired".to_owned(),
+        },
+        Canned {
+            status: 200,
+            body: EMBEDDING.to_owned(),
+        },
+    ])
+    .await;
+    let log = scratch("embed-mints");
+    let script = format!(
+        "printf 'x\\n' >> '{}'; n=$(grep -c x '{}'); printf 'tok-%s\\n' \"$n\"",
+        log.display(),
+        log.display()
+    );
+    let endpoint = format!("http://{}", server.addr);
+    let source = OpenaiProvider {
+        base_url: Some(endpoint.clone()),
+        api_key: Some("static-key".to_owned()),
+        token_command: Some(shell(&script)),
+        ..OpenaiProvider::default()
+    };
+    let embedder = common::demand(
+        providers::embed::Embedder::build(providers::embed::EmbedConfig {
+            endpoint,
+            api_prefix: None,
+            model: "test-model".to_owned(),
+            api_key: None,
+            expected_dims: None,
+            timeout_ms: Some(5_000),
+            query_instruction: None,
+        })
+        .and_then(|embedder| embedder.with_provider_auth(&source)),
+        "the embedder builds",
+    );
+    for _ in 0..2 {
+        let out = embedder
+            .embed(vec!["q".to_owned()])
+            .await
+            .expect("the embed succeeds");
+        assert_eq!(out.len(), 1);
+    }
+    let bearers: Vec<Option<String>> = server
+        .recorder
+        .lock()
+        .iter()
+        .map(|call| call.authorization.clone())
+        .collect();
+    assert_eq!(
+        bearers,
+        vec![
+            Some("Bearer tok-1".to_owned()),
+            Some("Bearer tok-1".to_owned()),
+            Some("Bearer tok-2".to_owned()),
+        ]
+    );
+    assert_eq!(lines(&log), 2);
+}

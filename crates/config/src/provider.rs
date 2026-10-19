@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
-use crate::enums::Effort;
+use crate::enums::{Effort, MemoryBackend};
+use crate::model::Config;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString, strum::EnumIter)]
 #[strum(serialize_all = "kebab-case")]
@@ -144,4 +145,28 @@ pub struct UnknownProvider {
     pub model: Option<String>,
     pub max_tokens: Option<u32>,
     pub api_key: Option<String>,
+}
+
+impl Config {
+    #[must_use]
+    pub fn embed_provider(&self, backend: MemoryBackend) -> Option<&OpenaiProvider> {
+        let memory = self.memory.as_ref()?;
+        let id = match backend {
+            MemoryBackend::Postgres => memory.postgres.as_ref()?.embed_provider.as_deref(),
+            MemoryBackend::Sqlite => memory.sqlite.as_ref()?.embed_provider.as_deref(),
+        }?;
+        match &self.providers.as_ref()?.get(id)?.body {
+            ProviderBody::Openai(provider) => Some(provider),
+            ProviderBody::Cli(_) | ProviderBody::Unknown(_) | ProviderBody::Removed(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub fn embed_provider_url(&self, backend: MemoryBackend) -> Option<String> {
+        self.embed_provider(backend)
+            .and_then(|provider| provider.base_url.as_deref())
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+            .map(str::to_owned)
+    }
 }

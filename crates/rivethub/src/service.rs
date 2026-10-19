@@ -109,9 +109,10 @@ fn query_embed(
         .as_ref()
         .and_then(|memory| memory.postgres.as_ref());
     let provider = embed_provider(
+        config.embed_provider(config::MemoryBackend::Postgres),
+        section.and_then(|section| section.embed_api_key.clone()),
         endpoint,
         model,
-        section.and_then(|section| section.embed_api_key.clone()),
         shutdown,
         activities,
     )?;
@@ -140,7 +141,14 @@ pub(crate) fn sqlite_query_embed(
         .as_ref()
         .and_then(|memory| memory.sqlite.as_ref())
         .and_then(|section| section.embed_api_key.clone());
-    let provider = embed_provider(endpoint, model, api_key, shutdown, activities)?;
+    let provider = embed_provider(
+        config.embed_provider(config::MemoryBackend::Sqlite),
+        api_key,
+        endpoint,
+        model,
+        shutdown,
+        activities,
+    )?;
     Ok(Some(memory_sqlite::QueryEmbed::new(
         provider,
         kernel::memory_core::DEFAULT_EMBED_QUERY_INSTRUCTION.to_owned(),
@@ -150,20 +158,26 @@ pub(crate) fn sqlite_query_embed(
 }
 
 fn embed_provider(
+    provider: Option<&config::provider::OpenaiProvider>,
+    api_key: Option<String>,
     endpoint: String,
     model: String,
-    api_key: Option<String>,
     shutdown: &CancellationToken,
     activities: &Activities,
 ) -> Result<Arc<dyn kernel::model::ModelProvider>, StartupError> {
+    let auth = provider
+        .cloned()
+        .unwrap_or_else(|| config::provider::OpenaiProvider {
+            api_key,
+            ..config::provider::OpenaiProvider::default()
+        });
     let provider = providers::OpenAiCompatible::build(
         config::ProviderType::OpenaiCompatible,
         &config::provider::OpenaiProvider {
             base_url: Some(endpoint),
             model: Some(model),
-            api_key,
             probe_models: Some(false),
-            ..config::provider::OpenaiProvider::default()
+            ..auth
         },
     )?
     .with_shutdown(shutdown.child_token())

@@ -85,10 +85,17 @@ the alternative (a harness, or `openai-compatible` with the server's base URL;
 when `token_command` is set, a bearer minted by that argv: stdout has one
 trailing newline removed and is cached until `token_ttl_ms` (default 300000)
 elapses, the command is killed when `token_command_timeout_ms` (default 5000)
-elapses, and `token_command` wins over `api_key`. Chat-client embeddings use
+elapses, and `token_command` wins over `api_key`. A minted bearer that is a JWT
+whose payload carries an integer `exp` is instead cached until 30 s before that
+`exp`, and not cached when that point has passed. Chat-client embeddings use
 that same key or token command. `embed_api_key` remains the memory embedder's
 static key, and `embed_token_command`, `embed_token_ttl_ms` and
-`embed_token_command_timeout_ms` are removed. Sampling and model-server tuning are configured on the model
+`embed_token_command_timeout_ms` are removed. `memory.postgres.embed_provider`
+and `memory.sqlite.embed_provider` name an `openai-compatible` or `vllm`
+provider whose `base_url` and `api_key` or `token_command` the memory embedder
+then uses with `embed_model`; setting it together with `embed_endpoint` or
+`embed_api_key`, or naming an unknown or non-HTTP provider, is a config error
+at that key. Sampling and model-server tuning are configured on the model
 server, not in RivetHub: the tuning keys `temperature`, `top_p`, `top_k`,
 `min_p`, `presence_penalty`, `frequency_penalty`, `seed`, `stop`,
 `repetition_penalty`, `min_tokens`, `default_tool_choice`, `mm_processor_kwargs`,

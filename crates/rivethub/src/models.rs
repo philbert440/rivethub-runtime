@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use config::provider::{ProviderBody, ProviderSlot};
-use config::{Config, Environment};
+use config::{Config, Environment, MemoryBackend};
 use harness_acp::{HeadlessLaunch, Retry, Supervisor};
 use kernel::harness::HarnessAdapter;
 use kernel::model::{ModelProvider, ProviderHealth};
@@ -88,9 +88,17 @@ impl ModelFactory {
                 .filter(|text| !text.is_empty())
                 .map(str::to_owned)
         };
+        let backend = if config.sqlite_selected() {
+            MemoryBackend::Sqlite
+        } else {
+            MemoryBackend::Postgres
+        };
+        let provider = config.embed_provider(backend);
+        let api_prefix = provider.and_then(|provider| provider.api_prefix.clone());
         let settings = if config.sqlite_selected() {
             let section = memory.sqlite.as_ref();
             let endpoint = text(section.and_then(|section| section.embed_endpoint.as_ref()))
+                .or_else(|| config.embed_provider_url(backend))
                 .or_else(|| self.embed_endpoint.clone());
             let model = text(section.and_then(|section| section.embed_model.as_ref()))
                 .or_else(|| self.embed_model.clone());
@@ -99,7 +107,7 @@ impl ModelFactory {
                     endpoint,
                     model: model.ok_or(providers::BuildError::MissingEmbedModel)?,
                     api_key: section.and_then(|section| section.embed_api_key.clone()),
-                    api_prefix: None,
+                    api_prefix,
                     expected_dims: None,
                     timeout_ms: None,
                     query_instruction: None,
@@ -108,6 +116,7 @@ impl ModelFactory {
         } else {
             let section = memory.postgres.as_ref();
             let endpoint = text(section.and_then(|section| section.embed_endpoint.as_ref()))
+                .or_else(|| config.embed_provider_url(backend))
                 .or_else(|| self.embed_endpoint.clone());
             let model = text(section.and_then(|section| section.embed_model.as_ref()))
                 .or_else(|| self.embed_model.clone());
@@ -116,7 +125,7 @@ impl ModelFactory {
                     endpoint,
                     model: model.ok_or(providers::BuildError::MissingEmbedModel)?,
                     api_key: section.and_then(|section| section.embed_api_key.clone()),
-                    api_prefix: None,
+                    api_prefix,
                     expected_dims: section.and_then(|section| section.embed_expected_dims),
                     timeout_ms: section.and_then(|section| section.embed_timeout_ms),
                     query_instruction: section
@@ -124,11 +133,14 @@ impl ModelFactory {
                 })
             })
         };
-        settings
+        let embedder = settings
             .transpose()?
             .map(providers::embed::Embedder::build)
-            .transpose()
-            .map_err(Into::into)
+            .transpose()?;
+        match (embedder, provider) {
+            (Some(embedder), Some(provider)) => Ok(Some(embedder.with_provider_auth(provider)?)),
+            (embedder, _) => Ok(embedder),
+        }
     }
 
     pub(crate) fn tasks(&self) -> ModelTasks {

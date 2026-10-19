@@ -55,7 +55,7 @@ fn invalidate_drops_the_cache_and_bumps_the_generation() {
         let mut inner = source.inner.lock();
         inner.cache = Some(Cached {
             token: "held".to_owned(),
-            minted: tokio::time::Instant::now(),
+            expires: tokio::time::Instant::now() + Duration::from_secs(60),
         });
     }
     source.invalidate();
@@ -92,6 +92,101 @@ async fn the_cached_token_expires_at_the_ttl() {
         mint_while_time_is_paused(&source).await.expect("refreshed"),
         "tok-2"
     );
+}
+
+fn jwt(exp: u64) -> String {
+    use base64::Engine;
+    let encode = |text: &str| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(text);
+    format!(
+        "{}.{}.{}",
+        encode("{\"alg\":\"HS256\",\"typ\":\"JWT\"}"),
+        encode(&format!("{{\"sub\":\"svc\",\"exp\":{exp}}}")),
+        encode("signature")
+    )
+}
+
+fn epoch_secs(at: SystemTime) -> u64 {
+    at.duration_since(SystemTime::UNIX_EPOCH)
+        .expect("the clock is after the epoch")
+        .as_secs()
+}
+
+#[test]
+fn a_jwt_lives_until_thirty_seconds_before_its_exp() {
+    let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+    assert_eq!(
+        jwt::lifetime(&jwt(1_003_600), now).expect("a JWT"),
+        Duration::from_secs(3_570)
+    );
+    assert_eq!(
+        jwt::lifetime(&jwt(1_000_020), now).expect("a JWT"),
+        Duration::ZERO
+    );
+    assert_eq!(
+        jwt::lifetime(&jwt(999_000), now).expect("a JWT"),
+        Duration::ZERO
+    );
+    let ttl = Duration::from_millis(1_000);
+    for opaque in ["opaque-secret", "a.b", "a.!!!.c", "a.e30.c", "a.b.c.d"] {
+        assert!(jwt::lifetime(opaque, now).is_err(), "{opaque}");
+        assert_eq!(cache_lifetime(opaque, ttl), ttl, "{opaque}");
+    }
+}
+
+fn counting_source(directory: &tempfile::TempDir, token: &str) -> TokenSource {
+    let log = directory.path().join("mints");
+    let script = format!(
+        "printf 'x\\n' >> '{log}'; n=$(grep -c x '{log}'); printf '%s\\n' \"{token}$n\"",
+        log = log.display(),
+    );
+    TokenSource::new(
+        &["/bin/sh".to_owned(), "-c".to_owned(), script],
+        Some(1_000),
+        None,
+    )
+    .expect("source")
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_jwt_bearer_is_cached_until_its_exp_not_the_ttl() {
+    let directory = scratch_dir();
+    let token = jwt(epoch_secs(SystemTime::now()) + 3_600);
+    let source = counting_source(&directory, &token);
+    let first = mint_while_time_is_paused(&source)
+        .await
+        .expect("first mint");
+    assert_eq!(first, format!("{token}1"));
+    tokio::time::advance(Duration::from_secs(60)).await;
+    assert_eq!(source.bearer().await.expect("still cached"), first);
+    tokio::time::advance(Duration::from_secs(3_600)).await;
+    assert_eq!(
+        mint_while_time_is_paused(&source).await.expect("refreshed"),
+        format!("{token}2")
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_jwt_inside_the_expiry_margin_is_not_cached() {
+    let directory = scratch_dir();
+    let token = jwt(epoch_secs(SystemTime::now()) + 10);
+    let source = counting_source(&directory, &token);
+    assert_eq!(
+        mint_while_time_is_paused(&source).await.expect("first"),
+        format!("{token}1")
+    );
+    assert_eq!(
+        mint_while_time_is_paused(&source).await.expect("second"),
+        format!("{token}2")
+    );
+}
+
+#[tokio::test]
+async fn a_jwt_exp_beyond_the_clock_range_is_not_cached() {
+    let directory = scratch_dir();
+    let token = jwt(u64::MAX);
+    let source = counting_source(&directory, &token);
+    assert_eq!(source.bearer().await.expect("first"), format!("{token}1"));
+    assert_eq!(source.bearer().await.expect("second"), format!("{token}2"));
 }
 
 #[tokio::test]

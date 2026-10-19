@@ -1,3 +1,4 @@
+mod jwt;
 mod mint;
 
 use config::provider::OpenaiProvider;

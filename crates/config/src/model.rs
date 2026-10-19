@@ -188,6 +188,7 @@ pub struct PostgresSection {
     pub embed_endpoint: Option<String>,
     pub embed_model: Option<String>,
     pub embed_api_key: Option<String>,
+    pub embed_provider: Option<String>,
     pub embed_expected_dims: Option<u32>,
     pub embed_query_instruction: Option<String>,
     pub embed_timeout_ms: Option<u64>,
@@ -222,6 +223,7 @@ pub struct SqliteSection {
     pub embed_endpoint: Option<String>,
     pub embed_model: Option<String>,
     pub embed_api_key: Option<String>,
+    pub embed_provider: Option<String>,
     pub tagging: Option<bool>,
     pub workers: Option<bool>,
     pub wiki_dir: Option<PathBuf>,
@@ -486,6 +488,7 @@ impl Config {
     #[must_use]
     pub fn memory_embed_endpoint(&self, env: &Environment) -> Option<String> {
         self.postgres_memory_text(|postgres| postgres.embed_endpoint.as_deref())
+            .or_else(|| self.embed_provider_url(MemoryBackend::Postgres))
             .or_else(|| env.embed_url())
     }
 
@@ -511,6 +514,7 @@ impl Config {
     #[must_use]
     pub fn sqlite_embed_endpoint(&self, env: &Environment) -> Option<String> {
         self.sqlite_memory_text(|sqlite| sqlite.embed_endpoint.as_deref())
+            .or_else(|| self.embed_provider_url(MemoryBackend::Sqlite))
             .or_else(|| env.embed_url())
     }
 
