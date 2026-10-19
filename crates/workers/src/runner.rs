@@ -215,10 +215,30 @@ where
             () = cancel.cancelled() => return Ok(()),
             result = self.queue.subscribe() => result.map_err(WorkerError::queue)?,
         };
-        let outcome = tokio::select! {
-            result = self.claim_loop(&roles, &semaphore, &mut tasks, notifications.as_mut(), &cancel) => result,
-            result = crate::schedule::run(self.queue.as_ref(), &roles, self.wiki_enabled, &cancel), if self.schedules => result,
+        let claims = async {
+            let claimed = self
+                .claim_loop(
+                    &roles,
+                    &semaphore,
+                    &mut tasks,
+                    notifications.as_mut(),
+                    &cancel,
+                )
+                .await;
+            cancel.cancel();
+            claimed
         };
+        let schedule = async {
+            if !self.schedules {
+                return Ok(());
+            }
+            let scheduled =
+                crate::schedule::run(self.queue.as_ref(), &roles, self.wiki_enabled, &cancel).await;
+            cancel.cancel();
+            scheduled
+        };
+        let (claimed, scheduled) = tokio::join!(claims, schedule);
+        let outcome = claimed.and(scheduled);
         drop(notifications);
         drop(listening);
         cancel.cancel();
@@ -306,14 +326,11 @@ where
         let count = roles.len();
         let start = self.cursor.fetch_add(1, Ordering::Relaxed) % count;
         for role in roles.iter().cycle().skip(start).take(count) {
+            if cancel.is_cancelled() {
+                return Ok(None);
+            }
             let selector = kernel::queue::ClaimSelector::matching(self.queue.task_names(*role));
-            let claim = self.queue.claim(&selector);
-            tokio::pin!(claim);
-            let claimed = tokio::select! {
-                biased;
-                result = &mut claim => result,
-                () = cancel.cancelled() => return Ok(None),
-            };
+            let claimed = self.queue.claim(&selector).await;
             if let Some(job) = claimed.map_err(WorkerError::queue)? {
                 return Ok(Some(job));
             }
