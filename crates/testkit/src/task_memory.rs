@@ -17,6 +17,7 @@ use kernel::queue::StoredJob;
 use kernel::queue::WorkerRole;
 use parking_lot::Mutex;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 use tokio::sync::watch;
 use uuid::Uuid;
 use wire::task::TaskPermissionDecision;
@@ -59,6 +60,7 @@ pub struct TaskMemory {
     fail_enqueue: Arc<AtomicBool>,
     fail_list: Arc<AtomicBool>,
     generation: Arc<watch::Sender<u64>>,
+    finished: broadcast::Sender<Uuid>,
     notifications: watch::Sender<()>,
 }
 
@@ -73,6 +75,7 @@ impl TaskMemory {
             fail_enqueue: Arc::new(AtomicBool::new(false)),
             fail_list: Arc::new(AtomicBool::new(false)),
             generation: Arc::new(watch::channel(0).0),
+            finished: broadcast::channel(256).0,
             notifications: watch::channel(()).0,
         }
     }
@@ -89,6 +92,15 @@ impl TaskMemory {
         self.generation.send_modify(|value| {
             *value = value.wrapping_add(1);
         });
+    }
+
+    fn ended(&self, ids: Vec<Uuid>) {
+        self.touch();
+        for id in ids {
+            if self.finished.send(id).is_err() {
+                tracing::trace!("finished task has no listener");
+            }
+        }
     }
 }
 
@@ -199,6 +211,7 @@ impl TaskStore for TaskMemory {
             drop(inner);
             return Ok(false);
         }
+        let ended = !terminal(task.status) && terminal(finish.status);
         task.status = finish.status;
         task.result.clone_from(&finish.result);
         task.error.clone_from(&finish.error);
@@ -207,7 +220,7 @@ impl TaskStore for TaskMemory {
         task.duration_ms = finish.duration_ms;
         task.pending_message = None;
         drop(inner);
-        self.touch();
+        self.ended(ended.then_some(id).into_iter().collect());
         Ok(true)
     }
 
@@ -217,8 +230,10 @@ impl TaskStore for TaskMemory {
             .ok_or(TaskError::Clock)?;
         let mut inner = self.inner.lock();
         let ids: Vec<Uuid> = inner.tasks.keys().copied().collect();
+        let mut ended = Vec::new();
         for id in ids {
             let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
+            let open = !terminal(task.status);
             if task.status == TaskStatus::Running && task.claimed_by.as_deref() == Some(worker) {
                 let stamp = task.last_heartbeat_at.or(task.started_at);
                 if let Some(stamp) = stamp
@@ -251,9 +266,12 @@ impl TaskStore for TaskMemory {
                     task.completed_at = Some(now);
                 }
             }
+            if open && terminal(task.status) {
+                ended.push(id);
+            }
         }
         drop(inner);
-        self.touch();
+        self.ended(ended);
         Ok(())
     }
 
@@ -263,16 +281,18 @@ impl TaskStore for TaskMemory {
         now: DateTime<Utc>,
     ) -> Result<(), TaskError> {
         let mut inner = self.inner.lock();
+        let mut ended = Vec::new();
         for task in inner.tasks.values_mut() {
             if task.session_key.as_deref() == Some(session_key) && task.status == TaskStatus::Queued
             {
                 task.status = TaskStatus::Killed;
                 task.completed_at = Some(now);
                 task.error = Some("replaced by a newer heartbeat".to_string());
+                ended.push(task.id);
             }
         }
         drop(inner);
-        self.touch();
+        self.ended(ended);
         Ok(())
     }
 
@@ -294,7 +314,7 @@ impl TaskStore for TaskMemory {
             task.error = Some("Killed by parent".to_string());
         }
         drop(inner);
-        self.touch();
+        self.ended(vec![id]);
         Ok(prior)
     }
 

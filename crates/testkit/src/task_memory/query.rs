@@ -6,7 +6,9 @@ use kernel::tasks::TaskListFilter;
 use kernel::tasks::TaskQuery;
 use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskWatch;
+use tokio::sync::broadcast;
 use tokio::sync::watch;
+use uuid::Uuid;
 
 use super::TaskMemory;
 
@@ -41,6 +43,10 @@ impl TaskQuery for TaskMemory {
 impl TaskWatch for TaskMemory {
     fn subscribe(&self) -> watch::Receiver<u64> {
         self.generation.subscribe()
+    }
+
+    fn finished(&self) -> broadcast::Receiver<Uuid> {
+        self.finished.subscribe()
     }
 }
 

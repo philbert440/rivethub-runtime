@@ -51,6 +51,33 @@ async fn task_watch_resumes_after_its_backend_is_terminated(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn task_watch_names_each_finished_task(pool: PgPool) {
+    let tasks = PostgresTasks::from_pool(pool.clone());
+    let cancel = CancellationToken::new();
+    let handle = tasks.spawn_watch(cancel.clone()).await.expect("listen");
+    let mut finished = TaskWatch::finished(&tasks);
+    let id = uuid::Uuid::from_u128(42);
+    for payload in ["1".to_owned(), id.to_string()] {
+        sqlx::query("SELECT pg_notify('ros_task_done', $1)")
+            .bind(payload)
+            .execute(&pool)
+            .await
+            .expect("notify");
+    }
+    let named = tokio::time::timeout(Duration::from_secs(20), finished.recv())
+        .await
+        .expect("finished task named")
+        .expect("finished open");
+    assert_eq!(named, id);
+    cancel.cancel();
+    let joined = tokio::time::timeout(Duration::from_secs(20), handle)
+        .await
+        .expect("watch joins")
+        .expect("watch task");
+    assert!(joined.is_ok());
+}
+
+#[sqlx::test(migrations = false)]
 async fn job_notifications_resume_after_the_backend_is_terminated(pool: PgPool) {
     sqlx::raw_sql(include_str!(
         "../../rivethub/tests/fixtures/graphile_worker.txt"

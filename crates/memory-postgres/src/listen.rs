@@ -71,6 +71,11 @@ impl Listener {
     }
 
     pub(crate) async fn recv(&mut self) -> Result<(), Stopped> {
+        self.next().await?;
+        Ok(())
+    }
+
+    pub(crate) async fn next(&mut self) -> Result<Option<String>, Stopped> {
         loop {
             if self.cancel.is_cancelled() {
                 return Err(Stopped);
@@ -82,7 +87,7 @@ impl Listener {
                         self.delay = FLOOR;
                         if self.down {
                             self.mark_up();
-                            return Ok(());
+                            return Ok(None);
                         }
                     }
                     Err(error) => {
@@ -107,11 +112,11 @@ impl Listener {
                 None => continue,
             };
             match incoming {
-                Ok(Some(_notification)) => return Ok(()),
+                Ok(Some(notification)) => return Ok(Some(notification.payload().to_owned())),
                 Ok(None) => {
                     self.mark_closed();
                     self.mark_up();
-                    return Ok(());
+                    return Ok(None);
                 }
                 Err(error) => {
                     self.inner = None;

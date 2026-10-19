@@ -415,6 +415,10 @@ impl Gateway {
         self
     }
 
+    pub(crate) fn tasks(&self) -> Option<&Arc<routes::tasks::TasksApi>> {
+        self.tasks.as_ref()
+    }
+
     pub(crate) fn uploads(&self) -> Option<&uploads::UploadService> {
         self.uploads.as_ref()
     }

@@ -4,8 +4,10 @@ use kernel::tasks::TaskListFilter;
 use kernel::tasks::TaskQuery;
 use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskWatch;
+use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use crate::listen::Listener;
 use crate::listen::Stopped;
@@ -26,18 +28,33 @@ impl PostgresTasks {
         .await
         .map_err(watch_error)?;
         let events = self.events.clone();
+        let finished = self.finished.clone();
         Ok(tokio::spawn(async move {
             loop {
-                match listener.recv().await {
-                    Ok(()) => {
+                match listener.next().await {
+                    Ok(payload) => {
                         events.send_modify(|generation| {
                             *generation = generation.saturating_add(1);
                         });
+                        if let Some(payload) = payload {
+                            announce(&finished, &payload);
+                        }
                     }
                     Err(Stopped) => return Ok(()),
                 }
             }
         }))
+    }
+}
+
+fn announce(finished: &broadcast::Sender<Uuid>, payload: &str) {
+    match payload.parse::<Uuid>() {
+        Ok(id) => {
+            if finished.send(id).is_err() {
+                tracing::trace!("finished task has no listener");
+            }
+        }
+        Err(error) => tracing::debug!(%error, "task notification names no task"),
     }
 }
 
@@ -54,6 +71,10 @@ fn watch_error(source: sqlx::Error) -> TaskError {
 impl TaskWatch for PostgresTasks {
     fn subscribe(&self) -> tokio::sync::watch::Receiver<u64> {
         self.events.subscribe()
+    }
+
+    fn finished(&self) -> broadcast::Receiver<Uuid> {
+        self.finished.subscribe()
     }
 }
 

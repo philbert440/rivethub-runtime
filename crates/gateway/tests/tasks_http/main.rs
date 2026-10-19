@@ -3,6 +3,7 @@
 mod catalog;
 mod create;
 mod lifecycle;
+mod notifications;
 mod outcomes;
 mod skips;
 
@@ -86,8 +87,12 @@ impl Setup {
     }
 
     fn router(&self) -> axum::Router {
+        router(self.api())
+    }
+
+    fn api(&self) -> Arc<TasksApi> {
         let memory = self.memory.clone();
-        router(Arc::new(TasksApi {
+        Arc::new(TasksApi {
             store: Arc::new(memory.clone()),
             jobs: Arc::new(memory.clone()),
             query: Arc::new(memory.clone()),
@@ -104,7 +109,7 @@ impl Setup {
             mesh: self.mesh,
             allowed_harnesses: self.allowed.clone(),
             command_timeout: self.timeout,
-        }))
+        })
     }
 }
 
