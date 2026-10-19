@@ -23,6 +23,9 @@ async fn waited_chat_passes_task_exclusions_into_the_turn() {
             thinking: None,
             system_prompt: None,
             attachments: None,
+            harness: None,
+            model: None,
+            working_dir: None,
         };
         let response = request(
             harness.app(),

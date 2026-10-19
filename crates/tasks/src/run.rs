@@ -10,6 +10,8 @@ use uuid::Uuid;
 use wire::gateway::sessions::SessionMessage;
 use wire::gateway::sessions::SessionPostReply;
 use wire::gateway::sessions::SessionPostRequest;
+use wire::stream::ThinkingLevel;
+use wire::task::Effort;
 use wire::task::TaskBudget;
 use wire::task::TaskExecutorKind;
 use wire::task::TaskResult;
@@ -126,7 +128,7 @@ where
     ) -> Result<SessionPostReply, Error> {
         let mut target = self.directory.resolve(&target_input(task))?;
         apply_spec(&mut target, &task.spec)?;
-        drop(self.working_dir(&target).await?);
+        let working_dir = self.working_dir(&target).await?;
         let client = match (target.mesh.as_ref(), target.remote) {
             (Some(identity), true) => GatewayClient::with_mesh(target.base.clone(), identity)?,
             (Some(identity), false) => GatewayClient::with_gateway(target.base.clone(), identity)?,
@@ -142,7 +144,11 @@ where
             thinking: None,
             system_prompt: target.system_prompt.clone(),
             attachments: None,
+            harness: None,
+            model: None,
+            working_dir: None,
         };
+        let body = harnessed(body, &target, working_dir);
         client
             .post_message(
                 &task.spec.session,
@@ -440,6 +446,36 @@ fn target_input(task: &TaskRecord) -> TargetInput {
         executor_target: task.executor_target.clone(),
         node_affinity: task.node_affinity.clone(),
         agent_id: task.agent_id.clone(),
+    }
+}
+
+fn harnessed(
+    mut body: SessionPostRequest,
+    target: &ResolvedTarget,
+    working_dir: Option<String>,
+) -> SessionPostRequest {
+    let Some(harness) = target.harness else {
+        return body;
+    };
+    body.harness = Some(harness);
+    body.model = target
+        .model
+        .clone()
+        .filter(|model| !model.trim().is_empty());
+    body.thinking = target.effort.map(thinking);
+    body.working_dir = if target.remote {
+        target.working_dir.clone()
+    } else {
+        working_dir
+    };
+    body
+}
+
+const fn thinking(effort: Effort) -> ThinkingLevel {
+    match effort {
+        Effort::Low => ThinkingLevel::Low,
+        Effort::Medium => ThinkingLevel::Medium,
+        Effort::High => ThinkingLevel::High,
     }
 }
 

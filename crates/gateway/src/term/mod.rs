@@ -1,5 +1,6 @@
 pub mod actor;
 mod chat;
+mod delegated;
 mod inject;
 pub(crate) mod live;
 pub mod socket;
@@ -23,6 +24,8 @@ use crate::error::ApiError;
 use crate::sessions::SessionRegistry;
 use crate::tenancy::UserId;
 use actor::{Command, Handle};
+pub(crate) use chat::ChatStart;
+pub(crate) use delegated::DelegatedTurn;
 
 #[derive(Debug, Clone)]
 pub struct LaunchCommand {

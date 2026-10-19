@@ -22,6 +22,7 @@ use tasks::Error;
 use tasks::LocalAgent;
 use tasks::TaskOrigin;
 use wire::harness::HarnessId;
+use wire::stream::ThinkingLevel;
 use wire::task::Effort;
 use wire::task::TaskExecutorKind;
 use wire::task::TaskStatus;
@@ -79,7 +80,15 @@ async fn a_relative_working_directory_inside_the_root_is_posted() {
         .await
         .expect("submit");
     engine.run_one().await.expect("run");
-    next_body(&mut rx);
+    let posted_chat = posted(&next_body(&mut rx).body);
+    assert_eq!(
+        (
+            posted_chat.harness,
+            posted_chat.model,
+            posted_chat.working_dir
+        ),
+        (None, None, None)
+    );
     assert_eq!(
         engine.load(id).await.expect("load").status,
         TaskStatus::Completed
@@ -185,6 +194,11 @@ async fn a_harness_session_posts_the_recorded_message_channel() {
     assert_eq!(posted.user_id, None);
     assert_eq!(posted.agent.as_deref(), Some("worker"));
     assert_eq!(posted.system_prompt.as_deref(), Some("base"));
+    assert_eq!(posted.harness, Some(HarnessId::ClaudeCode));
+    assert_eq!(posted.model.as_deref(), Some("demo"));
+    assert_eq!(posted.thinking, Some(ThinkingLevel::Low));
+    let canonical = std::fs::canonicalize(root.path()).expect("canonical root");
+    assert_eq!(posted.working_dir.as_deref(), canonical.to_str());
     let loaded = engine.load(id).await.expect("load");
     assert_eq!(loaded.status, TaskStatus::Completed);
     assert_eq!(loaded.harness_session_ids, Vec::<String>::new());

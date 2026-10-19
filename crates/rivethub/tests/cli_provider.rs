@@ -113,6 +113,9 @@ fn say_hi() -> wire::gateway::sessions::SessionPostRequest {
         agent: None,
         thinking: None,
         attachments: None,
+        harness: None,
+        model: None,
+        working_dir: None,
     }
 }
 #[tokio::test]
