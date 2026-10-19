@@ -9,6 +9,7 @@ use super::field::Field;
 use super::field::object_line;
 use super::field::text_of;
 use super::files::entries;
+use super::files::file_times;
 use super::files::newest_per_key;
 use super::files::open_store;
 use super::files::whole_file;
@@ -18,6 +19,7 @@ use super::time::parse_date;
 use crate::store_path::Root;
 
 const MAX_DEPTH: usize = 6;
+const TASK_PREFIX: usize = 8;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,7 +45,18 @@ pub(crate) fn describe(roots: &[PathBuf], id: &str) -> Option<StoreSession> {
     rows(roots).into_iter().find(|row| row.id == id)
 }
 
+pub(crate) fn transcripts(roots: &[PathBuf]) -> Vec<(String, PathBuf)> {
+    tasks(roots)
+        .into_iter()
+        .filter_map(|(row, meta)| transcript_of(&row, &meta).map(|transcript| (row.id, transcript)))
+        .collect()
+}
+
 fn rows(roots: &[PathBuf]) -> Vec<StoreSession> {
+    tasks(roots).into_iter().map(|(row, _)| row).collect()
+}
+
+fn tasks(roots: &[PathBuf]) -> Vec<(StoreSession, PathBuf)> {
     let mut seen: Vec<&PathBuf> = Vec::new();
     let mut files = Vec::new();
     for root in roots {
@@ -62,12 +75,72 @@ fn rows(roots: &[PathBuf]) -> Vec<StoreSession> {
             }
         }
     }
-    let found = files.iter().filter_map(|path| cowork_row(path)).collect();
+    let found = files
+        .into_iter()
+        .filter_map(|path| cowork_row(&path).map(|row| (row, path)))
+        .collect();
     newest_per_key(
         found,
-        |row: &StoreSession| row.id.clone(),
-        |row| row.updated_at,
+        |(row, _): &(StoreSession, PathBuf)| row.id.clone(),
+        |(row, _)| row.updated_at,
     )
+}
+
+fn transcript_of(row: &StoreSession, meta: &Path) -> Option<PathBuf> {
+    let name = format!("{}.jsonl", row.id);
+    task_directories(meta, row.cwd.as_deref())
+        .into_iter()
+        .find_map(|dir| newest_named(&dir.join(".claude").join("projects"), &name))
+}
+
+fn task_directories(meta: &Path, cwd: Option<&str>) -> Vec<PathBuf> {
+    let (Some(dir), Some(stem)) = (
+        meta.parent(),
+        meta.file_stem().and_then(|stem| stem.to_str()),
+    ) else {
+        return Vec::new();
+    };
+    let mut found = vec![dir.join(stem)];
+    if let Some(parent) = cwd.map(Path::new).and_then(Path::parent)
+        && parent.parent() == Some(dir)
+    {
+        found.push(parent.to_path_buf());
+    }
+    if let Some(prefix) = stem
+        .strip_prefix("local_")
+        .and_then(|task| task.get(..TASK_PREFIX))
+    {
+        found.push(dir.join(prefix));
+    }
+    found.dedup();
+    found
+}
+
+fn newest_named(projects: &Path, name: &str) -> Option<PathBuf> {
+    let store = match open_store(projects) {
+        Ok(store) => store?,
+        Err(error) => {
+            tracing::debug!(%error, dir = %projects.display(), "cowork projects directory is refused and is skipped");
+            return None;
+        }
+    };
+    let mut found = Vec::new();
+    named(&store, store.canonical(), name, 0, &mut found);
+    found
+        .into_iter()
+        .filter_map(|path| file_times(&path).map(|times| (times.mtime, path)))
+        .max_by_key(|(mtime, _)| *mtime)
+        .map(|(_, path)| path)
+}
+
+fn named(store: &Root, dir: &Path, name: &str, depth: usize, found: &mut Vec<PathBuf>) {
+    for entry in entries(store, dir) {
+        if entry.is_dir() && depth < MAX_DEPTH {
+            named(store, &entry.path, name, depth + 1, found);
+        } else if entry.is_file() && entry.name == name {
+            found.push(entry.path);
+        }
+    }
 }
 
 fn walk(store: &Root, dir: &Path, depth: usize, files: &mut Vec<PathBuf>) {
