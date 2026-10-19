@@ -1,9 +1,13 @@
 mod corpus;
+mod mcp;
 mod report;
 mod score;
 mod set;
+mod shown;
 mod store;
 
+use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::io::Write as _;
 use std::path::Path;
 use std::path::PathBuf;
@@ -22,6 +26,7 @@ use score::Scored;
 use set::Baseline;
 use set::EvalQuery;
 use set::QuerySet;
+use shown::Ranking;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -37,7 +42,7 @@ struct Args {
         long,
         value_name = "FILE",
         conflicts_with = "corpus",
-        required_unless_present = "corpus"
+        required_unless_present_any = ["corpus", "server"]
     )]
     sqlite: Option<PathBuf>,
     #[arg(long, value_name = "FILE")]
@@ -46,6 +51,8 @@ struct Args {
     check: bool,
     #[arg(long, requires = "baseline")]
     save_baseline: bool,
+    #[arg(last = true, value_name = "SERVER")]
+    server: Vec<OsString>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -91,6 +98,26 @@ enum Failure {
     Store(#[from] memory_sqlite::SqliteError),
     #[error("the query set is too large to score: {0}")]
     Count(#[from] std::num::TryFromIntError),
+    #[error("pass the MCP server command after --")]
+    NoServer,
+    #[error("cannot start the MCP server: {0}")]
+    Spawn(std::io::Error),
+    #[error("MCP handshake: {0}")]
+    Initialize(Box<rmcp::service::ClientInitializeError>),
+    #[error("MCP: {0}")]
+    Service(#[from] rmcp::ServiceError),
+    #[error("MCP server stopped unexpectedly: {0}")]
+    Quit(String),
+    #[error("MCP server stopped: {0}")]
+    Join(#[from] tokio::task::JoinError),
+    #[error("the MCP server does not serve memory_search; it offers: {offered}")]
+    NoTool { offered: String },
+    #[error("query {id}: memory_search answered with an error: {text}")]
+    Tool { id: String, text: String },
+    #[error("memory_search arguments: {0}")]
+    Arguments(serde_json::Error),
+    #[error("result pattern: {0}")]
+    Pattern(#[from] regex::Error),
 }
 
 enum Verdict {
@@ -115,11 +142,15 @@ fn main() -> ExitCode {
 async fn run(args: &Args) -> Result<Verdict, Failure> {
     let set = QuerySet::load(&args.queries)?;
     let opened = match (&args.sqlite, &args.corpus) {
-        (Some(pinned), _) => store::pinned(pinned)?,
-        (None, Some(corpus)) => store::seeded(corpus).await?,
-        (None, None) => return Err(Failure::NoDatabase),
+        (Some(pinned), _) => Some(store::pinned(pinned)?),
+        (None, Some(corpus)) => Some(store::seeded(corpus).await?),
+        (None, None) => None,
     };
-    let scored = evaluate(&opened.store, &set).await?;
+    let scored = match (args.server.is_empty(), &opened) {
+        (false, _) => mcp::evaluate(&args.server, opened.as_ref(), &set).await?,
+        (true, Some(opened)) => evaluate(&opened.store, &set).await?,
+        (true, None) => return Err(Failure::NoDatabase),
+    };
     let metrics = Metrics::of(&scored, set.limit.get())?;
     let mut out = report::queries(&scored);
     out.extend(report::summary(&metrics));
@@ -162,7 +193,12 @@ async fn evaluate(store: &SqliteStore, set: &QuerySet) -> Result<Vec<Scored>, Fa
                 id: query.id.clone(),
                 source,
             })?;
-        scored.push(Scored::new(query, &outcome, started.elapsed())?);
+        scored.push(Scored::new(
+            query,
+            &Ranking::of(&outcome),
+            &BTreeMap::new(),
+            started.elapsed(),
+        )?);
     }
     Ok(scored)
 }
