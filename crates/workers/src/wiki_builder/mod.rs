@@ -159,10 +159,9 @@ async fn extract(env: &WikiBuilderEnv<'_>, user: String) -> Result<Vec<WikiPatch
 }
 
 fn wiki_chat_error(error: ModelProviderError) -> WorkerError {
-    if crate::outage::provider_unreachable(&error) {
-        WorkerError::ProviderUnreachable
-    } else {
-        WorkerError::WikiModel(error)
+    match crate::outage::provider_outage(&error) {
+        Some(outage) => outage,
+        None => WorkerError::WikiModel(error),
     }
 }
 

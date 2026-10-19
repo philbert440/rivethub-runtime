@@ -25,6 +25,7 @@ use common::settings;
 use common::target_payload;
 use common::width;
 use kernel::model::Embedding;
+use kernel::model::ModelCallFailure;
 use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
 use kernel::model::ModelRequest;
@@ -40,6 +41,7 @@ use tokio_util::sync::CancellationToken;
 use wire::JsonObject;
 use wire::stream::LlmResponse;
 use workers::EmbedTable;
+use workers::OutageCause;
 use workers::ProcessRole;
 use workers::Runner;
 use workers::RunnerConfig;
@@ -73,6 +75,61 @@ async fn an_unreachable_provider_stops_claiming_until_it_recovers() {
     assert_eq!(rig.queue.claims(), ids.len() + more.len());
     assert_eq!(mentions(&lines, RECOVERY), 2);
     drop(guard);
+    finish(cancel, run).await;
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn auth_throttling_and_server_errors_hold_jobs_without_spending_attempts() {
+    let cases = [
+        (Fault::Status(401, None), OutageCause::Credentials),
+        (Fault::Status(403, None), OutageCause::Credentials),
+        (Fault::Credentials, OutageCause::Credentials),
+        (Fault::Status(429, None), OutageCause::Throttled),
+        (Fault::Status(500, None), OutageCause::ServerError),
+        (Fault::Status(503, None), OutageCause::ServerError),
+    ];
+    for (fault, cause) in cases {
+        let flaky = Arc::new(Flaky::failing(fault));
+        let rig = rig(1, Arc::clone(&flaky) as Arc<dyn ModelProvider>);
+        let (guard, lines) = warnings();
+        let ids = seed(&rig, &["a", "b", "c"]).await;
+        let (cancel, run) = spawn(&rig);
+        assert_held(&rig, &ids, 1).await;
+        assert!(flaky.calls() >= 2, "{fault:?}");
+        assert_eq!(
+            mentions(&lines, &format!("is {cause}; the worker {OUTAGE}")),
+            1
+        );
+        flaky.reach();
+        finish_ids(&rig, &ids).await;
+        assert_eq!(rig.queue.claims(), ids.len(), "{fault:?}");
+        drop(guard);
+        finish(cancel, run).await;
+    }
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn a_retry_after_hint_paces_the_held_job() {
+    let hint = Duration::from_secs(300);
+    let flaky = Arc::new(Flaky::failing(Fault::Status(429, Some(hint))));
+    let rig = rig(1, Arc::clone(&flaky) as Arc<dyn ModelProvider>);
+    let ids = seed(&rig, &["r"]).await;
+    let (cancel, run) = spawn(&rig);
+    rig.queue.wait_claims(1).await;
+    for _ in 0..8 {
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(flaky.calls(), 1);
+    flaky.reach();
+    for _ in 0..40 {
+        tokio::time::advance(Duration::from_secs(10)).await;
+        tokio::task::yield_now().await;
+    }
+    finish_ids(&rig, &ids).await;
+    assert_eq!(flaky.calls(), 2);
+    let gap = flaky.gap().expect("two calls");
+    assert!(gap >= hint, "{gap:?}");
+    assert!(gap < hint + Duration::from_secs(30), "{gap:?}");
     finish(cancel, run).await;
 }
 
@@ -137,14 +194,20 @@ async fn connection_refused_is_unreachable_and_http_status_is_not() {
     let error = embed_target(&store, &KindRefused, settings(), &payload, &cancel)
         .await
         .expect_err("refused");
-    assert!(matches!(error, WorkerError::ProviderUnreachable));
+    assert!(matches!(
+        error,
+        WorkerError::ProviderOutage {
+            cause: OutageCause::Unreachable,
+            retry_after: None
+        }
+    ));
     let provider = FakeProvider::http_errors(503);
     let error = embed_target(&store, &provider, settings(), &payload, &cancel)
         .await
         .expect_err("status");
     assert!(matches!(error, WorkerError::Embed(_)));
     assert!(error.to_string().contains("503"));
-    assert!(!matches!(error, WorkerError::ProviderUnreachable));
+    assert!(!matches!(error, WorkerError::ProviderOutage { .. }));
 }
 
 async fn assert_held(rig: &Rig, ids: &[JobId], claims: usize) {
@@ -276,17 +339,59 @@ async fn finish(cancel: CancellationToken, run: JoinHandle<Result<(), WorkerErro
         .expect("runner");
 }
 
+#[derive(Debug, Clone, Copy)]
+enum Fault {
+    Refused,
+    Status(u16, Option<Duration>),
+    Credentials,
+}
+
+impl Fault {
+    fn error(self) -> ModelProviderError {
+        let source = Box::new(std::io::Error::other("synthetic"));
+        let failure = match self {
+            Self::Refused => return Flaky::refused(),
+            Self::Status(status, retry_after) => ModelCallFailure::Http {
+                status,
+                retry_after,
+                source,
+            },
+            Self::Credentials => ModelCallFailure::Credentials { source },
+        };
+        ModelProviderError::Request {
+            message: failure.to_string(),
+            source: Box::new(failure),
+        }
+    }
+}
+
 struct Flaky {
+    fault: Fault,
     reachable: AtomicBool,
     calls: AtomicUsize,
+    instants: Mutex<Vec<tokio::time::Instant>>,
 }
 
 impl Flaky {
     fn new() -> Self {
+        Self::failing(Fault::Refused)
+    }
+
+    fn failing(fault: Fault) -> Self {
         Self {
+            fault,
             reachable: AtomicBool::new(false),
             calls: AtomicUsize::new(0),
+            instants: Mutex::new(Vec::new()),
         }
+    }
+
+    fn gap(&self) -> Option<Duration> {
+        let (first, second) = {
+            let instants = self.instants.lock();
+            (*instants.first()?, *instants.get(1)?)
+        };
+        Some(second.duration_since(first))
     }
 
     fn reach(&self) {
@@ -324,8 +429,9 @@ impl ModelProvider for Flaky {
 
     async fn embed(&self, texts: Vec<String>) -> Result<Vec<Embedding>, ModelProviderError> {
         let _calls = self.calls.fetch_add(1, Ordering::Relaxed);
+        self.instants.lock().push(tokio::time::Instant::now());
         if !self.reachable.load(Ordering::Relaxed) {
-            return Err(Self::refused());
+            return Err(self.fault.error());
         }
         let vector = vec![1.0_f32; width()];
         Ok(texts

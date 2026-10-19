@@ -169,12 +169,12 @@ impl From<EmbedError> for ModelProviderError {
                 let message = format!("http {}", status.code());
                 Self::Request {
                     message,
-                    source: Box::new(status),
+                    source: Box::new(status.into_failure()),
                 }
             }
             EmbedError::Transport { source } => crate::request_error(source),
-            other @ (EmbedError::Token(_)
-            | EmbedError::Malformed { .. }
+            EmbedError::Token(error) => error.into(),
+            other @ (EmbedError::Malformed { .. }
             | EmbedError::IndexOutOfRange { .. }
             | EmbedError::DuplicateIndex { .. }
             | EmbedError::Missing { .. }
@@ -233,6 +233,7 @@ mod tests {
     fn a_status_on_the_embed_port_is_http_status() {
         let error = EmbedError::Status(StatusError::Body {
             status: StatusCode::SERVICE_UNAVAILABLE,
+            retry_after: None,
             body: "model not loaded".to_owned(),
         });
         let ModelProviderError::Request { message, source } = ModelProviderError::from(error)

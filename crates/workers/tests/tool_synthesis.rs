@@ -119,7 +119,11 @@ impl ModelProvider for Provider {
         if call < self.failures {
             let source = Box::new(std::io::Error::other("fixture failure"));
             let failure = match self.status {
-                Some(status) => ModelCallFailure::Http { status, source },
+                Some(status) => ModelCallFailure::Http {
+                    status,
+                    retry_after: None,
+                    source,
+                },
                 None => ModelCallFailure::Transport { source },
             };
             return Err(ModelProviderError::Request {

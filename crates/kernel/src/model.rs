@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::BoxError;
 use async_trait::async_trait;
@@ -112,6 +113,7 @@ pub enum ModelCallFailure {
     #[error("model server returned {status}: {source}")]
     Http {
         status: u16,
+        retry_after: Option<Duration>,
         #[source]
         source: BoxError,
     },
@@ -120,21 +122,32 @@ pub enum ModelCallFailure {
         #[source]
         source: BoxError,
     },
+    #[error("model credentials are unavailable: {source}")]
+    Credentials {
+        #[source]
+        source: BoxError,
+    },
 }
 
 impl ModelProviderError {
     #[must_use]
-    pub fn retryable_transport(&self) -> bool {
+    pub fn failure(&self) -> Option<&ModelCallFailure> {
         let mut source = std::error::Error::source(self);
         while let Some(error) = source {
             if let Some(failure) = error.downcast_ref::<ModelCallFailure>() {
-                return match failure {
-                    ModelCallFailure::Http { status, .. } => *status >= 500,
-                    ModelCallFailure::Transport { .. } => true,
-                };
+                return Some(failure);
             }
             source = error.source();
         }
-        false
+        None
+    }
+
+    #[must_use]
+    pub fn retryable_transport(&self) -> bool {
+        match self.failure() {
+            Some(ModelCallFailure::Http { status, .. }) => *status >= 500,
+            Some(ModelCallFailure::Transport { .. }) => true,
+            Some(ModelCallFailure::Credentials { .. }) | None => false,
+        }
     }
 }

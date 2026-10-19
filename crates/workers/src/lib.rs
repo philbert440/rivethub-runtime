@@ -41,6 +41,7 @@ pub use embed::mean_pool;
 pub use embed::read_target;
 pub use embed::split_embed_text;
 pub use error::WorkerError;
+pub use outage::OutageCause;
 pub use role::ProcessRole;
 pub use role::accepts;
 pub use role::jobs_for;

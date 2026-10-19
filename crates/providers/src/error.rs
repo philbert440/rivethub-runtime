@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use kernel::model::ModelProviderError;
 use reqwest::StatusCode;
 use thiserror::Error;
@@ -89,10 +91,15 @@ pub enum TokenError {
 #[derive(Debug, Error)]
 pub enum StatusError {
     #[error("model server returned {status}: {body}")]
-    Body { status: StatusCode, body: String },
+    Body {
+        status: StatusCode,
+        retry_after: Option<Duration>,
+        body: String,
+    },
     #[error("model server returned {status}, and the body was unreadable")]
     Unreadable {
         status: StatusCode,
+        retry_after: Option<Duration>,
         #[source]
         source: reqwest::Error,
     },
@@ -102,6 +109,20 @@ impl StatusError {
     pub(crate) fn code(&self) -> u16 {
         match self {
             Self::Body { status, .. } | Self::Unreadable { status, .. } => status.as_u16(),
+        }
+    }
+
+    pub(crate) fn retry_after(&self) -> Option<Duration> {
+        match self {
+            Self::Body { retry_after, .. } | Self::Unreadable { retry_after, .. } => *retry_after,
+        }
+    }
+
+    pub(crate) fn into_failure(self) -> kernel::model::ModelCallFailure {
+        kernel::model::ModelCallFailure::Http {
+            status: self.code(),
+            retry_after: self.retry_after(),
+            source: Box::new(self),
         }
     }
 }
@@ -133,8 +154,16 @@ impl From<StatusError> for ModelProviderError {
     fn from(error: StatusError) -> Self {
         Self::Request {
             message: error.to_string(),
-            source: Box::new(kernel::model::ModelCallFailure::Http {
-                status: error.code(),
+            source: Box::new(error.into_failure()),
+        }
+    }
+}
+
+impl From<TokenError> for ModelProviderError {
+    fn from(error: TokenError) -> Self {
+        Self::Request {
+            message: error.to_string(),
+            source: Box::new(kernel::model::ModelCallFailure::Credentials {
                 source: Box::new(error),
             }),
         }

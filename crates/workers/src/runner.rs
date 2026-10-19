@@ -499,8 +499,8 @@ where
         };
         match outcome {
             Ok(()) => return finish_ok(queue, job.id, attempt).await,
-            Err(WorkerError::ProviderUnreachable) => {
-                if !pause(&mut attempt, cancel).await {
+            Err(WorkerError::ProviderOutage { cause, retry_after }) => {
+                if !pause(&mut attempt, cause, retry_after, cancel).await {
                     return release(queue, job.id, attempt).await;
                 }
             }
@@ -510,9 +510,15 @@ where
     }
 }
 
-async fn pause(attempt: &mut Attempt<'_>, cancel: &CancellationToken) -> bool {
-    attempt.hold.enter();
-    let waited = crate::outage::wait(attempt.delay, cancel).await;
+async fn pause(
+    attempt: &mut Attempt<'_>,
+    cause: crate::outage::OutageCause,
+    retry_after: Option<Duration>,
+    cancel: &CancellationToken,
+) -> bool {
+    attempt.hold.enter(cause);
+    let delay = crate::outage::pause_for(attempt.delay, retry_after);
+    let waited = crate::outage::wait(delay, cancel).await;
     attempt.delay = crate::outage::next_delay(attempt.delay);
     waited
 }
