@@ -106,7 +106,10 @@ pub struct SqliteStore {
     query_embed: Option<QueryEmbed>,
     notifications: tokio::sync::watch::Sender<()>,
     task_events: tokio::sync::watch::Sender<u64>,
+    task_finished: tokio::sync::broadcast::Sender<uuid::Uuid>,
 }
+
+const TASK_FINISHED_BUFFER: usize = 256;
 
 impl SqliteStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SqliteError> {
@@ -126,8 +129,14 @@ impl SqliteStore {
             .map_err(SqliteError::Pragma)?;
         search::functions::register(&conn)?;
         let task_events = tokio::sync::watch::channel(0).0;
-        task_watch::register(&conn, task_events.clone())?;
-        Ok(from_conn(conn, SharedClock::new(Utc::now), task_events))
+        let task_finished = tokio::sync::broadcast::channel(TASK_FINISHED_BUFFER).0;
+        task_watch::register(&conn, task_events.clone(), task_finished.clone())?;
+        Ok(from_conn(
+            conn,
+            SharedClock::new(Utc::now),
+            task_events,
+            task_finished,
+        ))
     }
 
     #[must_use]
@@ -240,6 +249,7 @@ fn from_conn(
     conn: Connection,
     clock: SharedClock,
     task_events: tokio::sync::watch::Sender<u64>,
+    task_finished: tokio::sync::broadcast::Sender<uuid::Uuid>,
 ) -> SqliteStore {
     SqliteStore {
         conn: Arc::new(Mutex::new(conn)),
@@ -252,6 +262,7 @@ fn from_conn(
         query_embed: None,
         notifications: tokio::sync::watch::channel(()).0,
         task_events,
+        task_finished,
     }
 }
 
