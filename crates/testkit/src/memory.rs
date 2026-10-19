@@ -26,6 +26,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryStatsResponse;
+use wire::gateway::memory::MemorySummaryNode;
 use wire::gateway::memory::PendingTagWire;
 use wire::gateway::memory::TagCount;
 use wire::gateway::memory::TagState;
@@ -36,42 +37,7 @@ use wire::gateway::memory::TagWire;
 use wire::memory::MemoryEntry;
 use wire::memory::MemorySearchResult;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum MemoryRequest {
-    Append(Vec<MemoryEntry>),
-    Search(SearchQuery),
-    Browse(BrowseFilter),
-    Stats,
-    GetFull(String),
-    Context {
-        session: String,
-        now: DateTime<Utc>,
-    },
-    ListTags(TagListQuery),
-    PendingTags(Limit),
-    TagCounts(TagCountsQuery),
-    TagTaxonomy(TagTaxonomyQuery),
-    DecideTags {
-        ids: Vec<TagId>,
-        decision: TagDecision,
-        decided_by: Option<String>,
-    },
-    DecideTagRemovals {
-        ids: Vec<TagId>,
-        decision: TagDecision,
-        decided_by: Option<String>,
-    },
-    AddTag(TagAdd),
-    LookupTags(TagLookup),
-    UpsertTagTaxonomy(TagTaxonomyUpsert),
-    DecideTagTaxonomy(TagTaxonomyDecision),
-    MergeTagTaxonomy(TagTaxonomyMerge),
-    TagJobContext(Uuid),
-    StoreTagSuggestions(TagSuggestionWrite),
-    WikiTopics(kernel::wiki::WikiFilter),
-    WikiPage(String),
-    WikiGaps(u32),
-}
+pub use crate::memory_request::MemoryRequest;
 
 #[derive(Debug, Default)]
 pub struct FakeMemoryStore {
@@ -84,6 +50,7 @@ pub struct FakeMemoryStore {
     tag_context: Mutex<Option<TagJobContext>>,
     tag_entities: Mutex<BTreeMap<String, Uuid>>,
     embeddings_armed: std::sync::atomic::AtomicBool,
+    summary_dags: Mutex<BTreeMap<String, Vec<MemorySummaryNode>>>,
 }
 
 impl FakeMemoryStore {
@@ -110,6 +77,10 @@ impl FakeMemoryStore {
 
     pub async fn insert_wiki_redirect(&self, from: String, to: String) {
         self.wiki_redirects.lock().await.insert(from, to);
+    }
+
+    pub async fn script_summary_dag(&self, session: String, nodes: Vec<MemorySummaryNode>) {
+        self.summary_dags.lock().await.insert(session, nodes);
     }
 
     pub async fn requests(&self) -> Vec<MemoryRequest> {
@@ -409,6 +380,20 @@ impl MemoryStore for FakeMemoryStore {
             .map(|e| e.content.clone())
             .collect::<Vec<_>>()
             .join("\n"))
+    }
+
+    async fn summary_dag(&self, session: &str) -> Result<Vec<MemorySummaryNode>, MemoryStoreError> {
+        self.record(MemoryRequest::SummaryDag(session.to_owned()))
+            .await;
+        Ok(self
+            .summary_dags
+            .lock()
+            .await
+            .get(session)
+            .into_iter()
+            .flatten()
+            .cloned()
+            .collect())
     }
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError> {

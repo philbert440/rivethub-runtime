@@ -184,6 +184,8 @@ fn search_rejections(app: &axum::Router) -> Result<(), String> {
     Ok(())
 }
 
+#[path = "memory_api/archive.rs"]
+mod archive;
 #[path = "memory_api/search_port.rs"]
 mod search_port;
 #[path = "memory_api/tags_and_health.rs"]

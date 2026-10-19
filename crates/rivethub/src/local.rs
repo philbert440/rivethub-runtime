@@ -190,15 +190,10 @@ async fn bind_node(
         activities,
     )
     .await?;
-    let composition = crate::composition::Composition::build(
-        config,
-        env,
-        Arc::clone(store) as Arc<dyn MemoryStore>,
-        shutdown,
-        activities,
-    )
-    .await
-    .map_err(StartupError::from)?;
+    let composition =
+        crate::composition::Composition::on_sqlite(config, env, store, shutdown, activities)
+            .await
+            .map_err(StartupError::from)?;
     let (listener, tls) = match listen(config, env).await {
         Ok(bound) => bound,
         Err(error) => {

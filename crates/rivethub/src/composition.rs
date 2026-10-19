@@ -10,12 +10,15 @@ pub use stores::store_roots;
 use std::sync::Arc;
 use std::time::Duration;
 
+use cli::memory::MemoryExporter;
 use config::{Config, Environment};
 use gateway::Gateway;
 use gateway::sessions::SessionRegistry;
 use kernel::agent_presets::AgentPresetStore;
+use kernel::memory::MemoryExport;
 use kernel::memory::MemoryStore;
 use memory_postgres::PostgresMemory;
+use memory_sqlite::SqliteStore;
 use thiserror::Error;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -111,9 +114,19 @@ fn transcripts(
     )))
 }
 
-fn with_presets(gateway: Gateway, presets: Option<Arc<dyn AgentPresetStore>>) -> Gateway {
-    match presets {
+#[derive(Default)]
+struct StoreBacking {
+    presets: Option<Arc<dyn AgentPresetStore>>,
+    export: Option<Arc<dyn MemoryExport>>,
+}
+
+fn with_backing(gateway: Gateway, backing: StoreBacking) -> Gateway {
+    let gateway = match backing.presets {
         Some(presets) => gateway.with_agent_presets(presets),
+        None => gateway,
+    };
+    match backing.export {
+        Some(export) => gateway.with_memory_export(export),
         None => gateway,
     }
 }
@@ -185,12 +198,36 @@ impl Composition {
         shutdown: &CancellationToken,
         activities: &kernel::shutdown::Activities,
     ) -> Result<Self, ComposeError> {
-        let presets = agent_presets(memory).await?;
+        let url = config.memory_postgres_url(env).ok_or_else(|| {
+            ComposeError::Invalid("no Postgres URL for the memory database".into())
+        })?;
+        let backing = StoreBacking {
+            presets: agent_presets(memory).await?,
+            export: Some(Arc::new(MemoryExporter::postgres(Arc::clone(memory), url))),
+        };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
             .with_activities(activities.clone());
         let store: Arc<dyn MemoryStore> = memory.clone();
-        Self::compose(config, env, store, presets, shutdown, &factory).await
+        Self::compose(config, env, store, backing, shutdown, &factory).await
+    }
+
+    pub async fn on_sqlite(
+        config: &Config,
+        env: &Environment,
+        store: &Arc<SqliteStore>,
+        shutdown: &CancellationToken,
+        activities: &kernel::shutdown::Activities,
+    ) -> Result<Self, ComposeError> {
+        let backing = StoreBacking {
+            presets: None,
+            export: Some(Arc::new(MemoryExporter::sqlite(Arc::clone(store)))),
+        };
+        let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
+            .await?
+            .with_activities(activities.clone());
+        let memory: Arc<dyn MemoryStore> = store.clone();
+        Self::compose(config, env, memory, backing, shutdown, &factory).await
     }
 
     pub async fn with_models(
@@ -200,14 +237,22 @@ impl Composition {
         shutdown: &CancellationToken,
         factory: &crate::models::ModelFactory,
     ) -> Result<Self, ComposeError> {
-        Self::compose(config, env, store, None, shutdown, factory).await
+        Self::compose(
+            config,
+            env,
+            store,
+            StoreBacking::default(),
+            shutdown,
+            factory,
+        )
+        .await
     }
 
     async fn compose(
         config: &Config,
         env: &Environment,
         store: Arc<dyn MemoryStore>,
-        presets: Option<Arc<dyn AgentPresetStore>>,
+        backing: StoreBacking,
         shutdown: &CancellationToken,
         factory: &crate::models::ModelFactory,
     ) -> Result<Self, ComposeError> {
@@ -242,7 +287,7 @@ impl Composition {
             .with_client_certificate_required(bind.require_client)
             .with_sessions(sessions.clone());
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
-        gateway = with_presets(with_session_stores(gateway, env)?, presets);
+        gateway = with_backing(with_session_stores(gateway, env)?, backing);
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let background = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {

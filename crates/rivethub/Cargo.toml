@@ -54,6 +54,7 @@ tracing-subscriber = { workspace = true }
 x509-parser.workspace = true
 
 [dev-dependencies]
+flate2 = { workspace = true }
 rusqlite = { workspace = true }
 futures.workspace = true
 rcgen.workspace = true

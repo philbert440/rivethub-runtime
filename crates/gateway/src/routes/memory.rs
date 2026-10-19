@@ -74,6 +74,14 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             "/health",
             routing::get(health).fallback(super::method_not_allowed),
         )
+        .route(
+            "/summaries/{session}",
+            routing::get(super::memory_archive::summaries).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/export",
+            routing::get(super::memory_archive::export).fallback(super::method_not_allowed),
+        )
         .route("/tool/memory_search", tool_route(tool_search))
         .route("/tool/memory_browse", tool_route(tool_browse))
         .route("/tool/memory_stats", tool_route(tool_stats))

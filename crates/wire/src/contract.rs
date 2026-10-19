@@ -100,6 +100,8 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::gateway::memory::MemoryToolResponse>,
     SchemaGenerator::subschema_for::<crate::gateway::memory::MemoryBrowseMessage>,
     SchemaGenerator::subschema_for::<crate::gateway::memory::MemoryBrowseResponse>,
+    SchemaGenerator::subschema_for::<crate::gateway::memory::MemorySummaryNode>,
+    SchemaGenerator::subschema_for::<crate::gateway::memory::MemorySummaryDagResponse>,
     SchemaGenerator::subschema_for::<crate::gateway::memory::TopTool>,
     SchemaGenerator::subschema_for::<crate::gateway::memory::RecentSession>,
     SchemaGenerator::subschema_for::<crate::gateway::memory::MemoryStatsResponse>,

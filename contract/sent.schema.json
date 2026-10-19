@@ -3223,6 +3223,87 @@
         "messages"
       ]
     },
+    "MemorySummaryNode": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "parentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "level": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/SummaryKind"
+        },
+        "content": {
+          "type": "string"
+        },
+        "messageCount": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "earliestAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "latestAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceMessageIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "level",
+        "kind",
+        "content",
+        "messageCount",
+        "createdAt",
+        "sourceMessageIds"
+      ]
+    },
+    "MemorySummaryDagResponse": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "summaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemorySummaryNode"
+          }
+        }
+      },
+      "required": [
+        "sessionId",
+        "summaries"
+      ]
+    },
     "TopTool": {
       "type": "object",
       "properties": {

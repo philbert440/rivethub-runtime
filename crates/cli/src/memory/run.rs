@@ -1,17 +1,16 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use chrono::DateTime;
 use chrono::Utc;
 use memory_postgres::PostgresMemory;
-use memory_postgres::dump::CopySource;
 use memory_postgres::queue::QueueHealth;
 use memory_sqlite::SqliteStore;
-use memory_sqlite::import::ImportTable;
-use strum::IntoEnumIterator;
 use tokio_util::sync::CancellationToken;
 
+use super::export::MemoryExporter;
 use super::io;
 use super::parse::MemoryCommand;
 use super::target::Kind;
@@ -147,11 +146,13 @@ async fn export(
     shutdown: &CancellationToken,
     stdout_is_terminal: bool,
 ) -> Result<Report, Error> {
-    let plain = match resolve(env, sqlite, Kind::Either)? {
-        Target::Postgres(url) => export_postgres(&url, since, shutdown).await?,
-        Target::Sqlite(path) => export_sqlite(&path, since, shutdown).await?,
+    let exporter = match resolve(env, sqlite, Kind::Either)? {
+        Target::Postgres(url) => {
+            MemoryExporter::postgres(Arc::new(PostgresMemory::connect(&url).await?), url)
+        }
+        Target::Sqlite(path) => MemoryExporter::sqlite(Arc::new(open_sqlite(&path).await?)),
     };
-    let bytes = tokio::task::spawn_blocking(move || io::gzip(&plain)).await??;
+    let bytes = exporter.gzipped(since, shutdown).await?;
     publish(out, bytes, stdout_is_terminal).await
 }
 
@@ -199,31 +200,6 @@ async fn rules(
     Ok(Report::success(format!(
         "applied {applied} project rule tag(s)\n"
     )))
-}
-
-async fn export_postgres(
-    url: &str,
-    since: Option<DateTime<Utc>>,
-    shutdown: &CancellationToken,
-) -> Result<Vec<u8>, Error> {
-    let origin = super::target::origin_for_url(url)?;
-    let tables = copy_sources();
-    let memory = PostgresMemory::connect(url).await?;
-    Ok(memory
-        .export_memory_dump(&tables, since, &origin, shutdown)
-        .await?)
-}
-
-async fn export_sqlite(
-    path: &Path,
-    since: Option<DateTime<Utc>>,
-    shutdown: &CancellationToken,
-) -> Result<Vec<u8>, Error> {
-    let origin = super::target::sqlite_origin()?;
-    let store = open_sqlite(path).await?;
-    Ok(store
-        .export_pg_dump(since, origin, shutdown.clone())
-        .await?)
 }
 
 async fn import_postgres(
@@ -341,33 +317,6 @@ fn requeue_text(count: u64, clamped: bool) -> String {
     } else {
         format!("requeued {count} dead job(s)\n")
     }
-}
-
-fn copy_sources() -> Vec<CopySource<'static>> {
-    ImportTable::iter().filter_map(copy_source).collect()
-}
-
-fn copy_source(table: ImportTable) -> Option<CopySource<'static>> {
-    let columns = table.dump_columns()?;
-    let (relation, compatibility) = match table {
-        ImportTable::Conversations => ("rh_conversations", "ros_conversations"),
-        ImportTable::Messages => ("rh_messages", "ros_messages"),
-        ImportTable::Summaries => ("rh_summaries", "ros_summaries"),
-        ImportTable::SummarySources => ("rh_summary_sources", "ros_summary_sources"),
-        ImportTable::Tags => ("rh_tags", "ros_tags"),
-        ImportTable::TagTaxonomy => ("rh_tag_taxonomy", "ros_tag_taxonomy"),
-        ImportTable::WikiTopics => ("rh_wiki_topics", "ros_wiki_topics"),
-        ImportTable::WikiProvenance => ("rh_wiki_provenance", "ros_wiki_provenance"),
-        ImportTable::WikiExtractions => ("rh_wiki_extractions", "ros_wiki_extractions"),
-        ImportTable::WikiCitations => ("rh_wiki_citations", "ros_wiki_citations"),
-        ImportTable::WikiRedirects => ("rh_wiki_redirects", "ros_wiki_redirects"),
-        ImportTable::Jobs | ImportTable::Meta | ImportTable::EmbedQueue => return None,
-    };
-    Some(CopySource {
-        relation,
-        compatibility,
-        columns,
-    })
 }
 
 #[derive(serde::Serialize)]

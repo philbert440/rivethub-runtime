@@ -7,6 +7,7 @@ pub mod http;
 pub mod json;
 pub mod mcp_text;
 pub mod memory;
+mod memory_request;
 pub mod naming;
 pub mod paths;
 pub mod pgdump;

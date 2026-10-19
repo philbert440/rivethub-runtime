@@ -2922,6 +2922,7 @@ dependencies = [
  "chrono-tz",
  "cli",
  "config",
+ "flate2",
  "futures",
  "gateway",
  "harness-acp",

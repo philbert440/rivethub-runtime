@@ -1,0 +1,193 @@
+#[expect(
+    dead_code,
+    reason = "integration binaries share fixtures and use different subsets"
+)]
+mod common;
+
+use common::TestResult;
+use common::execute;
+use common::fresh_store;
+use common::instant;
+use kernel::memory::MemoryStore;
+use kernel::memory::NewSummary;
+use kernel::memory::SummaryKind;
+use kernel::memory::SummarySource;
+use kernel::memory::SummaryStore;
+use memory_sqlite::SqliteStore;
+use uuid::Uuid;
+use wire::gateway::memory::MemorySummaryNode;
+
+const CURRENT: &str = "00000000-0000-4000-8000-000000000001";
+const STALE: &str = "00000000-0000-4000-8000-000000000002";
+const OTHER: &str = "00000000-0000-4000-8000-000000000003";
+const LEAF_ONE: &str = "00000000-0000-4000-8000-000000000011";
+const LEAF_TWO: &str = "00000000-0000-4000-8000-000000000012";
+const BRANCH: &str = "00000000-0000-4000-8000-000000000013";
+const ROOT: &str = "00000000-0000-4000-8000-000000000014";
+const STALE_LEAF: &str = "00000000-0000-4000-8000-000000000015";
+const OTHER_LEAF: &str = "00000000-0000-4000-8000-000000000016";
+
+const SEED: &str = "
+INSERT INTO ros_conversations (id, session_key, agent, channel, settings, active, created_at, updated_at) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'cli:dag', 'rivet', 'cli', '{}', 1, '2026-10-10T12:00:00.000Z', '2026-10-10T13:00:00.000Z'),
+  ('00000000-0000-4000-8000-000000000002', 'cli:dag', 'helper', 'cli', '{}', 1, '2026-10-10T11:00:00.000Z', '2026-10-10T11:30:00.000Z'),
+  ('00000000-0000-4000-8000-000000000003', 'cli:other', 'rivet', 'cli', '{}', 1, '2026-10-10T12:00:00.000Z', '2026-10-10T14:00:00.000Z');
+INSERT INTO ros_messages (id, conversation_id, agent, channel, role, content, metadata, created_at) VALUES
+  ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'user', 'one', '{}', '2026-10-10T12:00:00.000Z'),
+  ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'assistant', 'two', '{}', '2026-10-10T12:01:00.000Z'),
+  ('00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'user', 'three', '{}', '2026-10-10T12:02:00.000Z');
+";
+
+struct Planned<'a> {
+    id: &'a str,
+    conversation: &'a str,
+    kind: SummaryKind,
+    window: (&'a str, &'a str),
+    sources: &'a [&'a str],
+    children: &'a [&'a str],
+}
+
+async fn write(store: &SqliteStore, planned: Planned<'_>) -> TestResult {
+    let mut sources = Vec::new();
+    for (ordinal, id) in planned.sources.iter().enumerate() {
+        sources.push(SummarySource {
+            message_id: Uuid::parse_str(id)?,
+            ordinal: i32::try_from(ordinal)?,
+        });
+    }
+    let child_ids = planned
+        .children
+        .iter()
+        .map(|id| Uuid::parse_str(id))
+        .collect::<Result<Vec<_>, _>>()?;
+    store
+        .write_summary(NewSummary {
+            id: Uuid::parse_str(planned.id)?,
+            conversation_id: Uuid::parse_str(planned.conversation)?,
+            kind: planned.kind,
+            depth: planned.kind.depth(),
+            content: format!("{} {}", planned.kind, planned.id),
+            message_count: u32::try_from(planned.sources.len())?,
+            earliest_at: instant(planned.window.0)?,
+            latest_at: instant(planned.window.1)?,
+            model: "fake-chat".to_owned(),
+            pipeline_version: 5,
+            created_at: instant("2026-10-10T12:30:00.000Z")?,
+            sources,
+            child_ids,
+        })
+        .await?;
+    Ok(())
+}
+
+fn leaf<'a>(
+    id: &'a str,
+    conversation: &'a str,
+    window: (&'a str, &'a str),
+    sources: &'a [&'a str],
+) -> Planned<'a> {
+    Planned {
+        id,
+        conversation,
+        kind: SummaryKind::Leaf,
+        window,
+        sources,
+        children: &[],
+    }
+}
+
+async fn seeded() -> TestResult<common::Fresh> {
+    let fresh = fresh_store(None)?;
+    execute(&fresh.store, SEED).await?;
+    let first = ("2026-10-10T12:00:00.000Z", "2026-10-10T12:01:00.000Z");
+    let second = ("2026-10-10T12:02:00.000Z", "2026-10-10T12:02:00.000Z");
+    let ones = [
+        "00000000-0000-4000-8000-000000000101",
+        "00000000-0000-4000-8000-000000000102",
+    ];
+    let twos = ["00000000-0000-4000-8000-000000000103"];
+    write(&fresh.store, leaf(LEAF_TWO, CURRENT, second, &twos)).await?;
+    write(&fresh.store, leaf(LEAF_ONE, CURRENT, first, &ones)).await?;
+    write(&fresh.store, leaf(STALE_LEAF, STALE, first, &[])).await?;
+    write(&fresh.store, leaf(OTHER_LEAF, OTHER, first, &[])).await?;
+    let span = ("2026-10-10T12:00:00.000Z", "2026-10-10T12:02:00.000Z");
+    let branch = Planned {
+        id: BRANCH,
+        conversation: CURRENT,
+        kind: SummaryKind::Branch,
+        window: span,
+        sources: &[],
+        children: &[LEAF_ONE, LEAF_TWO],
+    };
+    write(&fresh.store, branch).await?;
+    let root = Planned {
+        id: ROOT,
+        conversation: CURRENT,
+        kind: SummaryKind::Root,
+        window: span,
+        sources: &[],
+        children: &[BRANCH],
+    };
+    write(&fresh.store, root).await?;
+    Ok(fresh)
+}
+
+fn shape(nodes: &[MemorySummaryNode]) -> Vec<(&str, Option<&str>, u32, SummaryKind)> {
+    nodes
+        .iter()
+        .map(|node| {
+            (
+                node.id.as_str(),
+                node.parent_id.as_deref(),
+                node.level,
+                node.kind,
+            )
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn the_summary_dag_walks_from_the_session_leaves_to_the_root() -> TestResult {
+    let fresh = seeded().await?;
+    let nodes = fresh.store.summary_dag("cli:dag").await?;
+    assert_eq!(
+        shape(&nodes),
+        vec![
+            (ROOT, None, 2, SummaryKind::Root),
+            (BRANCH, Some(ROOT), 1, SummaryKind::Branch),
+            (LEAF_ONE, Some(BRANCH), 0, SummaryKind::Leaf),
+            (LEAF_TWO, Some(BRANCH), 0, SummaryKind::Leaf),
+        ]
+    );
+    let first = nodes.get(2).ok_or("first leaf")?;
+    assert_eq!(
+        first.source_message_ids,
+        vec![
+            "00000000-0000-4000-8000-000000000101",
+            "00000000-0000-4000-8000-000000000102",
+        ]
+    );
+    assert_eq!(first.message_count, 2);
+    assert_eq!(first.content, format!("leaf {LEAF_ONE}"));
+    assert_eq!(
+        first.earliest_at,
+        Some(instant("2026-10-10T12:00:00.000Z")?)
+    );
+    assert_eq!(first.latest_at, Some(instant("2026-10-10T12:01:00.000Z")?));
+    assert_eq!(first.created_at, instant("2026-10-10T12:30:00.000Z")?);
+    let root = nodes.first().ok_or("root")?;
+    assert_eq!(root.source_message_ids.len(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_summary_dag_is_empty_for_a_session_without_a_conversation() -> TestResult {
+    let fresh = seeded().await?;
+    assert_eq!(fresh.store.summary_dag("cli:missing").await?.len(), 0);
+    let other = fresh.store.summary_dag("cli:other").await?;
+    assert_eq!(
+        shape(&other),
+        vec![(OTHER_LEAF, None, 0, SummaryKind::Leaf)]
+    );
+    Ok(())
+}
