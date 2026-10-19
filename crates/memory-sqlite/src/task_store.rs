@@ -106,7 +106,7 @@ impl TaskStore for SqliteStore {
     }
 }
 
-async fn call<T, F>(store: &SqliteStore, body: F) -> Result<T, TaskError>
+pub(crate) async fn call<T, F>(store: &SqliteStore, body: F) -> Result<T, TaskError>
 where
     T: Send + 'static,
     F: FnOnce(&mut Connection) -> Result<T, TaskError> + Send + 'static,

@@ -9,7 +9,6 @@ use kernel::tasks::TaskError;
 use kernel::tasks::TaskQuery;
 use kernel::tasks::TaskStore;
 use kernel::tasks::TaskWatch;
-use memory_postgres::PostgresTasks;
 use wire::gateway::agents::AgentPreset;
 use wire::harness::HarnessId;
 use wire::mesh::MeshNode;
@@ -79,12 +78,15 @@ impl TaskAgents for Roster {
     }
 }
 
-pub(super) fn api(
+pub(super) fn api<T>(
     roster: Arc<Roster>,
     catalog: Arc<tasks::Catalog>,
     allowed: Option<Vec<HarnessId>>,
-    tasks: &PostgresTasks,
-) -> Arc<gateway::routes::tasks::TasksApi> {
+    tasks: &T,
+) -> Arc<gateway::routes::tasks::TasksApi>
+where
+    T: TaskStore + JobQueue + TaskQuery + TaskWatch + Clone + 'static,
+{
     let store: Arc<dyn TaskStore> = Arc::new(tasks.clone());
     let jobs: Arc<dyn JobQueue> = Arc::new(tasks.clone());
     let query: Arc<dyn TaskQuery> = Arc::new(tasks.clone());

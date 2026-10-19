@@ -1,5 +1,6 @@
 mod assemble;
 mod dial;
+mod local;
 mod ports;
 
 use std::sync::Arc;
@@ -19,6 +20,7 @@ use crate::service::StartupError;
 use crate::service::load;
 use crate::service::report;
 pub use assemble::AgentError;
+pub(crate) use local::LocalTasks;
 
 #[derive(Debug)]
 pub(super) struct LocalBinding {
@@ -27,14 +29,6 @@ pub(super) struct LocalBinding {
 }
 
 pub(super) type TaskEngine = tasks::Engine<PostgresTasks, PostgresTasks>;
-
-pub(crate) async fn standalone_tasks(
-    config: &Config,
-    env: &Environment,
-    gateway: url::Url,
-) -> Result<(tasks::Directory, tasks::Settings), AgentError> {
-    assemble::standalone(config, env, gateway).await
-}
 
 #[derive(Debug, Error)]
 enum RootError {

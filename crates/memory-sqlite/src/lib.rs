@@ -24,6 +24,7 @@ mod tags_suggest;
 mod tags_write;
 mod task_rows;
 mod task_store;
+mod task_watch;
 mod taxonomy;
 mod time;
 mod vector;
@@ -103,6 +104,7 @@ pub struct SqliteStore {
     clock: SharedClock,
     query_embed: Option<QueryEmbed>,
     notifications: tokio::sync::watch::Sender<()>,
+    task_events: tokio::sync::watch::Sender<u64>,
 }
 
 impl SqliteStore {
@@ -122,7 +124,9 @@ impl SqliteStore {
         conn.execute_batch(FILE_PRAGMAS)
             .map_err(SqliteError::Pragma)?;
         search::functions::register(&conn)?;
-        Ok(from_conn(conn, SharedClock::new(Utc::now)))
+        let task_events = tokio::sync::watch::channel(0).0;
+        task_watch::register(&conn, task_events.clone())?;
+        Ok(from_conn(conn, SharedClock::new(Utc::now), task_events))
     }
 
     #[must_use]
@@ -231,7 +235,11 @@ impl ClaimIds {
     }
 }
 
-fn from_conn(conn: Connection, clock: SharedClock) -> SqliteStore {
+fn from_conn(
+    conn: Connection,
+    clock: SharedClock,
+    task_events: tokio::sync::watch::Sender<u64>,
+) -> SqliteStore {
     SqliteStore {
         conn: Arc::new(Mutex::new(conn)),
         pending: tokio_util::task::TaskTracker::new(),
@@ -242,6 +250,7 @@ fn from_conn(conn: Connection, clock: SharedClock) -> SqliteStore {
         clock,
         query_embed: None,
         notifications: tokio::sync::watch::channel(()).0,
+        task_events,
     }
 }
 

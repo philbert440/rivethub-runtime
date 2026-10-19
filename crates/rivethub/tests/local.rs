@@ -8,6 +8,8 @@ mod embed;
 mod import;
 #[path = "local/memory_http.rs"]
 mod memory_http;
+#[path = "local/tasks.rs"]
+mod task_routes;
 
 use std::net::SocketAddr;
 use std::path::Path;

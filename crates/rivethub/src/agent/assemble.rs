@@ -223,11 +223,18 @@ pub(super) async fn plan(config: &Config, env: &Environment) -> Result<Plan, Age
     })
 }
 
+pub(super) struct Standalone {
+    pub(super) directory: tasks::Directory,
+    pub(super) settings: tasks::Settings,
+    pub(super) roster: Roster,
+    pub(super) allowed: Option<Vec<wire::harness::HarnessId>>,
+}
+
 pub(super) async fn standalone(
     config: &Config,
     env: &Environment,
     gateway: url::Url,
-) -> Result<(tasks::Directory, tasks::Settings), AgentError> {
+) -> Result<Standalone, AgentError> {
     let identity = crate::identity::resolve(config, env)?;
     if identity.name.is_empty() {
         return Err(AgentError::Invalid("node name is empty".into()));
@@ -240,19 +247,28 @@ pub(super) async fn standalone(
     let presets = load_presets(state_dir).await?;
     let mut directory = tasks::Directory::new(node.clone(), gateway)?;
     install_local(&mut directory, config)?;
-    for preset in presets {
-        directory.preset(preset);
+    for preset in &presets {
+        directory.preset(preset.clone());
     }
-    Ok((
+    let roster = Roster {
+        node: node.clone(),
+        mesh: false,
+        local: local_agents(config)?,
+        presets,
+        nodes: Vec::new(),
+    };
+    Ok(Standalone {
         directory,
-        tasks::Settings {
+        settings: tasks::Settings {
             node,
             worker,
             files_root: gateway_settings.files_root,
             pricing: pricing(config)?,
             api_token: api_token(config)?,
         },
-    ))
+        roster,
+        allowed: gateway_settings.allowed_harnesses,
+    })
 }
 
 fn install_local(directory: &mut tasks::Directory, config: &Config) -> Result<(), AgentError> {
