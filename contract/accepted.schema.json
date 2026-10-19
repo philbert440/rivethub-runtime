@@ -4785,6 +4785,28 @@
           "items": {
             "$ref": "#/$defs/UserTurnAttachment"
           }
+        },
+        "harness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HarnessId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workingDir": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

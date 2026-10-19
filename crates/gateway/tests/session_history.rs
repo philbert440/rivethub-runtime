@@ -912,6 +912,9 @@ fn attached_turn(path: &str) -> String {
             path_or_uri: path.to_owned(),
             name: Some("shot.png".to_owned()),
         }]),
+        harness: None,
+        model: None,
+        working_dir: None,
     })
     .expect("turn json")
 }

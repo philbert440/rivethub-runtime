@@ -7,11 +7,20 @@ use wire::harness::{
     HarnessSessionSummary, Transport,
 };
 use wire::session_id::SessionId;
+use wire::stream::ThinkingLevel;
 
 use super::TerminalService;
 use crate::error::ApiError;
 use crate::sessions::control::{ChatActor, ChatHandle};
 use crate::tenancy::UserId;
+
+#[derive(Debug)]
+pub(crate) struct ChatStart {
+    pub(crate) harness: HarnessId,
+    pub(crate) model: Option<String>,
+    pub(crate) effort: Option<ThinkingLevel>,
+    pub(crate) cwd: Option<std::path::PathBuf>,
+}
 
 impl TerminalService {
     pub(crate) fn track(&self, future: impl Future<Output = ()> + Send + 'static) {
@@ -25,6 +34,29 @@ impl TerminalService {
         model: Option<String>,
         cwd: Option<std::path::PathBuf>,
     ) -> Result<HarnessSessionSummary, ApiError> {
+        self.start_chat(
+            user,
+            ChatStart {
+                harness: harness_id,
+                model,
+                effort: None,
+                cwd,
+            },
+        )
+        .await
+    }
+
+    pub(crate) async fn start_chat(
+        self: &Arc<Self>,
+        user: &UserId,
+        start: ChatStart,
+    ) -> Result<HarnessSessionSummary, ApiError> {
+        let ChatStart {
+            harness: harness_id,
+            model,
+            effort,
+            cwd,
+        } = start;
         let harness = self
             .harness
             .clone()
@@ -48,7 +80,7 @@ impl TerminalService {
             session: SessionId::new(harness_id, &uuid::Uuid::new_v4().to_string()),
             harness: harness_id,
             model: model.clone(),
-            effort: None,
+            effort,
             working_dir: Some(directory.clone()),
         };
         let session = harness.new_session(spec).await?;
@@ -74,7 +106,7 @@ impl TerminalService {
             parent_session_id: None,
             agent_name: None,
             task_id: None,
-            effort: None,
+            effort: effort.map(|level| level.to_string()),
             transport: Some(Transport::Protocol),
             extra: wire::Extra::default(),
         };

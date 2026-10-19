@@ -27,6 +27,7 @@ use crate::Gateway;
 use crate::error::ApiError;
 use crate::extract::Body;
 use crate::tenancy::UserId;
+use crate::term::{ChatStart, DelegatedTurn};
 use crate::uploads::AttachedTurn;
 
 #[derive(Debug, Deserialize)]
@@ -137,6 +138,7 @@ async fn prompt(
     }
     match posted.wait.as_deref() {
         None => accept(gateway, user, session, request).await,
+        Some("1") if request.harness.is_some() => delegated(gateway, user, session, request).await,
         Some("1") => waited(gateway, extension, session, request).await,
         Some(_) => Err(ApiError::BadRequest("wait must be 1".into())),
     }
@@ -218,6 +220,34 @@ async fn waited(
     .into_response())
 }
 
+async fn delegated(
+    gateway: Arc<Gateway>,
+    user: UserId,
+    session: String,
+    request: SessionPostRequest,
+) -> Result<Response, ApiError> {
+    let harness = request
+        .harness
+        .ok_or_else(|| ApiError::BadRequest("harness is required".into()))?;
+    let attachments = staged(&gateway, &user, request.attachments).await?;
+    let turn = DelegatedTurn {
+        start: ChatStart {
+            harness,
+            model: request.model,
+            effort: request.thinking,
+            cwd: request.working_dir.map(std::path::PathBuf::from),
+        },
+        text: request.text,
+        system_prompt: request.system_prompt,
+        attachments,
+    };
+    let text = service(&gateway)?.delegated_turn(&user, turn).await?;
+    Ok(Json(SessionPostReply {
+        message: reply_message(&session, text),
+    })
+    .into_response())
+}
+
 fn turn_messages(request: &SessionPostRequest) -> Result<Vec<Message>, ApiError> {
     if request.text.is_empty() {
         return Err(ApiError::BadRequest("user text is empty".into()));
@@ -288,11 +318,15 @@ async fn run_turn(
 }
 
 fn assistant_message(session: &str, result: &TurnResult) -> SessionMessage {
+    reply_message(session, result.response.clone())
+}
+
+fn reply_message(session: &str, text: String) -> SessionMessage {
     SessionMessage {
         id: Uuid::new_v4().to_string(),
         session_id: session.to_owned(),
         role: SessionMessageRole::Assistant,
-        text: result.response.clone(),
+        text,
         ts: Utc::now(),
         usage: None,
         model: None,

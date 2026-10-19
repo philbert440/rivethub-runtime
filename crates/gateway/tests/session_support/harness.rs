@@ -21,6 +21,7 @@ pub(crate) struct Harness {
     offered: Mutex<Vec<wire::harness::HarnessOffering>>,
     pub(crate) trace: watch::Sender<Vec<String>>,
     pub(crate) finish: Semaphore,
+    pub(crate) specs: Mutex<Vec<SessionSpec>>,
 }
 
 impl Default for Harness {
@@ -30,6 +31,7 @@ impl Default for Harness {
             offered: Mutex::new(Vec::new()),
             trace: watch::channel(Vec::new()).0,
             finish: Semaphore::new(0),
+            specs: Mutex::new(Vec::new()),
         }
     }
 }
@@ -80,6 +82,7 @@ impl Harness {
 impl HarnessAdapter for Harness {
     async fn new_session(&self, spec: SessionSpec) -> Result<SessionId, HarnessAdapterError> {
         self.opened(spec.session.clone());
+        self.specs.lock().push(spec.clone());
         self.trace.send_modify(|trace| trace.push("new".into()));
         Ok(spec.session)
     }
