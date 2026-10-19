@@ -81,6 +81,40 @@ async fn embedding_failure_is_visible_and_keyword_results_survive() -> TestResul
 }
 
 #[tokio::test]
+async fn vectors_from_another_model_leave_the_vector_arm_out() -> TestResult {
+    for (stored, degraded) in [("embed-b", false), ("embed-a", true)] {
+        let embedder = provider();
+        let (_dir, store) = seeded(Some(embedder.clone())).await?;
+        let stored = stored.to_owned();
+        store
+            .with_conn(move |conn| {
+                conn.execute(
+                    "INSERT INTO ros_meta (key, value) VALUES ('embed_model', ?1)",
+                    [stored],
+                )
+                .map_err(failed)
+            })
+            .await?;
+        let store = store.with_embed_model("embed-b");
+        let response = store
+            .search_at(query("alpha", SearchMode::Hybrid), Utc::now(), &Utc)
+            .await?;
+        assert_ne!(response.results, []);
+        assert_eq!(
+            embedder.embed_requests().await.len(),
+            usize::from(!degraded)
+        );
+        assert_eq!(
+            response.degraded.map(|degraded| degraded.reason),
+            degraded.then(|| {
+                "stored vectors were written by embedding model embed-a, the configured model is embed-b; run rh memory reembed".to_owned()
+            })
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn corrupt_vectors_are_errors() -> TestResult {
     for bytes in [
         vec![0u8; 3],

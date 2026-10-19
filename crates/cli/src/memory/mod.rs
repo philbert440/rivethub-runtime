@@ -47,6 +47,7 @@ Commands:\n\
   export [--out <file>] [--since <iso>] [--sqlite <file>]\n\
   import <file> [--dry-run] [--sqlite <file>]\n\
   tags backfill-rule [--since <iso>] [--sqlite <file>]\n\
-Postgres commands read RIVETHUB_PG_URL. export, import and tags backfill-rule use --sqlite or memory.sqlite.path when no Postgres URL is set.\n"
+  reembed [--dry-run] [--sqlite <file>]\n\
+Postgres commands read RIVETHUB_PG_URL. export, import and tags backfill-rule use --sqlite or memory.sqlite.path when no Postgres URL is set. reembed runs on a SQLite memory file only.\n"
         .to_owned()
 }

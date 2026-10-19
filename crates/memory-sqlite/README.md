@@ -10,7 +10,9 @@ The store implements `kernel::memory::MemoryStore`, `kernel::memory::EmbeddingSt
 
 `StoredEmbedding.content_hash` is not stored. `ros_messages`, `ros_summaries`, and `ros_wiki_topics` have no `content_hash` column. A successful write still stores the little-endian `f32` vector, sets `embed_status` to `done`, clears `embed_error`, and sets `embed_failures` to 0.
 
-When `ros_meta` has `embed_dims`, a vector of a different width is `EmbeddingStoreError::Width`. When that key is unset, the write accepts the vector and does not insert a meta row.
+When `ros_meta` has `embed_dims`, a vector of a different width is `EmbeddingStoreError::Width`. A store built `with_embed_model` (the `rh local` composition passes the configured SQLite embedding model) also checks `embed_model`: the first write records the model and the vector width, a write while `embed_model` names another model is `EmbeddingStoreError::Model` and leaves the row unchanged, and `/api/memory/health` reports the mismatch as unavailable embeddings. Without a configured model the write accepts the vector and does not insert a meta row.
+
+`SqliteStore::reembed` (`rh memory reembed [--dry-run] [--sqlite <file>]`) runs in one transaction: it clears every stored vector except rows marked `unembeddable`, replaces every embed job that is not running with one per message, summary and wiki topic, and deletes `embed_model` and `embed_dims` so the next write records the configured model and width.
 
 ## Search
 

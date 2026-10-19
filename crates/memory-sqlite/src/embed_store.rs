@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use kernel::memory::EmbedModelMismatch;
 use kernel::memory::EmbedTable;
 use kernel::memory::EmbedTarget;
 use kernel::memory::EmbeddingStore;
@@ -7,12 +8,15 @@ use kernel::memory::LoadedTarget;
 use kernel::memory::StoredEmbedding;
 use kernel::memory::Unembeddable;
 use rusqlite::OptionalExtension as _;
+use rusqlite::TransactionBehavior;
 use rusqlite::params_from_iter;
 use rusqlite::types::Value;
 use uuid::Uuid;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;
+use crate::meta;
+use crate::meta::MetaKey;
 
 const CHUNKS: &str = "ros_message_chunks";
 
@@ -29,9 +33,16 @@ impl EmbeddingStore for SqliteStore {
     }
 
     async fn write(&self, stored: StoredEmbedding) -> Result<(), EmbeddingStoreError> {
-        self.with_conn(move |conn| write_target(conn, &stored))
-            .await
-            .map_err(embed_err)
+        let model = self.embed_model.clone();
+        self.with_conn(move |conn| {
+            let tx = conn
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .map_err(SqliteError::query("write embedding"))?;
+            write_target(&tx, &stored, model.as_deref())?;
+            tx.commit().map_err(SqliteError::query("write embedding"))
+        })
+        .await
+        .map_err(embed_err)
     }
 
     async fn mark_unembeddable(
@@ -86,11 +97,32 @@ fn load_target(
     }
 }
 
-fn write_target(conn: &rusqlite::Connection, stored: &StoredEmbedding) -> Result<(), SqliteError> {
+impl SqliteStore {
+    pub async fn embed_mismatch(&self) -> Result<Option<EmbedModelMismatch>, SqliteError> {
+        let Some(configured) = self.embed_model.clone() else {
+            return Ok(None);
+        };
+        self.with_conn(move |conn| {
+            Ok(meta::read(conn, MetaKey::EmbedModel)?
+                .filter(|stored| *stored != configured)
+                .map(|stored| EmbedModelMismatch { stored, configured }))
+        })
+        .await
+    }
+}
+
+fn write_target(
+    conn: &rusqlite::Connection,
+    stored: &StoredEmbedding,
+    model: Option<&str>,
+) -> Result<(), SqliteError> {
     if stored.target.table == EmbedTable::MessageChunks || !stored.chunks.is_empty() {
         return Err(SqliteError::MissingTable { table: CHUNKS });
     }
     require_width(conn, stored.vector.len())?;
+    if let Some(model) = model {
+        require_model(conn, model, stored.vector.len())?;
+    }
     let bytes = crate::vector::pack(&stored.vector);
     let updated = match stored.target.table {
         EmbedTable::Messages | EmbedTable::Summaries => exec_id(
@@ -226,16 +258,26 @@ fn load_text(
     .map_err(SqliteError::query("load embed target"))
 }
 
+fn require_model(
+    conn: &rusqlite::Connection,
+    model: &str,
+    width: usize,
+) -> Result<(), SqliteError> {
+    match meta::read(conn, MetaKey::EmbedModel)? {
+        Some(stored) if stored == model => Ok(()),
+        Some(stored) => Err(SqliteError::EmbedModel {
+            stored,
+            configured: model.to_owned(),
+        }),
+        None => {
+            meta::record_absent(conn, MetaKey::EmbedModel, model)?;
+            meta::record_absent(conn, MetaKey::EmbedDims, &width.to_string())
+        }
+    }
+}
+
 fn require_width(conn: &rusqlite::Connection, got: usize) -> Result<(), SqliteError> {
-    let expected: Option<String> = conn
-        .query_row(
-            "SELECT value FROM ros_meta WHERE key = 'embed_dims'",
-            [],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(SqliteError::query("embed width"))?;
-    let Some(expected) = expected else {
+    let Some(expected) = meta::read(conn, MetaKey::EmbedDims)? else {
         return Ok(());
     };
     let expected = expected
@@ -327,6 +369,9 @@ fn embed_err(error: SqliteError) -> EmbeddingStoreError {
     }
     if let SqliteError::MissingHit { id } = error {
         return EmbeddingStoreError::Missing { id };
+    }
+    if let SqliteError::EmbedModel { stored, configured } = error {
+        return EmbeddingStoreError::Model { stored, configured };
     }
     EmbeddingStoreError::Query {
         message: error.to_string(),

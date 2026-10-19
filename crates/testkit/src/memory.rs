@@ -1,9 +1,12 @@
+mod suggestions;
+
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::BrowseFilter;
+use kernel::memory::EmbedModelMismatch;
 use kernel::memory::Limit;
 use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
@@ -16,7 +19,6 @@ use kernel::memory::TagId;
 use kernel::memory::TagJobContext;
 use kernel::memory::TagListQuery;
 use kernel::memory::TagLookup;
-use kernel::memory::TagSuggestKind;
 use kernel::memory::TagSuggestionStored;
 use kernel::memory::TagSuggestionWrite;
 use kernel::memory::TagTaxonomyDecision;
@@ -51,12 +53,17 @@ pub struct FakeMemoryStore {
     tag_entities: Mutex<BTreeMap<String, Uuid>>,
     embeddings_armed: std::sync::atomic::AtomicBool,
     summary_dags: Mutex<BTreeMap<String, Vec<MemorySummaryNode>>>,
+    embed_mismatch: Mutex<Option<EmbedModelMismatch>>,
 }
 
 impl FakeMemoryStore {
     pub fn arm_embeddings(&self) {
         self.embeddings_armed
             .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub async fn script_embed_mismatch(&self, mismatch: EmbedModelMismatch) {
+        *self.embed_mismatch.lock().await = Some(mismatch);
     }
 
     pub async fn script_session_entity(&self, session: String, entity: Uuid) {
@@ -109,6 +116,10 @@ impl MemoryStore for FakeMemoryStore {
     fn embeddings_armed(&self) -> bool {
         self.embeddings_armed
             .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    async fn embed_model_mismatch(&self) -> Result<Option<EmbedModelMismatch>, MemoryStoreError> {
+        Ok(self.embed_mismatch.lock().await.clone())
     }
 
     async fn wiki_topics(
@@ -577,38 +588,10 @@ impl MemoryStore for FakeMemoryStore {
         &self,
         write: TagSuggestionWrite,
     ) -> Result<TagSuggestionStored, MemoryStoreError> {
-        let stored = count_suggestions(&write)?;
+        let stored = suggestions::count(&write)?;
         self.record(MemoryRequest::StoreTagSuggestions(write)).await;
         Ok(stored)
     }
-}
-
-fn count_suggestions(write: &TagSuggestionWrite) -> Result<TagSuggestionStored, MemoryStoreError> {
-    let mut tags = 0u64;
-    let mut removals = 0u64;
-    for row in &write.rows {
-        match row.kind {
-            TagSuggestKind::Add => tags = add_count(tags)?,
-            TagSuggestKind::Remove => removals = add_count(removals)?,
-        }
-    }
-    Ok(TagSuggestionStored {
-        tags,
-        removals,
-        vocabulary: u64::try_from(write.vocabulary.len()).map_err(|_| {
-            MemoryStoreError::InvalidRequest {
-                message: "vocabulary count overflowed".to_owned(),
-            }
-        })?,
-    })
-}
-
-fn add_count(total: u64) -> Result<u64, MemoryStoreError> {
-    total
-        .checked_add(1)
-        .ok_or_else(|| MemoryStoreError::InvalidRequest {
-            message: "tag suggestion count overflowed".to_owned(),
-        })
 }
 
 fn wiki_topic(page: &wire::gateway::wiki::WikiPageResponse) -> wire::gateway::wiki::WikiTopic {

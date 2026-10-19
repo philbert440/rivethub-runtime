@@ -124,19 +124,7 @@ impl SqliteStore {
         let plan = Plan::prepare(query, now, zone)?;
         let semantic = matches!(plan.mode, SearchMode::Hybrid | SearchMode::Vector);
         let (vector, degraded) = if semantic {
-            match &self.query_embed {
-                None => (None, Some(EMBED_MISSING.to_owned())),
-                Some(embed) => match embed.vector(&plan.text).await {
-                    Ok(vector) => (Some(vector), None),
-                    Err(embed::EmbedFailure::Cancelled) => {
-                        return Err(SqliteError::SearchCancelled);
-                    }
-                    Err(error) => {
-                        self.record_log(format!("[memory.sqlite] query embedding failed, searching without the vector arm: {error}"));
-                        (None, Some(error.to_string()))
-                    }
-                },
-            }
+            self.query_vector(&plan.text).await?
         } else {
             (
                 None,
@@ -163,6 +151,34 @@ impl SqliteStore {
             Ok(outcome)
         })
         .await
+    }
+
+    async fn query_vector(
+        &self,
+        text: &str,
+    ) -> Result<(Option<Vec<f32>>, Option<String>), SqliteError> {
+        let Some(embed) = &self.query_embed else {
+            return Ok((None, Some(EMBED_MISSING.to_owned())));
+        };
+        if let Some(mismatch) = self.embed_mismatch().await? {
+            let reason = SqliteError::EmbedModel {
+                stored: mismatch.stored,
+                configured: mismatch.configured,
+            }
+            .to_string();
+            self.record_log(format!(
+                "[memory.sqlite] {reason}; searching without the vector arm"
+            ));
+            return Ok((None, Some(reason)));
+        }
+        match embed.vector(text).await {
+            Ok(vector) => Ok((Some(vector), None)),
+            Err(embed::EmbedFailure::Cancelled) => Err(SqliteError::SearchCancelled),
+            Err(error) => {
+                self.record_log(format!("[memory.sqlite] query embedding failed, searching without the vector arm: {error}"));
+                Ok((None, Some(error.to_string())))
+            }
+        }
     }
 }
 

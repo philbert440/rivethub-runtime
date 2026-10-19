@@ -56,6 +56,7 @@ pub(super) async fn run(
             sqlite,
         } => import(path, dry_run, sqlite, env, shutdown).await,
         MemoryCommand::Rules { since, sqlite } => rules(since, sqlite, env).await,
+        MemoryCommand::Reembed { dry_run, sqlite } => reembed(dry_run, sqlite, env).await,
     }
 }
 
@@ -200,6 +201,25 @@ async fn rules(
     Ok(Report::success(format!(
         "applied {applied} project rule tag(s)\n"
     )))
+}
+
+async fn reembed(
+    dry_run: bool,
+    sqlite: Option<PathBuf>,
+    env: &Environment,
+) -> Result<Report, Error> {
+    let Target::Sqlite(path) = resolve(env, sqlite, Kind::Either)? else {
+        return Err(Error::ReembedSqlite);
+    };
+    let report = open_sqlite(&path).await?.reembed(!dry_run).await?;
+    let (cleared, queued) = (report.cleared, report.queued);
+    Ok(Report::success(if dry_run {
+        format!("would clear {cleared} stored vector(s) and queue {queued} embed job(s)\n")
+    } else {
+        format!(
+            "cleared {cleared} stored vector(s) and queued {queued} embed job(s); the next embedding records the configured model\n"
+        )
+    }))
 }
 
 async fn import_postgres(

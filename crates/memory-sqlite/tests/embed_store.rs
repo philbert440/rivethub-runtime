@@ -6,10 +6,12 @@ mod common;
 
 use common::TestResult;
 use common::fresh_store;
+use kernel::memory::EmbedModelMismatch;
 use kernel::memory::EmbedTable;
 use kernel::memory::EmbedTarget;
 use kernel::memory::EmbeddingStore;
 use kernel::memory::EmbeddingStoreError;
+use kernel::memory::MemoryStore;
 use kernel::memory::StoredChunk;
 use kernel::memory::StoredEmbedding;
 use kernel::memory::Unembeddable;
@@ -163,6 +165,56 @@ async fn width_and_missing_chunk_storage_are_refused() -> TestResult {
         .await;
     expect_missing_chunks(table)?;
     assert_schema(&fresh.store).await
+}
+
+#[tokio::test]
+async fn the_first_write_records_the_model_and_another_model_is_refused() -> TestResult {
+    let fresh = fresh_store(None)?;
+    seed(&fresh.store).await?;
+    let first = fresh.store.clone().with_embed_model("embed-a");
+    first.write(stored(DONE, sample(), Vec::new())).await?;
+    assert_eq!(
+        meta(&fresh.store, "embed_model").await?.as_deref(),
+        Some("embed-a")
+    );
+    assert_eq!(
+        meta(&fresh.store, "embed_dims").await?.as_deref(),
+        Some("8")
+    );
+    let second = fresh.store.clone().with_embed_model("embed-b");
+    match second.write(stored(WIDE, sample(), Vec::new())).await {
+        Err(EmbeddingStoreError::Model { stored, configured })
+            if stored == "embed-a" && configured == "embed-b" => {}
+        other => return Err(format!("a second model returned {other:?}").into()),
+    }
+    expect_row(&fresh.store, WIDE, None, None, None, 0).await?;
+    assert_eq!(
+        second.embed_model_mismatch().await?,
+        Some(EmbedModelMismatch {
+            stored: "embed-a".to_owned(),
+            configured: "embed-b".to_owned(),
+        })
+    );
+    assert_eq!(first.embed_model_mismatch().await?, None);
+    assert_eq!(fresh.store.embed_model_mismatch().await?, None);
+    first.write(stored(WIDE, sample(), Vec::new())).await?;
+    expect_row(&fresh.store, WIDE, Some("done"), Some(32), None, 0).await
+}
+
+async fn meta(store: &memory_sqlite::SqliteStore, key: &str) -> TestResult<Option<String>> {
+    let key = key.to_owned();
+    let value = store
+        .with_conn(move |conn| {
+            conn.query_row(
+                "SELECT value FROM ros_meta WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(common::seed)
+        })
+        .await?;
+    Ok(value)
 }
 
 async fn seed(store: &memory_sqlite::SqliteStore) -> TestResult {

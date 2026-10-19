@@ -37,6 +37,7 @@ mod search;
 mod suggest;
 mod summary;
 
+pub use embed::EmbedModelMismatch;
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;
 pub use embed::EmbeddingStore;
@@ -334,6 +335,8 @@ pub trait MemoryStore: Send + Sync {
     async fn probe(&self) -> Result<(), MemoryStoreError>;
 
     fn embeddings_armed(&self) -> bool;
+
+    async fn embed_model_mismatch(&self) -> Result<Option<EmbedModelMismatch>, MemoryStoreError>;
 
     async fn wiki_topics(
         &self,
