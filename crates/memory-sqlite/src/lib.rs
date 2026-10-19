@@ -27,6 +27,7 @@ mod task_store;
 mod task_watch;
 mod taxonomy;
 mod time;
+mod title;
 mod unembedded;
 mod vector;
 mod wiki_builder;
