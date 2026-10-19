@@ -1,0 +1,194 @@
+{
+  "conversations": [
+    {
+      "id": "deploy",
+      "agent": "rivet",
+      "created_at": "2026-10-01T09:00:00.000Z"
+    },
+    {
+      "id": "backups",
+      "agent": "rivet",
+      "created_at": "2026-10-02T09:00:00.000Z"
+    },
+    {
+      "id": "certs",
+      "agent": "rivet",
+      "created_at": "2026-10-03T09:00:00.000Z"
+    },
+    {
+      "id": "search",
+      "agent": "rivet",
+      "created_at": "2026-10-04T09:00:00.000Z"
+    },
+    {
+      "id": "kitchen",
+      "agent": "helper",
+      "created_at": "2026-10-05T09:00:00.000Z"
+    }
+  ],
+  "messages": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "conversation": "deploy",
+      "role": "user",
+      "content": "how do we deploy the AcmeKit service to staging",
+      "created_at": "2026-10-01T09:01:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "conversation": "deploy",
+      "role": "assistant",
+      "content": "run the deploy script from the release branch, then watch the health check on staging.example.com",
+      "created_at": "2026-10-01T09:02:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000003",
+      "conversation": "deploy",
+      "role": "user",
+      "content": "what happens if the health check fails during the rollout",
+      "created_at": "2026-10-01T09:03:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "conversation": "deploy",
+      "role": "assistant",
+      "content": "the blue-green rollout keeps the previous colour live, and a failed health check switches traffic back automatically",
+      "created_at": "2026-10-01T09:04:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000005",
+      "conversation": "backups",
+      "role": "user",
+      "content": "where do the nightly database backups go",
+      "created_at": "2026-10-02T09:01:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000006",
+      "conversation": "backups",
+      "role": "assistant",
+      "content": "the nightly backup job writes compressed dumps to the backup bucket and keeps fourteen days of snapshots",
+      "created_at": "2026-10-02T09:02:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000007",
+      "conversation": "backups",
+      "role": "user",
+      "content": "how do I restore a single table from a snapshot",
+      "created_at": "2026-10-02T09:03:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000008",
+      "conversation": "backups",
+      "role": "assistant",
+      "content": "restore the snapshot into a scratch database with pg_restore, then copy the table across",
+      "created_at": "2026-10-02T09:04:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000009",
+      "conversation": "certs",
+      "role": "user",
+      "content": "the gateway certificate expires next week",
+      "created_at": "2026-10-03T09:01:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000010",
+      "conversation": "certs",
+      "role": "assistant",
+      "content": "certificates renew automatically every seven days; run the renew command by hand if the timer missed a cycle",
+      "created_at": "2026-10-03T09:02:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000011",
+      "conversation": "certs",
+      "role": "user",
+      "content": "renewal failed with a clock skew error",
+      "created_at": "2026-10-03T09:03:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000012",
+      "conversation": "certs",
+      "role": "assistant",
+      "content": "sync the node clock with chrony, then retry the certificate renewal",
+      "created_at": "2026-10-03T09:04:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000013",
+      "conversation": "search",
+      "role": "user",
+      "content": "keyword search crashed on a query with a colon in it",
+      "created_at": "2026-10-04T09:01:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000014",
+      "conversation": "search",
+      "role": "assistant",
+      "content": "the full text query builder now strips colons and quotes before matching, so that crash is fixed",
+      "created_at": "2026-10-04T09:02:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000015",
+      "conversation": "search",
+      "role": "user",
+      "content": "why do short queries sometimes return nothing",
+      "created_at": "2026-10-04T09:03:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000016",
+      "conversation": "search",
+      "role": "assistant",
+      "content": "every query word must match, so one stray word with no hits empties the result list",
+      "created_at": "2026-10-04T09:04:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000017",
+      "conversation": "kitchen",
+      "role": "user",
+      "content": "give me a quick bread recipe",
+      "created_at": "2026-10-05T09:01:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000018",
+      "conversation": "kitchen",
+      "role": "assistant",
+      "content": "mix flour, water, salt and yeast, rest the dough for an hour, then bake it hot",
+      "created_at": "2026-10-05T09:02:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000019",
+      "conversation": "kitchen",
+      "role": "user",
+      "content": "can I deploy this recipe with a sourdough starter instead of yeast",
+      "created_at": "2026-10-05T09:03:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000020",
+      "conversation": "kitchen",
+      "role": "assistant",
+      "content": "yes, swap the yeast for a cup of active starter and let the dough rest longer",
+      "created_at": "2026-10-05T09:04:00.000Z"
+    }
+  ],
+  "summaries": [
+    {
+      "id": "00000000-0000-4000-8000-400000000001",
+      "conversation": "deploy",
+      "content": "The team deploys AcmeKit with a blue-green rollout from the release branch. A health check on staging gates the traffic switch, and a failed check rolls traffic back to the previous colour.",
+      "kind": "leaf",
+      "created_at": "2026-10-01T09:10:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-400000000002",
+      "conversation": "backups",
+      "content": "Nightly backups keep fourteen days of compressed snapshots; a single table is restored through a scratch database.",
+      "kind": "leaf",
+      "created_at": "2026-10-02T09:10:00.000Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-400000000003",
+      "conversation": "certs",
+      "content": "Certificates renew every seven days; clock skew breaks renewal until the node clock is synced.",
+      "kind": "leaf",
+      "created_at": "2026-10-03T09:10:00.000Z"
+    }
+  ]
+}

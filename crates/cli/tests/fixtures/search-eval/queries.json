@@ -1,0 +1,75 @@
+{
+  "clock": "2026-10-10T12:00:00Z",
+  "limit": 10,
+  "queries": [
+    {
+      "id": "deploy-staging",
+      "query": "deploy staging",
+      "relevant": ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"],
+      "must_contain": ["release branch"]
+    },
+    {
+      "id": "failed-health-check",
+      "query": "failed health check",
+      "relevant": ["00000000-0000-4000-8000-000000000004", "00000000-0000-4000-8000-400000000001"],
+      "must_contain": ["switches traffic back", "rolls traffic back"]
+    },
+    {
+      "id": "backup-retention",
+      "query": "backup snapshots",
+      "relevant": ["00000000-0000-4000-8000-000000000006", "00000000-0000-4000-8000-400000000002"],
+      "must_contain": ["fourteen days"]
+    },
+    {
+      "id": "restore-one-table",
+      "query": "restore table snapshot",
+      "relevant": ["00000000-0000-4000-8000-000000000008"],
+      "must_contain": ["pg_restore"]
+    },
+    {
+      "id": "certificate-renewal",
+      "query": "certificate renewal",
+      "relevant": ["00000000-0000-4000-8000-000000000012", "00000000-0000-4000-8000-000000000010"],
+      "must_contain": ["chrony", "renew command"]
+    },
+    {
+      "id": "clock-skew-fix",
+      "query": "clock skew",
+      "relevant": ["00000000-0000-4000-8000-000000000012"],
+      "must_contain": ["chrony"]
+    },
+    {
+      "id": "colon-crash",
+      "query": "colon crash",
+      "relevant": ["00000000-0000-4000-8000-000000000014"],
+      "must_contain": ["strips colons"]
+    },
+    {
+      "id": "undo-a-bad-release",
+      "query": "undo a bad release",
+      "relevant": ["00000000-0000-4000-8000-000000000004", "00000000-0000-4000-8000-400000000001"]
+    },
+    {
+      "id": "bread-recipe",
+      "query": "bread recipe",
+      "relevant": ["00000000-0000-4000-8000-000000000017", "00000000-0000-4000-8000-000000000018"]
+    },
+    {
+      "id": "sourdough-starter",
+      "query": "deploy recipe",
+      "relevant": ["00000000-0000-4000-8000-000000000019"]
+    },
+    {
+      "id": "misspelled-skew-error",
+      "query": "renewal faild with a clok skew eror",
+      "mode": "trigram",
+      "relevant": ["00000000-0000-4000-8000-000000000011"],
+      "must_contain": ["clock skew"]
+    },
+    {
+      "id": "empty-result-list",
+      "query": "stray word empties",
+      "must_contain": ["empties the result list"]
+    }
+  ]
+}

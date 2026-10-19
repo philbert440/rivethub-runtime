@@ -61,5 +61,9 @@ tokio = { workspace = true, features = ["process", "rt-multi-thread", "test-util
 name = "rivethub-migrate"
 path = "src/bin/rivethub-migrate.rs"
 
+[[bin]]
+name = "search-eval"
+path = "tests/search-eval/eval.rs"
+
 [lints]
 workspace = true
