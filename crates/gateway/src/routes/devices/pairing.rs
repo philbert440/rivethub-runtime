@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::ca::CertificateAuthority;
+use sha2::Digest;
+use sha2::Sha256;
 use wire::gateway::devices::PairRedeemResponse;
 use wire::gateway::devices::PairingRecord;
 use wire::gateway::devices::PhonePairingAvailability;
@@ -97,7 +99,11 @@ pub(super) async fn start(
         name: name.to_owned(),
         expires_at,
     };
-    if let Err(error) = write_record(&issuer.pairing_dir.join("pending"), &token, &record) {
+    if let Err(error) = write_record(
+        &issuer.pairing_dir.join("pending"),
+        &record_stem(&token),
+        &record,
+    ) {
         revoke_issued(authority, issuer, &device_id).await?;
         return Err(error);
     }
@@ -211,24 +217,25 @@ fn read_pending(issuer: &PhoneIssuer, token: &str) -> Result<PairingRecord, Devi
 
 fn pending_stem(token: &str, pending: &Path) -> Result<Option<String>, DeviceError> {
     let names = list_stems(pending)?;
-    Ok(select_token(token, &names))
+    Ok(select_token(&record_stem(token), &names))
+}
+
+fn record_stem(token: &str) -> String {
+    hex::encode(Sha256::digest(token.as_bytes()))
 }
 
 fn state_of(
-    name: &str,
+    key: &str,
     pending: &[PairingRecord],
     claimed: &[PairingRecord],
     now: DateTime<Utc>,
 ) -> PhonePairingState {
-    if claimed
-        .iter()
-        .any(|record| record.name == name && record.expires_at > now)
-    {
+    let live = |record: &PairingRecord| {
+        (record.name == key || record.device_id == key) && record.expires_at > now
+    };
+    if claimed.iter().any(live) {
         PhonePairingState::Paired
-    } else if pending
-        .iter()
-        .any(|record| record.name == name && record.expires_at > now)
-    {
+    } else if pending.iter().any(live) {
         PhonePairingState::Pending
     } else {
         PhonePairingState::Expired
