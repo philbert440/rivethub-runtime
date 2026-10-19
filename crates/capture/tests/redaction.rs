@@ -114,7 +114,7 @@ fn builtins_replace_secret_spans() -> Result<(), Box<dyn std::error::Error>> {
 fn scan_covers_only_the_head_of_long_text() -> Result<(), Box<dyn std::error::Error>> {
     let redaction = redaction(true, true, &[]).expect("resolves");
     let tail_secret = "Bearer abcdefghijklmnop1234";
-    let content = "x".repeat(17000) + tail_secret;
+    let content = "x".repeat(30000) + tail_secret;
     let mut tail_case = message(&content, "{}")?;
     let spans = redaction.redact_message(&mut tail_case);
     assert_eq!(spans, 0);
@@ -124,5 +124,56 @@ fn scan_covers_only_the_head_of_long_text() -> Result<(), Box<dyn std::error::Er
     let spans = redaction.redact_message(&mut head_case);
     assert_eq!(spans, 1);
     assert!(head_case.content.starts_with("[REDACTED:bearer]"));
+    Ok(())
+}
+
+#[derive(Default)]
+struct KeptBodies {
+    bodies: parking_lot::Mutex<Vec<String>>,
+}
+
+#[async_trait::async_trait]
+impl capture::writer::CaptureTransport for &KeptBodies {
+    async fn post(
+        &self,
+        body: String,
+    ) -> Result<wire::capture::CaptureResult, capture::writer::PostError> {
+        self.bodies.lock().push(body);
+        Ok(wire::capture::CaptureResult {
+            ok: true,
+            conversation_id: "c-1".to_owned(),
+            inserted: 1,
+            skipped: 0,
+        })
+    }
+}
+
+#[tokio::test]
+async fn the_writer_redacts_the_session_title() -> Result<(), Box<dyn std::error::Error>> {
+    let redaction = redaction(true, true, &[]).ok_or("redaction should resolve")?;
+    let transport = KeptBodies::default();
+    let dir = tempfile::tempdir()?;
+    let writer = capture::writer::CaptureWriter::new(
+        &transport,
+        capture::spool::CaptureSpool::new(dir.path().to_path_buf()),
+        None,
+        Some(redaction),
+    );
+    let mut batch = capture::batch::parse_batch(
+        r#"{"session_key":"s","agent":"a","messages":[{"event_id":"e1","role":"user","content":"hi"}]}"#,
+    )?;
+    batch.title = Some("deploy with Bearer abcdefghijklmnop1234 now".to_owned());
+    writer
+        .write(&batch, "2026-10-10T12:00:00Z".parse()?)
+        .await?;
+    let bodies = transport.bodies.lock().clone();
+    let [body] = bodies.as_slice() else {
+        return Err("expected one capture post".into());
+    };
+    let posted = capture::batch::parse_batch(body)?;
+    assert_eq!(
+        posted.title.as_deref(),
+        Some("deploy with [REDACTED:bearer] now")
+    );
     Ok(())
 }

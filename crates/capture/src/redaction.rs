@@ -2,17 +2,35 @@ use std::sync::LazyLock;
 
 use config::Environment;
 use regress::Regex;
+use wire::JsonObject;
+use wire::capture::CaptureBatchRequest;
 use wire::capture::CaptureMessage;
 
 pub const ENV_VARIABLE: &str = "RIVETHUB_CAPTURE_REDACTION";
 const SCAN_LIMIT: usize = 16_000;
-const SECRET_KEY_SOURCE: &str = "^(password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|credential)$";
+const SCAN_MARGIN: usize = 8_192;
+const SECRET_KEY_SOURCE: &str = "^(?:pwd|pass|auth)$|passw(?:or)?d|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential|authorization|auth[_-]?header|cookie|session[_-]?key";
 const SECRET_KEY_PLACEHOLDER: &str = "[REDACTED:secret_key]";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Replacement {
     Whole,
     FirstGroup,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Case {
+    Insensitive,
+    Sensitive,
+}
+
+impl Case {
+    const fn flags(self) -> &'static str {
+        match self {
+            Self::Insensitive => "i",
+            Self::Sensitive => "",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -22,11 +40,12 @@ struct Builtin {
     replacement: Replacement,
 }
 
-const BUILTIN_SOURCES: [(&str, &str, Replacement); 8] = [
+const BUILTIN_SOURCES: [(&str, &str, Replacement, Case); 9] = [
     (
         "bearer",
         r"Bearer [A-Za-z0-9\-._~+/=]{16,}",
         Replacement::Whole,
+        Case::Insensitive,
     ),
     (
         "pem_private_key",
@@ -36,32 +55,49 @@ const BUILTIN_SOURCES: [(&str, &str, Replacement); 8] = [
             "KEY-----"
         ),
         Replacement::Whole,
+        Case::Insensitive,
     ),
-    ("aws_access_key", r"AKIA[0-9A-Z]{16}", Replacement::Whole),
+    (
+        "aws_access_key",
+        r"AKIA[0-9A-Z]{16}",
+        Replacement::Whole,
+        Case::Insensitive,
+    ),
     (
         "github_token",
         r"gh[pousr]_[A-Za-z0-9]{30,}",
         Replacement::Whole,
+        Case::Insensitive,
     ),
     (
         "slack_token",
         r"xox[aebprs]-[A-Za-z0-9\-]{10,}",
         Replacement::Whole,
+        Case::Insensitive,
     ),
     (
         "sk_token",
         concat!("sk", r"[_\-][A-Za-z0-9_\-]{20,}"),
         Replacement::Whole,
+        Case::Insensitive,
     ),
     (
         "jwt",
         r"ey[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}",
         Replacement::Whole,
+        Case::Insensitive,
+    ),
+    (
+        "http_auth",
+        r"\b(?:Basic|Digest|Negotiate|NTLM) (?=[A-Za-z0-9+/=._~\-]*[A-Z0-9+/=])[A-Za-z0-9+/=._~\-]{8,}",
+        Replacement::Whole,
+        Case::Sensitive,
     ),
     (
         "assignment",
-        r"\b(api[_-]?key|apikey|access[_-]?key|access[_-]?token|auth[_-]?token|secret|token|authorization|credential)[ \t]*[=:][ \t]*\S+",
+        r#"\b(api[_-]?key|apikey|access[_-]?key|access[_-]?token|auth[_-]?token|secret|token|authorization|credential)["']?[ \t]*[=:][ \t]*\S+"#,
         Replacement::FirstGroup,
+        Case::Insensitive,
     ),
 ];
 
@@ -81,9 +117,9 @@ static SECRET_KEYS: LazyLock<Regex> = LazyLock::new(|| {
 static BUILTINS: LazyLock<Vec<Builtin>> = LazyLock::new(|| {
     BUILTIN_SOURCES
         .into_iter()
-        .map(|(name, source, replacement)| Builtin {
+        .map(|(name, source, replacement, case)| Builtin {
             name,
-            regex: Regex::with_flags(source, "i")
+            regex: Regex::with_flags(source, case.flags())
                 .expect("builtin redaction patterns are constants that compile"),
             replacement,
         })
@@ -143,6 +179,22 @@ fn env_opt_in(env: &Environment) -> bool {
 }
 
 impl Redaction {
+    pub fn redact_batch(&self, batch: &mut CaptureBatchRequest) -> u64 {
+        let mut spans = 0;
+        if let Some(title) = &mut batch.title {
+            let (redacted, count) = apply_spans(title, self);
+            *title = redacted;
+            spans += count;
+        }
+        if let Some(settings) = &mut batch.settings {
+            spans += self.redact_object(settings);
+        }
+        for message in &mut batch.messages {
+            spans += self.redact_message(message);
+        }
+        spans
+    }
+
     pub fn redact_message(&self, message: &mut CaptureMessage) -> u64 {
         let mut spans = 0;
         if let Some((redacted, count)) = scan_text(&message.content, self) {
@@ -156,16 +208,25 @@ impl Redaction {
             spans += count;
         }
         if let Some(arguments) = &mut message.tool_args {
-            arguments.visit_strings_mut(&mut |name, text| {
-                let (redacted, count) = apply_spans(text, self);
-                spans += count;
-                if secret_key(name) {
-                    SECRET_KEY_PLACEHOLDER.clone_into(text);
-                } else {
-                    *text = redacted;
-                }
-            });
+            spans += self.redact_object(arguments);
         }
+        if let Some(metadata) = &mut message.metadata {
+            spans += self.redact_object(metadata);
+        }
+        spans
+    }
+
+    fn redact_object(&self, object: &mut JsonObject) -> u64 {
+        let mut spans = 0;
+        object.visit_strings_mut(&mut |name, text| {
+            let (redacted, count) = apply_spans(text, self);
+            spans += count;
+            if secret_key(name) {
+                SECRET_KEY_PLACEHOLDER.clone_into(text);
+            } else {
+                *text = redacted;
+            }
+        });
         spans
     }
 }
@@ -189,15 +250,25 @@ fn apply_spans(text: &str, redaction: &Redaction) -> (String, u64) {
 }
 
 fn scan_text(text: &str, redaction: &Redaction) -> Option<(String, u64)> {
-    let (head, tail) = text
-        .char_indices()
-        .nth(SCAN_LIMIT)
-        .map_or((text, ""), |(end, _)| text.split_at(end));
-    let (redacted_head, count) = apply_spans(head, redaction);
-    if redacted_head == head && tail.is_empty() {
-        return None;
+    let mut window = SCAN_LIMIT + SCAN_MARGIN;
+    loop {
+        let (head, tail) = split_at_char(text, window);
+        let (redacted_head, count) = apply_spans(head, redaction);
+        let covered = tail.is_empty() || redacted_head.chars().count() >= SCAN_LIMIT + SCAN_MARGIN;
+        if covered {
+            if redacted_head == head {
+                return None;
+            }
+            return Some((format!("{redacted_head}{tail}"), count));
+        }
+        window = window.saturating_mul(2);
     }
-    Some((format!("{redacted_head}{tail}"), count))
+}
+
+fn split_at_char(text: &str, chars: usize) -> (&str, &str) {
+    text.char_indices()
+        .nth(chars)
+        .map_or((text, ""), |(end, _)| text.split_at(end))
 }
 
 fn secret_key(key: &str) -> bool {
@@ -316,6 +387,7 @@ mod tests {
                     ".SflKxwRJSMeKKF2QT4"
                 ),
             ),
+            ("http_auth", concat!("Basic ", "dXNlcjpwYXNz")),
             ("assignment", "api_key = hunter2"),
         ];
         for (name, canary) in canaries {
