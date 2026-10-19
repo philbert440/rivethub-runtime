@@ -467,7 +467,7 @@ async fn the_chunk_arm_surfaces_and_merges_parents(pool: PgPool) -> TestResult {
     Ok(())
 }
 
-const RECENCY_SCORE_SLOPE: f64 = 0.3 * 0.05 * 1.25;
+const RECENCY_SCORE_SLOPE: f64 = 0.3 / 30.0 * 1.25;
 
 struct ObservedScore {
     score: f64,
@@ -519,7 +519,8 @@ async fn reads_reinforce_and_age_decays_the_recency_boost(pool: PgPool) -> TestR
     let fresh = observe_recency(&pool, &memory, 0.0, 0).await?;
     let reinforced = observe_recency(&pool, &memory, 0.0, 25).await?;
     let capped = observe_recency(&pool, &memory, 0.0, 400).await?;
-    let half_life = observe_recency(&pool, &memory, 2.0_f64.ln() / 0.05, 0).await?;
+    let month_old = observe_recency(&pool, &memory, 30.0, 0).await?;
+    let month_drop = 0.3 * (1.0 - (1.0 + 2.0_f64.ln()).recip());
 
     assert!(
         (reinforced.score - fresh.score - 0.075).abs() < fresh.slack + reinforced.slack,
@@ -534,10 +535,10 @@ async fn reads_reinforce_and_age_decays_the_recency_boost(pool: PgPool) -> TestR
         reinforced.score
     );
     assert!(
-        (fresh.score - half_life.score - 0.15).abs() < fresh.slack + half_life.slack,
+        (fresh.score - month_old.score - month_drop).abs() < fresh.slack + month_old.slack,
         "{} vs {}",
         fresh.score,
-        half_life.score
+        month_old.score
     );
     Ok(())
 }

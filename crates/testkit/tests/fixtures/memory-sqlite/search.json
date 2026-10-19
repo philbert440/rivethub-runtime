@@ -930,7 +930,7 @@
             "layer": "summary",
             "role": "branch",
             "agent": "summary",
-            "relevanceScore": 0.16072440036888394,
+            "relevanceScore": 0.16072535789924383,
             "createdAt": "2026-10-10T12:00:40.000Z",
             "content": "Branch: staging deploys and database migration plans for AcmeKit"
           },
@@ -939,7 +939,7 @@
             "layer": "summary",
             "role": "leaf",
             "agent": "summary",
-            "relevanceScore": 0.14733051227522131,
+            "relevanceScore": 0.14733145270954437,
             "createdAt": "2026-10-10T12:00:30.000Z",
             "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour."
           },
@@ -948,7 +948,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "rivet",
-            "relevanceScore": 0.126663690631195,
+            "relevanceScore": 0.1266646827463401,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": ""
           },
@@ -957,7 +957,7 @@
             "layer": "message",
             "role": "user",
             "agent": "rivet",
-            "relevanceScore": 0.11225496459824387,
+            "relevanceScore": 0.11225581818226085,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": "how do we deploy the AcmeKit service to staging"
           },
@@ -966,7 +966,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.09694291774257989,
+            "relevanceScore": 0.09939305017221832,
             "createdAt": "2026-10-04T08:00:00.000Z",
             "content": "run the deploy script from the release branch, then watch the health check"
           }
@@ -986,7 +986,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "rivet",
-            "relevanceScore": 0.12694937515655458,
+            "relevanceScore": 0.1269503771928511,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": ""
           },
@@ -995,7 +995,7 @@
             "layer": "message",
             "role": "user",
             "agent": "helper",
-            "relevanceScore": 0.1218360919615639,
+            "relevanceScore": 0.12183670957193608,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "notes about the staging database migration on db.example.com"
           },
@@ -1004,7 +1004,7 @@
             "layer": "message",
             "role": "user",
             "agent": "rivet",
-            "relevanceScore": 0.11961467462237856,
+            "relevanceScore": 0.11961559125785434,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": "how do we deploy the AcmeKit service to staging"
           }
@@ -1024,7 +1024,7 @@
             "layer": "summary",
             "role": "branch",
             "agent": "summary",
-            "relevanceScore": 0.1687493417236477,
+            "relevanceScore": 0.16875035488196177,
             "createdAt": "2026-10-10T12:00:40.000Z",
             "content": "Branch: staging deploys and database migration plans for AcmeKit"
           },
@@ -1033,7 +1033,7 @@
             "layer": "summary",
             "role": "leaf",
             "agent": "summary",
-            "relevanceScore": 0.16107870988869838,
+            "relevanceScore": 0.16107974607633435,
             "createdAt": "2026-10-10T12:00:30.000Z",
             "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour."
           }
@@ -1053,7 +1053,7 @@
             "layer": "summary",
             "role": "branch",
             "agent": "summary",
-            "relevanceScore": 0.16143343383080708,
+            "relevanceScore": 0.16143441051177415,
             "createdAt": "2026-10-10T12:00:40.000Z",
             "content": "Branch: staging deploys and database migration plans for AcmeKit"
           },
@@ -1062,7 +1062,7 @@
             "layer": "summary",
             "role": "leaf",
             "agent": "summary",
-            "relevanceScore": 0.14798045585405908,
+            "relevanceScore": 0.14798141509706858,
             "createdAt": "2026-10-10T12:00:30.000Z",
             "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour."
           }
@@ -1082,7 +1082,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.11393913057098891,
+            "relevanceScore": 0.11463336877756526,
             "createdAt": "2026-10-09T00:00:00.000Z",
             "content": "the rollback switches traffic back to the previous colour"
           },
@@ -1091,7 +1091,7 @@
             "layer": "message",
             "role": "user",
             "agent": "rivet",
-            "relevanceScore": 0.09263533813397663,
+            "relevanceScore": 0.10275244664155975,
             "createdAt": "2026-09-01T00:00:00.000Z",
             "content": "rollback rollback rollback procedure notes"
           },
@@ -1100,7 +1100,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "helper",
-            "relevanceScore": 0.06333234130428712,
+            "relevanceScore": 0.06333267200359752,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": ""
           },
@@ -1109,7 +1109,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "rivet",
-            "relevanceScore": 0.0607258239390954,
+            "relevanceScore": 0.060726306918786485,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": ""
           },
@@ -1118,7 +1118,7 @@
             "layer": "message",
             "role": "user",
             "agent": "helper",
-            "relevanceScore": 0.059694737350605646,
+            "relevanceScore": 0.059695042312882744,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "notes about the staging database migration on db.example.com"
           },
@@ -1127,7 +1127,7 @@
             "layer": "message",
             "role": "user",
             "agent": "rivet",
-            "relevanceScore": 0.05733200527750411,
+            "relevanceScore": 0.05733244800888761,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": "how do we deploy the AcmeKit service to staging"
           }
@@ -1147,7 +1147,7 @@
             "layer": "message",
             "role": "user",
             "agent": "helper",
-            "relevanceScore": 0.06552279765418238,
+            "relevanceScore": 0.06552313496747898,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "notes about the staging database migration on db.example.com"
           },
@@ -1156,7 +1156,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "helper",
-            "relevanceScore": 0.060589952684724085,
+            "relevanceScore": 0.060590271508922884,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": ""
           },
@@ -1165,7 +1165,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "helper",
-            "relevanceScore": 0.0591295290169578,
+            "relevanceScore": 0.05912983095980643,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "config lives at /home/user/work/acme-app/config.yaml and listens on api.example.com:8443"
           }
@@ -1184,7 +1184,7 @@
             "layer": "summary",
             "role": "leaf",
             "agent": "summary",
-            "relevanceScore": 0.15504658344545424,
+            "relevanceScore": 0.1550475961222321,
             "createdAt": "2026-10-10T12:00:30.000Z",
             "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour."
           },
@@ -1193,7 +1193,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.10688182837107546,
+            "relevanceScore": 0.1096054818738339,
             "createdAt": "2026-10-04T08:00:00.000Z",
             "content": "run the deploy script from the release branch, then watch the health check"
           },
@@ -1202,7 +1202,7 @@
             "layer": "summary",
             "role": "branch",
             "agent": "summary",
-            "relevanceScore": 0.08089397528088432,
+            "relevanceScore": 0.08089446840901965,
             "createdAt": "2026-10-10T12:00:40.000Z",
             "content": "Branch: staging deploys and database migration plans for AcmeKit"
           }
@@ -1221,7 +1221,7 @@
             "layer": "summary",
             "role": "branch",
             "agent": "summary",
-            "relevanceScore": 0.0810712336463651,
+            "relevanceScore": 0.08107173156215224,
             "createdAt": "2026-10-10T12:00:40.000Z",
             "content": "Branch: staging deploys and database migration plans for AcmeKit"
           },
@@ -1230,7 +1230,7 @@
             "layer": "summary",
             "role": "leaf",
             "agent": "summary",
-            "relevanceScore": 0.07431519971644841,
+            "relevanceScore": 0.0743156887422964,
             "createdAt": "2026-10-10T12:00:30.000Z",
             "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour."
           },
@@ -1239,7 +1239,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "rivet",
-            "relevanceScore": 0.06376037210363686,
+            "relevanceScore": 0.06376088304293658,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": ""
           },
@@ -1248,7 +1248,7 @@
             "layer": "message",
             "role": "user",
             "agent": "helper",
-            "relevanceScore": 0.05995558880051002,
+            "relevanceScore": 0.0599558998016441,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "notes about the staging database migration on db.example.com"
           },
@@ -1257,7 +1257,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "helper",
-            "relevanceScore": 0.0534391500295132,
+            "relevanceScore": 0.05343943337268235,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": ""
           },
@@ -1266,7 +1266,7 @@
             "layer": "message",
             "role": "user",
             "agent": "rivet",
-            "relevanceScore": 0.05303722362216824,
+            "relevanceScore": 0.05303763630391032,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": "how do we deploy the AcmeKit service to staging"
           },
@@ -1275,7 +1275,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "helper",
-            "relevanceScore": 0.050480702187552955,
+            "relevanceScore": 0.05048096197023345,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "config lives at /home/user/work/acme-app/config.yaml and listens on api.example.com:8443"
           },
@@ -1284,7 +1284,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.04691577861581138,
+            "relevanceScore": 0.04720372079172622,
             "createdAt": "2026-10-09T00:00:00.000Z",
             "content": "the rollback switches traffic back to the previous colour"
           },
@@ -1293,9 +1293,18 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.04588520435862672,
+            "relevanceScore": 0.047064041659679166,
             "createdAt": "2026-10-04T08:00:00.000Z",
             "content": "run the deploy script from the release branch, then watch the health check"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000016",
+            "layer": "message",
+            "role": "user",
+            "agent": "rivet",
+            "relevanceScore": 0.04115532177652347,
+            "createdAt": "2026-09-01T00:00:00.000Z",
+            "content": "rollback rollback rollback procedure notes"
           }
         ]
       },
@@ -1312,7 +1321,7 @@
             "layer": "summary",
             "role": "branch",
             "agent": "summary",
-            "relevanceScore": 0.08124849201184589,
+            "relevanceScore": 0.08124899471528482,
             "createdAt": "2026-10-10T12:00:40.000Z",
             "content": "Branch: staging deploys and database migration plans for AcmeKit"
           },
@@ -1321,7 +1330,7 @@
             "layer": "summary",
             "role": "leaf",
             "agent": "summary",
-            "relevanceScore": 0.07447768561115786,
+            "relevanceScore": 0.07447817933917747,
             "createdAt": "2026-10-10T12:00:30.000Z",
             "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour."
           },
@@ -1330,7 +1339,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "rivet",
-            "relevanceScore": 0.06390321436631664,
+            "relevanceScore": 0.06390373026619209,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": ""
           },
@@ -1339,7 +1348,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "helper",
-            "relevanceScore": 0.058216458365727405,
+            "relevanceScore": 0.05821676936686149,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": ""
           },
@@ -1348,7 +1357,7 @@
             "layer": "message",
             "role": "user",
             "agent": "helper",
-            "relevanceScore": 0.055279133363425235,
+            "relevanceScore": 0.05527942226234279,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "notes about the staging database migration on db.example.com"
           },
@@ -1357,7 +1366,7 @@
             "layer": "message",
             "role": "user",
             "agent": "rivet",
-            "relevanceScore": 0.053152596218948064,
+            "relevanceScore": 0.053153012907309,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": "how do we deploy the AcmeKit service to staging"
           },
@@ -1366,7 +1375,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "helper",
-            "relevanceScore": 0.0505918055828826,
+            "relevanceScore": 0.05059206793766884,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "config lives at /home/user/work/acme-app/config.yaml and listens on api.example.com:8443"
           },
@@ -1375,7 +1384,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.047011742083199165,
+            "relevanceScore": 0.04730235039037247,
             "createdAt": "2026-10-09T00:00:00.000Z",
             "content": "the rollback switches traffic back to the previous colour"
           },
@@ -1384,9 +1393,18 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.045963910843935384,
+            "relevanceScore": 0.047154305373429524,
             "createdAt": "2026-10-04T08:00:00.000Z",
             "content": "run the deploy script from the release branch, then watch the health check"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000016",
+            "layer": "message",
+            "role": "user",
+            "agent": "rivet",
+            "relevanceScore": 0.04120966489642305,
+            "createdAt": "2026-09-01T00:00:00.000Z",
+            "content": "rollback rollback rollback procedure notes"
           }
         ]
       },
@@ -1403,7 +1421,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "helper",
-            "relevanceScore": 0.11589236337877082,
+            "relevanceScore": 0.11589296892595254,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "config lives at /home/user/work/acme-app/config.yaml and listens on api.example.com:8443"
           },
@@ -1412,7 +1430,7 @@
             "layer": "summary",
             "role": "leaf",
             "agent": "summary",
-            "relevanceScore": 0.08142564164276433,
+            "relevanceScore": 0.0814261853847911,
             "createdAt": "2026-10-10T12:00:30.000Z",
             "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour."
           },
@@ -1421,7 +1439,7 @@
             "layer": "summary",
             "role": "branch",
             "agent": "summary",
-            "relevanceScore": 0.07464027117921611,
+            "relevanceScore": 0.07464073637938261,
             "createdAt": "2026-10-10T12:00:40.000Z",
             "content": "Branch: staging deploys and database migration plans for AcmeKit"
           },
@@ -1430,7 +1448,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "rivet",
-            "relevanceScore": 0.06404605662899643,
+            "relevanceScore": 0.0640465774894476,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": ""
           },
@@ -1439,7 +1457,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "helper",
-            "relevanceScore": 0.0583468840906796,
+            "relevanceScore": 0.05834719811124216,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": ""
           }
@@ -1458,7 +1476,7 @@
             "layer": "summary",
             "role": "branch",
             "agent": "summary",
-            "relevanceScore": 0.08160300874280746,
+            "relevanceScore": 0.08160352102154998,
             "createdAt": "2026-10-10T12:00:40.000Z",
             "content": "Branch: staging deploys and database migration plans for AcmeKit"
           },
@@ -1467,7 +1485,7 @@
             "layer": "summary",
             "role": "leaf",
             "agent": "summary",
-            "relevanceScore": 0.07480265740057673,
+            "relevanceScore": 0.07480316053293957,
             "createdAt": "2026-10-10T12:00:30.000Z",
             "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour."
           },
@@ -1476,7 +1494,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "helper",
-            "relevanceScore": 0.06404657741712053,
+            "relevanceScore": 0.06404692465139644,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": ""
           },
@@ -1485,7 +1503,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "rivet",
-            "relevanceScore": 0.058607255509791324,
+            "relevanceScore": 0.05860773560725067,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": ""
           },
@@ -1494,7 +1512,7 @@
             "layer": "message",
             "role": "user",
             "agent": "helper",
-            "relevanceScore": 0.05539912503038125,
+            "relevanceScore": 0.055399416707173015,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "notes about the staging database migration on db.example.com"
           },
@@ -1503,7 +1521,7 @@
             "layer": "message",
             "role": "user",
             "agent": "rivet",
-            "relevanceScore": 0.05326796881572789,
+            "relevanceScore": 0.053268389510707684,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": "how do we deploy the AcmeKit service to staging"
           },
@@ -1512,7 +1530,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "helper",
-            "relevanceScore": 0.05081401237354187,
+            "relevanceScore": 0.050814279872539614,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "config lives at /home/user/work/acme-app/config.yaml and listens on api.example.com:8443"
           },
@@ -1521,7 +1539,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.047107705550586944,
+            "relevanceScore": 0.047400979989018724,
             "createdAt": "2026-10-09T00:00:00.000Z",
             "content": "the rollback switches traffic back to the previous colour"
           },
@@ -1530,9 +1548,18 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.04604261732924405,
+            "relevanceScore": 0.047244569087179875,
             "createdAt": "2026-10-04T08:00:00.000Z",
             "content": "run the deploy script from the release branch, then watch the health check"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000016",
+            "layer": "message",
+            "role": "user",
+            "agent": "rivet",
+            "relevanceScore": 0.041264008016322615,
+            "createdAt": "2026-09-01T00:00:00.000Z",
+            "content": "rollback rollback rollback procedure notes"
           }
         ]
       }
@@ -1554,7 +1581,7 @@
               "source": "summary",
               "content": "Branch: staging deploys and database migration plans for AcmeKit",
               "createdAt": "2026-10-10T12:00:40.000Z",
-              "score": 0.1635605342165765,
+              "score": 0.16356156834936514,
               "role": "branch",
               "agent": "summary",
               "kind": "branch",
@@ -1565,7 +1592,7 @@
               "source": "summary",
               "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
               "createdAt": "2026-10-10T12:00:30.000Z",
-              "score": 0.14993028659057234,
+              "score": 0.14993130225964124,
               "role": "leaf",
               "agent": "summary",
               "kind": "leaf",
@@ -1581,7 +1608,7 @@
               "source": "message",
               "content": "",
               "createdAt": "2026-10-10T12:00:00.000Z",
-              "score": 0.12866348230871197,
+              "score": 0.12866454387191723,
               "role": "tool",
               "agent": "rivet",
               "toolName": "Bash",
@@ -1597,7 +1624,7 @@
               "source": "message",
               "content": "how do we deploy the AcmeKit service to staging",
               "createdAt": "2026-10-10T12:00:00.000Z",
-              "score": 0.11372972735708164,
+              "score": 0.11373063215613964,
               "role": "user",
               "agent": "rivet",
               "conversationId": "00000000-0000-4000-8000-000000000007",
@@ -1612,7 +1639,7 @@
               "source": "message",
               "content": "run the deploy script from the release branch, then watch the health check",
               "createdAt": "2026-10-04T08:00:00.000Z",
-              "score": 0.09777720648685173,
+              "score": 0.10034984553797209,
               "role": "assistant",
               "agent": "rivet",
               "conversationId": "00000000-0000-4000-8000-000000000007",
@@ -1642,7 +1669,7 @@
               "source": "message",
               "content": "notes about the staging database migration on db.example.com",
               "createdAt": "2026-10-10T12:01:00.000Z",
-              "score": 0.12343677131324982,
+              "score": 0.12343742598024435,
               "role": "user",
               "agent": "helper",
               "conversationId": "00000000-0000-4000-8000-000000000010",
@@ -1671,7 +1698,7 @@
               "source": "summary",
               "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.",
               "createdAt": "2026-10-10T12:00:30.000Z",
-              "score": 0.1502552583799912,
+              "score": 0.15025628345340333,
               "role": "leaf",
               "agent": "summary",
               "kind": "leaf",
@@ -1687,7 +1714,7 @@
               "source": "message",
               "content": "",
               "createdAt": "2026-10-10T12:00:00.000Z",
-              "score": 0.12923485135943114,
+              "score": 0.12923593276493928,
               "role": "tool",
               "agent": "rivet",
               "toolName": "Bash",
@@ -1703,7 +1730,7 @@
               "source": "message",
               "content": "how do we deploy the AcmeKit service to staging",
               "createdAt": "2026-10-10T12:00:00.000Z",
-              "score": 0.11422131494336092,
+              "score": 0.11422223681409924,
               "role": "user",
               "agent": "rivet",
               "conversationId": "00000000-0000-4000-8000-000000000007",
@@ -1759,7 +1786,7 @@
               "source": "message",
               "content": "notes about the staging database migration on db.example.com",
               "createdAt": "2026-10-10T12:01:00.000Z",
-              "score": 0.06637988098958247,
+              "score": 0.06638023814483769,
               "role": "user",
               "agent": "helper",
               "conversationId": "00000000-0000-4000-8000-000000000010",
@@ -1773,7 +1800,7 @@
               "source": "message",
               "content": "",
               "createdAt": "2026-10-10T12:01:00.000Z",
-              "score": 0.06127172351970142,
+              "score": 0.0612720581272764,
               "role": "tool",
               "agent": "helper",
               "toolName": "Read",
@@ -1788,7 +1815,7 @@
               "source": "message",
               "content": "config lives at /home/user/work/acme-app/config.yaml and listens on api.example.com:8443",
               "createdAt": "2026-10-10T12:01:00.000Z",
-              "score": 0.05978165764171874,
+              "score": 0.059781974681709794,
               "role": "assistant",
               "agent": "helper",
               "conversationId": "00000000-0000-4000-8000-000000000010",
@@ -1814,7 +1841,7 @@
             "layer": "summary",
             "role": "leaf",
             "agent": "summary",
-            "relevanceScore": 0.08213467100149642,
+            "relevanceScore": 0.08213523526209025,
             "createdAt": "2026-10-10T12:00:30.000Z",
             "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour."
           },
@@ -1823,7 +1850,7 @@
             "layer": "summary",
             "role": "branch",
             "agent": "summary",
-            "relevanceScore": 0.07529021851931231,
+            "relevanceScore": 0.07529070127420208,
             "createdAt": "2026-10-10T12:00:40.000Z",
             "content": "Branch: staging deploys and database migration plans for AcmeKit"
           },
@@ -1832,7 +1859,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "rivet",
-            "relevanceScore": 0.06476026794239535,
+            "relevanceScore": 0.06476081360572515,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": ""
           },
@@ -1841,7 +1868,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "helper",
-            "relevanceScore": 0.05873816126553615,
+            "relevanceScore": 0.05873848434438419,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": ""
           },
@@ -1850,7 +1877,7 @@
             "layer": "message",
             "role": "user",
             "agent": "helper",
-            "relevanceScore": 0.05587909169820529,
+            "relevanceScore": 0.055879394486493886,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "notes about the staging database migration on db.example.com"
           },
@@ -1859,7 +1886,7 @@
             "layer": "message",
             "role": "user",
             "agent": "rivet",
-            "relevanceScore": 0.0537294592028472,
+            "relevanceScore": 0.05372989592430241,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": "how do we deploy the AcmeKit service to staging"
           },
@@ -1868,7 +1895,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.05070023709338025,
+            "relevanceScore": 0.05101809918675127,
             "createdAt": "2026-10-09T00:00:00.000Z",
             "content": "the rollback switches traffic back to the previous colour"
           },
@@ -1877,7 +1904,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "helper",
-            "relevanceScore": 0.049213497051193975,
+            "relevanceScore": 0.049213759957145733,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "config lives at /home/user/work/acme-app/config.yaml and listens on api.example.com:8443"
           },
@@ -1886,9 +1913,18 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.04460692580676272,
+            "relevanceScore": 0.04578974835900195,
             "createdAt": "2026-10-04T08:00:00.000Z",
             "content": "run the deploy script from the release branch, then watch the health check"
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000016",
+            "layer": "message",
+            "role": "user",
+            "agent": "rivet",
+            "relevanceScore": 0.04131835113622219,
+            "createdAt": "2026-09-01T00:00:00.000Z",
+            "content": "rollback rollback rollback procedure notes"
           }
         ]
       },
@@ -1904,7 +1940,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "helper",
-            "relevanceScore": 0.18463621385500953,
+            "relevanceScore": 0.1846372073520532,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": "config lives at /home/user/work/acme-app/config.yaml and listens on api.example.com:8443"
           }
@@ -1922,7 +1958,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "helper",
-            "relevanceScore": 0.1878188251601295,
+            "relevanceScore": 0.18781986556891644,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": ""
           }
@@ -1940,7 +1976,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "helper",
-            "relevanceScore": 0.19385389892216173,
+            "relevanceScore": 0.19385498030890672,
             "createdAt": "2026-10-10T12:01:00.000Z",
             "content": ""
           }
@@ -1966,7 +2002,7 @@
             "layer": "summary",
             "role": "branch",
             "agent": "summary",
-            "relevanceScore": 0.16462408440946116,
+            "relevanceScore": 0.16462514726816066,
             "createdAt": "2026-10-10T12:00:40.000Z",
             "content": "Branch: staging deploys and database migration plans for AcmeKit"
           },
@@ -1975,7 +2011,7 @@
             "layer": "summary",
             "role": "leaf",
             "agent": "summary",
-            "relevanceScore": 0.150905201958829,
+            "relevanceScore": 0.15090624584092757,
             "createdAt": "2026-10-10T12:00:30.000Z",
             "content": "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour."
           },
@@ -1984,7 +2020,7 @@
             "layer": "message",
             "role": "tool",
             "agent": "rivet",
-            "relevanceScore": 0.12980622041015027,
+            "relevanceScore": 0.12980732165796133,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": ""
           },
@@ -1993,7 +2029,7 @@
             "layer": "message",
             "role": "user",
             "agent": "rivet",
-            "relevanceScore": 0.11471290252964017,
+            "relevanceScore": 0.11471384147205883,
             "createdAt": "2026-10-10T12:00:00.000Z",
             "content": "how do we deploy the AcmeKit service to staging"
           },
@@ -2002,7 +2038,7 @@
             "layer": "message",
             "role": "assistant",
             "agent": "rivet",
-            "relevanceScore": 0.09811092198456048,
+            "relevanceScore": 0.1007325636842736,
             "createdAt": "2026-10-04T08:00:00.000Z",
             "content": "run the deploy script from the release branch, then watch the health check"
           }
@@ -2166,7 +2202,7 @@
       },
       {
         "id": "00000000-0000-4000-8000-000000000016",
-        "access_count": 1,
+        "access_count": 5,
         "last_accessed_at": "2026-10-10T12:03:00.000Z"
       },
       {

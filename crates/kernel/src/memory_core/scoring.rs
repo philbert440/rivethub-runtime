@@ -1,4 +1,4 @@
-const DECAY_LAMBDA: f64 = 0.05;
+const DECAY_TAU_DAYS: f64 = 30.0;
 const REINFORCEMENT_ALPHA: f64 = 0.01;
 const REINFORCEMENT_CAP: u32 = 25;
 const W_FTS: f64 = 0.3;
@@ -18,7 +18,8 @@ pub fn composite_score(arm_score: f64, semantic: f64, boost: f64) -> f64 {
 
 fn temporal_decay(age_days: f64, access_count: u32) -> f64 {
     let reinforced = f64::from(access_count.min(REINFORCEMENT_CAP));
-    (-DECAY_LAMBDA * age_days).exp() * REINFORCEMENT_ALPHA.mul_add(reinforced, 1.0)
+    let decayed = ((age_days.max(0.0) / DECAY_TAU_DAYS).ln_1p() + 1.0).recip();
+    decayed * REINFORCEMENT_ALPHA.mul_add(reinforced, 1.0)
 }
 
 #[cfg(test)]
@@ -42,10 +43,28 @@ mod tests {
     }
 
     #[test]
-    fn decay_halves_after_the_half_life() {
-        let half_life = 2.0_f64.ln() / 0.05;
-        assert_close(temporal_decay(half_life, 0), 0.5);
-        assert_close(temporal_decay(2.0 * half_life, 0), 0.25);
+    fn decay_is_logarithmic_in_days_since_creation() {
+        assert_close(temporal_decay(30.0, 0), 1.0 / (1.0 + 2.0_f64.ln()));
+        assert_close(temporal_decay(90.0, 0), 1.0 / (1.0 + 4.0_f64.ln()));
+        assert_close(temporal_decay(7.0, 0), 1.0 / (1.0 + (37.0_f64 / 30.0).ln()));
+    }
+
+    #[test]
+    fn old_rows_keep_a_share_of_the_temporal_weight() {
+        let week = temporal_decay(7.0, 0);
+        let month = temporal_decay(30.0, 0);
+        let year = temporal_decay(365.0, 0);
+        let five_years = temporal_decay(5.0 * 365.0, 0);
+        assert!((0.82..0.84).contains(&week), "{week}");
+        assert!((0.59..0.60).contains(&month), "{month}");
+        assert!((0.27..0.29).contains(&year), "{year}");
+        assert!((0.19..0.20).contains(&five_years), "{five_years}");
+    }
+
+    #[test]
+    fn a_row_dated_in_the_future_counts_as_fresh() {
+        assert_close(temporal_decay(-1.0, 0), 1.0);
+        assert_close(temporal_decay(-400.0, 4), 1.04);
     }
 
     #[test]

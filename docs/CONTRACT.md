@@ -61,6 +61,11 @@ session; (4) one process per service (`rh gateway`, `rh agent`, `rh worker --rol
 existing boundaries (B1 HTTP API, B4/B13 Postgres queue) — no new wire; (5) one reviewer, Claude Opus, for Rust idiom and
 quality; boundary acceptance is mechanical; (6) the first attempt's branches and PRs are deleted.
 
+Decided 2026-10-19 (after cutover): memory search ranks recency by logarithmic decay from creation,
+`1 / (1 + ln(1 + days / 30))` with the same access reinforcement, instead of the 14-day exponential half-life, so B6
+no longer ranks like the TypeScript. The `memory-sqlite/search.json` hybrid recording carries the Rust scores, the
+older message the fusion gate now keeps, and the access counts that follow from it.
+
 Decided 2026-10-12 (crate review): (7) one harness adapter — every chat-capable harness speaks ACP, natively or through
 `codex-acp` / `claude-code-acp`; pi and cursor are terminal-only until they have ACP; no codex app-server, claude stream-json
 or headless drivers are built. (8) A crate exists only where a feature is replaced or deployed on its own: hooks live in
