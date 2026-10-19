@@ -171,7 +171,7 @@ async fn spool_round_trip_and_dead_letters() -> Result<(), Box<dyn std::error::E
 
     let posted = Mutex::new(Vec::new());
     spool
-        .replay(50, |body| {
+        .replay(50, now, |body| {
             posted.lock().push(body);
             async { Ok(spool_ok("c-1")) }
         })
@@ -181,17 +181,28 @@ async fn spool_round_trip_and_dead_letters() -> Result<(), Box<dyn std::error::E
 
     spool.spool(r#"{"session_key":"c"}"#, now).await?;
     spool
-        .replay(50, |_body| async { Err(spool_error(400)) })
+        .replay(50, now, |_body| async { Err(spool_error(400)) })
         .await?;
     let dead = dir.path().join("dead");
     assert!(dead.is_dir());
     assert_eq!(std::fs::read_dir(&dead)?.count(), 1);
 
     spool.spool(r#"{"session_key":"d"}"#, now).await?;
-    let stopped = spool
-        .replay(50, |_body| async { Err(spool_error(503)) })
-        .await;
-    assert!(stopped.is_err());
+    spool
+        .replay(50, now, |_body| async { Err(spool_error(503)) })
+        .await?;
+    let mut deferred = Vec::new();
+    for entry in std::fs::read_dir(dir.path())? {
+        let entry = entry?;
+        if entry.file_type()?.is_file() {
+            deferred.push(entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+    let [name] = deferred.as_slice() else {
+        return Err("expected the failed batch to stay queued".into());
+    };
+    let retry_at = (now + Duration::from_secs(30)).timestamp_millis();
+    assert!(name.ends_with(&format!(".1.{retry_at}.json")), "{name}");
     Ok(())
 }
 

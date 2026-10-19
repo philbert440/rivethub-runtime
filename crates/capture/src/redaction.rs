@@ -143,6 +143,14 @@ fn env_opt_in(env: &Environment) -> bool {
 }
 
 impl Redaction {
+    pub fn redact_title(&self, title: &mut String) -> u64 {
+        let Some((redacted, count)) = scan_text(title, self) else {
+            return 0;
+        };
+        *title = redacted;
+        count
+    }
+
     pub fn redact_message(&self, message: &mut CaptureMessage) -> u64 {
         let mut spans = 0;
         if let Some((redacted, count)) = scan_text(&message.content, self) {
