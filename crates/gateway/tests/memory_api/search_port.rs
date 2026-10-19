@@ -20,6 +20,8 @@ fn search_routes_forward_every_argument_and_preserve_runtime_degradation() {
         scope: Some(MemoryScope::Both),
         limit: Some(3),
         agent: Some("acme".into()),
+        role: Some(wire::message::Role::Tool),
+        tool_name: Some("Bash".into()),
         tag: Some("project:acme".into()),
         since: Some("2026-10-12T00:00:00Z".parse().expect("since")),
         before: Some("2026-10-13T00:00:00Z".parse().expect("before")),
@@ -30,7 +32,7 @@ fn search_routes_forward_every_argument_and_preserve_runtime_degradation() {
     let tool = post(&app, "/api/memory/tool/memory_search", &args).expect("tool");
     let tool_result: MemorySearchResponse =
         serde_json::from_str(&tool_text(&tool)).expect("result");
-    let http = block_on(answer(app, recorded("GET", "/api/memory/search?q=release&mode=vector&scope=both&limit=3&agent=acme&tag=project%3Aacme&since=2026-10-12T00%3A00%3A00Z&before=2026-10-13T00%3A00%3A00Z&window=today&expand=true&synthesize=true", Vec::new()))).expect("http");
+    let http = block_on(answer(app, recorded("GET", "/api/memory/search?q=release&mode=vector&scope=both&limit=3&agent=acme&role=tool&tool_name=Bash&tag=project%3Aacme&since=2026-10-12T00%3A00%3A00Z&before=2026-10-13T00%3A00%3A00Z&window=today&expand=true&synthesize=true", Vec::new()))).expect("http");
     assert_eq!(http.status, 200);
     let http_result: MemorySearchResponse = serde_json::from_slice(&http.body).expect("result");
     assert_eq!(http_result, tool_result);
@@ -46,6 +48,8 @@ fn search_routes_forward_every_argument_and_preserve_runtime_degradation() {
     assert_eq!(query.mode, SearchMode::Vector);
     assert_eq!(query.scope, MemoryScope::Both);
     assert_eq!(query.agent, args.agent);
+    assert_eq!(query.role, Some(wire::message::Role::Tool));
+    assert_eq!(query.tool_name.as_deref(), Some("Bash"));
     assert_eq!(
         query.tag.as_ref().map(|tag| tag.value.as_str()),
         Some("acme")
@@ -67,6 +71,7 @@ fn search_routes_reject_wrong_types_before_the_port() {
         "/api/memory/search?q=x&since=wrong",
         "/api/memory/search?q=x&window=wrong",
         "/api/memory/search?q=x&mode=wrong",
+        "/api/memory/search?q=x&role=wrong",
     ] {
         let response =
             block_on(answer(app.clone(), recorded("GET", target, Vec::new()))).expect("http");

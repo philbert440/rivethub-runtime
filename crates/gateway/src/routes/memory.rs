@@ -130,6 +130,8 @@ struct SearchParams {
     q: Option<String>,
     scope: Option<ScopeParam>,
     agent: Option<String>,
+    role: Option<RoleParam>,
+    tool_name: Option<String>,
     tag: Option<TagFilter>,
     limit: Option<RawLimit>,
 }
@@ -168,6 +170,8 @@ async fn search(
         },
         scope,
         agent: params.agent,
+        role: params.role.map(RoleParam::get),
+        tool_name: params.tool_name,
         tag: params.tag.map(TagFilter::get),
         limit: Limit::clamped(
             params.limit.map(RawLimit::get),
@@ -383,6 +387,8 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
         mode,
         scope,
         agent: args.agent,
+        role: args.role,
+        tool_name: args.tool_name,
         tag,
         limit: Limit::clamped(args.limit, SEARCH_TOOL_LIMIT_DEFAULT, 1..=SEARCH_LIMIT_MAX),
     };

@@ -112,6 +112,8 @@ pub struct MemorySearchToolArgs {
     pub scope: Option<MemoryScope>,
     pub limit: Option<u32>,
     pub agent: Option<String>,
+    pub role: Option<Role>,
+    pub tool_name: Option<String>,
     pub tag: Option<String>,
 }
 

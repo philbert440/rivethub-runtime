@@ -9,6 +9,7 @@ use std::sync::Arc;
 use testkit::{FakeMemoryStore, MemoryRequest};
 use tokio_util::sync::CancellationToken;
 use wire::gateway::memory::{BrowseWindow, MemoryBrowseOrder, MemoryScope, TagState};
+use wire::message::Role;
 
 pub mod support;
 
@@ -29,7 +30,7 @@ async fn memory_requests_reach_kernel_with_resolved_windows() {
     for (name, args) in [
         (
             "memory_search",
-            r#"{"query":"日本語","mode":"trigram","scope":"messages","tag":"project:acme","limit":7}"#,
+            r#"{"query":"日本語","mode":"trigram","scope":"messages","role":"tool","tool_name":"Bash","tag":"project:acme","limit":7}"#,
         ),
         (
             "memory_browse",
@@ -52,6 +53,19 @@ async fn memory_requests_reach_kernel_with_resolved_windows() {
     assert_eq!(store.requests().await, expected_requests(today));
 }
 
+#[tokio::test]
+async fn an_unknown_search_role_is_refused_before_the_store() {
+    let (server, store) = setup(false);
+    let result = support::call(
+        &server,
+        "memory_search",
+        r#"{"query":"disk","role":"robot"}"#,
+    )
+    .await;
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(store.requests().await, []);
+}
+
 fn expected_requests(today: kernel::memory_core::TimeRange) -> Vec<MemoryRequest> {
     vec![
         MemoryRequest::Search(SearchQuery {
@@ -64,6 +78,8 @@ fn expected_requests(today: kernel::memory_core::TimeRange) -> Vec<MemoryRequest
             mode: SearchMode::Trigram,
             scope: MemoryScope::Messages,
             agent: None,
+            role: Some(Role::Tool),
+            tool_name: Some("Bash".into()),
             tag: Some("project:acme".parse().expect("tag")),
             limit: Limit::clamped(Some(7), 10, 1..=50),
         }),
@@ -294,6 +310,8 @@ async fn search_forwards_every_argument_and_preserves_the_outcome() {
             mode: SearchMode::Vector,
             scope: MemoryScope::Summaries,
             agent: Some("acme".into()),
+            role: None,
+            tool_name: None,
             tag: Some("project:acme".parse().expect("tag")),
             limit: Limit::clamped(Some(3), 10, 1..=50),
             since: Some("2026-10-12T00:00:00Z".parse().expect("since")),

@@ -534,6 +534,8 @@ fn search_reports_store_degradation() {
             scope: None,
             limit: None,
             agent: None,
+            role: None,
+            tool_name: None,
             tag: None,
         },
     )

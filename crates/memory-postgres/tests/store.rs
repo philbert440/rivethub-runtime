@@ -143,6 +143,8 @@ fn query(text: &str, limit: u32) -> SearchQuery {
         mode: SearchMode::Fts,
         scope: MemoryScope::Both,
         agent: None,
+        role: None,
+        tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(limit), 20, 1..=50),
     }

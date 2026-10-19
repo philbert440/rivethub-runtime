@@ -187,6 +187,8 @@ pub struct SearchQuery {
     pub mode: SearchMode,
     pub scope: MemoryScope,
     pub agent: Option<String>,
+    pub role: Option<Role>,
+    pub tool_name: Option<String>,
     pub tag: Option<TagLiteral>,
     pub limit: Limit,
     pub since: Option<DateTime<Utc>>,

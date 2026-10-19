@@ -127,6 +127,9 @@ accepted and ignored with a warning. (13) Workflows kept but outside the runtime
 (15) Capture redaction is a configuration option, off by default: `memory.capture.redaction.{enabled,builtins,patterns}` and
 `RIVETHUB_CAPTURE_REDACTION` are honoured by the hook-side writer; the YAML keys are actually passed to the hook process (the
 TypeScript validated them but did not). Nothing is redacted unless enabled.
+(16) Memory search (B6, B7) narrows message hits by `role` and `tool_name` on `GET /api/memory/search`, the
+`memory_search` tool route and the MCP `memory_search` schema; summaries carry neither and stay in the result unless
+`scope` excludes them (Phil, 2026-10-19).
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

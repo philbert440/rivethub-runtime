@@ -41,6 +41,8 @@ const MESSAGE_SQL: &str = "SELECT m.id, m.content, m.role, m.agent, m.created_at
        AND (?2 IS NULL OR m.agent = ?2) \
        AND (?3 IS NULL OR m.created_at >= ?3) \
        AND (?4 IS NULL OR m.created_at < ?4) \
+       AND (?6 IS NULL OR m.role = ?6) \
+       AND (?7 IS NULL OR m.tool_name = ?7) \
      ORDER BY ros_messages_fts.rank ASC \
      LIMIT ?5";
 
@@ -77,6 +79,8 @@ struct Plan {
     mode: SearchMode,
     scope: MemoryScope,
     agent: Option<String>,
+    role: Option<Role>,
+    tool_name: Option<String>,
     tag: Option<TagLiteral>,
     since: Option<String>,
     before: Option<String>,
@@ -195,6 +199,8 @@ impl Plan {
             mode: query.mode,
             scope: query.scope,
             agent: query.agent,
+            role: query.role,
+            tool_name: query.tool_name,
             tag: query.tag,
             since: range.since.map(time::stamp),
             before: range.before.map(time::stamp),
@@ -259,26 +265,34 @@ fn fetch(conn: &Connection, plan: &Plan) -> Result<Vec<Candidate>, SqliteError> 
 }
 
 fn fetch_messages(conn: &Connection, plan: &Plan) -> Result<Vec<Candidate>, SqliteError> {
-    let rows = query_rows(conn, MESSAGE_SQL, plan, "search messages", read_message)?;
+    let operation = "search messages";
+    let mut statement = conn
+        .prepare(MESSAGE_SQL)
+        .map_err(SqliteError::query(operation))?;
+    let rows = statement
+        .query_map(
+            params![
+                plan.pattern,
+                plan.agent,
+                plan.since,
+                plan.before,
+                plan.fetch_limit,
+                plan.role.map(|role| role.to_string()),
+                plan.tool_name,
+            ],
+            read_message,
+        )
+        .map_err(SqliteError::query(operation))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(SqliteError::query(operation))?;
     rows.into_iter().map(Candidate::from_message).collect()
 }
 
 fn fetch_summaries(conn: &Connection, plan: &Plan) -> Result<Vec<Candidate>, SqliteError> {
-    let rows = query_rows(conn, SUMMARY_SQL, plan, "search summaries", read_summary)?;
-    rows.into_iter().map(Candidate::from_summary).collect()
-}
-
-fn query_rows<T, F>(
-    conn: &Connection,
-    sql: &str,
-    plan: &Plan,
-    operation: &'static str,
-    read: F,
-) -> Result<Vec<T>, SqliteError>
-where
-    F: FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>,
-{
-    let mut statement = conn.prepare(sql).map_err(SqliteError::query(operation))?;
+    let operation = "search summaries";
+    let mut statement = conn
+        .prepare(SUMMARY_SQL)
+        .map_err(SqliteError::query(operation))?;
     let rows = statement
         .query_map(
             params![
@@ -288,12 +302,12 @@ where
                 plan.before,
                 plan.fetch_limit,
             ],
-            read,
+            read_summary,
         )
         .map_err(SqliteError::query(operation))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(SqliteError::query(operation))?;
-    Ok(rows)
+    rows.into_iter().map(Candidate::from_summary).collect()
 }
 
 struct MessageRow {

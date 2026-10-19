@@ -2214,6 +2214,22 @@
             "null"
           ]
         },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Role"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tool_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "tag": {
           "type": [
             "string",
@@ -2243,6 +2259,15 @@
         "messages",
         "summaries",
         "both"
+      ]
+    },
+    "Role": {
+      "type": "string",
+      "enum": [
+        "system",
+        "user",
+        "assistant",
+        "tool"
       ]
     },
     "MemoryHitSource": {
@@ -2387,15 +2412,6 @@
         "charStart",
         "charEnd",
         "content"
-      ]
-    },
-    "Role": {
-      "type": "string",
-      "enum": [
-        "system",
-        "user",
-        "assistant",
-        "tool"
       ]
     },
     "MemoryFallback": {

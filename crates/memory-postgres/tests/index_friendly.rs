@@ -104,6 +104,8 @@ fn search(text: &str, mode: SearchMode, scope: MemoryScope) -> SearchQuery {
         mode,
         scope,
         agent: None,
+        role: None,
+        tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(20), 20, 1..=50),
         since: None,

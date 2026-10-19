@@ -6,6 +6,7 @@ use rmcp::model::CallToolResult;
 use serde::Deserialize;
 use uuid::Uuid;
 use wire::gateway::memory::{BrowseWindow, MemoryBrowseOrder, MemoryScope};
+use wire::message::Role;
 
 #[derive(schemars::JsonSchema, Debug, Deserialize)]
 #[schemars(!deny_unknown_fields)]
@@ -22,6 +23,10 @@ pub struct Search {
     limit: Option<u32>,
     #[schemars(description = "Filter by agent (opus, grok, etc.)", transform = crate::catalog::optional_non_null)]
     agent: Option<String>,
+    #[schemars(description = "Only message hits with this role (user, assistant, system, tool). Summaries carry no role and are not filtered; pass scope=messages for messages only.", transform = crate::catalog::optional_non_null)]
+    role: Option<Role>,
+    #[schemars(description = "Only message hits from this tool (e.g. Bash, Read), matched exactly. Summaries are not filtered; pass scope=messages for messages only.", transform = crate::catalog::optional_non_null)]
+    tool_name: Option<String>,
     #[schemars(description = "Only results whose conversation carries this accepted key:value tag (e.g. project:acmeapp). See memory_tags.", transform = crate::catalog::optional_non_null)]
     tag: Option<String>,
     #[schemars(description = "Only return results after this date (ISO UTC timestamp). Prefer window= for local-day bounds.", with = "Option<String>", transform = crate::catalog::optional_non_null)]
@@ -181,6 +186,8 @@ pub async fn search(
             mode: args.mode,
             scope,
             agent: args.agent,
+            role: args.role,
+            tool_name: args.tool_name,
             tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
                 |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),
             )?,
