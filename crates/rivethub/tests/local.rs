@@ -296,9 +296,11 @@ async fn sqlite_worker_roles_and_mcp_share_the_process() -> TestResult {
 #[tokio::test]
 async fn mcp_delegate_task_runs_to_completion() -> TestResult {
     let home = tempfile::tempdir()?;
-    let gateway = free_port()?;
-    let mcp_port = free_port()?;
     let stub = model_stub().await?;
+    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+    let gateway = probe.local_addr()?.port();
+    let mcp_port = free_port()?;
+    drop(probe);
     let database = home.path().join(".rivethub").join("memory.sqlite");
     write_config(
         home.path(),

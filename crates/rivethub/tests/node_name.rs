@@ -282,9 +282,18 @@ async fn install_queue(pool: &PgPool) -> Result<(), sqlx::Error> {
     if present {
         return Ok(());
     }
-    sqlx::raw_sql(include_str!("fixtures/graphile_worker.txt"))
-        .execute(pool)
+    let mut transaction = pool.begin().await?;
+    let path: String = sqlx::query_scalar("SHOW search_path")
+        .fetch_one(&mut *transaction)
         .await?;
+    sqlx::raw_sql(include_str!("fixtures/graphile_worker.txt"))
+        .execute(&mut *transaction)
+        .await?;
+    sqlx::query("SELECT set_config('search_path', $1, false)")
+        .bind(path)
+        .execute(&mut *transaction)
+        .await?;
+    transaction.commit().await?;
     Ok(())
 }
 
