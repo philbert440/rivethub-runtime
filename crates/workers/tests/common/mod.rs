@@ -139,6 +139,8 @@ pub struct Queue {
     next_id: AtomicI64,
     claim_error: Mutex<Option<JobQueueError>>,
     claims: AtomicUsize,
+    claim_gate: watch::Sender<bool>,
+    held: AtomicUsize,
     events: watch::Sender<u64>,
     notifications: watch::Sender<()>,
 }
@@ -151,6 +153,8 @@ impl Queue {
             next_id: AtomicI64::new(1),
             claim_error: Mutex::new(None),
             claims: AtomicUsize::new(0),
+            claim_gate: watch::channel(true).0,
+            held: AtomicUsize::new(0),
             events,
             notifications: watch::channel(()).0,
         }
@@ -180,6 +184,40 @@ impl Queue {
     pub async fn fail_next_claim(&self) {
         let error = JobQueueError::Unavailable(Box::new(std::io::Error::other("queue down")));
         *self.claim_error.lock().await = Some(error);
+    }
+
+    pub fn hold_claims(&self) {
+        self.claim_gate.send_replace(false);
+    }
+
+    pub fn open_claims(&self) {
+        self.claim_gate.send_replace(true);
+    }
+
+    pub async fn wait_held(&self, count: usize) {
+        let mut events = self.events.subscribe();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if self.held.load(Ordering::Relaxed) >= count {
+                    return;
+                }
+                events.changed().await.expect("queue watch");
+            }
+        })
+        .await
+        .expect("the held claim count");
+    }
+
+    async fn wait_open(&self) {
+        let mut gate = self.claim_gate.subscribe();
+        if *gate.borrow_and_update() {
+            return;
+        }
+        self.held.fetch_add(1, Ordering::Relaxed);
+        self.bump();
+        while !*gate.borrow_and_update() {
+            gate.changed().await.expect("claim gate");
+        }
     }
 
     pub fn claims(&self) -> usize {
@@ -275,6 +313,52 @@ fn snapshot(row: &Queued) -> JobView {
     }
 }
 
+struct Landing<'a> {
+    queue: &'a Queue,
+    selector: &'a ClaimSelector,
+    armed: bool,
+}
+
+impl Drop for Landing<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let Ok(mut rows) = self.queue.rows.try_lock() else {
+            return;
+        };
+        let landed = claim_row(&mut rows, self.selector);
+        drop(rows);
+        if matches!(landed, Ok(Some(_))) {
+            self.queue.claims.fetch_add(1, Ordering::Relaxed);
+        }
+        self.queue.bump();
+    }
+}
+
+fn claim_row(
+    rows: &mut [Queued],
+    selector: &ClaimSelector,
+) -> Result<Option<ClaimedJob>, JobQueueError> {
+    let Some(index) = select_ready(rows, selector) else {
+        return Ok(None);
+    };
+    let Some(row) = rows.get_mut(index) else {
+        return Err(JobQueueError::Claim {
+            message: "the ready job index is outside the queue".to_owned(),
+            source: Box::new(std::io::Error::other("ready job index")),
+        });
+    };
+    row.attempt = row.attempt.saturating_add(1);
+    row.phase = Phase::Running;
+    Ok(Some(ClaimedJob {
+        id: row.id,
+        name: row.name.clone(),
+        payload: row.payload.clone(),
+        attempt: row.attempt,
+    }))
+}
+
 fn select_ready(rows: &[Queued], selector: &ClaimSelector) -> Option<usize> {
     let mut chosen: Option<usize> = None;
     for (index, row) in rows.iter().enumerate() {
@@ -363,31 +447,20 @@ impl JobQueue for Queue {
             self.bump();
             return Err(error);
         }
-        let claimed = {
-            let mut rows = self.rows.lock().await;
-            let Some(index) = select_ready(&rows, selector) else {
-                return Ok(None);
-            };
-            let Some(row) = rows.get_mut(index) else {
-                return Err(JobQueueError::Claim {
-                    message: "the ready job index is outside the queue".to_owned(),
-                    source: Box::new(std::io::Error::other("ready job index")),
-                });
-            };
-            row.attempt = row.attempt.saturating_add(1);
-            row.phase = Phase::Running;
-            self.claims.fetch_add(1, Ordering::Relaxed);
-            let claimed = ClaimedJob {
-                id: row.id,
-                name: row.name.clone(),
-                payload: row.payload.clone(),
-                attempt: row.attempt,
-            };
-            drop(rows);
-            claimed
+        let mut landing = Landing {
+            queue: self,
+            selector,
+            armed: true,
         };
+        self.wait_open().await;
+        landing.armed = false;
+        let claimed = claim_row(&mut self.rows.lock().await, selector)?;
+        if claimed.is_none() {
+            return Ok(None);
+        }
+        self.claims.fetch_add(1, Ordering::Relaxed);
         self.bump();
-        Ok(Some(claimed))
+        Ok(claimed)
     }
 
     async fn complete(&self, id: JobId) -> Result<(), JobQueueError> {

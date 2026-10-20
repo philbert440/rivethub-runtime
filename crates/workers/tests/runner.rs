@@ -276,6 +276,49 @@ async fn shutdown_releases_every_in_flight_embed() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_claim_landing_after_shutdown_is_released() {
+    for schedules in [false, true] {
+        let queue = Arc::new(Queue::new());
+        let store = Arc::new(Store::new());
+        store
+            .insert(EmbedTable::Messages, "m", "hello", None)
+            .await
+            .expect("seed");
+        let mut runner = Runner::new(
+            Arc::clone(&queue),
+            RunnerConfig::new(ProcessRole::Embedder, 1).expect("concurrency"),
+            deps(
+                Arc::clone(&store) as Arc<dyn kernel::memory::EmbeddingStore>,
+                Arc::new(common::HangEmbed::new()),
+            ),
+        );
+        if schedules {
+            runner = runner.with_schedules(false);
+        }
+        queue.hold_claims();
+        let id = queue
+            .push(
+                fixed(FixedJob::EmbedTarget),
+                target_payload("ros_messages", "m"),
+                5,
+            )
+            .await;
+        let cancel = CancellationToken::new();
+        let token = cancel.clone();
+        let run = tokio::spawn(async move { runner.run(token).await });
+        queue.wait_held(1).await;
+        cancel.cancel();
+        tokio::task::yield_now().await;
+        queue.open_claims();
+        finish(cancel, run).await;
+        let job = queue.view(id).await;
+        assert_eq!(job.phase, Phase::Ready, "schedules {schedules}");
+        assert_eq!(job.attempt, 0, "schedules {schedules}");
+        assert_eq!(job.error, None, "schedules {schedules}");
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn a_database_outage_keeps_the_runner_alive() {
     let rig = rig(ProcessRole::Embedder, 1, fnv_provider());
     rig.queue.fail_next_claim().await;
