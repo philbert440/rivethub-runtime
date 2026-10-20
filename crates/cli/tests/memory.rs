@@ -162,6 +162,66 @@ async fn cloud_import_exits_2_and_sqlite_wins() {
     assert_eq!(scalar(&database, "SELECT count(*) FROM ros_summaries"), 2);
 }
 
+#[tokio::test]
+async fn sqlite_reembed_clears_imported_vectors_and_requeues_every_row() {
+    let directory = tempfile::tempdir().expect("directory");
+    let database = migrated(directory.path());
+    let path = database.to_string_lossy().to_string();
+    let (_home, environment) = env(&[]);
+    let imported = run(
+        &["memory", "import", &recording(), "--sqlite", &path],
+        &environment,
+    )
+    .await;
+    assert_eq!(imported.exit, Exit::Ok, "{}", imported.stderr);
+    let preview = run(
+        &["memory", "reembed", "--sqlite", &path, "--dry-run"],
+        &environment,
+    )
+    .await;
+    assert_eq!(preview.exit, Exit::Ok, "{}", preview.stderr);
+    assert_eq!(
+        preview.stdout,
+        "would clear 3 stored vector(s) and queue 4 embed job(s)\n"
+    );
+    assert_eq!(vectors(&database), 3);
+    let applied = run(&["memory", "reembed", "--sqlite", &path], &environment).await;
+    assert_eq!(applied.exit, Exit::Ok, "{}", applied.stderr);
+    assert_eq!(
+        applied.stdout,
+        "cleared 3 stored vector(s) and queued 4 embed job(s); the next embedding records the configured model\n"
+    );
+    assert_eq!(vectors(&database), 0);
+    assert_eq!(
+        scalar(
+            &database,
+            "SELECT count(*) FROM ros_jobs WHERE task = 'embed-target' AND state = 'queued'"
+        ),
+        4
+    );
+    assert_eq!(
+        scalar(
+            &database,
+            "SELECT count(*) FROM ros_meta WHERE key IN ('embed_model', 'embed_dims')"
+        ),
+        0
+    );
+    let (_home, postgres) = env(&[("RIVETHUB_PG_URL", "postgres://127.0.0.1/memory")]);
+    failure(
+        &run(&["memory", "reembed"], &postgres).await,
+        "reembed runs on a SQLite memory file; pass --sqlite <file>",
+    );
+}
+
+fn vectors(path: &Path) -> i64 {
+    scalar(
+        path,
+        "SELECT (SELECT count(*) FROM ros_messages WHERE embedding IS NOT NULL) \
+              + (SELECT count(*) FROM ros_summaries WHERE embedding IS NOT NULL) \
+              + (SELECT count(*) FROM ros_wiki_topics WHERE embedding IS NOT NULL)",
+    )
+}
+
 fn recording() -> String {
     testkit::recording("memory-sqlite/import/copy-cases.txt")
         .display()

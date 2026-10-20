@@ -9,6 +9,7 @@ use axum::handler::Handler;
 use axum::routing;
 use axum::routing::MethodRouter;
 use kernel::memory::BrowseFilter;
+use kernel::memory::EmbedModelMismatch;
 use kernel::memory::Limit;
 use kernel::memory::SearchMode;
 use kernel::memory::SearchQuery;
@@ -56,6 +57,7 @@ const SEARCH_LIMIT_MAX: u32 = 50;
 const SEARCH_TOOL_LIMIT_DEFAULT: u32 = 10;
 const BROWSE_LIMIT_DEFAULT: u32 = 50;
 const BROWSE_LIMIT_MAX: u32 = 200;
+const MODEL_MISMATCH_IMPACT: &str = "New embeddings are refused so the stored vectors stay comparable; run rh memory reembed to re-embed with the configured model.";
 pub(crate) fn router() -> Router<Arc<Gateway>> {
     Router::new()
         .route(
@@ -260,12 +262,11 @@ async fn health(
 ) -> Result<Json<MemoryHealthResponse>, ApiError> {
     let store = gateway.store();
     let counts = store.stats().await?;
-    let embeddings = if store.embeddings_armed() {
-        EmbedStatus::Ok
-    } else {
-        EmbedStatus::Unavailable
-    };
-    let overall = if embeddings == EmbedStatus::Ok && counts.failed_embeddings == 0 {
+    let embeddings = embed_health(
+        store.embeddings_armed(),
+        store.embed_model_mismatch().await?,
+    );
+    let overall = if embeddings.status == EmbedStatus::Ok && counts.failed_embeddings == 0 {
         MemoryHealthStatus::Ok
     } else {
         MemoryHealthStatus::Degraded
@@ -279,14 +280,33 @@ async fn health(
         skipped_embeddings: None,
         capture: None,
         status: overall,
-        embeddings: EmbedHealth {
-            status: embeddings,
-            error: None,
-            impact: None,
-            checked_at: None,
-        },
+        embeddings,
         embed_queue_depth: counts.embed_queue_depth,
     }))
+}
+
+fn embed_health(armed: bool, mismatch: Option<EmbedModelMismatch>) -> EmbedHealth {
+    if let Some(mismatch) = mismatch {
+        return EmbedHealth {
+            status: EmbedStatus::Unavailable,
+            error: Some(format!(
+                "stored vectors were written by embedding model {}, the configured model is {}",
+                mismatch.stored, mismatch.configured
+            )),
+            impact: Some(MODEL_MISMATCH_IMPACT.to_owned()),
+            checked_at: None,
+        };
+    }
+    EmbedHealth {
+        status: if armed {
+            EmbedStatus::Ok
+        } else {
+            EmbedStatus::Unavailable
+        },
+        error: None,
+        impact: None,
+        checked_at: None,
+    }
 }
 
 async fn tool_search(

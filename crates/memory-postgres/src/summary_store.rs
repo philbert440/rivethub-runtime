@@ -164,6 +164,14 @@ impl SummaryStore for PostgresMemory {
                 });
             }
         }
+        if summary.kind == SummaryKind::Leaf {
+            crate::title::title_from_first_leaf(&mut tx, summary.conversation_id)
+                .await
+                .map_err(|error| SummaryStoreError::Query {
+                    message: error.to_string(),
+                    source: Box::new(error),
+                })?;
+        }
         tx.commit()
             .await
             .map_err(|source| query_err("commit summary write", source))?;

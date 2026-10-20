@@ -191,6 +191,8 @@ pub enum Error {
     ImportPath,
     #[error("import accepts one file path")]
     ImportOne,
+    #[error("reembed runs on a SQLite memory file; pass --sqlite <file>")]
+    ReembedSqlite,
     #[error("--sqlite requires a file path")]
     SqliteRequired,
     #[error("unexpected argument: {0}")]

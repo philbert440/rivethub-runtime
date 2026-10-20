@@ -168,7 +168,8 @@ async fn run(
 ) -> Result<(), LocalError> {
     let _guard = shutdown.clone().drop_guard();
     let embed = crate::service::sqlite_query_embed(config, env, &shutdown, &activities)?;
-    let store = open_store(database, embed).await?;
+    let model = crate::service::sqlite_vector_model(config, env);
+    let store = open_store(database, embed, model).await?;
     import::pending(&store, config, &shutdown).await?;
     let switches = config.service_switches(env);
     let node = bind_node(&store, &switches, config, env, &shutdown, &activities).await?;
@@ -446,10 +447,15 @@ fn note_serve(result: Result<(), StartupError>) {
 async fn open_store(
     path: PathBuf,
     embed: Option<QueryEmbed>,
+    model: Option<String>,
 ) -> Result<Arc<SqliteStore>, LocalError> {
     let store = tokio::task::spawn_blocking(move || SqliteStore::open(path)).await??;
-    Ok(Arc::new(match embed {
+    let store = match embed {
         Some(embed) => store.with_query_embed(embed),
+        None => store,
+    };
+    Ok(Arc::new(match model {
+        Some(model) => store.with_embed_model(&model),
         None => store,
     }))
 }

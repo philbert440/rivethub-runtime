@@ -1,4 +1,5 @@
 use super::*;
+use kernel::memory::EmbedModelMismatch;
 use wire::gateway::memory::EmbedStatus;
 use wire::gateway::memory::MemoryHealthResponse;
 use wire::gateway::memory::MemoryHealthStatus;
@@ -444,6 +445,38 @@ fn memory_fallback_and_health_shape() {
     let response = call("GET", "/api/memory/bogus").expect("in-process answer");
     assert_eq!(response.status, 404);
     assert_eq!(error_of(&response).error, "unknown memory resource");
+}
+
+#[test]
+fn a_model_mismatch_degrades_embedding_health() {
+    let (store, app) = seeded().expect("seed store");
+    store.arm_embeddings();
+    block_on(store.script_embed_mismatch(EmbedModelMismatch {
+        stored: "embed-a".to_owned(),
+        configured: "embed-b".to_owned(),
+    }));
+    let response = block_on(answer(
+        app,
+        recorded("GET", "/api/memory/health", Vec::new()),
+    ))
+    .expect("in-process answer");
+    assert_eq!(response.status, 200);
+    let health: MemoryHealthResponse =
+        serde_json::from_slice(&response.body).expect("health response");
+    assert_eq!(health.status, MemoryHealthStatus::Degraded);
+    assert_eq!(health.embeddings.status, EmbedStatus::Unavailable);
+    assert_eq!(
+        health.embeddings.error.as_deref(),
+        Some(
+            "stored vectors were written by embedding model embed-a, the configured model is embed-b"
+        )
+    );
+    assert!(
+        health
+            .embeddings
+            .impact
+            .is_some_and(|impact| impact.contains("rh memory reembed"))
+    );
 }
 
 #[test]

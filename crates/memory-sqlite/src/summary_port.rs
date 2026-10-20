@@ -130,6 +130,9 @@ fn write_one(conn: &mut rusqlite::Connection, summary: &NewSummary) -> Result<()
             });
         }
     }
+    if summary.kind == SummaryKind::Leaf {
+        crate::title::title_from_first_leaf(&tx, &summary.conversation_id.to_string())?;
+    }
     tx.commit().map_err(SqliteError::query("summary commit"))?;
     Ok(())
 }

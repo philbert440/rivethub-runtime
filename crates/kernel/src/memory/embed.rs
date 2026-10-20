@@ -44,6 +44,12 @@ pub struct StoredEmbedding {
     pub chunks: Vec<StoredChunk>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmbedModelMismatch {
+    pub stored: String,
+    pub configured: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Unembeddable {
@@ -80,6 +86,10 @@ pub enum EmbeddingStoreError {
     },
     #[error("embedding width is {got}, the column is {expected}")]
     Width { got: usize, expected: usize },
+    #[error(
+        "stored vectors were written by embedding model {stored}, the configured model is {configured}; run rh memory reembed"
+    )]
+    Model { stored: String, configured: String },
     #[error("embed chunks belong on a message, not {table}")]
     Chunks { table: EmbedTable },
     #[error("embed chunk index does not fit the table")]

@@ -124,6 +124,12 @@ fn query_embed(
     )))
 }
 
+pub(crate) fn sqlite_vector_model(config: &Config, env: &Environment) -> Option<String> {
+    config
+        .sqlite_embed_endpoint(env)
+        .and_then(|_| config.sqlite_embed_model(env))
+}
+
 pub(crate) fn sqlite_query_embed(
     config: &Config,
     env: &Environment,
@@ -540,16 +546,19 @@ mod embed_tests {
 mod sqlite_embed_tests {
     use super::*;
 
+    fn sqlite_config(memory: &str) -> Result<Config, Box<dyn std::error::Error>> {
+        let text = format!(
+            "runtime:\n  workspace: /tmp\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\nmemory:\n  backend: sqlite\n  sqlite:\n    path: /tmp/memory.sqlite\n{memory}"
+        );
+        Ok(Config::from_str(&Environment::default(), &text)?.config)
+    }
+
     fn searched(
         memory: &str,
         env: &Environment,
     ) -> Result<Option<memory_sqlite::QueryEmbed>, Box<dyn std::error::Error>> {
-        let text = format!(
-            "runtime:\n  workspace: /tmp\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\nmemory:\n  backend: sqlite\n  sqlite:\n    path: /tmp/memory.sqlite\n{memory}"
-        );
-        let config = Config::from_str(&Environment::default(), &text)?.config;
         Ok(sqlite_query_embed(
-            &config,
+            &sqlite_config(memory)?,
             env,
             &CancellationToken::new(),
             &Activities::new(),
@@ -596,6 +605,22 @@ mod sqlite_embed_tests {
             ),
         ]);
         assert!(searched("", &env)?.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn the_vector_model_is_the_configured_sqlite_embedder() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let env = Environment::default();
+        assert_eq!(sqlite_vector_model(&sqlite_config("")?, &env), None);
+        let model_only = sqlite_config("    embed_model: embed-a\n")?;
+        assert_eq!(sqlite_vector_model(&model_only, &env), None);
+        let armed =
+            sqlite_config("    embed_endpoint: http://127.0.0.1:9\n    embed_model: embed-a\n")?;
+        assert_eq!(
+            sqlite_vector_model(&armed, &env).as_deref(),
+            Some("embed-a")
+        );
         Ok(())
     }
 }

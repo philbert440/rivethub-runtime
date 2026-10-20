@@ -36,7 +36,9 @@ mod origin;
 mod search;
 mod suggest;
 mod summary;
+mod title;
 
+pub use embed::EmbedModelMismatch;
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;
 pub use embed::EmbeddingStore;
@@ -68,6 +70,8 @@ pub use summary::SummarySource;
 pub use summary::SummaryStore;
 pub use summary::SummaryStoreError;
 pub use summary::WindowMessage;
+pub use title::SUMMARY_TITLE_MAX_CHARS;
+pub use title::summary_title;
 
 #[derive(Debug, Error)]
 pub enum MemoryStoreError {
@@ -334,6 +338,8 @@ pub trait MemoryStore: Send + Sync {
     async fn probe(&self) -> Result<(), MemoryStoreError>;
 
     fn embeddings_armed(&self) -> bool;
+
+    async fn embed_model_mismatch(&self) -> Result<Option<EmbedModelMismatch>, MemoryStoreError>;
 
     async fn wiki_topics(
         &self,
