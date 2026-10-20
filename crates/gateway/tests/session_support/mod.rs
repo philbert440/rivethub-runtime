@@ -263,6 +263,21 @@ fn launch(
     }
 }
 
+fn terminal(
+    service: TerminalService,
+    harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
+    lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
+) -> Arc<TerminalService> {
+    let service = match harness {
+        Some(harness) => service.with_harness(harness),
+        None => service,
+    };
+    Arc::new(match lister {
+        Some(lister) => service.with_session_lister(lister),
+        None => service,
+    })
+}
+
 fn uploads(directory: &Path) -> gateway::uploads::UploadService {
     gateway::uploads::UploadService::new(gateway::uploads::UploadOptions {
         root: directory.join("uploads"),
@@ -332,10 +347,7 @@ impl Fixture {
         )
         .await
         .expect("terminal service");
-        let service = Arc::new(match harness {
-            Some(harness) => service.with_harness(harness),
-            None => service,
-        });
+        let service = terminal(service, harness, lister.clone());
         let tenancy = Tenancy::local(user("owner"))
             .with_token("alice-test-token", user("alice"))
             .expect("token");

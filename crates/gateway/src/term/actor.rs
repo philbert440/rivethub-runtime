@@ -189,11 +189,11 @@ impl TerminalActor {
                 ))
             })?;
         let mut argv = launch.command.argv.clone();
-        argv.extend(session_args(
-            launch.command.harness,
-            &self.session,
-            launch.resume,
-        ));
+        let resume = self
+            .service
+            .resume(launch.command.harness, &self.session, launch.resume)
+            .await?;
+        argv.extend(session_args(launch.command.harness, &self.session, resume));
         if let Some(model) = launch.model {
             argv.extend(["--model".into(), model]);
         }

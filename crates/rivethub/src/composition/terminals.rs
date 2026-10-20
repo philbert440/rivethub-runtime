@@ -82,7 +82,10 @@ pub(super) async fn build(
     .with_shutdown(shutdown.child_token())
     .with_harness(Arc::new(
         harness_acp::AcpHarnessAdapter::new(config).with_search_paths(paths),
-    ));
+    ))
+    .with_session_lister(Arc::new(capture::listing::StoreSessionLister::new(
+        super::store_roots(env),
+    )));
     let service = Arc::new(with_claude_trust(built, config, env));
     claim_adopted(&service, &mux, owner, &mut adopted)?;
     Ok(service)

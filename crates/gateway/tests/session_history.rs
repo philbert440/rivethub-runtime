@@ -17,7 +17,7 @@ use kernel::transcript::{
 };
 use parking_lot::Mutex;
 use session_support::harness::Harness;
-use session_support::{Fixture, Socket, WAIT, frame, http, user};
+use session_support::{Call, Fixture, Socket, WAIT, frame, http, user};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest as _;
 use wire::events::ContextSource;
@@ -1134,6 +1134,57 @@ async fn an_approval_answer_reaches_the_harness_and_is_broadcast() {
         )
     );
     stop.cancel();
+}
+
+#[tokio::test]
+async fn a_fresh_terminal_resumes_a_session_its_store_already_holds() {
+    let stores = Stores {
+        rows: vec![row(HarnessId::ClaudeCode, U1, 1)],
+        ..Stores::default()
+    };
+    let setup = setup_with("{}", stores, &[HarnessId::ClaudeCode]).await;
+    for session in [U1, U2] {
+        let request = wire::gateway::term::TermSpawnRequest {
+            session: Some(session.into()),
+            command: Some("claude".into()),
+            model: None,
+            effort: None,
+            resume: None,
+            agent_id: None,
+            force: None,
+            cols: None,
+            rows: None,
+        };
+        setup
+            .fixture
+            .service
+            .spawn(&user("owner"), request)
+            .await
+            .expect("spawn");
+    }
+    let spawned: Vec<Vec<String>> = setup
+        .fixture
+        .mux
+        .calls
+        .borrow()
+        .iter()
+        .filter_map(|call| match call {
+            Call::Spawn { argv, .. } => Some(argv.clone()),
+            Call::Input(_) | Call::Resize(_) | Call::Kill => None,
+        })
+        .collect();
+    assert_eq!(
+        spawned,
+        [
+            vec!["claude".to_owned(), "--resume".to_owned(), U1.to_owned()],
+            vec![
+                "claude".to_owned(),
+                "--session-id".to_owned(),
+                U2.to_owned()
+            ],
+        ]
+    );
+    setup.fixture.gateway.close().await;
 }
 
 #[test]
