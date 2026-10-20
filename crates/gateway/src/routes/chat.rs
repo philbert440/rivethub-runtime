@@ -230,6 +230,11 @@ async fn delegated(
         .harness
         .ok_or_else(|| ApiError::BadRequest("harness is required".into()))?;
     let attachments = staged(&gateway, &user, request.attachments).await?;
+    let journal = if attachments.is_empty() {
+        None
+    } else {
+        Some(super::harnesses::open_store(&gateway).await?)
+    };
     let turn = DelegatedTurn {
         start: ChatStart {
             harness,
@@ -240,6 +245,7 @@ async fn delegated(
         text: request.text,
         system_prompt: request.system_prompt,
         attachments,
+        journal,
     };
     let text = service(&gateway)?.delegated_turn(&user, turn).await?;
     Ok(Json(SessionPostReply {

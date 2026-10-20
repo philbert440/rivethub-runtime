@@ -44,6 +44,7 @@ struct Stores {
     transcripts: BTreeMap<(HarnessId, String), Vec<HarnessTranscriptTurn>>,
     cwd: BTreeMap<String, String>,
     limits: Mutex<Vec<usize>>,
+    later: Mutex<BTreeMap<String, Vec<HarnessTranscriptTurn>>>,
 }
 
 #[async_trait]
@@ -95,6 +96,7 @@ impl SessionLister for Stores {
                 .transcripts
                 .get(&(harness, native.to_owned()))
                 .cloned()
+                .or_else(|| self.later.lock().get(native).cloned())
                 .unwrap_or_default(),
             truncated: false,
         }))
@@ -1017,6 +1019,58 @@ async fn a_reloaded_transcript_names_the_uploads_its_user_turn_carried() {
     assert_eq!(
         turns.get(2).and_then(|turn| turn.attachments.clone()),
         Some(named)
+    );
+}
+
+fn delegated_attached_turn(path: &str) -> Vec<u8> {
+    let mut turn: SessionPostRequest =
+        serde_json::from_str(&attached_turn(path)).expect("turn json");
+    turn.harness = Some(HarnessId::ClaudeCode);
+    serde_json::to_vec(&turn).expect("turn json")
+}
+
+#[tokio::test]
+async fn a_delegated_turn_names_the_uploads_it_carried_when_reloaded() {
+    let setup = setup("{}", Stores::default()).await;
+    let shot = staged(&setup, "shot.png", "image/png", None).await;
+    setup.harness.finish.add_permits(1);
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        "/api/sessions/task:abc/messages?wait=1",
+        delegated_attached_turn(&shot.uri),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    let session = setup
+        .harness
+        .specs
+        .lock()
+        .first()
+        .map(|spec| spec.session.clone())
+        .expect("one harness session");
+    let native = session
+        .as_str()
+        .split_once(':')
+        .map(|(_, native)| native.to_owned())
+        .expect("native id");
+    setup.lister.later.lock().insert(
+        native,
+        vec![
+            image_turn("look"),
+            answered("answer", "claude-opus-4-1", 10),
+        ],
+    );
+    let turns = transcript_turns(&setup, session.as_str()).await;
+    assert_eq!(
+        turns.first().and_then(|turn| turn.attachments.clone()),
+        Some(vec![TranscriptAttachment {
+            media_type: "image/png".to_owned(),
+            name: Some("shot.png".to_owned()),
+            uri: Some(shot.uri.clone()),
+            upload_id: Some(shot.id.clone()),
+        }])
     );
 }
 
