@@ -206,51 +206,89 @@ struct Asset {
     browser_download_url: String,
 }
 
+const RELEASES: [(&str, bool, bool); 3] = [
+    ("v0.9.0", false, false),
+    ("v0.11.0", true, true),
+    ("v0.10.0", false, true),
+];
+
+fn asset_name(name: &str) -> String {
+    format!("{name}-linux-{}", std::env::consts::ARCH)
+}
+
 pub(crate) async fn server(corrupt: bool) -> Result<testkit::Stub> {
     let manifest = format!(
-        "{}  rh-linux-x86_64\n{}  rivethub-migrate-linux-x86_64\n",
+        "{}  {}\n{}  {}\n",
         hex::encode(Sha256::digest(if corrupt { b"wrong" } else { BINARY })),
-        hex::encode(Sha256::digest(MIGRATION))
+        asset_name("rh"),
+        hex::encode(Sha256::digest(MIGRATION)),
+        asset_name("rivethub-migrate"),
     );
     let routes = axum::Router::new()
-        .route("/releases/latest", get(metadata))
-        .route("/releases/tags/v9", get(metadata))
+        .route("/releases", get(list))
+        .route("/releases/latest", get(latest))
+        .route("/releases/tags/{tag}", get(tagged))
         .route("/assets/{name}", get(download))
         .with_state(Arc::new(manifest));
     Ok(testkit::stub_server(routes).await?)
 }
 
-async fn metadata(headers: HeaderMap) -> Response {
+fn release(
+    headers: &HeaderMap,
+    (tag_name, draft, prerelease): (&'static str, bool, bool),
+) -> Release {
     let host = headers
         .get("host")
         .expect("host")
         .to_str()
         .expect("host text");
-    axum::Json(Release {
-        tag_name: "v9",
-        draft: false,
-        prerelease: false,
+    Release {
+        tag_name,
+        draft,
+        prerelease,
         assets: [
-            "rh-linux-x86_64",
-            "rivethub-migrate-linux-x86_64",
-            "SHA256SUMS",
+            asset_name("rh"),
+            asset_name("rivethub-migrate"),
+            "SHA256SUMS".to_owned(),
         ]
         .into_iter()
         .map(|name| Asset {
-            name: name.to_owned(),
             browser_download_url: format!("http://{host}/assets/{name}"),
+            name,
         })
         .collect(),
-    })
-    .into_response()
+    }
+}
+
+async fn list(headers: HeaderMap) -> Response {
+    let releases: Vec<_> = RELEASES
+        .into_iter()
+        .map(|entry| release(&headers, entry))
+        .collect();
+    axum::Json(releases).into_response()
+}
+
+async fn latest(headers: HeaderMap) -> Response {
+    axum::Json(release(&headers, RELEASES[0])).into_response()
+}
+
+async fn tagged(Path(tag): Path<String>, headers: HeaderMap) -> Response {
+    match RELEASES.into_iter().find(|(name, _, _)| *name == tag) {
+        Some(entry) => axum::Json(release(&headers, entry)).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn download(Path(name): Path<String>, State(manifest): State<Arc<String>>) -> Response {
-    match name.as_str() {
-        "SHA256SUMS" => manifest.as_str().to_owned().into_response(),
-        "rh-linux-x86_64" => Redirect::temporary("/assets/runtime").into_response(),
-        "runtime" => BINARY.into_response(),
-        "rivethub-migrate-linux-x86_64" => MIGRATION.into_response(),
-        _ => StatusCode::NOT_FOUND.into_response(),
+    if name == "SHA256SUMS" {
+        manifest.as_str().to_owned().into_response()
+    } else if name == asset_name("rh") {
+        Redirect::temporary("/assets/runtime").into_response()
+    } else if name == "runtime" {
+        BINARY.into_response()
+    } else if name == asset_name("rivethub-migrate") {
+        MIGRATION.into_response()
+    } else {
+        StatusCode::NOT_FOUND.into_response()
     }
 }

@@ -1,0 +1,32 @@
+name: Promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Beta release tag to promote to stable (default the newest prerelease)
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Promote release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          if [[ -z "$RELEASE_TAG" ]]; then
+            RELEASE_TAG=$(gh release list --exclude-drafts --limit 100 --json tagName,isPrerelease --jq '[.[] | select(.isPrerelease)][0].tagName // empty')
+          fi
+          test -n "$RELEASE_TAG"
+          gh release edit "$RELEASE_TAG" --prerelease=false --latest

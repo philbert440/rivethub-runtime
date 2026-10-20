@@ -46,28 +46,28 @@ printf '#!/bin/sh\nprintf source\n' > "$last/release/rh"
 }
 
 #[tokio::test]
-async fn beta_and_nightly_pull_build_locked_and_migrate_before_restart() -> Result {
-    for (channel, branch) in [(Channel::Beta, "beta"), (Channel::Nightly, "main")] {
-        let fixture = Fixture::new()?;
-        let env = prepare(&fixture)?.with_override("RIVETHUB_TEST_BRANCH", branch);
-        let mut args = args();
-        args.channel = channel;
-        let report = fixture.run(&args, &env, false).await?;
-        assert_eq!(report.exit, Exit::Ok, "{}", report.stderr);
-        let calls = std::fs::read_to_string(&fixture.calls)?;
-        assert!(calls.contains(&format!("git|pull|--ff-only|origin|{branch}\n")));
-        assert!(calls.contains(
+async fn nightly_pulls_builds_locked_and_migrates_before_restart() -> Result {
+    let fixture = Fixture::new()?;
+    let env = prepare(&fixture)?.with_override("RIVETHUB_TEST_BRANCH", "main");
+    let mut args = args();
+    args.channel = Channel::Nightly;
+    let report = fixture.run(&args, &env, false).await?;
+    assert_eq!(report.exit, Exit::Ok, "{}", report.stderr);
+    let calls = std::fs::read_to_string(&fixture.calls)?;
+    assert!(calls.contains("git|pull|--ff-only|origin|main\n"));
+    assert!(
+        calls.contains(
             "cargo|build|--release|--locked|--bin|rh|--bin|rivethub-migrate|--target-dir|"
-        ));
-        let build = calls.find("cargo|build").ok_or("build")?;
-        let migration = calls.find("migrate|sqlite").ok_or("migration")?;
-        let restart = calls.find("systemctl|--user|restart").ok_or("restart")?;
-        assert!(build < migration && migration < restart);
-        assert_eq!(
-            std::fs::read(fixture.binary.with_extension("previous"))?,
-            b"old runtime"
-        );
-    }
+        )
+    );
+    let build = calls.find("cargo|build").ok_or("build")?;
+    let migration = calls.find("migrate|sqlite").ok_or("migration")?;
+    let restart = calls.find("systemctl|--user|restart").ok_or("restart")?;
+    assert!(build < migration && migration < restart);
+    assert_eq!(
+        std::fs::read(fixture.binary.with_extension("previous"))?,
+        b"old runtime"
+    );
     Ok(())
 }
 
@@ -76,10 +76,10 @@ async fn source_failures_never_swap_or_restart() -> Result {
     for failure in ["dirty", "pull", "build", "escape"] {
         let fixture = Fixture::new()?;
         let env = prepare(&fixture)?
-            .with_override("RIVETHUB_TEST_BRANCH", "beta")
+            .with_override("RIVETHUB_TEST_BRANCH", "main")
             .with_override("RIVETHUB_TEST_FAIL", failure);
         let mut args = args();
-        args.channel = Channel::Beta;
+        args.channel = Channel::Nightly;
         let report = fixture.run(&args, &env, false).await?;
         assert_eq!(report.exit, Exit::Failure);
         assert_eq!(std::fs::read(&fixture.binary)?, b"old runtime");

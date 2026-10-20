@@ -81,8 +81,8 @@ pub(super) async fn update(
             .stdout
             .extend(["Updating node: ", &peer.node.name, "\n"]);
         let selected = match args.channel {
-            super::Channel::Stable => Some(version),
-            super::Channel::Beta | super::Channel::Nightly => args.version.as_deref(),
+            super::Channel::Stable | super::Channel::Beta => Some(version),
+            super::Channel::Nightly => args.version.as_deref(),
         };
         let remote = remote_command(args, selected)?;
         let result = invoke(&peer, &remote, env, shutdown).await?;
