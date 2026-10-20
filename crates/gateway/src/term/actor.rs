@@ -189,9 +189,11 @@ impl TerminalActor {
                 ))
             })?;
         let mut argv = launch.command.argv.clone();
-        if let Some(resume) = launch.resume {
-            argv.extend(["--resume".into(), resume]);
-        }
+        argv.extend(session_args(
+            launch.command.harness,
+            &self.session,
+            launch.resume,
+        ));
         if let Some(model) = launch.model {
             argv.extend(["--model".into(), model]);
         }
@@ -352,6 +354,25 @@ impl TerminalActor {
     }
 }
 
+fn session_args(
+    harness: Option<wire::harness::HarnessId>,
+    session: &str,
+    resume: Option<String>,
+) -> Vec<String> {
+    let flags = harness.and_then(wire::gateway::roster::session_flags);
+    match (resume, flags) {
+        (Some(resume), Some(flags)) => vec![flags.resume.into(), resume],
+        (Some(resume), None) => vec!["--resume".into(), resume],
+        (None, Some(flags)) => match flags.pin {
+            Some(pin) if session.len() == 36 && uuid::Uuid::try_parse(session).is_ok() => {
+                vec![pin.into(), session.into()]
+            }
+            _ => Vec::new(),
+        },
+        (None, None) => Vec::new(),
+    }
+}
+
 fn respond<T>(reply: Reply<T>, result: Result<T, ApiError>) {
     if reply.send(result).is_err() {
         tracing::debug!("terminal request caller disconnected");
@@ -373,4 +394,66 @@ fn response(state: PtyInfo) -> Result<TermSpawnResponse, ApiError> {
         reattached: None,
         attach: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use wire::harness::HarnessId;
+
+    use super::session_args;
+
+    const UUID: &str = "8922b6dd-d60f-42d9-9690-51b0d6e63176";
+
+    fn args(harness: HarnessId, session: &str, resume: Option<&str>) -> Vec<String> {
+        session_args(Some(harness), session, resume.map(str::to_owned))
+    }
+
+    #[test]
+    fn a_fresh_claude_launch_pins_the_registered_session() {
+        assert_eq!(
+            args(HarnessId::ClaudeCode, UUID, None),
+            ["--session-id", UUID]
+        );
+    }
+
+    #[test]
+    fn a_claude_resume_resumes_without_pinning() {
+        assert_eq!(
+            args(HarnessId::ClaudeCode, UUID, Some(UUID)),
+            ["--resume", UUID]
+        );
+    }
+
+    #[test]
+    fn each_harness_resumes_with_its_own_flag() {
+        assert_eq!(args(HarnessId::Codex, UUID, Some(UUID)), ["resume", UUID]);
+        assert_eq!(
+            args(HarnessId::KimiCode, UUID, Some(UUID)),
+            ["--session", UUID]
+        );
+        assert_eq!(args(HarnessId::Pi, UUID, Some(UUID)), ["--session", UUID]);
+    }
+
+    #[test]
+    fn a_harness_without_a_pin_flag_starts_bare() {
+        for harness in [
+            HarnessId::Codex,
+            HarnessId::KimiCode,
+            HarnessId::Hermes,
+            HarnessId::Opencode,
+            HarnessId::Cursor,
+        ] {
+            assert_eq!(args(harness, UUID, None), Vec::<String>::new());
+        }
+    }
+
+    #[test]
+    fn a_non_uuid_session_is_not_pinned() {
+        let generated = format!("rivethub-{UUID}");
+        assert_eq!(
+            args(HarnessId::ClaudeCode, &generated, None),
+            Vec::<String>::new()
+        );
+        assert_eq!(session_args(None, UUID, None), Vec::<String>::new());
+    }
 }

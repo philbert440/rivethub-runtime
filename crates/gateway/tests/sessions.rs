@@ -608,6 +608,61 @@ async fn terminal_resume_passes_the_native_id_to_the_harness() {
     assert!(!spawned.iter().any(|arg| arg.contains("claude-code:")));
 }
 
+fn spawned_argv(fixture: &Fixture) -> Vec<String> {
+    fixture
+        .mux
+        .calls
+        .borrow()
+        .iter()
+        .find_map(|call| match call {
+            Call::Spawn { argv, .. } => Some(argv.clone()),
+            Call::Input(_) | Call::Resize(_) | Call::Kill => None,
+        })
+        .expect("one spawn")
+}
+
+#[tokio::test]
+async fn a_new_harness_terminal_pins_the_registered_session_id() {
+    let fixture = Fixture::new().await;
+    let session = "0f6c3a52-7d41-4e8b-a2c9-5b1e8d7f3a60";
+    let mut request = spawn(session);
+    request.command = Some("claude".into());
+    request.model = Some("fable".into());
+    let response = fixture
+        .service
+        .spawn(&user("owner"), request)
+        .await
+        .expect("fresh spawn");
+    assert_eq!(response.session, session);
+    assert_eq!(
+        spawned_argv(&fixture),
+        ["claude", "--session-id", session, "--model", "fable"]
+    );
+    fixture.gateway.close().await;
+}
+
+#[tokio::test]
+async fn a_codex_terminal_resumes_through_its_subcommand() {
+    let fixture = Fixture::with_lister(
+        None,
+        gateway::sessions::SessionRegistry::new(std::time::Duration::from_secs(1)),
+        None,
+        &[("codex", wire::harness::HarnessId::Codex)],
+    )
+    .await;
+    let native = "8922b6dd-d60f-42d9-9690-51b0d6e63176";
+    let mut request = spawn(&format!("codex:{native}"));
+    request.command = Some("codex".into());
+    request.resume = Some(format!("codex:{native}"));
+    fixture
+        .service
+        .spawn(&user("owner"), request)
+        .await
+        .expect("resume spawn");
+    assert_eq!(spawned_argv(&fixture), ["codex", "resume", native]);
+    fixture.gateway.close().await;
+}
+
 fn inputs(fixture: &Fixture) -> Vec<Vec<u8>> {
     fixture
         .mux

@@ -100,6 +100,27 @@ pub fn harness_for_roster_key(key: &str) -> Option<HarnessId> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionFlags {
+    pub pin: Option<&'static str>,
+    pub resume: &'static str,
+}
+
+#[must_use]
+pub fn session_flags(harness: HarnessId) -> Option<SessionFlags> {
+    let (pin, resume) = match harness {
+        HarnessId::ClaudeCode | HarnessId::GrokBuild | HarnessId::QwenCode => {
+            (Some("--session-id"), "--resume")
+        }
+        HarnessId::Pi => (Some("--session-id"), "--session"),
+        HarnessId::Hermes | HarnessId::Cursor => (None, "--resume"),
+        HarnessId::KimiCode | HarnessId::Opencode => (None, "--session"),
+        HarnessId::Codex => (None, "resume"),
+        HarnessId::Cowork => return None,
+    };
+    Some(SessionFlags { pin, resume })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RosterFile {
