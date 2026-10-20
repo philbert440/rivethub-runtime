@@ -150,7 +150,7 @@ fn sqlx_prepare_check_with(root: &Path, program: &str) -> Result<()> {
     })
 }
 
-pub fn check(root: &Path, locked: bool) -> Result<()> {
+pub fn check(root: &Path, locked: bool, list_tests: bool) -> Result<()> {
     run_tool(root, &["fmt", "--all", "--check"])?;
     let mut clippy = vec!["clippy"];
     if locked {
@@ -165,7 +165,9 @@ pub fn check(root: &Path, locked: bool) -> Result<()> {
         "warnings",
     ]);
     run_tool(root, &clippy)?;
-    nextest_list(root, locked)?;
+    if list_tests {
+        nextest_list(root, locked)?;
+    }
     let fallback_hits = crate::fallback::collect(root)?;
     let mut deny = vec!["deny", "--all-features"];
     if locked {

@@ -7,11 +7,19 @@ use xtask::error::{Error, Result};
 use xtask::recmcp;
 
 enum Mode {
-    Check { root: PathBuf, locked: bool },
+    Check {
+        root: PathBuf,
+        locked: bool,
+        list_tests: bool,
+    },
     Baseline,
     PreCommit,
-    CommitMsg { file: PathBuf },
-    Commits { range: String },
+    CommitMsg {
+        file: PathBuf,
+    },
+    Commits {
+        range: String,
+    },
     InstallHooks,
     RecordMcp(recmcp::Invocation),
 }
@@ -22,9 +30,12 @@ fn parse(args: &[String]) -> Result<Mode> {
         Some("check") => {
             let mut root = PathBuf::from(".");
             let mut locked = false;
+            let mut list_tests = true;
             for arg in args.iter().skip(1) {
                 if arg == "--locked" {
                     locked = true;
+                } else if arg == "--no-nextest-list" {
+                    list_tests = false;
                 } else {
                     root = PathBuf::from(arg);
                 }
@@ -32,6 +43,7 @@ fn parse(args: &[String]) -> Result<Mode> {
             Ok(Mode::Check {
                 root: check::absolute(&root)?,
                 locked,
+                list_tests,
             })
         }
         Some("record-mcp") => {
@@ -60,7 +72,7 @@ fn parse(args: &[String]) -> Result<Mode> {
         }
         Some("install-hooks") => Ok(Mode::InstallHooks),
         _ => Err(Error::Usage(
-            "usage: cargo xtask check [--locked]|baseline --write|record-mcp --out DIR [--script FILE] -- COMMAND [ARGS...]|pre-commit|commit-msg FILE|commits RANGE|install-hooks"
+            "usage: cargo xtask check [--locked] [--no-nextest-list]|baseline --write|record-mcp --out DIR [--script FILE] -- COMMAND [ARGS...]|pre-commit|commit-msg FILE|commits RANGE|install-hooks"
                 .to_owned(),
         )),
     }
@@ -95,7 +107,11 @@ fn main() -> ExitCode {
         None => parse(&args),
     }
     .and_then(|mode| match mode {
-        Mode::Check { root, locked } => check::check(&root, locked),
+        Mode::Check {
+            root,
+            locked,
+            list_tests,
+        } => check::check(&root, locked, list_tests),
         Mode::Baseline => xtask::baseline::write(&root),
         Mode::PreCommit => check::pre_commit(&root),
         Mode::CommitMsg { file } => check::commit_msg(&root, &file),
