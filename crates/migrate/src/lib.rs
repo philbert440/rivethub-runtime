@@ -1,4 +1,5 @@
 pub mod error;
+mod ids;
 mod postgres;
 mod schema;
 mod upgrade;

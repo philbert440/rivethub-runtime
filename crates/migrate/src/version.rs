@@ -11,6 +11,7 @@ pub enum SchemaVersion {
     V7 = 7,
     V8 = 8,
     V9 = 9,
+    V10 = 10,
 }
 
 impl SchemaVersion {
@@ -30,7 +31,8 @@ impl SchemaVersion {
             Self::V6 => Some(Self::V7),
             Self::V7 => Some(Self::V8),
             Self::V8 => Some(Self::V9),
-            Self::V9 => None,
+            Self::V9 => Some(Self::V10),
+            Self::V10 => None,
         }
     }
 }
@@ -49,6 +51,7 @@ impl TryFrom<i64> for SchemaVersion {
             7 => Ok(Self::V7),
             8 => Ok(Self::V8),
             9 => Ok(Self::V9),
+            10 => Ok(Self::V10),
             other => Err(Error::Unsupported { found: other }),
         }
     }
@@ -61,7 +64,7 @@ mod tests {
 
     #[test]
     fn every_recorded_user_version_maps_to_a_schema_version() {
-        for found in 1..=9 {
+        for found in 1..=10 {
             let version = SchemaVersion::try_from(found).unwrap_or_else(|error| {
                 panic!("user_version {found} must map to a schema version: {error}")
             });
@@ -71,7 +74,7 @@ mod tests {
 
     #[test]
     fn versions_outside_the_ladder_are_typed_errors() {
-        for found in [-3, 0, 10, 99] {
+        for found in [-3, 0, 11, 99] {
             match SchemaVersion::try_from(found) {
                 Err(Error::Unsupported { found: reported }) => {
                     assert_eq!(reported, found);
@@ -82,15 +85,15 @@ mod tests {
     }
 
     #[test]
-    fn the_ladder_runs_from_any_version_to_the_ninth() {
-        for from in 1..=9 {
+    fn the_ladder_runs_from_any_version_to_the_tenth() {
+        for from in 1..=10 {
             let mut current = SchemaVersion::try_from(from).unwrap();
             let mut visited = Vec::new();
             while let Some(next) = current.next() {
                 visited.push(next.number());
                 current = next;
             }
-            let expected: Vec<i64> = (from + 1..=9).collect();
+            let expected: Vec<i64> = (from + 1..=10).collect();
             assert_eq!(visited, expected, "ladder from user_version {from}");
         }
     }
