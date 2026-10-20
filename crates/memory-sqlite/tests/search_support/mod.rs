@@ -18,6 +18,8 @@ pub(crate) fn query(text: &str, mode: SearchMode) -> SearchQuery {
         mode,
         scope: MemoryScope::Both,
         agent: None,
+        role: None,
+        tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(10), 10, 1..=50),
         since: None,

@@ -8,7 +8,7 @@ use wire::gateway::memory::MemoryFallback;
 use super::{
     Candidate, Kind, Plan, SearchMode, SearchOutcome, SqliteError, bump, fetch, hit_limit,
 };
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use wire::gateway::memory::{MemoryHitSource, MemoryScope};
 
 #[derive(Debug, Clone)]
@@ -347,7 +347,8 @@ fn load_table(conn: &Connection, plan: &Plan, message: bool) -> Result<Vec<ArmRo
     let sql = if message {
         "SELECT id, content, created_at, conversation_id, role, agent, embedding, access_count,
          CASE WHEN role = 'system' THEN 0.5 WHEN tool_name IS NOT NULL THEN 0.3 WHEN role = 'user' THEN 0.7 ELSE 0.6 END
-         FROM ros_messages WHERE (?1 IS NULL OR agent = ?1) AND (?2 IS NULL OR created_at >= ?2) AND (?3 IS NULL OR created_at < ?3)"
+         FROM ros_messages WHERE (?1 IS NULL OR agent = ?1) AND (?2 IS NULL OR created_at >= ?2) AND (?3 IS NULL OR created_at < ?3)
+         AND (?4 IS NULL OR role = ?4) AND (?5 IS NULL OR tool_name = ?5)"
     } else {
         "SELECT id, content, created_at, conversation_id, NULL, NULL, embedding, access_count, 0.6
          FROM ros_summaries s WHERE (?1 IS NULL OR EXISTS (SELECT 1 FROM ros_conversations c WHERE c.id = s.conversation_id AND c.agent = ?1))
@@ -356,8 +357,20 @@ fn load_table(conn: &Connection, plan: &Plan, message: bool) -> Result<Vec<ArmRo
     let mut statement = conn
         .prepare(sql)
         .map_err(SqliteError::query("search candidates"))?;
+    let role = plan.role.map(|role| role.to_string());
+    let filters: Vec<&dyn rusqlite::ToSql> = if message {
+        vec![
+            &plan.agent,
+            &plan.since,
+            &plan.before,
+            &role,
+            &plan.tool_name,
+        ]
+    } else {
+        vec![&plan.agent, &plan.since, &plan.before]
+    };
     let mapped = statement
-        .query_map(params![plan.agent, plan.since, plan.before], |row| {
+        .query_map(filters.as_slice(), |row| {
             let kind = if message {
                 Kind::Message {
                     role: crate::message::stored_role(row, 4)?,

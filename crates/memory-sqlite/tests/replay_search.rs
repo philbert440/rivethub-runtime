@@ -365,6 +365,8 @@ fn asked(text: &str, scope: MemoryScope, limit: u32) -> SearchQuery {
         mode: SearchMode::Hybrid,
         scope,
         agent: None,
+        role: None,
+        tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(limit), 10, 1..=50),
         since: None,

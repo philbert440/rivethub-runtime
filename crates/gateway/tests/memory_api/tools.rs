@@ -217,6 +217,8 @@ fn search_tool_answers_json_text_and_reports_failures() {
             scope: None,
             limit: Some(5),
             agent: None,
+            role: None,
+            tool_name: None,
             tag: None,
         },
     )
@@ -253,6 +255,8 @@ fn search_tool_answers_json_text_and_reports_failures() {
             scope: None,
             limit: None,
             agent: None,
+            role: None,
+            tool_name: None,
             tag: Some("nokey".to_owned()),
         },
     )

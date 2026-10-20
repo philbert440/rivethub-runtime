@@ -55,6 +55,8 @@ fn query(text: &str, mode: SearchMode) -> SearchQuery {
         mode,
         scope: MemoryScope::Both,
         agent: None,
+        role: None,
+        tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(10), 20, 1..=50),
     }

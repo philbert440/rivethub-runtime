@@ -10,6 +10,8 @@ fn query() -> SearchQuery {
         mode: SearchMode::Hybrid,
         scope: MemoryScope::Both,
         agent: None,
+        role: None,
+        tool_name: None,
         tag: None,
         limit: Limit::clamped(None, 10, 1..=50),
         since: None,

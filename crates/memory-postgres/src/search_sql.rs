@@ -96,17 +96,34 @@ fn push_time_conditions(
     }
 }
 
-fn push_agent_condition(query: &mut QueryBuilder<sqlx::Postgres>, agent: &str, is_message: bool) {
-    if is_message {
-        query.push(" AND m.agent = ");
-        query.push_bind(agent.to_owned());
-    } else {
-        query.push(
-            " AND EXISTS (SELECT 1 FROM rh_conversations c \
-             WHERE c.id = s.conversation_id AND c.agent = ",
-        );
-        query.push_bind(agent.to_owned());
-        query.push(")");
+fn push_scope_conditions(
+    query: &mut QueryBuilder<sqlx::Postgres>,
+    options: &SearchOptions,
+    is_message: bool,
+) {
+    if let Some(agent) = &options.agent {
+        if is_message {
+            query.push(" AND m.agent = ");
+            query.push_bind(agent.clone());
+        } else {
+            query.push(
+                " AND EXISTS (SELECT 1 FROM rh_conversations c \
+                 WHERE c.id = s.conversation_id AND c.agent = ",
+            );
+            query.push_bind(agent.clone());
+            query.push(")");
+        }
+    }
+    if !is_message {
+        return;
+    }
+    if let Some(role) = options.role {
+        query.push(" AND m.role = ");
+        query.push_bind(role.to_string());
+    }
+    if let Some(tool_name) = &options.tool_name {
+        query.push(" AND m.tool_name = ");
+        query.push_bind(tool_name.clone());
     }
 }
 
@@ -412,9 +429,7 @@ impl crate::PostgresMemory {
             }
         }
         push_time_conditions(&mut query, options, alias);
-        if let Some(agent) = &options.agent {
-            push_agent_condition(&mut query, agent, is_message);
-        }
+        push_scope_conditions(&mut query, options, is_message);
         if kind == ArmKind::Trigram {
             query.push(format!(
                 " ORDER BY score DESC, {alias}.created_at DESC LIMIT {pool}"
@@ -530,9 +545,7 @@ impl crate::PostgresMemory {
             filter.push_condition(&mut query, is_message);
         }
         push_time_conditions(&mut query, options, alias);
-        if let Some(agent) = &options.agent {
-            push_agent_condition(&mut query, agent, is_message);
-        }
+        push_scope_conditions(&mut query, options, is_message);
         query.push(" ORDER BY ");
         query.push(distance);
         query.push(" <=> ");
@@ -571,9 +584,7 @@ impl crate::PostgresMemory {
             filter.push_condition(&mut query, true);
         }
         push_time_conditions(&mut query, context.options, "m");
-        if let Some(agent) = &context.options.agent {
-            push_agent_condition(&mut query, agent, true);
-        }
+        push_scope_conditions(&mut query, context.options, true);
         query.push(" ORDER BY c.embedding <=> ");
         query.push_bind(vector.clone());
         query.push(format!(" LIMIT {}", chunk_pool(context.options.limit)));

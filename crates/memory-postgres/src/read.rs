@@ -351,6 +351,8 @@ impl crate::PostgresMemory {
                 scope: MemoryScope::Both,
                 limit: CONTEXT_RELEVANT_LIMIT,
                 agent: Some(agent.clone()),
+                role: None,
+                tool_name: None,
                 tag: None,
             })
             .await?;

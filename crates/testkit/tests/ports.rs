@@ -96,6 +96,8 @@ fn search_query(text: &str) -> SearchQuery {
         mode: SearchMode::Hybrid,
         scope: MemoryScope::Both,
         agent: None,
+        role: None,
+        tool_name: None,
         tag: None,
         limit: Limit::clamped(None, 10, 1..=50),
     }
@@ -163,6 +165,8 @@ fn fake_memory_store_records_typed_requests() {
             mode: SearchMode::Fts,
             scope: MemoryScope::Messages,
             agent: Some("agent-a".to_string()),
+            role: None,
+            tool_name: None,
             tag: Some("project:acme".parse().unwrap()),
             limit: Limit::clamped(Some(500), 20, 1..=50),
         };

@@ -209,6 +209,8 @@ fn search(query: &EvalQuery, limit: u32) -> SearchQuery {
         mode: query.mode,
         scope: MemoryScope::Both,
         agent: None,
+        role: None,
+        tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(limit), limit, 1..=limit),
         since: None,
