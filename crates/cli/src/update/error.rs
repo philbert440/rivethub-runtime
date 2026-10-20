@@ -8,12 +8,14 @@ pub enum UpdateError {
     HostnameEncoding,
     #[error(transparent)]
     Config(#[from] config::ConfigError),
-    #[error("update requires Linux x86_64 or aarch64")]
+    #[error("update requires Linux x86_64 or aarch64, or macOS")]
     Platform,
     #[error("invalid release version: {0}")]
     Version(String),
-    #[error("no matching published release contains both binaries for this platform")]
+    #[error("no matching published release has an archive for this platform")]
     Release,
+    #[error("release archive must contain exactly one regular file named {0}")]
+    Archive(&'static str),
     #[error("release download failed: {0}")]
     Http(#[from] reqwest::Error),
     #[error("release asset is too large")]

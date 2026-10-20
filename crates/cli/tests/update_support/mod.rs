@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use std::ffi::OsStr;
+use std::fmt::Write as _;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -29,6 +30,13 @@ if [ "$RIVETHUB_TEST_FAIL" = migration ]; then
 fi
 printf 'schema ready\n'
 "#;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Published {
+    Good,
+    BadChecksum,
+    MissingMigration,
+}
 
 pub(crate) type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -124,9 +132,9 @@ if [ "$failed" = yes ] && [ "$last" != true ]; then exit 1; fi
         &self,
         args: &UpdateArgs,
         env: &Environment,
-        corrupt: bool,
+        published: Published,
     ) -> Result<cli::Report> {
-        let server = server(corrupt).await?;
+        let server = server(published).await?;
         let updater = Updater::new(
             self.binary.clone(),
             format!("http://{}/releases/", server.addr).parse()?,
@@ -212,24 +220,59 @@ const RELEASES: [(&str, bool, bool); 3] = [
     ("v0.10.0", false, true),
 ];
 
-fn asset_name(name: &str) -> String {
-    format!("{name}-linux-{}", std::env::consts::ARCH)
+fn archive_name(tag: &str) -> String {
+    format!(
+        "rh-{}-{}-unknown-linux-gnu.tar.gz",
+        tag.trim_start_matches('v'),
+        std::env::consts::ARCH
+    )
 }
 
-pub(crate) async fn server(corrupt: bool) -> Result<testkit::Stub> {
-    let manifest = format!(
-        "{}  {}\n{}  {}\n",
-        hex::encode(Sha256::digest(if corrupt { b"wrong" } else { BINARY })),
-        asset_name("rh"),
-        hex::encode(Sha256::digest(MIGRATION)),
-        asset_name("rivethub-migrate"),
-    );
+fn archive(published: Published) -> Result<Vec<u8>> {
+    let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(
+        Vec::new(),
+        flate2::Compression::default(),
+    ));
+    let mut entries = vec![
+        ("LICENSE", b"license".as_slice()),
+        ("rh", BINARY),
+        ("rivethub-migrate", MIGRATION),
+    ];
+    if published == Published::MissingMigration {
+        entries.pop();
+    }
+    for (name, contents) in entries {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(u64::try_from(contents.len())?);
+        header.set_mode(0o755);
+        header.set_cksum();
+        builder.append_data(&mut header, name, contents)?;
+    }
+    Ok(builder.into_inner()?.finish()?)
+}
+
+struct Assets {
+    manifest: String,
+    archive: Vec<u8>,
+}
+
+pub(crate) async fn server(published: Published) -> Result<testkit::Stub> {
+    let archive = archive(published)?;
+    let digest = hex::encode(Sha256::digest(if published == Published::BadChecksum {
+        b"wrong".as_slice()
+    } else {
+        &archive
+    }));
+    let mut manifest = String::new();
+    for (release_tag, _, _) in RELEASES {
+        writeln!(manifest, "{digest}  {}", archive_name(release_tag))?;
+    }
     let routes = axum::Router::new()
         .route("/releases", get(list))
         .route("/releases/latest", get(latest))
         .route("/releases/tags/{tag}", get(tagged))
         .route("/assets/{name}", get(download))
-        .with_state(Arc::new(manifest));
+        .with_state(Arc::new(Assets { manifest, archive }));
     Ok(testkit::stub_server(routes).await?)
 }
 
@@ -246,17 +289,13 @@ fn release(
         tag_name,
         draft,
         prerelease,
-        assets: [
-            asset_name("rh"),
-            asset_name("rivethub-migrate"),
-            "SHA256SUMS".to_owned(),
-        ]
-        .into_iter()
-        .map(|name| Asset {
-            browser_download_url: format!("http://{host}/assets/{name}"),
-            name,
-        })
-        .collect(),
+        assets: [archive_name(tag_name), "SHA256SUMS".to_owned()]
+            .into_iter()
+            .map(|name| Asset {
+                browser_download_url: format!("http://{host}/assets/{name}"),
+                name,
+            })
+            .collect(),
     }
 }
 
@@ -279,15 +318,16 @@ async fn tagged(Path(tag): Path<String>, headers: HeaderMap) -> Response {
     }
 }
 
-async fn download(Path(name): Path<String>, State(manifest): State<Arc<String>>) -> Response {
+async fn download(Path(name): Path<String>, State(assets): State<Arc<Assets>>) -> Response {
     if name == "SHA256SUMS" {
-        manifest.as_str().to_owned().into_response()
-    } else if name == asset_name("rh") {
-        Redirect::temporary("/assets/runtime").into_response()
-    } else if name == "runtime" {
-        BINARY.into_response()
-    } else if name == asset_name("rivethub-migrate") {
-        MIGRATION.into_response()
+        assets.manifest.clone().into_response()
+    } else if RELEASES
+        .into_iter()
+        .any(|(tag, _, _)| name == archive_name(tag))
+    {
+        Redirect::temporary("/assets/archive").into_response()
+    } else if name == "archive" {
+        assets.archive.clone().into_response()
     } else {
         StatusCode::NOT_FOUND.into_response()
     }
