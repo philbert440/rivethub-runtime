@@ -4,6 +4,7 @@ mod delegated;
 mod inject;
 pub(crate) mod live;
 pub mod socket;
+mod stored;
 mod trust;
 
 use std::collections::BTreeMap;
@@ -110,6 +111,7 @@ pub struct TerminalService {
     registry_events: tokio::sync::broadcast::Sender<live::RegistryEvent>,
     injecting: tokio::sync::Mutex<()>,
     claude_trust: Option<ClaudeTrust>,
+    session_lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
 }
 
 impl TerminalService {
@@ -142,6 +144,7 @@ impl TerminalService {
             registry_events: tokio::sync::broadcast::channel(live::REGISTRY_EVENT_BUFFER).0,
             injecting: tokio::sync::Mutex::new(()),
             claude_trust: None,
+            session_lister: None,
         })
     }
 
