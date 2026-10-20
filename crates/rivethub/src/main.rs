@@ -35,7 +35,9 @@ fn build_runtime() -> std::io::Result<tokio::runtime::Runtime> {
 async fn dispatch(command: cli::Cli, env: &Environment) -> Exit {
     if matches!(
         command.command,
-        Some(cli::Command::Start { .. } | cli::Command::Local { .. })
+        Some(
+            cli::Command::Start { .. } | cli::Command::Local { .. } | cli::Command::Capture { .. }
+        )
     ) {
         rivethub::logging::init(env);
     }

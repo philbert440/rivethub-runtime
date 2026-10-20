@@ -1,6 +1,11 @@
 use wire::capture::{CaptureBatchRequest, CaptureMessage, CaptureResult};
 use wire::message::Role;
 
+use std::process::Stdio;
+use std::time::Duration;
+
+use tokio::io::AsyncWriteExt as _;
+
 use super::{TestResult, free_port, start, stop};
 
 const SESSION: &str = "capture-resend";
@@ -84,5 +89,68 @@ async fn resent_capture_batches_skip_stored_events_and_keep_the_title() -> TestR
         |row| row.get(0),
     )?;
     assert_eq!(title.as_deref(), Some("SessionEnd"));
+    Ok(())
+}
+
+const HOOK_SESSION: &str = "44444444-4444-4444-4444-444444444444";
+
+#[derive(serde::Serialize)]
+struct PromptHook<'a> {
+    session_id: &'a str,
+    cwd: &'a str,
+    hook_event_name: &'a str,
+    prompt: &'a str,
+}
+
+async fn run_hook(home: &std::path::Path, payload: &str) -> TestResult<std::process::Output> {
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_rh"))
+        .args(["capture", "hook"])
+        .env_clear()
+        .env("HOME", home)
+        .env("RIVETHUB_CAPTURE_REDACTION", "1")
+        .current_dir(home)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()?;
+    let mut stdin = child.stdin.take().ok_or("missing stdin")?;
+    stdin.write_all(payload.as_bytes()).await?;
+    drop(stdin);
+    Ok(tokio::time::timeout(Duration::from_secs(30), child.wait_with_output()).await??)
+}
+
+#[tokio::test]
+async fn the_capture_hook_command_posts_a_prompt_to_the_local_gateway() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let port_text = free_port()?.to_string();
+    let started = start(
+        home.path(),
+        &["local", "--no-lan", "--port", &port_text],
+        &["gateway listening on "],
+    )
+    .await?;
+    let payload = serde_json::to_string(&PromptHook {
+        session_id: HOOK_SESSION,
+        cwd: "/work/demo",
+        hook_event_name: "UserPromptSubmit",
+        prompt: "deploy with Bearer abcdefghijklmnop1234",
+    })?;
+    let output = run_hook(home.path(), &payload).await;
+    stop(started).await?;
+    let output = output?;
+    let stderr = String::from_utf8(output.stderr)?;
+    assert!(output.status.success(), "{stderr}");
+    assert_eq!(String::from_utf8(output.stdout)?, "");
+    let conn = rusqlite::Connection::open(home.path().join(".rivethub").join("memory.sqlite"))?;
+    let content: String = conn.query_row(
+        "SELECT m.content FROM ros_messages m JOIN ros_conversations c ON c.id = m.conversation_id
+          WHERE c.session_key = ?1",
+        [format!("claude-code:{HOOK_SESSION}")],
+        |row| row.get(0),
+    )?;
+    assert_eq!(content, "deploy with [REDACTED:bearer]");
+    let log = std::fs::read_to_string(home.path().join(".rivethub").join("claude-capture.log"))?;
+    assert!(log.contains("UserPromptSubmit"), "{log}");
     Ok(())
 }

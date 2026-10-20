@@ -1,5 +1,6 @@
 mod argv;
 pub mod ca;
+pub mod capture_hook;
 pub mod cert;
 mod configuration;
 pub mod db;
@@ -174,6 +175,7 @@ async fn command_dispatch(
         Command::Mesh(args) => mesh::run(args, env, shutdown).await,
         Command::Update(args) => update::run(args, env, shutdown).await,
         Command::Db(args) => db::run(args, env, shutdown).await,
+        Command::Capture { command } => capture_hook::run(command, env).await,
         Command::Memory { args } => Ok(memory::execute(
             &args,
             env,

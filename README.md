@@ -23,9 +23,10 @@ cargo test --workspace
 
 The repository is Rust only. The git hooks are the `xtask` binary itself: `cargo xtask install-hooks` copies it to
 `target/git-hooks/pre-commit` and `target/git-hooks/commit-msg` and points `core.hooksPath` there; the binary dispatches on
-the name it is invoked as (pre-commit: staged privacy + fmt; commit-msg: house identity, no attribution trailers). Clients
-of the runtime, including the per-harness capture hooks, live in their own repositories and reach the runtime over its
-boundaries.
+the name it is invoked as (pre-commit: staged privacy + fmt; commit-msg: house identity, no attribution trailers).
+The runtime ships one generic capture entry point, `rh capture hook`, built on the `capture` crate's writer, spool and
+redaction; the per-harness hook kits (install scripts and hook configuration) live in the client repositories and call
+it. Other clients of the runtime live in their own repositories too and reach the runtime over its boundaries.
 
 Every crate depends only downward (foundation ← kernel ← adapters/services ← composition); `deny.toml` fails the build the
 moment a `Cargo.toml` breaks that (each internal crate is a ban whose wrappers are exactly the crates allowed to use it).

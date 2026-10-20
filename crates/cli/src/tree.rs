@@ -107,6 +107,11 @@ pub enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    #[command(about = "Capture harness sessions into memory")]
+    Capture {
+        #[command(subcommand)]
+        command: crate::capture_hook::CaptureCommand,
+    },
     #[command(about = "Read the service journal", disable_help_flag = true)]
     Logs {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
