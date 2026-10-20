@@ -26,10 +26,12 @@ use wire::stream::LlmResponse;
 use wire::stream::LlmResponseKind;
 use workers::CategorizeEnv;
 use workers::SuggestOutcome;
+use workers::TAG_SYSTEM_PROMPT;
 use workers::TagSettings;
 use workers::WorkerError;
 use workers::handle_suggest;
 use workers::suggest_tags_job;
+use workers::tag_user_prompt;
 
 const SUMMARY_ID: &str = "00000000-0000-4000-8000-000000000014";
 const CONVERSATION_ID: &str = "00000000-0000-4000-8000-000000000002";
@@ -64,6 +66,51 @@ async fn an_alias_resolves_to_the_accepted_canonical() {
     assert!(turn.write.rows.iter().all(|row| {
         row.kind == TagSuggestKind::Add && row.value == "acme" && row.display == "Acme"
     }));
+}
+
+#[tokio::test]
+async fn an_in_use_display_value_is_reused() {
+    let mut context = context();
+    context.vocabulary = vec![vocab(
+        "project",
+        "Widget Hub",
+        "Widget Hub",
+        &[],
+        TagState::Accepted,
+    )];
+    let turn = drive(&context, r#"[{"key":"project","value":"widget-hub"}]"#)
+        .await
+        .expect("suggest");
+    assert_eq!(turn.outcome.proposed, 1);
+    assert_eq!(turn.write.vocabulary, Vec::new());
+    assert!(turn.write.rows.iter().all(|row| row.value == "Widget Hub"));
+}
+
+#[test]
+fn the_vocabulary_shows_aliases_and_hides_rejected_entries() {
+    let mut context = context();
+    context.vocabulary = vec![
+        vocab(
+            "project",
+            "Widget Hub",
+            "Widget Hub",
+            &["widgets", "wh"],
+            TagState::Accepted,
+        ),
+        vocab("topic", "storage", "", &[], TagState::Accepted),
+        vocab("project", "scratch", "", &[], TagState::Rejected),
+    ];
+    let prompt = tag_user_prompt(&context);
+    assert!(prompt.contains("- project:Widget Hub (also: widgets, wh)\n"));
+    assert!(prompt.contains("- topic:storage\n"));
+    assert!(!prompt.contains("scratch"));
+}
+
+#[test]
+fn the_prompt_asks_for_at_most_three_reused_tags() {
+    assert!(TAG_SYSTEM_PROMPT.contains("An empty array [] is a good answer"));
+    assert!(TAG_SYSTEM_PROMPT.contains("Suggest at most 3 tags."));
+    assert!(TAG_SYSTEM_PROMPT.contains("including when the conversation names one of its aliases"));
 }
 
 #[tokio::test]
@@ -122,22 +169,22 @@ async fn shape_rejects_do_not_consume_the_cap() {
         format!(r#"{{"key":"topic","value":"{long_value}"}}"#),
         r#"{"action":"remove","key":"topic","value":"missing"}"#.to_owned(),
     ];
-    for index in 1..=9 {
+    for index in 1..=4 {
         items.push(format!(r#"{{"key":"topic","value":"item-{index}"}}"#));
     }
     let turn = drive(&context(), &format!("[{}]", items.join(",")))
         .await
         .expect("suggest");
-    assert_eq!(turn.outcome.proposed, 8);
-    assert_eq!(turn.outcome.fresh, 16);
-    assert_eq!(turn.write.rows.len(), 16);
+    assert_eq!(turn.outcome.proposed, 3);
+    assert_eq!(turn.outcome.fresh, 6);
+    assert_eq!(turn.write.rows.len(), 6);
     assert!(
         turn.write
             .rows
             .iter()
             .all(|row| row.value.starts_with("item-"))
     );
-    assert!(!turn.write.rows.iter().any(|row| row.value == "item-9"));
+    assert!(!turn.write.rows.iter().any(|row| row.value == "item-4"));
     assert!(
         turn.outcome
             .rejections
@@ -172,7 +219,7 @@ async fn shape_rejects_do_not_consume_the_cap() {
         turn.outcome
             .rejections
             .iter()
-            .any(|note| note == "rejected — suggestion cap is 8")
+            .any(|note| note == "rejected — suggestion cap is 3")
     );
 }
 

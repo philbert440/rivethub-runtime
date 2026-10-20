@@ -12,7 +12,7 @@ use super::parse::ParsedTag;
 use super::parse::TagAction;
 use crate::error::WorkerError;
 
-const MAX_SUGGESTIONS: u32 = 8;
+const MAX_SUGGESTIONS: u32 = 3;
 const KEY_LIMIT: usize = 64;
 const VALUE_LIMIT: usize = 128;
 
@@ -94,7 +94,7 @@ fn consider(fold: &mut Fold<'_>, item: &ParsedTag) -> Result<(), WorkerError> {
     if fold.plan.proposed >= MAX_SUGGESTIONS {
         fold.plan
             .rejections
-            .push("rejected — suggestion cap is 8".to_owned());
+            .push(format!("rejected — suggestion cap is {MAX_SUGGESTIONS}"));
         return Ok(());
     }
     match ready.action {
@@ -297,7 +297,8 @@ fn resolve<'a>(context: &'a TagJobContext, key: &str, raw: &str, slug: &str) -> 
 }
 
 fn entry_matches(entry: &TagVocabulary, raw: &str, slug: &str) -> bool {
-    entry.value == slug
+    slug_of(&entry.value) == slug
+        || (!entry.display.is_empty() && slug_of(&entry.display) == slug)
         || entry
             .aliases
             .iter()

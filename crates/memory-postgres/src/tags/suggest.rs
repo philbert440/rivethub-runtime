@@ -24,8 +24,15 @@ const SUMMARY_SQL: &str = "select id as summary_id, conversation_id, content as 
 const CONVERSATION_SQL: &str =
     "select session_key, title, agent from rh_conversations where id = $1";
 
-const VOCABULARY_SQL: &str = "select key, value, display, aliases, state from rh_tag_taxonomy \
-     order by created_at, key, value";
+const VOCABULARY_SQL: &str = "select key, value, display, aliases, state from ( \
+        select key, value, display, aliases, state, created_at from rh_tag_taxonomy \
+        union all \
+        select t.key, t.value, max(t.display), '{}'::text[], 'accepted', min(t.created_at) \
+          from rh_tags t \
+         where t.state = 'accepted' \
+           and not exists (select 1 from rh_tag_taxonomy x where x.key = t.key and x.value = t.value) \
+         group by t.key, t.value \
+     ) vocabulary order by created_at, key, value";
 
 const TAGS_SQL: &str = "select entity_type, key, value, display, source, state from rh_tags \
      where (entity_type = 'summary' and entity_id = $1) \

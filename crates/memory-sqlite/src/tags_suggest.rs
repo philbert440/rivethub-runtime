@@ -24,8 +24,15 @@ const SUMMARY_SQL: &str = "SELECT id, conversation_id, content FROM ros_summarie
 const CONVERSATION_SQL: &str =
     "SELECT session_key, title, agent FROM ros_conversations WHERE id = ?1";
 
-const VOCABULARY_SQL: &str = "SELECT key, value, display, aliases, state FROM ros_tag_taxonomy \
-     ORDER BY created_at, key, value";
+const VOCABULARY_SQL: &str = "SELECT key, value, display, aliases, state FROM ( \
+        SELECT key, value, display, aliases, state, created_at FROM ros_tag_taxonomy \
+        UNION ALL \
+        SELECT t.key, t.value, max(t.display), '[]', 'accepted', min(t.created_at) \
+          FROM ros_tags t \
+         WHERE t.state = 'accepted' \
+           AND NOT EXISTS (SELECT 1 FROM ros_tag_taxonomy x WHERE x.key = t.key AND x.value = t.value) \
+         GROUP BY t.key, t.value \
+     ) ORDER BY created_at, key, value";
 
 const TAGS_SQL: &str = "SELECT entity_type, key, value, display, source, state FROM ros_tags \
      WHERE (entity_type = 'summary' AND entity_id = ?1) \

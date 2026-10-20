@@ -102,7 +102,20 @@ fn apply(
         .execute(
             "INSERT OR IGNORE INTO ros_tags (
                 id, entity_type, entity_id, key, value, display, source, state, created_at, updated_at
-             ) VALUES (?1, 'conversation', ?2, 'project', ?3, ?4, 'rule', 'accepted', ?5, ?5)",
+             )
+             SELECT ?1, 'conversation', ?2, 'project', coalesce(found.value, ?3),
+                    coalesce(found.display, ?4), 'rule', 'accepted', ?5, ?5
+               FROM (SELECT 1) AS candidate
+               LEFT JOIN (
+                    SELECT value, display, state FROM ros_tag_taxonomy
+                     WHERE key = 'project'
+                       AND (lower(value) IN (lower(?3), lower(?4))
+                            OR EXISTS (SELECT 1 FROM json_each(aliases) AS alias
+                                        WHERE lower(alias.value) IN (lower(?3), lower(?4))))
+                     ORDER BY state = 'rejected', created_at
+                     LIMIT 1
+               ) AS found ON 1
+              WHERE found.state IS NOT 'rejected'",
             (Uuid::new_v4().to_string(), conversation_id, value, display, now),
         )
         .map_err(SqliteError::query("project rule"))?;

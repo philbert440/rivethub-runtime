@@ -175,3 +175,57 @@ async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
     assert_eq!(job.get("attempts").and_then(testkit::Json::as_i64), Some(0));
     Ok(())
 }
+
+#[tokio::test]
+async fn the_project_rule_reuses_the_taxonomy() -> TestResult {
+    let fresh = fresh_store(None)?;
+    common::execute(
+        &fresh.store,
+        "INSERT INTO ros_tag_taxonomy (key, value, display, aliases, state, created_at, updated_at) \
+         VALUES ('project', 'Widget Hub', 'Widget Hub', '[\"Widgets\"]', 'accepted', \
+                 '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'), \
+                ('project', 'scratch', '', '[]', 'rejected', \
+                 '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');",
+    )
+    .await?;
+    let mut applied = Vec::new();
+    for (id, value, display) in [
+        ("alias", "widgets", "widgets"),
+        ("canonical", "widget-hub", "widget hub"),
+        ("rejected", "scratch", "Scratch"),
+        ("fresh", "gizmo", "gizmo"),
+    ] {
+        applied.push(
+            fresh
+                .store
+                .apply_project_rule(id.to_owned(), value.to_owned(), display.to_owned())
+                .await?,
+        );
+    }
+    assert_eq!(applied, vec![1, 1, 0, 1]);
+    let rows = fresh
+        .store
+        .with_conn(|conn| {
+            let mut statement = conn
+                .prepare(
+                    "SELECT entity_id, value, display FROM ros_tags \
+                     WHERE source = 'rule' ORDER BY entity_id",
+                )
+                .map_err(common::seed)?;
+            let found = statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .map_err(common::seed)?
+                .collect::<Result<Vec<(String, String, String)>, _>>()
+                .map_err(common::seed)?;
+            Ok(found)
+        })
+        .await?;
+    let expected = [
+        ("alias", "Widget Hub", "Widget Hub"),
+        ("canonical", "Widget Hub", "Widget Hub"),
+        ("fresh", "gizmo", "gizmo"),
+    ]
+    .map(|(id, value, display)| (id.to_owned(), value.to_owned(), display.to_owned()));
+    assert_eq!(rows, expected);
+    Ok(())
+}

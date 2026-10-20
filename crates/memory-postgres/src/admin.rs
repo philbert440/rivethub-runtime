@@ -192,7 +192,7 @@ async fn directories(
 }
 
 async fn insert_rule(pool: &sqlx::PgPool, id: Uuid, tag: &ProjectTag) -> Result<u64, Error> {
-    let result = sqlx::query(INSERT_RULE)
+    let result = sqlx::query(project::RULE_TAG_SQL)
         .bind(id)
         .bind(&tag.key)
         .bind(&tag.value)
@@ -273,8 +273,3 @@ SELECT id, settings->>'cwd' AS cwd
   FROM rh_conversations
  WHERE nullif(btrim(settings->>'cwd'), '') IS NOT NULL
    AND ($1::timestamptz IS NULL OR created_at >= $1 OR updated_at >= $1)";
-
-const INSERT_RULE: &str = "\
-INSERT INTO rh_tags (entity_type, entity_id, key, value, display, source, state)
-VALUES ('conversation', $1, $2, $3, $4, 'rule', 'accepted')
-ON CONFLICT (entity_type, entity_id, key, value) DO NOTHING";
