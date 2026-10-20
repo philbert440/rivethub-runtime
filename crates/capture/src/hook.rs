@@ -39,6 +39,7 @@ pub const CHANNEL: &str = "claude-code";
 const FALLBACK_TITLE: &str = "Claude Code session";
 const LOG_FILE: &str = "claude-capture.log";
 const LOG_MODE: u32 = 0o644;
+const INGEST_TOKEN_CHARS: usize = 9;
 
 #[derive(Debug, Error)]
 pub enum HookError {
@@ -183,6 +184,17 @@ async fn load_transcript(payload: &HookPayload) -> Vec<Line> {
             Vec::new()
         }
     }
+}
+
+#[must_use]
+pub fn ingest_key(now: DateTime<Utc>) -> String {
+    let token: String = uuid::Uuid::new_v4()
+        .simple()
+        .to_string()
+        .chars()
+        .take(INGEST_TOKEN_CHARS)
+        .collect();
+    format!("{}-{token}", now.timestamp_millis())
 }
 
 fn iso_at(now: DateTime<Utc>) -> String {

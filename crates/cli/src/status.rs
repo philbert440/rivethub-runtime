@@ -78,6 +78,18 @@ async fn health(env: &Environment) -> Result<Report, Error> {
 }
 
 pub(crate) async fn endpoint(env: &Environment, config: &Config) -> Result<Endpoint, Error> {
+    let Endpoint { url, client } = gateway(env, config, Duration::from_secs(3)).await?;
+    Ok(Endpoint {
+        url: url.join("healthz")?,
+        client,
+    })
+}
+
+pub(crate) async fn gateway(
+    env: &Environment,
+    config: &Config,
+    timeout: Duration,
+) -> Result<Endpoint, Error> {
     let hostname = host_name()?;
     let node = config::resolve_node_name(config, env, &hostname)?;
     let section = config.gateway.clone();
@@ -88,9 +100,9 @@ pub(crate) async fn endpoint(env: &Environment, config: &Config) -> Result<Endpo
     })
     .await?;
     let mut url = url::Url::parse(if source.tls_cert.is_some() {
-        "https://localhost/healthz"
+        "https://localhost/"
     } else {
-        "http://localhost/healthz"
+        "http://localhost/"
     })?;
     let host = if source.host.contains(':') && !source.host.starts_with('[') {
         format!("[{}]", source.host)
@@ -110,9 +122,7 @@ pub(crate) async fn endpoint(env: &Environment, config: &Config) -> Result<Endpo
     }
     url.set_port(Some(source.port))
         .map_err(|()| Error::Address)?;
-    let builder = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(3));
+    let builder = reqwest::Client::builder().no_proxy().timeout(timeout);
     let client = match (&source.tls_cert, &source.tls_ca) {
         (Some(cert), Some(ca)) => verified(builder, &mut url, cert, ca, source.port)?,
         _ => builder,
