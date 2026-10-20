@@ -167,6 +167,13 @@ impl Composition {
         Ok(())
     }
 
+    pub(crate) async fn node_owner(
+        config: &Config,
+        env: &Environment,
+    ) -> Result<gateway::tenancy::UserId, ComposeError> {
+        Ok(identities::load(config, env).await?.owner)
+    }
+
     pub async fn failed(&mut self) -> Result<(), ComposeError> {
         tokio::select! {
             result = self.tasks.join_next(), if !self.tasks.is_empty() => {
