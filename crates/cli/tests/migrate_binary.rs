@@ -36,8 +36,8 @@ fn migrating_a_v5_copy_reports_v8_and_leaves_a_byte_equal_backup() -> TestResult
 
     let stdout = run(&["sqlite", "--path", &path.to_string_lossy()])?;
     assert!(
-        stdout.contains("current 9")
-            && stdout.contains("required 9")
+        stdout.contains("current 10")
+            && stdout.contains("required 10")
             && stdout.contains("pending 0"),
         "the applied report must name the reached state: {stdout}"
     );
@@ -55,7 +55,7 @@ fn migrating_a_v5_copy_reports_v8_and_leaves_a_byte_equal_backup() -> TestResult
 
     let conn = rusqlite::Connection::open(&path)?;
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(version, 9);
+    assert_eq!(version, 10);
     Ok(())
 }
 
@@ -68,8 +68,8 @@ fn status_reports_the_sqlite_ladder_position() -> TestResult {
     let stdout = run(&["status", "sqlite", "--path", &path.to_string_lossy()])?;
     assert!(
         stdout.contains("current 5")
-            && stdout.contains("required 9")
-            && stdout.contains("pending 4"),
+            && stdout.contains("required 10")
+            && stdout.contains("pending 5"),
         "status must report the current, required and pending steps: {stdout}"
     );
     assert!(
@@ -80,7 +80,7 @@ fn status_reports_the_sqlite_ladder_position() -> TestResult {
     let missing = dir.path().join("absent.sqlite");
     let stdout = run(&["status", "sqlite", "--path", &missing.to_string_lossy()])?;
     assert!(
-        stdout.contains("current 0") && stdout.contains("pending 9"),
+        stdout.contains("current 0") && stdout.contains("pending 10"),
         "a missing file reads as version 0 with the whole ladder pending: {stdout}"
     );
     assert!(!missing.exists(), "status must not create the file");

@@ -66,12 +66,10 @@ fn pending_windows(conn: &rusqlite::Connection) -> Result<Vec<ConversationWindow
         .map_err(SqliteError::query("pending summaries"))?;
     let mut windows = Vec::new();
     for id in ids {
-        let uuid = parse_id(&id)?;
-        match load_window(conn, uuid)? {
-            Some(window) => windows.push(window),
-            None => {
-                return Err(SqliteError::MissingHit { id });
-            }
+        match parse_id(&id).and_then(|uuid| load_window(conn, uuid)) {
+            Ok(Some(window)) => windows.push(window),
+            Ok(None) => tracing::warn!("skipped summary window: conversation {id} not found"),
+            Err(error) => tracing::warn!("skipped summary window for conversation {id}: {error}"),
         }
     }
     Ok(windows)
@@ -367,4 +365,86 @@ fn stored_kind(message: &str) -> Option<String> {
     let rest = message.strip_prefix("stored summary kind ")?;
     let kind = rest.strip_suffix(" is not leaf, branch, or root")?;
     Some(kind.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use parking_lot::Mutex;
+    use rusqlite::Connection;
+
+    use super::pending_windows;
+
+    const HEALTHY: &str = "0199e2a0-7b3c-7a00-8000-0000000000a1";
+    const UNREADABLE: &str = "0199e2a07b3c7a0080000000000000b2";
+
+    struct WarningRecorder(Arc<Mutex<Vec<String>>>);
+
+    struct MessageVisitor(Arc<Mutex<Vec<String>>>, tracing::Level);
+
+    impl tracing::field::Visit for MessageVisitor {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            if field.name() == "message" {
+                self.0.lock().push(format!("{} {value:?}", self.1));
+            }
+        }
+    }
+
+    impl<S> tracing_subscriber::Layer<S> for WarningRecorder
+    where
+        S: tracing::Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
+    {
+        fn on_event(
+            &self,
+            event: &tracing::Event<'_>,
+            _context: tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            event.record(&mut MessageVisitor(
+                self.0.clone(),
+                *event.metadata().level(),
+            ));
+        }
+    }
+
+    fn seed(conn: &Connection, conversation: &str, message: &str) {
+        conn.execute(
+            "INSERT INTO ros_conversations (id, session_key, agent, created_at, updated_at)
+             VALUES (?1, ?1, 'rivet', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z')",
+            [conversation],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO ros_messages (id, conversation_id, agent, channel, role, content, created_at)
+             VALUES (?1, ?2, 'rivet', 'test', 'user', 'hello', '2026-10-10T12:00:00.000Z')",
+            [message, conversation],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_window_that_cannot_be_loaded_is_skipped_with_a_warning() {
+        use tracing_subscriber::layer::SubscriberExt as _;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("memory.sqlite");
+        migrate::sqlite(&path).unwrap();
+        let conn = Connection::open(&path).unwrap();
+        seed(&conn, HEALTHY, "0199e2a0-7b3c-7a00-8001-0000000000a1");
+        seed(&conn, UNREADABLE, "0199e2a0-7b3c-7a00-8001-0000000000b2");
+        let lines: Arc<Mutex<Vec<String>>> = Arc::default();
+        let subscriber = tracing_subscriber::registry().with(WarningRecorder(lines.clone()));
+        let windows =
+            tracing::subscriber::with_default(subscriber, || pending_windows(&conn)).unwrap();
+        let ids: Vec<String> = windows
+            .iter()
+            .map(|window| window.conversation.id.to_string())
+            .collect();
+        assert_eq!(ids, [HEALTHY]);
+        assert_eq!(
+            *lines.lock(),
+            [format!(
+                "WARN skipped summary window: conversation {UNREADABLE} not found"
+            )]
+        );
+    }
 }

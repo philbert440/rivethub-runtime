@@ -33,6 +33,7 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
             tx.execute_batch(include_str!("schema/search_v8.sql"))
         }),
         SchemaVersion::V9 => rewrite_legacy_summary_kinds(conn),
+        SchemaVersion::V10 => in_transaction(conn, to, crate::ids::canonicalize),
     }
 }
 
