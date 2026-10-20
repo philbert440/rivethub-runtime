@@ -36,12 +36,22 @@ pub(super) fn validate_version(version: &str) -> Result<(), UpdateError> {
     Ok(())
 }
 
+pub(super) fn platform() -> Result<&'static str, UpdateError> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("linux", "x86_64") => Ok("linux-x86_64"),
+        ("linux", "aarch64") => Ok("linux-aarch64"),
+        _ => Err(UpdateError::Platform),
+    }
+}
+
 pub(super) async fn stage(
     api: &Url,
     version: Option<&str>,
+    beta: bool,
     directory: &Path,
     shutdown: &CancellationToken,
 ) -> Result<String, UpdateError> {
+    let platform = platform()?;
     let client = reqwest::Client::builder()
         .user_agent("RivetHub updater")
         .https_only(api.scheme() == "https")
@@ -57,14 +67,22 @@ pub(super) async fn stage(
         if let Some(version) = version {
             validate_version(version)?;
             segments.push("tags").push(version);
-        } else {
+        } else if !beta {
             segments.push("latest");
         }
     }
-    let body = download(&client, endpoint, 1024 * 1024, shutdown).await?;
-    let release: Release = serde_json::from_slice(&body).map_err(|_| UpdateError::Release)?;
+    let release = if version.is_none() && beta {
+        endpoint.set_query(Some("per_page=100"));
+        let body = download(&client, endpoint, 8 * 1024 * 1024, shutdown).await?;
+        let releases: Vec<Release> =
+            serde_json::from_slice(&body).map_err(|_| UpdateError::Release)?;
+        newest(releases)?
+    } else {
+        let body = download(&client, endpoint, 1024 * 1024, shutdown).await?;
+        serde_json::from_slice(&body).map_err(|_| UpdateError::Release)?
+    };
     if release.draft
-        || release.prerelease
+        || (release.prerelease && !beta)
         || version.is_some_and(|version| release.tag_name != version)
     {
         return Err(UpdateError::Release);
@@ -74,7 +92,7 @@ pub(super) async fn stage(
     let manifest = download(&client, manifest, 16 * 1024, shutdown).await?;
     let checksums = checksums(&manifest)?;
     for name in ["rh", "rivethub-migrate"] {
-        let asset_name = format!("{name}-linux-x86_64");
+        let asset_name = format!("{name}-{platform}");
         let expected = checksums.get(&asset_name).ok_or(UpdateError::Manifest)?;
         let bytes = download(
             &client,
@@ -91,6 +109,26 @@ pub(super) async fn stage(
         tokio::task::spawn_blocking(move || files::write_executable(&path, &bytes)).await??;
     }
     Ok(release.tag_name)
+}
+
+fn newest(releases: Vec<Release>) -> Result<Release, UpdateError> {
+    releases
+        .into_iter()
+        .filter(|release| !release.draft)
+        .map(|release| {
+            let version = release
+                .tag_name
+                .strip_prefix('v')
+                .ok_or_else(|| UpdateError::Version(release.tag_name.clone()))?;
+            let version = semver::Version::parse(version)
+                .map_err(|_| UpdateError::Version(release.tag_name.clone()))?;
+            Ok((version, release))
+        })
+        .collect::<Result<Vec<_>, UpdateError>>()?
+        .into_iter()
+        .max_by(|(left, _), (right, _)| left.cmp(right))
+        .map(|(_, release)| release)
+        .ok_or(UpdateError::Release)
 }
 
 fn asset(release: &Release, name: &str) -> Result<Url, UpdateError> {

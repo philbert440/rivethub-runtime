@@ -2,10 +2,11 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags: ['v[0-9]*']
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -15,34 +16,119 @@ env:
   SQLX_OFFLINE: 'true'
 
 jobs:
-  linux:
+  version:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.0
+      - name: Compute release version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          crate_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "cli") | .version')
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            test "$RELEASE_TAG" = "v$crate_version"
+            version=$crate_version
+            prerelease=false
+            if [[ "${version%%+*}" == *-* ]]; then
+              prerelease=true
+            fi
+          else
+            latest=$(git ls-remote --tags --refs origin 'v*' | awk '{print $2}' \
+              | sed -n 's|^refs/tags/v\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)$|\1|p' | sort -V | tail -n 1)
+            version=$crate_version
+            if [[ -n "$latest" ]]; then
+              version=$(printf '%s\n' "$crate_version" "${latest%.*}.$((${latest##*.} + 1))" | sort -V | tail -n 1)
+            fi
+            prerelease=true
+            if git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then
+              echo "::error::tag v$version already exists"
+              exit 1
+            fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+  linux:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.0
       - uses: Swatinem/rust-cache@v2
-      - name: Check version tag
+        with:
+          key: ${{ matrix.target }}
+      - name: Set workspace version
+        if: github.ref_type == 'branch'
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: |
-          release_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "cli") | .version')
-          test "$RELEASE_TAG" = "v$release_version"
-      - name: Build Linux x86_64 binaries
-        run: cargo build --release --locked --target x86_64-unknown-linux-gnu --bin rh --bin rivethub-migrate
+          sed -i "/^\[workspace.package\]/,/^\[/ s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
+          cargo update --workspace
+          test -z "$(git diff -U0 Cargo.lock | grep '^[-+][^-+]' | grep -v '^[-+]version = ')"
+      - name: Check workspace version
+        env:
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          crate_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "cli") | .version')
+          test "$crate_version" = "$RELEASE_VERSION"
+      - name: Build Linux ${{ matrix.arch }} binaries
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin rh --bin rivethub-migrate
       - name: Prepare release assets
+        env:
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: |
           mkdir release
-          cp target/x86_64-unknown-linux-gnu/release/rh release/rh-linux-x86_64
-          cp target/x86_64-unknown-linux-gnu/release/rivethub-migrate release/rivethub-migrate-linux-x86_64
-          cd release
-          sha256sum rh-linux-x86_64 rivethub-migrate-linux-x86_64 > SHA256SUMS
+          cp target/${{ matrix.target }}/release/rh release/rh-linux-${{ matrix.arch }}
+          cp target/${{ matrix.target }}/release/rivethub-migrate release/rivethub-migrate-linux-${{ matrix.arch }}
+          [[ "$(release/rh-linux-${{ matrix.arch }} version) " == "RivetHub v$RELEASE_VERSION "* ]]
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-${{ matrix.arch }}
+          path: release/
+          if-no-files-found: error
+
+  publish:
+    needs: [version, linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+      - name: Checksums
+        working-directory: release
+        run: sha256sum rh-linux-* rivethub-migrate-linux-* > SHA256SUMS
+      - name: Tag the merge commit
+        if: github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v${{ needs.version.outputs.version }}
+        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA"
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: v${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
-          release_args=(--verify-tag --generate-notes --title "$RELEASE_TAG")
-          if [[ "${RELEASE_TAG%%+*}" == *-* ]]; then
+          release_args=(--repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "$RELEASE_TAG")
+          if [[ "$PRERELEASE" == true ]]; then
             release_args+=(--prerelease)
           fi
-          gh release create "$RELEASE_TAG" "${release_args[@]}" release/rh-linux-x86_64 release/rivethub-migrate-linux-x86_64 release/SHA256SUMS
+          gh release create "$RELEASE_TAG" "${release_args[@]}" release/*

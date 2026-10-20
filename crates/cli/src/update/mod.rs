@@ -84,9 +84,7 @@ impl Updater {
         report: &mut Report,
     ) -> Result<Prepared, Error> {
         check_cancelled(shutdown)?;
-        if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            return Err(UpdateError::Platform.into());
-        }
+        release::platform()?;
         if let Some(version) = &args.version {
             release::validate_version(version)?;
         }
@@ -151,16 +149,17 @@ impl Updater {
                 .stdout
                 .extend(["Updating this node (", &args.channel.to_string(), ")...\n"]);
             let version = match args.channel {
-                Channel::Stable => {
+                Channel::Stable | Channel::Beta => {
                     release::stage(
                         &self.releases,
                         args.version.as_deref(),
+                        args.channel == Channel::Beta,
                         installation.staging.path(),
                         shutdown,
                     )
                     .await?
                 }
-                Channel::Beta | Channel::Nightly => {
+                Channel::Nightly => {
                     source::stage(args, env, installation.staging.path(), shutdown).await?
                 }
             };

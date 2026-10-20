@@ -1,4 +1,7 @@
-#![cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+#![cfg(not(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+)))]
 
 use std::ffi::OsStr;
 
@@ -30,7 +33,9 @@ async fn update_refuses_other_platforms_before_touching_the_installation()
     let report = updater.run(&args, &env, &CancellationToken::new()).await;
     assert_ne!(report.exit, Exit::Ok);
     assert!(
-        report.stderr.contains("update requires Linux x86_64"),
+        report
+            .stderr
+            .contains("update requires Linux x86_64 or aarch64"),
         "{}",
         report.stderr
     );

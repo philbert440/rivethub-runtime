@@ -8,11 +8,11 @@ pub enum UpdateError {
     HostnameEncoding,
     #[error(transparent)]
     Config(#[from] config::ConfigError),
-    #[error("update requires Linux x86_64")]
+    #[error("update requires Linux x86_64 or aarch64")]
     Platform,
     #[error("invalid release version: {0}")]
     Version(String),
-    #[error("no published stable release contains both Linux x86_64 binaries")]
+    #[error("no matching published release contains both binaries for this platform")]
     Release,
     #[error("release download failed: {0}")]
     Http(#[from] reqwest::Error),

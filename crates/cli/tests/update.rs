@@ -1,4 +1,7 @@
-#![cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#![cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
 
 #[path = "update/source.rs"]
 mod source;
@@ -8,7 +11,7 @@ use std::os::unix::fs::symlink;
 
 use cli::Exit;
 use cli::service::Scope;
-use cli::update::Updater;
+use cli::update::{Channel, Updater};
 use tokio_util::sync::CancellationToken;
 use update_support::{BINARY, Fixture, MIGRATION, Result, args, server};
 
@@ -73,7 +76,7 @@ async fn bad_checksums_and_migration_failures_preserve_installation() -> Result 
 async fn explicit_version_and_no_restart_still_migrate() -> Result {
     let fixture = Fixture::new()?;
     let mut args = args();
-    args.version = Some("v9".to_owned());
+    args.version = Some("v0.9.0".to_owned());
     args.no_restart = true;
     let report = fixture.run(&args, &fixture.env(), false).await?;
     assert_eq!(report.exit, Exit::Ok, "{}", report.stderr);
@@ -96,7 +99,7 @@ async fn mesh_preflight_local_first_ssh_user_and_partial_failures() -> Result {
     let mut args = args();
     args.mesh = true;
     args.ssh_user = Some("deploy".to_owned());
-    args.version = Some("v9".to_owned());
+    args.version = Some("v0.9.0".to_owned());
     args.no_restart = true;
     let report = fixture.run(&args, &fixture.env(), false).await?;
     assert_eq!(report.exit, Exit::Failure);
@@ -108,10 +111,55 @@ async fn mesh_preflight_local_first_ssh_user_and_partial_failures() -> Result {
     assert!(lines.first().ok_or("preflight")?.ends_with("|true"));
     assert!(lines.get(4).ok_or("migration")?.starts_with("migrate|"));
     assert!(lines.last().ok_or("last peer")?.ends_with(
-        "|-l|deploy|--|last.example.com|rh update --channel stable --version v9 --no-restart"
+        "|-l|deploy|--|last.example.com|rh update --channel stable --version v0.9.0 --no-restart"
     ));
     assert!(!calls.contains("update --mesh"));
     assert_eq!(calls.matches("unreachable.example.com").count(), 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn beta_installs_the_highest_published_version_and_pins_mesh_peers() -> Result {
+    let fixture = Fixture::new()?;
+    fixture.mesh(&["local.example.com", "peer.example.com"])?;
+    let mut args = args();
+    args.channel = Channel::Beta;
+    args.mesh = true;
+    args.no_restart = true;
+    let report = fixture.run(&args, &fixture.env(), false).await?;
+    assert_eq!(report.exit, Exit::Ok, "{}", report.stderr);
+    assert!(
+        report.stdout.contains("Installed v0.10.0;"),
+        "{}",
+        report.stdout
+    );
+    assert_eq!(std::fs::read(&fixture.binary)?, BINARY);
+    let calls = std::fs::read_to_string(&fixture.calls)?;
+    assert!(
+        calls.lines().last().ok_or("peer")?.ends_with(
+            "|--|peer.example.com|rh update --channel beta --version v0.10.0 --no-restart"
+        )
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn only_beta_accepts_prerelease_tags_and_drafts_are_refused() -> Result {
+    for (channel, tag, exit) in [
+        (Channel::Stable, "v0.10.0", Exit::Failure),
+        (Channel::Beta, "v0.10.0", Exit::Ok),
+        (Channel::Beta, "v0.11.0", Exit::Failure),
+    ] {
+        let fixture = Fixture::new()?;
+        let mut args = args();
+        args.channel = channel;
+        args.version = Some(tag.to_owned());
+        args.no_restart = true;
+        let report = fixture.run(&args, &fixture.env(), false).await?;
+        assert_eq!(report.exit, exit, "{}", report.stderr);
+        let installed = std::fs::read(&fixture.binary)? == BINARY;
+        assert_eq!(installed, exit == Exit::Ok);
+    }
     Ok(())
 }
 

@@ -23,9 +23,8 @@ pub(super) async fn stage(
     }
     let root = tokio::fs::canonicalize(requested).await?;
     let branch = match args.channel {
-        Channel::Beta => "beta",
         Channel::Nightly => "main",
-        Channel::Stable => return Err(UpdateError::Source),
+        Channel::Stable | Channel::Beta => return Err(UpdateError::Source),
     };
     if git(&root, &["status", "--porcelain"], env, shutdown)
         .await?

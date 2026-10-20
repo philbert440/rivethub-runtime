@@ -36,6 +36,7 @@ nix = { workspace = true, features = ["hostname"] }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rmcp = { workspace = true, features = ["client", "transport-child-process"] }
+semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }

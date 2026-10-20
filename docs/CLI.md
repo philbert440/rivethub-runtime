@@ -98,8 +98,8 @@ file.
 Platforms: `rh` targets Linux and macOS (Apple Silicon). CI builds `rh` and runs the
 `cli` tests on `macos-latest`. `rh service` and the restart step of `rh update` manage systemd units only. On macOS
 running `rh start` under launchd (a LaunchAgent or LaunchDaemon plist) is the operator's job, and `rh update` refuses
-any platform other than Linux x86_64 because that is the only published release asset. The PKI commands refuse a
-state, holder or authority path that passes through a symlink; on macOS `/tmp` and `/var` are symlinks into
+any platform other than Linux x86_64 and aarch64 because those are the only published release assets. The PKI
+commands refuse a state, holder or authority path that passes through a symlink; on macOS `/tmp` and `/var` are symlinks into
 `/private`, so keep those paths under the home directory (the default `~/.rivethub` is fine).
 
 Doctor calls `migrate`'s read-only schema status library APIs in-process. Postgres uses the async status API;
@@ -119,16 +119,20 @@ PID files and symlink boundaries, real signal delivery, and read-only doctor che
 tests assert unchanged database state. Timing tests await events with deadlines.
 
 `rh update [--channel stable|beta|nightly] [--version TAG] [--no-restart] [--mesh] [--ssh-user USER]`
-updates Linux x86_64 installations. Stable is the default and resolves the latest published stable GitHub release,
-or the exact tag supplied with `--version`. Both `rh-linux-x86_64` and `rivethub-migrate-linux-x86_64` must match
-`SHA256SUMS` before either is executed. HTTPS redirects are supported; HTTPS downloads cannot downgrade to HTTP.
-Version tags are URL path components, never shell expressions. The release workflow builds both binaries when a
-version tag is pushed. Releases use the workspace package version and require a matching `v<version>` tag.
+updates Linux x86_64 and aarch64 installations. Stable is the default and resolves the latest published stable GitHub
+release, or the exact tag supplied with `--version`; it refuses prereleases. Beta resolves the highest semantic version
+among published releases, prereleases included, or the exact tag supplied with `--version`. Both `rh-linux-<arch>` and
+`rivethub-migrate-linux-<arch>` for the running architecture must match `SHA256SUMS` before either is executed.
+HTTPS redirects are supported; HTTPS downloads cannot downgrade to HTTP. Version tags are URL path components, never
+shell expressions. Every merge to `main` tags the next patch version (one past the highest `vX.Y.Z` tag, or the
+workspace package version if that is higher) and publishes it as a beta prerelease with both binaries for both
+architectures. The Promote workflow turns a beta into the latest stable release without rebuilding. A pushed
+`v<version>` tag must match the workspace package version and publishes that release.
 
-Beta and nightly require `RIVETHUB_INSTALL_ROOT` to name an absolute, clean source checkout on `beta` and `main`,
-respectively. The deprecated install-root alias remains in `config` and emits its existing warning. The updater runs
+Nightly requires `RIVETHUB_INSTALL_ROOT` to name an absolute, clean source checkout on `main`. The deprecated
+install-root alias remains in `config` and emits its existing warning. The updater runs
 `git pull --ff-only origin <branch>` then `cargo build --release --locked` for both binaries into an isolated staging
-directory. With a source channel, `--version` asserts that the updated checkout resolves to that commit or tag;
+directory. With nightly, `--version` asserts that the updated checkout resolves to that commit or tag;
 a different revision is refused before building. The updater never changes the checkout's branch or discards edits.
 
 Updates require a configured memory backend. The staged migration binary applies that backend's migrations before
@@ -142,7 +146,7 @@ implementation. A restart failure exits 1 and retains both backups; it does not 
 Mesh mode reads the existing typed registry at `<RIVETHUB_SHARED_DIR>/mesh.json` through the gateway's registry reader.
 It resolves the local node name with the same config, environment, and operating-system hostname precedence as the runtime. It validates every SSH destination and concurrently preflights SSH
 before updating locally, then visits every reachable peer in registry order. Each peer executes its own `rh update`;
-`--mesh` is never forwarded. Stable peers receive the exact release tag installed locally. The explicit SSH user overrides the registry user; absent both, SSH selects its normal user.
+`--mesh` is never forwarded. Stable and beta peers receive the exact release tag installed locally. The explicit SSH user overrides the registry user; absent both, SSH selects its normal user.
 Batch mode and strict host-key checking use the operator's existing SSH trust. Paths and secrets are not interpolated
 into a remote shell. Unreachable peers and failed peer updates are reported, other reachable peers continue, and the
 aggregate exit is 1 if any peer failed. Local failure stops the rollout. Success exits 0; cancellation exits 1.
