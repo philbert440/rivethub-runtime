@@ -278,6 +278,9 @@ async fn supervise(
     tracker.close();
     tracker.wait().await;
     outcome?;
+    if let Ok(error) = failed_rx.try_recv() {
+        return Err(error);
+    }
     tracing::info!("gateway stopped");
     Ok(())
 }
