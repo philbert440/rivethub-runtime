@@ -3,7 +3,7 @@ use kernel::memory::TagOnEntity;
 use wire::gateway::memory::TagEntityType;
 use wire::gateway::memory::TagState;
 
-pub const TAG_SYSTEM_PROMPT: &str = "You suggest tags for one conversation summary. Reply with a JSON array only. Each item has key, value, an optional confidence from 0 to 1, and an optional reason. Reuse an existing vocabulary entry when it fits. Set action to \"remove\" only for a tag already on the conversation, and only when the summary shows that tag is wrong. Omit action to add a tag.";
+pub const TAG_SYSTEM_PROMPT: &str = "You tag one conversation summary so it can be found later by project and topic. Reply with a JSON array only. An empty array [] is a good answer; most conversations need zero or one new tag. Suggest at most 3 tags. Reuse an existing vocabulary entry whenever one fits, including when the conversation names one of its aliases. Propose a new value only when the conversation is substantially about something no entry covers and that will come up again in other conversations. Use key \"project\" only for a named product, repository or long-running effort. Never use a folder or path name, temp dir, worktree or lane name, branch, task-brief file, ticket, PR number, version, review round, or an agent, model or harness name as a value. Use key \"topic\" for a durable subject area such as networking, storage or gpu-inference, not for a one-off task, a status or an activity like code review. Values are short lowercase hyphenated nouns. Each item has key, value, an optional confidence from 0 to 1, and an optional reason. Set action to \"remove\" only for a tag already on the conversation, and only when the summary shows that tag is wrong. Omit action to add a tag.";
 
 pub(super) const MAX_TAG_TOKENS: u32 = 400;
 
@@ -33,7 +33,10 @@ fn vocabulary_lines(context: &TagJobContext) -> Vec<String> {
         .iter()
         .filter(|entry| entry.state != TagState::Rejected)
     {
-        lines.push(bullet(&entry.key, &entry.value, &entry.display));
+        lines.push(with_aliases(
+            bullet(&entry.key, &entry.value, &entry.display),
+            &entry.aliases,
+        ));
         seen.push(pair(&entry.key, &entry.value));
     }
     for tag in accepted_conversation(context) {
@@ -73,6 +76,14 @@ fn accepted_conversation(context: &TagJobContext) -> Vec<&TagOnEntity> {
 
 fn bullet(key: &str, value: &str, display: &str) -> String {
     format!("- {}", label(key, value, display))
+}
+
+fn with_aliases(line: String, aliases: &[String]) -> String {
+    if aliases.is_empty() {
+        line
+    } else {
+        format!("{line} (also: {})", aliases.join(", "))
+    }
 }
 
 fn label(key: &str, value: &str, display: &str) -> String {

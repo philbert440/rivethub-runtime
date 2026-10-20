@@ -325,6 +325,52 @@ async fn chat_release_notes_do_not_reset_the_first_suggestions() -> TestResult {
 }
 
 #[tokio::test]
+async fn the_vocabulary_adds_accepted_tags_in_use() -> TestResult {
+    let fresh = fresh_store(None)?;
+    let summary = Uuid::parse_str("00000000-0000-4000-8000-000000000041")?;
+    let conversation = Uuid::parse_str("00000000-0000-4000-8000-000000000042")?;
+    let at = "2026-01-01T00:00:00.000Z";
+    seed_conversation(&fresh.store, conversation, "cli:vocab", "rivet", None, at).await?;
+    seed_summary(&fresh.store, summary, Some(conversation), "body", at).await?;
+    common::execute(
+        &fresh.store,
+        "INSERT INTO ros_tag_taxonomy (key, value, state, created_at, updated_at) VALUES \
+           ('project', 'scratch', 'rejected', '2026-01-01T00:00:01.000Z', '2026-01-01T00:00:01.000Z'), \
+           ('topic', 'storage', 'accepted', '2026-01-01T00:00:02.000Z', '2026-01-01T00:00:02.000Z'); \
+         INSERT INTO ros_tags (id, entity_type, entity_id, key, value, display, source, state, \
+                               created_at, updated_at) VALUES \
+           ('t1', 'conversation', 'other', 'project', 'Widget Hub', 'Widget Hub', 'user', 'accepted', \
+            '2026-01-01T00:00:03.000Z', '2026-01-01T00:00:03.000Z'), \
+           ('t2', 'conversation', 'other', 'project', 'scratch', '', 'user', 'accepted', \
+            '2026-01-01T00:00:03.000Z', '2026-01-01T00:00:03.000Z'), \
+           ('t3', 'conversation', 'other', 'topic', 'storage', '', 'user', 'accepted', \
+            '2026-01-01T00:00:03.000Z', '2026-01-01T00:00:03.000Z'), \
+           ('t4', 'conversation', 'other', 'topic', 'maybe', '', 'model', 'suggested', \
+            '2026-01-01T00:00:03.000Z', '2026-01-01T00:00:03.000Z');",
+    )
+    .await?;
+    let loaded = fresh
+        .store
+        .tag_job_context(summary)
+        .await?
+        .ok_or("context")?;
+    let seen: Vec<(&str, &str, TagState)> = loaded
+        .vocabulary
+        .iter()
+        .map(|entry| (entry.key.as_str(), entry.value.as_str(), entry.state))
+        .collect();
+    assert_eq!(
+        seen,
+        vec![
+            ("project", "scratch", TagState::Rejected),
+            ("topic", "storage", TagState::Accepted),
+            ("project", "Widget Hub", TagState::Accepted),
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn missing_summaries_and_missing_tables_fail_closed() -> TestResult {
     let fresh = fresh_store(None)?;
     let summary = assert_missing_summary_heads(&fresh.store).await?;

@@ -3,6 +3,25 @@ use std::process::Command;
 
 use crate::error::Error;
 
+pub(crate) const RULE_TAG_SQL: &str = "\
+insert into rh_tags (entity_type, entity_id, key, value, display, source, state)
+select 'conversation', candidate.entity_id, candidate.key,
+       coalesce(found.value, candidate.value), coalesce(found.display, candidate.display),
+       'rule', 'accepted'
+  from (values ($1::uuid, $2::text, $3::text, $4::text))
+       as candidate(entity_id, key, value, display)
+  left join lateral (
+       select value, display, state from rh_tag_taxonomy
+        where key = candidate.key
+          and (lower(value) in (lower(candidate.value), lower(candidate.display))
+               or exists (select 1 from unnest(aliases) as alias
+                           where lower(alias) in (lower(candidate.value), lower(candidate.display))))
+        order by state = 'rejected', created_at
+        limit 1
+  ) as found on true
+ where found.state is distinct from 'rejected'
+on conflict (entity_type, entity_id, key, value) do nothing";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuleSource {
     GitRemote,

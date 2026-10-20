@@ -306,18 +306,14 @@ impl<'a> CaptureWriter<'a> {
             .begin()
             .await
             .map_err(|source| Error::operation("tag savepoint", source))?;
-        sqlx::query!(
-            "insert into rh_tags (entity_type, entity_id, key, value, display, source, state)
-             values ('conversation', $1, $2, $3, $4, 'rule', 'accepted')
-             on conflict (entity_type, entity_id, key, value) do nothing",
-            conversation_id,
-            tag.key.as_str(),
-            tag.value.as_str(),
-            tag.display.as_str()
-        )
-        .execute(&mut *savepoint)
-        .await
-        .map_err(|source| Error::operation("project tag", source))?;
+        sqlx::query(project::RULE_TAG_SQL)
+            .bind(conversation_id)
+            .bind(tag.key.as_str())
+            .bind(tag.value.as_str())
+            .bind(tag.display.as_str())
+            .execute(&mut *savepoint)
+            .await
+            .map_err(|source| Error::operation("project tag", source))?;
         savepoint
             .commit()
             .await

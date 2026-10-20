@@ -278,11 +278,14 @@ async fn the_second_chat_call_adds_release_notes_and_skips_duplicates() {
     let turn = drive(&second_context(&summary), SECOND_ANSWER, false, 1)
         .await
         .expect("suggest");
-    assert_eq!(turn.outcome.proposed, 4);
+    assert_eq!(turn.outcome.proposed, 3);
     assert_eq!(turn.outcome.fresh, 2);
     assert_eq!(
         turn.outcome.rejections,
-        vec!["rejected — empty value for key \"bad-key\"".to_owned()]
+        vec![
+            "rejected — empty value for key \"bad-key\"".to_owned(),
+            "rejected — suggestion cap is 3".to_owned(),
+        ]
     );
     assert_eq!(turn.write.rows.len(), 2);
     assert!(

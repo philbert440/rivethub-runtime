@@ -88,7 +88,7 @@ async fn tag_job_context_reads_the_summary(pool: PgPool) -> TestResult {
     assert_eq!(loaded.title.as_deref(), Some("Deploy"));
     assert_eq!(loaded.agent, "rivet");
     assert_eq!(loaded.summary, "The team decided.");
-    assert_eq!(loaded.vocabulary.len(), 2);
+    assert_eq!(loaded.vocabulary.len(), 3);
     let first = loaded.vocabulary.first().expect("first vocabulary");
     assert_eq!(first.key, "topic");
     assert_eq!(first.value, "memory-summarizer");
@@ -97,6 +97,9 @@ async fn tag_job_context_reads_the_summary(pool: PgPool) -> TestResult {
     assert_eq!(second.value, "acmekit");
     assert_eq!(second.display, "AcmeKit");
     assert_eq!(second.state, TagState::Suggested);
+    let third = loaded.vocabulary.get(2).expect("tag in use");
+    assert_eq!(third.value, "manual");
+    assert_eq!(third.state, TagState::Accepted);
     let tag = loaded.tags.first().expect("tag");
     assert_eq!(loaded.tags.len(), 1);
     assert_eq!(tag.entity_type, TagEntityType::Conversation);
@@ -104,6 +107,42 @@ async fn tag_job_context_reads_the_summary(pool: PgPool) -> TestResult {
     assert_eq!(tag.value, "manual");
     assert_eq!(tag.source, "user");
     assert_eq!(tag.state, TagState::Accepted);
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_vocabulary_adds_accepted_tags_in_use(pool: PgPool) -> TestResult {
+    let memory = store(&pool);
+    let conversation = seed_conversation(&pool, "cli:vocab").await?;
+    let summary = id(22);
+    insert_summary(&pool, summary, Some(conversation), "body").await?;
+    insert_taxonomy(&pool, "project", "scratch", "", "rejected", stamp(1)).await?;
+    insert_taxonomy(&pool, "topic", "storage", "", "accepted", stamp(2)).await?;
+    let other = seed_conversation(&pool, "cli:other").await?;
+    for (key, value, state) in [
+        ("project", "Widget Hub", "accepted"),
+        ("project", "scratch", "accepted"),
+        ("topic", "storage", "accepted"),
+        ("topic", "maybe", "suggested"),
+    ] {
+        let mut seed = tag_seed("conversation", other, key, value, "user", None);
+        seed.state = state;
+        insert_tag(&pool, seed).await?;
+    }
+    let loaded = memory.tag_job_context(summary).await?.expect("context");
+    let seen: Vec<(&str, &str, TagState)> = loaded
+        .vocabulary
+        .iter()
+        .map(|entry| (entry.key.as_str(), entry.value.as_str(), entry.state))
+        .collect();
+    assert_eq!(
+        seen,
+        vec![
+            ("project", "scratch", TagState::Rejected),
+            ("topic", "storage", TagState::Accepted),
+            ("project", "Widget Hub", TagState::Accepted),
+        ]
+    );
     Ok(())
 }
 
