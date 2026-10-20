@@ -1,12 +1,14 @@
 use wire::capture::{CaptureBatchRequest, CaptureMessage, CaptureResult};
+use wire::gateway::memory::{EmbedStatus, MemoryHealthResponse};
 use wire::message::Role;
 
+use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
 use tokio::io::AsyncWriteExt as _;
 
-use super::{TestResult, free_port, start, stop};
+use super::{TestResult, free_port, provider_base, start, stop, write_config};
 
 const SESSION: &str = "capture-resend";
 
@@ -152,5 +154,99 @@ async fn the_capture_hook_command_posts_a_prompt_to_the_local_gateway() -> TestR
     assert_eq!(content, "deploy with [REDACTED:bearer]");
     let log = std::fs::read_to_string(home.path().join(".rivethub").join("claude-capture.log"))?;
     assert!(log.contains("UserPromptSubmit"), "{log}");
+    Ok(())
+}
+
+const NODE_OWNER: &str = "node-owner";
+
+async fn capture_on_node(home: &Path, sqlite: &str) -> TestResult<MemoryHealthResponse> {
+    let port = free_port()?;
+    let database = home.join(".rivethub").join("memory.sqlite");
+    if let Some(parent) = database.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    migrate::sqlite(&database)?;
+    let users = home.join("users.json");
+    std::fs::write(
+        &users,
+        format!(r#"{{"ownerUserId":"{NODE_OWNER}","unmappedIsOwner":true,"users":{{}}}}"#),
+    )?;
+    write_config(
+        home,
+        &provider_base(
+            home,
+            "http://127.0.0.1:1",
+            &format!(
+                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n{sqlite}den:\n  host: 127.0.0.1\n  port: {port}\n  users_file: {}\n",
+                database.display(),
+                users.display()
+            ),
+        ),
+    )?;
+    let started = start(home, &["local", "--no-lan"], &["gateway listening on "]).await?;
+    let client = reqwest::Client::builder().no_proxy().build()?;
+    let base = format!("http://127.0.0.1:{port}");
+    let exchanged = async {
+        client
+            .post(format!("{base}/api/capture"))
+            .json(&batch("Stop"))
+            .send()
+            .await?
+            .error_for_status()?;
+        client
+            .get(format!("{base}/api/memory/health"))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<MemoryHealthResponse>()
+            .await
+    }
+    .await;
+    stop(started).await?;
+    Ok(exchanged?)
+}
+
+fn queued_embeds(home: &Path) -> TestResult<i64> {
+    let conn = rusqlite::Connection::open(home.join(".rivethub").join("memory.sqlite"))?;
+    Ok(conn.query_row(
+        "SELECT count(*) FROM ros_jobs j JOIN ros_messages m
+            ON j.job_key = 'embed-ros_messages-' || m.id
+          WHERE j.task = 'embed-target'",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+#[tokio::test]
+async fn an_embedding_node_reports_embeddings_armed_and_queues_captured_messages() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let health = capture_on_node(
+        home.path(),
+        "    embed_endpoint: http://127.0.0.1:1\n    embed_model: embedding-model\n",
+    )
+    .await?;
+    assert_eq!(health.embeddings.status, EmbedStatus::Ok, "{health:?}");
+    assert_eq!(health.embed_queue_depth, 2, "{health:?}");
+    assert_eq!(queued_embeds(home.path())?, 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn captured_conversations_belong_to_the_node_owner() -> TestResult {
+    let home = tempfile::tempdir()?;
+    capture_on_node(home.path(), "").await?;
+    let conn = rusqlite::Connection::open(home.path().join(".rivethub").join("memory.sqlite"))?;
+    let conversation: Option<String> = conn.query_row(
+        "SELECT owner_user_id FROM ros_conversations WHERE session_key = ?1",
+        [SESSION],
+        |row| row.get(0),
+    )?;
+    assert_eq!(conversation.as_deref(), Some(NODE_OWNER));
+    let unowned: i64 = conn.query_row(
+        "SELECT count(*) FROM ros_messages WHERE owner_user_id IS NOT ?1",
+        [NODE_OWNER],
+        |row| row.get(0),
+    )?;
+    assert_eq!(unowned, 0);
     Ok(())
 }

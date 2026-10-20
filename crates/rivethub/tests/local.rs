@@ -10,6 +10,8 @@ mod embed;
 mod import;
 #[path = "local/memory_http.rs"]
 mod memory_http;
+#[path = "local/summarize.rs"]
+mod summarize;
 #[path = "local/tasks.rs"]
 mod task_routes;
 
