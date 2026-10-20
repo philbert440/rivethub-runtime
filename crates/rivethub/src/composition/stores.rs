@@ -55,3 +55,11 @@ pub fn store_roots(env: &Environment) -> StoreRoots {
         cowork: cowork_roots(env),
     }
 }
+
+#[must_use]
+pub(super) fn claude_config_file(env: &Environment) -> Option<PathBuf> {
+    setting(env, "CLAUDE_CONFIG_DIR")
+        .map(PathBuf::from)
+        .or_else(|| home(env).map(Path::to_path_buf))
+        .map(|directory| directory.join(".claude.json"))
+}

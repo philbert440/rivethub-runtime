@@ -352,6 +352,7 @@ pub struct TerminalSection {
     pub enabled: Option<bool>,
     pub open: Option<bool>,
     pub idle_ttl_ms: Option<u64>,
+    pub trust_claude_launch_dirs: Option<bool>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]

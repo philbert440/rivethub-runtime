@@ -76,6 +76,25 @@ den:
 
 An unlisted origin is refused with `origin "<origin>" is not allowed (add it to the gateway allowed_origins setting)`.
 
+A Claude Code terminal opened in a folder it has not seen before waits at its "do you trust the files in this folder"
+dialog. `rh` leaves that dialog alone unless the operator opts in:
+
+```yaml
+den:
+  terminal:
+    trust_claude_launch_dirs: true
+```
+
+With the flag set, before the gateway launches a `claude-code` terminal command it marks the launch directory trusted in
+the Claude Code config file (`$CLAUDE_CONFIG_DIR/.claude.json`, or `~/.claude.json`) by setting
+`projects.<dir>.hasTrustDialogAccepted` and `hasCompletedProjectOnboarding`. Only a directory that resolves inside the
+terminal root (`den.files_root`, else `runtime.workspace`) or inside a configured `tasks.harnesses.<id>.cwd` is trusted;
+any other directory launches normally and Claude Code asks as usual. Every other setting and project in the file is kept,
+the file is written through a temporary file and a rename, and a file that cannot be parsed is left untouched and the
+launch is refused with the parse error. The flag is off by default because trusting a folder lets that folder's own
+`.claude` settings, hooks and MCP servers run without asking. Chat sessions and other terminal commands never touch the
+file.
+
 Platforms: `rh` targets Linux and macOS (Apple Silicon). CI builds `rh` and runs the
 `cli` tests on `macos-latest`. `rh service` and the restart step of `rh update` manage systemd units only. On macOS
 running `rh start` under launchd (a LaunchAgent or LaunchDaemon plist) is the operator's job, and `rh update` refuses

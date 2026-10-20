@@ -4,6 +4,7 @@ mod delegated;
 mod inject;
 pub(crate) mod live;
 pub mod socket;
+mod trust;
 
 use std::collections::BTreeMap;
 use std::path::{Component, PathBuf};
@@ -26,6 +27,7 @@ use crate::tenancy::UserId;
 use actor::{Command, Handle};
 pub(crate) use chat::ChatStart;
 pub(crate) use delegated::DelegatedTurn;
+pub use trust::ClaudeTrust;
 
 #[derive(Debug, Clone)]
 pub struct LaunchCommand {
@@ -107,6 +109,7 @@ pub struct TerminalService {
         RwLock<BTreeMap<String, tokio::sync::broadcast::Sender<wire::harness::HarnessEvent>>>,
     registry_events: tokio::sync::broadcast::Sender<live::RegistryEvent>,
     injecting: tokio::sync::Mutex<()>,
+    claude_trust: Option<ClaudeTrust>,
 }
 
 impl TerminalService {
@@ -138,6 +141,7 @@ impl TerminalService {
             harness_events: RwLock::new(BTreeMap::new()),
             registry_events: tokio::sync::broadcast::channel(live::REGISTRY_EVENT_BUFFER).0,
             injecting: tokio::sync::Mutex::new(()),
+            claude_trust: None,
         })
     }
 
@@ -145,6 +149,24 @@ impl TerminalService {
     pub fn with_harness(mut self, harness: Arc<dyn kernel::harness::HarnessAdapter>) -> Self {
         self.harness = Some(harness);
         self
+    }
+
+    #[must_use]
+    pub fn with_claude_trust(mut self, trust: ClaudeTrust) -> Self {
+        self.claude_trust = Some(trust);
+        self
+    }
+
+    pub(crate) async fn trust_claude_directory(
+        &self,
+        command: &LaunchCommand,
+    ) -> Result<(), ApiError> {
+        match &self.claude_trust {
+            Some(trust) if command.harness == Some(HarnessId::ClaudeCode) => {
+                trust.apply(&self.options.root, &command.cwd).await
+            }
+            _ => Ok(()),
+        }
     }
 
     #[must_use]
