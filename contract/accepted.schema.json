@@ -513,6 +513,12 @@
             "null"
           ]
         },
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "directory": {
           "type": [
             "string",

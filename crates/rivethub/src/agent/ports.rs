@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -6,6 +7,7 @@ use kernel::queue::JobQueue;
 use kernel::tasks::CatalogSource;
 use kernel::tasks::TaskAgents;
 use kernel::tasks::TaskError;
+use kernel::tasks::TaskPresets;
 use kernel::tasks::TaskQuery;
 use kernel::tasks::TaskStore;
 use kernel::tasks::TaskWatch;
@@ -18,11 +20,34 @@ use super::LocalBinding;
 use super::assemble::Plan;
 
 #[derive(Debug)]
+pub(super) struct PresetFile {
+    state_dir: PathBuf,
+}
+
+impl PresetFile {
+    pub(super) const fn new(state_dir: PathBuf) -> Self {
+        Self { state_dir }
+    }
+}
+
+#[async_trait]
+impl TaskPresets for PresetFile {
+    async fn presets(&self) -> Result<Vec<AgentPreset>, TaskError> {
+        super::assemble::load_presets(self.state_dir.clone())
+            .await
+            .map_err(|error| TaskError::Operation {
+                operation: "agent preset read",
+                source: Box::new(error),
+            })
+    }
+}
+
+#[derive(Debug)]
 pub(super) struct Roster {
     pub node: String,
     pub mesh: bool,
     pub local: BTreeMap<String, LocalBinding>,
-    pub presets: Vec<AgentPreset>,
+    pub presets: Arc<PresetFile>,
     pub nodes: Vec<MeshNode>,
 }
 
@@ -42,9 +67,6 @@ impl Roster {
                 },
             );
         }
-        for preset in &self.presets {
-            directory.preset(preset.clone());
-        }
         for node in &self.nodes {
             directory.mesh_node(node.clone());
         }
@@ -53,28 +75,34 @@ impl Roster {
         Ok(directory)
     }
 
-    fn known(&self, agent_id: &str) -> bool {
+    pub(super) fn presets(&self) -> Arc<dyn TaskPresets> {
+        Arc::clone(&self.presets) as Arc<dyn TaskPresets>
+    }
+
+    async fn known(&self, agent_id: &str) -> Result<bool, TaskError> {
         if self.local.contains_key(agent_id) {
-            return true;
+            return Ok(true);
         }
         if self
             .presets
+            .presets()
+            .await?
             .iter()
             .any(|preset| preset.name == agent_id || preset.id == agent_id)
         {
-            return true;
+            return Ok(true);
         }
-        self.nodes.iter().any(|node| {
+        Ok(self.nodes.iter().any(|node| {
             node.status == MeshNodeStatus::Online
                 && node.agents.iter().any(|agent| agent == agent_id)
-        })
+        }))
     }
 }
 
 #[async_trait]
 impl TaskAgents for Roster {
     async fn contains(&self, agent_id: &str) -> Result<bool, TaskError> {
-        Ok(self.known(agent_id))
+        self.known(agent_id).await
     }
 }
 
@@ -109,3 +137,7 @@ where
         command_timeout: gateway::routes::tasks::COMMAND_LIST_TIMEOUT,
     })
 }
+
+#[cfg(test)]
+#[path = "ports_test.rs"]
+mod tests;

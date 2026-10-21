@@ -5,6 +5,7 @@ use kernel::harness::HarnessAdapter;
 use kernel::tasks::CatalogList;
 use kernel::tasks::CatalogSource;
 use kernel::tasks::TaskError;
+use kernel::tasks::TaskPresets;
 use wire::gateway::agents::AgentPreset;
 use wire::gateway::catalog::CatalogAgent;
 use wire::gateway::catalog::CatalogCommand;
@@ -18,7 +19,8 @@ use crate::directory::Directory;
 use crate::executors;
 
 pub struct Catalog {
-    agents: Vec<CatalogAgent>,
+    directory: Directory,
+    presets: Option<Arc<dyn TaskPresets>>,
     mesh: bool,
     tools: Vec<String>,
     harness: Option<Arc<dyn HarnessAdapter>>,
@@ -35,7 +37,8 @@ impl std::fmt::Debug for Catalog {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("Catalog")
-            .field("agents", &self.agents)
+            .field("directory", &self.directory)
+            .field("presets", &self.presets)
             .field("mesh", &self.mesh)
             .field("tools", &self.tools)
             .finish_non_exhaustive()
@@ -50,11 +53,18 @@ impl Catalog {
         harness: Option<Arc<dyn HarnessAdapter>>,
     ) -> Self {
         Self {
-            agents: listed_agents(directory),
+            directory: directory.clone(),
+            presets: None,
             mesh,
             tools,
             harness,
         }
+    }
+
+    #[must_use]
+    pub fn with_presets(mut self, presets: Arc<dyn TaskPresets>) -> Self {
+        self.presets = Some(presets);
+        self
     }
 }
 
@@ -89,6 +99,7 @@ fn preset_entry(local_node: &str, preset: &AgentPreset) -> CatalogPreset {
         local,
         harness_id: preset.harness_id,
         model: Some(preset.model.clone()),
+        effort: Some(preset.effort.clone()),
         directory: preset.directory.clone(),
         implemented: Some(true),
         gap: None,
@@ -108,7 +119,8 @@ fn executor(kind: TaskExecutorKind) -> CatalogExecutorEntry {
 #[async_trait]
 impl CatalogSource for Catalog {
     async fn agents(&self) -> Result<Vec<CatalogAgent>, TaskError> {
-        Ok(self.agents.clone())
+        let directory = crate::presets::current(&self.directory, self.presets.as_deref()).await?;
+        Ok(listed_agents(&directory))
     }
 
     async fn executors(&self) -> Result<Vec<CatalogExecutorEntry>, TaskError> {

@@ -43,6 +43,7 @@ impl LocalTasks {
             standalone.directory.clone(),
             standalone.settings,
         )?
+        .with_presets(standalone.roster.presets())
         .with_activities(activities.clone());
         Ok(Some(Self {
             engine: Arc::new(engine),
@@ -59,12 +60,10 @@ impl LocalTasks {
 
     pub(crate) fn mount(&self, gateway: Gateway, tools: Vec<String>) -> Gateway {
         let harness = gateway.terminal().and_then(|terminal| terminal.adapter());
-        let catalog = Arc::new(tasks::Catalog::new(
-            &self.directory,
-            self.roster.mesh,
-            tools,
-            harness,
-        ));
+        let catalog = Arc::new(
+            tasks::Catalog::new(&self.directory, self.roster.mesh, tools, harness)
+                .with_presets(self.roster.presets()),
+        );
         let api = super::ports::api(
             Arc::clone(&self.roster),
             catalog,

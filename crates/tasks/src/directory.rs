@@ -88,6 +88,13 @@ impl Directory {
         self.presets.insert(preset.name.clone(), preset);
     }
 
+    pub(crate) fn replace_presets(&mut self, presets: Vec<AgentPreset>) {
+        self.presets.clear();
+        for preset in presets {
+            self.preset(preset);
+        }
+    }
+
     pub fn mesh_node(&mut self, node: MeshNode) {
         self.nodes.insert(node.id.clone(), node);
     }
