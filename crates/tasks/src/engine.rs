@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -12,6 +13,7 @@ use uuid::Uuid;
 
 use kernel::queue::JobQueue;
 use kernel::shutdown::Activities;
+use kernel::tasks::TaskPresets;
 use kernel::tasks::TaskStore;
 
 use crate::directory::Directory;
@@ -51,7 +53,8 @@ impl std::fmt::Debug for Settings {
 pub struct Engine<S, J> {
     pub(crate) store: S,
     pub(crate) jobs: J,
-    pub(crate) directory: Directory,
+    directory: Directory,
+    presets: Option<Arc<dyn TaskPresets>>,
     pub(crate) settings: Settings,
     wake: Arc<Notify>,
     finished: watch::Sender<Option<Uuid>>,
@@ -80,6 +83,7 @@ where
             store,
             jobs,
             directory,
+            presets: None,
             settings,
             wake: Arc::new(Notify::new()),
             finished,
@@ -93,6 +97,16 @@ where
     pub fn with_activities(mut self, activities: Activities) -> Self {
         self.activities = activities;
         self
+    }
+
+    #[must_use]
+    pub fn with_presets(mut self, presets: Arc<dyn TaskPresets>) -> Self {
+        self.presets = Some(presets);
+        self
+    }
+
+    pub(crate) async fn directory(&self) -> Result<Cow<'_, Directory>, Error> {
+        Ok(crate::presets::current(&self.directory, self.presets.as_deref()).await?)
     }
 
     pub fn subscribe(&self) -> watch::Receiver<Option<Uuid>> {

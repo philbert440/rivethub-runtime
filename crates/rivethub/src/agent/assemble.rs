@@ -17,6 +17,7 @@ use wire::mesh::MeshNode;
 
 use super::LocalBinding;
 use super::TaskEngine;
+use super::ports::PresetFile;
 use super::ports::Roster;
 use crate::service::StartupError;
 use crate::service::postgres_url;
@@ -181,6 +182,7 @@ impl Connected {
                 directory,
                 self.plan.settings(),
             )?
+            .with_presets(self.roster.presets())
             .with_activities(activities.clone()),
         ))
     }
@@ -244,17 +246,14 @@ pub(super) async fn standalone(
     let gateway_settings =
         gateway::Settings::from_config_in(config, env, identity.hostname, node.clone())?;
     let state_dir = gateway_settings.state_dir.clone();
-    let presets = load_presets(state_dir).await?;
+    drop(load_presets(state_dir.clone()).await?);
     let mut directory = tasks::Directory::new(node.clone(), gateway)?;
     install_local(&mut directory, config)?;
-    for preset in &presets {
-        directory.preset(preset.clone());
-    }
     let roster = Roster {
         node: node.clone(),
         mesh: false,
         local: local_agents(config)?,
-        presets,
+        presets: Arc::new(PresetFile::new(state_dir)),
         nodes: Vec::new(),
     };
     Ok(Standalone {
@@ -291,13 +290,13 @@ fn install_local(directory: &mut tasks::Directory, config: &Config) -> Result<()
 pub(super) async fn connect(config: &Config, env: &Environment) -> Result<Connected, AgentError> {
     let mut plan = plan(config, env).await?;
     plan.mesh_identity = load_mesh_identity(config, env).await?;
-    let presets = load_presets(plan.state_dir.clone()).await?;
+    drop(load_presets(plan.state_dir.clone()).await?);
     let nodes = load_nodes(config, env).await?;
     let roster = Arc::new(Roster {
         node: plan.node.clone(),
         mesh: plan.mesh,
         local: local_agents(config)?,
-        presets,
+        presets: Arc::new(PresetFile::new(plan.state_dir.clone())),
         nodes,
     });
     let tasks = PostgresTasks::connect(&plan.postgres).await?;
@@ -459,7 +458,7 @@ fn local_agents(config: &Config) -> Result<BTreeMap<String, LocalBinding>, Agent
     Ok(local)
 }
 
-async fn load_presets(state_dir: PathBuf) -> Result<Vec<AgentPreset>, AgentError> {
+pub(super) async fn load_presets(state_dir: PathBuf) -> Result<Vec<AgentPreset>, AgentError> {
     match tokio::task::spawn_blocking(move || read_presets(&state_dir)).await {
         Ok(result) => result,
         Err(error) => Err(AgentError::Join(error)),

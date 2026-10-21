@@ -70,7 +70,7 @@ where
     pub async fn steer(&self, id: Uuid, message: &str) -> Result<(), Error> {
         self.store.set_pending(id, message).await?;
         let task = self.store.load(id).await?;
-        let prepared = self.directory.prepare(&TargetInput {
+        let prepared = self.directory().await?.prepare(&TargetInput {
             executor: task.executor,
             executor_target: task.executor_target.clone(),
             node_affinity: task.node_affinity.clone(),
@@ -127,7 +127,7 @@ where
             node_affinity: request.node_affinity.clone(),
             agent_id: request.agent_id.clone(),
         };
-        let prepared = self.directory.prepare(&input)?;
+        let prepared = self.directory().await?.prepare(&input)?;
         let record = TaskRecord {
             id,
             goal: request.goal.clone(),

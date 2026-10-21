@@ -293,7 +293,7 @@ where
     J: JobQueue + 'static,
 {
     async fn agents(&self) -> Result<AgentDirectory, DelegationError> {
-        Ok(self.directory.catalog())
+        Ok(self.directory().await.map_err(classify)?.catalog())
     }
 
     async fn delegate(
@@ -305,17 +305,17 @@ where
             return Err(DelegationError::Cancelled);
         }
         let millis = wall_ms(request.timeout).map_err(classify)?;
-        let target = self
-            .directory
+        let directory = self.directory().await.map_err(classify)?;
+        let target = directory
             .delegation_target(&request.target, request.node.as_deref())
             .map_err(classify)?;
-        let prepared = self.directory.prepare(&target.input).map_err(classify)?;
+        let prepared = directory.prepare(&target.input).map_err(classify)?;
         let origin = if prepared.remote {
             TaskOrigin::Mesh
         } else {
             TaskOrigin::Tool
         };
-        let created = task_request(&request, target, millis, self.directory.local_node());
+        let created = task_request(&request, target, millis, directory.local_node());
         let id = self
             .submit(NewTask {
                 request: created,

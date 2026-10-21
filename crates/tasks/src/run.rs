@@ -126,7 +126,7 @@ where
         task: &TaskRecord,
         cancel: &CancellationToken,
     ) -> Result<SessionPostReply, Error> {
-        let mut target = self.directory.resolve(&target_input(task))?;
+        let mut target = self.directory().await?.resolve(&target_input(task))?;
         apply_spec(&mut target, &task.spec)?;
         let working_dir = self.working_dir(&target).await?;
         let client = match (target.mesh.as_ref(), target.remote) {

@@ -13,6 +13,7 @@ use tokio::sync::broadcast;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+use wire::gateway::agents::AgentPreset;
 use wire::gateway::catalog::CatalogAgent;
 use wire::gateway::catalog::CatalogCommand;
 use wire::gateway::catalog::CatalogExecutorEntry;
@@ -349,6 +350,11 @@ pub trait CatalogSource: Debug + Send + Sync {
 #[async_trait]
 pub trait TaskAgents: Debug + Send + Sync {
     async fn contains(&self, agent_id: &str) -> Result<bool, TaskError>;
+}
+
+#[async_trait]
+pub trait TaskPresets: Debug + Send + Sync {
+    async fn presets(&self) -> Result<Vec<AgentPreset>, TaskError>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

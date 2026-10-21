@@ -17,6 +17,8 @@ pub struct CatalogPreset {
     #[serde(default)]
     pub model: Option<String>,
     #[serde(default)]
+    pub effort: Option<String>,
+    #[serde(default)]
     pub directory: Option<String>,
     #[serde(default)]
     pub implemented: Option<bool>,

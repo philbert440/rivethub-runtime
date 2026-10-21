@@ -32,6 +32,7 @@ async fn agents_come_from_the_directory() {
                 && preset.implemented == Some(true)
                 && preset.harness_id == Some(HarnessId::ClaudeCode)
                 && preset.model.as_deref() == Some("demo")
+                && preset.effort.as_deref() == Some("low")
     ));
     assert!(matches!(
         agents.next(),
