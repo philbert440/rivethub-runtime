@@ -2,9 +2,10 @@
     dead_code,
     reason = "the harness module is included whole by every test binary and this one uses a subset"
 )]
+#[path = "it/common/mod.rs"]
 mod common;
 
-#[path = "common/fixture.rs"]
+#[path = "it/common/fixture.rs"]
 mod fixture;
 
 use libtest_mimic::Arguments;
