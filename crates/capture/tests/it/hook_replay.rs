@@ -204,7 +204,7 @@ async fn claude_hook_replays_recorded_batches() -> Result<(), Box<dyn std::error
     let recording = testkit::recording("capture/claude-hook/hook-ts.json");
     let session_entries = entries(&recording)?;
     let skipped: std::collections::BTreeMap<String, String> =
-        serde_json::from_str(include_str!("fixtures/hook-skipped.json"))?;
+        serde_json::from_str(include_str!("../fixtures/hook-skipped.json"))?;
     let outer = tempfile::tempdir()?;
     let transcript = prepare_store(outer.path())?;
     let transcript_text = transcript.to_string_lossy().to_string();
@@ -317,7 +317,7 @@ async fn a_failed_log_write_does_not_fail_the_run() -> Result<(), Box<dyn std::e
 #[test]
 fn hook_exclusions_name_existing_recordings() -> Result<(), Box<dyn std::error::Error>> {
     let skipped: std::collections::BTreeMap<String, String> =
-        serde_json::from_str(include_str!("fixtures/hook-skipped.json"))?;
+        serde_json::from_str(include_str!("../fixtures/hook-skipped.json"))?;
     let rows = entries(&testkit::recording("capture/claude-hook/hook-ts.json"))?;
     assert_eq!(skipped.len(), 3);
     for (name, reason) in skipped {
