@@ -39,7 +39,7 @@ async fn status_reads_health_and_optional_version_and_uptime() {
     let env = environment(&home);
     config(
         &home,
-        &format!("den:\n  host: 0.0.0.0\n  port: {}\n", stub.addr.port()),
+        &format!("gateway:\n  host: 0.0.0.0\n  port: {}\n", stub.addr.port()),
     );
     let status = run(&["status"], &env).await;
     assert_eq!(status.exit, Exit::Ok);
@@ -64,7 +64,10 @@ async fn malformed_health_falls_back_with_a_diagnostic() {
     let env = environment(&home);
     config(
         &home,
-        &format!("den:\n  host: 127.0.0.1\n  port: {}\n", stub.addr.port()),
+        &format!(
+            "gateway:\n  host: 127.0.0.1\n  port: {}\n",
+            stub.addr.port()
+        ),
     );
     let status = run(&["status"], &env).await;
     assert_eq!(status.exit, Exit::Ok);
@@ -101,7 +104,10 @@ async fn ordinary_redirects_reach_the_health_route() {
     let env = environment(&home);
     config(
         &home,
-        &format!("den:\n  host: 127.0.0.1\n  port: {}\n", stub.addr.port()),
+        &format!(
+            "gateway:\n  host: 127.0.0.1\n  port: {}\n",
+            stub.addr.port()
+        ),
     );
     let report = run(&["status"], &env).await;
     assert_eq!(report.exit, Exit::Ok);
@@ -139,7 +145,10 @@ async fn stalled_health_request_times_out_after_three_seconds() {
     let env = environment(&home);
     config(
         &home,
-        &format!("den:\n  host: 127.0.0.1\n  port: {}\n", stub.addr.port()),
+        &format!(
+            "gateway:\n  host: 127.0.0.1\n  port: {}\n",
+            stub.addr.port()
+        ),
     );
     let request = tokio::spawn(async move { run(&["status"], &env).await });
     tokio::time::timeout(Duration::from_secs(5), reached.notified())
@@ -190,7 +199,10 @@ async fn status_names_each_degraded_provider() {
     let env = environment(&home);
     config(
         &home,
-        &format!("den:\n  host: 127.0.0.1\n  port: {}\n", stub.addr.port()),
+        &format!(
+            "gateway:\n  host: 127.0.0.1\n  port: {}\n",
+            stub.addr.port()
+        ),
     );
     let report = run(&["status"], &env).await;
     assert_eq!(report.exit, Exit::Ok);

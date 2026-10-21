@@ -226,7 +226,7 @@ async fn sqlite_builds_a_wiki_topic_from_a_seeded_summary() -> TestResult {
             home.path(),
             &format!("http://{}", stub.address),
             &format!(
-                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    wiki_dir: {}\nden:\n  host: 127.0.0.1\n  port: {port}\n",
+                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    wiki_dir: {}\ngateway:\n  host: 127.0.0.1\n  port: {port}\n",
                 database.display(),
                 wiki.display()
             ),
@@ -268,7 +268,7 @@ async fn sqlite_worker_roles_and_mcp_share_the_process() -> TestResult {
         &provider(
             home.path(),
             &format!(
-                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    workers: true\n    tagging: true\nden:\n  host: 127.0.0.1\n  port: {port}\ntransports:\n  mcp:\n    socket: {}\n",
+                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    workers: true\n    tagging: true\ngateway:\n  host: 127.0.0.1\n  port: {port}\ntransports:\n  mcp:\n    socket: {}\n",
                 database.display(),
                 socket.display()
             ),
@@ -318,7 +318,7 @@ async fn mcp_delegate_task_runs_to_completion() -> TestResult {
 
 fn mcp_config(database: &Path, gateway: u16, mcp_port: u16) -> String {
     format!(
-        "mesh:\n  node_name: standalone-node\nmemory:\n  backend: sqlite\n  sqlite:\n    path: {}\nden:\n  host: 127.0.0.1\n  port: {gateway}\ntransports:\n  mcp:\n    host: 127.0.0.1\n    port: {mcp_port}\n    auth_token: test-secret\n",
+        "mesh:\n  node_name: standalone-node\nmemory:\n  backend: sqlite\n  sqlite:\n    path: {}\ngateway:\n  host: 127.0.0.1\n  port: {gateway}\ntransports:\n  mcp:\n    host: 127.0.0.1\n    port: {mcp_port}\n    auth_token: test-secret\n",
         database.display()
     )
 }
@@ -482,7 +482,7 @@ async fn local_blocked_on_a_provider_releases_the_job_on_sigint() -> TestResult 
             home.path(),
             &format!("http://{provider}"),
             &format!(
-                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    workers: true\nden:\n  host: 127.0.0.1\n  port: {port}\n",
+                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    workers: true\ngateway:\n  host: 127.0.0.1\n  port: {port}\n",
                 database.display()
             ),
         ),

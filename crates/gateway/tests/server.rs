@@ -179,7 +179,7 @@ async fn bind_loopback_hosts_and_the_recorded_refusal_hosts() {
 
 #[test]
 fn settings_come_from_the_config_gateway_section() {
-    let document = "den:\n  host: 0.0.0.0\n  port: 6001\n  allowed_origins:\n    - https://hub.example.test\n  allowed_hosts:\n    - gateway.example.test\n";
+    let document = "gateway:\n  host: 0.0.0.0\n  port: 6001\n  allowed_origins:\n    - https://hub.example.test\n  allowed_hosts:\n    - gateway.example.test\n";
     let config: config::Config = serde_yaml_ng::from_str(document).expect("config");
     let home = tempdir().expect("home");
     let env = config::Environment::from_vars([("HOME", home.path().to_str().expect("utf-8 home"))]);
@@ -204,8 +204,7 @@ fn settings_come_from_the_config_gateway_section() {
 
 #[test]
 fn surface_paths_follow_the_environment_then_the_gateway_section() {
-    let document =
-        "den:\n  static_dir: /yaml/static\n  root_redirect: /yaml\n  devices:\n    enabled: true\n";
+    let document = "gateway:\n  static_dir: /yaml/static\n  root_redirect: /yaml\n  devices:\n    enabled: true\n";
     let config: config::Config = serde_yaml_ng::from_str(document).expect("config");
     let legacy = config::Environment::from_vars([
         ("HOME", "/tmp/golden/home"),
@@ -248,8 +247,7 @@ fn surface_paths_follow_the_environment_then_the_gateway_section() {
 
 #[test]
 fn mesh_cache_duration_rejects_a_bad_count_and_defaults_when_unset() {
-    let document =
-        "den:\n  static_dir: /yaml/static\n  root_redirect: /yaml\n  devices:\n    enabled: true\n";
+    let document = "gateway:\n  static_dir: /yaml/static\n  root_redirect: /yaml\n  devices:\n    enabled: true\n";
     let config: config::Config = serde_yaml_ng::from_str(document).expect("config");
     let current = config::Environment::from_vars([
         ("HOME", "/tmp/golden/home"),
@@ -331,7 +329,8 @@ fn mesh_peers_are_probed_against_the_shared_rivet_ca_when_the_gateway_names_none
     let chain = shared.path().join("rivet-ca").join("intermediate");
     std::fs::create_dir_all(&chain).expect("ca dir");
     std::fs::write(chain.join("chain.pem"), b"pem").expect("chain");
-    let config: config::Config = serde_yaml_ng::from_str("den:\n  port: 5174\n").expect("config");
+    let config: config::Config =
+        serde_yaml_ng::from_str("gateway:\n  port: 5174\n").expect("config");
     let shared_text = shared.path().to_str().expect("utf-8 path");
     let settings = |vars: Vec<(&str, &str)>| {
         gateway::Settings::from_config_in(

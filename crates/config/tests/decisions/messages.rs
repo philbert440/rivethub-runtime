@@ -4,18 +4,18 @@ use super::{Config, HEX_KEY, config_yaml, env_from, expect_validation_error};
 fn inventory_messages_that_the_recordings_do_not_reach() -> Result<(), Box<dyn std::error::Error>> {
     let cases: [(&str, &str, &str); 9] = [
         (
-            "runtime:\n  workspace: w\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nden:\n  host: \"   \"\n",
-            "\"den.host\" must be a non-empty string (bind address, e.g. 127.0.0.1 or 0.0.0.0)",
-            "blank den.host",
+            "runtime:\n  workspace: w\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\ngateway:\n  host: \"   \"\n",
+            "\"gateway.host\" must be a non-empty string (bind address, e.g. 127.0.0.1 or 0.0.0.0)",
+            "blank gateway.host",
         ),
         (
-            "runtime:\n  workspace: w\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nden:\n  port: 0\n",
-            "\"den.port\" must be an integer between 1 and 65535",
-            "den.port 0",
+            "runtime:\n  workspace: w\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\ngateway:\n  port: 0\n",
+            "\"gateway.port\" must be an integer between 1 and 65535",
+            "gateway.port 0",
         ),
         (
-            "runtime:\n  workspace: w\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nden:\n  allowed_origins:\n    - gateway.example.com\n    - \"\"\n",
-            "\"den.allowed_origins\" must be a list of non-empty strings",
+            "runtime:\n  workspace: w\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\ngateway:\n  allowed_origins:\n    - gateway.example.com\n    - \"\"\n",
+            "\"gateway.allowed_origins\" must be a list of non-empty strings",
             "blank allowed_origins entry",
         ),
         (

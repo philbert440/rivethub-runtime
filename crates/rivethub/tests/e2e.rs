@@ -192,7 +192,7 @@ async fn recorded_batches_land_and_read_back_through_the_memory_api(pool: PgPool
         (OsStr::new("HOME"), home.path().as_os_str()),
         (OsStr::new("RIVETHUB_SHARED_DIR"), home.path().as_os_str()),
     ]);
-    let config: Config = serde_yaml_ng::from_str("den:\n  host: 127.0.0.1\n  port: 0\n")?;
+    let config: Config = serde_yaml_ng::from_str("gateway:\n  host: 127.0.0.1\n  port: 0\n")?;
     let store = rivethub::service::connect(&config, &env).await?;
     let gateway = rivethub::service::compose(&config, &env, store)?;
     let (listener, tls) = rivethub::service::listen(&config, &env).await?;
@@ -364,7 +364,7 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
     let port = probe.local_addr()?.port();
     drop(probe);
     let config_text = format!(
-        "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:1\n    model: m\nmemory:\n  postgres:\n    connection_string: {url}\nden:\n  host: 127.0.0.1\n  port: {port}\n",
+        "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:1\n    model: m\nmemory:\n  postgres:\n    connection_string: {url}\ngateway:\n  host: 127.0.0.1\n  port: {port}\n",
         home.path().display()
     );
     std::fs::write(hub_home.join("config.yaml"), config_text)?;

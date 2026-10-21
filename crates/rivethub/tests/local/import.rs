@@ -13,7 +13,7 @@ fn configure(home: &Path, dump: Option<&Path>) -> TestResult {
     }
     write!(
         memory,
-        "den:\n  host: 127.0.0.1\n  port: {}\n",
+        "gateway:\n  host: 127.0.0.1\n  port: {}\n",
         free_port()?
     )?;
     write_config(home, &provider(home, &memory))

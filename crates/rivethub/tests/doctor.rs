@@ -130,7 +130,7 @@ async fn postgres_doctor_checks_current_and_behind_without_migrating(pool: sqlx:
 #[tokio::test]
 async fn terminal_check_accepts_executable_paths_with_spaces_and_refuses_non_executables() {
     use std::os::unix::fs::PermissionsExt;
-    let (home, _) = setup("den:\n  terminal:\n    enabled: true\n");
+    let (home, _) = setup("gateway:\n  terminal:\n    enabled: true\n");
     let bin = home.path().join("bin with spaces");
     std::fs::create_dir(&bin).expect("bin");
     let env = Environment::from_vars([

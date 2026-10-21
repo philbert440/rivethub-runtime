@@ -21,7 +21,7 @@ async fn start_stops_its_children_within_the_grace_on_sigint(pool: PgPool) -> Te
         &provider_config(
             home.path(),
             &url,
-            &format!("den:\n  host: 127.0.0.1\n  port: {port}\n"),
+            &format!("gateway:\n  host: 127.0.0.1\n  port: {port}\n"),
         ),
     )?;
     let mut child = Command::new(env!("CARGO_BIN_EXE_rh"))

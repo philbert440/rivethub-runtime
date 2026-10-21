@@ -51,7 +51,7 @@ fn config_paths_beat_environment_and_issued_files() -> TestResult {
         ("RIVETOS_DEN_TLS_CA", "/legacy/ca.pem"),
     ]);
     let text = format!(
-        "den:\n  host: 0.0.0.0\n  tls_cert: {}\n  tls_key: {}\n  tls_ca: {}\n",
+        "gateway:\n  host: 0.0.0.0\n  tls_cert: {}\n  tls_key: {}\n  tls_ca: {}\n",
         configured_cert.display(),
         configured_key.display(),
         configured_ca.display()
@@ -87,7 +87,7 @@ fn current_environment_beats_legacy_names_and_issued_files() -> TestResult {
         ("RIVETOS_DEN_TLS_KEY", "/legacy/node.key"),
         ("RIVETOS_DEN_TLS_CA", "/legacy/ca.pem"),
     ]);
-    let source = resolve("den:\n  host: 0.0.0.0\n", &env, "node", &shared)?;
+    let source = resolve("gateway:\n  host: 0.0.0.0\n", &env, "node", &shared)?;
     assert_eq!(source.tls_cert.as_deref(), Some(cert.as_path()));
     assert_eq!(source.tls_key.as_deref(), Some(key.as_path()));
     assert_eq!(source.tls_ca.as_deref(), Some(ca.as_path()));
@@ -110,7 +110,7 @@ fn legacy_environment_is_used_only_when_the_current_name_is_unset() -> TestResul
         ("RIVETOS_DEN_TLS_KEY", key_text),
         ("RIVET_CA_CHAIN", "/legacy/ca.pem"),
     ]);
-    let source = resolve("den:\n  host: 0.0.0.0\n", &env, "node", root.path())?;
+    let source = resolve("gateway:\n  host: 0.0.0.0\n", &env, "node", root.path())?;
     assert_eq!(source.tls_cert.as_deref(), Some(cert.as_path()));
     assert_eq!(source.tls_key.as_deref(), Some(key.as_path()));
     assert_eq!(source.tls_ca.as_deref(), Some(Path::new("/legacy/ca.pem")));
@@ -134,7 +134,7 @@ fn issued_pair_is_used_only_when_both_files_stay_inside_the_directory() -> TestR
     write(&issued.join("node.crt"), b"issued-cert")?;
     write(&issued.join("node.key"), b"issued-key")?;
     let env = environment(&[]);
-    let source = resolve("den:\n  host: 0.0.0.0\n", &env, "node", &shared)?;
+    let source = resolve("gateway:\n  host: 0.0.0.0\n", &env, "node", &shared)?;
     assert_eq!(
         source.tls_cert.as_deref(),
         Some(issued.join("node.crt").canonicalize()?.as_path())
@@ -150,7 +150,7 @@ fn issued_pair_is_used_only_when_both_files_stay_inside_the_directory() -> TestR
 
     let cert_only = root.path().join("cert-only");
     write(&cert_only.join("rivet-ca/issued/node.crt"), b"only-cert")?;
-    let missing = resolve("den:\n  host: 0.0.0.0\n", &env, "node", &cert_only)?;
+    let missing = resolve("gateway:\n  host: 0.0.0.0\n", &env, "node", &cert_only)?;
     assert!(missing.tls_cert.is_none());
     assert!(missing.tls_key.is_none());
     assert!(missing.tls_ca.is_none());
@@ -162,14 +162,14 @@ fn issued_pair_is_used_only_when_both_files_stay_inside_the_directory() -> TestR
     std::fs::create_dir_all(&linked_issued)?;
     std::os::unix::fs::symlink(&outside, linked_issued.join("node.crt"))?;
     write(&linked_issued.join("node.key"), b"inside-key")?;
-    let escaped = resolve("den:\n  host: 0.0.0.0\n", &env, "node", &linked)?;
+    let escaped = resolve("gateway:\n  host: 0.0.0.0\n", &env, "node", &linked)?;
     assert!(escaped.tls_cert.is_none());
     assert!(escaped.tls_key.is_none());
 
     write(&issued.join("foo/bar.crt"), b"nested-cert")?;
     write(&issued.join("foo/bar.key"), b"nested-key")?;
     for node in ["..", "foo/bar", "", ".", "node/../node"] {
-        let refused = resolve("den:\n  host: 0.0.0.0\n", &env, node, &shared)?;
+        let refused = resolve("gateway:\n  host: 0.0.0.0\n", &env, node, &shared)?;
         assert!(
             refused.tls_cert.is_none() && refused.tls_key.is_none(),
             "{node}"
@@ -187,7 +187,7 @@ fn configured_certificate_can_take_its_key_from_the_issued_pair() -> TestResult 
     write(&issued.join("node.key"), b"issued-key")?;
     let cert = root.path().join("config.crt");
     write(&cert, b"config-cert")?;
-    let text = format!("den:\n  tls_cert: {}\n", cert.display());
+    let text = format!("gateway:\n  tls_cert: {}\n", cert.display());
     let source = resolve(&text, &environment(&[]), "node", &shared)?;
     assert_eq!(source.tls_cert.as_deref(), Some(cert.as_path()));
     assert_eq!(
@@ -205,7 +205,7 @@ fn ca_chain_follows_config_then_environment_then_the_shared_default() -> TestRes
     write(&cert, b"cert")?;
     write(&key, b"key")?;
     let material = format!(
-        "den:\n  host: 0.0.0.0\n  tls_cert: {}\n  tls_key: {}\n",
+        "gateway:\n  host: 0.0.0.0\n  tls_cert: {}\n  tls_key: {}\n",
         cert.display(),
         key.display()
     );
@@ -279,12 +279,12 @@ fn requirements() -> [Requirement; 13] {
             required: true,
         },
         Requirement {
-            text: "den:\n  tls_require_client: false\n",
+            text: "gateway:\n  tls_require_client: false\n",
             pairs: &[("RIVETHUB_TLS_REQUIRE_CLIENT", "1")],
             required: false,
         },
         Requirement {
-            text: "den:\n  tls_require_client: true\n",
+            text: "gateway:\n  tls_require_client: true\n",
             pairs: &[("RIVETHUB_TLS_REQUIRE_CLIENT", "0")],
             required: false,
         },
@@ -367,7 +367,7 @@ fn client_certificates_are_required_unless_config_or_environment_turns_them_off(
         ]
     );
     let empty_host = resolve(
-        "den:\n  host: \"\"\n",
+        "gateway:\n  host: \"\"\n",
         &environment(&[]),
         "node",
         root.path(),

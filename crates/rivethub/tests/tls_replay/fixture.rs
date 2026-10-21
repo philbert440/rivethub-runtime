@@ -40,7 +40,7 @@ fn prepare_files(remote: IpAddr, url: &str, kind: RunKind) -> Result<Fixture, Er
     let reservation = std::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0))?;
     let port = reservation.local_addr()?.port();
     let mut config = format!(
-        "runtime:\n  workspace: {home}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: test\n    probe_models: false\nmemory:\n  backend: postgres\n  postgres:\n    connection_string: {url}\nden:\n  host: 0.0.0.0\n  port: {port}\n  tls_cert: {state}/server.pem\n  tls_key: {state}/server.key\n  static_dir: {static_dir}\n",
+        "runtime:\n  workspace: {home}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: test\n    probe_models: false\nmemory:\n  backend: postgres\n  postgres:\n    connection_string: {url}\ngateway:\n  host: 0.0.0.0\n  port: {port}\n  tls_cert: {state}/server.pem\n  tls_key: {state}/server.key\n  static_dir: {static_dir}\n",
         home = home.path().display(),
         state = state.display(),
         static_dir = static_dir.display(),

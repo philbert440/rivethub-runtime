@@ -102,7 +102,7 @@ async fn status_verifies_a_tls_gateway_by_the_name_its_certificate_carries() -> 
     config(
         &home,
         &format!(
-            "den:\n  host: 0.0.0.0\n  port: {}\n  tls_cert: {}\n  tls_key: {}\n  tls_ca: {}\n",
+            "gateway:\n  host: 0.0.0.0\n  port: {}\n  tls_cert: {}\n  tls_key: {}\n  tls_ca: {}\n",
             served.port,
             dir.join("node.pem").display(),
             dir.join("node.key").display(),

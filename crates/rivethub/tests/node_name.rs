@@ -188,7 +188,7 @@ async fn gateway_healthz_reports_the_configured_node(pool: PgPool) -> TestResult
             home.path(),
             &url,
             &format!(
-                "den:\n  host: 127.0.0.1\n  port: {port}\nmesh:\n  node_name: \" {CONFIGURED} \"\n"
+                "gateway:\n  host: 127.0.0.1\n  port: {port}\nmesh:\n  node_name: \" {CONFIGURED} \"\n"
             ),
         ),
     )?;

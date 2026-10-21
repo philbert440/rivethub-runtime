@@ -128,9 +128,10 @@ Anti-pattern: `match s.as_str() { "a" => … }` on a protocol tag or kind. Patte
 
 ## NAMING
 Anti-pattern: `den` / `room` identifiers inherited from the TypeScript. Pattern: descriptive names (`gateway`, `session`,
-`view`). Wire strings and config keys that must stay (`den:`, `rooms`) are serde renames, never Rust identifiers, modules or
-file names. Check: dylint `naming` (identifier words on snake/camel boundaries, method calls included; strings and serde
-renames never match — `golden_path` and `NetworkGoldenPath` pass); xtask `NAMING` (file and directory names).
+`view`). Wire strings and legacy keys that must stay (`rooms`, the deprecated `den:` config alias) are serde renames or string
+constants, never Rust identifiers, modules or file names. Check: dylint `naming` (identifier words on snake/camel
+boundaries, method calls included; strings and serde renames never match — `golden_path` and `NetworkGoldenPath` pass);
+xtask `NAMING` (file and directory names).
 
 ## RUNTIME
 Anti-pattern: a library building a tokio runtime or using `#[tokio::main]`. Pattern: libraries expose `async fn`; only the

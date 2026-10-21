@@ -89,7 +89,7 @@ async fn local_workers_embed_rows_that_were_never_queued() -> TestResult {
             home.path(),
             &format!("http://{}/v1", server.addr),
             &format!(
-                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    workers: true\n    embed_endpoint: http://{}\n    embed_model: embedding-model\nden:\n  host: 127.0.0.1\n  port: {port}\n",
+                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    workers: true\n    embed_endpoint: http://{}\n    embed_model: embedding-model\ngateway:\n  host: 127.0.0.1\n  port: {port}\n",
                 database.display(),
                 server.addr
             ),

@@ -49,7 +49,7 @@ async fn the_gateway_finds_a_harness_adapter_on_its_path() -> TestResult {
     std::fs::write(
         state.join("config.yaml"),
         format!(
-            "runtime:\n  workspace: {work}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\n    probe_models: false\nden:\n  host: 127.0.0.1\n  port: 5976\n  terminal:\n    enabled: true\n  commands_file: {commands}\n  files_root: {work}\n",
+            "runtime:\n  workspace: {work}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\n    probe_models: false\ngateway:\n  host: 127.0.0.1\n  port: 5976\n  terminal:\n    enabled: true\n  commands_file: {commands}\n  files_root: {work}\n",
             work = work.display(),
             commands = commands.display(),
         ),

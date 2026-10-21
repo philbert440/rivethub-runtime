@@ -18,7 +18,7 @@ struct Observed {
 
 fn gateway_config(database: &Path, gateway: u16) -> String {
     format!(
-        "mesh:\n  node_name: standalone-node\nmemory:\n  backend: sqlite\n  sqlite:\n    path: {}\nden:\n  host: 127.0.0.1\n  port: {gateway}\n",
+        "mesh:\n  node_name: standalone-node\nmemory:\n  backend: sqlite\n  sqlite:\n    path: {}\ngateway:\n  host: 127.0.0.1\n  port: {gateway}\n",
         database.display()
     )
 }

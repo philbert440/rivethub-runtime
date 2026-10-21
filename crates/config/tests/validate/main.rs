@@ -343,6 +343,22 @@ fn removed_by_decision(input: &serde_yaml_ng::Value) -> RemovedDeltas {
     deltas
 }
 
+fn gateway_finding(mut finding: Finding) -> Finding {
+    let Some(rest) = finding.path.strip_prefix("den") else {
+        return finding;
+    };
+    if !(rest.is_empty() || rest.starts_with('.') || rest.starts_with('[')) {
+        return finding;
+    }
+    finding.path = format!("gateway{rest}");
+    finding.message = finding
+        .message
+        .replace("\"den\" must", "\"gateway\" must")
+        .replace("Unknown den key", "Unknown gateway key")
+        .replace("den.", "gateway.");
+    finding
+}
+
 fn contract_findings(input: &serde_yaml_ng::Value, recorded: &Recorded) -> Vec<Finding> {
     let replacements = decision_replacements(input);
     let mut findings: Vec<Finding> = recorded
@@ -356,6 +372,7 @@ fn contract_findings(input: &serde_yaml_ng::Value, recorded: &Recorded) -> Vec<F
                 .any(|(scope, _, _, _)| covered(&finding.path, scope))
         })
         .cloned()
+        .map(gateway_finding)
         .collect();
     for (_, error, path, message) in replacements {
         findings.push(Finding {
@@ -471,7 +488,12 @@ fn replay_case(case: &Replay) -> Result<(), String> {
                 "a well-typed document",
             ));
         }
-        Some(deviation) => deviation.findings.clone(),
+        Some(deviation) => deviation
+            .findings
+            .iter()
+            .cloned()
+            .map(gateway_finding)
+            .collect(),
         None => case.contract.clone(),
     };
     expected_findings.retain(|finding| !case.removed.paths.contains(&finding.path));

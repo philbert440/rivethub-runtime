@@ -4,6 +4,10 @@ The final naming sweep changes the `memory.postgres.review_endpoint` removal
 message from "compaction" to "the summarizer". The replay applies that contract
 change to the expected finding only; fixture bytes remain unchanged.
 
+The `den` section is now named `gateway` (`den` is read as a deprecated alias).
+The replay renames recorded `den` paths and messages to `gateway` on the
+expected side only; fixture bytes remain unchanged.
+
 The replay in `tests/validate/` drives every recorded case in
 `tests/golden/fixtures/validate_config*.jsonl` through `config::validate_document`,
 one test per recording file (a failing file lists every failing case with its

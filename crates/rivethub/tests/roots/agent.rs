@@ -301,7 +301,10 @@ async fn agent_blocked_on_a_gateway_releases_the_task_on_sigint(pool: PgPool) ->
         &provider_config(
             home.path(),
             &url,
-            &format!("den:\n  host: 127.0.0.1\n  port: {}\n", hole.address.port()),
+            &format!(
+                "gateway:\n  host: 127.0.0.1\n  port: {}\n",
+                hole.address.port()
+            ),
         ),
     )?;
     let LoggedChild { mut child, logs } = start_agent(home.path()).await?;

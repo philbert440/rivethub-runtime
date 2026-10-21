@@ -18,7 +18,7 @@ pub(crate) enum AgentError {
     Conflict(String),
     #[error("agent \"{name}\" is hosted on {node}")]
     Hosted { name: String, node: String },
-    #[error("harness \"{harness}\" is not allowed on this node (den.allowed_harnesses)")]
+    #[error("harness \"{harness}\" is not allowed on this node (gateway.allowed_harnesses)")]
     HarnessDenied { harness: HarnessId },
     #[error("could not create agent directory: {0}")]
     Directory(#[source] std::io::Error),

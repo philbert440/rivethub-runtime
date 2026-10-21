@@ -127,7 +127,7 @@ fn gateway_block(host: &str, cert: &Path, key: &Path, ca: Option<&Path>) -> Stri
         None => String::new(),
     };
     format!(
-        "den:\n  host: {host}\n  port: 8443\n  tls_cert: {}\n  tls_key: {}\n{ca_line}",
+        "gateway:\n  host: {host}\n  port: 8443\n  tls_cert: {}\n  tls_key: {}\n{ca_line}",
         cert.display(),
         key.display()
     )
@@ -318,22 +318,25 @@ async fn an_invalid_gateway_certificate_is_refused() {
 
 #[tokio::test]
 async fn http_dials_loopback_and_refuses_an_off_loopback_bind() {
-    let plan = open_plan(&document("den:\n  host: 127.0.0.1\n  port: 5174\n", ""))
+    let plan = open_plan(&document("gateway:\n  host: 127.0.0.1\n  port: 5174\n", ""))
         .await
         .expect("plan");
     assert_eq!(plan.gateway.as_str(), "http://127.0.0.1:5174/");
     assert!(plan.gateway_trust.is_none());
-    let wild = open_plan(&document("den:\n  host: 0.0.0.0\n  port: 5174\n", ""))
+    let wild = open_plan(&document("gateway:\n  host: 0.0.0.0\n  port: 5174\n", ""))
         .await
         .expect("wild");
     assert_eq!(wild.gateway.as_str(), "http://127.0.0.1:5174/");
-    let v6 = open_plan(&document("den:\n  host: \"::\"\n  port: 5174\n", ""))
+    let v6 = open_plan(&document("gateway:\n  host: \"::\"\n  port: 5174\n", ""))
         .await
         .expect("v6");
     assert_eq!(v6.gateway.as_str(), "http://[::1]:5174/");
-    let error = open_plan(&document("den:\n  host: 192.0.2.55\n  port: 5174\n", ""))
-        .await
-        .expect_err("remote");
+    let error = open_plan(&document(
+        "gateway:\n  host: 192.0.2.55\n  port: 5174\n",
+        "",
+    ))
+    .await
+    .expect_err("remote");
     assert!(matches!(
         error,
         AgentError::GatewayBind { host } if host == "192.0.2.55"

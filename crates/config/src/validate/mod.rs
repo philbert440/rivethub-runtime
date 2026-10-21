@@ -360,7 +360,7 @@ fn ignored_message(config: &Config, segments: &[Segment]) -> Option<String> {
         "channels" => channels_message(rest),
         "memory" => memory_message(rest),
         "deployment" => deployment_message(rest),
-        "den" => gateway_message(rest),
+        "gateway" => gateway_message(rest),
         "tasks" => tasks_message(rest),
         _ => None,
     }
@@ -447,15 +447,15 @@ fn deployment_message(rest: &[Segment]) -> Option<String> {
 
 fn gateway_message(rest: &[Segment]) -> Option<String> {
     match rest {
-        [Segment::Key(key)] => Some(format!("Unknown den key \"{key}\"")),
+        [Segment::Key(key)] => Some(format!("Unknown gateway key \"{key}\"")),
         [Segment::Key(parent), Segment::Key(key)] => {
             let parent: &str = parent.as_str();
             match parent {
-                "terminal" => Some(format!("Unknown den.terminal key \"{key}\"")),
-                "devices" => Some(format!("Unknown den.devices key \"{key}\"")),
-                "certificate_authority" => {
-                    Some(format!("Unknown den.certificate_authority key \"{key}\""))
-                }
+                "terminal" => Some(format!("Unknown gateway.terminal key \"{key}\"")),
+                "devices" => Some(format!("Unknown gateway.devices key \"{key}\"")),
+                "certificate_authority" => Some(format!(
+                    "Unknown gateway.certificate_authority key \"{key}\""
+                )),
                 _ => None,
             }
         }

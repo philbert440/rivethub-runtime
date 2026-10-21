@@ -182,7 +182,7 @@ async fn gateway_check_succeeds_without_a_certificate_authority() -> TestResult 
         &provider_config(
             home.path(),
             DEAD_POSTGRES,
-            "den:\n  host: 127.0.0.1\n  port: 9\n",
+            "gateway:\n  host: 127.0.0.1\n  port: 9\n",
         ),
     )?;
     let output = run_rh(home.path(), &["gateway", "--check"]).await?;

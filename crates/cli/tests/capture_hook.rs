@@ -34,7 +34,10 @@ async fn an_unreachable_gateway_spools_the_batch() -> Result<(), Box<dyn std::er
     drop(probe);
     let home = home();
     let env = environment(&home);
-    config(&home, &format!("den:\n  host: 127.0.0.1\n  port: {port}\n"));
+    config(
+        &home,
+        &format!("gateway:\n  host: 127.0.0.1\n  port: {port}\n"),
+    );
     let report = cli::capture_hook::hook(&env, PROMPT, now()?).await;
     assert_eq!(report.exit, Exit::Ok);
     assert!(

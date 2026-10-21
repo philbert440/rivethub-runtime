@@ -18,7 +18,7 @@ pub(super) enum TaskHttpError {
     NotFound(String),
     #[error("{0}")]
     Conflict(String),
-    #[error("harness \"{0}\" is not allowed on this node (den.allowed_harnesses)")]
+    #[error("harness \"{0}\" is not allowed on this node (gateway.allowed_harnesses)")]
     HarnessDenied(HarnessId),
     #[error("{0}")]
     Unavailable(String),
@@ -61,7 +61,7 @@ impl IntoResponse for TaskHttpError {
             Self::Conflict(message) => (StatusCode::CONFLICT, GatewayError::new(message)),
             Self::HarnessDenied(harness) => {
                 let mut body = GatewayError::new(format!(
-                    "harness \"{harness}\" is not allowed on this node (den.allowed_harnesses)"
+                    "harness \"{harness}\" is not allowed on this node (gateway.allowed_harnesses)"
                 ))
                 .code("harness_not_allowed");
                 body.harness_id = Some(harness);
