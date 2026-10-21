@@ -59,7 +59,7 @@ async fn a_priced_reply_records_the_exact_cost() {
     next_body(&mut rx);
     let usage = engine.load(id).await.expect("load").usage.expect("usage");
     assert_eq!(usage.cost_usd, Some(3.0));
-    assert_eq!(usage.total_tokens, 1_000_000);
+    assert_eq!(usage.total_tokens, Some(1_000_000));
     stub.close().await.expect("stub shuts down");
 }
 
@@ -202,5 +202,49 @@ async fn a_hung_turn_ends_as_a_timeout() {
         engine.load(id).await.expect("load").status,
         TaskStatus::Timeout
     );
+    stub.close().await.expect("stub shuts down");
+}
+
+#[tokio::test]
+async fn reported_usage_settles_on_the_task_and_its_result() {
+    let (stub, mut rx) = common::chat_stub(Script {
+        prompt_tokens: Some(23_248),
+        completion_tokens: Some(4),
+        ..Script::reply("done")
+    })
+    .await;
+    let engine = common::engine(common::base_url(stub.addr));
+    let id = engine.submit(task("ship it")).await.expect("submit");
+    engine.run_one().await.expect("run");
+    next_body(&mut rx);
+    let loaded = engine.load(id).await.expect("load");
+    let usage = loaded.usage.expect("usage");
+    assert_eq!(
+        (usage.input_tokens, usage.output_tokens, usage.total_tokens),
+        (Some(23_248), Some(4), Some(23_252))
+    );
+    assert_eq!(loaded.result.expect("result").usage, usage);
+    stub.close().await.expect("stub shuts down");
+}
+
+#[tokio::test]
+async fn unreported_usage_leaves_the_token_fields_out() {
+    let (stub, mut rx) = common::chat_stub(Script::reply("done")).await;
+    let engine = common::engine(common::base_url(stub.addr));
+    let id = engine.submit(task("ship it")).await.expect("submit");
+    engine.run_one().await.expect("run");
+    next_body(&mut rx);
+    let loaded = engine.load(id).await.expect("load");
+    assert_eq!(loaded.status, TaskStatus::Completed);
+    let usage = loaded.usage.expect("usage");
+    assert_eq!(
+        (usage.input_tokens, usage.output_tokens, usage.total_tokens),
+        (None, None, None)
+    );
+    assert_eq!(usage.turns, 1);
+    let written = serde_json::to_value(usage).expect("usage serializes");
+    for field in ["inputTokens", "outputTokens", "totalTokens"] {
+        assert_eq!(written.get(field), None, "{field}");
+    }
     stub.close().await.expect("stub shuts down");
 }

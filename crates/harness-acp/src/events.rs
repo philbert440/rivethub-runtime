@@ -6,7 +6,9 @@ use kernel::harness::SessionEvent;
 use kernel::harness::ToolCallInfo;
 use kernel::harness::ToolCallStatus;
 use kernel::harness::ToolCallUpdate;
+use serde::Deserialize as _;
 use wire::json::JsonObject;
+use wire::stream::LlmUsage;
 
 use crate::error::AcpError;
 
@@ -50,6 +52,61 @@ pub(crate) fn session_event(update: acp::SessionUpdate) -> Result<Option<Session
         _ => Err(AcpError::UnmappedUpdate),
     };
     event.map(Some)
+}
+
+pub(crate) fn turn_usage(response: &acp::PromptResponse) -> Result<Option<LlmUsage>, AcpError> {
+    match (&response.usage, &response.meta) {
+        (Some(usage), _) => Ok(reported_usage(usage)),
+        (None, Some(meta)) => meta_usage(meta),
+        (None, None) => Ok(None),
+    }
+}
+
+fn reported_usage(usage: &acp::Usage) -> Option<LlmUsage> {
+    let prompt = [usage.cached_read_tokens, usage.cached_write_tokens]
+        .into_iter()
+        .flatten()
+        .try_fold(usage.input_tokens, u64::checked_add)?;
+    Some(LlmUsage {
+        prompt_tokens: prompt,
+        completion_tokens: usage.output_tokens,
+        reasoning_tokens: usage.thought_tokens,
+        cached_tokens: None,
+        cache_creation_tokens: usage.cached_write_tokens,
+        cache_read_tokens: usage.cached_read_tokens,
+    })
+}
+
+#[derive(serde::Deserialize)]
+struct MetaUsage {
+    #[serde(rename = "inputTokens")]
+    input: Option<u64>,
+    #[serde(rename = "outputTokens")]
+    output: Option<u64>,
+    #[serde(rename = "reasoningTokens")]
+    reasoning: Option<u64>,
+    #[serde(rename = "cachedReadTokens")]
+    cached_read: Option<u64>,
+    #[serde(rename = "cacheCreationTokens")]
+    cache_creation: Option<u64>,
+}
+
+fn meta_usage(meta: &acp::Meta) -> Result<Option<LlmUsage>, AcpError> {
+    let Some(raw) = meta.get("usage") else {
+        return Ok(None);
+    };
+    let usage = MetaUsage::deserialize(raw).map_err(|source| AcpError::UsageMeta { source })?;
+    let (Some(input), Some(output)) = (usage.input, usage.output) else {
+        return Ok(None);
+    };
+    Ok(Some(LlmUsage {
+        prompt_tokens: input,
+        completion_tokens: output,
+        reasoning_tokens: usage.reasoning,
+        cached_tokens: None,
+        cache_creation_tokens: usage.cache_creation,
+        cache_read_tokens: usage.cached_read,
+    }))
 }
 
 pub(crate) fn permission_request(

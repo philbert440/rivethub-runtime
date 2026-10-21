@@ -3,9 +3,13 @@ use std::collections::BTreeMap;
 use kernel::harness::{SessionEvent, ToolCallStatus};
 use wire::harness::HarnessEvent;
 use wire::session_id::SessionId;
+use wire::stream::LlmUsage;
 
 #[derive(Debug, Default)]
-pub(crate) struct ToolNames(BTreeMap<String, String>);
+pub(crate) struct ToolNames {
+    names: BTreeMap<String, String>,
+    usage: Option<LlmUsage>,
+}
 
 impl ToolNames {
     pub(crate) fn harness_event(
@@ -26,7 +30,8 @@ impl ToolNames {
                 turn_id: None,
             },
             SessionEvent::ToolCall(call) => {
-                self.0.insert(call.tool_call_id.clone(), call.name.clone());
+                self.names
+                    .insert(call.tool_call_id.clone(), call.name.clone());
                 HarnessEvent::ToolUse {
                     session_id,
                     tool_call_id: call.tool_call_id.clone(),
@@ -43,7 +48,7 @@ impl ToolNames {
                 };
                 HarnessEvent::ToolResult {
                     session_id,
-                    name: self.0.remove(&update.tool_call_id)?,
+                    name: self.names.remove(&update.tool_call_id)?,
                     tool_call_id: update.tool_call_id.clone(),
                     output: update.output.clone().unwrap_or_default(),
                     is_error: failed.then_some(true),
@@ -59,13 +64,17 @@ impl ToolNames {
                 reason: request.reason.clone(),
                 options: None,
             },
+            SessionEvent::Usage { usage } => {
+                self.usage = Some(usage.clone());
+                return None;
+            }
             SessionEvent::TurnEnded => HarnessEvent::TurnComplete {
                 session_id,
                 turn_id: None,
                 stop_reason: None,
+                usage: self.usage.take(),
             },
             SessionEvent::UserMessageChunk { .. }
-            | SessionEvent::Usage { .. }
             | SessionEvent::Plan(_)
             | SessionEvent::AvailableCommands(_)
             | SessionEvent::CurrentMode { .. }

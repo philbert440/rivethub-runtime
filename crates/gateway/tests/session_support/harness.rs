@@ -22,6 +22,7 @@ pub(crate) struct Harness {
     pub(crate) trace: watch::Sender<Vec<String>>,
     pub(crate) finish: Semaphore,
     pub(crate) specs: Mutex<Vec<SessionSpec>>,
+    pub(crate) usage: Mutex<Option<wire::stream::LlmUsage>>,
 }
 
 impl Default for Harness {
@@ -32,6 +33,7 @@ impl Default for Harness {
             trace: watch::channel(Vec::new()).0,
             finish: Semaphore::new(0),
             specs: Mutex::new(Vec::new()),
+            usage: Mutex::new(None),
         }
     }
 }
@@ -136,6 +138,13 @@ impl HarnessAdapter for Harness {
             })
             .await
             .expect("events");
+        let usage = self.usage.lock().clone();
+        if let Some(usage) = usage {
+            sender
+                .send(SessionEvent::Usage { usage })
+                .await
+                .expect("usage");
+        }
         sender
             .send(SessionEvent::TurnEnded)
             .await

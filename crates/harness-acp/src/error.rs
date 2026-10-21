@@ -104,6 +104,8 @@ pub enum AcpError {
     UnanswerablePermission { decision: ApprovalDecision },
     #[error("the agent reported a tool input that is not a JSON object: {source}")]
     ToolInput { source: serde_json::Error },
+    #[error("the agent reported turn usage under _meta that is not token counts: {source}")]
+    UsageMeta { source: serde_json::Error },
     #[error(
         "no working directory: the request, the launch command and runtime.workspace all leave it unset"
     )]
@@ -134,6 +136,7 @@ impl AcpError {
             | Self::UnknownPermission { .. }
             | Self::UnanswerablePermission { .. }
             | Self::ToolInput { .. }
+            | Self::UsageMeta { .. }
             | Self::Attachment { .. }
             | Self::WorkingDir => ProviderRecovery::Permanent,
         }

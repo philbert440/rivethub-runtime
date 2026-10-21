@@ -20,6 +20,7 @@ use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
 use wire::json::JsonObject;
 use wire::session_id::SessionId;
+use wire::stream::LlmUsage;
 use wire::stream::ThinkingLevel;
 
 #[cfg(test)]
@@ -106,6 +107,72 @@ fn a_turn_streams_the_mapped_events_in_order() {
         .expect("object input");
         assert_eq!(collected, expected_events(input));
     });
+}
+
+fn turn_usage_events(mode: &str) -> Result<Vec<SessionEvent>, String> {
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(&["text:hello"], &["--usage", mode]));
+    run(async {
+        let cwd = tempdir().map_err(|error| error.to_string())?;
+        let session = adapter
+            .new_session(spec(cwd.path()))
+            .await
+            .map_err(|error| error.to_string())?;
+        let mut events = adapter
+            .events(&session)
+            .await
+            .map_err(|error| error.to_string())?;
+        adapter
+            .prompt(&session, TurnInput::Text("do the thing".to_owned()))
+            .await
+            .map_err(|error| error.to_string())?;
+        collect_until_turn_end(&mut events).await
+    })
+}
+
+#[test]
+fn the_prompt_result_usage_arrives_before_the_turn_end() {
+    assert_eq!(
+        turn_usage_events("reported").expect("reported usage turn"),
+        vec![
+            SessionEvent::AgentMessageChunk {
+                text: "hello".to_owned(),
+            },
+            SessionEvent::Usage {
+                usage: LlmUsage {
+                    prompt_tokens: 23_248,
+                    completion_tokens: 4,
+                    reasoning_tokens: None,
+                    cached_tokens: None,
+                    cache_creation_tokens: Some(12_776),
+                    cache_read_tokens: Some(10_470),
+                },
+            },
+            SessionEvent::TurnEnded,
+        ]
+    );
+}
+
+#[test]
+fn usage_under_the_prompt_result_meta_arrives_before_the_turn_end() {
+    assert_eq!(
+        turn_usage_events("meta").expect("meta usage turn"),
+        vec![
+            SessionEvent::AgentMessageChunk {
+                text: "hello".to_owned(),
+            },
+            SessionEvent::Usage {
+                usage: LlmUsage {
+                    prompt_tokens: 20_185,
+                    completion_tokens: 44,
+                    reasoning_tokens: Some(43),
+                    cached_tokens: None,
+                    cache_creation_tokens: Some(0),
+                    cache_read_tokens: Some(2_176),
+                },
+            },
+            SessionEvent::TurnEnded,
+        ]
+    );
 }
 
 #[test]

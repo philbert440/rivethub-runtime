@@ -17,6 +17,7 @@ use tokio_util::compat::TokioAsyncWriteCompatExt as _;
 use tokio_util::sync::CancellationToken;
 use tokio_util::sync::DropGuard;
 use tokio_util::task::TaskTracker;
+use wire::stream::LlmUsage;
 
 use crate::error::AcpError;
 use crate::launch::AcpCommand;
@@ -77,7 +78,7 @@ pub(crate) struct AgentConnection {
     pub(crate) acp_session: acp::SessionId,
     pub(crate) permissions: Arc<PermissionRegistry>,
     pub(crate) options: Arc<SessionOptions>,
-    pub(crate) turn_end: mpsc::UnboundedSender<()>,
+    pub(crate) turn_end: mpsc::UnboundedSender<Option<LlmUsage>>,
     pub(crate) events_rx: mpsc::Receiver<SessionEvent>,
     pub(crate) exited: Arc<AtomicBool>,
     pub(crate) shutdown: CancellationToken,
@@ -90,7 +91,7 @@ struct Connecting {
     commands: mpsc::Sender<SessionCommand>,
     permissions: Arc<PermissionRegistry>,
     options: Arc<SessionOptions>,
-    turn_end: mpsc::UnboundedSender<()>,
+    turn_end: mpsc::UnboundedSender<Option<LlmUsage>>,
     events_rx: mpsc::Receiver<SessionEvent>,
     exited: Arc<AtomicBool>,
     shutdown: CancellationToken,
@@ -493,7 +494,7 @@ fn spawn_prompt(
 
 async fn forward_turn_ends(
     events: mpsc::Sender<SessionEvent>,
-    mut turn_ends: mpsc::UnboundedReceiver<()>,
+    mut turn_ends: mpsc::UnboundedReceiver<Option<LlmUsage>>,
     mut connection_ended: oneshot::Receiver<()>,
     shutdown: CancellationToken,
 ) {
@@ -502,16 +503,22 @@ async fn forward_turn_ends(
             biased;
             () = shutdown.cancelled() => break,
             turn = turn_ends.recv() => {
-                let Some(()) = turn else {
+                let Some(usage) = turn else {
                     break;
                 };
-                let sent = tokio::select! {
-                    () = shutdown.cancelled() => break,
-                    sent = events.send(SessionEvent::TurnEnded) => sent,
-                };
-                if sent.is_err() {
-                    tracing::debug!("turn end had no listener");
-                    break;
+                let ended = usage
+                    .map(|usage| SessionEvent::Usage { usage })
+                    .into_iter()
+                    .chain([SessionEvent::TurnEnded]);
+                for event in ended {
+                    let sent = tokio::select! {
+                        () = shutdown.cancelled() => return,
+                        sent = events.send(event) => sent,
+                    };
+                    if sent.is_err() {
+                        tracing::debug!("turn end had no listener");
+                        return;
+                    }
                 }
             }
             result = &mut connection_ended => {

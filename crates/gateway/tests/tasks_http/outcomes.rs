@@ -35,9 +35,9 @@ fn criterion() -> AcceptanceCriterion {
 
 fn usage(cost: f64) -> TaskUsage {
     TaskUsage {
-        input_tokens: 1,
-        output_tokens: 1,
-        total_tokens: 2,
+        input_tokens: Some(1),
+        output_tokens: Some(1),
+        total_tokens: Some(2),
         cost_usd: Some(cost),
         turns: 1,
         wall_clock_ms: 10,

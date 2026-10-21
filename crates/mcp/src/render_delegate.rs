@@ -44,8 +44,12 @@ pub(crate) fn task(outcome: &DelegateOutcome, elapsed: std::time::Duration) -> S
         outcome.status.to_string()
     };
     let mut meta = vec![format!("{}ms", elapsed.as_millis())];
-    if let Some(result) = &outcome.result {
-        meta.push(format!("tokens: {}", result.usage.total_tokens));
+    if let Some(total) = outcome
+        .result
+        .as_ref()
+        .and_then(|result| result.usage.total_tokens)
+    {
+        meta.push(format!("tokens: {total}"));
     }
     let meta_line = format!("\n\n---\n_Delegation [{status}]: {}_", meta.join(" | "));
     if outcome.status == wire::task::TaskStatus::Completed && !outcome.timed_out {

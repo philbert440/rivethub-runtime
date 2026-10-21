@@ -11,9 +11,9 @@ use kernel::harness::SessionSpec;
 use session_support::harness::Harness;
 use session_support::{Fixture, http, user};
 use wire::gateway::GatewayError;
-use wire::gateway::sessions::{SessionPostReply, SessionPostRequest};
+use wire::gateway::sessions::{MessageUsage, SessionPostReply, SessionPostRequest};
 use wire::harness::HarnessId;
-use wire::stream::ThinkingLevel;
+use wire::stream::{LlmUsage, ThinkingLevel};
 
 fn delegated(harness: HarnessId, working_dir: Option<String>) -> SessionPostRequest {
     SessionPostRequest {
@@ -57,6 +57,7 @@ async fn a_waited_turn_naming_a_harness_runs_a_harness_session_in_the_working_di
     let reply: SessionPostReply = serde_json::from_slice(&reply).expect("reply");
     assert_eq!(reply.message.text, "answer");
     assert_eq!(reply.message.session_id, "task:abc");
+    assert_eq!(reply.message.usage, None);
     let specs = harness.specs.lock().clone();
     let spec = specs.first().expect("one harness session");
     assert_eq!(specs.len(), 1);
@@ -160,5 +161,32 @@ async fn a_relative_working_directory_cannot_climb_out_of_the_root() {
     let (status, _) = post(&fixture, &body).await;
     assert_eq!(status, 400);
     assert!(harness.specs.lock().is_empty());
+    fixture.gateway.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_usage_a_harness_reports_for_the_turn_is_on_the_reply() {
+    let harness = Arc::new(Harness::default());
+    *harness.usage.lock() = Some(LlmUsage {
+        prompt_tokens: 23_248,
+        completion_tokens: 4,
+        reasoning_tokens: None,
+        cached_tokens: None,
+        cache_creation_tokens: Some(12_776),
+        cache_read_tokens: Some(10_470),
+    });
+    let fixture = Fixture::with_harness(Some(harness.clone())).await;
+    harness.finish.add_permits(1);
+    let (status, reply) = post(&fixture, &delegated(HarnessId::ClaudeCode, None)).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&reply));
+    let reply: SessionPostReply = serde_json::from_slice(&reply).expect("reply");
+    assert_eq!(
+        reply.message.usage,
+        Some(MessageUsage {
+            prompt_tokens: 23_248,
+            completion_tokens: 4,
+            cached_tokens: 10_470,
+        })
+    );
     fixture.gateway.close().await;
 }

@@ -6,7 +6,8 @@
   ],
   "usage": [
     {"input":{"inputTokens":1,"outputTokens":2,"totalTokens":3,"costUsd":null,"turns":1,"wallClockMs":10},"expected":{"inputTokens":1,"outputTokens":2,"totalTokens":3,"turns":1,"wallClockMs":10}},
-    {"input":{"inputTokens":1,"outputTokens":2,"totalTokens":3,"costUsd":0.0,"turns":1,"wallClockMs":10},"expected":{"inputTokens":1,"outputTokens":2,"totalTokens":3,"costUsd":0.0,"turns":1,"wallClockMs":10}}
+    {"input":{"inputTokens":1,"outputTokens":2,"totalTokens":3,"costUsd":0.0,"turns":1,"wallClockMs":10},"expected":{"inputTokens":1,"outputTokens":2,"totalTokens":3,"costUsd":0.0,"turns":1,"wallClockMs":10}},
+    {"input":{"inputTokens":null,"outputTokens":null,"totalTokens":null,"turns":1,"wallClockMs":10},"expected":{"turns":1,"wallClockMs":10}}
   ],
   "result": [
     {"input":{"verdict":"completed","summary":"done","output":null,"artifacts":[{"kind":"file","ref":"answer.txt","note":null}],"criteriaSelfReport":null,"usage":{"inputTokens":1,"outputTokens":2,"totalTokens":3,"turns":1,"wallClockMs":10},"error":null},"expected":{"verdict":"completed","summary":"done","artifacts":[{"kind":"file","ref":"answer.txt"}],"usage":{"inputTokens":1,"outputTokens":2,"totalTokens":3,"turns":1,"wallClockMs":10}}}

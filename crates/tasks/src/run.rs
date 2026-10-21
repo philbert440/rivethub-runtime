@@ -498,13 +498,18 @@ fn usage_of(
     let (input, output) = match &message.usage {
         Some(usage) => (usage.prompt_tokens, usage.completion_tokens),
         None if message.model.is_some() => return Err(Error::Pricing),
-        None => (0, 0),
+        None => {
+            return Ok(TaskUsage {
+                turns: 1,
+                ..empty_usage(wall)
+            });
+        }
     };
     let total = input.checked_add(output).ok_or(Error::Pricing)?;
     Ok(TaskUsage {
-        input_tokens: input,
-        output_tokens: output,
-        total_tokens: total,
+        input_tokens: Some(input),
+        output_tokens: Some(output),
+        total_tokens: Some(total),
         cost_usd: cost(rates, message.model.as_deref(), input, output)?,
         turns: 1,
         wall_clock_ms: wall,
@@ -518,7 +523,7 @@ fn budget_reason(budget: &TaskBudget, usage: &TaskUsage) -> Option<String> {
         return Some(format!("maxTurns ({max}) reached"));
     }
     if let Some(max) = budget.max_tokens
-        && usage.total_tokens >= max
+        && usage.total_tokens.is_some_and(|total| total >= max)
     {
         return Some(format!("maxTokens ({max}) reached"));
     }
@@ -541,9 +546,9 @@ fn budget_reason(budget: &TaskBudget, usage: &TaskUsage) -> Option<String> {
 
 fn empty_usage(wall: u64) -> TaskUsage {
     TaskUsage {
-        input_tokens: 0,
-        output_tokens: 0,
-        total_tokens: 0,
+        input_tokens: None,
+        output_tokens: None,
+        total_tokens: None,
         cost_usd: None,
         turns: 0,
         wall_clock_ms: wall,

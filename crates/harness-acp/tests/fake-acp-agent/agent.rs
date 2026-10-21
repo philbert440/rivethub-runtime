@@ -37,6 +37,8 @@ struct FakeArgs {
     list_sessions: bool,
     #[arg(long, default_value = "plain")]
     prompt: PromptMode,
+    #[arg(long, default_value = "none")]
+    usage: UsageMode,
 }
 
 const REPLAYED_CHUNKS: usize = 300;
@@ -56,6 +58,15 @@ enum PromptMode {
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
+enum UsageMode {
+    None,
+    Reported,
+    Meta,
+}
+
+const META_USAGE: &str = r#"{"usage":{"inputTokens":20185,"outputTokens":44,"totalTokens":20229,"cachedReadTokens":2176,"cacheCreationTokens":0,"reasoningTokens":43}}"#;
+
+#[derive(Clone, Copy, clap::ValueEnum)]
 enum CrashPoint {
     New,
     Prompt,
@@ -70,6 +81,7 @@ struct AgentState {
     hang_until_cancel: bool,
     list_sessions: bool,
     prompt: PromptMode,
+    usage: UsageMode,
     cancelled: AtomicBool,
     cancel_notify: Notify,
     selection: Mutex<Selection>,
@@ -95,6 +107,7 @@ fn prepare(args: FakeArgs) -> Option<AgentState> {
         hang_until_cancel: args.hang_until_cancel,
         list_sessions: args.list_sessions,
         prompt: args.prompt,
+        usage: args.usage,
         cancelled: AtomicBool::new(false),
         cancel_notify: Notify::new(),
         selection: Mutex::new(Selection::initial()),
@@ -210,10 +223,27 @@ fn spawn_prompt(
             }
         }
         match execute_prompt(&state, &task_connection, &session_id).await {
-            Ok(stop) => responder.respond(acp::PromptResponse::new(stop)),
+            Ok(stop) => responder.respond(ended(stop, state.usage)?),
             Err(error) => responder.respond_with_error(error),
         }
     })
+}
+
+fn ended(stop: acp::StopReason, usage: UsageMode) -> Result<acp::PromptResponse, acp::Error> {
+    let response = acp::PromptResponse::new(stop);
+    match usage {
+        UsageMode::None => Ok(response),
+        UsageMode::Reported => Ok(response.usage(
+            acp::Usage::new(23_252, 2, 4)
+                .cached_read_tokens(10_470)
+                .cached_write_tokens(12_776),
+        )),
+        UsageMode::Meta => {
+            let meta: acp::Meta = serde_json::from_str(META_USAGE)
+                .map_err(|error| acp::Error::internal_error().data(error.to_string()))?;
+            Ok(response.meta(meta))
+        }
+    }
 }
 
 fn described(block: &acp::ContentBlock) -> String {
