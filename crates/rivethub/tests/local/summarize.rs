@@ -11,7 +11,8 @@ const CONVERSATION: &str = "0199e2a0-7b3c-7a00-8000-0000000000e1";
 const IMPORTED: &str = "0199e2a07b3c7a0080000000000000e2";
 const IMPORTED_CANONICAL: &str = "0199e2a0-7b3c-7a00-8000-0000000000e2";
 const MESSAGES: u32 = 20;
-const IDLE_TICK: Duration = Duration::from_mins(5);
+const SUMMARY_WAIT: Duration = Duration::from_mins(1);
+const POLL: Duration = Duration::from_millis(100);
 
 fn stamp(at: chrono::DateTime<chrono::Utc>) -> String {
     at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
@@ -63,11 +64,13 @@ fn summary(path: &Path, conversation: &str) -> TestResult<Option<String>> {
 }
 
 async fn wait_summary(path: &Path, conversation: &str) -> TestResult<Option<String>> {
-    let waited = tokio::time::timeout(IDLE_TICK + Duration::from_secs(60), async {
+    let mut ticks = tokio::time::interval(POLL);
+    let waited = tokio::time::timeout(SUMMARY_WAIT, async {
         loop {
+            ticks.tick().await;
             match summary(path, conversation) {
                 Ok(Some(content)) => return Ok(content),
-                Ok(None) => tokio::task::yield_now().await,
+                Ok(None) => {}
                 Err(error) => return Err(error.to_string()),
             }
         }
