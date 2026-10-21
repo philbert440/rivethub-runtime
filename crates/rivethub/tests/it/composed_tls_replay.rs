@@ -6,7 +6,7 @@ mod certificates;
 mod compare;
 #[path = "tls_replay/fixture.rs"]
 mod fixture;
-pub mod process;
+use crate::process;
 #[path = "tls_replay/recording.rs"]
 mod recording;
 

@@ -5,7 +5,7 @@ use wire::gateway::users::UsersRegistry;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-const REGISTRY: &str = include_str!("../../wire/tests/golden/gateway/users-tenancy.json");
+const REGISTRY: &str = include_str!("../../../wire/tests/golden/gateway/users-tenancy.json");
 
 #[tokio::test]
 async fn recorded_registry_is_the_composition_boundary() -> TestResult {
@@ -49,7 +49,7 @@ async fn check_refuses_explicit_missing_invalid_and_ambiguous_registries() -> Te
     for content in [
         None,
         Some(include_str!(
-            "../../wire/tests/golden/gateway/users-invalid.json"
+            "../../../wire/tests/golden/gateway/users-invalid.json"
         )),
         Some(r#"{"ownerUserId":"owner","unmappedIsOwner":"false","users":{}}"#),
         Some(ambiguous.as_str()),

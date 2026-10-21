@@ -81,7 +81,7 @@ async fn seed(pool: &PgPool) -> TestResult {
     };
     legacy.run(pool).await?;
     sqlx::raw_sql(include_str!(
-        "../../testkit/tests/fixtures/mcp-memory/seed.txt"
+        "../../../testkit/tests/fixtures/mcp-memory/seed.txt"
     ))
     .execute(pool)
     .await?;

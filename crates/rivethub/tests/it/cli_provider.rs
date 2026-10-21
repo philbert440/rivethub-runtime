@@ -40,7 +40,7 @@ enum Chunk {
 
 fn recorded() -> TestResult<(Vec<SessionEvent>, String)> {
     let chunks: Vec<Chunk> = serde_json::from_str(include_str!(
-        "../../testkit/tests/fixtures/provider/A-text/chunks.json"
+        "../../../testkit/tests/fixtures/provider/A-text/chunks.json"
     ))?;
     let mut events = Vec::new();
     let mut expected = String::new();

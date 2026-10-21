@@ -112,7 +112,7 @@ async fn mcp_delegation_rows_match_shapes(pool: PgPool) {
         .fetch_one(&mut *setup)
         .await
         .expect("search path");
-    sqlx::raw_sql(include_str!("fixtures/graphile_worker.txt"))
+    sqlx::raw_sql(include_str!("../fixtures/graphile_worker.txt"))
         .execute(&mut *setup)
         .await
         .expect("graphile");
@@ -123,7 +123,7 @@ async fn mcp_delegation_rows_match_shapes(pool: PgPool) {
         .expect("restore search path");
     setup.commit().await.expect("setup commit");
     let fixture: Fixture = serde_json::from_str(include_str!(
-        "../../testkit/tests/fixtures/tasks/delegate-rows.json"
+        "../../../testkit/tests/fixtures/tasks/delegate-rows.json"
     ))
     .expect("fixture");
     let mut skipped = BTreeSet::new();
@@ -206,7 +206,7 @@ async fn replay(pool: &PgPool, scenario: Scenario) {
     .await
     .expect("finished row");
     let expected: JsonObject = serde_json::from_str(include_str!(
-        "../../testkit/tests/fixtures/tasks/completed-columns.json"
+        "../../../testkit/tests/fixtures/tasks/completed-columns.json"
     ))
     .expect("completed fixture");
     assert_eq!(stored.0, expected);

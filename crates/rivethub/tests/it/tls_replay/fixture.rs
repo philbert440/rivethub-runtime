@@ -35,7 +35,7 @@ fn prepare_files(remote: IpAddr, url: &str, kind: RunKind) -> Result<Fixture, Er
     std::fs::create_dir(&static_dir)?;
     std::fs::write(
         static_dir.join("index.html"),
-        include_str!("../fixtures/tls-replay/index.txt"),
+        include_str!("../../fixtures/tls-replay/index.txt"),
     )?;
     let reservation = std::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0))?;
     let port = reservation.local_addr()?.port();
@@ -57,7 +57,7 @@ fn prepare_files(remote: IpAddr, url: &str, kind: RunKind) -> Result<Fixture, Er
         use std::fmt::Write;
 
         let mut users: wire::gateway::users::UsersRegistry = serde_json::from_str(include_str!(
-            "../../../wire/tests/golden/gateway/users-tenancy.json"
+            "../../../../wire/tests/golden/gateway/users-tenancy.json"
         ))?;
         for user in users.users.values_mut() {
             if user.pg_url.is_some() {

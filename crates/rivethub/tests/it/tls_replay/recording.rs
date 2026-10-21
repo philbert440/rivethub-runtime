@@ -5,7 +5,8 @@ use testkit::http::{RequestRecord, ResponseRecord};
 
 use super::Error;
 
-pub(super) const RECORDING: &str = include_str!("../../../wire/tests/golden/gateway/http-tls.json");
+pub(super) const RECORDING: &str =
+    include_str!("../../../../wire/tests/golden/gateway/http-tls.json");
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum RunKind {
@@ -109,7 +110,7 @@ pub(super) fn recording() -> Result<Recording, Error> {
 
 pub(super) fn skips() -> Result<BTreeMap<String, Skip>, Error> {
     let entries: Vec<Skip> =
-        serde_json::from_str(include_str!("../fixtures/tls-replay/skips.json"))?;
+        serde_json::from_str(include_str!("../../fixtures/tls-replay/skips.json"))?;
     let mut skips = BTreeMap::new();
     for entry in entries {
         let id = entry.id.clone();

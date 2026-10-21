@@ -131,7 +131,7 @@ async fn install_queue(pool: &sqlx::PgPool) -> TestResult {
     let search_path: String = sqlx::query_scalar("SHOW search_path")
         .fetch_one(&mut *setup)
         .await?;
-    sqlx::raw_sql(include_str!("../fixtures/graphile_worker.txt"))
+    sqlx::raw_sql(include_str!("../../fixtures/graphile_worker.txt"))
         .execute(&mut *setup)
         .await?;
     sqlx::query("SELECT set_config('search_path', $1, false)")

@@ -74,7 +74,7 @@ async fn install_queue(pool: &PgPool) -> Result<(), sqlx::Error> {
     if present {
         return Ok(());
     }
-    sqlx::raw_sql(include_str!("fixtures/graphile_worker.txt"))
+    sqlx::raw_sql(include_str!("../fixtures/graphile_worker.txt"))
         .execute(pool)
         .await?;
     Ok(())
