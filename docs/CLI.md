@@ -97,8 +97,8 @@ file.
 
 Platforms: `rh` targets Linux and macOS (Apple Silicon). CI builds `rh` and runs the
 `cli` tests on `macos-latest`. `rh service` and the restart step of `rh update` manage systemd units only. On macOS
-running `rh start` under launchd (a LaunchAgent or LaunchDaemon plist) is the operator's job, and `rh update` refuses
-any platform other than Linux x86_64 and aarch64 because those are the only published release assets. The PKI
+running `rh start` under launchd (a LaunchAgent or LaunchDaemon plist) is the operator's job, so `rh update` on macOS
+installs the universal archive and needs `--no-restart`; it refuses platforms without a published archive. The PKI
 commands refuse a state, holder or authority path that passes through a symlink; on macOS `/tmp` and `/var` are symlinks into
 `/private`, so keep those paths under the home directory (the default `~/.rivethub` is fine).
 
@@ -119,15 +119,33 @@ PID files and symlink boundaries, real signal delivery, and read-only doctor che
 tests assert unchanged database state. Timing tests await events with deadlines.
 
 `rh update [--channel stable|beta|nightly] [--version TAG] [--no-restart] [--mesh] [--ssh-user USER]`
-updates Linux x86_64 and aarch64 installations. Stable is the default and resolves the latest published stable GitHub
-release, or the exact tag supplied with `--version`; it refuses prereleases. Beta resolves the highest semantic version
-among published releases, prereleases included, or the exact tag supplied with `--version`. Both `rh-linux-<arch>` and
-`rivethub-migrate-linux-<arch>` for the running architecture must match `SHA256SUMS` before either is executed.
+updates Linux x86_64 and aarch64 and macOS installations. Stable is the default and resolves the latest published
+stable GitHub release, or the exact tag supplied with `--version`; it refuses prereleases. Beta resolves the highest
+semantic version among published releases, prereleases included, or the exact tag supplied with `--version`. The
+updater downloads the release archive for the running platform, checks its SHA-256 against the release's
+`SHA256SUMS`, and only then unpacks `rh` and `rivethub-migrate` from it; an archive missing either binary is refused.
 HTTPS redirects are supported; HTTPS downloads cannot downgrade to HTTP. Version tags are URL path components, never
-shell expressions. Every merge to `main` tags the next patch version (one past the highest `vX.Y.Z` tag, or the
-workspace package version if that is higher) and publishes it as a beta prerelease with both binaries for both
-architectures. The Promote workflow turns a beta into the latest stable release without rebuilding. A pushed
-`v<version>` tag must match the workspace package version and publishes that release.
+shell expressions.
+
+Every release tag `v<version>` carries one archive per target and one `SHA256SUMS` listing the archives:
+
+| Target | Archive | Built on |
+|---|---|---|
+| `x86_64-unknown-linux-gnu` | `rh-<version>-x86_64-unknown-linux-gnu.tar.gz` | `ubuntu-22.04` (glibc 2.35 or newer) |
+| `aarch64-unknown-linux-gnu` | `rh-<version>-aarch64-unknown-linux-gnu.tar.gz` | `ubuntu-22.04-arm` (glibc 2.35 or newer) |
+| `universal-apple-darwin` | `rh-<version>-universal-apple-darwin.tar.gz` | `macos-latest`, arm64 and x86_64 joined with `lipo` |
+
+`<version>` is the tag without its leading `v`: tag `v0.5.3` publishes `rh-0.5.3-x86_64-unknown-linux-gnu.tar.gz`
+at `https://github.com/philbert440/rivethub-runtime/releases/download/v0.5.3/rh-0.5.3-x86_64-unknown-linux-gnu.tar.gz`.
+Each archive holds `rh`, `rivethub-migrate` (which `rh update` runs to migrate before the swap) and `LICENSE` at its top
+level. Windows users run the Linux archive under WSL. Before upload, every build job rejects a Linux binary that needs
+a glibc newer than 2.35, unpacks the archive, and checks that `rh version` prints the release version and commit, that
+`rh db migrate` creates a fresh SQLite store, and that `rh doctor` then passes with a current schema.
+
+Every merge to `main` tags the next patch version (one past the highest `vX.Y.Z` tag, or the workspace package version
+if that is higher) and publishes it as a beta prerelease with all three archives. The Promote workflow turns a beta into
+the latest stable release without rebuilding. A pushed `v<version>` tag must match the workspace package version and
+publishes that release. Published archives are never rebuilt or replaced, so a pinned URL and SHA-256 stay valid.
 
 Nightly requires `RIVETHUB_INSTALL_ROOT` to name an absolute, clean source checkout on `main`. The deprecated
 install-root alias remains in `config` and emits its existing warning. The updater runs

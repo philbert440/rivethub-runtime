@@ -1,5 +1,5 @@
 #![cfg(not(all(
-    target_os = "linux",
+    any(target_os = "linux", target_os = "macos"),
     any(target_arch = "x86_64", target_arch = "aarch64")
 )))]
 
@@ -35,7 +35,7 @@ async fn update_refuses_other_platforms_before_touching_the_installation()
     assert!(
         report
             .stderr
-            .contains("update requires Linux x86_64 or aarch64"),
+            .contains("update requires Linux x86_64 or aarch64, or macOS"),
         "{}",
         report.stderr
     );

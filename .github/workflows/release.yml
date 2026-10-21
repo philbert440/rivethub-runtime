@@ -53,56 +53,114 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
-  linux:
+  build:
     needs: version
     strategy:
       matrix:
         include:
-          - runner: ubuntu-24.04
+          - runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            arch: x86_64
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
-            arch: aarch64
+          - runner: macos-latest
+            target: universal-apple-darwin
     runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_VERSION: ${{ needs.version.outputs.version }}
+      TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.99.0
+      - name: Add both macOS targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
       - name: Set workspace version
         if: github.ref_type == 'branch'
-        env:
-          RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: |
-          sed -i "/^\[workspace.package\]/,/^\[/ s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
+          sed -i.orig "/^\[workspace.package\]/,/^\[/ s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
+          rm Cargo.toml.orig
           cargo update --workspace
           test -z "$(git diff -U0 Cargo.lock | grep '^[-+][^-+]' | grep -v '^[-+]version = ')"
       - name: Check workspace version
-        env:
-          RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: |
           crate_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "cli") | .version')
           test "$crate_version" = "$RELEASE_VERSION"
-      - name: Build Linux ${{ matrix.arch }} binaries
-        run: cargo build --release --locked --target ${{ matrix.target }} --bin rh --bin rivethub-migrate
-      - name: Prepare release assets
-        env:
-          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+      - name: Build ${{ matrix.target }}
         run: |
-          mkdir release
-          cp target/${{ matrix.target }}/release/rh release/rh-linux-${{ matrix.arch }}
-          cp target/${{ matrix.target }}/release/rivethub-migrate release/rivethub-migrate-linux-${{ matrix.arch }}
-          [[ "$(release/rh-linux-${{ matrix.arch }} version) " == "RivetHub v$RELEASE_VERSION "* ]]
+          if [[ "$TARGET" == universal-apple-darwin ]]; then
+            for arch in aarch64 x86_64; do
+              cargo build --release --locked --target "$arch-apple-darwin" -p rivethub --bin rh -p cli --bin rivethub-migrate
+            done
+            mkdir -p "target/$TARGET/release"
+            for bin in rh rivethub-migrate; do
+              lipo -create -output "target/$TARGET/release/$bin" \
+                "target/aarch64-apple-darwin/release/$bin" "target/x86_64-apple-darwin/release/$bin"
+              lipo "target/$TARGET/release/$bin" -verify_arch arm64 x86_64
+            done
+          else
+            cargo build --release --locked --target "$TARGET" -p rivethub --bin rh -p cli --bin rivethub-migrate
+          fi
+      - name: Check the glibc floor
+        if: runner.os == 'Linux'
+        run: |
+          for bin in rh rivethub-migrate; do
+            floor=$(objdump -T "target/$TARGET/release/$bin" | grep -o 'GLIBC_[0-9][0-9.]*' | sort -uV | tail -n 1)
+            echo "$bin requires $floor"
+            if [[ "$(printf '%s\n' "$floor" GLIBC_2.35 | sort -V | tail -n 1)" != GLIBC_2.35 ]]; then
+              echo "::error::$bin requires $floor, above the GLIBC_2.35 floor"
+              exit 1
+            fi
+          done
+      - name: Archive
+        run: |
+          mkdir release staging
+          cp "target/$TARGET/release/rh" "target/$TARGET/release/rivethub-migrate" LICENSE staging/
+          COPYFILE_DISABLE=1 tar --format=ustar -C staging -czf "release/rh-$RELEASE_VERSION-$TARGET.tar.gz" LICENSE rh rivethub-migrate
+      - name: Smoke test the archive
+        run: |
+          archive="release/rh-$RELEASE_VERSION-$TARGET.tar.gz"
+          test "$(tar -tzf "$archive" | sort | paste -sd ' ' -)" = "LICENSE rh rivethub-migrate"
+          smoke="$RUNNER_TEMP/smoke"
+          mkdir -p "$smoke/home/.rivethub"
+          tar -xzf "$archive" -C "$smoke"
+          expected="RivetHub v$RELEASE_VERSION ($(git rev-parse --short HEAD))"
+          actual=$("$smoke/rh" version)
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::rh version printed '$actual', expected '$expected'"
+            exit 1
+          fi
+          export HOME="$smoke/home"
+          cat > "$HOME/.rivethub/config.yaml" <<EOF
+          runtime:
+            workspace: $HOME
+            default_agent: main
+          agents:
+            main:
+              provider: local
+          providers:
+            local:
+              type: openai-compatible
+              base_url: http://127.0.0.1:1/v1
+              model: smoke
+          memory:
+            backend: sqlite
+            sqlite:
+              path: $HOME/memory.sqlite
+          EOF
+          "$smoke/rh" db migrate
+          "$smoke/rh" doctor | tee "$smoke/doctor.txt"
+          grep -q '^pass: memory' "$smoke/doctor.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: release-linux-${{ matrix.arch }}
+          name: release-${{ matrix.target }}
           path: release/
           if-no-files-found: error
 
   publish:
-    needs: [version, linux]
+    needs: [version, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -114,7 +172,7 @@ jobs:
           merge-multiple: true
       - name: Checksums
         working-directory: release
-        run: sha256sum rh-linux-* rivethub-migrate-linux-* > SHA256SUMS
+        run: sha256sum rh-*.tar.gz > SHA256SUMS
       - name: Tag the merge commit
         if: github.ref_type == 'branch'
         env:

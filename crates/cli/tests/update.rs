@@ -13,12 +13,14 @@ use cli::Exit;
 use cli::service::Scope;
 use cli::update::{Channel, Updater};
 use tokio_util::sync::CancellationToken;
-use update_support::{BINARY, Fixture, MIGRATION, Result, args, server};
+use update_support::{BINARY, Fixture, MIGRATION, Published, Result, args, server};
 
 #[tokio::test]
-async fn stable_verifies_redirected_assets_migrates_swaps_and_restarts() -> Result {
+async fn stable_verifies_redirected_archive_migrates_swaps_and_restarts() -> Result {
     let fixture = Fixture::new()?;
-    let report = fixture.run(&args(), &fixture.env(), false).await?;
+    let report = fixture
+        .run(&args(), &fixture.env(), Published::Good)
+        .await?;
     assert_eq!(report.exit, Exit::Ok, "{}", report.stderr);
     assert_eq!(std::fs::read(&fixture.binary)?, BINARY);
     assert_eq!(
@@ -52,21 +54,31 @@ async fn stable_verifies_redirected_assets_migrates_swaps_and_restarts() -> Resu
 }
 
 #[tokio::test]
-async fn bad_checksums_and_migration_failures_preserve_installation() -> Result {
-    for (corrupt, failure) in [(true, ""), (false, "migration")] {
+async fn bad_archives_and_migration_failures_preserve_installation() -> Result {
+    for (published, failure, message) in [
+        (
+            Published::BadChecksum,
+            "",
+            "SHA-256 verification failed for rh-0.9.0-",
+        ),
+        (
+            Published::MissingMigration,
+            "",
+            "exactly one regular file named rivethub-migrate",
+        ),
+        (Published::Good, "migration", "migration failed"),
+    ] {
         let fixture = Fixture::new()?;
         let env = fixture.env().with_override("RIVETHUB_TEST_FAIL", failure);
-        let report = fixture.run(&args(), &env, corrupt).await?;
+        let report = fixture.run(&args(), &env, published).await?;
         assert_eq!(report.exit, Exit::Failure);
+        assert!(report.stderr.contains(message), "{}", report.stderr);
         assert_eq!(std::fs::read(&fixture.binary)?, b"old runtime");
         assert!(!fixture.binary.with_extension("previous").exists());
         let calls = std::fs::read_to_string(&fixture.calls)?;
         assert!(!calls.contains("systemctl"));
-        if corrupt {
-            assert!(report.stderr.contains("SHA-256"));
+        if failure.is_empty() {
             assert_eq!(calls, "");
-        } else {
-            assert!(report.stderr.contains("migration failed"));
         }
     }
     Ok(())
@@ -78,7 +90,7 @@ async fn explicit_version_and_no_restart_still_migrate() -> Result {
     let mut args = args();
     args.version = Some("v0.9.0".to_owned());
     args.no_restart = true;
-    let report = fixture.run(&args, &fixture.env(), false).await?;
+    let report = fixture.run(&args, &fixture.env(), Published::Good).await?;
     assert_eq!(report.exit, Exit::Ok, "{}", report.stderr);
     let calls = std::fs::read_to_string(&fixture.calls)?;
     assert!(calls.starts_with("migrate"));
@@ -101,7 +113,7 @@ async fn mesh_preflight_local_first_ssh_user_and_partial_failures() -> Result {
     args.ssh_user = Some("deploy".to_owned());
     args.version = Some("v0.9.0".to_owned());
     args.no_restart = true;
-    let report = fixture.run(&args, &fixture.env(), false).await?;
+    let report = fixture.run(&args, &fixture.env(), Published::Good).await?;
     assert_eq!(report.exit, Exit::Failure);
     assert!(report.stderr.contains("Unreachable: node-2"));
     assert!(report.stderr.contains("Update failed: node-3"));
@@ -126,7 +138,7 @@ async fn beta_installs_the_highest_published_version_and_pins_mesh_peers() -> Re
     args.channel = Channel::Beta;
     args.mesh = true;
     args.no_restart = true;
-    let report = fixture.run(&args, &fixture.env(), false).await?;
+    let report = fixture.run(&args, &fixture.env(), Published::Good).await?;
     assert_eq!(report.exit, Exit::Ok, "{}", report.stderr);
     assert!(
         report.stdout.contains("Installed v0.10.0;"),
@@ -155,7 +167,7 @@ async fn only_beta_accepts_prerelease_tags_and_drafts_are_refused() -> Result {
         args.channel = channel;
         args.version = Some(tag.to_owned());
         args.no_restart = true;
-        let report = fixture.run(&args, &fixture.env(), false).await?;
+        let report = fixture.run(&args, &fixture.env(), Published::Good).await?;
         assert_eq!(report.exit, exit, "{}", report.stderr);
         let installed = std::fs::read(&fixture.binary)? == BINARY;
         assert_eq!(installed, exit == Exit::Ok);
@@ -175,7 +187,7 @@ async fn malicious_mesh_input_fails_before_network_or_local_changes() -> Result 
         fixture.mesh(&["local.example.com", host])?;
         let mut args = args();
         args.mesh = true;
-        let report = fixture.run(&args, &fixture.env(), false).await?;
+        let report = fixture.run(&args, &fixture.env(), Published::Good).await?;
         assert_eq!(report.exit, Exit::Failure);
         assert!(report.stderr.contains("invalid SSH"));
         assert_eq!(std::fs::read(&fixture.calls)?, b"");
@@ -187,7 +199,7 @@ async fn malicious_mesh_input_fails_before_network_or_local_changes() -> Result 
 #[tokio::test]
 async fn symlinks_out_and_traversal_are_refused() -> Result {
     let fixture = Fixture::new()?;
-    let server = server(false).await?;
+    let server = server(Published::Good).await?;
     let root = fixture.binary.parent().ok_or("root")?;
     let sibling = root.with_file_name("install 'quoted' $(literal)-sibling");
     std::fs::create_dir(&sibling)?;
@@ -215,7 +227,7 @@ async fn symlinks_out_and_traversal_are_refused() -> Result {
 #[tokio::test]
 async fn cancellation_and_busy_installations_refuse_changes() -> Result {
     let fixture = Fixture::new()?;
-    let server = server(false).await?;
+    let server = server(Published::Good).await?;
     let updater = Updater::new(
         fixture.binary.clone(),
         format!("http://{}/releases/", server.addr).parse()?,
@@ -267,7 +279,7 @@ fn update_db_recording_scope_has_no_unexplained_skips() -> Result {
 async fn restart_failure_preserves_both_rollback_binaries() -> Result {
     let fixture = Fixture::new()?;
     let env = fixture.env().with_override("RIVETHUB_TEST_FAIL", "restart");
-    let report = fixture.run(&args(), &env, false).await?;
+    let report = fixture.run(&args(), &env, Published::Good).await?;
     assert_eq!(report.exit, Exit::Failure);
     assert_eq!(std::fs::read(&fixture.binary)?, BINARY);
     assert_eq!(

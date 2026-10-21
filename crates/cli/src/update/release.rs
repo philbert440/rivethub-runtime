@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::io::Read as _;
 use std::path::Path;
 use std::time::Duration;
 
@@ -36,10 +37,13 @@ pub(super) fn validate_version(version: &str) -> Result<(), UpdateError> {
     Ok(())
 }
 
+const BINARY_LIMIT: u64 = 512 * 1024 * 1024;
+
 pub(super) fn platform() -> Result<&'static str, UpdateError> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("linux", "x86_64") => Ok("linux-x86_64"),
-        ("linux", "aarch64") => Ok("linux-aarch64"),
+        ("linux", "x86_64") => Ok("x86_64-unknown-linux-gnu"),
+        ("linux", "aarch64") => Ok("aarch64-unknown-linux-gnu"),
+        ("macos", "x86_64" | "aarch64") => Ok("universal-apple-darwin"),
         _ => Err(UpdateError::Platform),
     }
 }
@@ -88,27 +92,58 @@ pub(super) async fn stage(
         return Err(UpdateError::Release);
     }
     validate_version(&release.tag_name)?;
+    let version = release
+        .tag_name
+        .strip_prefix('v')
+        .ok_or_else(|| UpdateError::Version(release.tag_name.clone()))?;
+    let archive_name = format!("rh-{version}-{platform}.tar.gz");
     let manifest = asset(&release, "SHA256SUMS")?;
     let manifest = download(&client, manifest, 16 * 1024, shutdown).await?;
-    let checksums = checksums(&manifest)?;
-    for name in ["rh", "rivethub-migrate"] {
-        let asset_name = format!("{name}-{platform}");
-        let expected = checksums.get(&asset_name).ok_or(UpdateError::Manifest)?;
-        let bytes = download(
-            &client,
-            asset(&release, &asset_name)?,
-            512 * 1024 * 1024,
-            shutdown,
-        )
-        .await?;
-        let actual: [u8; 32] = Sha256::digest(&bytes).into();
-        if actual != *expected {
-            return Err(UpdateError::Checksum(asset_name));
-        }
-        let path = directory.join(name);
-        tokio::task::spawn_blocking(move || files::write_executable(&path, &bytes)).await??;
+    let expected = *checksums(&manifest)?
+        .get(&archive_name)
+        .ok_or(UpdateError::Manifest)?;
+    let archive = download(
+        &client,
+        asset(&release, &archive_name)?,
+        512 * 1024 * 1024,
+        shutdown,
+    )
+    .await?;
+    let actual: [u8; 32] = Sha256::digest(&archive).into();
+    if actual != expected {
+        return Err(UpdateError::Checksum(archive_name));
     }
+    let directory = directory.to_owned();
+    tokio::task::spawn_blocking(move || unpack(&archive, &directory)).await??;
     Ok(release.tag_name)
+}
+
+fn unpack(archive: &[u8], directory: &Path) -> Result<(), UpdateError> {
+    let mut unpacked = Vec::new();
+    for entry in tar::Archive::new(flate2::read::GzDecoder::new(archive)).entries()? {
+        let mut entry = entry?;
+        let name = match entry.path()?.to_str() {
+            Some("rh") => "rh",
+            Some("rivethub-migrate") => "rivethub-migrate",
+            _ => continue,
+        };
+        if !entry.header().entry_type().is_file() || unpacked.contains(&name) {
+            return Err(UpdateError::Archive(name));
+        }
+        if entry.size() > BINARY_LIMIT {
+            return Err(UpdateError::AssetSize);
+        }
+        let mut bytes = Vec::new();
+        entry.read_to_end(&mut bytes)?;
+        files::write_executable(&directory.join(name), &bytes)?;
+        unpacked.push(name);
+    }
+    for name in ["rh", "rivethub-migrate"] {
+        if !unpacked.contains(&name) {
+            return Err(UpdateError::Archive(name));
+        }
+    }
+    Ok(())
 }
 
 fn newest(releases: Vec<Release>) -> Result<Release, UpdateError> {
