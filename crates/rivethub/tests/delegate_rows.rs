@@ -269,9 +269,9 @@ async fn assert_queued(pool: &PgPool, task: &TaskRecord, scenario: &Scenario) {
 #[expect(clippy::expect_used, reason = "a failed finish must fail the replay")]
 async fn finish(store: &PostgresTasks, task: &TaskRecord) {
     let usage = TaskUsage {
-        input_tokens: 1,
-        output_tokens: 2,
-        total_tokens: 3,
+        input_tokens: Some(1),
+        output_tokens: Some(2),
+        total_tokens: Some(3),
         cost_usd: None,
         turns: 1,
         wall_clock_ms: 10,

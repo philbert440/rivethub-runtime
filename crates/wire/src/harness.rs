@@ -309,6 +309,7 @@ pub enum HarnessEvent {
         session_id: SessionId,
         turn_id: Option<String>,
         stop_reason: Option<String>,
+        usage: Option<crate::stream::LlmUsage>,
     },
     #[serde(rename_all = "camelCase")]
     Error {

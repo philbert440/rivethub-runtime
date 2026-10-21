@@ -6,6 +6,7 @@ use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use wire::harness::{HarnessEvent, HarnessSessionStatus};
 use wire::session_id::SessionId;
+use wire::stream::LlmUsage;
 
 use super::TerminalService;
 use super::chat::ChatStart;
@@ -23,12 +24,18 @@ pub(crate) struct DelegatedTurn {
     pub(crate) journal: Option<Arc<Uploads>>,
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct DelegatedReply {
+    pub(crate) text: String,
+    pub(crate) usage: Option<LlmUsage>,
+}
+
 impl TerminalService {
     pub(crate) async fn delegated_turn(
         self: &Arc<Self>,
         user: &UserId,
         turn: DelegatedTurn,
-    ) -> Result<String, ApiError> {
+    ) -> Result<DelegatedReply, ApiError> {
         let DelegatedTurn {
             mut start,
             text,
@@ -66,7 +73,7 @@ impl TerminalService {
             service.release_harness(&key);
             let closed = chat.close().await;
             if reply
-                .send(outcome.and_then(|text| closed.map(|()| text)))
+                .send(outcome.and_then(|reply| closed.map(|()| reply)))
                 .is_err()
             {
                 tracing::debug!("delegated turn caller disconnected");
@@ -101,9 +108,9 @@ async fn exchange(
     text: String,
     system_prompt: Option<String>,
     attachments: Vec<TurnAttachment>,
-) -> Result<String, ApiError> {
+) -> Result<DelegatedReply, ApiError> {
     chat.prompt(text, system_prompt, attachments).await?;
-    let mut reply = String::new();
+    let mut reply = DelegatedReply::default();
     loop {
         let event = match events.recv().await {
             Ok(event) => event,
@@ -122,13 +129,16 @@ async fn exchange(
     }
 }
 
-fn observe(reply: &mut String, event: HarnessEvent) -> Result<bool, ApiError> {
+fn observe(reply: &mut DelegatedReply, event: HarnessEvent) -> Result<bool, ApiError> {
     match event {
         HarnessEvent::AssistantDelta { text, .. } => {
-            reply.push_str(&text);
+            reply.text.push_str(&text);
             Ok(false)
         }
-        HarnessEvent::TurnComplete { .. } => Ok(true),
+        HarnessEvent::TurnComplete { usage, .. } => {
+            reply.usage = usage;
+            Ok(true)
+        }
         HarnessEvent::SessionUpdated {
             status: HarnessSessionStatus::Ended | HarnessSessionStatus::Error,
             ..

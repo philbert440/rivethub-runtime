@@ -2,7 +2,7 @@ use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::SessionEvent;
 
 use crate::error::AcpError;
-use crate::events::{permission_request, session_event};
+use crate::events::{permission_request, session_event, turn_usage};
 
 #[test]
 fn absent_permission_titles_are_refused() {
@@ -142,4 +142,40 @@ fn session_metadata_is_accepted_without_inventing_a_text_event() {
         serde_json::from_str(r#"{"sessionUpdate":"session_info_update","title":"Retitled"}"#)
             .expect("session info");
     assert_eq!(session_event(update).expect("accepted metadata"), None);
+}
+
+fn usage_of(result: &str) -> Option<(u64, u64)> {
+    let response: acp::PromptResponse = serde_json::from_str(result).expect("prompt result");
+    turn_usage(&response)
+        .expect("usage")
+        .map(|usage| (usage.prompt_tokens, usage.completion_tokens))
+}
+
+#[test]
+fn recorded_prompt_results_yield_full_prompt_and_output_tokens() {
+    let reported = r#"{"stopReason":"end_turn","usage":{"inputTokens":2,"outputTokens":4,"cachedReadTokens":10470,"cachedWriteTokens":12776,"totalTokens":23252}}"#;
+    let meta = r#"{"stopReason":"end_turn","_meta":{"totalTokens":20238,"inputTokens":20185,"outputTokens":44,"usage":{"inputTokens":20185,"outputTokens":44,"totalTokens":20229,"cachedReadTokens":2176,"cacheCreationTokens":0,"reasoningTokens":43,"modelCalls":1,"numTurns":1}}}"#;
+    assert_eq!(usage_of(reported), Some((23_248, 4)));
+    assert_eq!(usage_of(meta), Some((20_185, 44)));
+}
+
+#[test]
+fn a_prompt_result_without_usage_reports_none() {
+    assert_eq!(usage_of(r#"{"stopReason":"end_turn"}"#), None);
+    assert_eq!(
+        usage_of(r#"{"stopReason":"end_turn","_meta":{"usage":{"modelCalls":1}}}"#),
+        None
+    );
+}
+
+#[test]
+fn usage_meta_that_is_not_token_counts_is_refused() {
+    let response: acp::PromptResponse = serde_json::from_str(
+        r#"{"stopReason":"end_turn","_meta":{"usage":{"inputTokens":"many"}}}"#,
+    )
+    .expect("prompt result");
+    assert!(matches!(
+        turn_usage(&response),
+        Err(AcpError::UsageMeta { .. })
+    ));
 }

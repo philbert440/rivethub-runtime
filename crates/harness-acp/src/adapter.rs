@@ -25,6 +25,7 @@ use tokio_util::sync::CancellationToken;
 use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
+use wire::stream::LlmUsage;
 
 use crate::connection::AgentConnection;
 use crate::connection::SessionCommand;
@@ -48,7 +49,7 @@ struct SessionEntry {
     acp_session: acp::SessionId,
     permissions: Arc<PermissionRegistry>,
     options: Arc<SessionOptions>,
-    turn_end: mpsc::UnboundedSender<()>,
+    turn_end: mpsc::UnboundedSender<Option<LlmUsage>>,
     events: Option<Receiver<SessionEvent>>,
     exited: Arc<AtomicBool>,
     shutdown: CancellationToken,
@@ -67,7 +68,7 @@ struct SessionSnapshot {
     acp_session: acp::SessionId,
     permissions: Arc<PermissionRegistry>,
     options: Arc<SessionOptions>,
-    turn_end: mpsc::UnboundedSender<()>,
+    turn_end: mpsc::UnboundedSender<Option<LlmUsage>>,
     exited: Arc<AtomicBool>,
     images: bool,
 }
@@ -351,9 +352,10 @@ impl HarnessAdapter for AcpHarnessAdapter {
             reply,
         })
         .await;
-        match responded {
+        let usage = match responded {
             Ok(response) => {
                 tracing::debug!(stop = ?response.stop_reason, "turn ended");
+                crate::events::turn_usage(&response).map_err(port)?
             }
             Err(failure) => {
                 let error = if snapshot.exited.load(Ordering::Acquire) {
@@ -365,8 +367,8 @@ impl HarnessAdapter for AcpHarnessAdapter {
                 };
                 return Err(port(error));
             }
-        }
-        if snapshot.turn_end.send(()).is_err() {
+        };
+        if snapshot.turn_end.send(usage).is_err() {
             tracing::debug!("turn end had no listener");
         }
         Ok(())

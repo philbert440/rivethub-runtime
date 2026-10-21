@@ -9991,6 +9991,16 @@
                 "string",
                 "null"
               ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LlmUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -10341,6 +10351,57 @@
         "status"
       ],
       "additionalProperties": true
+    },
+    "LlmUsage": {
+      "type": "object",
+      "properties": {
+        "promptTokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "completionTokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reasoningTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cachedTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cacheCreationTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cacheReadTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "promptTokens",
+        "completionTokens"
+      ]
     },
     "StatusTool": {
       "type": "object",
@@ -10974,17 +11035,26 @@
       "type": "object",
       "properties": {
         "inputTokens": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint64",
           "minimum": 0
         },
         "outputTokens": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint64",
           "minimum": 0
         },
         "totalTokens": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint64",
           "minimum": 0
         },
@@ -11007,9 +11077,6 @@
         }
       },
       "required": [
-        "inputTokens",
-        "outputTokens",
-        "totalTokens",
         "turns",
         "wallClockMs"
       ]

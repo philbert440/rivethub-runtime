@@ -15,7 +15,8 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use wire::gateway::agents::UserTurnAttachment;
 use wire::gateway::sessions::{
-    SessionMessage, SessionMessageRole, SessionPostAccepted, SessionPostReply, SessionPostRequest,
+    MessageUsage, SessionMessage, SessionMessageRole, SessionPostAccepted, SessionPostReply,
+    SessionPostRequest,
 };
 use wire::harness::{ApprovalDecision, HarnessId, HarnessSessionSummary};
 use wire::hooks::HookContextBase;
@@ -247,11 +248,17 @@ async fn delegated(
         attachments,
         journal,
     };
-    let text = service(&gateway)?.delegated_turn(&user, turn).await?;
-    Ok(Json(SessionPostReply {
-        message: reply_message(&session, text),
-    })
-    .into_response())
+    let reply = service(&gateway)?.delegated_turn(&user, turn).await?;
+    let mut message = reply_message(&session, reply.text);
+    message.usage = reply.usage.map(|usage| MessageUsage {
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+        cached_tokens: usage
+            .cached_tokens
+            .or(usage.cache_read_tokens)
+            .unwrap_or_default(),
+    });
+    Ok(Json(SessionPostReply { message }).into_response())
 }
 
 fn turn_messages(request: &SessionPostRequest) -> Result<Vec<Message>, ApiError> {
