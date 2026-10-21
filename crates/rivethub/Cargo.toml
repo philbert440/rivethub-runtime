@@ -68,7 +68,7 @@ tempfile = { workspace = true }
 testkit = { workspace = true }
 tower = { workspace = true }
 rmcp = { workspace = true, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest"] }
-tokio = { workspace = true, features = ["io-util", "macros", "process"] }
+tokio = { workspace = true, features = ["io-util", "macros", "process", "test-util"] }
 
 [lints]
 workspace = true

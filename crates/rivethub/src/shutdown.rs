@@ -95,7 +95,7 @@ mod tests {
         assert!(started.elapsed() < SHUTDOWN_GRACE);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn grace_names_work_that_is_still_entered() {
         let shutdown = CancellationToken::new();
         let activities = Activities::new();
