@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use axum::{Json, Router, routing::get};
 use cli::Exit;

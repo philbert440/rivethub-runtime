@@ -1,4 +1,4 @@
-mod common;
+pub(crate) mod common;
 pub(crate) mod server;
 
 pub(crate) use common::{Result, directory, run, text, token};

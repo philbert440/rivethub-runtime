@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use cli::{ConfigCommand, Exit};
 use std::collections::BTreeSet;

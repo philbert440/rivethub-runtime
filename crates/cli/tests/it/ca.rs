@@ -1,3 +1,4 @@
+#[path = "ca_support/mod.rs"]
 mod ca_support;
 
 use std::os::unix::fs::PermissionsExt;

@@ -5,6 +5,7 @@
 
 #[path = "update/source.rs"]
 mod source;
+#[path = "update_support/mod.rs"]
 mod update_support;
 
 use std::os::unix::fs::symlink;

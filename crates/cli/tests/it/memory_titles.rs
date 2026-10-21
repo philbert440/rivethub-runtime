@@ -1,10 +1,6 @@
 #![cfg(test)]
 
-#[expect(
-    dead_code,
-    reason = "integration binaries share fixtures and use different subsets"
-)]
-mod support;
+use crate::support;
 
 use std::path::Path;
 use std::path::PathBuf;

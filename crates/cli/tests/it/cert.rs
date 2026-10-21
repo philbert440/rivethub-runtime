@@ -1,5 +1,4 @@
-#[path = "stepca_support/mod.rs"]
-mod support;
+use crate::stepca_support as support;
 
 #[path = "stepca_support/mesh_issue.rs"]
 mod mesh_issue;

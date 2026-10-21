@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use cli::{Cli, Command, Dispatch, Exit};
 use support::{config, environment, home, run};

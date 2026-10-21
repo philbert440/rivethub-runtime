@@ -1,3 +1,4 @@
+#[path = "gateway_ca_support/mod.rs"]
 mod gateway_ca_support;
 
 use gateway_ca_support::Lab;

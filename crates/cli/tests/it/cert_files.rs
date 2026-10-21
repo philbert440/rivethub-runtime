@@ -1,5 +1,4 @@
-#[path = "stepca_support/common.rs"]
-mod support;
+use crate::stepca_support::common as support;
 
 use cli::Exit;
 use std::os::unix::fs::{PermissionsExt, symlink};

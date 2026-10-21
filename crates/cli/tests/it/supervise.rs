@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use std::ffi::OsString;
 use std::os::unix::fs::PermissionsExt;

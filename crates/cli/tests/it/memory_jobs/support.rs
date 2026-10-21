@@ -18,7 +18,7 @@ pub(super) fn message_id() -> Uuid {
 }
 
 pub(super) async fn seed(pool: &PgPool) -> PostgresMemory {
-    sqlx::raw_sql(include_str!("../fixtures/memory_jobs/seed.txt"))
+    sqlx::raw_sql(include_str!("../../fixtures/memory_jobs/seed.txt"))
         .execute(pool)
         .await
         .expect("seed fixture");
@@ -49,7 +49,7 @@ impl RecordingQueue {
             .await
             .expect("path");
         sqlx::raw_sql(include_str!(
-            "../../../rivethub/tests/fixtures/graphile_worker.txt"
+            "../../../../rivethub/tests/fixtures/graphile_worker.txt"
         ))
         .execute(&mut *tx)
         .await

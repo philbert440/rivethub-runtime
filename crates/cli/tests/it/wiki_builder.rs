@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-mod wiki_support;
+use crate::wiki_support;
 
 use kernel::queue::{FixedJob, JobName, JobQueue, WorkerRole};
 use kernel::wiki::builder::{ExtractWiki, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiWork};

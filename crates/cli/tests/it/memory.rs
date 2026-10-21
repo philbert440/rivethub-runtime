@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-mod support;
+use crate::support;
 
 use std::path::{Path, PathBuf};
 
@@ -490,7 +490,7 @@ async fn install_graphile(pool: &PgPool) {
         .await
         .expect("search path");
     sqlx::raw_sql(include_str!(
-        "../../rivethub/tests/fixtures/graphile_worker.txt"
+        "../../../rivethub/tests/fixtures/graphile_worker.txt"
     ))
     .execute(&mut *transaction)
     .await

@@ -1,10 +1,6 @@
 #![cfg(test)]
 
-#[expect(
-    dead_code,
-    reason = "each wiki test target uses a subset of shared test helpers"
-)]
-mod wiki_support;
+use crate::wiki_support;
 
 use std::sync::Arc;
 use std::time::Duration;

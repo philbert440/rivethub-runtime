@@ -1,5 +1,5 @@
+use crate::support;
 use std::os::unix::process::ExitStatusExt;
-mod support;
 
 use cli::Exit;
 use std::time::Duration;
