@@ -1,0 +1,28 @@
+pub mod process;
+
+mod agent_presets;
+mod app_routes;
+mod cli;
+mod cli_provider;
+mod composed;
+mod composed_client_auth;
+mod composed_tls_replay;
+mod db_resilience;
+mod delegate_rows;
+mod doctor;
+mod e2e;
+mod harness_offerings;
+mod local;
+mod local_ensure;
+mod mcp_memory;
+mod node_name;
+mod roots;
+mod startup;
+mod store_roots;
+mod term_isolation;
+mod term_transcripts;
+mod tls_fallback;
+mod users_registry;
+mod v1_agents;
+mod wiki;
+mod worker_wiki_guard;
