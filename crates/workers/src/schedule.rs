@@ -12,10 +12,18 @@ pub async fn enqueue_due(
     now: DateTime<Utc>,
     cancel: &CancellationToken,
 ) -> Result<(), WorkerError> {
+    let due = entries
+        .iter()
+        .filter(|entry| now.minute().is_multiple_of(entry.every_minutes));
+    enqueue(queue, due, cancel).await
+}
+
+async fn enqueue(
+    queue: &dyn JobQueue,
+    entries: impl Iterator<Item = &CronEntry>,
+    cancel: &CancellationToken,
+) -> Result<(), WorkerError> {
     for entry in entries {
-        if !now.minute().is_multiple_of(entry.every_minutes) {
-            continue;
-        }
         let job = Job {
             name: entry.task.clone(),
             payload: JsonObject::default(),
@@ -55,9 +63,13 @@ pub(crate) async fn run(
     queue: &dyn JobQueue,
     roles: &[WorkerRole],
     wiki_enabled: bool,
+    at_start: bool,
     cancel: &CancellationToken,
 ) -> Result<(), WorkerError> {
     let entries = claimed_entries(queue, roles, wiki_enabled);
+    if at_start {
+        enqueue(queue, entries.iter(), cancel).await?;
+    }
     loop {
         let now = Utc::now();
         let millis = 60_000 - now.timestamp_millis().rem_euclid(60_000);

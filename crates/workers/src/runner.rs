@@ -84,6 +84,7 @@ pub struct WorkerDeps {
 pub struct Runner<Q> {
     job_settings: crate::MemoryJobSettings,
     schedules: bool,
+    schedule_at_start: bool,
     wiki_enabled: bool,
     memory_jobs: Option<Arc<dyn kernel::memory::jobs::MemoryJobStore>>,
     unembedded: Option<Arc<dyn kernel::memory::jobs::UnembeddedStore>>,
@@ -115,6 +116,7 @@ where
         Self {
             job_settings: crate::MemoryJobSettings::standard(),
             schedules: false,
+            schedule_at_start: false,
             wiki_enabled: true,
             memory_jobs: None,
             unembedded: None,
@@ -165,6 +167,12 @@ where
     pub fn with_schedules(mut self, wiki_enabled: bool) -> Self {
         self.schedules = true;
         self.wiki_enabled = wiki_enabled;
+        self
+    }
+
+    #[must_use]
+    pub fn with_schedule_at_start(mut self) -> Self {
+        self.schedule_at_start = true;
         self
     }
 
@@ -232,8 +240,14 @@ where
             if !self.schedules {
                 return Ok(());
             }
-            let scheduled =
-                crate::schedule::run(self.queue.as_ref(), &roles, self.wiki_enabled, &cancel).await;
+            let scheduled = crate::schedule::run(
+                self.queue.as_ref(),
+                &roles,
+                self.wiki_enabled,
+                self.schedule_at_start,
+                &cancel,
+            )
+            .await;
             cancel.cancel();
             scheduled
         };

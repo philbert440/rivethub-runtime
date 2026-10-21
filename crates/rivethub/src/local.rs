@@ -499,7 +499,7 @@ async fn build_runners(
                 .with_unembedded(Arc::clone(store) as Arc<dyn UnembeddedStore>);
         }
         if matches!(role, ProcessRole::Embedder | ProcessRole::Summarizer) {
-            runner.runner = runner.runner.with_schedules(true);
+            runner.runner = runner.runner.with_schedules(true).with_schedule_at_start();
         }
         built.push((role, runner));
     }
