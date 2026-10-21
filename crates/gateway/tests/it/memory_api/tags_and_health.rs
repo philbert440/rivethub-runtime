@@ -232,7 +232,32 @@ fn tags_add_returns_the_tag() {
     let parsed: TagAddResult = serde_json::from_slice(&response.body).expect("add response");
     assert_eq!(parsed.tag.key, "project");
     assert_eq!(parsed.tag.value, "acmekit");
+    assert_eq!(parsed.tag.display, "AcmeKit");
     assert_eq!(parsed.tag.state, TagState::Accepted);
+
+    let bare = post(
+        &app,
+        "/api/memory/tags/add",
+        &MemoryTagsAddRequest {
+            entity_type: Some("conversation".to_owned()),
+            entity_id: Some("00000000-0000-4000-8000-000000000003".to_owned()),
+            session_key: None,
+            agent: None,
+            tag: Some("topic:deploy".to_owned()),
+            key: None,
+            value: None,
+            display: None,
+            reason: None,
+            decided_by: None,
+        },
+    )
+    .expect("in-process answer");
+    assert_eq!(bare.status, 200);
+    let parsed: TagAddResult = serde_json::from_slice(&bare.body).expect("add response");
+    assert_eq!(
+        parsed.tag.display, "deploy",
+        "an add without a display falls back to the value"
+    );
 }
 
 #[test]

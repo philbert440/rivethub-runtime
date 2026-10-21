@@ -462,14 +462,10 @@ impl MemoryStore for FakeMemoryStore {
 
     async fn add_tag(&self, add: TagAdd) -> Result<TagWire, MemoryStoreError> {
         self.record(MemoryRequest::AddTag(add.clone())).await;
-        #[cfg_attr(
-            dylint_lib = "rr_lints",
-            expect(
-                fallback,
-                reason = "CONTRACT B6: omitted tag display is stored as empty text"
-            )
-        )]
-        let display = add.display.as_deref().unwrap_or("").to_owned();
+        let display = match add.display.as_deref().map(str::trim) {
+            Some(text) if !text.is_empty() => text.to_owned(),
+            _ => add.tag.value.clone(),
+        };
         #[cfg_attr(
             dylint_lib = "rr_lints",
             expect(
