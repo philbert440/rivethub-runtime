@@ -7,7 +7,7 @@ use sqlx::PgPool;
 #[sqlx::test]
 async fn subscribed_workers_observe_an_insert_from_another_connection(pool: PgPool) {
     sqlx::raw_sql(include_str!(
-        "../../rivethub/tests/fixtures/graphile_worker.txt"
+        "../../../rivethub/tests/fixtures/graphile_worker.txt"
     ))
     .execute(&pool)
     .await

@@ -1,0 +1,24 @@
+mod common;
+
+mod agent_presets;
+mod capture_pg;
+mod embedding_store;
+mod final_fix;
+mod index_friendly;
+mod memory_golden;
+mod named_queues;
+mod queue;
+mod queue_notifications;
+mod search_filters;
+mod search_port;
+mod store;
+mod summary_dag;
+mod summary_store;
+mod tag_suggest;
+mod tags;
+mod task_query;
+mod task_spec;
+mod tasks;
+mod vector_search;
+mod verify;
+mod wiki_writer;

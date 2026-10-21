@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use kernel::queue::{ClaimSelector, JobId, JobName, JobQueue, WorkerRole};
 use memory_postgres::{PostgresQueue, PostgresTasks};

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use sqlx::PgPool;
 
 pub(super) fn exclusions() -> Result<BTreeMap<String, String>, serde_json::Error> {
-    serde_json::from_str(include_str!("../fixtures/capture-skipped.json"))
+    serde_json::from_str(include_str!("../../fixtures/capture-skipped.json"))
 }
 
 #[derive(serde::Serialize)]

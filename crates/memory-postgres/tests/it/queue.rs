@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use kernel::queue::FixedJob;
 use kernel::queue::Job;

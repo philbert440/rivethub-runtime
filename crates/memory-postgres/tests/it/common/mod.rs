@@ -6,7 +6,7 @@ pub(crate) async fn install_graphile(pool: &PgPool) -> Result<(), sqlx::Error> {
         .fetch_one(&mut *transaction)
         .await?;
     sqlx::raw_sql(include_str!(
-        "../../../rivethub/tests/fixtures/graphile_worker.txt"
+        "../../../../rivethub/tests/fixtures/graphile_worker.txt"
     ))
     .execute(&mut *transaction)
     .await?;

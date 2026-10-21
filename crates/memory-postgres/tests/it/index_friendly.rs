@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use kernel::memory::jobs::MemoryJobStore as _;
 use kernel::memory::{Limit, MemoryStore as _, SearchMode, SearchQuery};

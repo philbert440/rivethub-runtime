@@ -1,4 +1,4 @@
-mod common;
+use crate::common;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -102,7 +102,7 @@ struct Tag {
 
 fn recording() -> Result<Recording, serde_json::Error> {
     serde_json::from_str(include_str!(
-        "../../testkit/tests/fixtures/memory/capture-batch.json"
+        "../../../testkit/tests/fixtures/memory/capture-batch.json"
     ))
 }
 
