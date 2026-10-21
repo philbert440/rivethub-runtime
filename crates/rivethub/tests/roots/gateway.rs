@@ -39,7 +39,7 @@ async fn gateway_with_a_missing_certificate_authority_root_refuses_to_start(
             home.path(),
             &url,
             &format!(
-                "den:\n  host: 127.0.0.1\n  port: {port}\n  certificate_authority:\n    url: https://ca.example.test\n    root: {}\n    provisioner_password_file: {}\n",
+                "gateway:\n  host: 127.0.0.1\n  port: {port}\n  certificate_authority:\n    url: https://ca.example.test\n    root: {}\n    provisioner_password_file: {}\n",
                 root.display(),
                 password.display()
             ),
@@ -112,7 +112,7 @@ async fn phone_pairing_without_an_authority_stays_unavailable_and_agents_come_fr
             home.path(),
             &url,
             &format!(
-                "den:\n  host: 127.0.0.1\n  port: {port}\n  devices:\n    gateway_url: {GATEWAY_URL}\n"
+                "gateway:\n  host: 127.0.0.1\n  port: {port}\n  devices:\n    gateway_url: {GATEWAY_URL}\n"
             ),
         ),
     )?;
@@ -203,7 +203,7 @@ async fn gateway_with_a_partial_request_exits_within_the_grace_on_sigint(
         &provider_config(
             home.path(),
             &url,
-            &format!("den:\n  host: 127.0.0.1\n  port: {port}\n"),
+            &format!("gateway:\n  host: 127.0.0.1\n  port: {port}\n"),
         ),
     )?;
     let Started { mut child, logs } = start_gateway(home.path()).await?;

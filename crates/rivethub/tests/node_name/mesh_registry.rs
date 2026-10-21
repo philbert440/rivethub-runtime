@@ -48,7 +48,7 @@ async fn mesh_registry_records_the_configured_node(pool: PgPool) -> TestResult {
         home.path(),
         &url,
         &format!(
-            "den:\n  host: 127.0.0.1\n  port: {port}\n  tls_cert: {}\n  tls_key: {}\n  tls_ca: {}\nmesh:\n  enabled: true\n  node_name: \" {CONFIGURED} \"\n  tls: true\n  advertise_host: 127.0.0.1\n  agent_channel_port: {channel}\n",
+            "gateway:\n  host: 127.0.0.1\n  port: {port}\n  tls_cert: {}\n  tls_key: {}\n  tls_ca: {}\nmesh:\n  enabled: true\n  node_name: \" {CONFIGURED} \"\n  tls: true\n  advertise_host: 127.0.0.1\n  agent_channel_port: {channel}\n",
             state.join("node.pem").display(),
             state.join("node.key").display(),
             state.join("ca.pem").display(),

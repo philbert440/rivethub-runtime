@@ -434,7 +434,7 @@ async fn unknown_or_disallowed_input_does_not_create_a_preset() {
     .await;
     assert_eq!(denied.status, 403);
     let mut expected = GatewayError::new(
-        "harness \"claude-code\" is not allowed on this node (den.allowed_harnesses)",
+        "harness \"claude-code\" is not allowed on this node (gateway.allowed_harnesses)",
     );
     expected.code = Some("harness_not_allowed".to_owned());
     expected.harness_id = Some(HarnessId::ClaudeCode);
@@ -664,7 +664,7 @@ async fn create_moves_a_catalog_model_onto_the_harness() {
     let denied = send_json(&limited.app, "POST", "/api/agents", &body).await;
     assert_eq!(denied.status, 403);
     let mut expected = GatewayError::new(
-        "harness \"claude-code\" is not allowed on this node (den.allowed_harnesses)",
+        "harness \"claude-code\" is not allowed on this node (gateway.allowed_harnesses)",
     );
     expected.code = Some("harness_not_allowed".to_owned());
     expected.harness_id = Some(HarnessId::ClaudeCode);
@@ -1018,7 +1018,7 @@ fn settings_use_the_hub_layout_and_known_harnesses() {
         ),
     ]);
     let config: config::Config = serde_yaml_ng::from_str(
-        "den:\n  allowed_harnesses:\n    - claude-code\n    - not-a-real-harness\n",
+        "gateway:\n  allowed_harnesses:\n    - claude-code\n    - not-a-real-harness\n",
     )
     .expect("config");
     let settings = Settings::from_config_in(&config, &env, "gold-host".to_owned(), NODE.to_owned())

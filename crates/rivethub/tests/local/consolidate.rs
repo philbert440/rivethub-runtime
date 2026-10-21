@@ -17,7 +17,7 @@ async fn local_folds_a_session_variant_topic_into_its_parent_and_redirects() -> 
         &provider(
             home.path(),
             &format!(
-                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    wiki_dir: {}\nden:\n  host: 127.0.0.1\n  port: {port}\n",
+                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    wiki_dir: {}\ngateway:\n  host: 127.0.0.1\n  port: {port}\n",
                 database.display(),
                 wiki.display()
             ),

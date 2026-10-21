@@ -21,7 +21,7 @@ async fn composed_gateway_serves_https_from_the_shared_issued_pair() -> TestResu
         ),
         ("RIVETHUB_NODE_NAME", "fallback-node"),
     ]);
-    let config: config::Config = serde_yaml_ng::from_str("den:\n  host: 0.0.0.0\n  port: 0\n")?;
+    let config: config::Config = serde_yaml_ng::from_str("gateway:\n  host: 0.0.0.0\n  port: 0\n")?;
     let store: Arc<dyn kernel::memory::MemoryStore> = Arc::new(testkit::FakeMemoryStore::default());
     let shutdown = CancellationToken::new();
     let composition = rivethub::composition::Composition::build(

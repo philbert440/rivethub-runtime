@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use strum::IntoEnumIterator as _;
@@ -17,6 +18,12 @@ use crate::provider::{
 use crate::report::{Finding, ValidationResult};
 use crate::resolve::resolve_env_vars_with;
 use crate::validate::{self, IgnoredPath};
+
+const GATEWAY_SECTION: &str = "gateway";
+const LEGACY_GATEWAY_SECTION: &str = "den";
+const LEGACY_GATEWAY_NOTICE: &str =
+    "den is deprecated — rename the config section to gateway; the settings are unchanged.";
+const BOTH_GATEWAY_SECTIONS: &str = "den and gateway are both set — den is the deprecated name of the gateway section; keep only gateway.";
 
 const PGLITE_IMPORT_NOTICE: &str = "memory.postgres.embedded is set — the embedded Postgres (PGlite) option was removed; the memory backend resolves to SQLite and the one-time import runs at first start.";
 
@@ -84,11 +91,19 @@ pub fn validate_document(
     document: &serde_yaml_ng::Value,
     profile: validate::Profile,
 ) -> ValidationResult {
-    let presence = validate::Presence {
-        plugins: has_key(document, "plugins"),
-        workflows: has_key(document, "workflows"),
+    let document = match gateway_section(document) {
+        Ok(document) => document,
+        Err((path, message)) => {
+            let mut out = ValidationResult::default();
+            out.error(&path, message);
+            return out;
+        }
     };
-    match typed_document(document) {
+    let presence = validate::Presence {
+        plugins: has_key(&document, "plugins"),
+        workflows: has_key(&document, "workflows"),
+    };
+    match typed_document(&document) {
         Ok(typed) => validate::validate(&typed.config, &typed.ignored, &presence, profile),
         Err((path, message)) => {
             let mut out = ValidationResult::default();
@@ -103,10 +118,40 @@ pub fn type_document(document: &serde_yaml_ng::Value) -> Result<Typed, ConfigErr
 }
 
 fn typed_document(document: &serde_yaml_ng::Value) -> Result<Typed, (String, String)> {
+    let document = gateway_section(document)?;
     let mut ignored = Vec::new();
-    let mut config = deserialize_main(document, &mut ignored)?;
-    config.providers = provider_map(document, &mut ignored)?;
+    let mut config = deserialize_main(&document, &mut ignored)?;
+    config.providers = provider_map(&document, &mut ignored)?;
     Ok(Typed { config, ignored })
+}
+
+fn gateway_section(
+    document: &serde_yaml_ng::Value,
+) -> Result<Cow<'_, serde_yaml_ng::Value>, (String, String)> {
+    let Some(mapping) = document
+        .as_mapping()
+        .filter(|mapping| mapping.contains_key(LEGACY_GATEWAY_SECTION))
+    else {
+        return Ok(Cow::Borrowed(document));
+    };
+    if mapping.contains_key(GATEWAY_SECTION) {
+        return Err((
+            LEGACY_GATEWAY_SECTION.to_owned(),
+            BOTH_GATEWAY_SECTIONS.to_owned(),
+        ));
+    }
+    let renamed = mapping
+        .iter()
+        .map(|(key, value)| {
+            let key = if key.as_str() == Some(LEGACY_GATEWAY_SECTION) {
+                serde_yaml_ng::Value::String(GATEWAY_SECTION.to_owned())
+            } else {
+                key.clone()
+            };
+            (key, value.clone())
+        })
+        .collect();
+    Ok(Cow::Owned(serde_yaml_ng::Value::Mapping(renamed)))
 }
 
 fn has_key(document: &serde_yaml_ng::Value, key: &str) -> bool {
@@ -276,6 +321,9 @@ fn notices(env: &Environment, document: &serde_yaml_ng::Value, config: &Config) 
     let mut out = env.legacy_notices();
     out.extend(env.deprecation_warnings());
     out.extend(plugin_entry_notices(document));
+    if has_key(document, LEGACY_GATEWAY_SECTION) {
+        out.push(LEGACY_GATEWAY_NOTICE.to_owned());
+    }
     if config.pglite_import_pending() {
         out.push(PGLITE_IMPORT_NOTICE.to_owned());
     }
@@ -300,7 +348,6 @@ pub fn standalone_config_yaml(
 #[derive(Serialize)]
 struct StandaloneDocument<'a> {
     memory: StandaloneMemory<'a>,
-    #[serde(rename = "den")]
     gateway: StandaloneGateway<'a>,
 }
 

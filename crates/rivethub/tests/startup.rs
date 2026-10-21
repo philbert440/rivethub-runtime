@@ -57,7 +57,7 @@ async fn binary_replays_recorded_startup_refusals() -> TestResult {
         std::fs::write(home.path().join("pki/node.key"), "key")?;
         let replace = |text: &str| text.replace("{{TMP}}", &home.path().to_string_lossy());
         let mut config = format!(
-            "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nden:\n  host: {}\n",
+            "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\ngateway:\n  host: {}\n",
             home.path().display(),
             refusal.env.host
         );

@@ -36,7 +36,7 @@ async fn check_refuses_explicit_missing_invalid_and_ambiguous_registries() -> Te
     tokio::fs::create_dir(&state).await?;
     let users_path = state.join("users.json");
     tokio::fs::write(state.join("config.yaml"), format!(
-        "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\nden:\n  users_file: {}\n",
+        "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    model: m\ngateway:\n  users_file: {}\n",
         home.path().display(), users_path.display()
     )).await?;
     let mut duplicate: UsersRegistry = serde_json::from_str(REGISTRY)?;

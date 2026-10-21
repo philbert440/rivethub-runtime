@@ -55,7 +55,7 @@ async fn local_vector_search(
     }
     migrate::sqlite(&database)?;
     let body = format!(
-        "{}den:\n  host: 127.0.0.1\n  port: {port}\n",
+        "{}gateway:\n  host: 127.0.0.1\n  port: {port}\n",
         extra(&database, server.addr)
     );
     write_config(

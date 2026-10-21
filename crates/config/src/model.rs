@@ -39,7 +39,6 @@ pub struct Config {
     pub transports: Option<BTreeMap<String, TransportSection>>,
     pub deployment: Option<DeploymentSection>,
     pub mesh: Option<MeshSection>,
-    #[serde(rename = "den")]
     pub gateway: Option<GatewaySection>,
     pub tasks: Option<TasksSection>,
 }

@@ -239,7 +239,7 @@ async fn gateway_stays_up_across_a_database_outage(pool: PgPool) -> TestResult {
         &provider_config(
             home.path(),
             &url,
-            &format!("den:\n  host: 127.0.0.1\n  port: {port}\n"),
+            &format!("gateway:\n  host: 127.0.0.1\n  port: {port}\n"),
         ),
     )?;
     let mut running = spawn_rh(home.path(), &["gateway"], "gateway listening on ").await?;

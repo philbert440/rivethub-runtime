@@ -177,7 +177,7 @@ async fn capture_on_node(home: &Path, sqlite: &str) -> TestResult<MemoryHealthRe
             home,
             "http://127.0.0.1:1",
             &format!(
-                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n{sqlite}den:\n  host: 127.0.0.1\n  port: {port}\n  users_file: {}\n",
+                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n{sqlite}gateway:\n  host: 127.0.0.1\n  port: {port}\n  users_file: {}\n",
                 database.display(),
                 users.display()
             ),

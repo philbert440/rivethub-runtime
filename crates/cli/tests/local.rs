@@ -180,7 +180,7 @@ async fn an_existing_file_keeps_its_bytes_and_flags_apply_in_memory() {
     config(
         &home,
         &format!(
-            "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\nden:\n  host: 0.0.0.0\n  port: 5174\n",
+            "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\ngateway:\n  host: 0.0.0.0\n  port: 5174\n",
             database.display()
         ),
     );

@@ -29,7 +29,7 @@ the composed router requires a resolved identity. A verified device leaf is
 looked up before loopback ownership, so an unknown device cannot inherit the
 owner identity merely by connecting over loopback.
 
-Under the compatibility-pinned `den` configuration section:
+Under the `gateway` configuration section (`den` is its deprecated alias):
 
 - `tls_cert` and `tls_key` select the server identity.
 - `tls_ca` selects the client CA chain; when present, client certificates are
@@ -75,7 +75,7 @@ with a typed startup error and is never redirected to Postgres.
 `rh gateway` opens the certificate authority at the state directory's `ca`
 path, the same directory `rh ca` uses, after the memory database connects.
 The authority must already be initialized. Devices use that authority. A phone
-issuer is enabled only when `den.devices.gateway_url` is set. Enrollment stays
+issuer is enabled only when `gateway.devices.gateway_url` is set. Enrollment stays
 off: the configuration has no embed URL, WireGuard address, or device Postgres
 URL. CRL publication stays on `rh ca --crl-out`. Agent presets use the file
 store the gateway already opens. The users file remains a composition
@@ -86,7 +86,7 @@ categorizer, wiki-builder, and `all`. The runner uses the Postgres job queue,
 embedding store, summary store, and wiki store, plus the default agent's
 OpenAI-compatible provider. An absent queue fails closed.
 
-`rh start` is the supervisor. It spawns `rh gateway` unless `den.enabled` is
+`rh start` is the supervisor. It spawns `rh gateway` unless `gateway.enabled` is
 false, `rh agent` when Postgres memory would start, `rh worker --role` for
 sqlite `workers`, `tagging`, and `wiki_dir`, and `rh mcp` when `transports.mcp`
 sets `host` or `socket`. Postgres has no worker-role list, so those roles are
@@ -95,7 +95,7 @@ SIGTERM to each child and waits the same 10 second grace. A child that exits
 inside the grace is not killed. A child still running after the grace is sent
 SIGKILL; if it has not exited after that same grace, start logs
 `shutdown grace of 10s elapsed; still running: child …` and returns an error. `rh local` is one process on one
-`SqliteStore`: the gateway (always, including when `den.enabled` is false), the
+`SqliteStore`: the gateway (always, including when `gateway.enabled` is false), the
 embedder and summarizer when `memory.sqlite.workers` is true, the categorizer
 when `memory.sqlite.tagging` is true, the wiki builder when `memory.sqlite.wiki_dir`
 is set, and MCP when `transports.mcp` sets a host or a socket. A configured agent

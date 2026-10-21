@@ -38,6 +38,8 @@ fn standalone_round_trip(home: &Path) -> Result<(), Box<dyn std::error::Error>> 
     let yaml = standalone_config_yaml(&database, "0.0.0.0", 5174)?;
     assert!(yaml.contains("backend: sqlite"), "{yaml}");
     assert!(yaml.contains("0.0.0.0"), "{yaml}");
+    assert!(yaml.contains("\ngateway:\n"), "{yaml}");
+    assert!(!yaml.contains("den:"), "{yaml}");
     assert!(!yaml.contains("runtime"), "{yaml}");
     assert!(!yaml.contains("agents"), "{yaml}");
     assert!(!yaml.contains("providers"), "{yaml}");
@@ -62,13 +64,13 @@ fn standalone_round_trip(home: &Path) -> Result<(), Box<dyn std::error::Error>> 
             ),
         ]
     );
-    let broken = sqlite_document(&database, "den:\n  host: 127.0.0.1\n  port: 0\n");
+    let broken = sqlite_document(&database, "gateway:\n  host: 127.0.0.1\n  port: 0\n");
     let port = load_outcome(home, "port.yaml", &broken, Profile::Standalone)?;
     assert_eq!(
         findings(&validation(port)?),
         [(
-            "den.port",
-            "\"den.port\" must be an integer between 1 and 65535",
+            "gateway.port",
+            "\"gateway.port\" must be an integer between 1 and 65535",
         )]
     );
     let empty = sqlite_document(&database, "agents: {}\n");
@@ -86,7 +88,7 @@ fn standalone_round_trip(home: &Path) -> Result<(), Box<dyn std::error::Error>> 
             "Missing required field \"runtime.default_agent\"",
         )]
     );
-    let mistyped = "den:\n  port: \"no\"\n";
+    let mistyped = "gateway:\n  port: \"no\"\n";
     let typed = validation(load_outcome(
         home,
         "type.yaml",
@@ -99,6 +101,82 @@ fn standalone_round_trip(home: &Path) -> Result<(), Box<dyn std::error::Error>> 
             .iter()
             .any(|finding| finding.message.contains("wrong type")),
         "{typed:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn den_is_a_deprecated_name_of_the_gateway_section() -> Result<(), Box<dyn std::error::Error>> {
+    let home = temp_home("gateway-section")?;
+    let outcome = gateway_section_names(&home);
+    fs::remove_dir_all(&home)?;
+    outcome
+}
+
+fn gateway_section_names(home: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let database = home.join("memory.sqlite");
+    let section = "  host: 127.0.0.1\n  port: 5180\n";
+    let gateway = format!("gateway:\n{section}");
+    let den = format!("den:\n{section}");
+    let current = load_text(
+        home,
+        "gateway.yaml",
+        &sqlite_document(&database, &gateway),
+        Profile::Standalone,
+    )?;
+    assert_eq!(
+        current.config.gateway.as_ref().map(|section| section.port),
+        Some(5180)
+    );
+    assert!(
+        current.notices.iter().all(|notice| !notice.contains("den")),
+        "{:?}",
+        current.notices
+    );
+    let legacy = load_text(
+        home,
+        "den.yaml",
+        &sqlite_document(&database, &den),
+        Profile::Standalone,
+    )?;
+    assert_eq!(
+        legacy.config.gateway.as_ref().map(|section| section.port),
+        Some(5180)
+    );
+    assert!(
+        legacy
+            .notices
+            .iter()
+            .any(|notice| notice
+                .starts_with("den is deprecated — rename the config section to gateway")),
+        "{:?}",
+        legacy.notices
+    );
+    let legacy_port = sqlite_document(&database, "den:\n  port: 0\n");
+    assert_eq!(
+        findings(&validation(load_outcome(
+            home,
+            "den-port.yaml",
+            &legacy_port,
+            Profile::Standalone,
+        )?)?),
+        [(
+            "gateway.port",
+            "\"gateway.port\" must be an integer between 1 and 65535",
+        )]
+    );
+    let both = sqlite_document(&database, &format!("{den}{gateway}"));
+    assert_eq!(
+        findings(&validation(load_outcome(
+            home,
+            "both.yaml",
+            &both,
+            Profile::Standalone,
+        )?)?),
+        [(
+            "den",
+            "den and gateway are both set — den is the deprecated name of the gateway section; keep only gateway.",
+        )]
     );
     Ok(())
 }

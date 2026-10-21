@@ -39,7 +39,7 @@ The 2026-10-14 notes below describe holder identity and the gateway routes. Wher
    bound the exposure if a check is missed.
 6. **Crates:** `pki` implements `CertificateAuthority` over the `stepca` client and owns the one token minter.
    `stepca` cannot depend on kernel, so the port lives in `pki` rather than in `stepca`. The composition root injects
-   it when `den.certificate_authority` is set. The gateway serves `/ca/v1/*` and device enrollment through that port.
+   it when `gateway.certificate_authority` is set. The gateway serves `/ca/v1/*` and device enrollment through that port.
    `rh ca token` and `rh ca revoke` call the shared minter. `rh ca crl`, `rh ca status`, and `rh cert renew` stay on the
    `stepca` client. There is no local signer and no `rh ca import` in this runtime.
 

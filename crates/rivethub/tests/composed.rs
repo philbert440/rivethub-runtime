@@ -134,7 +134,7 @@ async fn composed_binary_serves_tls_memory_and_websocket(pool: sqlx::PgPool) -> 
     let channel_reservation = std::net::TcpListener::bind("127.0.0.1:0")?;
     let channel_port = channel_reservation.local_addr()?.port();
     let config = format!(
-        "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\n    model: test\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://{model_address}\n    model: test\nmemory:\n  backend: postgres\n  postgres:\n    connection_string: {url}\nden:\n  host: 127.0.0.1\n  port: {port}\n  tls_cert: {}/node.pem\n  tls_key: {}/node.key\n  tls_ca: {}/ca.pem\n  users_file: {}/users.json\n  tls_crl: {}/revoked.pem\nmesh:\n  enabled: true\n  node_name: test-node\n  tls: true\n  advertise_host: 127.0.0.1\n  agent_channel_port: {channel_port}\n",
+        "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\n    model: test\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://{model_address}\n    model: test\nmemory:\n  backend: postgres\n  postgres:\n    connection_string: {url}\ngateway:\n  host: 127.0.0.1\n  port: {port}\n  tls_cert: {}/node.pem\n  tls_key: {}/node.key\n  tls_ca: {}/ca.pem\n  users_file: {}/users.json\n  tls_crl: {}/revoked.pem\nmesh:\n  enabled: true\n  node_name: test-node\n  tls: true\n  advertise_host: 127.0.0.1\n  agent_channel_port: {channel_port}\n",
         home.path().display(),
         state.display(),
         state.display(),

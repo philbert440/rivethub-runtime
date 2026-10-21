@@ -189,7 +189,7 @@ async fn harness_allow_list_applies_only_to_a_harness_session() {
     let denied = harness_post(Some(Vec::new()), "harness-session", "claude-code").await;
     assert_eq!(denied.0, 403, "{}", String::from_utf8_lossy(&denied.1));
     let mut expected = GatewayError::new(
-        "harness \"claude-code\" is not allowed on this node (den.allowed_harnesses)",
+        "harness \"claude-code\" is not allowed on this node (gateway.allowed_harnesses)",
     );
     expected = expected.code("harness_not_allowed");
     expected.harness_id = Some(HarnessId::ClaudeCode);

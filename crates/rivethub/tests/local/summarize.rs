@@ -92,7 +92,7 @@ async fn summarized_within_one_idle_tick(
             home,
             &format!("http://{}", stub.address),
             &format!(
-                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    workers: true\nden:\n  host: 127.0.0.1\n  port: {port}\n",
+                "memory:\n  backend: sqlite\n  sqlite:\n    path: {}\n    workers: true\ngateway:\n  host: 127.0.0.1\n  port: {port}\n",
                 database.display()
             ),
         ),

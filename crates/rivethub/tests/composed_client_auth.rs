@@ -79,7 +79,7 @@ fn write_config(state: &Path, work: &Path, users: Option<&str>) -> TestResult {
         None => String::new(),
     };
     let config = format!(
-        "runtime:\n  workspace: {work}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\n    probe_models: false\nden:\n  host: 127.0.0.1\n  port: 5975\n{users_line}",
+        "runtime:\n  workspace: {work}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:9/v1\n    model: m\n    probe_models: false\ngateway:\n  host: 127.0.0.1\n  port: 5975\n{users_line}",
         work = work.display(),
     );
     std::fs::write(state.join("config.yaml"), config)?;

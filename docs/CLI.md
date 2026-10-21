@@ -63,12 +63,12 @@ restarts an unexpected exit with backoff, and forwards SIGTERM. Deployments prev
 one-release compatibility binary dispatches through the same entry point.
 
 Browser origins: the gateway answers a request that carries an `Origin` header only when that origin is the
-gateway's own origin, the desktop app's built-in origin, or is listed in the gateway's `allowed_origins` setting (the `den` section of `config.yaml`, including the file
+gateway's own origin, the desktop app's built-in origin, or is listed in the gateway's `allowed_origins` setting (the `gateway` section of `config.yaml`, including the file
 `rh local` writes). Origins compare by scheme, host and port, so `localhost` and `127.0.0.1` are separate entries. A
 web client served by a Vite dev server on port 5273 that talks to the gateway needs that origin listed:
 
 ```yaml
-den:
+gateway:
   allowed_origins:
     - http://127.0.0.1:5273
     - http://localhost:5273
@@ -80,7 +80,7 @@ A Claude Code terminal opened in a folder it has not seen before waits at its "d
 dialog. `rh` leaves that dialog alone unless the operator opts in:
 
 ```yaml
-den:
+gateway:
   terminal:
     trust_claude_launch_dirs: true
 ```
@@ -88,7 +88,7 @@ den:
 With the flag set, before the gateway launches a `claude-code` terminal command it marks the launch directory trusted in
 the Claude Code config file (`$CLAUDE_CONFIG_DIR/.claude.json`, or `~/.claude.json`) by setting
 `projects.<dir>.hasTrustDialogAccepted` and `hasCompletedProjectOnboarding`. Only a directory that resolves inside the
-terminal root (`den.files_root`, else `runtime.workspace`) or inside a configured `tasks.harnesses.<id>.cwd` is trusted;
+terminal root (`gateway.files_root`, else `runtime.workspace`) or inside a configured `tasks.harnesses.<id>.cwd` is trusted;
 any other directory launches normally and Claude Code asks as usual. Every other setting and project in the file is kept,
 the file is written through a temporary file and a rename, and a file that cannot be parsed is left untouched and the
 launch is refused with the parse error. The flag is off by default because trusting a folder lets that folder's own

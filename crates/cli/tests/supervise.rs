@@ -462,7 +462,7 @@ async fn a_postgres_config_spawns_the_agent_and_not_worker_roles() {
 #[tokio::test(start_paused = true)]
 async fn an_empty_service_set_holds_the_pid_until_shutdown() {
     let quiet = support::home();
-    config(&quiet, "den:\n  enabled: false\n");
+    config(&quiet, "gateway:\n  enabled: false\n");
     let marker = quiet.path().join("spawned");
     let program = write_script(
         quiet.path(),

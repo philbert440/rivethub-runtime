@@ -135,7 +135,7 @@ No runtime plugin loading: extension points are adapter crates behind ports, the
 
 ## Certificate authority (step-ca, 2026-10-15b)
 
-step-ca holds the intermediate. This runtime is a client. Gateway config (`den.certificate_authority`) names the HTTPS
+step-ca holds the intermediate. This runtime is a client. Gateway config (`gateway.certificate_authority`) names the HTTPS
 URL, the root PEM, the provisioner password file, and the optional operator roster. The composition root connects
 `pki::Authority` when that section is present and leaves the gateway without a certificate authority when it is absent.
 An empty `~/.rivethub/ca` directory does not start or refuse a local signer.
@@ -156,7 +156,8 @@ no sqlite serial store, and no import of a CA directory.
 
 B1/B12/B16 operator messages use `[rivethub-gateway]`, `RIVETHUB_TLS_CERT` and `RIVETHUB_TLS_KEY`.
 ACP subprocess stderr uses the `rivethub::harness_acp::agent` tracing target. Gateway host and origin guidance
-refers to the gateway settings; the `den` YAML section remains a B10 compatibility key.
+refers to the gateway settings. The YAML section is `gateway`; `den` is still read as a deprecated alias, with a
+load-time notice, and setting both is a validation error.
 New shell session IDs are `rivethub-<uuid-v4>`. Herdr config homes are `rivethub-<hash8>` under the existing
 runtime directory or temporary directory; the hash inputs and socket layout stay unchanged.
 
