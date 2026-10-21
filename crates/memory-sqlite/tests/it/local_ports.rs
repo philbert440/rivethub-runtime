@@ -227,9 +227,10 @@ async fn task_json_writes_omit_absent_fields() -> TestResult {
     let fixture = fixture()?;
     let id = Uuid::now_v7();
     let mut record = queued(id, None);
-    let completed_text = include_str!("../../testkit/tests/fixtures/tasks/completed-columns.json");
+    let completed_text =
+        include_str!("../../../testkit/tests/fixtures/tasks/completed-columns.json");
     let completed: CompletedColumns = serde_json::from_str(completed_text)?;
-    let eval_text = include_str!("../../testkit/tests/fixtures/tasks/eval-column.json");
+    let eval_text = include_str!("../../../testkit/tests/fixtures/tasks/eval-column.json");
     record.eval = Some(serde_json::from_str(eval_text)?);
     record.usage = Some(completed.usage);
     record.result = Some(completed.result);

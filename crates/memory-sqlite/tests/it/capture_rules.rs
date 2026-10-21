@@ -1,8 +1,4 @@
-#[expect(
-    dead_code,
-    reason = "integration binaries share fixtures and use different subsets"
-)]
-mod common;
+use crate::common;
 
 use common::TestResult;
 use common::batch;

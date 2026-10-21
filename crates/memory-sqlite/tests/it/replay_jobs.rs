@@ -1,8 +1,4 @@
-#[expect(
-    dead_code,
-    reason = "this test binary uses only the queue helpers of the shared harness"
-)]
-mod common;
+use crate::common;
 
 use chrono::Duration;
 use chrono::Utc;

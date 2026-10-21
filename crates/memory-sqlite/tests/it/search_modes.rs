@@ -1,8 +1,4 @@
-#[expect(
-    dead_code,
-    reason = "the shared harness also supplies the hybrid recording replay"
-)]
-mod search_support;
+use crate::search_support;
 
 use chrono::{FixedOffset, TimeZone as _, Utc};
 use kernel::memory::SearchMode;

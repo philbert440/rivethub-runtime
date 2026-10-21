@@ -1,12 +1,7 @@
-#[expect(
-    dead_code,
-    reason = "integration binaries share fixtures and use different subsets"
-)]
-mod common;
+use crate::common;
 #[path = "search_support/fts_seed.rs"]
 mod seed;
-#[path = "search_support/superseded.rs"]
-mod superseded;
+use crate::search_support::superseded;
 use seed::{seed_fts, seed_tag_pool};
 use superseded::Superseded;
 

@@ -1,4 +1,4 @@
-mod search_support;
+use crate::search_support;
 
 use chrono::{DateTime, Utc};
 use kernel::memory::{SearchMode, SearchOutcome, SearchQuery};

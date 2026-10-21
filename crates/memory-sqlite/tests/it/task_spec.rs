@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-#[path = "../../testkit/tests/support/task_spec.rs"]
+#[path = "../../../testkit/tests/support/task_spec.rs"]
 mod contract;
 
 use std::path::PathBuf;
