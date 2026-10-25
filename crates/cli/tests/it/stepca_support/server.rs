@@ -36,6 +36,7 @@ pub(crate) enum Behavior {
     ExtraName,
     RevokedRenew,
     Wait,
+    Overdue,
 }
 
 #[derive(Debug)]
@@ -64,6 +65,7 @@ struct Material {
     reused: FailureDocument,
     revoked: FailureDocument,
     saved_csr: Option<String>,
+    issued: Option<String>,
     signed: bool,
     redirected: bool,
     serial: u64,
@@ -123,6 +125,10 @@ impl Server {
 
     pub(crate) fn set_behavior(&self, behavior: Behavior) {
         *self.shared.behavior.lock() = behavior;
+    }
+
+    pub(crate) fn issued(&self) -> Option<String> {
+        self.shared.material.lock().issued.clone()
     }
 
     pub(crate) fn note(&self) -> String {
@@ -202,6 +208,7 @@ fn prepare(principal: &str) -> Result<Prepared> {
             reused: failure_document(&recorded, "sign-token-reused")?,
             revoked: failure_document(&recorded, "renew-revoked")?,
             saved_csr: None,
+            issued: None,
             signed: false,
             redirected: false,
             serial: 0,
@@ -443,7 +450,12 @@ fn sign(behavior: Behavior, material: &mut Material, form: Option<&SignForm>) ->
             "missing certificate request".to_owned(),
         );
     };
-    match issue(material, Some(&form.csr), mint(behavior)) {
+    match issue(
+        material,
+        Some(&form.csr),
+        mint(behavior),
+        behavior == Behavior::Overdue,
+    ) {
         Ok(body) => {
             material.saved_csr = Some(form.csr.clone());
             material.signed = true;
@@ -458,7 +470,12 @@ fn renew(behavior: Behavior, material: &mut Material) -> Response {
         return failure(&material.revoked);
     }
     let saved = material.saved_csr.clone();
-    match issue(material, saved.as_deref(), mint(behavior)) {
+    match issue(
+        material,
+        saved.as_deref(),
+        mint(behavior),
+        behavior == Behavior::Overdue,
+    ) {
         Ok(body) => created(body),
         Err(error) => text(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
     }
@@ -473,7 +490,8 @@ fn mint(behavior: Behavior) -> Mint {
         | Behavior::Redirect
         | Behavior::ForeignRedirect
         | Behavior::RevokedRenew
-        | Behavior::Wait => Mint::Grant,
+        | Behavior::Wait
+        | Behavior::Overdue => Mint::Grant,
     }
 }
 
@@ -485,19 +503,24 @@ enum Mint {
     ExtraName,
 }
 
-fn issue(material: &mut Material, csr_pem: Option<&str>, mint: Mint) -> Result<Vec<u8>> {
+fn issue(
+    material: &mut Material,
+    csr_pem: Option<&str>,
+    mint: Mint,
+    overdue: bool,
+) -> Result<Vec<u8>> {
     let mut params = CertificateParams::default();
     let Some(pem) = csr_pem else {
         params.subject_alt_names = vec![SanType::URI(material.principal.as_str().try_into()?)];
         apply_names(&mut params, mint, &material.principal)?;
-        return sign_new_key(material, &params);
+        return sign_new_key(material, &params, overdue);
     };
     let requested = rcgen::CertificateSigningRequestParams::from_pem(pem)?;
     params
         .subject_alt_names
         .clone_from(&requested.params.subject_alt_names);
     apply_names(&mut params, mint, &material.principal)?;
-    stamp(&mut params, material)?;
+    stamp(&mut params, material, overdue)?;
     let key = KeyPair::from_pem(&material.intermediate_key_pem)?;
     let issuer = Issuer::from_params(&material.intermediate_params, &key);
     let certificate = match mint {
@@ -522,9 +545,13 @@ fn requested_with(
     Ok(signed.signed_by(issuer)?)
 }
 
-fn sign_new_key(material: &mut Material, params: &CertificateParams) -> Result<Vec<u8>> {
+fn sign_new_key(
+    material: &mut Material,
+    params: &CertificateParams,
+    overdue: bool,
+) -> Result<Vec<u8>> {
     let mut params = params.clone();
-    stamp(&mut params, material)?;
+    stamp(&mut params, material, overdue)?;
     let foreign = KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)?;
     let key = KeyPair::from_pem(&material.intermediate_key_pem)?;
     let issuer = Issuer::from_params(&material.intermediate_params, &key);
@@ -562,8 +589,13 @@ fn ensure_principal(names: &mut Vec<SanType>, principal: &str) -> Result {
     Ok(())
 }
 
-fn stamp(params: &mut CertificateParams, material: &mut Material) -> Result {
-    let not_before = leaf_not_before()?;
+// An overdue leaf is five days into its seven-day lifetime: past the renewal
+// deadline at two thirds, but not yet expired.
+fn stamp(params: &mut CertificateParams, material: &mut Material, overdue: bool) -> Result {
+    let mut not_before = leaf_not_before()?;
+    if overdue {
+        not_before -= time::Duration::seconds(5 * 86_400);
+    }
     params.not_before = not_before;
     params.not_after = not_before + time::Duration::seconds(7 * 86_400);
     material.serial += 1;
@@ -595,7 +627,12 @@ fn serial_bytes(value: u64) -> Vec<u8> {
     }
 }
 
-fn document(material: &Material, certificate: &rcgen::Certificate) -> Result<Vec<u8>> {
+fn document(material: &mut Material, certificate: &rcgen::Certificate) -> Result<Vec<u8>> {
+    material.issued = Some(format!(
+        "{}\n{}\n",
+        certificate.pem().trim(),
+        material.intermediate_pem.trim()
+    ));
     Ok(serde_json::to_vec(&SignResponse {
         crt: certificate.pem(),
         ca: material.intermediate_pem.clone(),

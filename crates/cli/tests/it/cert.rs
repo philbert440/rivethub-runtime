@@ -184,6 +184,35 @@ async fn refused_renewal_preserves_the_certificate_and_key() -> Result {
 }
 
 #[tokio::test]
+async fn renews_a_stored_certificate_that_is_past_its_renewal_deadline() -> Result {
+    let mut fixture = started(Behavior::Overdue).await?;
+    let refused = invoke(fixture.home.path(), &enroll_args(&fixture, None)?).await?;
+    assert_eq!(refused.exit, Exit::Failure);
+    assert!(
+        refused
+            .stderr
+            .contains("already reached its renewal deadline")
+    );
+    let _sign = next_event(&mut fixture.server).await?;
+    let holder = fixture.home.path().join(".rivethub/tls");
+    let overdue = fixture
+        .server
+        .issued()
+        .ok_or("missing issued certificate")?;
+    let path = holder.join("holder.cert.pem");
+    std::fs::write(&path, &overdue)?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    fixture.server.set_behavior(Behavior::Sign);
+    let report = invoke(fixture.home.path(), &renew_args(&fixture, None)?).await?;
+    assert_eq!(report.exit, Exit::Ok, "{}", report.stderr);
+    let renewal = next_event(&mut fixture.server).await?;
+    assert_exchange(&renewal, "renew-mtls", true)?;
+    assert_ne!(overdue, std::fs::read_to_string(&path)?);
+    fixture.server.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn long_running_renewal_obeys_cancellation_and_does_not_renew_early() -> Result {
     let mut fixture = started(Behavior::Sign).await?;
     let holder = fixture.home.path().join("holder");
