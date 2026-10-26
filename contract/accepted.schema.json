@@ -333,21 +333,121 @@
         "agent"
       ]
     },
-    "HubStateResponse": {
+    "HubProjectDefaults": {
       "type": "object",
       "properties": {
-        "version": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
+        "agentId": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        "state": {
-          "$ref": "#/$defs/HubState"
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThinkingLevel"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "harnessId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HarnessId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "node": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "directory": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ThinkingLevel": {
+      "type": "string",
+      "enum": [
+        "off",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
+    },
+    "HubProject": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "order": {
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "createdAt": {
+          "type": "integer",
+          "format": "int64",
+          "default": 0
+        },
+        "defaults": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HubProjectDefaults"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
-        "version",
-        "state"
+        "id",
+        "name"
+      ]
+    },
+    "HubLastSession": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "key",
+        "at"
+      ]
+    },
+    "HubSessionMode": {
+      "type": "string",
+      "enum": [
+        "chat",
+        "terminal"
       ]
     },
     "HubState": {
@@ -420,121 +520,21 @@
         }
       }
     },
-    "HubProject": {
+    "HubStateResponse": {
       "type": "object",
       "properties": {
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "order": {
-          "type": "number",
-          "format": "double",
-          "default": 0.0
-        },
-        "createdAt": {
+        "version": {
           "type": "integer",
-          "format": "int64",
-          "default": 0
+          "format": "uint64",
+          "minimum": 0
         },
-        "defaults": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/HubProjectDefaults"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "state": {
+          "$ref": "#/$defs/HubState"
         }
       },
       "required": [
-        "id",
-        "name"
-      ]
-    },
-    "HubProjectDefaults": {
-      "type": "object",
-      "properties": {
-        "agentId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "model": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "effort": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ThinkingLevel"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "harnessId": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/HarnessId"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "node": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "directory": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "ThinkingLevel": {
-      "type": "string",
-      "enum": [
-        "off",
-        "low",
-        "medium",
-        "high",
-        "xhigh"
-      ]
-    },
-    "HubSessionMode": {
-      "type": "string",
-      "enum": [
-        "chat",
-        "terminal"
-      ]
-    },
-    "HubLastSession": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string"
-        },
-        "at": {
-          "type": "integer",
-          "format": "int64"
-        }
-      },
-      "required": [
-        "key",
-        "at"
+        "version",
+        "state"
       ]
     },
     "HubStatePutRequest": {
