@@ -43,7 +43,6 @@ use super::sqlite::database_file;
 use super::sqlite::require_component;
 
 const FORMAT: &str = "opencode-part";
-const PREFIX: &str = "opencode:";
 const FILE: &str = "opencode.db";
 
 #[derive(Debug)]
@@ -62,7 +61,7 @@ impl OpencodeTranscriptReader {
         session: &SessionId,
         offset: u64,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
-        let Some(native_id) = native(session, PREFIX) else {
+        let Some(native_id) = native(session, HarnessId::Opencode) else {
             return Ok(TranscriptSlice::empty(offset));
         };
         let root = self.root.clone();

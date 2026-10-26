@@ -36,7 +36,6 @@ use crate::store_path::dir_state;
 use crate::store_path::session_component;
 
 const FORMAT: &str = "cursor-jsonl";
-const PREFIX: &str = "cursor:";
 
 #[derive(Debug)]
 pub struct CursorTranscriptReader {
@@ -54,7 +53,7 @@ impl CursorTranscriptReader {
         session: &SessionId,
         offset: u64,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
-        let Some(native_id) = native(session, PREFIX).map(str::to_owned) else {
+        let Some(native_id) = native(session, HarnessId::Cursor).map(str::to_owned) else {
             return Ok(TranscriptSlice::empty(offset));
         };
         let root = self.root.clone();

@@ -22,7 +22,6 @@ use crate::store_path::session_component;
 use crate::store_path::single_component;
 use crate::store_path::utf8_stem;
 
-pub const HARNESS_PREFIX: &str = "claude-code:";
 const TRANSCRIPT_MAX_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -271,7 +270,7 @@ fn capped_text(bytes: &[u8]) -> String {
 
 #[must_use]
 pub fn native_id(session: &SessionId) -> Option<&str> {
-    session.as_str().strip_prefix(HARNESS_PREFIX)
+    (session.harness() == HarnessId::ClaudeCode).then(|| session.native())
 }
 
 #[derive(Debug)]

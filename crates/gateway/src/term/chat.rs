@@ -169,13 +169,7 @@ impl TerminalService {
         let canonical = session
             .parse::<SessionId>()
             .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-        let (prefix, _) = canonical
-            .as_str()
-            .split_once(':')
-            .ok_or_else(|| ApiError::BadRequest("canonical session required".into()))?;
-        let harness_id = prefix
-            .parse::<HarnessId>()
-            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        let harness_id = canonical.harness();
         if !self
             .options
             .commands

@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -36,15 +35,7 @@ impl StoreTranscriptReader {
     }
 
     fn session_reader(&self, session: &SessionId) -> Result<StoreReader, TranscriptReaderError> {
-        let prefix = session
-            .as_str()
-            .split_once(':')
-            .map_or(session.as_str(), |(prefix, _)| prefix);
-        let harness = HarnessId::from_str(prefix).map_err(|error| TranscriptReaderError::Read {
-            message: format!("session {session} names no known harness"),
-            source: Box::new(error),
-        })?;
-        self.reader(harness)
+        self.reader(session.harness())
     }
 
     fn store_reader(&self, store: &Path) -> Result<StoreReader, TranscriptReaderError> {

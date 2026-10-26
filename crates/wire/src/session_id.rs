@@ -12,7 +12,14 @@ use thiserror::Error;
     Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, schemars::JsonSchema,
 )]
 #[serde(try_from = "String", into = "String")]
-pub struct SessionId(String);
+pub struct SessionId(Canonical);
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Canonical {
+    text: String,
+    harness: HarnessId,
+    native: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum SessionIdError {
@@ -29,18 +36,32 @@ pub enum SessionIdError {
 impl SessionId {
     #[must_use]
     pub fn new(harness: HarnessId, native: &str) -> Self {
-        Self(format!("{harness}:{native}"))
+        Self(Canonical {
+            text: format!("{harness}:{native}"),
+            harness,
+            native: native.to_owned(),
+        })
     }
 
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.0.text
+    }
+
+    #[must_use]
+    pub fn harness(&self) -> HarnessId {
+        self.0.harness
+    }
+
+    #[must_use]
+    pub fn native(&self) -> &str {
+        &self.0.native
     }
 }
 
 impl Display for SessionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+        f.write_str(&self.0.text)
     }
 }
 
@@ -57,9 +78,13 @@ impl FromStr for SessionId {
         if native.is_empty() {
             return Err(SessionIdError::EmptyNative);
         }
-        HarnessId::from_str(prefix)
+        let harness = HarnessId::from_str(prefix)
             .map_err(|_| SessionIdError::UnknownHarness(prefix.to_string()))?;
-        Ok(Self(value.to_string()))
+        Ok(Self(Canonical {
+            text: value.to_string(),
+            harness,
+            native: native.to_string(),
+        }))
     }
 }
 
@@ -73,7 +98,7 @@ impl TryFrom<String> for SessionId {
 
 impl From<SessionId> for String {
     fn from(value: SessionId) -> Self {
-        value.0
+        value.0.text
     }
 }
 
@@ -131,7 +156,7 @@ pub fn decode_segment(segment: &str) -> Result<DecodedSegment, SegmentError> {
     if let Some(canonical) = canonical_from_base64(text) {
         return Ok(DecodedSegment {
             session: SessionRef::Canonical(collapse_path_fallback(&canonical)),
-            requested: canonical.0,
+            requested: canonical.into(),
         });
     }
     if is_uuid(text) {
@@ -160,11 +185,10 @@ fn canonical_from_base64(text: &str) -> Option<SessionId> {
 }
 
 fn collapse_path_fallback(session: &SessionId) -> SessionId {
-    if let Some((harness, native)) = session.as_str().split_once(':')
-        && let Some((_, tail)) = native.rsplit_once('/')
+    if let Some((_, tail)) = session.native().rsplit_once('/')
         && is_uuid(tail)
     {
-        return SessionId(format!("{harness}:{tail}"));
+        return SessionId::new(session.harness(), tail);
     }
     session.clone()
 }
