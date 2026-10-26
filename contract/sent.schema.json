@@ -7200,6 +7200,365 @@
         "total"
       ]
     },
+    "TopicDirectory": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "local"
+            },
+            "node": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "node",
+            "path"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "shared"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ]
+        }
+      ]
+    },
+    "PlacedBy": {
+      "type": "string",
+      "enum": [
+        "you",
+        "categorizer"
+      ]
+    },
+    "TopicRecord": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "directory": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TopicDirectory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "updatedAt": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "name",
+        "aliases",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TopicSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "slug": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "directory": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TopicDirectory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "updatedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "sessionCount": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "lastActive": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "name",
+        "aliases",
+        "createdAt",
+        "updatedAt",
+        "sessionCount"
+      ]
+    },
+    "TopicList": {
+      "type": "object",
+      "properties": {
+        "topics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicSummary"
+          }
+        }
+      },
+      "required": [
+        "topics"
+      ]
+    },
+    "TopicCreateRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "directory": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TopicDirectory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "aliases"
+      ]
+    },
+    "TopicUpdate": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "aliases": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "directory": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TopicDirectory"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "TopicMergeRequest": {
+      "type": "object",
+      "properties": {
+        "into": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "into"
+      ]
+    },
+    "TopicPlacement": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "topicId": {
+          "type": "string"
+        },
+        "by": {
+          "$ref": "#/$defs/PlacedBy"
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "sessionId",
+        "topicId",
+        "by",
+        "at"
+      ]
+    },
+    "PlacementReply": {
+      "type": "object",
+      "properties": {
+        "placement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TopicPlacement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "PlacementRequest": {
+      "type": "object",
+      "properties": {
+        "topicId": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "topicId"
+      ]
+    },
+    "TopicSession": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "topicId": {
+          "type": "string"
+        },
+        "by": {
+          "$ref": "#/$defs/PlacedBy"
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "lastActive": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "required": [
+        "sessionId",
+        "topicId",
+        "by",
+        "at"
+      ]
+    },
+    "TopicSessionList": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicSession"
+          }
+        }
+      },
+      "required": [
+        "sessions"
+      ]
+    },
     "AgentEvent": {
       "type": "object",
       "properties": {

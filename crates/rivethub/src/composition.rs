@@ -17,6 +17,7 @@ use gateway::sessions::SessionRegistry;
 use kernel::agent_presets::AgentPresetStore;
 use kernel::memory::MemoryExport;
 use kernel::memory::MemoryStore;
+use kernel::topics::TopicStore;
 use memory_postgres::PostgresMemory;
 use memory_sqlite::SqliteStore;
 use thiserror::Error;
@@ -107,6 +108,7 @@ fn gateway_settings(config: &Config, env: &Environment) -> Result<gateway::Setti
 struct Backing<'tasks> {
     presets: Option<Arc<dyn AgentPresetStore>>,
     export: Option<Arc<dyn MemoryExport>>,
+    topics: Option<Arc<dyn TopicStore>>,
     tasks: Option<&'tasks crate::agent::LocalTasks>,
 }
 
@@ -132,8 +134,12 @@ fn with_backing(gateway: Gateway, backing: &Backing<'_>) -> Gateway {
         Some(presets) => gateway.with_agent_presets(presets),
         None => gateway,
     };
-    match backing.export.clone() {
+    let gateway = match backing.export.clone() {
         Some(export) => gateway.with_memory_export(export),
+        None => gateway,
+    };
+    match backing.topics.clone() {
+        Some(topics) => gateway.with_topics(topics),
         None => gateway,
     }
 }
@@ -219,6 +225,7 @@ impl Composition {
         let backing = Backing {
             presets: agent_presets(memory).await?,
             export: Some(Arc::new(MemoryExporter::postgres(Arc::clone(memory), url))),
+            topics: Some(memory.clone()),
             tasks: None,
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
@@ -239,6 +246,7 @@ impl Composition {
         let backing = Backing {
             presets: None,
             export: Some(Arc::new(MemoryExporter::sqlite(Arc::clone(store)))),
+            topics: Some(store.clone()),
             tasks,
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)

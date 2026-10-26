@@ -15,6 +15,7 @@ pub mod sessions;
 pub mod tags;
 pub mod tasks;
 pub mod terminal;
+mod topics;
 pub mod v1;
 pub mod wiki;
 
@@ -47,6 +48,7 @@ pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
         .merge(ca::router())
         .merge(history::router())
         .merge(notifications::router())
+        .merge(topics::router())
 }
 
 pub(crate) fn mount(router: Router<Arc<Gateway>>) -> Router<Arc<Gateway>> {
