@@ -5,11 +5,13 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use axum::extract::{Path, RawQuery, State};
-use axum::routing::get;
+use axum::routing::{get, put};
 use axum::{Json, Router};
 use chrono::Utc;
-use kernel::transcript::{ListLimit, StoreSession};
-use wire::gateway::sessions::{HarnessSessionResponse, HarnessSessionTranscriptResponse};
+use kernel::transcript::{ListLimit, SessionRenameError, StoreSession};
+use wire::gateway::sessions::{
+    HarnessSessionResponse, HarnessSessionTitleRequest, HarnessSessionTranscriptResponse,
+};
 use wire::harness::{
     HarnessCode, HarnessId, HarnessSessionList, HarnessSessionSummary, HarnessStoreSessionList,
 };
@@ -17,6 +19,7 @@ use wire::harness::{
 use super::terminal::require;
 use crate::Gateway;
 use crate::error::ApiError;
+use crate::extract::Body;
 use crate::history::{authorize, live_summary, offered, store_summary};
 use crate::tenancy::UserId;
 
@@ -34,6 +37,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route(
             "/api/harness-sessions/{session}/transcript",
             get(transcript),
+        )
+        .route(
+            "/api/harness-sessions/{session}/title",
+            put(rename).fallback(super::method_not_allowed),
         )
 }
 
@@ -183,6 +190,46 @@ async fn transcript(
         context_window: read.stamp.window,
         compact_at: read.stamp.compact_at,
         context_source: read.stamp.source,
+        redirected_to: resolved.redirected_to,
+    }))
+}
+
+async fn rename(
+    State(gateway): State<Arc<Gateway>>,
+    user: UserId,
+    Path(segment): Path<String>,
+    Body(request): Body<HarnessSessionTitleRequest>,
+) -> Result<Json<HarnessSessionResponse>, ApiError> {
+    let title = request.title.trim();
+    if title.is_empty() {
+        return Err(ApiError::Code(
+            HarnessCode::BadRequest,
+            "title must not be empty".to_owned(),
+        ));
+    }
+    let resolved = gateway.history().resolve(&gateway, &segment).await?;
+    authorize(&gateway, &user, &resolved).await?;
+    let lister = gateway
+        .session_lister()
+        .ok_or_else(|| ApiError::Unavailable("harness session stores unavailable".to_owned()))?;
+    let row = lister
+        .rename(resolved.harness, &resolved.native, title)
+        .await
+        .map_err(|error| match error {
+            SessionRenameError::Unsupported(harness) => ApiError::Code(
+                HarnessCode::CapabilityUnsupported,
+                format!("{harness} sessions cannot be renamed from RivetHub"),
+            ),
+            SessionRenameError::Missing => {
+                ApiError::Missing(format!("unknown session {}", resolved.session))
+            }
+            SessionRenameError::Write { .. } => ApiError::Unavailable(error.to_string()),
+            SessionRenameError::Store(error) => ApiError::Transcript(error),
+        })?;
+    let live = live_summary(&gateway, &resolved.native);
+    let summary = store_summary(&gateway, &row, live.as_ref()).await;
+    Ok(Json(HarnessSessionResponse {
+        summary,
         redirected_to: resolved.redirected_to,
     }))
 }

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -14,11 +15,13 @@ use super::files::entries;
 use super::files::file_times;
 use super::files::head;
 use super::files::open_store;
+use super::files::whole_file;
 use super::text::TextElement;
 use super::text::clip;
 use super::text::collapse;
 use super::text::non_empty;
 use super::time::FileTimes;
+use super::title::HarnessTitles;
 use crate::readers::codex::codex_id;
 use crate::store_path::Root;
 
@@ -74,7 +77,12 @@ pub(crate) fn list(root: &Path, limit: usize) -> Result<Vec<StoreSession>, Trans
     };
     let mut found = rollouts(&store);
     found.sort_by_key(|item| std::cmp::Reverse(item.times.mtime));
-    Ok(found.iter().take(limit).map(rollout_row).collect())
+    let names = thread_names(root);
+    Ok(found
+        .iter()
+        .take(limit)
+        .map(|rollout| rollout_row(rollout, &names))
+        .collect())
 }
 
 pub(crate) fn describe(
@@ -91,10 +99,31 @@ pub(crate) fn describe(
             Some(current) if current.times.mtime >= candidate.times.mtime => Some(current),
             Some(_) | None => Some(candidate),
         });
-    Ok(newest.as_ref().map(rollout_row))
+    let names = thread_names(root);
+    Ok(newest.as_ref().map(|rollout| rollout_row(rollout, &names)))
 }
 
-fn rollout_row(rollout: &Rollout) -> StoreSession {
+#[derive(Debug, Deserialize)]
+struct IndexLine {
+    id: String,
+    thread_name: String,
+}
+
+fn thread_names(root: &Path) -> HashMap<String, String> {
+    let index = root.join("session_index.jsonl");
+    if !index.is_file() {
+        return HashMap::new();
+    }
+    let Some(text) = whole_file(&index) else {
+        return HashMap::new();
+    };
+    text.lines()
+        .filter_map(object_line::<IndexLine>)
+        .map(|line| (line.id, line.thread_name))
+        .collect()
+}
+
+fn rollout_row(rollout: &Rollout, names: &HashMap<String, String>) -> StoreSession {
     let mut row = StoreSession::new(HarnessId::Codex, &rollout.id, rollout.times.mtime);
     row.created_at = Some(rollout.times.birth);
     if let Some(title) = non_empty(
@@ -104,6 +133,11 @@ fn rollout_row(rollout: &Rollout) -> StoreSession {
             .collect(),
     ) {
         row.title = title;
+    }
+    if let Some(name) = names.get(&rollout.id) {
+        let mut titles = HarnessTitles::default();
+        titles.manual(name);
+        titles.apply(&mut row);
     }
     row
 }

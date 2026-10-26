@@ -9,6 +9,7 @@ mod listing_stores;
 mod opencode_v2_store;
 mod redaction;
 mod redaction_gaps;
+mod session_titles;
 mod session_transcripts;
 mod spool_and_transport;
 mod spool_recovery;
