@@ -58,6 +58,13 @@ async fn redirects_follow_a_second_merge() -> TestResult {
 }
 
 #[tokio::test]
+async fn suggestions_hold_until_the_session_is_placed() -> TestResult {
+    let (_directory, store) = store()?;
+    topics::suggestions_hold_until_the_session_is_placed(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn listings_count_sessions_and_take_last_activity_from_conversations() -> TestResult {
     let (_directory, store) = store()?;
     let busy = store.create(topics::new_topic("Busy", &[], None)?).await?;

@@ -103,9 +103,20 @@ pub struct TopicPlacement {
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct TopicSuggestion {
+    pub name: String,
+    #[serde(default)]
+    pub topic_id: Option<String>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct PlacementReply {
     #[serde(default)]
     pub placement: Option<TopicPlacement>,
+    #[serde(default)]
+    pub suggestion: Option<TopicSuggestion>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

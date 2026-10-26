@@ -72,6 +72,12 @@ pub struct NewSummary {
     pub child_ids: Vec<Uuid>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SummaryWrite {
+    FirstLeaf,
+    Added,
+}
+
 #[derive(Debug, Error)]
 pub enum SummaryStoreError {
     #[error("summary store query failed: {message}")]
@@ -97,5 +103,5 @@ pub trait SummaryStore: Send + Sync {
 
     async fn pending(&self) -> Result<Vec<ConversationWindow>, SummaryStoreError>;
 
-    async fn write_summary(&self, summary: NewSummary) -> Result<(), SummaryStoreError>;
+    async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError>;
 }

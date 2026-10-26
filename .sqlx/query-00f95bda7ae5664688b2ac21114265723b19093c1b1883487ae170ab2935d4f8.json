@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE rh_session_suggestions SET topic_id = $2 WHERE topic_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "00f95bda7ae5664688b2ac21114265723b19093c1b1883487ae170ab2935d4f8"
+}

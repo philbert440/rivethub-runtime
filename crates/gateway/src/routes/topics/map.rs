@@ -3,6 +3,7 @@ use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
 use kernel::topics::Root;
+use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicListing;
@@ -11,6 +12,7 @@ use wire::gateway::topics::TopicDirectory;
 use wire::gateway::topics::TopicPlacement;
 use wire::gateway::topics::TopicRecord;
 use wire::gateway::topics::TopicSession;
+use wire::gateway::topics::TopicSuggestion;
 use wire::gateway::topics::TopicSummary;
 
 use crate::error::ApiError;
@@ -94,6 +96,13 @@ pub(super) fn placement(placement: Placement) -> TopicPlacement {
         topic_id: placement.topic.to_string(),
         by: placed_by(placement.by),
         at: placement.at,
+    }
+}
+
+pub(super) fn suggestion(suggestion: &Suggestion) -> TopicSuggestion {
+    TopicSuggestion {
+        name: suggestion.name.as_str().to_owned(),
+        topic_id: suggestion.topic.map(|topic| topic.to_string()),
     }
 }
 

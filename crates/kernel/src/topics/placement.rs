@@ -3,6 +3,7 @@ use chrono::Utc;
 use wire::session_id::SessionId;
 
 use super::TopicId;
+use super::TopicName;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
@@ -60,4 +61,11 @@ impl PlacementOutcome {
 pub struct PlacedSession {
     pub placement: Placement,
     pub last_active: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Suggestion {
+    pub session: SessionId,
+    pub name: TopicName,
+    pub topic: Option<TopicId>,
 }

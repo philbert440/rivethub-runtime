@@ -3,6 +3,8 @@ use chrono::TimeZone;
 use chrono::Utc;
 use kernel::topics::Alias;
 use kernel::topics::Change;
+use kernel::topics::FirstLeaf;
+use kernel::topics::Lineage;
 use kernel::topics::MergePlan;
 use kernel::topics::NewTopic;
 use kernel::topics::Placement;
@@ -20,6 +22,7 @@ use kernel::topics::TopicKey;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
+use kernel::topics::Verdict;
 use kernel::topics::check_parent;
 use kernel::topics::rank;
 use std::str::FromStr;
@@ -309,6 +312,129 @@ fn search_matches_prefixes_folded_slugs_aliases_and_redirects_by_recent_activity
     assert_eq!(
         rank(listings.clone(), &redirects, &TopicQuery::new(""), 1).len(),
         1
+    );
+    Ok(())
+}
+
+fn catalog(topics: &[&Topic]) -> Vec<TopicListing> {
+    topics
+        .iter()
+        .map(|topic| TopicListing {
+            topic: (*topic).clone(),
+            session_count: 0,
+            last_active: None,
+        })
+        .collect()
+}
+
+fn first_leaf<'a>(title: Option<&'a str>, summary: &'a str) -> FirstLeaf<'a> {
+    FirstLeaf {
+        placement: None,
+        lineage: Lineage::Root,
+        title,
+        summary,
+    }
+}
+
+#[test]
+fn the_categorizer_leaves_placed_and_child_sessions_alone() -> TestResult {
+    let desktop = topic("RivetHub Desktop", &[])?;
+    let topics = catalog(&[&desktop]);
+    let summary = "Fixed the RivetHub desktop window.";
+    let yours = placement(PlacementSource::You, desktop.id, 1)?;
+    let placed = FirstLeaf {
+        placement: Some(&yours),
+        ..first_leaf(None, summary)
+    };
+    assert_eq!(placed.categorize(&topics, &[])?, Verdict::AlreadyPlaced);
+    let child = FirstLeaf {
+        lineage: Lineage::Child,
+        ..first_leaf(None, summary)
+    };
+    assert_eq!(child.categorize(&topics, &[])?, Verdict::InheritsParent);
+    Ok(())
+}
+
+#[test]
+fn one_named_topic_is_a_clear_match() -> TestResult {
+    let runtime = topic("RivetHub", &[])?;
+    let mut desktop = topic("RivetHub Desktop", &["Tauri"])?;
+    desktop.parent = Some(runtime.id);
+    let gateway = topic("Gateway", &[])?;
+    let renamed = Redirect {
+        slug: Slug::fold("Mesh Gateway")?,
+        topic: gateway.id,
+    };
+    let topics = catalog(&[&runtime, &desktop, &gateway]);
+    let by_alias = first_leaf(None, "Moved the tauri shell to the new window API.");
+    assert_eq!(
+        by_alias.categorize(&topics, &[])?,
+        Verdict::Place(desktop.id)
+    );
+    let sub_topic = first_leaf(Some("RivetHub desktop menus"), "Reworked the menus.");
+    assert_eq!(
+        sub_topic.categorize(&topics, &[])?,
+        Verdict::Place(desktop.id)
+    );
+    let unrelated = catalog(&[&runtime, &desktop]);
+    let by_redirect = first_leaf(None, "Retried the mesh gateway handshake.");
+    assert_eq!(
+        by_redirect.categorize(&unrelated, &[])?,
+        Verdict::Suggest {
+            name: TopicName::new("Retried the mesh gateway handshake")?,
+            topic: None,
+        }
+    );
+    let redirected = Redirect {
+        topic: desktop.id,
+        ..renamed
+    };
+    assert_eq!(
+        by_redirect.categorize(&unrelated, &[redirected])?,
+        Verdict::Place(desktop.id)
+    );
+    Ok(())
+}
+
+#[test]
+fn unclear_sessions_get_a_suggestion_from_their_title() -> TestResult {
+    let desktop = topic("RivetHub Desktop", &[])?;
+    let gateway = topic("Gateway", &[])?;
+    let short = topic("UI", &[])?;
+    let topics = catalog(&[&desktop, &gateway, &short]);
+    let both = first_leaf(
+        None,
+        "Wired the gateway into RivetHub Desktop. The gateway now retries.",
+    );
+    assert_eq!(
+        both.categorize(&topics, &[])?,
+        Verdict::Suggest {
+            name: TopicName::new("Wired the gateway into RivetHub Desktop")?,
+            topic: None,
+        }
+    );
+    let titled = first_leaf(
+        Some("Gateway retries"),
+        "Tuned the RivetHub desktop and the gateway backoff.",
+    );
+    assert_eq!(
+        titled.categorize(&topics, &[])?,
+        Verdict::Suggest {
+            name: TopicName::new("Gateway retries")?,
+            topic: Some(gateway.id),
+        }
+    );
+    let unknown = first_leaf(None, "Cleaned up the ui and gatewayish code.");
+    assert_eq!(
+        unknown.categorize(&topics, &[])?,
+        Verdict::Suggest {
+            name: TopicName::new("Cleaned up the ui and gatewayish code")?,
+            topic: None,
+        }
+    );
+    assert_eq!(
+        first_leaf(None, "  ").categorize(&topics, &[])?,
+        Verdict::Untitled
     );
     Ok(())
 }

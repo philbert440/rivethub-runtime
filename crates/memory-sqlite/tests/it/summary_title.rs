@@ -6,6 +6,7 @@ use common::instant;
 use kernel::memory::NewSummary;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummaryStore;
+use kernel::memory::SummaryWrite;
 use memory_sqlite::SqliteStore;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
@@ -20,18 +21,20 @@ async fn the_first_leaf_titles_an_untitled_conversation_once() -> TestResult {
     let fresh = fresh_store(None)?;
     let conversation = Uuid::new_v4();
     seed_conversation(&fresh.store, conversation, None).await?;
-    fresh
+    let first = fresh
         .store
         .write_summary(leaf(conversation, FIRST_LEAF, "2026-10-10T12:00:00Z")?)
         .await?;
+    assert_eq!(first, SummaryWrite::FirstLeaf);
     assert_eq!(
         title(&fresh.store, conversation).await?.as_deref(),
         Some("Investigated the billing timeout on the payment host.")
     );
-    fresh
+    let second = fresh
         .store
         .write_summary(leaf(conversation, SECOND_LEAF, "2026-10-10T13:00:00Z")?)
         .await?;
+    assert_eq!(second, SummaryWrite::Added);
     assert_eq!(
         title(&fresh.store, conversation).await?.as_deref(),
         Some("Investigated the billing timeout on the payment host.")

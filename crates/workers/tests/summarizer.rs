@@ -25,6 +25,7 @@ use kernel::memory::SummaryKind;
 use kernel::memory::SummaryNode;
 use kernel::memory::SummaryStore;
 use kernel::memory::SummaryStoreError;
+use kernel::memory::SummaryWrite;
 use kernel::memory::WindowMessage;
 use kernel::model::Embedding;
 use kernel::model::ModelProvider;

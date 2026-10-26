@@ -54,6 +54,7 @@ pub use summarize::BRANCH_SYSTEM_PROMPT;
 pub use summarize::DEAD_REST;
 pub use summarize::LEAF_SYSTEM_PROMPT;
 pub use summarize::ROOT_SYSTEM_PROMPT;
+pub use summarize::SessionTopics;
 pub use summarize::SummarizeEnv;
 pub use summarize::SummarizeOutcome;
 pub use summarize::SummaryHealth;

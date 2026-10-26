@@ -2,6 +2,7 @@ use kernel::topics::Alias;
 use kernel::topics::MergePlan;
 use kernel::topics::Placement;
 use kernel::topics::Root;
+use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
@@ -179,6 +180,14 @@ pub(super) async fn fold_into(
     .execute(&mut *conn)
     .await
     .map_err(failed("topic merge redirects"))?;
+    sqlx::query!(
+        "UPDATE rh_session_suggestions SET topic_id = $2 WHERE topic_id = $1",
+        source,
+        into
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(failed("topic merge suggestions"))?;
     sqlx::query!("DELETE FROM rh_topic_aliases WHERE topic_id = $1", source)
         .execute(&mut *conn)
         .await
@@ -256,5 +265,31 @@ pub(super) async fn placement(
     .execute(&mut *conn)
     .await
     .map_err(failed("session placement write"))?;
+    sqlx::query!(
+        "DELETE FROM rh_session_suggestions WHERE session_id = $1",
+        placement.session.as_str()
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(failed("session suggestion clear"))?;
+    Ok(())
+}
+
+pub(super) async fn suggestion(
+    conn: &mut PgConnection,
+    suggestion: &Suggestion,
+) -> Result<(), TopicError> {
+    sqlx::query!(
+        "INSERT INTO rh_session_suggestions (session_id, name, topic_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (session_id) DO UPDATE SET name = EXCLUDED.name,
+                                                topic_id = EXCLUDED.topic_id",
+        suggestion.session.as_str(),
+        suggestion.name.as_str(),
+        suggestion.topic.map(TopicId::uuid)
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(failed("session suggestion write"))?;
     Ok(())
 }

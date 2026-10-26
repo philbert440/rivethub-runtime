@@ -7464,6 +7464,23 @@
         "at"
       ]
     },
+    "TopicSuggestion": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
     "PlacementReply": {
       "type": "object",
       "properties": {
@@ -7471,6 +7488,16 @@
           "anyOf": [
             {
               "$ref": "#/$defs/TopicPlacement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "suggestion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TopicSuggestion"
             },
             {
               "type": "null"

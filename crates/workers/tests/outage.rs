@@ -313,7 +313,7 @@ impl kernel::memory::SummaryStore for IdleSummaries {
     async fn write_summary(
         &self,
         _summary: kernel::memory::NewSummary,
-    ) -> Result<(), kernel::memory::SummaryStoreError> {
+    ) -> Result<kernel::memory::SummaryWrite, kernel::memory::SummaryStoreError> {
         Err(kernel::memory::SummaryStoreError::Closed)
     }
 }

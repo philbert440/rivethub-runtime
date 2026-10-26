@@ -4,6 +4,7 @@ use kernel::memory::NewSummary;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummaryNode;
 use kernel::memory::SummarySource;
+use kernel::memory::SummaryWrite;
 use kernel::memory::WindowMessage;
 use uuid::Uuid;
 use wire::stream::openai::FinishReason;
@@ -50,7 +51,18 @@ pub(super) async fn write_leaves(
         let summary_id = summary.id;
         let conversation_id = summary.conversation_id;
         let node = node_from(&summary);
-        env.store.write_summary(summary).await?;
+        let stored = env.store.write_summary(summary).await?;
+        if stored == SummaryWrite::FirstLeaf
+            && let Some(topics) = env.topics
+        {
+            super::topic::best_effort_categorize(
+                topics,
+                &window.conversation,
+                &node.content,
+                env.now,
+            )
+            .await;
+        }
         if env.settings.session_tagging {
             enqueue_tags(env, summary_id, conversation_id).await?;
         }

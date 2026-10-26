@@ -3,8 +3,8 @@ use crate::embed::{EmbedSettings, handle_embed};
 use crate::error::WorkerError;
 use crate::role::ProcessRole;
 use crate::summarize::{
-    SummarizeEnv, SummarySettings, handle_enqueue_idle, handle_enqueue_stale, handle_reap,
-    handle_summarize,
+    SessionTopics, SummarizeEnv, SummarySettings, handle_enqueue_idle, handle_enqueue_stale,
+    handle_reap, handle_summarize,
 };
 use crate::wiki_builder::{
     WikiBuilderDeps, WikiBuilderEnv, handle_consolidate_wiki, handle_extract_wiki,
@@ -30,6 +30,7 @@ pub(crate) struct JobEnv {
     pub(crate) embed: EmbedSettings,
     pub(crate) summary: SummarySettings,
     pub(crate) tags: TagSettings,
+    pub(crate) topics: Option<SessionTopics>,
 }
 
 pub(crate) async fn dispatch<Q: JobQueue>(
@@ -45,6 +46,7 @@ pub(crate) async fn dispatch<Q: JobQueue>(
         settings: &env.summary,
         now: Utc::now(),
         cancel,
+        topics: env.topics.as_ref(),
     };
     match &job.name {
         JobName::Fixed(FixedJob::ExtractWiki | FixedJob::EnqueueWikiBackfill) => {

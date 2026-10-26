@@ -8,6 +8,7 @@ use kernel::memory::SummaryKind;
 use kernel::memory::SummaryNode;
 use kernel::memory::SummaryStore;
 use kernel::memory::SummaryStoreError;
+use kernel::memory::SummaryWrite;
 use kernel::memory::WindowMessage;
 use sqlx::PgPool;
 use sqlx::Row;
@@ -55,6 +56,9 @@ const INSERT_SQL: &str = "insert into rh_summaries (
 
 const SOURCE_SQL: &str = "insert into rh_summary_sources (summary_id, message_id, ordinal)
     values ($1, $2, $3)";
+
+const LEAVES_SQL: &str = "select count(*) from rh_summaries
+    where conversation_id = $1 and kind = $2";
 
 const PARENT_SQL: &str = "update rh_summaries
     set parent_id = $1
@@ -118,7 +122,7 @@ impl SummaryStore for PostgresMemory {
         Ok(windows)
     }
 
-    async fn write_summary(&self, summary: NewSummary) -> Result<(), SummaryStoreError> {
+    async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError> {
         let message_count =
             i32::try_from(summary.message_count).map_err(|_| SummaryStoreError::Count)?;
         let mut tx = self
@@ -164,18 +168,31 @@ impl SummaryStore for PostgresMemory {
                 });
             }
         }
-        if summary.kind == SummaryKind::Leaf {
+        let written = if summary.kind == SummaryKind::Leaf {
             crate::title::title_from_first_leaf(&mut tx, summary.conversation_id)
                 .await
                 .map_err(|error| SummaryStoreError::Query {
                     message: error.to_string(),
                     source: Box::new(error),
                 })?;
-        }
+            let leaves: i64 = sqlx::query_scalar(LEAVES_SQL)
+                .bind(summary.conversation_id)
+                .bind(SummaryKind::Leaf.as_str())
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|source| query_err("count leaves", source))?;
+            if leaves == 1 {
+                SummaryWrite::FirstLeaf
+            } else {
+                SummaryWrite::Added
+            }
+        } else {
+            SummaryWrite::Added
+        };
         tx.commit()
             .await
             .map_err(|source| query_err("commit summary write", source))?;
-        Ok(())
+        Ok(written)
     }
 }
 

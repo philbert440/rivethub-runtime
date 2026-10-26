@@ -226,13 +226,15 @@ async fn placement(
     Path(segment): Path<String>,
 ) -> Result<Json<PlacementReply>, ApiError> {
     let session = canonical(&segment)?;
-    let current = gateway
-        .topics()?
-        .placement(&session)
-        .await
-        .map_err(map::error)?;
+    let store = gateway.topics()?;
+    let current = store.placement(&session).await.map_err(map::error)?;
+    let suggestion = match current {
+        Some(_) => None,
+        None => store.suggestion(&session).await.map_err(map::error)?,
+    };
     Ok(Json(PlacementReply {
         placement: current.map(map::placement),
+        suggestion: suggestion.as_ref().map(map::suggestion),
     }))
 }
 
@@ -255,6 +257,7 @@ async fn place(
         .map_err(map::error)?;
     Ok(Json(PlacementReply {
         placement: Some(map::placement(outcome.into_placement())),
+        suggestion: None,
     }))
 }
 
@@ -268,5 +271,8 @@ async fn unplace(
         .unplace(&session)
         .await
         .map_err(map::error)?;
-    Ok(Json(PlacementReply { placement: None }))
+    Ok(Json(PlacementReply {
+        placement: None,
+        suggestion: None,
+    }))
 }
