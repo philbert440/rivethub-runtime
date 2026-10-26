@@ -21,6 +21,7 @@ const NODE: &str = "golden-node";
 struct Lab {
     gateway: Arc<gateway::Gateway>,
     mux: Arc<Mux>,
+    harness: Arc<session_support::harness::Harness>,
     root: tempfile::TempDir,
 }
 
@@ -39,6 +40,7 @@ impl Lab {
             Duration::from_secs(1),
         ));
         let mux = Arc::new(Mux::default());
+        let harness = Arc::new(session_support::harness::Harness::default());
         let commands = [
             ("shell", None),
             ("claude", Some(HarnessId::ClaudeCode)),
@@ -66,7 +68,8 @@ impl Lab {
             },
         )
         .await
-        .expect("terminal service");
+        .expect("terminal service")
+        .with_harness(harness.clone());
         let gateway = Arc::new(
             gateway::Gateway::new(
                 Arc::new(testkit::FakeMemoryStore::default()),
@@ -94,7 +97,12 @@ impl Lab {
             .with_sessions(registry)
             .with_terminal(Arc::new(service)),
         );
-        Self { gateway, mux, root }
+        Self {
+            gateway,
+            mux,
+            harness,
+            root,
+        }
     }
 
     fn path(&self, relative: &str) -> PathBuf {
@@ -389,5 +397,39 @@ async fn spawn_takes_command_cwd_and_flags_from_the_preset() {
             ],
             normalized
         ))
+    );
+}
+
+#[tokio::test]
+async fn chat_starts_in_the_agent_home_outside_the_terminal_root() {
+    let home = tempfile::tempdir().expect("agent home");
+    let lab = Lab::open(&[preset("p-one", |p| {
+        p.model = "opus".to_owned();
+        p.directory = Some(directory(home.path(), "p-one"));
+    })])
+    .await;
+    let (status, body) = http(
+        &lab.gateway,
+        "POST",
+        "/api/harness-sessions",
+        br#"{"agentId":"p-one"}"#.to_vec(),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    let summary: wire::harness::HarnessSessionSummary =
+        serde_json::from_slice(&body).expect("summary");
+    let started = home.path().join("p-one");
+    assert_eq!(summary.harness_id, HarnessId::ClaudeCode);
+    assert_eq!(summary.agent_name.as_deref(), Some("Agent p-one"));
+    assert_eq!(summary.model.as_deref(), Some("opus"));
+    assert_eq!(summary.cwd, started.to_str().map(str::to_owned));
+    let specs = lab.harness.specs.lock().clone();
+    assert_eq!(
+        specs
+            .iter()
+            .map(|spec| spec.working_dir.clone())
+            .collect::<Vec<_>>(),
+        vec![Some(started)]
     );
 }
