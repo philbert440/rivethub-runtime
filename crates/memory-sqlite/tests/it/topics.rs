@@ -1,0 +1,140 @@
+use kernel::topics::Placement;
+use kernel::topics::PlacementSource;
+use kernel::topics::TopicStore;
+use memory_sqlite::SqliteStore;
+use tempfile::TempDir;
+use testkit::topics;
+
+use crate::common::TestResult;
+
+fn store() -> TestResult<(TempDir, SqliteStore)> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("memory.sqlite");
+    migrate::sqlite(&path)?;
+    let store = SqliteStore::open(&path)?;
+    Ok((directory, store))
+}
+
+#[tokio::test]
+async fn topics_are_created_found_and_renamed() -> TestResult {
+    let (_directory, store) = store()?;
+    topics::topics_are_created_found_and_renamed(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn slugs_and_aliases_are_unique_across_topics() -> TestResult {
+    let (_directory, store) = store()?;
+    topics::slugs_and_aliases_are_unique_across_topics(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn sub_topics_stay_one_level_deep() -> TestResult {
+    let (_directory, store) = store()?;
+    topics::sub_topics_stay_one_level_deep(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn placements_keep_your_choice() -> TestResult {
+    let (_directory, store) = store()?;
+    topics::placements_keep_your_choice(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn merges_move_placements_aliases_and_slugs() -> TestResult {
+    let (_directory, store) = store()?;
+    topics::merges_move_placements_aliases_and_slugs(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn redirects_follow_a_second_merge() -> TestResult {
+    let (_directory, store) = store()?;
+    topics::redirects_follow_a_second_merge(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn listings_count_sessions_and_take_last_activity_from_conversations() -> TestResult {
+    let (_directory, store) = store()?;
+    let busy = store.create(topics::new_topic("Busy", &[], None)?).await?;
+    let quiet = store.create(topics::new_topic("Quiet", &[], None)?).await?;
+    store.create(topics::new_topic("Empty", &[], None)?).await?;
+    let first = topics::session("00000000-0000-4000-8000-000000000011")?;
+    let second = topics::session("00000000-0000-4000-8000-000000000012")?;
+    let uncaptured = topics::session("00000000-0000-4000-8000-000000000013")?;
+    for (session, topic) in [
+        (&first, busy.id),
+        (&second, busy.id),
+        (&uncaptured, quiet.id),
+    ] {
+        store
+            .place(Placement {
+                session: session.clone(),
+                topic,
+                by: PlacementSource::You,
+                at: topics::at(1),
+            })
+            .await?;
+    }
+    let keys = [first.to_string(), second.to_string()];
+    store
+        .with_conn(move |conn| {
+            for (index, (key, agent, updated)) in [
+                (&keys[0], "opus", "2026-10-02T09:00:00.000Z"),
+                (&keys[0], "grok", "2026-10-03T09:00:00.000Z"),
+                (&keys[1], "opus", "2026-10-01T09:00:00.000Z"),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                conn.execute(
+                    "INSERT INTO ros_conversations (id, session_key, agent, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?4)",
+                    rusqlite::params![
+                        format!("00000000-0000-4000-8000-00000000010{index}"),
+                        key,
+                        agent,
+                        updated
+                    ],
+                )
+                .map_err(|source| memory_sqlite::SqliteError::Query {
+                    operation: "seed conversations",
+                    source,
+                })?;
+            }
+            Ok(())
+        })
+        .await?;
+    let listed = store.list().await?;
+    let summary: Vec<(&str, u64, Option<String>)> = listed
+        .iter()
+        .map(|listing| {
+            (
+                listing.topic.name.as_str(),
+                listing.session_count,
+                listing.last_active.map(|at| at.to_rfc3339()),
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        [
+            ("Busy", 2, Some("2026-10-03T09:00:00+00:00".to_owned())),
+            ("Empty", 0, None),
+            ("Quiet", 1, None),
+        ]
+    );
+    let sessions = store.sessions(busy.id).await?;
+    assert_eq!(
+        sessions
+            .iter()
+            .map(|placed| placed.placement.session.clone())
+            .collect::<Vec<_>>(),
+        [first, second]
+    );
+    Ok(())
+}

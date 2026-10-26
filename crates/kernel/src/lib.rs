@@ -11,6 +11,7 @@ pub mod task_spec;
 pub mod tasks;
 pub mod terminal;
 pub mod tool;
+pub mod topics;
 pub mod transcript;
 pub mod wiki;
 
