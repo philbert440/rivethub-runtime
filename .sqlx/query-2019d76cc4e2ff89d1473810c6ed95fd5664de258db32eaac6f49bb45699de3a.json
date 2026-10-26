@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE rh_session_placements SET topic_id = $2 WHERE topic_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2019d76cc4e2ff89d1473810c6ed95fd5664de258db32eaac6f49bb45699de3a"
+}

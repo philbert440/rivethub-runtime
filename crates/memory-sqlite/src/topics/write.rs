@@ -1,0 +1,169 @@
+use kernel::topics::MergePlan;
+use kernel::topics::Placement;
+use kernel::topics::Root;
+use kernel::topics::Topic;
+use kernel::topics::TopicError;
+use rusqlite::Connection;
+use rusqlite::OptionalExtension as _;
+use rusqlite::params;
+
+use super::rows::failed;
+use crate::time;
+
+pub(super) fn claim_names(conn: &Connection, topic: &Topic) -> Result<(), TopicError> {
+    let id = topic.id.to_string();
+    let slug_taken = conn
+        .query_row(
+            "SELECT 1 FROM rh_topics WHERE slug = ?1 AND id <> ?2",
+            params![topic.slug.as_str(), id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(failed("topic slug check"))?;
+    if slug_taken.is_some() {
+        return Err(TopicError::SlugTaken {
+            slug: topic.slug.clone(),
+        });
+    }
+    for alias in &topic.aliases {
+        let owner = conn
+            .query_row(
+                "SELECT alias FROM rh_topic_aliases WHERE alias_key = ?1 AND topic_id <> ?2",
+                params![alias.key(), id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(failed("topic alias check"))?;
+        if let Some(alias) = owner {
+            return Err(TopicError::AliasTaken { alias });
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn insert(conn: &Connection, topic: &Topic) -> Result<(), TopicError> {
+    let directory = topic.directory.as_ref();
+    conn.execute(
+        "INSERT INTO rh_topics (id, slug, name, parent_id, directory_kind, directory_node,
+                                directory_path, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            topic.id.to_string(),
+            topic.slug.as_str(),
+            topic.name.as_str(),
+            topic.parent.map(|parent| parent.to_string()),
+            directory.map(|root| root.kind().to_string()),
+            directory.and_then(Root::node),
+            directory.map(Root::path),
+            time::stamp(topic.created_at),
+            time::stamp(topic.updated_at),
+        ],
+    )
+    .map_err(failed("topic create"))?;
+    Ok(())
+}
+
+pub(super) fn row(conn: &Connection, topic: &Topic) -> Result<(), TopicError> {
+    let directory = topic.directory.as_ref();
+    conn.execute(
+        "UPDATE rh_topics
+            SET slug = ?2, name = ?3, parent_id = ?4, directory_kind = ?5, directory_node = ?6,
+                directory_path = ?7, updated_at = ?8
+          WHERE id = ?1",
+        params![
+            topic.id.to_string(),
+            topic.slug.as_str(),
+            topic.name.as_str(),
+            topic.parent.map(|parent| parent.to_string()),
+            directory.map(|root| root.kind().to_string()),
+            directory.and_then(Root::node),
+            directory.map(Root::path),
+            time::stamp(topic.updated_at),
+        ],
+    )
+    .map_err(failed("topic update"))?;
+    Ok(())
+}
+
+pub(super) fn aliases(conn: &Connection, topic: &Topic) -> Result<(), TopicError> {
+    let id = topic.id.to_string();
+    conn.execute(
+        "DELETE FROM rh_topic_aliases WHERE topic_id = ?1",
+        params![id],
+    )
+    .map_err(failed("topic aliases"))?;
+    for alias in &topic.aliases {
+        conn.execute(
+            "INSERT INTO rh_topic_aliases (topic_id, alias, alias_key) VALUES (?1, ?2, ?3)",
+            params![id, alias.as_str(), alias.key()],
+        )
+        .map_err(failed("topic aliases"))?;
+    }
+    Ok(())
+}
+
+pub(super) fn fold_into(
+    conn: &Connection,
+    plan: &MergePlan,
+    merged: &Topic,
+) -> Result<(), TopicError> {
+    let source = plan.source.to_string();
+    let into = plan.into.to_string();
+    let now = time::stamp(merged.updated_at);
+    conn.execute(
+        "UPDATE rh_session_placements SET topic_id = ?2 WHERE topic_id = ?1",
+        params![source, into],
+    )
+    .map_err(failed("topic merge placements"))?;
+    conn.execute(
+        "UPDATE rh_topic_redirects SET topic_id = ?2 WHERE topic_id = ?1",
+        params![source, into],
+    )
+    .map_err(failed("topic merge redirects"))?;
+    conn.execute(
+        "DELETE FROM rh_topic_aliases WHERE topic_id = ?1",
+        params![source],
+    )
+    .map_err(failed("topic merge aliases"))?;
+    for subtopic in &plan.subtopics {
+        conn.execute(
+            "UPDATE rh_topics SET parent_id = ?2, updated_at = ?3 WHERE id = ?1",
+            params![subtopic.to_string(), into, now],
+        )
+        .map_err(failed("topic merge sub-topics"))?;
+    }
+    row(conn, merged)?;
+    aliases(conn, merged)?;
+    conn.execute("DELETE FROM rh_topics WHERE id = ?1", params![source])
+        .map_err(failed("topic merge delete"))?;
+    conn.execute(
+        "INSERT INTO rh_topic_redirects (slug, topic_id, created_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT (slug) DO UPDATE SET topic_id = excluded.topic_id,
+                                          created_at = excluded.created_at",
+        params![
+            plan.redirect.slug.as_str(),
+            plan.redirect.topic.to_string(),
+            now
+        ],
+    )
+    .map_err(failed("topic merge redirect"))?;
+    Ok(())
+}
+
+pub(super) fn placement(conn: &Connection, placement: &Placement) -> Result<(), TopicError> {
+    conn.execute(
+        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (session_id) DO UPDATE SET topic_id = excluded.topic_id,
+                                                placed_by = excluded.placed_by,
+                                                placed_at = excluded.placed_at",
+        params![
+            placement.session.as_str(),
+            placement.topic.to_string(),
+            placement.by.to_string(),
+            time::stamp(placement.at),
+        ],
+    )
+    .map_err(failed("session placement write"))?;
+    Ok(())
+}

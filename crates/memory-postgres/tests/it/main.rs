@@ -19,6 +19,7 @@ mod tags;
 mod task_query;
 mod task_spec;
 mod tasks;
+mod topics;
 mod vector_search;
 mod verify;
 mod wiki_writer;

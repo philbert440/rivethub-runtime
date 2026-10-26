@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE rh_topic_redirects SET topic_id = $2 WHERE topic_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d280fc070a715fc72d8243fbd62710df919eadc0d86cd9dde426ca1e92ff481d"
+}

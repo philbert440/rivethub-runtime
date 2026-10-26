@@ -31,5 +31,6 @@ mod summary_dag;
 mod summary_title;
 mod task_query;
 mod task_spec;
+mod topics;
 mod unembedded_sweep;
 mod wiki_consolidate;

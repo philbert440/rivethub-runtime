@@ -34,6 +34,9 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         }),
         SchemaVersion::V9 => rewrite_legacy_summary_kinds(conn),
         SchemaVersion::V10 => in_transaction(conn, to, crate::ids::canonicalize),
+        SchemaVersion::V11 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/topics_v11.sql"))
+        }),
     }
 }
 
