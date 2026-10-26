@@ -14,7 +14,7 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 
 | # | Boundary | Who observes it | Spec (inventory) | Pinned by (recording) | Acceptance test |
 |---|---|---|---|---|---|
-| B1 | Gateway HTTP + WS API (`/api/*`, `/files/*`, `/term`, `/event(s)`, `/sessions`, `/state`, `/layout`, `/healthz`, `/mesh.json`, static SPA, `/ws`, `/v1` OpenAI-compatible) | RivetHub web/Android/Electron, hooks, mesh peers, scripts | gateway-api.md §2–§17 (route table §4, aliases §5) | `golden/gateway/` (28 files, recorded traffic incl. startup refusals) + `golden/term/` (17) | replay every recorded exchange: same status, headers (names case-insensitive), body; WS frames in order |
+| B1 | Gateway HTTP + WS API (`/api/*`, `/files/*`, `/term`, `/event(s)`, `/sessions`, `/state`, `/layout`, `/healthz`, `/mesh.json`, static SPA, `/ws`, `/v1` OpenAI-compatible; the Topics routes `GET/POST /api/topics`, `GET /api/topics/search?q=`, `GET/PATCH /api/topics/{id}`, `POST /api/topics/{id}/merge`, `GET /api/topics/{id}/sessions` and `GET/PUT/DELETE /api/sessions/{session}/placement`) | RivetHub web/Android/Electron, hooks, mesh peers, scripts | gateway-api.md §2–§17 (route table §4, aliases §5) | `golden/gateway/` (28 files, recorded traffic incl. startup refusals) + `golden/term/` (17) | replay every recorded exchange: same status, headers (names case-insensitive), body; WS frames in order |
 | B2 | Session event stream v1 (`AgentEvent`, `v: 1`) and the room/session snapshot | RivetHub clients `/ws` clients, `POST /event(s)` producers | gateway-api.md §6, core-domain.md §1.10 | gateway + term recordings (events and snapshots) | accept/reject decisions and emitted snapshots identical on recorded inputs |
 | B3 | Capture ingest: hook payloads from every harness → `POST /api/capture` batch body | 10 harness integration kits (claude, codex, grok, kimi, qwen, opencode, hermes, pi, cursor, cowork) | data-layer.md §3.1–§3.6; harness-control-plane.md §3 | `golden/capture/` (22: pg arms), `golden/capture-zod/` (batch validation) | same rows written for the same hook input; same validation errors |
 | B4 | Postgres schema and data (`rh_*` tables, migrations 0001–0020 including `0020_tag_removals`, then 0021 renames `ros_*` to `rh_*` with `ros_*` views over them, views, triggers, graphile_worker jobs). Migrations are applied only by `rivethub-migrate postgres`, which then requires every migration file name in `_rivetos_migrations`; the runtime verifies one schema version (`memory_postgres::SCHEMA_VERSION`) at connect — equal ok, newer ok with one warning, no `_sqlx_migrations` table a `NotAdopted` error (one `rivethub-migrate postgres` adopts it, including a database whose history is only `_rivetos_migrations`), behind a `SchemaBehind` error naming the migrate command — and runs no DDL | the live datahub, the TypeScript workers during cutover, operators | data-layer.md §1–§2 | `golden/capture/pg/` (30 scenarios), `golden/memory/` | Rust migrates a 0001-era DB to the same schema; writes rows the TypeScript reads and vice versa; enqueues the same jobs with the same keys |
@@ -130,6 +130,14 @@ TypeScript validated them but did not). Nothing is redacted unless enabled.
 (16) Memory search (B6, B7) narrows message hits by `role` and `tool_name` on `GET /api/memory/search`, the
 `memory_search` tool route and the MCP `memory_search` schema; summaries carry neither and stay in the result unless
 `scope` excludes them (Phil, 2026-10-19).
+(17) Topics (Phil, 2026-10-25): a topic is a themed group of sessions with a stable UUID, a unique slug folded from
+its name, aliases unique across topics (case-insensitive), an optional parent one level deep and an optional directory
+(`local` on a node or `shared`). A session has at most one placement, made by `you` or the `categorizer`; the
+categorizer never replaces your placement, and unplacing returns the session to Forming. Merging A into B moves A's
+placements, sub-topics and aliases to B and keeps A's slug resolving to B. The B1 Topics routes are new, with no
+TypeScript recording; `{id}` takes a topic id or slug and `{session}` is the base64url session segment. Their
+bodies are the `wire::gateway::topics` types in `contract/*.schema.json`, and `lastActive` is the newest captured
+conversation update of the topic's sessions.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

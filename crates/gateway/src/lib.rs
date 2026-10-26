@@ -248,6 +248,7 @@ pub struct Gateway {
     tasks: Option<Arc<routes::tasks::TasksApi>>,
     providers: Vec<kernel::model::ProviderHealth>,
     memory_export: Option<Arc<dyn kernel::memory::MemoryExport>>,
+    topics: Option<Arc<dyn kernel::topics::TopicStore>>,
 }
 
 impl Gateway {
@@ -285,6 +286,7 @@ impl Gateway {
             tasks: None,
             providers: Vec::new(),
             memory_export: None,
+            topics: None,
         }
     }
 
@@ -301,6 +303,18 @@ impl Gateway {
     pub fn with_memory_export(mut self, export: Arc<dyn kernel::memory::MemoryExport>) -> Self {
         self.memory_export = Some(export);
         self
+    }
+
+    #[must_use]
+    pub fn with_topics(mut self, store: Arc<dyn kernel::topics::TopicStore>) -> Self {
+        self.topics = Some(store);
+        self
+    }
+
+    pub(crate) fn topics(&self) -> Result<&Arc<dyn kernel::topics::TopicStore>, error::ApiError> {
+        self.topics
+            .as_ref()
+            .ok_or_else(|| error::ApiError::Unavailable("topic store unavailable".into()))
     }
 
     pub(crate) fn memory_export(&self) -> Option<&Arc<dyn kernel::memory::MemoryExport>> {
