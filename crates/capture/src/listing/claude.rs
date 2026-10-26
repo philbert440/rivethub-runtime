@@ -3,9 +3,11 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 
+use kernel::transcript::SessionRenameError;
 use kernel::transcript::StoreSession;
 use kernel::transcript::TranscriptReaderError;
 use serde::Deserialize;
+use serde::Serialize;
 use wire::harness::HarnessId;
 
 use super::ancestors::with_ancestors;
@@ -14,6 +16,7 @@ use super::field::first_present;
 use super::field::object_line;
 use super::field::text_of;
 use super::files::Entry;
+use super::files::append_line;
 use super::files::directories;
 use super::files::entries;
 use super::files::file_times;
@@ -22,7 +25,9 @@ use super::files::head;
 use super::files::newest_per_key;
 use super::files::open_store;
 use super::files::regular_file;
+use super::files::tail;
 use super::files::whole_file;
+use super::files::write_failure;
 use super::text::clip;
 use super::text::clip_field;
 use super::text::is_uuid;
@@ -30,12 +35,14 @@ use super::text::non_empty;
 use super::text::segment_safe;
 use super::text::strip_paste;
 use super::time::FileTimes;
+use super::title::HarnessTitles;
 use crate::store_path::Root;
 
 const HEAD_WINDOW: u64 = 65_536;
 const TITLE_CHARS: usize = 120;
 const AGENT_CHARS: usize = 64;
 const MODEL_CHARS: usize = 80;
+const NAMING_MARKER: &str = "-title\"";
 
 #[derive(Debug, Clone)]
 struct Transcript {
@@ -65,6 +72,8 @@ impl Transcript {
             let labels = agent_labels(&self.path);
             row.agent_name = non_empty(labels.agent_name);
             row.model = non_empty(labels.model);
+        } else {
+            harness_titles(&self.path).apply(row);
         }
     }
 }
@@ -229,6 +238,63 @@ pub(crate) fn claude_title(path: &Path) -> String {
         }
     }
     String::new()
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
+enum NamingLine {
+    CustomTitle { custom_title: String },
+    AiTitle { ai_title: String },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename = "custom-title", rename_all = "camelCase")]
+struct CustomTitleLine<'a> {
+    custom_title: &'a str,
+    session_id: &'a str,
+}
+
+fn harness_titles(path: &Path) -> HarnessTitles {
+    let mut titles = HarnessTitles::default();
+    let windows = [head(path, HEAD_WINDOW), tail(path, HEAD_WINDOW)];
+    for line in windows.iter().flatten().flat_map(|text| text.lines()) {
+        if !line.contains(NAMING_MARKER) {
+            continue;
+        }
+        match object_line::<NamingLine>(line) {
+            Some(NamingLine::CustomTitle { custom_title }) => titles.manual(&custom_title),
+            Some(NamingLine::AiTitle { ai_title }) => titles.automatic(&ai_title),
+            None => {}
+        }
+    }
+    titles
+}
+
+pub(crate) fn rename(
+    root: &Path,
+    id: &str,
+    title: &str,
+) -> Result<Option<StoreSession>, SessionRenameError> {
+    if !is_uuid(id) {
+        return Ok(None);
+    }
+    let Some(store) = projects(root)? else {
+        return Ok(None);
+    };
+    let Some(file) = top_level_file(&store, id) else {
+        return Ok(None);
+    };
+    let line = serde_json::to_string(&CustomTitleLine {
+        custom_title: title,
+        session_id: id,
+    })
+    .map_err(|error| write_failure(&file.path, error.into()))?;
+    append_line(&file.path, &line).map_err(|error| write_failure(&file.path, error))?;
+    Ok(describe(root, id, None)?)
 }
 
 fn user_concat(message: &Field) -> String {
