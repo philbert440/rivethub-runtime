@@ -25,6 +25,7 @@ use kernel::transcript::ListLimit;
 use kernel::transcript::SessionLister;
 use kernel::transcript::SessionRenameError;
 use kernel::transcript::StoreSession;
+use kernel::transcript::ToolOutputRead;
 use kernel::transcript::TranscriptRead;
 use kernel::transcript::TranscriptReaderError;
 use wire::harness::HarnessId;
@@ -298,5 +299,14 @@ impl SessionLister for StoreSessionLister {
         let native = native.to_owned();
         let title = title.to_owned();
         blocking(move || Ok(rename_harness(&roots, &spawns, harness, &native, &title))).await?
+    }
+
+    async fn tool_output(
+        &self,
+        harness: HarnessId,
+        native: &str,
+        tool_call_id: &str,
+    ) -> Result<ToolOutputRead, TranscriptReaderError> {
+        history::tool_output(&self.roots, harness, native, tool_call_id).await
     }
 }

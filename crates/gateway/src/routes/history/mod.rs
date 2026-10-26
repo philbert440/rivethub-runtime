@@ -11,6 +11,7 @@ use chrono::Utc;
 use kernel::transcript::{ListLimit, SessionRenameError, StoreSession};
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTitleRequest, HarnessSessionTranscriptResponse,
+    HarnessToolOutput,
 };
 use wire::harness::{
     HarnessCode, HarnessId, HarnessSessionList, HarnessSessionSummary, HarnessStoreSessionList,
@@ -41,6 +42,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route(
             "/api/harness-sessions/{session}/title",
             put(rename).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/harness-sessions/{session}/tools/{tool}/output",
+            get(tool_output),
         )
 }
 
@@ -232,4 +237,22 @@ async fn rename(
         summary,
         redirected_to: resolved.redirected_to,
     }))
+}
+
+async fn tool_output(
+    State(gateway): State<Arc<Gateway>>,
+    user: UserId,
+    Path((segment, tool)): Path<(String, String)>,
+) -> Result<Json<HarnessToolOutput>, ApiError> {
+    let resolved = gateway
+        .history()
+        .resolve_canonical(&gateway, &segment)
+        .await?;
+    authorize(&gateway, &user, &resolved).await?;
+    Ok(Json(
+        gateway
+            .history()
+            .tool_output(&gateway, &resolved, &tool)
+            .await?,
+    ))
 }

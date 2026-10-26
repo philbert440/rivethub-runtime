@@ -9,8 +9,8 @@ use async_trait::async_trait;
 use futures::{SinkExt as _, StreamExt as _};
 use gateway::sessions::{SessionRegistry, owners_file};
 use kernel::transcript::{
-    ListLimit, SessionLister, SessionRenameError, StoreSession, StoreTranscript, TranscriptRead,
-    TranscriptReaderError,
+    ListLimit, SessionLister, SessionRenameError, StoreSession, StoreTranscript, ToolOutputRead,
+    TranscriptRead, TranscriptReaderError,
 };
 use parking_lot::Mutex;
 use session_support::harness::Harness;
@@ -106,6 +106,15 @@ impl SessionLister for Stores {
         _title: &str,
     ) -> Result<StoreSession, SessionRenameError> {
         Err(SessionRenameError::Unsupported(harness))
+    }
+
+    async fn tool_output(
+        &self,
+        _harness: HarnessId,
+        _native: &str,
+        _tool_call_id: &str,
+    ) -> Result<ToolOutputRead, TranscriptReaderError> {
+        Ok(ToolOutputRead::NoSource)
     }
 }
 

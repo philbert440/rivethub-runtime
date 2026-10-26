@@ -130,6 +130,14 @@ pub struct HarnessSessionResponse {
     pub redirected_to: Option<SessionId>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HarnessToolOutput {
+    pub text: String,
+    pub is_error: bool,
+    pub truncated: bool,
+}
+
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]

@@ -1,8 +1,12 @@
+use std::fs::File;
+use std::io::BufRead as _;
+use std::io::BufReader;
 use std::path::Path;
 
 use kernel::transcript::StoreTranscript;
 use kernel::transcript::TranscriptReaderError;
 use serde::Deserialize;
+use wire::gateway::sessions::HarnessToolOutput;
 use wire::gateway::sessions::HarnessTranscriptTool;
 use wire::gateway::sessions::HarnessTranscriptTurn;
 use wire::gateway::sessions::MessageUsage;
@@ -26,6 +30,7 @@ use super::tools::prompt_input;
 
 const THINKING_CHARS: usize = 8000;
 const RESULT_CHARS: usize = 2048;
+const OUTPUT_BYTES: usize = 64 * 1024;
 
 pub(crate) fn transcript(root: &Path, id: &str) -> Result<StoreTranscript, TranscriptReaderError> {
     let Some(path) = transcript_file(root, id)? else {
@@ -38,6 +43,66 @@ pub(crate) fn transcript(root: &Path, id: &str) -> Result<StoreTranscript, Trans
         turns: fold(&records, sidechains),
         truncated: window.truncated,
     })
+}
+
+pub(crate) fn tool_output(
+    root: &Path,
+    id: &str,
+    call: &str,
+) -> Result<Option<HarnessToolOutput>, TranscriptReaderError> {
+    let Some(path) = transcript_file(root, id)? else {
+        return Ok(None);
+    };
+    let file = File::open(&path).map_err(|error| read_failure(&path, error))?;
+    let mut reader = BufReader::new(file);
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        let read = reader
+            .read_until(b'\n', &mut line)
+            .map_err(|error| read_failure(&path, error))?;
+        if read == 0 {
+            return Ok(None);
+        }
+        let text = String::from_utf8_lossy(&line);
+        if !text.contains(call) {
+            continue;
+        }
+        if let Some(output) = object_line::<Record>(&text)
+            .filter(|record| record.kind() == Kind::User)
+            .and_then(|record| record_output(&record, call))
+        {
+            return Ok(Some(output));
+        }
+    }
+}
+
+fn record_output(record: &Record, call: &str) -> Option<HarnessToolOutput> {
+    let block = record
+        .body()?
+        .content?
+        .items()?
+        .iter()
+        .filter_map(Field::object::<Block>)
+        .find(|block| {
+            block.is("tool_result")
+                && block
+                    .tool_use_id
+                    .as_ref()
+                    .is_some_and(|id| id.is_text(call))
+        })?;
+    let text = result_text(record, &block).unwrap_or_default();
+    let truncated = text.len() > OUTPUT_BYTES;
+    Some(HarnessToolOutput {
+        text: if truncated { tail_bytes(&text) } else { text },
+        is_error: flagged(block.is_error.as_ref()),
+        truncated,
+    })
+}
+
+fn tail_bytes(text: &str) -> String {
+    let start = text.ceil_char_boundary(text.len().saturating_sub(OUTPUT_BYTES));
+    text.get(start..).unwrap_or_default().to_owned()
 }
 
 fn agent_file(path: &Path) -> bool {
@@ -352,7 +417,7 @@ impl Folder {
         };
         if is_prompt_tool(&tool.name) {
             tool.result_text =
-                prompt_result(record, block).map(|text| text.chars().take(RESULT_CHARS).collect());
+                result_text(record, block).map(|text| text.chars().take(RESULT_CHARS).collect());
         }
     }
 
@@ -466,19 +531,20 @@ fn content_pieces(content: Option<&Field>) -> Vec<Piece> {
         .collect()
 }
 
-fn prompt_result(record: &Record, block: &Block) -> Option<String> {
+fn result_text(record: &Record, block: &Block) -> Option<String> {
     if let Some(content) = block.content.as_ref() {
         if let Some(text) = content.text() {
             return Some(text);
         }
-        if let Some(text) = content
+        let parts: Vec<String> = content
             .items()
             .unwrap_or_default()
             .iter()
             .filter_map(Field::object::<Block>)
-            .find_map(|part| text_of(part.text.as_ref()))
-        {
-            return Some(text);
+            .filter_map(|part| text_of(part.text.as_ref()))
+            .collect();
+        if !parts.is_empty() {
+            return Some(parts.join("\n"));
         }
     }
     let result = record.tool_use_result.as_ref()?;

@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
+use wire::gateway::sessions::HarnessToolOutput;
 use wire::gateway::sessions::HarnessTranscriptTurn;
 use wire::harness::HarnessId;
 use wire::harness::HarnessSessionStatus;
@@ -222,6 +223,13 @@ pub enum TranscriptRead {
     NoSource,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolOutputRead {
+    Found(HarnessToolOutput),
+    Missing,
+    NoSource,
+}
+
 #[async_trait]
 pub trait SessionLister: Send + Sync {
     async fn list(&self, harnesses: &[HarnessId], limit: ListLimit) -> Vec<StoreSession>;
@@ -251,4 +259,11 @@ pub trait SessionLister: Send + Sync {
         native: &str,
         title: &str,
     ) -> Result<StoreSession, SessionRenameError>;
+
+    async fn tool_output(
+        &self,
+        harness: HarnessId,
+        native: &str,
+        tool_call_id: &str,
+    ) -> Result<ToolOutputRead, TranscriptReaderError>;
 }
