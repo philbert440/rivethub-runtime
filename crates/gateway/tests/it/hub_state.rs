@@ -9,7 +9,6 @@ use axum::Router;
 use gateway::Gateway;
 use gateway::tenancy::Tenancy;
 use serde_json::Value;
-use serde_json::json;
 use testkit::Request;
 use wire::events::SessionBroadcast;
 use wire::gateway::GatewayError;
@@ -37,7 +36,7 @@ fn opened(root: &Path) -> Result<Arc<Gateway>, Failure> {
 async fn exchange(
     app: &Router,
     method: &str,
-    body: &Value,
+    body: &str,
     token: Option<&str>,
 ) -> Result<testkit::Response, Failure> {
     let mut headers = vec![("Host".to_owned(), "127.0.0.1:5174".to_owned())];
@@ -48,11 +47,7 @@ async fn exchange(
         method: method.to_owned(),
         target: "/api/hub/state".to_owned(),
         headers,
-        body: if body.is_null() {
-            Vec::new()
-        } else {
-            serde_json::to_vec(body)?
-        },
+        body: body.as_bytes().to_vec(),
         recipe: None,
         via: None,
     };
@@ -62,7 +57,7 @@ async fn exchange(
 }
 
 async fn get(app: &Router, token: Option<&str>) -> Result<HubStateResponse, Failure> {
-    let response = exchange(app, "GET", &Value::Null, token).await?;
+    let response = exchange(app, "GET", "", token).await?;
     if response.status != 200 {
         return Err(format!(
             "GET {}: {}",
@@ -74,8 +69,12 @@ async fn get(app: &Router, token: Option<&str>) -> Result<HubStateResponse, Fail
     document(&response)
 }
 
-fn put(base: u64, state: &Value) -> Value {
-    json!({ "baseVersion": base, "state": state })
+fn put(base: u64, state: &str) -> String {
+    format!(r#"{{"baseVersion":{base},"state":{state}}}"#)
+}
+
+fn value(text: &str) -> Result<Value, Failure> {
+    Ok(serde_json::from_str(text)?)
 }
 
 fn document(response: &testkit::Response) -> Result<HubStateResponse, Failure> {
@@ -97,12 +96,9 @@ async fn a_put_advances_the_version_and_tells_the_users_sockets() -> TestResult 
     let gateway = opened(root.path())?;
     let (_, mut live) = gateway.sessions().subscribe(&user("owner"), None)?;
     let app = Arc::clone(&gateway).router(false);
-    let state = json!({
-        "projects": [{ "id": "p1", "name": "Code", "order": 0, "createdAt": 1 }],
-        "membership": { KEY: "p1" },
-        "names": { KEY: "Refactor" },
-        "lastSession": { "key": KEY, "at": 5 }
-    });
+    let state = format!(
+        r#"{{"projects":[{{"id":"p1","name":"Code","order":0,"createdAt":1}}],"membership":{{"{KEY}":"p1"}},"names":{{"{KEY}":"Refactor"}},"lastSession":{{"key":"{KEY}","at":5}}}}"#
+    );
     let saved = exchange(&app, "PUT", &put(0, &state), None).await?;
     assert_eq!(saved.status, 200);
     let saved = document(&saved)?;
@@ -117,10 +113,11 @@ async fn a_put_advances_the_version_and_tells_the_users_sockets() -> TestResult 
     assert!(matches!(&frame, SessionBroadcast::HubState(changed) if changed.version == 1));
     assert_eq!(
         serde_json::to_value(&frame)?,
-        json!({ "type": "hub.state", "v": 1, "version": 1 })
+        value(r#"{"type":"hub.state","v":1,"version":1}"#)?
     );
 
-    let next = exchange(&app, "PUT", &put(1, &json!({ "archived": [KEY] })), None).await?;
+    let archived = format!(r#"{{"archived":["{KEY}"]}}"#);
+    let next = exchange(&app, "PUT", &put(1, &archived), None).await?;
     assert_eq!(document(&next)?.version, 2);
     Ok(())
 }
@@ -129,10 +126,12 @@ async fn a_put_advances_the_version_and_tells_the_users_sockets() -> TestResult 
 async fn a_stale_put_conflicts_with_the_current_document() -> TestResult {
     let root = tempfile::tempdir()?;
     let app = opened(root.path())?.router(false);
-    let first = exchange(&app, "PUT", &put(0, &json!({ "pinned": [KEY] })), None).await?;
+    let pinned = format!(r#"{{"pinned":["{KEY}"]}}"#);
+    let hidden = format!(r#"{{"hidden":["{KEY}"]}}"#);
+    let first = exchange(&app, "PUT", &put(0, &pinned), None).await?;
     assert_eq!(first.status, 200);
     for stale in [0, 7] {
-        let late = exchange(&app, "PUT", &put(stale, &json!({ "hidden": [KEY] })), None).await?;
+        let late = exchange(&app, "PUT", &put(stale, &hidden), None).await?;
         assert_eq!(late.status, 409);
         let current = document(&late)?;
         assert_eq!(current.version, 1);
@@ -146,34 +145,36 @@ async fn a_stale_put_conflicts_with_the_current_document() -> TestResult {
 async fn the_stored_document_is_normalised() -> TestResult {
     let root = tempfile::tempdir()?;
     let app = opened(root.path())?.router(false);
-    let state = json!({
-        "projects": [
-            { "id": " p1 ", "name": " Code ", "order": 2.5, "createdAt": -4,
-              "defaults": { "directory": "relative/dir", "model": "  ", "effort": "high" } },
-            { "id": "p1", "name": "Duplicate" },
-            { "id": "p2", "name": "   " }
-        ],
-        "defaultProjectId": "gone",
-        "membership": { KEY: "p1", OTHER: "gone", "no-separator": "p1" },
-        "names": { KEY: "  Trimmed  ", OTHER: "" },
-        "archived": [KEY, KEY, "::missing-node"],
-        "modes": { KEY: "terminal" },
-        "lastSession": { "key": "bad", "at": 1 }
-    });
+    let state = format!(
+        r#"{{
+            "projects": [
+                {{ "id": " p1 ", "name": " Code ", "order": 2.5, "createdAt": -4,
+                   "defaults": {{ "directory": "relative/dir", "model": "  ", "effort": "high" }} }},
+                {{ "id": "p1", "name": "Duplicate" }},
+                {{ "id": "p2", "name": "   " }}
+            ],
+            "defaultProjectId": "gone",
+            "membership": {{ "{KEY}": "p1", "{OTHER}": "gone", "no-separator": "p1" }},
+            "names": {{ "{KEY}": "  Trimmed  ", "{OTHER}": "" }},
+            "archived": ["{KEY}", "{KEY}", "::missing-node"],
+            "modes": {{ "{KEY}": "terminal" }},
+            "lastSession": {{ "key": "bad", "at": 1 }}
+        }}"#
+    );
     let saved = document(&exchange(&app, "PUT", &put(0, &state), None).await?)?;
-    assert_eq!(
-        serde_json::to_value(&saved.state)?,
-        json!({
-            "projects": [{ "id": "p1", "name": "Code", "order": 2.5, "createdAt": 0,
-                           "defaults": { "effort": "high" } }],
-            "membership": { KEY: "p1" },
-            "names": { KEY: "Trimmed" },
-            "archived": [KEY],
+    let expected = format!(
+        r#"{{
+            "projects": [{{ "id": "p1", "name": "Code", "order": 2.5, "createdAt": 0,
+                            "defaults": {{ "effort": "high" }} }}],
+            "membership": {{ "{KEY}": "p1" }},
+            "names": {{ "{KEY}": "Trimmed" }},
+            "archived": ["{KEY}"],
             "pinned": [],
             "hidden": [],
-            "modes": { KEY: "terminal" }
-        })
+            "modes": {{ "{KEY}": "terminal" }}
+        }}"#
     );
+    assert_eq!(serde_json::to_value(&saved.state)?, value(&expected)?);
     Ok(())
 }
 
@@ -181,8 +182,9 @@ async fn the_stored_document_is_normalised() -> TestResult {
 async fn an_oversized_or_malformed_document_is_refused() -> TestResult {
     let root = tempfile::tempdir()?;
     let app = opened(root.path())?.router(false);
-    let pinned: Vec<String> = (0..501).map(|n| format!("node-a::s{n}")).collect();
-    let over = exchange(&app, "PUT", &put(0, &json!({ "pinned": pinned })), None).await?;
+    let pinned: Vec<String> = (0..501).map(|n| format!(r#""node-a::s{n}""#)).collect();
+    let over_pinned = format!(r#"{{"pinned":[{}]}}"#, pinned.join(","));
+    let over = exchange(&app, "PUT", &put(0, &over_pinned), None).await?;
     assert_eq!(over.status, 400);
     let error: GatewayError = serde_json::from_slice(&over.body)?;
     assert!(
@@ -192,20 +194,17 @@ async fn an_oversized_or_malformed_document_is_refused() -> TestResult {
     );
 
     for body in [
-        json!([1, 2]),
-        json!({ "state": {} }),
-        json!({ "baseVersion": -1, "state": {} }),
+        "[1, 2]",
+        r#"{"state":{}}"#,
+        r#"{"baseVersion":-1,"state":{}}"#,
     ] {
         assert_eq!(
-            exchange(&app, "PUT", &body, None).await?.status,
+            exchange(&app, "PUT", body, None).await?.status,
             400,
             "{body}"
         );
     }
-    assert_eq!(
-        exchange(&app, "DELETE", &Value::Null, None).await?.status,
-        405
-    );
+    assert_eq!(exchange(&app, "DELETE", "", None).await?.status, 405);
     assert_eq!(get(&app, None).await?.version, 0);
     Ok(())
 }
@@ -215,10 +214,12 @@ async fn each_user_has_their_own_document_and_it_survives_a_restart() -> TestRes
     let root = tempfile::tempdir()?;
     {
         let app = opened(root.path())?.router(false);
-        let saved = exchange(&app, "PUT", &put(0, &json!({ "pinned": [KEY] })), None).await?;
+        let pinned = format!(r#"{{"pinned":["{KEY}"]}}"#);
+        let hidden = format!(r#"{{"hidden":["{KEY}"]}}"#);
+        let saved = exchange(&app, "PUT", &put(0, &pinned), None).await?;
         assert_eq!(saved.status, 200);
         assert_eq!(get(&app, Some(ALICE)).await?.version, 0);
-        let odd = exchange(&app, "PUT", &put(0, &json!({ "hidden": [KEY] })), Some(ODD)).await?;
+        let odd = exchange(&app, "PUT", &put(0, &hidden), Some(ODD)).await?;
         assert_eq!(odd.status, 200);
     }
     let app = opened(root.path())?.router(false);
