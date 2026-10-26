@@ -27,15 +27,18 @@ use super::terminal::{require, service};
 use crate::Gateway;
 use crate::error::ApiError;
 use crate::extract::Body;
+use crate::routes::agents::Failure;
 use crate::tenancy::UserId;
 use crate::term::{ChatStart, DelegatedTurn};
 use crate::uploads::AttachedTurn;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Create {
-    harness: HarnessId,
+    harness: Option<HarnessId>,
     model: Option<String>,
     cwd: Option<std::path::PathBuf>,
+    agent_id: Option<String>,
 }
 
 pub(crate) fn router() -> Router<Arc<Gateway>> {
@@ -109,12 +112,24 @@ async fn create(
     State(gateway): State<Arc<Gateway>>,
     user: UserId,
     Body(request): Body<Create>,
-) -> Result<Json<HarnessSessionSummary>, ApiError> {
-    Ok(Json(
-        service(&gateway)?
-            .create_chat(&user, request.harness, request.model, request.cwd)
-            .await?,
-    ))
+) -> Result<Json<HarnessSessionSummary>, Failure> {
+    let service = service(&gateway)?;
+    let agent = match request.agent_id {
+        Some(id) => Some(crate::routes::agents::launch_preset(&gateway, id).await?),
+        None => None,
+    };
+    let harness = request
+        .harness
+        .or_else(|| agent.as_ref().and_then(|agent| agent.harness))
+        .ok_or_else(|| ApiError::BadRequest("harness is required".into()))?;
+    let start = ChatStart {
+        harness,
+        model: request.model,
+        effort: None,
+        cwd: request.cwd,
+        agent,
+    };
+    Ok(Json(service.start_chat(&user, start).await?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -242,6 +257,7 @@ async fn delegated(
             model: request.model,
             effort: request.thinking,
             cwd: request.working_dir.map(std::path::PathBuf::from),
+            agent: None,
         },
         text: request.text,
         system_prompt: request.system_prompt,

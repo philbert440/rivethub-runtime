@@ -9,7 +9,7 @@ use wire::harness::{
 use wire::session_id::SessionId;
 use wire::stream::ThinkingLevel;
 
-use super::TerminalService;
+use super::{AgentLaunch, TerminalService};
 use crate::error::ApiError;
 use crate::sessions::control::{ChatActor, ChatHandle};
 use crate::tenancy::UserId;
@@ -20,6 +20,41 @@ pub(crate) struct ChatStart {
     pub(crate) model: Option<String>,
     pub(crate) effort: Option<ThinkingLevel>,
     pub(crate) cwd: Option<std::path::PathBuf>,
+    pub(crate) agent: Option<AgentLaunch>,
+}
+
+type ChatDefaults = (
+    std::path::PathBuf,
+    Option<String>,
+    Option<ThinkingLevel>,
+    Option<String>,
+);
+
+impl AgentLaunch {
+    fn chat_defaults(
+        self,
+        model: Option<String>,
+        effort: Option<ThinkingLevel>,
+    ) -> Result<ChatDefaults, ApiError> {
+        let model = match model {
+            Some(model) => Some(model),
+            None => self.stored("model", &self.model)?,
+        };
+        let effort = match effort {
+            Some(effort) => Some(effort),
+            None => self
+                .stored("effort", &self.effort)?
+                .map(|level| level.parse::<ThinkingLevel>())
+                .transpose()
+                .map_err(|_| {
+                    ApiError::BadRequest(format!(
+                        "agent \"{}\" effort is not a thinking level",
+                        self.name
+                    ))
+                })?,
+        };
+        Ok((self.directory, model, effort, Some(self.name)))
+    }
 }
 
 impl TerminalService {
@@ -41,6 +76,7 @@ impl TerminalService {
                 model,
                 effort: None,
                 cwd,
+                agent: None,
             },
         )
         .await
@@ -56,6 +92,7 @@ impl TerminalService {
             model,
             effort,
             cwd,
+            agent,
         } = start;
         let harness = self
             .harness
@@ -67,14 +104,14 @@ impl TerminalService {
             .iter()
             .find(|command| command.harness == Some(harness_id))
             .ok_or_else(|| ApiError::BadRequest("harness is not allowed on this node".into()))?;
-        let directory = match cwd {
-            Some(directory) => {
-                let root = self.options.root.clone();
-                tokio::task::spawn_blocking(move || super::contained_directory(&root, &directory))
-                    .await
-                    .map_err(ApiError::Task)??
-            }
-            None => command.cwd.clone(),
+        let (directory, model, effort, agent_name) = match agent {
+            Some(agent) => agent.chat_defaults(model, effort)?,
+            None => (
+                self.chat_directory(cwd, &command.cwd).await?,
+                model,
+                effort,
+                None,
+            ),
         };
         let spec = SessionSpec {
             session: SessionId::new(harness_id, &uuid::Uuid::new_v4().to_string()),
@@ -104,7 +141,7 @@ impl TerminalService {
             supersedes: None,
             model,
             parent_session_id: None,
-            agent_name: None,
+            agent_name,
             task_id: None,
             effort: effort.map(|level| level.to_string()),
             transport: Some(Transport::Protocol),
@@ -121,6 +158,22 @@ impl TerminalService {
             },
         );
         Ok(summary)
+    }
+
+    async fn chat_directory(
+        &self,
+        cwd: Option<std::path::PathBuf>,
+        fallback: &std::path::Path,
+    ) -> Result<std::path::PathBuf, ApiError> {
+        match cwd {
+            Some(directory) => {
+                let root = self.options.root.clone();
+                tokio::task::spawn_blocking(move || super::contained_directory(&root, &directory))
+                    .await
+                    .map_err(ApiError::Task)?
+            }
+            None => Ok(fallback.to_path_buf()),
+        }
     }
 
     async fn register_chat(
