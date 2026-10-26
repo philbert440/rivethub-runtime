@@ -286,6 +286,7 @@ impl WorkerRole {
             Self::WikiBuilder => &[
                 JobName::Fixed(FixedJob::ExtractWiki),
                 JobName::Fixed(FixedJob::EnqueueWikiBackfill),
+                JobName::Fixed(FixedJob::ConsolidateWiki),
                 JobName::Fixed(FixedJob::EnqueueStaleWiki),
             ],
         }

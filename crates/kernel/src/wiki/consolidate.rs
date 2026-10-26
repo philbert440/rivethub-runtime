@@ -1,8 +1,11 @@
-use std::collections::BTreeMap;
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+use wire::wiki::topic_identity;
 
 use super::builder::WikiStoreError;
 
@@ -26,6 +29,15 @@ const fn default_min_cluster_size() -> u32 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WikiTopicStats {
+    pub slug: String,
+    pub title: String,
+    pub citations: u64,
+    pub history: u64,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WikiFold {
     pub cluster: String,
     pub parent: String,
@@ -34,7 +46,7 @@ pub struct WikiFold {
 
 #[async_trait]
 pub trait WikiConsolidateStore: Send + Sync {
-    async fn wiki_slugs(&self) -> Result<Vec<String>, WikiStoreError>;
+    async fn wiki_topic_stats(&self) -> Result<Vec<WikiTopicStats>, WikiStoreError>;
 
     async fn fold_wiki(
         &self,
@@ -44,25 +56,91 @@ pub trait WikiConsolidateStore: Send + Sync {
 }
 
 #[must_use]
-pub fn consolidation_plan(slugs: &[String], options: &ConsolidateWiki) -> Vec<WikiFold> {
-    let mut clusters: Vec<(String, Vec<String>)> = stem_clusters(slugs)
-        .into_iter()
-        .filter(|(_, members)| {
-            !u32::try_from(members.len()).is_ok_and(|size| size < options.min_cluster_size)
-        })
+pub fn consolidation_plan(topics: &[WikiTopicStats], options: &ConsolidateWiki) -> Vec<WikiFold> {
+    let topics: Vec<&WikiTopicStats> = topics
+        .iter()
+        .filter(|topic| is_normalized(&topic.slug))
         .collect();
-    clusters.sort_by(|left, right| {
+    let identity = identity_folds(&topics);
+    let folded: BTreeSet<&str> = identity
+        .iter()
+        .flat_map(|(_, fold)| fold.children.iter().map(String::as_str))
+        .collect();
+    let remaining: Vec<String> = topics
+        .iter()
+        .filter(|topic| !folded.contains(topic.slug.as_str()))
+        .map(|topic| topic.slug.clone())
+        .collect();
+    let mut planned: Vec<(usize, WikiFold)> = identity
+        .into_iter()
+        .chain(
+            stem_clusters(&remaining)
+                .into_iter()
+                .filter_map(|(cluster, members)| {
+                    let size = members.len();
+                    fold_for(cluster, &members).map(|fold| (size, fold))
+                }),
+        )
+        .filter(|(size, _)| !u32::try_from(*size).is_ok_and(|size| size < options.min_cluster_size))
+        .collect();
+    planned.sort_by(|left, right| {
         right
-            .1
-            .len()
-            .cmp(&left.1.len())
-            .then_with(|| left.0.cmp(&right.0))
+            .0
+            .cmp(&left.0)
+            .then_with(|| left.1.cluster.cmp(&right.1.cluster))
     });
-    clusters
+    planned
         .into_iter()
         .zip(0..options.limit_clusters)
-        .filter_map(|((cluster, members), _)| fold_for(cluster, &members))
+        .map(|((_, fold), _)| fold)
         .collect()
+}
+
+fn identity_folds(topics: &[&WikiTopicStats]) -> Vec<(usize, WikiFold)> {
+    let mut groups: BTreeMap<String, Vec<(usize, &WikiTopicStats)>> = BTreeMap::new();
+    for topic in topics {
+        let identity = topic_identity(&topic.slug, &topic.title);
+        groups
+            .entry(identity.key)
+            .or_default()
+            .push((identity.noise, *topic));
+    }
+    groups
+        .into_iter()
+        .filter_map(|(cluster, members)| {
+            let parent = survivor(&members)?;
+            let mut children: Vec<String> = members
+                .iter()
+                .filter(|(_, topic)| topic.slug != parent)
+                .map(|(_, topic)| topic.slug.clone())
+                .collect();
+            children.sort();
+            (!children.is_empty()).then_some((
+                members.len(),
+                WikiFold {
+                    cluster,
+                    parent,
+                    children,
+                },
+            ))
+        })
+        .collect()
+}
+
+fn survivor(members: &[(usize, &WikiTopicStats)]) -> Option<String> {
+    members
+        .iter()
+        .min_by_key(|&&(noise, topic)| {
+            (
+                noise,
+                Reverse(topic.citations),
+                Reverse(topic.history),
+                topic.created_at,
+                topic.slug.len(),
+                topic.slug.as_str(),
+            )
+        })
+        .map(|(_, topic)| topic.slug.clone())
 }
 
 fn fold_for(cluster: String, members: &[String]) -> Option<WikiFold> {

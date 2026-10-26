@@ -60,6 +60,11 @@ pub(super) enum MemoryCommand {
         dry_run: bool,
         sqlite: Option<PathBuf>,
     },
+    ConsolidateWiki {
+        limit: Option<u32>,
+        dry_run: bool,
+        json: bool,
+    },
 }
 
 enum Verb {
@@ -72,6 +77,7 @@ enum Verb {
     Tags,
     Titles,
     Reembed,
+    ConsolidateWiki,
 }
 
 fn verb(text: &str) -> Option<Verb> {
@@ -85,6 +91,7 @@ fn verb(text: &str) -> Option<Verb> {
         "tags" => Some(Verb::Tags),
         "backfill-titles" => Some(Verb::Titles),
         "reembed" => Some(Verb::Reembed),
+        "consolidate-wiki" => Some(Verb::ConsolidateWiki),
         _ => None,
     }
 }
@@ -112,6 +119,7 @@ pub(super) fn parse(args: &[String]) -> Result<Option<MemoryCommand>, Error> {
         Verb::Tags => tags(rest),
         Verb::Titles => titles(rest).map(Some),
         Verb::Reembed => reembed(rest).map(Some),
+        Verb::ConsolidateWiki => consolidate_wiki(rest).map(Some),
     }
 }
 
@@ -437,6 +445,37 @@ fn reembed(args: &[String]) -> Result<MemoryCommand, Error> {
         return Err(reject(&scan));
     }
     Ok(MemoryCommand::Reembed { dry_run, sqlite })
+}
+
+fn consolidate_wiki(args: &[String]) -> Result<MemoryCommand, Error> {
+    let mut scan = Scan::new(args);
+    let mut limit = None;
+    let mut dry_run = false;
+    let mut json = false;
+    while scan.current().is_some() {
+        match scan.option("--limit", None) {
+            Taken::Value(value) => {
+                limit = Some(positive_limit(&value)?.0);
+                continue;
+            }
+            Taken::Missing => return Err(Error::LimitInteger),
+            Taken::Absent => {}
+        }
+        if scan.flag("--dry-run") {
+            dry_run = true;
+            continue;
+        }
+        if scan.flag("--json") {
+            json = true;
+            continue;
+        }
+        return Err(reject(&scan));
+    }
+    Ok(MemoryCommand::ConsolidateWiki {
+        limit,
+        dry_run,
+        json,
+    })
 }
 
 fn reject(scan: &Scan<'_>) -> Error {

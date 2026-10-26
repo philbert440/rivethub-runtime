@@ -119,6 +119,29 @@ async fn gate_resolves_an_alias(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn gate_folds_a_product_prefixed_plural_into_the_same_topic(pool: PgPool) -> TestResult {
+    let wiki = tempfile::tempdir()?;
+    let store = store_with_deploys(&pool, &wiki).await?;
+    let touched = apply(
+        &store,
+        &pool,
+        vec![proposal(
+            "rivethub-acmekit-deploy",
+            "RivetHub AcmeKit deploy",
+        )],
+    )
+    .await?;
+    assert_eq!(touched, vec!["acmekit-deploys"]);
+    assert_eq!(slugs(&pool).await?, vec!["acmekit-deploys"]);
+    assert!(
+        aliases(&pool, "acmekit-deploys")
+            .await?
+            .contains(&"rivethub-acmekit-deploy".to_owned())
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn gate_resolves_a_shared_entity(pool: PgPool) -> TestResult {
     let wiki = tempfile::tempdir()?;
     let store = store_with_deploys(&pool, &wiki).await?;

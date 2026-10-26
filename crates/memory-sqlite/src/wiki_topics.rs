@@ -10,6 +10,7 @@ use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
 use thiserror::Error;
+use wire::wiki::topic_identity;
 
 use crate::time;
 
@@ -214,6 +215,11 @@ fn canonical(conn: &Connection, patch: &WikiPatch) -> Result<String, WikiStoreEr
             found.insert(slug);
         }
     }
+    if found.is_empty()
+        && let Some(slug) = same_identity(conn, patch)?
+    {
+        found.insert(slug);
+    }
     let mut found = found.into_iter();
     match (found.next(), found.next()) {
         (None, _) if patch.action == WikiAction::Create => Ok(patch.slug.as_ref().to_owned()),
@@ -221,6 +227,25 @@ fn canonical(conn: &Connection, patch: &WikiPatch) -> Result<String, WikiStoreEr
         (Some(slug), None) => Ok(slug),
         (Some(_), Some(_)) => Err(WikiStoreError::SlugConflict(patch.slug.as_ref().to_owned())),
     }
+}
+
+fn same_identity(conn: &Connection, patch: &WikiPatch) -> Result<Option<String>, WikiStoreError> {
+    let identity = topic_identity(patch.slug.as_ref(), &patch.title);
+    let Some(probe) = identity.probe() else {
+        return Ok(None);
+    };
+    let mut statement = conn
+        .prepare("SELECT slug, title FROM ros_wiki_topics WHERE instr(slug, ?1) > 0")
+        .map_err(query)?;
+    let rows = statement
+        .query_map(params![probe], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(query)?;
+    let candidates = rows
+        .collect::<Result<Vec<(String, String)>, _>>()
+        .map_err(query)?;
+    Ok(identity.closest(candidates))
 }
 
 fn matches(conn: &Connection, candidate: &str) -> Result<Vec<String>, WikiStoreError> {

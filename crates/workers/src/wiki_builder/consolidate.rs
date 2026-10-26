@@ -17,19 +17,19 @@ pub async fn handle_consolidate_wiki(
     let options: ConsolidateWiki =
         serde_json::from_value(serde_json::to_value(payload).map_err(WorkerError::WikiJson)?)
             .map_err(WorkerError::WikiJson)?;
-    let slugs = tokio::select! {
+    let topics = tokio::select! {
         biased;
         () = cancel.cancelled() => return Err(WorkerError::Cancelled),
-        result = store.wiki_slugs() => result?,
+        result = store.wiki_topic_stats() => result?,
     };
     let mut removed = 0;
-    for fold in consolidation_plan(&slugs, &options) {
+    for fold in consolidation_plan(&topics, &options) {
         if options.dry_run {
             tracing::info!(
-                "wiki consolidate {} -> {} (+{}) (dry run)",
+                "wiki consolidate {} -> {} <- {} (dry run)",
                 fold.cluster,
                 fold.parent,
-                fold.children.len()
+                fold.children.join(", ")
             );
             continue;
         }

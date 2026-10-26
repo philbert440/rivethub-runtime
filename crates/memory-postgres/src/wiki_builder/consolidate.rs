@@ -1,0 +1,201 @@
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use kernel::wiki::builder::WikiStoreError;
+use kernel::wiki::consolidate::{WikiConsolidateStore, WikiFold, WikiTopicStats};
+use sqlx::{Postgres, Transaction};
+use wire::wiki::{FoldedTopic, WikiPage, fold_page, fold_text};
+
+use super::{lock_slug, query_error, settle, topics};
+use crate::PostgresMemory;
+use crate::wiki_writer::{LockedRepository, WikiRepository};
+
+#[derive(Debug, sqlx::FromRow)]
+struct StatsRow {
+    slug: String,
+    title: String,
+    citations: i64,
+    history_count: i32,
+    created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct TextRow {
+    title: String,
+    current_state: String,
+    article: String,
+}
+
+#[async_trait]
+impl WikiConsolidateStore for PostgresMemory {
+    async fn wiki_topic_stats(&self) -> Result<Vec<WikiTopicStats>, WikiStoreError> {
+        let rows = sqlx::query_as::<_, StatsRow>(
+            "SELECT t.slug, t.title, t.history_count, t.created_at,
+                    (SELECT count(*) FROM rh_wiki_citations c WHERE c.topic_slug = t.slug) AS citations
+               FROM rh_wiki_topics t ORDER BY t.slug",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(query_error)?;
+        rows.into_iter()
+            .map(|row| {
+                Ok(WikiTopicStats {
+                    slug: row.slug,
+                    title: row.title,
+                    citations: count(row.citations)?,
+                    history: count(row.history_count.into())?,
+                    created_at: row.created_at,
+                })
+            })
+            .collect()
+    }
+
+    async fn fold_wiki(
+        &self,
+        fold: &WikiFold,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<String>, WikiStoreError> {
+        let directory = self
+            .wiki_directory
+            .as_ref()
+            .ok_or(WikiStoreError::DirectoryMissing)?;
+        let (folded, released) = {
+            let mut repository = WikiRepository::new(directory.clone()).lock().await?;
+            let folded = self.fold_pages(&mut repository, fold, now).await;
+            (folded, repository.release().await)
+        };
+        settle(folded, released)
+    }
+}
+
+impl PostgresMemory {
+    async fn fold_pages(
+        &self,
+        repository: &mut LockedRepository,
+        fold: &WikiFold,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<String>, WikiStoreError> {
+        let mut tx = self.pool.begin().await.map_err(query_error)?;
+        let mut slugs: Vec<&str> = std::iter::once(fold.parent.as_str())
+            .chain(fold.children.iter().map(String::as_str))
+            .collect();
+        slugs.sort_unstable();
+        slugs.dedup();
+        for slug in slugs {
+            lock_slug(&mut tx, slug).await?;
+        }
+        if text(&mut tx, &fold.parent).await?.is_none() {
+            return Err(WikiStoreError::TopicMissing(fold.parent.clone()));
+        }
+        let Some(mut page) = repository.read(&fold.parent).await? else {
+            tracing::warn!("wiki consolidate skipped {}: no page file", fold.parent);
+            return Ok(Vec::new());
+        };
+        let mut folded = Vec::new();
+        for child in fold.children.iter().filter(|child| **child != fold.parent) {
+            let Some(row) = text(&mut tx, child).await? else {
+                continue;
+            };
+            absorb(&mut page, child, row, repository.read(child).await?);
+            folded.push(child.clone());
+        }
+        if folded.is_empty() {
+            tx.commit().await.map_err(query_error)?;
+            return Ok(folded);
+        }
+        let message = format!(
+            "wiki({}): consolidate {}\n\nPipeline: wiki-v7",
+            fold.parent,
+            folded.join(", ")
+        );
+        let git_sha = repository.fold(&page, &folded, &message).await?;
+        topics::store_topic(&mut tx, &page, &git_sha, now).await?;
+        for child in &folded {
+            retire(&mut tx, child, &fold.parent, now).await?;
+        }
+        tx.commit().await.map_err(query_error)?;
+        Ok(folded)
+    }
+}
+
+fn absorb(page: &mut WikiPage, slug: &str, row: TextRow, child: Option<WikiPage>) {
+    if let Some(child) = child {
+        fold_page(page, child);
+        return;
+    }
+    if !page.meta.aliases.iter().any(|alias| alias == slug) {
+        page.meta.aliases.push(slug.to_owned());
+    }
+    fold_text(
+        &mut page.current_state,
+        &mut page.article,
+        FoldedTopic {
+            slug: slug.to_owned(),
+            title: row.title,
+            current_state: row.current_state,
+            article: row.article,
+        },
+    );
+}
+
+async fn text(
+    tx: &mut Transaction<'_, Postgres>,
+    slug: &str,
+) -> Result<Option<TextRow>, WikiStoreError> {
+    sqlx::query_as::<_, TextRow>(
+        "SELECT title, current_state, article FROM rh_wiki_topics WHERE slug = $1",
+    )
+    .bind(slug)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(query_error)
+}
+
+async fn retire(
+    tx: &mut Transaction<'_, Postgres>,
+    child: &str,
+    parent: &str,
+    now: DateTime<Utc>,
+) -> Result<(), WikiStoreError> {
+    for statement in [
+        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at)
+         SELECT $2, summary_id, kind, note, cited_at FROM rh_wiki_citations WHERE topic_slug = $1
+         ON CONFLICT DO NOTHING",
+        "INSERT INTO rh_wiki_provenance (topic_slug, source_kind, source_id, conversation_id, git_sha, created_at)
+         SELECT $2, source_kind, source_id, conversation_id, git_sha, created_at
+           FROM rh_wiki_provenance WHERE topic_slug = $1
+         ON CONFLICT DO NOTHING",
+        "UPDATE rh_wiki_redirects SET to_slug = $2 WHERE to_slug = $1",
+    ] {
+        sqlx::query(statement)
+            .bind(child)
+            .bind(parent)
+            .execute(&mut **tx)
+            .await
+            .map_err(query_error)?;
+    }
+    for (statement, slug) in [
+        ("DELETE FROM rh_wiki_redirects WHERE from_slug = $1", parent),
+        ("DELETE FROM rh_wiki_topics WHERE slug = $1", child),
+    ] {
+        sqlx::query(statement)
+            .bind(slug)
+            .execute(&mut **tx)
+            .await
+            .map_err(query_error)?;
+    }
+    sqlx::query(
+        "INSERT INTO rh_wiki_redirects (from_slug, to_slug, created_at) VALUES ($1, $2, $3)
+         ON CONFLICT (from_slug) DO UPDATE SET to_slug = EXCLUDED.to_slug",
+    )
+    .bind(child)
+    .bind(parent)
+    .bind(now)
+    .execute(&mut **tx)
+    .await
+    .map_err(query_error)?;
+    Ok(())
+}
+
+fn count(value: i64) -> Result<u64, WikiStoreError> {
+    u64::try_from(value).map_err(|error| WikiStoreError::Query(Box::new(error)))
+}

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use kernel::queue::{ClaimSelector, FixedJob, JobName, JobQueue};
 use kernel::wiki::builder::WikiStoreError;
-use kernel::wiki::consolidate::{ConsolidateWiki, WikiConsolidateStore, WikiFold};
+use kernel::wiki::consolidate::{ConsolidateWiki, WikiConsolidateStore, WikiFold, WikiTopicStats};
 use testkit::fakes::FakeJobQueue;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -13,20 +13,26 @@ use workers::wiki_builder::handle_consolidate_wiki;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 struct Topics {
-    slugs: Vec<String>,
+    topics: Vec<WikiTopicStats>,
     folds: Mutex<Vec<WikiFold>>,
 }
 
 impl Topics {
     fn new() -> Self {
         Self {
-            slugs: [
+            topics: [
                 "acmekit-deploys",
                 "acmekit-deploys-friday",
                 "staging-database",
             ]
             .iter()
-            .map(|slug| (*slug).to_owned())
+            .map(|slug| WikiTopicStats {
+                slug: (*slug).to_owned(),
+                title: (*slug).to_owned(),
+                citations: 0,
+                history: 0,
+                created_at: DateTime::<Utc>::UNIX_EPOCH,
+            })
             .collect(),
             folds: Mutex::new(Vec::new()),
         }
@@ -35,8 +41,8 @@ impl Topics {
 
 #[async_trait]
 impl WikiConsolidateStore for Topics {
-    async fn wiki_slugs(&self) -> Result<Vec<String>, WikiStoreError> {
-        Ok(self.slugs.clone())
+    async fn wiki_topic_stats(&self) -> Result<Vec<WikiTopicStats>, WikiStoreError> {
+        Ok(self.topics.clone())
     }
 
     async fn fold_wiki(

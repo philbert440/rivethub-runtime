@@ -49,6 +49,7 @@ Commands:\n\
   tags backfill-rule [--since <iso>] [--sqlite <file>]\n\
   backfill-titles [--dry-run] [--json] [--sqlite <file>]\n\
   reembed [--dry-run] [--sqlite <file>]\n\
+  consolidate-wiki [--limit <n>] [--dry-run] [--json]\n\
 Postgres commands read RIVETHUB_PG_URL. export, import, tags backfill-rule and backfill-titles use --sqlite or memory.sqlite.path when no Postgres URL is set. reembed runs on a SQLite memory file only.\n"
         .to_owned()
 }

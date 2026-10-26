@@ -62,14 +62,26 @@ positive, default 6000 in `EmbedSettings`; the datahub runs 4000). Sweep limits 
 200), `RIVETHUB_EMBED_SWEEP_MAX_ATTEMPTS` (default 5), and `RIVETHUB_WIKI_SWEEP_LIMIT` (enqueue-stale-wiki, default 20,
 clamped to 0..=200, 0 disables it). The stale-wiki sweep runs only with `RIVETHUB_WIKI_EXTRACTION=1`.
 
-### Wiki consolidation on SQLite
+### Wiki topic identity and consolidation
 
-The SQLite wiki builder claims `consolidate-wiki` (payload `{ dryRun?, limitClusters? (50), minClusterSize? (2) }`), and
-`rh local` queues one each time it starts with a wiki directory. It folds session-variant topics into their parent with no
-model: topics are grouped by their first two slug tokens, the group's stem topic (or else its shortest slug) is the parent,
+`wire::wiki::topic_identity(slug, title)` is a topic's identity key: the slug's words without the product and project words
+(`rivet`, `rivetos`, `rivethub`, `project`, `projects`) or connector words (`the`, `and`, `of`, `for`, `in`, `on`, `to`,
+`with`, `via`, `by`), each singularized, sorted and deduplicated. A trailing `-2`..`-9` is a dedupe suffix and is dropped
+unless the title carries that number, so `grok-4` stays apart from `grok-3` and `rivet-grok`. Numbers inside words
+(`web114`, `web115`) are kept. A slug made only of those words is its own key. Both wiki builders resolve a proposed topic to an
+existing one with the same key (after exact, redirect and alias matches) instead of creating a fork.
+
+The wiki builder claims `consolidate-wiki` (payload `{ dryRun?, limitClusters? (50), minClusterSize? (2) }`) on SQLite and
+Postgres. `rh local` queues one each time it starts with a wiki directory; on Postgres, `rh memory consolidate-wiki
+[--limit <n>]` queues one for the `rh worker --role wiki-builder` process, and `--dry-run` prints the planned folds without
+writing. No model is involved. Topics that share an identity key fold into one survivor: the page with the fewest
+product, connector and dedupe words, then the most citations, then the longest history, then the oldest. The remaining
+topics are then grouped by their first two slug tokens, the group's stem topic (or else its shortest slug) is the parent,
 and only true hyphen-boundary variants of that parent are folded. The child slug and its aliases become parent aliases and
-`ros_wiki_redirects` rows (served as 308s), citations and provenance move to the parent, the denser summary and article win,
-and the text not kept is appended to the parent's article under `Superseded parent text` / `Merged from <slug>` headings.
+redirect rows (served as 308s), redirects that pointed at the child point at the parent, citations and provenance
+move to the parent, the denser summary and article win, and the text not kept is appended to the parent's article under
+`Superseded parent text` / `Merged from <slug>` headings. On Postgres the merged page file, its history and citations
+included, and the removal of each child's page file land in one wiki git commit. A second run finds nothing to fold.
 
 ## Process shape (Phil 2026-10-12)
 

@@ -5,6 +5,14 @@ use std::sync::Arc;
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::queue::FixedJob;
+use kernel::queue::Job;
+use kernel::queue::JobKeyMode;
+use kernel::queue::JobName;
+use kernel::queue::JobQueue as _;
+use kernel::wiki::consolidate::ConsolidateWiki;
+use kernel::wiki::consolidate::WikiConsolidateStore as _;
+use kernel::wiki::consolidate::consolidation_plan;
 use memory_postgres::PostgresMemory;
 use memory_postgres::queue::QueueHealth;
 use memory_sqlite::SqliteStore;
@@ -62,6 +70,11 @@ pub(super) async fn run(
             sqlite,
         } => titles(dry_run, json, sqlite, env).await,
         MemoryCommand::Reembed { dry_run, sqlite } => reembed(dry_run, sqlite, env).await,
+        MemoryCommand::ConsolidateWiki {
+            limit,
+            dry_run,
+            json,
+        } => consolidate_wiki(limit, dry_run, json, env).await,
     }
 }
 
@@ -142,6 +155,77 @@ async fn tool_synth(
             "enqueued {enqueued} synthesize-tool-call job(s)\n"
         )))
     }
+}
+
+async fn consolidate_wiki(
+    limit: Option<u32>,
+    dry_run: bool,
+    json: bool,
+    env: &Environment,
+) -> Result<Report, Error> {
+    let memory = PostgresMemory::connect(&postgres_url(env)?).await?;
+    let mut options: ConsolidateWiki = serde_json::from_str("{}")?;
+    options.dry_run = dry_run;
+    if let Some(limit) = limit {
+        options.limit_clusters = limit;
+    }
+    let limit = options.limit_clusters;
+    if !dry_run {
+        memory
+            .queue()
+            .await?
+            .enqueue(Job {
+                name: JobName::Fixed(FixedJob::ConsolidateWiki),
+                payload: wire::JsonObject::from_serialize(&options)?,
+                key: Some("wiki-consolidate".to_owned()),
+                key_mode: JobKeyMode::Replace,
+                priority: 5,
+                run_at: None,
+                max_attempts: None,
+            })
+            .await?;
+        return Ok(Report::success(if json {
+            format!(
+                "{}\n",
+                serde_json::to_string(&QueuedBody {
+                    queued: true,
+                    limit_clusters: limit,
+                })?
+            )
+        } else {
+            format!(
+                "queued consolidate-wiki for up to {limit} cluster(s); the wiki-builder worker folds them\n"
+            )
+        }));
+    }
+    let plan = consolidation_plan(&memory.wiki_topic_stats().await?, &options);
+    if json {
+        return Ok(Report::success(format!(
+            "{}\n",
+            serde_json::to_string(&PlanBody {
+                dry_run: true,
+                folds: plan
+                    .into_iter()
+                    .map(|fold| FoldBody {
+                        cluster: fold.cluster,
+                        parent: fold.parent,
+                        children: fold.children,
+                    })
+                    .collect(),
+            })?
+        )));
+    }
+    let merged: usize = plan.iter().map(|fold| fold.children.len()).sum();
+    let mut lines: Vec<String> = plan
+        .iter()
+        .map(|fold| format!("{} <- {}", fold.parent, fold.children.join(", ")))
+        .collect();
+    lines.push(format!(
+        "{} fold(s) planned, {merged} page(s) would be merged (dry run)",
+        plan.len()
+    ));
+    let text = format!("{}\n", lines.join("\n"));
+    Ok(Report::success(text))
 }
 
 async fn export(
@@ -374,6 +458,27 @@ fn requeue_text(count: u64, clamped: bool) -> String {
     } else {
         format!("requeued {count} dead job(s)\n")
     }
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct QueuedBody {
+    queued: bool,
+    limit_clusters: u32,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PlanBody {
+    dry_run: bool,
+    folds: Vec<FoldBody>,
+}
+
+#[derive(serde::Serialize)]
+struct FoldBody {
+    cluster: String,
+    parent: String,
+    children: Vec<String>,
 }
 
 #[derive(serde::Serialize)]

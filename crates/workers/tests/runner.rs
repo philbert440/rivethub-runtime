@@ -74,6 +74,7 @@ fn roles_match_the_kernel_task_lists() {
         vec![
             "extract-wiki".to_owned(),
             "enqueue-wiki-backfill".to_owned(),
+            "consolidate-wiki".to_owned(),
             "enqueue-stale-wiki".to_owned(),
         ]
     );

@@ -6,10 +6,13 @@ use chrono::Utc;
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::WikiConsolidateStore;
 use kernel::wiki::consolidate::WikiFold;
+use kernel::wiki::consolidate::WikiTopicStats;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::TransactionBehavior;
 use rusqlite::params;
+use wire::wiki::FoldedTopic;
+use wire::wiki::fold_text;
 
 use crate::SqliteStore;
 use crate::wiki_builder::blocking;
@@ -27,16 +30,10 @@ struct Topic {
     history_count: i64,
 }
 
-#[derive(Default)]
-struct Leftovers {
-    superseded: Vec<String>,
-    merged: Vec<String>,
-}
-
 #[async_trait]
 impl WikiConsolidateStore for SqliteStore {
-    async fn wiki_slugs(&self) -> Result<Vec<String>, WikiStoreError> {
-        blocking(self, |conn| slugs(conn)).await
+    async fn wiki_topic_stats(&self) -> Result<Vec<WikiTopicStats>, WikiStoreError> {
+        blocking(self, |conn| topics(conn)).await
     }
 
     async fn fold_wiki(
@@ -49,12 +46,38 @@ impl WikiConsolidateStore for SqliteStore {
     }
 }
 
-fn slugs(conn: &Connection) -> Result<Vec<String>, WikiStoreError> {
+fn topics(conn: &Connection) -> Result<Vec<WikiTopicStats>, WikiStoreError> {
     let mut statement = conn
-        .prepare("SELECT slug FROM ros_wiki_topics ORDER BY slug")
+        .prepare(
+            "SELECT t.slug, t.title, t.history_count, t.created_at,
+                    (SELECT count(*) FROM ros_wiki_citations c WHERE c.topic_slug = t.slug)
+               FROM ros_wiki_topics t ORDER BY t.slug",
+        )
         .map_err(query)?;
-    let rows = statement.query_map([], |row| row.get(0)).map_err(query)?;
-    rows.collect::<Result<Vec<String>, _>>().map_err(query)
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, u64>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, u64>(4)?,
+            ))
+        })
+        .map_err(query)?;
+    let mut topics = Vec::new();
+    for row in rows {
+        let (slug, title, history, created_at, citations) = row.map_err(query)?;
+        topics.push(WikiTopicStats {
+            slug,
+            title,
+            citations,
+            history,
+            created_at: crate::time::stored(&created_at, "ros_wiki_topics.created_at")
+                .map_err(|source| WikiStoreError::Query(Box::new(source)))?,
+        });
+    }
+    Ok(topics)
 }
 
 fn fold_all(
@@ -102,60 +125,16 @@ fn absorb(parent: &mut Topic, child: Topic) {
         .collect();
     merge_unique(&mut parent.related, related);
     parent.history_count += child.history_count;
-    let mut leftovers = Leftovers::default();
-    take_denser(
+    fold_text(
         &mut parent.current_state,
-        child.current_state,
-        "summary",
-        &mut leftovers,
-    );
-    take_denser(
         &mut parent.article,
-        child.article,
-        "article",
-        &mut leftovers,
+        FoldedTopic {
+            slug: child.slug,
+            title: child.title,
+            current_state: child.current_state,
+            article: child.article,
+        },
     );
-    if !leftovers.superseded.is_empty() {
-        append_entry(
-            &mut parent.article,
-            &format!(
-                "#### Superseded parent text\n\n{}",
-                leftovers.superseded.join("\n\n")
-            ),
-        );
-    }
-    let mut merged = format!("#### Merged from {}\n\n**{}**", child.slug, child.title);
-    for text in leftovers.merged {
-        merged.push_str("\n\n");
-        merged.push_str(&text);
-    }
-    append_entry(&mut parent.article, &merged);
-}
-
-fn take_denser(slot: &mut String, incoming: String, label: &str, leftovers: &mut Leftovers) {
-    if incoming.chars().count() > slot.chars().count() {
-        let displaced = std::mem::replace(slot, incoming);
-        if !displaced.trim().is_empty() {
-            leftovers.superseded.push(format!(
-                "**Displaced parent {label}:**\n\n{}",
-                displaced.trim()
-            ));
-        }
-    } else if !incoming.trim().is_empty() && incoming.trim() != slot.trim() {
-        leftovers.merged.push(incoming.trim().to_owned());
-    }
-}
-
-fn append_entry(article: &mut String, entry: &str) {
-    if article.contains(entry) {
-        return;
-    }
-    let kept = article.trim_end();
-    *article = if kept.is_empty() {
-        entry.to_owned()
-    } else {
-        format!("{kept}\n\n{entry}")
-    };
 }
 
 fn merge_unique(existing: &mut Vec<String>, additions: Vec<String>) {
