@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::Read;
@@ -8,10 +9,12 @@ use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::path::PathBuf;
 
+use kernel::transcript::SessionRenameError;
 use kernel::transcript::StoreSession;
 use kernel::transcript::TranscriptReaderError;
 use parking_lot::Mutex;
 use serde::Deserialize;
+use serde::Serialize;
 use wire::harness::HarnessId;
 
 use super::ancestors::with_ancestors;
@@ -25,12 +28,15 @@ use super::files::open_store;
 use super::files::regular_file;
 use super::files::unreadable;
 use super::files::whole_file;
+use super::files::write_failure;
 use super::text::clip_field;
 use super::text::is_uuid;
 use super::text::non_empty;
+use super::text::segment_safe;
 use super::time::UNKNOWN_TIME;
 use super::time::parse_date;
 use super::time::system_ms;
+use super::title::HarnessTitles;
 use crate::store_path::Root;
 
 const SPAWN_MARKER: &str = "subagent_spawned";
@@ -168,6 +174,31 @@ struct SummaryFile {
     agent_name: Option<Field>,
     current_model_id: Option<Field>,
     session_kind: Option<Field>,
+    generated_title: Option<Field>,
+    title_is_manual: Option<Field>,
+}
+
+impl SummaryFile {
+    fn titles(&self) -> HarnessTitles {
+        let mut titles = HarnessTitles::default();
+        if let Some(generated) = text_of(self.generated_title.as_ref()) {
+            if self.title_is_manual.as_ref().is_some_and(Field::flag) {
+                titles.manual(&generated);
+            } else {
+                titles.automatic(&generated);
+            }
+        }
+        titles
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SummaryTitle {
+    generated_title: Option<String>,
+    #[serde(default)]
+    title_is_manual: bool,
+    #[serde(flatten)]
+    rest: wire::Extra,
 }
 
 #[derive(Debug, Deserialize)]
@@ -230,6 +261,7 @@ fn summary_row(text: &str, dir_name: &str) -> Option<GrokRow> {
     if let Some(title) = non_empty(clip_field(summary.session_summary.as_ref(), 120)) {
         row.title = title;
     }
+    summary.titles().apply(&mut row);
     row.created_at = text_of(summary.created_at.as_ref()).and_then(|text| parse_date(&text));
     row.agent_name = non_empty(clip_field(summary.agent_name.as_ref(), 64));
     row.model = non_empty(clip_field(summary.current_model_id.as_ref(), 80));
@@ -289,4 +321,43 @@ pub(crate) fn describe(
             Some(current) if current.updated_at >= row.updated_at => Some(current),
             Some(_) | None => Some(row),
         }))
+}
+
+pub(crate) fn rename(
+    root: &Path,
+    spawns: &SpawnIndex,
+    id: &str,
+    title: &str,
+) -> Result<Option<StoreSession>, SessionRenameError> {
+    if !segment_safe(id) {
+        return Ok(None);
+    }
+    let Some(store) = sessions(root)? else {
+        return Ok(None);
+    };
+    let Some(summary) = directories(&store, store.canonical())
+        .into_iter()
+        .map(|encoded| encoded.path.join(id).join("summary.json"))
+        .find(|summary| regular_file(&store, summary))
+    else {
+        return Ok(None);
+    };
+    retitle(&summary, title).map_err(|error| write_failure(&summary, error))?;
+    Ok(describe(root, spawns, id)?)
+}
+
+fn retitle(summary: &Path, title: &str) -> io::Result<()> {
+    let lock = File::options()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(summary.with_extension("json.lock"))?;
+    lock.lock()?;
+    let mut document: SummaryTitle = serde_json::from_slice(&fs::read(summary)?)?;
+    document.generated_title = Some(title.to_owned());
+    document.title_is_manual = true;
+    let staged = summary.with_extension("json.rivethub");
+    fs::write(&staged, serde_json::to_vec_pretty(&document)?)?;
+    fs::rename(&staged, summary)?;
+    lock.unlock()
 }

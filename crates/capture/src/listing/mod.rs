@@ -13,6 +13,7 @@ mod pi;
 mod qwen;
 mod text;
 mod time;
+mod title;
 mod transcripts;
 
 use std::path::Path;
@@ -22,6 +23,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use kernel::transcript::ListLimit;
 use kernel::transcript::SessionLister;
+use kernel::transcript::SessionRenameError;
 use kernel::transcript::StoreSession;
 use kernel::transcript::TranscriptRead;
 use kernel::transcript::TranscriptReaderError;
@@ -192,6 +194,34 @@ fn store_cwd_of(
     }
 }
 
+fn rename_harness(
+    roots: &StoreRoots,
+    spawns: &grok::SpawnIndex,
+    harness: HarnessId,
+    native: &str,
+    title: &str,
+) -> Result<StoreSession, SessionRenameError> {
+    let renamed = match harness {
+        HarnessId::ClaudeCode => match roots.claude.as_deref() {
+            Some(root) => claude::rename(root, native, title)?,
+            None => None,
+        },
+        HarnessId::GrokBuild => match roots.grok.as_deref() {
+            Some(root) => grok::rename(root, spawns, native, title)?,
+            None => None,
+        },
+        HarnessId::Hermes
+        | HarnessId::KimiCode
+        | HarnessId::Codex
+        | HarnessId::Opencode
+        | HarnessId::Pi
+        | HarnessId::QwenCode
+        | HarnessId::Cursor
+        | HarnessId::Cowork => return Err(SessionRenameError::Unsupported(harness)),
+    };
+    renamed.ok_or(SessionRenameError::Missing)
+}
+
 fn absent_store<T: Default>(
     root: Option<&Path>,
     work: impl FnOnce(&Path) -> Result<T, TranscriptReaderError>,
@@ -255,5 +285,18 @@ impl SessionLister for StoreSessionLister {
         native: &str,
     ) -> Result<TranscriptRead, TranscriptReaderError> {
         history::transcript(&self.roots, harness, native).await
+    }
+
+    async fn rename(
+        &self,
+        harness: HarnessId,
+        native: &str,
+        title: &str,
+    ) -> Result<StoreSession, SessionRenameError> {
+        let roots = Arc::clone(&self.roots);
+        let spawns = Arc::clone(&self.spawns);
+        let native = native.to_owned();
+        let title = title.to_owned();
+        blocking(move || Ok(rename_harness(&roots, &spawns, harness, &native, &title))).await?
     }
 }

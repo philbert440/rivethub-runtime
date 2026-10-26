@@ -5476,6 +5476,17 @@
         "protocol"
       ]
     },
+    "HarnessSessionTitleRequest": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ]
+    },
     "HarnessSocketRefusalCode": {
       "type": "string",
       "enum": [

@@ -8,9 +8,11 @@ use std::io::BufReader;
 use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
+use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
+use kernel::transcript::SessionRenameError;
 use kernel::transcript::TranscriptReaderError;
 use serde::Deserialize;
 
@@ -143,7 +145,11 @@ pub(crate) fn head(path: &Path, limit: u64) -> Option<String> {
 }
 
 pub(crate) fn tail_window(path: &Path) -> Option<String> {
-    match read_tail(path) {
+    tail(path, TAIL_WINDOW)
+}
+
+pub(crate) fn tail(path: &Path, limit: u64) -> Option<String> {
+    match tail_of(path, limit) {
         Ok(window) => Some(window.text),
         Err(error) => {
             unreadable(path, &error);
@@ -159,17 +165,21 @@ pub(crate) struct Window {
 }
 
 pub(crate) fn read_tail(path: &Path) -> io::Result<Window> {
+    tail_of(path, TAIL_WINDOW)
+}
+
+fn tail_of(path: &Path, limit: u64) -> io::Result<Window> {
     let mut file = File::open(path)?;
     let length = file.metadata()?.len();
     let mut bytes = Vec::new();
-    if length <= TAIL_WINDOW {
+    if length <= limit {
         file.read_to_end(&mut bytes)?;
         return Ok(Window {
             text: String::from_utf8_lossy(&bytes).into_owned(),
             truncated: false,
         });
     }
-    file.seek(SeekFrom::Start(length - TAIL_WINDOW))?;
+    file.seek(SeekFrom::Start(length - limit))?;
     file.read_to_end(&mut bytes)?;
     let start = bytes
         .iter()
@@ -179,6 +189,23 @@ pub(crate) fn read_tail(path: &Path) -> io::Result<Window> {
         text: String::from_utf8_lossy(bytes.get(start..).unwrap_or_default()).into_owned(),
         truncated: true,
     })
+}
+
+pub(crate) fn append_line(path: &Path, line: &str) -> io::Result<()> {
+    let mut file = File::options().read(true).append(true).open(path)?;
+    let length = file.metadata()?.len();
+    let mut record = String::with_capacity(line.len() + 2);
+    if length > 0 {
+        let mut last = [0_u8; 1];
+        file.seek(SeekFrom::Start(length - 1))?;
+        file.read_exact(&mut last)?;
+        if &last != b"\n" {
+            record.push('\n');
+        }
+    }
+    record.push_str(line);
+    record.push('\n');
+    file.write_all(record.as_bytes())
 }
 
 pub(crate) fn complete_lines(bytes: &[u8]) -> &[u8] {
@@ -223,6 +250,13 @@ pub(crate) fn first_cwd(path: &Path) -> Result<Option<String>, TranscriptReaderE
 
 pub(crate) fn read_failure(path: &Path, error: io::Error) -> TranscriptReaderError {
     TranscriptReaderError::Read {
+        message: format!("session store file {}: {error}", path.display()),
+        source: Box::new(error),
+    }
+}
+
+pub(crate) fn write_failure(path: &Path, error: io::Error) -> SessionRenameError {
+    SessionRenameError::Write {
         message: format!("session store file {}: {error}", path.display()),
         source: Box::new(error),
     }

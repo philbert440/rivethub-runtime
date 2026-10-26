@@ -24,6 +24,22 @@ pub enum TranscriptReaderError {
     },
 }
 
+#[derive(Debug, Error)]
+pub enum SessionRenameError {
+    #[error("{0} sessions cannot be renamed")]
+    Unsupported(HarnessId),
+    #[error("the session has no record in its harness store")]
+    Missing,
+    #[error("writing the session title failed: {message}")]
+    Write {
+        message: String,
+        #[source]
+        source: BoxError,
+    },
+    #[error(transparent)]
+    Store(#[from] TranscriptReaderError),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Turn {
     pub role: Role,
@@ -228,4 +244,11 @@ pub trait SessionLister: Send + Sync {
         harness: HarnessId,
         native: &str,
     ) -> Result<TranscriptRead, TranscriptReaderError>;
+
+    async fn rename(
+        &self,
+        harness: HarnessId,
+        native: &str,
+        title: &str,
+    ) -> Result<StoreSession, SessionRenameError>;
 }

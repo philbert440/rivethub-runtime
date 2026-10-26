@@ -171,6 +171,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessSessionTranscriptResponse>,
     SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessTurnAccepted>,
     SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessSessionResponse>,
+    SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessSessionTitleRequest>,
     SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessSocketRefusalCode>,
     SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessSocketRefusal>,
     SchemaGenerator::subschema_for::<crate::gateway::sessions::HarnessSocketMessage>,
