@@ -233,4 +233,8 @@ pub enum Error {
     MemorySqlite(#[from] memory_sqlite::SqliteError),
     #[error(transparent)]
     MemoryImport(#[from] memory_sqlite::import::ImportError),
+    #[error(transparent)]
+    WikiStore(#[from] kernel::wiki::builder::WikiStoreError),
+    #[error(transparent)]
+    JobQueue(#[from] kernel::queue::JobQueueError),
 }

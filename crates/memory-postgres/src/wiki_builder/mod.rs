@@ -1,3 +1,4 @@
+mod consolidate;
 mod gate;
 mod topics;
 
@@ -5,7 +6,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use kernel::wiki::builder::{
     ExtractWiki, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiPatch, WikiStoreError, WikiSummary,
-    WikiWork,
+    WikiWork, WikiWriteError,
 };
 use sqlx::{PgConnection, Postgres, Transaction};
 use uuid::Uuid;
@@ -82,15 +83,7 @@ impl WikiBuilderStore for PostgresMemory {
             let applied = self.apply_pages(&mut repository, job, patches, now).await;
             (applied, repository.release().await)
         };
-        match (applied, released) {
-            (Ok(topics), Ok(())) => Ok(topics),
-            (Err(error), Ok(())) => Err(error),
-            (Ok(_), Err(error)) => Err(error.into()),
-            (Err(error), Err(release)) => {
-                tracing::error!(%release, "wiki writer lock release failed");
-                Err(error)
-            }
-        }
+        settle(applied, released)
     }
 
     async fn fail_wiki(
@@ -163,6 +156,21 @@ impl PostgresMemory {
         .execute(&mut *tx).await.map_err(query_error)?;
         tx.commit().await.map_err(query_error)?;
         Ok(touched)
+    }
+}
+
+fn settle<T>(
+    applied: Result<T, WikiStoreError>,
+    released: Result<(), WikiWriteError>,
+) -> Result<T, WikiStoreError> {
+    match (applied, released) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(_), Err(error)) => Err(error.into()),
+        (Err(error), Err(release)) => {
+            tracing::error!(%release, "wiki writer lock release failed");
+            Err(error)
+        }
     }
 }
 

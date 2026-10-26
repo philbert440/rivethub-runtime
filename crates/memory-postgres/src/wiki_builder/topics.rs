@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use kernel::wiki::builder::{WikiPatch, WikiStoreError, WikiSummary};
 use sqlx::{Postgres, Transaction};
 use wire::gateway::wiki::WikiSourceKind;
-use wire::wiki::{CitationKind, PageCitation, PagePatch, PageSource};
+use wire::wiki::{CitationKind, PageCitation, PagePatch, PageSource, WikiPage};
 
 use super::{gate, lock_slug, query_error};
 
@@ -70,10 +70,20 @@ pub(super) async fn apply(
         allow_shrink: false,
     };
     let applied = repository.apply(page_patch, &summary_id).await?;
-    let page = applied.page;
+    store_topic(tx, &applied.page, &applied.git_sha, now).await?;
+    provenance(tx, &slug, summary, note, now).await?;
+    Ok((slug, applied.git_sha))
+}
+
+pub(super) async fn store_topic(
+    tx: &mut Transaction<'_, Postgres>,
+    page: &WikiPage,
+    git_sha: &str,
+    now: DateTime<Utc>,
+) -> Result<(), WikiStoreError> {
     let history_count = i32::try_from(page.history.len())
         .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;
-    let search_text = wire::wiki::build_wiki_search_text(&page);
+    let search_text = wire::wiki::build_wiki_search_text(page);
     sqlx::query(
         "INSERT INTO rh_wiki_topics (slug, title, aliases, tags, entities, current_state, article, related,
             search_text, history_count, last_verified_at, created_at, updated_at, git_sha)
@@ -85,13 +95,12 @@ pub(super) async fn apply(
             updated_at = EXCLUDED.updated_at, git_sha = EXCLUDED.git_sha,
             embedding = NULL, embed_status = NULL, embed_failures = 0, embed_error = NULL",
     )
-    .bind(&slug).bind(&page.meta.title).bind(&page.meta.aliases)
+    .bind(page.meta.slug.as_ref()).bind(&page.meta.title).bind(&page.meta.aliases)
     .bind(&page.meta.tags).bind(&page.meta.entities).bind(&page.current_state)
     .bind(&page.article).bind(&page.meta.related).bind(search_text).bind(history_count)
-    .bind(now).bind(now).bind(&applied.git_sha)
+    .bind(now).bind(now).bind(git_sha)
     .execute(&mut **tx).await.map_err(query_error)?;
-    provenance(tx, &slug, summary, note, now).await?;
-    Ok((slug, applied.git_sha))
+    Ok(())
 }
 
 async fn provenance(

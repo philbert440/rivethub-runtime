@@ -49,6 +49,21 @@ impl LockedRepository {
         apply_locked(&self.root, patch, provenance).await
     }
 
+    pub async fn read(&self, slug: &str) -> Result<Option<WikiPage>, WikiWriteError> {
+        let slug = WikiSlug::try_from(normalize_slug(slug))?;
+        ensure_repo(&self.root).await?;
+        read_page(&self.root, &slug).await
+    }
+
+    pub async fn fold(
+        &mut self,
+        page: &WikiPage,
+        removed: &[String],
+        message: &str,
+    ) -> Result<String, WikiWriteError> {
+        fold_locked(&self.root, page, removed, message).await
+    }
+
     pub async fn release(self) -> Result<(), WikiWriteError> {
         self.lock.release().await
     }
@@ -116,6 +131,48 @@ async fn apply_locked(
     provenance: &str,
 ) -> Result<AppliedPage, WikiWriteError> {
     let slug = WikiSlug::try_from(normalize_slug(&patch.slug))?;
+    sync(root).await?;
+    let page = read_page(root, &slug).await?;
+    let prefix: String = provenance.chars().take(8).collect();
+    let message = format!(
+        "wiki({}): {} from summary {prefix}\n\nProvenance: summary {provenance}\nPipeline: wiki-v7",
+        slug.as_ref(),
+        patch.action
+    );
+    let page = apply_patch(page, patch)?;
+    let relative = store_page(root, &page).await?;
+    let git_sha = commit(root, &[relative], &message).await?;
+    Ok(AppliedPage { page, git_sha })
+}
+
+async fn fold_locked(
+    root: &Path,
+    page: &WikiPage,
+    removed: &[String],
+    message: &str,
+) -> Result<String, WikiWriteError> {
+    sync(root).await?;
+    let mut paths = vec![store_page(root, page).await?];
+    for slug in removed {
+        let slug = WikiSlug::try_from(normalize_slug(slug))?;
+        let relative = topic_path(&slug);
+        reject_symlink(&root.join(&relative)).await?;
+        git(
+            root,
+            &["rm", "-q", "--cached", "--ignore-unmatch", "--", &relative],
+        )
+        .await?;
+        match tokio::fs::remove_file(root.join(&relative)).await {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        paths.push(relative);
+    }
+    commit(root, &paths, message).await
+}
+
+async fn sync(root: &Path) -> Result<(), WikiWriteError> {
     ensure_repo(root).await?;
     if tokio::fs::try_exists(root.join(".git/refs/remotes")).await? {
         #[expect(
@@ -126,33 +183,38 @@ async fn apply_locked(
             .await
             .inspect_err(|error| tracing::warn!(%error, "wiki pull failed; applying local patch"));
     }
-    reject_symlink(&root.join("topics")).await?;
-    let relative = format!("topics/{}.md", slug.as_ref());
-    let destination = root.join(&relative);
+    reject_symlink(&root.join("topics")).await
+}
+
+fn topic_path(slug: &WikiSlug) -> String {
+    format!("topics/{}.md", slug.as_ref())
+}
+
+async fn read_page(root: &Path, slug: &WikiSlug) -> Result<Option<WikiPage>, WikiWriteError> {
+    let destination = root.join(topic_path(slug));
     reject_symlink(&destination).await?;
-    let page = match tokio::fs::canonicalize(&destination).await {
+    match tokio::fs::canonicalize(&destination).await {
         Ok(canonical) => {
             if !canonical.starts_with(root) {
                 return Err(WikiWriteError::Containment(canonical));
             }
             let markdown = tokio::fs::read_to_string(canonical).await?;
             let page = parse_wiki_page(&markdown)?;
-            if page.meta.slug != slug {
+            if page.meta.slug != *slug {
                 return Err(WikiWriteError::SlugMismatch);
             }
-            Some(page)
+            Ok(Some(page))
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => return Err(error.into()),
-    };
-    let prefix: String = provenance.chars().take(8).collect();
-    let message = format!(
-        "wiki({}): {} from summary {prefix}\n\nProvenance: summary {provenance}\nPipeline: wiki-v7",
-        slug.as_ref(),
-        patch.action
-    );
-    let page = apply_patch(page, patch)?;
-    let markdown = serialize_wiki_page(&page)?;
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+async fn store_page(root: &Path, page: &WikiPage) -> Result<String, WikiWriteError> {
+    let relative = topic_path(&page.meta.slug);
+    let destination = root.join(&relative);
+    reject_symlink(&destination).await?;
+    let markdown = serialize_wiki_page(page)?;
     let temporary = root
         .join("topics")
         .join(format!(".{}.tmp", uuid::Uuid::new_v4()));
@@ -166,12 +228,25 @@ async fn apply_locked(
         return Err(error);
     }
     git(root, &["add", "--", &relative]).await?;
-    let status = git(root, &["status", "--porcelain", "--", &relative]).await?;
-    if !status.is_empty() {
-        git(root, &["commit", "--only", "-m", &message, "--", &relative]).await?;
+    Ok(relative)
+}
+
+async fn commit(root: &Path, paths: &[String], message: &str) -> Result<String, WikiWriteError> {
+    let mut changed: Vec<&str> = Vec::new();
+    for path in paths {
+        if !git(root, &["status", "--porcelain", "--", path])
+            .await?
+            .is_empty()
+        {
+            changed.push(path);
+        }
     }
-    let git_sha = git(root, &["rev-parse", "HEAD"]).await?.trim().to_owned();
-    Ok(AppliedPage { page, git_sha })
+    if !changed.is_empty() {
+        let mut args = vec!["commit", "--only", "-m", message, "--"];
+        args.extend(changed);
+        git(root, &args).await?;
+    }
+    Ok(git(root, &["rev-parse", "HEAD"]).await?.trim().to_owned())
 }
 
 async fn write_page(temporary: &Path, path: &Path, markdown: &[u8]) -> Result<(), WikiWriteError> {

@@ -222,7 +222,11 @@ fn shrinks(previous: &str, next: &str) -> bool {
     !next.is_empty() && next.chars().count() * 5 < previous.trim().chars().count() * 3
 }
 
-fn merge_list(target: &mut Vec<String>, items: impl IntoIterator<Item = String>, limit: usize) {
+pub(super) fn merge_list(
+    target: &mut Vec<String>,
+    items: impl IntoIterator<Item = String>,
+    limit: usize,
+) {
     let existing = std::mem::take(target);
     for item in existing.into_iter().chain(items) {
         if !item.is_empty() && !target.contains(&item) {

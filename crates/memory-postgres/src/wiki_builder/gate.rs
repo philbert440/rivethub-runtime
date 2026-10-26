@@ -1,6 +1,6 @@
 use kernel::wiki::builder::{WikiAction, WikiPatch, WikiStoreError};
 use sqlx::{Postgres, Transaction};
-use wire::wiki::{find_stem_match, normalize_slug};
+use wire::wiki::{find_stem_match, normalize_slug, topic_identity};
 
 use super::query_error;
 const RRF_K: f64 = 20.0;
@@ -17,6 +17,7 @@ pub(super) enum ResolveReason {
     Exact,
     Redirect,
     Alias,
+    Identity,
     Entity,
     Stem,
     Search,
@@ -29,6 +30,7 @@ impl std::fmt::Display for ResolveReason {
             Self::Exact => "exact",
             Self::Redirect => "redirect",
             Self::Alias => "alias",
+            Self::Identity => "identity",
             Self::Entity => "entity",
             Self::Stem => "stem",
             Self::Search => "search",
@@ -89,6 +91,9 @@ async fn resolve(
     if let Some(found) = alias {
         return Ok(Some((found, ResolveReason::Alias)));
     }
+    if let Some(found) = same_identity(tx, &slug, title).await? {
+        return Ok(Some((found, ResolveReason::Identity)));
+    }
     if !entities.is_empty() {
         let shared = sqlx::query_scalar::<_, String>(
             "SELECT slug FROM rh_wiki_topics WHERE entities && $1::text[]
@@ -127,6 +132,35 @@ async fn resolve(
         return Ok(Some((top, ResolveReason::Search)));
     }
     Ok(None)
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct NamedTopic {
+    slug: String,
+    title: String,
+}
+
+async fn same_identity(
+    tx: &mut Transaction<'_, Postgres>,
+    slug: &str,
+    title: &str,
+) -> Result<Option<String>, WikiStoreError> {
+    let identity = topic_identity(slug, title);
+    let Some(probe) = identity.probe() else {
+        return Ok(None);
+    };
+    let candidates = sqlx::query_as::<_, NamedTopic>(
+        "SELECT slug, title FROM rh_wiki_topics WHERE strpos(slug, $1) > 0",
+    )
+    .bind(probe)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(query_error)?;
+    Ok(identity.closest(
+        candidates
+            .into_iter()
+            .map(|topic| (topic.slug, topic.title)),
+    ))
 }
 
 async fn topic(

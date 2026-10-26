@@ -115,6 +115,15 @@ fn fold() -> WikiFold {
     }
 }
 
+async fn slugs(store: &SqliteStore) -> TestResult<Vec<String>> {
+    Ok(store
+        .wiki_topic_stats()
+        .await?
+        .into_iter()
+        .map(|topic| topic.slug)
+        .collect())
+}
+
 fn cell(path: &Path, sql: &str) -> TestResult<String> {
     let conn = rusqlite::Connection::open(path)?;
     Ok(conn.query_row(sql, [], |row| row.get(0))?)
@@ -131,7 +140,7 @@ async fn folding_moves_the_child_into_the_parent() -> TestResult {
     let fixture = fixture()?;
     let folded = fixture.store.fold_wiki(&fold(), Utc::now()).await?;
     assert_eq!(folded, vec![CHILD.to_owned()]);
-    assert_eq!(fixture.store.wiki_slugs().await?, vec![PARENT.to_owned()]);
+    assert_eq!(slugs(&fixture.store).await?, vec![PARENT.to_owned()]);
     let row = |column: &str| {
         cell(
             &fixture.path,
@@ -232,7 +241,7 @@ async fn a_missing_parent_is_an_error() -> TestResult {
         other => return Err(format!("unexpected {other:?}").into()),
     }
     assert_eq!(
-        fixture.store.wiki_slugs().await?,
+        slugs(&fixture.store).await?,
         vec![PARENT.to_owned(), CHILD.to_owned()]
     );
     Ok(())

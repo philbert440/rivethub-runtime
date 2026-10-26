@@ -133,6 +133,7 @@ async fn run(
         let summaries: Arc<dyn SummaryStore> = memory.clone();
         let wiki: Arc<dyn WikiBuilderStore> = memory.clone();
         let store: Arc<dyn MemoryStore> = memory.clone();
+        let consolidate: Arc<dyn WikiConsolidateStore> = memory.clone();
         let mut runner = build_runner(
             role,
             WorkerPorts {
@@ -141,7 +142,7 @@ async fn run(
                 summaries,
                 memory: store,
                 wiki,
-                consolidate: None,
+                consolidate: Some(consolidate),
             },
             &config,
             env,
