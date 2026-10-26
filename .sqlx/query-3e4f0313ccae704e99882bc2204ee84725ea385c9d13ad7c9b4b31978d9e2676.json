@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE rh_topics\n            SET slug = $2, name = $3, parent_id = $4, directory_kind = $5, directory_node = $6,\n                directory_path = $7, updated_at = $8\n          WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3e4f0313ccae704e99882bc2204ee84725ea385c9d13ad7c9b4b31978d9e2676"
+}

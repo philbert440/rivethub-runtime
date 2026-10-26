@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM rh_topic_aliases WHERE topic_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c6f6034abb6b1ece5db417820784f87a86832a9f8a84c70c88661524abb27ee6"
+}
