@@ -1,6 +1,9 @@
 use std::time::Duration;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use rustls_pki_types::CertificateDer;
+use rustls_pki_types::UnixTime;
 use rustls_pki_types::pem::PemObject;
 use tokio_util::sync::CancellationToken;
 use url::Url;
@@ -56,6 +59,7 @@ pub struct Authority {
     trust: reqwest::Certificate,
     anonymous: reqwest::Client,
     cancel: CancellationToken,
+    clock: Option<UnixTime>,
 }
 
 impl Authority {
@@ -79,13 +83,23 @@ impl Authority {
                 ott: token,
             });
         let received = self.exchange(builder, 201).await?;
-        verify::signed(&self.root, received.content_type.as_deref(), &received.body)
+        verify::signed(
+            &self.root,
+            self.now()?,
+            received.content_type.as_deref(),
+            &received.body,
+        )
     }
 
     pub async fn renew(&self, holder: &Holder) -> Result<SignedCertificate, Error> {
         let builder = self.builder(Some(holder), reqwest::Method::POST, "/1.0/renew", None)?;
         let received = self.exchange(builder, 201).await?;
-        verify::signed(&self.root, received.content_type.as_deref(), &received.body)
+        verify::signed(
+            &self.root,
+            self.now()?,
+            received.content_type.as_deref(),
+            &received.body,
+        )
     }
 
     pub async fn revoke(&self, holder: &Holder, revocation: &Revocation) -> Result<(), Error> {
@@ -120,10 +134,22 @@ impl Authority {
     }
 
     #[cfg(test)]
+    #[must_use]
+    pub(crate) fn verifying_at(mut self, at: UnixTime) -> Self {
+        self.clock = Some(at);
+        self
+    }
+
+    #[cfg(test)]
     pub(crate) async fn renew_without_holder(&self) -> Result<SignedCertificate, Error> {
         let builder = self.builder(None, reqwest::Method::POST, "/1.0/renew", None)?;
         let received = self.exchange(builder, 201).await?;
-        verify::signed(&self.root, received.content_type.as_deref(), &received.body)
+        verify::signed(
+            &self.root,
+            self.now()?,
+            received.content_type.as_deref(),
+            &received.body,
+        )
     }
 
     fn assemble(address: Url, ca_pem: &str, tls_pem: &str) -> Result<Self, Error> {
@@ -138,7 +164,18 @@ impl Authority {
             trust,
             anonymous,
             cancel: CancellationToken::new(),
+            clock: None,
         })
+    }
+
+    fn now(&self) -> Result<UnixTime, Error> {
+        match self.clock {
+            Some(at) => Ok(at),
+            None => SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(UnixTime::since_unix_epoch)
+                .map_err(|_| Error::Clock),
+        }
     }
 
     fn builder(

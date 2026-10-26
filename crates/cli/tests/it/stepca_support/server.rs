@@ -589,8 +589,6 @@ fn ensure_principal(names: &mut Vec<SanType>, principal: &str) -> Result {
     Ok(())
 }
 
-// An overdue leaf is five days into its seven-day lifetime: past the renewal
-// deadline at two thirds, but not yet expired.
 fn stamp(params: &mut CertificateParams, material: &mut Material, overdue: bool) -> Result {
     let mut not_before = leaf_not_before()?;
     if overdue {
