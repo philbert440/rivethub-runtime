@@ -111,7 +111,7 @@ async fn b5_2_a_tool_round_trip_stays_inside_the_assistant_turn() {
             &done
         ])
         .await,
-        r#"[{"role":"assistant","text":"done","tools":[{"name":"Bash","status":"done","args":{"command":"ls"},"id":"t1"}],"stopReason":"end_turn","lastBlock":"text","complete":true}]"#
+        r#"[{"role":"assistant","text":"done","tools":[{"name":"Bash","status":"done","args":{"command":"ls"},"id":"t1","resultText":"a.txt"}],"stopReason":"end_turn","lastBlock":"text","complete":true}]"#
     );
 }
 
@@ -266,6 +266,18 @@ async fn b5_9_a_large_prompt_tool_input_is_replaced_by_a_marker() {
         r#"{"question":"ok?"}"#
     );
     assert_eq!(tool.result_text.as_deref(), Some(r#"{"answers":["yes"]}"#));
+}
+
+#[tokio::test]
+async fn every_tool_result_keeps_its_text_up_to_the_cap() {
+    let call = tool_use("t1", "Bash", r#"{"command":"echo hi"}"#);
+    let output = "o".repeat(5 * 1024);
+    let result = format!(
+        r#"{{"type":"user","message":{{"content":[{{"type":"tool_result","tool_use_id":"t1","content":"{output}"}}]}}}}"#
+    );
+    let turns = claude_turns(&[&call, &result]).await;
+    let tool = first_tool(&turns);
+    assert_eq!(tool.result_text.as_deref().map(str::len), Some(2048));
 }
 
 #[tokio::test]

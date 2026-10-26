@@ -350,10 +350,8 @@ impl Folder {
         } else {
             TranscriptToolStatus::Done
         };
-        if is_prompt_tool(&tool.name) {
-            tool.result_text =
-                prompt_result(record, block).map(|text| text.chars().take(RESULT_CHARS).collect());
-        }
+        tool.result_text =
+            result_text(record, block).map(|text| text.chars().take(RESULT_CHARS).collect());
     }
 
     fn assistant(&mut self, record: &Record) {
@@ -466,7 +464,7 @@ fn content_pieces(content: Option<&Field>) -> Vec<Piece> {
         .collect()
 }
 
-fn prompt_result(record: &Record, block: &Block) -> Option<String> {
+fn result_text(record: &Record, block: &Block) -> Option<String> {
     if let Some(content) = block.content.as_ref() {
         if let Some(text) = content.text() {
             return Some(text);
