@@ -1,5 +1,3 @@
-use std::str::FromStr as _;
-
 use chrono::Datelike as _;
 use chrono::NaiveDate;
 use chrono::Timelike as _;
@@ -25,8 +23,6 @@ pub enum IdentityError {
         native: String,
         source: chrono::ParseError,
     },
-    #[error("session id {canonical:?} is not a harness-prefixed native session id")]
-    Canonical { canonical: String },
 }
 
 impl NativeSession {
@@ -55,18 +51,7 @@ impl NativeSession {
 }
 
 pub fn from_canonical(session: &SessionId) -> Result<NativeSession, IdentityError> {
-    let canonical = session.as_str();
-    let Some((prefix, native)) = canonical.split_once(':') else {
-        return Err(IdentityError::Canonical {
-            canonical: canonical.to_owned(),
-        });
-    };
-    let Ok(harness) = HarnessId::from_str(prefix) else {
-        return Err(IdentityError::Canonical {
-            canonical: canonical.to_owned(),
-        });
-    };
-    NativeSession::parse(harness, native)
+    NativeSession::parse(session.harness(), session.native())
 }
 
 fn matches_shape(harness: HarnessId, native: &str) -> Result<(), IdentityError> {

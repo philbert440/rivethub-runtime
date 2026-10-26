@@ -27,7 +27,6 @@ use crate::store_path::dir_state;
 use crate::store_path::session_component;
 
 const FORMAT: &str = "grok-updates";
-const PREFIX: &str = "grok-build:";
 const UPDATES: &str = "updates.jsonl";
 
 #[derive(Debug)]
@@ -46,7 +45,7 @@ impl GrokTranscriptReader {
         session: &SessionId,
         offset: u64,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
-        let Some(native_id) = native(session, PREFIX).map(str::to_owned) else {
+        let Some(native_id) = native(session, HarnessId::GrokBuild).map(str::to_owned) else {
             return Ok(TranscriptSlice::empty(offset));
         };
         let root = self.root.clone();

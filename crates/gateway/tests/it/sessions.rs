@@ -368,12 +368,7 @@ async fn handoff_waits_for_turn_end_releases_then_resumes_and_delivers_queued_ch
         &*harness.trace.borrow(),
         &["new", "prompt:first", "ended", "release"]
     );
-    let native = session
-        .session_id
-        .as_str()
-        .split_once(':')
-        .expect("canonical")
-        .1;
+    let native = session.session_id.native();
     assert!(fixture.mux.calls.borrow().iter().any(|call| matches!(call, Call::Spawn { argv, .. } if argv.ends_with(&["--resume".into(), native.into()]))));
     chat.prompt("queued".into(), None, Vec::new())
         .await

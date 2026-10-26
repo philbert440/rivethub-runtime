@@ -6,6 +6,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use wire::JsonObject;
 use wire::capture::CaptureMessage;
+use wire::harness::HarnessId;
 use wire::message::Role;
 use wire::session_id::SessionId;
 
@@ -135,8 +136,8 @@ pub(crate) fn row_position(row_id: i64) -> Result<u64, TranscriptReaderError> {
 }
 
 #[must_use]
-pub(crate) fn native<'a>(session: &'a SessionId, prefix: &str) -> Option<&'a str> {
-    session.as_str().strip_prefix(prefix)
+pub(crate) fn native(session: &SessionId, harness: HarnessId) -> Option<&str> {
+    (session.harness() == harness).then(|| session.native())
 }
 
 pub(crate) async fn blocking<T: Send + 'static>(

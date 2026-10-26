@@ -37,7 +37,6 @@ use crate::store_path::dir_state;
 use crate::store_path::session_component;
 
 const FORMAT: &str = "kimi-wire";
-const PREFIX: &str = "kimi-code:";
 const DIR_PREFIX: &str = "session_";
 
 #[derive(Debug)]
@@ -56,7 +55,7 @@ impl KimiTranscriptReader {
         session: &SessionId,
         offset: u64,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
-        let Some(native_id) = native(session, PREFIX).map(str::to_owned) else {
+        let Some(native_id) = native(session, HarnessId::KimiCode).map(str::to_owned) else {
             return Ok(TranscriptSlice::empty(offset));
         };
         let root = self.root.clone();

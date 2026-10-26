@@ -261,7 +261,7 @@ impl ChatActor {
                             respond(reply, result);
                         }
                         Request::Terminal { launch, reply } => {
-                            if launch.command.harness.is_none_or(|harness| !self.session.as_str().starts_with(&format!("{harness}:"))) { respond(reply, Err(ApiError::Conflict("surface switch must retain the session harness".into()))); }
+                            if launch.command.harness.is_none_or(|harness| harness != self.session.harness()) { respond(reply, Err(ApiError::Conflict("surface switch must retain the session harness".into()))); }
                             else if self.pending.is_some() { respond(reply, Err(ApiError::Conflict("surface switch already pending".into()))); }
                             else { self.pending = Some((launch, reply)); }
                         }
@@ -307,13 +307,7 @@ impl ChatActor {
                 self.events = None;
                 self.surface = Surface::Idle;
             }
-            let native = self
-                .session
-                .as_str()
-                .split_once(':')
-                .ok_or_else(|| ApiError::BadRequest("canonical session required".into()))?
-                .1;
-            launch.resume = Some(native.into());
+            launch.resume = Some(self.session.native().into());
             let result = self.service.spawn_raw(&self.user, &self.key, launch).await;
             if result.is_ok() {
                 self.surface = Surface::Terminal;

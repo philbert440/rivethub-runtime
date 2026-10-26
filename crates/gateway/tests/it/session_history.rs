@@ -1046,11 +1046,7 @@ async fn a_delegated_turn_names_the_uploads_it_carried_when_reloaded() {
         .first()
         .map(|spec| spec.session.clone())
         .expect("one harness session");
-    let native = session
-        .as_str()
-        .split_once(':')
-        .map(|(_, native)| native.to_owned())
-        .expect("native id");
+    let native = session.native().to_owned();
     setup.lister.later.lock().insert(
         native,
         vec![

@@ -62,6 +62,19 @@ fn t0_1_encode_is_unpadded_base64url_and_decodes_back() {
 }
 
 #[test]
+fn session_id_exposes_harness_and_native_parts() {
+    let parsed = session("kimi-code:session_a:b");
+    assert_eq!(parsed.harness(), HarnessId::KimiCode);
+    assert_eq!(parsed.native(), "session_a:b");
+    let built = SessionId::new(HarnessId::KimiCode, "session_a:b");
+    assert_eq!(built, parsed);
+    assert_eq!(
+        serde_json::to_value(&built).unwrap(),
+        json!("kimi-code:session_a:b")
+    );
+}
+
+#[test]
 fn encode_uses_the_url_alphabet_without_padding() {
     let id = session("hermes:a?>~");
     let encoded = encode_segment(&id);
