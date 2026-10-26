@@ -232,6 +232,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicUpdate>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicMergeRequest>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicPlacement>,
+    SchemaGenerator::subschema_for::<crate::gateway::topics::TopicSuggestion>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::PlacementReply>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::PlacementRequest>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicSession>,

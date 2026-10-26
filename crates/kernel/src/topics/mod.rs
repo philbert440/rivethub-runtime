@@ -1,3 +1,4 @@
+mod categorize;
 mod placement;
 mod rules;
 mod search;
@@ -11,10 +12,14 @@ use wire::session_id::SessionId;
 
 use crate::BoxError;
 
+pub use categorize::FirstLeaf;
+pub use categorize::Lineage;
+pub use categorize::Verdict;
 pub use placement::PlacedSession;
 pub use placement::Placement;
 pub use placement::PlacementOutcome;
 pub use placement::PlacementSource;
+pub use placement::Suggestion;
 pub use rules::MergePlan;
 pub use rules::check_parent;
 pub use search::TopicKey;
@@ -94,6 +99,10 @@ pub trait TopicStore: Send + Sync {
     async fn placement(&self, session: &SessionId) -> Result<Option<Placement>, TopicError>;
 
     async fn sessions(&self, topic: TopicId) -> Result<Vec<PlacedSession>, TopicError>;
+
+    async fn suggest(&self, suggestion: Suggestion) -> Result<(), TopicError>;
+
+    async fn suggestion(&self, session: &SessionId) -> Result<Option<Suggestion>, TopicError>;
 
     async fn search(
         &self,

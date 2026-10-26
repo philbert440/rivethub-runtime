@@ -4,6 +4,8 @@ use config::{Config, Environment};
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::JobQueue;
 use kernel::shutdown::Activities;
+use kernel::topics::TopicStore;
+use kernel::transcript::SessionLister;
 use kernel::wiki::builder::WikiBuilderStore;
 use kernel::wiki::consolidate::WikiConsolidateStore;
 use thiserror::Error;
@@ -134,6 +136,7 @@ async fn run(
         let wiki: Arc<dyn WikiBuilderStore> = memory.clone();
         let store: Arc<dyn MemoryStore> = memory.clone();
         let consolidate: Arc<dyn WikiConsolidateStore> = memory.clone();
+        let topics: Arc<dyn TopicStore> = memory.clone();
         let mut runner = build_runner(
             role,
             WorkerPorts {
@@ -143,6 +146,8 @@ async fn run(
                 memory: store,
                 wiki,
                 consolidate: Some(consolidate),
+                topics,
+                lineage: session_lineage(env),
             },
             &config,
             env,
@@ -183,6 +188,14 @@ pub struct WorkerPorts<Q> {
     pub memory: Arc<dyn MemoryStore>,
     pub wiki: Arc<dyn WikiBuilderStore>,
     pub consolidate: Option<Arc<dyn WikiConsolidateStore>>,
+    pub topics: Arc<dyn TopicStore>,
+    pub lineage: Arc<dyn SessionLister>,
+}
+
+pub(crate) fn session_lineage(env: &Environment) -> Arc<dyn SessionLister> {
+    Arc::new(capture::listing::StoreSessionLister::new(
+        crate::composition::store_roots(env),
+    ))
 }
 
 pub async fn build_runner<Q: JobQueue + 'static>(
@@ -232,6 +245,10 @@ pub fn with_models<Q: JobQueue + 'static>(
         store: ports.wiki,
         consolidate: ports.consolidate,
         model,
+    })
+    .with_session_topics(workers::SessionTopics {
+        store: ports.topics,
+        lineage: ports.lineage,
     })
     .with_activities(activities.clone());
     Ok(ComposedRunner {

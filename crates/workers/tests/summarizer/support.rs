@@ -46,6 +46,7 @@ pub(super) fn bind<'a>(
         settings,
         now,
         cancel: token,
+        topics: None,
     }
 }
 
@@ -172,7 +173,7 @@ impl SummaryStore for MemStore {
             .collect())
     }
 
-    async fn write_summary(&self, summary: NewSummary) -> Result<(), SummaryStoreError> {
+    async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError> {
         let node = SummaryNode {
             id: summary.id,
             kind: summary.kind,
@@ -211,8 +212,18 @@ impl SummaryStore for MemStore {
             }
         }
         drop(windows);
-        self.written.lock().await.push(summary);
-        Ok(())
+        let mut written = self.written.lock().await;
+        let first_leaf = summary.kind == SummaryKind::Leaf
+            && !written.iter().any(|earlier| {
+                earlier.kind == SummaryKind::Leaf
+                    && earlier.conversation_id == summary.conversation_id
+            });
+        written.push(summary);
+        Ok(if first_leaf {
+            SummaryWrite::FirstLeaf
+        } else {
+            SummaryWrite::Added
+        })
     }
 }
 

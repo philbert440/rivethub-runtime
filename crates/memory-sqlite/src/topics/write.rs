@@ -1,6 +1,7 @@
 use kernel::topics::MergePlan;
 use kernel::topics::Placement;
 use kernel::topics::Root;
+use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use rusqlite::Connection;
@@ -121,6 +122,11 @@ pub(super) fn fold_into(
     )
     .map_err(failed("topic merge redirects"))?;
     conn.execute(
+        "UPDATE rh_session_suggestions SET topic_id = ?2 WHERE topic_id = ?1",
+        params![source, into],
+    )
+    .map_err(failed("topic merge suggestions"))?;
+    conn.execute(
         "DELETE FROM rh_topic_aliases WHERE topic_id = ?1",
         params![source],
     )
@@ -165,5 +171,26 @@ pub(super) fn placement(conn: &Connection, placement: &Placement) -> Result<(), 
         ],
     )
     .map_err(failed("session placement write"))?;
+    conn.execute(
+        "DELETE FROM rh_session_suggestions WHERE session_id = ?1",
+        params![placement.session.as_str()],
+    )
+    .map_err(failed("session suggestion clear"))?;
+    Ok(())
+}
+
+pub(super) fn suggestion(conn: &Connection, suggestion: &Suggestion) -> Result<(), TopicError> {
+    conn.execute(
+        "INSERT INTO rh_session_suggestions (session_id, name, topic_id)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT (session_id) DO UPDATE SET name = excluded.name,
+                                                topic_id = excluded.topic_id",
+        params![
+            suggestion.session.as_str(),
+            suggestion.name.as_str(),
+            suggestion.topic.map(|topic| topic.to_string()),
+        ],
+    )
+    .map_err(failed("session suggestion write"))?;
     Ok(())
 }

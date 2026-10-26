@@ -38,6 +38,11 @@ async fn redirects_follow_a_second_merge(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn suggestions_hold_until_the_session_is_placed(pool: PgPool) -> TestResult {
+    topics::suggestions_hold_until_the_session_is_placed(&PostgresMemory::new(pool)).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn listings_count_sessions_and_take_last_activity_from_conversations(
     pool: PgPool,
 ) -> TestResult {

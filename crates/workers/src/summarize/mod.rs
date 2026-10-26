@@ -4,6 +4,7 @@ mod prompt;
 mod rollup;
 mod settings;
 mod sweep;
+mod topic;
 
 use kernel::memory::ConversationWindow;
 use kernel::memory::HEARTBEAT_SESSION_PREFIX;
@@ -22,6 +23,7 @@ pub use sweep::handle_enqueue_idle;
 pub use sweep::handle_enqueue_stale;
 pub use sweep::handle_reap;
 pub use sweep::summary_health;
+pub use topic::SessionTopics;
 
 pub(crate) use llm::llm_error;
 
@@ -39,7 +41,7 @@ pub struct SummarizeOutcome {
 
 #[expect(
     missing_debug_implementations,
-    reason = "the summary store, model provider, and job queue are trait objects"
+    reason = "the summary store, model provider, job queue and topic ports are trait objects"
 )]
 pub struct SummarizeEnv<'a> {
     pub store: &'a dyn SummaryStore,
@@ -48,6 +50,7 @@ pub struct SummarizeEnv<'a> {
     pub settings: &'a SummarySettings,
     pub now: chrono::DateTime<chrono::Utc>,
     pub cancel: &'a CancellationToken,
+    pub topics: Option<&'a SessionTopics>,
 }
 
 pub async fn handle_summarize(

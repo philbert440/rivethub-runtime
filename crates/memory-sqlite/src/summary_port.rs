@@ -9,6 +9,7 @@ use kernel::memory::SummaryKind;
 use kernel::memory::SummaryNode;
 use kernel::memory::SummaryStore;
 use kernel::memory::SummaryStoreError;
+use kernel::memory::SummaryWrite;
 use kernel::memory::WindowMessage;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params_from_iter;
@@ -37,7 +38,7 @@ impl SummaryStore for SqliteStore {
             .map_err(store_err)
     }
 
-    async fn write_summary(&self, summary: NewSummary) -> Result<(), SummaryStoreError> {
+    async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError> {
         self.with_conn(move |conn| write_one(conn, &summary))
             .await
             .map_err(store_err)
@@ -75,7 +76,10 @@ fn pending_windows(conn: &rusqlite::Connection) -> Result<Vec<ConversationWindow
     Ok(windows)
 }
 
-fn write_one(conn: &mut rusqlite::Connection, summary: &NewSummary) -> Result<(), SqliteError> {
+fn write_one(
+    conn: &mut rusqlite::Connection,
+    summary: &NewSummary,
+) -> Result<SummaryWrite, SqliteError> {
     let count = i64::from(summary.message_count);
     let tx = conn
         .transaction()
@@ -128,11 +132,36 @@ fn write_one(conn: &mut rusqlite::Connection, summary: &NewSummary) -> Result<()
             });
         }
     }
-    if summary.kind == SummaryKind::Leaf {
-        crate::title::title_from_first_leaf(&tx, &summary.conversation_id.to_string())?;
-    }
+    let written = if summary.kind == SummaryKind::Leaf {
+        let conversation = summary.conversation_id.to_string();
+        crate::title::title_from_first_leaf(&tx, &conversation)?;
+        leaf_write(&tx, &conversation)?
+    } else {
+        SummaryWrite::Added
+    };
     tx.commit().map_err(SqliteError::query("summary commit"))?;
-    Ok(())
+    Ok(written)
+}
+
+fn leaf_write(
+    conn: &rusqlite::Connection,
+    conversation: &str,
+) -> Result<SummaryWrite, SqliteError> {
+    let leaves: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM ros_summaries WHERE conversation_id = ?1 AND kind = ?2",
+            params_from_iter([
+                Value::Text(conversation.to_owned()),
+                Value::Text(SummaryKind::Leaf.as_str().to_owned()),
+            ]),
+            |row| row.get(0),
+        )
+        .map_err(SqliteError::query("count leaves"))?;
+    Ok(if leaves == 1 {
+        SummaryWrite::FirstLeaf
+    } else {
+        SummaryWrite::Added
+    })
 }
 
 fn load_window(

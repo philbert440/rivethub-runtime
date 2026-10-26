@@ -68,6 +68,10 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
         memory: store.clone(),
         wiki: store.clone(),
         consolidate: None,
+        topics: store.clone(),
+        lineage: Arc::new(capture::listing::StoreSessionLister::new(
+            capture::listing::StoreRoots::default(),
+        )),
     };
     for role in [workers::ProcessRole::Embedder, workers::ProcessRole::All] {
         let refused = with_models(

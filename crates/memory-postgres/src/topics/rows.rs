@@ -10,6 +10,7 @@ use kernel::topics::PlacementSource;
 use kernel::topics::Root;
 use kernel::topics::RootKind;
 use kernel::topics::Slug;
+use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
@@ -42,6 +43,12 @@ pub(super) struct PlacementRow {
     pub(super) topic_id: Uuid,
     pub(super) placed_by: String,
     pub(super) placed_at: DateTime<Utc>,
+}
+
+pub(super) struct SuggestionRow {
+    pub(super) session_id: String,
+    pub(super) name: String,
+    pub(super) topic_id: Option<Uuid>,
 }
 
 pub(super) struct PlacedRow {
@@ -98,6 +105,15 @@ pub(super) fn placement(row: PlacementRow) -> Result<Placement, TopicError> {
         by: PlacementSource::from_str(&row.placed_by)
             .map_err(|error| stored("placed_by")(Box::new(error)))?,
         at: row.placed_at,
+    })
+}
+
+pub(super) fn suggestion(row: SuggestionRow) -> Result<Suggestion, TopicError> {
+    Ok(Suggestion {
+        session: SessionId::try_from(row.session_id)
+            .map_err(|error| stored("session_id")(Box::new(error)))?,
+        name: TopicName::new(&row.name)?,
+        topic: row.topic_id.map(TopicId::from_uuid),
     })
 }
 

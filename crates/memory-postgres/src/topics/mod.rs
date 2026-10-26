@@ -10,6 +10,7 @@ use kernel::topics::Placement;
 use kernel::topics::PlacementOutcome;
 use kernel::topics::Redirect;
 use kernel::topics::Slug;
+use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
@@ -25,6 +26,7 @@ use crate::PostgresMemory;
 use rows::AliasRow;
 use rows::PlacedRow;
 use rows::PlacementRow;
+use rows::SuggestionRow;
 use rows::TopicRow;
 use rows::failed;
 use rows::not_found;
@@ -246,5 +248,35 @@ impl TopicStore for PostgresMemory {
         .into_iter()
         .map(rows::placed)
         .collect()
+    }
+
+    async fn suggest(&self, suggestion: Suggestion) -> Result<(), TopicError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(failed("session suggestion"))?;
+        write::lock_session(&mut tx, &suggestion.session).await?;
+        if rows::placement_of(&mut tx, &suggestion.session)
+            .await?
+            .is_none()
+        {
+            write::suggestion(&mut tx, &suggestion).await?;
+        }
+        tx.commit().await.map_err(failed("session suggestion"))?;
+        Ok(())
+    }
+
+    async fn suggestion(&self, session: &SessionId) -> Result<Option<Suggestion>, TopicError> {
+        sqlx::query_as!(
+            SuggestionRow,
+            "SELECT session_id, name, topic_id FROM rh_session_suggestions WHERE session_id = $1",
+            session.as_str()
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(failed("session suggestion read"))?
+        .map(rows::suggestion)
+        .transpose()
     }
 }

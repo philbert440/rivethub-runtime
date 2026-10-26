@@ -9,6 +9,7 @@ use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
 use kernel::topics::PlacementOutcome;
 use kernel::topics::Redirect;
+use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
@@ -167,5 +168,23 @@ impl TopicStore for SqliteStore {
     async fn sessions(&self, topic: TopicId) -> Result<Vec<PlacedSession>, TopicError> {
         self.topics("topic sessions", move |conn| rows::placed_in(conn, topic))
             .await
+    }
+
+    async fn suggest(&self, suggestion: Suggestion) -> Result<(), TopicError> {
+        self.topics("session suggestion", move |conn| {
+            if rows::placement_of(conn, &suggestion.session)?.is_none() {
+                write::suggestion(conn, &suggestion)?;
+            }
+            Ok(())
+        })
+        .await
+    }
+
+    async fn suggestion(&self, session: &SessionId) -> Result<Option<Suggestion>, TopicError> {
+        let session = session.clone();
+        self.topics("session suggestion read", move |conn| {
+            rows::suggestion_of(conn, &session)
+        })
+        .await
     }
 }

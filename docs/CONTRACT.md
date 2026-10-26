@@ -138,6 +138,14 @@ placements, sub-topics and aliases to B and keeps A's slug resolving to B. The B
 TypeScript recording; `{id}` takes a topic id or slug and `{session}` is the base64url session segment. Their
 bodies are the `wire::gateway::topics` types in `contract/*.schema.json`, and `lastActive` is the newest captured
 conversation update of the topic's sessions.
+(18) Session categorizer (Phil, 2026-10-26): when a session's first leaf summary is stored, the summarizer skips a
+session that is already placed or is a child of another session (it inherits its parent's topic on the client), then
+looks for the topics named in the conversation title and the leaf summary (slug, aliases and merge redirects, matched
+as whole words of three or more characters, a sub-topic winning over its parent). Exactly one named topic places the
+session `by: "categorizer"`; otherwise the session stays in Forming with a suggestion: the title as the suggested
+name and, when exactly one topic is named in the title, that topic as `topicId`. No model call is made. `GET
+/api/sessions/{session}/placement` carries the suggestion as an optional `suggestion` (`name`, optional `topicId`)
+while the session is unplaced; any placement clears it, and merges move its `topicId` like placements.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

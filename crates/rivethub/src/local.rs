@@ -14,6 +14,7 @@ use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::shutdown::Activities;
 use kernel::tasks::Delegation;
+use kernel::topics::TopicStore;
 use kernel::wiki::builder::WikiBuilderStore;
 use kernel::wiki::consolidate::WikiConsolidateStore;
 use memory_sqlite::{QueryEmbed, SqliteStore};
@@ -490,6 +491,8 @@ async fn build_runners(
             memory: Arc::clone(store) as Arc<dyn MemoryStore>,
             wiki: Arc::clone(store) as Arc<dyn WikiBuilderStore>,
             consolidate: Some(Arc::clone(store) as Arc<dyn WikiConsolidateStore>),
+            topics: Arc::clone(store) as Arc<dyn TopicStore>,
+            lineage: worker::session_lineage(env),
         };
         let mut runner =
             worker::build_runner(role, ports, config, env, shutdown, activities).await?;

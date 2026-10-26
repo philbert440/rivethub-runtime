@@ -12,6 +12,7 @@ use kernel::topics::PlacementOutcome;
 use kernel::topics::PlacementSource;
 use kernel::topics::Root;
 use kernel::topics::Slug;
+use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
@@ -362,5 +363,63 @@ pub async fn redirects_follow_a_second_merge(store: &dyn TopicStore) -> Outcome 
     if !matches!(refused, Err(TopicError::SelfMerge)) {
         return Err(format!("a self merge must be refused: {refused:?}").into());
     }
+    Ok(())
+}
+
+pub async fn suggestions_hold_until_the_session_is_placed(store: &dyn TopicStore) -> Outcome {
+    let gateway = store.create(new_topic("Gateway", &[], None)?).await?;
+    let mesh = store.create(new_topic("Mesh", &[], None)?).await?;
+    let session = session("00000000-0000-4000-8000-000000000021")?;
+    same("no suggestion yet", store.suggestion(&session).await?, None)?;
+    let unsure = Suggestion {
+        session: session.clone(),
+        name: TopicName::new("Mesh retries")?,
+        topic: Some(mesh.id),
+    };
+    store.suggest(unsure.clone()).await?;
+    same(
+        "stored suggestion",
+        store.suggestion(&session).await?,
+        Some(unsure.clone()),
+    )?;
+    store.merge(mesh.id, gateway.id, at(2)).await?;
+    same(
+        "a merge moves the unsure topic",
+        store
+            .suggestion(&session)
+            .await?
+            .and_then(|suggestion| suggestion.topic),
+        Some(gateway.id),
+    )?;
+    let renamed = Suggestion {
+        name: TopicName::new("Retry budget")?,
+        topic: None,
+        ..unsure
+    };
+    store.suggest(renamed.clone()).await?;
+    same(
+        "a new suggestion replaces the old one",
+        store.suggestion(&session).await?,
+        Some(renamed.clone()),
+    )?;
+    store
+        .place(Placement {
+            session: session.clone(),
+            topic: gateway.id,
+            by: PlacementSource::Categorizer,
+            at: at(3),
+        })
+        .await?;
+    same(
+        "a placement clears the suggestion",
+        store.suggestion(&session).await?,
+        None,
+    )?;
+    store.suggest(renamed).await?;
+    same(
+        "a placed session takes no suggestion",
+        store.suggestion(&session).await?,
+        None,
+    )?;
     Ok(())
 }

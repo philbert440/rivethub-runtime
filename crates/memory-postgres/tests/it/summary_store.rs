@@ -6,6 +6,7 @@ use kernel::memory::NewSummary;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummarySource;
 use kernel::memory::SummaryStore;
+use kernel::memory::SummaryWrite;
 use memory_postgres::PostgresMemory;
 use serde::Deserialize;
 use sqlx::PgPool;
@@ -179,15 +180,17 @@ async fn the_first_leaf_titles_only_untitled_conversations(pool: PgPool) -> Test
     let memory = PostgresMemory::new(pool.clone());
     let untitled = seed_untitled(&pool, "cli:untitled").await?;
     let named = seed_conversation(&pool, "cli:named", "Named by the hook").await?;
-    memory
+    let first = memory
         .write_summary(titled_leaf(
             untitled,
             "Moved the build to the new host. Then slept.",
         ))
         .await?;
-    memory
+    assert_eq!(first, SummaryWrite::FirstLeaf);
+    let later = memory
         .write_summary(titled_leaf(untitled, "A later leaf about something else."))
         .await?;
+    assert_eq!(later, SummaryWrite::Added);
     memory
         .write_summary(titled_leaf(named, "Moved the build to the new host."))
         .await?;

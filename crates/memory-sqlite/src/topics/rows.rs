@@ -9,6 +9,7 @@ use kernel::topics::Redirect;
 use kernel::topics::Root;
 use kernel::topics::RootKind;
 use kernel::topics::Slug;
+use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
@@ -261,6 +262,35 @@ pub(super) fn placement_of(
     .optional()
     .map_err(failed("session placement read"))?
     .map(placement)
+    .transpose()
+}
+
+pub(super) fn suggestion_of(
+    conn: &Connection,
+    session: &SessionId,
+) -> Result<Option<Suggestion>, TopicError> {
+    let row = conn
+        .query_row(
+            "SELECT session_id, name, topic_id FROM rh_session_suggestions WHERE session_id = ?1",
+            params![session.as_str()],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(failed("session suggestion read"))?;
+    row.map(|(session_id, name, topic)| {
+        Ok(Suggestion {
+            session: SessionId::try_from(session_id)
+                .map_err(|error| stored("session_id")(Box::new(error)))?,
+            name: TopicName::new(&name)?,
+            topic: topic.as_deref().map(topic_id).transpose()?,
+        })
+    })
     .transpose()
 }
 

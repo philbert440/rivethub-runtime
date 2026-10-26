@@ -118,7 +118,7 @@ impl SummaryStore for ClosedSummaries {
     async fn write_summary(
         &self,
         _summary: kernel::memory::NewSummary,
-    ) -> Result<(), SummaryStoreError> {
+    ) -> Result<kernel::memory::SummaryWrite, SummaryStoreError> {
         Err(SummaryStoreError::Closed)
     }
 }
