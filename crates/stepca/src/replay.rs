@@ -1,3 +1,4 @@
+use rustls_pki_types::UnixTime;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -29,6 +30,9 @@ const REPLAYED: &[&str] = &[
 ];
 
 const SKIPPED: &[(&str, &str)] = &[];
+
+const RECORDED_2026_10_15_NOON_UTC: UnixTime =
+    UnixTime::since_unix_epoch(std::time::Duration::from_hours(497_796));
 
 #[test]
 fn every_recorded_exchange_is_replayed_or_skipped() -> TestResult {
@@ -70,7 +74,8 @@ async fn recorded_step_ca_exchanges_replay() -> TestResult {
     let server = Server::start().await?;
     let current = server.mint("current")?;
     let revoked = server.mint("revoked")?;
-    let authority = Authority::for_replay(server.url().clone(), &root, server.tls_pem())?;
+    let authority = Authority::for_replay(server.url().clone(), &root, server.tls_pem())?
+        .verifying_at(RECORDED_2026_10_15_NOON_UTC);
     for case in &fixture.cases {
         if let Err(error) = replay_case(&server, &authority, &current, &revoked, case).await {
             return Err(format!("{}: {error}", case.id).into());

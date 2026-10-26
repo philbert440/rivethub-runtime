@@ -1,6 +1,3 @@
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
-
 use serde::Deserialize;
 
 use rustls_pki_types::CertificateDer;
@@ -61,6 +58,7 @@ pub(crate) fn serial(value: &str) -> Result<String, Error> {
 
 pub(crate) fn signed(
     root: &CertificateDer<'_>,
+    now: UnixTime,
     content_type: Option<&str>,
     bytes: &[u8],
 ) -> Result<SignedCertificate, Error> {
@@ -69,7 +67,7 @@ pub(crate) fn signed(
     let leaf = certificate(&response.crt)?;
     let intermediate = certificate(&response.ca)?;
     link(&response, &leaf, &intermediate)?;
-    trust(root, &leaf, &intermediate)?;
+    trust(root, now, &leaf, &intermediate)?;
     Ok(SignedCertificate {
         leaf: response.crt,
         intermediate: response.ca,
@@ -178,14 +176,12 @@ fn link(
 
 fn trust(
     root: &CertificateDer<'_>,
+    now: UnixTime,
     leaf: &CertificateDer<'_>,
     intermediate: &CertificateDer<'_>,
 ) -> Result<(), Error> {
     let anchor = webpki::anchor_from_trusted_cert(root)
         .map_err(|error| Error::Untrusted(error.to_string()))?;
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| Error::Clock)?;
     let end = webpki::EndEntityCert::try_from(leaf)
         .map_err(|error| Error::Untrusted(error.to_string()))?;
     let chain = [intermediate.clone()];
@@ -193,7 +189,7 @@ fn trust(
         webpki::ALL_VERIFICATION_ALGS,
         &[anchor],
         &chain,
-        UnixTime::since_unix_epoch(now),
+        now,
         webpki::KeyUsage::client_auth(),
         None,
         None,

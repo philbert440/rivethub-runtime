@@ -135,6 +135,10 @@ impl std::os::fd::AsRawFd for MeshWatch {
     }
 }
 
+#[expect(
+    deprecated,
+    reason = "RUSTSEC-2026-0386 covers fds closed while registered; AsyncFd owns this Inotify and the workspace forbids the unsafe replacement"
+)]
 fn mesh_watch(directory: &Path) -> Result<tokio::io::unix::AsyncFd<MeshWatch>, String> {
     let inotify = nix::sys::inotify::Inotify::init(
         nix::sys::inotify::InitFlags::IN_CLOEXEC | nix::sys::inotify::InitFlags::IN_NONBLOCK,

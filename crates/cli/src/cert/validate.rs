@@ -89,6 +89,11 @@ pub(super) fn accept(
     now: OffsetDateTime,
 ) -> Result<Accepted, Error> {
     let accepted = checked(pem, root, key, now)?;
+    if accepted.renew_at <= now.unix_timestamp() {
+        return Err(Error::PkiInput(
+            "CA certificate has already reached its renewal deadline",
+        ));
+    }
     one_identity(&accepted.names, principal)?;
     if !requested.is_subset(&accepted.names) {
         return Err(Error::PkiInput(
@@ -144,11 +149,6 @@ fn checked(
     let start = certificate.validity().not_before.timestamp();
     let end = certificate.validity().not_after.timestamp();
     let renew_at = renewal_at(start, end)?;
-    if renew_at <= now.unix_timestamp() {
-        return Err(Error::PkiInput(
-            "CA certificate has already reached its renewal deadline",
-        ));
-    }
     Ok(Accepted { names, renew_at })
 }
 
