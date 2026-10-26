@@ -279,6 +279,7 @@ impl TerminalService {
                 },
             },
         );
+        self.set_blocked(&key, session, false);
         Ok(())
     }
 

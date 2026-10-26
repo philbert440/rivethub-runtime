@@ -110,16 +110,46 @@ impl TerminalService {
         session: &SessionId,
         status: HarnessSessionStatus,
     ) {
-        if let Some(summary) = self.summaries.write().get_mut(key) {
-            summary.status = status;
-            summary.updated_at = chrono::Utc::now();
-        }
+        let settled = status != HarnessSessionStatus::Active;
+        let blocked = match self.summaries.write().get_mut(key) {
+            Some(summary) => {
+                summary.status = status;
+                summary.updated_at = chrono::Utc::now();
+                if settled {
+                    summary.blocked = None;
+                }
+                summary.blocked
+            }
+            None => None,
+        };
+        let reported = if settled { Some(false) } else { blocked };
+        self.publish_update(key, session, status, reported);
+    }
+
+    pub(crate) fn set_blocked(&self, key: &str, session: &SessionId, blocked: bool) {
+        let status = match self.summaries.write().get_mut(key) {
+            Some(summary) if summary.blocked.unwrap_or(false) != blocked => {
+                summary.blocked = blocked.then_some(true);
+                summary.status
+            }
+            _ => return,
+        };
+        self.publish_update(key, session, status, Some(blocked));
+    }
+
+    fn publish_update(
+        &self,
+        key: &str,
+        session: &SessionId,
+        status: HarnessSessionStatus,
+        blocked: Option<bool>,
+    ) {
         let event = HarnessEvent::SessionUpdated {
             session_id: session.clone(),
             status,
             previous_session_id: None,
             supersedes: None,
-            blocked: None,
+            blocked,
         };
         self.publish_harness(key, event.clone());
         self.publish_registry(key.to_owned(), event);

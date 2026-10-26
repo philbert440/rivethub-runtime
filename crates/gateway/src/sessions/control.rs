@@ -352,6 +352,10 @@ impl ChatActor {
         if let Some(harness_event) = self.tools.harness_event(&self.session, event) {
             self.service.publish_harness(&self.key, harness_event);
         }
+        if matches!(event, SessionEvent::Permission(_)) {
+            self.service.set_blocked(&self.key, &self.session, true);
+            return;
+        }
         let status = if matches!(event, SessionEvent::TurnEnded) {
             HarnessSessionStatus::Idle
         } else if matches!(event, SessionEvent::Exited { .. }) {
