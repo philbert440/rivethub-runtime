@@ -5,6 +5,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use kernel::transcript::StoreTranscript;
+use kernel::transcript::ToolOutputRead;
 use kernel::transcript::TranscriptRead;
 use kernel::transcript::TranscriptReader;
 use kernel::transcript::TranscriptReaderError;
@@ -37,6 +38,25 @@ pub(super) async fn transcript(
             .map(TranscriptRead::Read);
     }
     text_turns(harness, root, native).await
+}
+
+pub(super) async fn tool_output(
+    roots: &StoreRoots,
+    harness: HarnessId,
+    native: &str,
+    call: &str,
+) -> Result<ToolOutputRead, TranscriptReaderError> {
+    if harness != HarnessId::ClaudeCode {
+        return Ok(ToolOutputRead::NoSource);
+    }
+    let Some(root) = roots.single(harness).map(Path::to_path_buf) else {
+        return Ok(ToolOutputRead::Missing);
+    };
+    let native = native.to_owned();
+    let call = call.to_owned();
+    blocking(move || claude::tool_output(&root, &native, &call))
+        .await
+        .map(|found| found.map_or(ToolOutputRead::Missing, ToolOutputRead::Found))
 }
 
 async fn text_turns(

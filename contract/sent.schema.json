@@ -5487,6 +5487,25 @@
         "title"
       ]
     },
+    "HarnessToolOutput": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "isError": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "text",
+        "isError",
+        "truncated"
+      ]
+    },
     "HarnessSocketRefusalCode": {
       "type": "string",
       "enum": [

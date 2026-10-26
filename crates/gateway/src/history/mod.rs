@@ -3,8 +3,9 @@ mod context;
 use std::collections::HashMap;
 
 use chrono::Utc;
-use kernel::transcript::{StoreSession, StoreTranscript, TranscriptRead};
+use kernel::transcript::{StoreSession, StoreTranscript, ToolOutputRead, TranscriptRead};
 use parking_lot::RwLock;
+use wire::gateway::sessions::HarnessToolOutput;
 use wire::harness::{HarnessCode, HarnessId, HarnessOffering, HarnessSessionSummary};
 use wire::session_id::{SessionId, SessionRef, decode_segment};
 
@@ -106,6 +107,18 @@ impl History {
         })
     }
 
+    pub(crate) async fn resolve_canonical(
+        &self,
+        gateway: &Gateway,
+        segment: &str,
+    ) -> Result<Resolved, ApiError> {
+        let decoded = decode_segment(segment).map_err(|error| invalid(error.to_string()))?;
+        if let SessionRef::Bare(native) = &decoded.session {
+            return Err(invalid(format!("{native} is not a canonical session id")));
+        }
+        self.resolve(gateway, segment).await
+    }
+
     async fn owner_of_bare(
         &self,
         gateway: &Gateway,
@@ -160,6 +173,32 @@ impl History {
             spawn_model.as_deref(),
         );
         Ok(Transcript { read, stamp })
+    }
+
+    pub(crate) async fn tool_output(
+        &self,
+        gateway: &Gateway,
+        resolved: &Resolved,
+        tool_call_id: &str,
+    ) -> Result<HarnessToolOutput, ApiError> {
+        let unsupported = || {
+            ApiError::Code(
+                HarnessCode::CapabilityUnsupported,
+                format!("{} has no tool output source", resolved.harness),
+            )
+        };
+        let lister = gateway.session_lister().ok_or_else(unsupported)?;
+        match lister
+            .tool_output(resolved.harness, &resolved.native, tool_call_id)
+            .await?
+        {
+            ToolOutputRead::Found(output) => Ok(output),
+            ToolOutputRead::Missing => Err(ApiError::Missing(format!(
+                "unknown tool call {tool_call_id} in {}",
+                resolved.session
+            ))),
+            ToolOutputRead::NoSource => Err(unsupported()),
+        }
     }
 }
 
