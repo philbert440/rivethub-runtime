@@ -61,6 +61,17 @@ impl Harness {
         );
     }
 
+    pub(crate) async fn emit(&self, session: &SessionId, event: SessionEvent) {
+        let sender = self
+            .sessions
+            .lock()
+            .get(session)
+            .expect("live session")
+            .sender
+            .clone();
+        sender.send(event).await.expect("events");
+    }
+
     pub(crate) async fn traced(&self, wanted: &str) {
         let mut trace = self.trace.subscribe();
         tokio::time::timeout(super::WAIT, async {

@@ -187,3 +187,86 @@ async fn a_socket_opens_on_a_node_without_chat_sessions() {
     assert!(opened.is_ok());
     stop.cancel();
 }
+
+async fn blocked(socket: &mut Socket) -> (HarnessSessionStatus, Option<bool>) {
+    let HarnessEvent::SessionUpdated {
+        status, blocked, ..
+    } = event(socket).await
+    else {
+        panic!("session-updated expected");
+    };
+    (status, blocked)
+}
+
+#[tokio::test]
+async fn a_pending_approval_blocks_the_session_until_it_is_answered() {
+    let setup = setup().await;
+    let mut socket = watch(&setup, "", None).await;
+    let session = create(&setup, "claude-code", None).await;
+    created(&mut socket).await;
+    let (status, _) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!("/api/harness-sessions/{session}/turn"),
+        r#"{"text":"hi"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        blocked(&mut socket).await,
+        (HarnessSessionStatus::Active, None)
+    );
+    setup.harness.traced("prompt:hi").await;
+    setup
+        .harness
+        .emit(
+            &session,
+            kernel::harness::SessionEvent::Permission(kernel::harness::PermissionRequest {
+                request_id: "ask-1".into(),
+                tool_call_id: None,
+                name: "Bash".into(),
+                input: wire::JsonObject::default(),
+                reason: None,
+            }),
+        )
+        .await;
+    assert_eq!(
+        blocked(&mut socket).await,
+        (HarnessSessionStatus::Active, Some(true))
+    );
+    let listed = setup
+        .fixture
+        .service
+        .harness_sessions(&session_support::user("owner"));
+    assert_eq!(
+        listed
+            .sessions
+            .iter()
+            .map(|summary| summary.blocked)
+            .collect::<Vec<_>>(),
+        vec![Some(true)]
+    );
+    let (status, _) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!(
+            "/api/harness-sessions/{}/approvals/ask-1",
+            wire::session_id::encode_segment(&session)
+        ),
+        r#"{"decision":"allow"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        blocked(&mut socket).await,
+        (HarnessSessionStatus::Active, Some(false))
+    );
+    setup.harness.finish.add_permits(1);
+    assert_eq!(
+        blocked(&mut socket).await,
+        (HarnessSessionStatus::Idle, Some(false))
+    );
+    setup.stop.cancel();
+}
