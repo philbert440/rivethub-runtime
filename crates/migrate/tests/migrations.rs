@@ -11,12 +11,12 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 25);
+    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 26);
 
     let applied = sqlx::query("SELECT count(*)::bigint AS n FROM _sqlx_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 25);
+    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 26);
 
     migrate::postgres_pool(&pool).await?;
 
@@ -41,6 +41,7 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
         "rh_topic_redirects",
         "rh_session_placements",
         "rh_session_suggestions",
+        "rh_hub_state",
     ] {
         let present = sqlx::query("SELECT to_regclass($1) IS NOT NULL AS present")
             .bind(format!("public.{table}"))
@@ -189,8 +190,8 @@ async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
         .await?;
     assert_eq!(
         tracked.try_get::<i64, _>("n").unwrap(),
-        25,
-        "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, and 0025 adds topic suggestions"
+        26,
+        "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, 0025 adds topic suggestions, and 0026 adds the hub state table"
     );
     let summaries_trgm =
         sqlx::query("SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_ros_summaries_trgm'")

@@ -240,6 +240,7 @@ pub struct Gateway {
     history: history::History,
     uploads: Option<uploads::UploadService>,
     presets: routes::agents::AgentRegistry,
+    hub_state: Arc<dyn kernel::hub_state::HubStateStore>,
     certificate_authority: Option<Arc<dyn kernel::ca::CertificateAuthority>>,
     devices: routes::devices::DeviceRuntime,
     mesh_cache: routes::MeshCache,
@@ -259,6 +260,7 @@ impl Gateway {
             settings.allowed_hosts.clone(),
         );
         let presets = routes::agents::open(&settings);
+        let hub_state = routes::hub_state::open(&settings);
         Self {
             store,
             turn_runner: None,
@@ -278,6 +280,7 @@ impl Gateway {
             history: history::History::default(),
             uploads: None,
             presets,
+            hub_state,
             certificate_authority: None,
             devices: routes::devices::DeviceRuntime::unconfigured(),
             mesh_cache: routes::MeshCache::default(),
@@ -297,6 +300,16 @@ impl Gateway {
     ) -> Self {
         self.presets = routes::agents::backed_by(&self.settings, store);
         self
+    }
+
+    #[must_use]
+    pub fn with_hub_state(mut self, store: Arc<dyn kernel::hub_state::HubStateStore>) -> Self {
+        self.hub_state = store;
+        self
+    }
+
+    pub(crate) fn hub_state(&self) -> &dyn kernel::hub_state::HubStateStore {
+        self.hub_state.as_ref()
     }
 
     #[must_use]

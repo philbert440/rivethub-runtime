@@ -4,6 +4,7 @@ mod agent_presets;
 mod capture_pg;
 mod embedding_store;
 mod final_fix;
+mod hub_state;
 mod index_friendly;
 mod memory_golden;
 mod named_queues;

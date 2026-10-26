@@ -15,6 +15,7 @@ use config::{Config, Environment};
 use gateway::Gateway;
 use gateway::sessions::SessionRegistry;
 use kernel::agent_presets::AgentPresetStore;
+use kernel::hub_state::HubStateStore;
 use kernel::memory::MemoryExport;
 use kernel::memory::MemoryStore;
 use kernel::topics::TopicStore;
@@ -79,6 +80,18 @@ pub async fn agent_presets(
         .map(|store| Arc::new(store) as Arc<dyn AgentPresetStore>))
 }
 
+pub async fn hub_state(
+    memory: &PostgresMemory,
+) -> Result<Option<Arc<dyn HubStateStore>>, ComposeError> {
+    let store = memory.hub_state().await?;
+    if store.is_none() {
+        tracing::warn!(
+            "rh_hub_state is missing on the memory database; hub state stays on this node until `rh db migrate` runs"
+        );
+    }
+    Ok(store.map(|store| Arc::new(store) as Arc<dyn HubStateStore>))
+}
+
 #[expect(
     missing_debug_implementations,
     reason = "Gateway contains kernel ports without Debug"
@@ -107,6 +120,7 @@ fn gateway_settings(config: &Config, env: &Environment) -> Result<gateway::Setti
 #[derive(Default)]
 struct Backing<'tasks> {
     presets: Option<Arc<dyn AgentPresetStore>>,
+    hub_state: Option<Arc<dyn HubStateStore>>,
     export: Option<Arc<dyn MemoryExport>>,
     topics: Option<Arc<dyn TopicStore>>,
     tasks: Option<&'tasks crate::agent::LocalTasks>,
@@ -132,6 +146,10 @@ async fn attach_tasks(
 fn with_backing(gateway: Gateway, backing: &Backing<'_>) -> Gateway {
     let gateway = match backing.presets.clone() {
         Some(presets) => gateway.with_agent_presets(presets),
+        None => gateway,
+    };
+    let gateway = match backing.hub_state.clone() {
+        Some(store) => gateway.with_hub_state(store),
         None => gateway,
     };
     let gateway = match backing.export.clone() {
@@ -224,6 +242,7 @@ impl Composition {
         })?;
         let backing = Backing {
             presets: agent_presets(memory).await?,
+            hub_state: hub_state(memory).await?,
             export: Some(Arc::new(MemoryExporter::postgres(Arc::clone(memory), url))),
             topics: Some(memory.clone()),
             tasks: None,
@@ -245,6 +264,7 @@ impl Composition {
     ) -> Result<Self, ComposeError> {
         let backing = Backing {
             presets: None,
+            hub_state: None,
             export: Some(Arc::new(MemoryExporter::sqlite(Arc::clone(store)))),
             topics: Some(store.clone()),
             tasks,
