@@ -590,6 +590,31 @@ async fn observed_usage_promotes_the_window_and_learns_the_compact_point() {
 }
 
 #[tokio::test]
+async fn a_prompt_past_a_million_promotes_the_window_to_the_next_million() {
+    let stores = Stores {
+        rows: vec![row(HarnessId::Codex, U1, 1)],
+        transcripts: BTreeMap::from([(
+            (HarnessId::Codex, U1.to_owned()),
+            vec![answered("a", "gpt-5", 1_085_000)],
+        )]),
+        ..Stores::default()
+    };
+    let setup = setup("{}", stores).await;
+    let (_, body) = get(
+        &setup,
+        &format!(
+            "/api/harness-sessions/{}/transcript",
+            enc(&format!("codex:{U1}"))
+        ),
+        None,
+    )
+    .await;
+    let read: HarnessSessionTranscriptResponse = parsed(&body);
+    assert_eq!(read.context_window, 2_000_000);
+    assert_eq!(read.context_source, ContextSource::Observed);
+}
+
+#[tokio::test]
 async fn a_harness_without_a_transcript_reader_is_unsupported() {
     let stores = Stores {
         rows: vec![row(HarnessId::Cowork, "c1", 1)],

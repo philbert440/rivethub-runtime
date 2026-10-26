@@ -104,7 +104,7 @@ impl Stamps {
             .map(|usage| usage.prompt_tokens);
         for prompt in prompts {
             if prompt > window {
-                window = MILLION;
+                window = prompt.div_ceil(MILLION).saturating_mul(MILLION);
                 source = ContextSource::Observed;
             }
             if let Some(before) = previous
