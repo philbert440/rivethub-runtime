@@ -93,16 +93,34 @@ fn select(
         return Err(AcpError::ConfigOptionUnavailable { category: label });
     };
     let offered = select_ids(found, label)?;
-    if !offered.iter().any(|id| id.0.as_ref() == value) {
+    let chosen = if offered.iter().any(|id| id.0.as_ref() == value) {
+        Some(value.clone())
+    } else if category == acp::SessionConfigOptionCategory::Model {
+        alias(&offered, &value)
+    } else {
+        None
+    };
+    let Some(chosen) = chosen else {
         return Err(AcpError::ConfigValueRejected {
             category: label,
             value,
         });
-    }
+    };
     Ok(ConfigSelection {
         config_id: found.id.clone(),
-        value: acp::SessionConfigOptionValue::value_id(value),
+        value: acp::SessionConfigOptionValue::value_id(chosen),
     })
+}
+
+fn alias(offered: &[acp::SessionConfigValueId], value: &str) -> Option<String> {
+    let wanted = value.to_lowercase();
+    let mut named = offered.iter().filter(|id| {
+        id.0.to_lowercase()
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|part| part == wanted)
+    });
+    let found = named.next()?;
+    named.next().is_none().then(|| found.0.to_string())
 }
 
 fn select_ids(
@@ -183,6 +201,34 @@ mod tests {
         let effort = select(&options, &SessionOption::Effort(ThinkingLevel::Low)).expect("effort");
         assert_eq!(effort.config_id.0.as_ref(), "reasoning_effort");
         assert_eq!(effort.value, acp::SessionConfigOptionValue::value_id("low"));
+    }
+
+    #[test]
+    fn a_model_alias_resolves_to_the_one_advertised_id_that_names_it() {
+        let ids = |ids: &[&str]| {
+            acp::SessionConfigOption::select(
+                "model",
+                "Model",
+                ids.first().copied().unwrap_or_default().to_owned(),
+                ids.iter()
+                    .map(|id| {
+                        acp::SessionConfigSelectOption::new((*id).to_owned(), (*id).to_owned())
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .category(acp::SessionConfigOptionCategory::Model)
+        };
+        let claude = vec![ids(&["default", "opus", "claude-fable-5-1[1m]", "sonnet"])];
+        let fable = select(&claude, &SessionOption::Model("fable".to_owned())).expect("alias");
+        assert_eq!(
+            fable.value,
+            acp::SessionConfigOptionValue::value_id("claude-fable-5-1[1m]")
+        );
+        let twins = vec![ids(&["claude-fable-5", "claude-fable-5-1"])];
+        assert!(matches!(
+            select(&twins, &SessionOption::Model("fable".to_owned())),
+            Err(AcpError::ConfigValueRejected { .. })
+        ));
     }
 
     #[test]
