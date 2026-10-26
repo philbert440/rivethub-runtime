@@ -79,12 +79,7 @@ async fn transcript(
     let canonical = session
         .parse::<wire::session_id::SessionId>()
         .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-    let command = canonical
-        .as_str()
-        .split_once(':')
-        .ok_or_else(|| ApiError::BadRequest("canonical session required".into()))?
-        .0
-        .to_owned();
+    let command = canonical.harness().to_string();
     let turns = reader
         .read(&canonical)
         .await?

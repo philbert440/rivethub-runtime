@@ -34,7 +34,6 @@ use super::sqlite::database_file;
 use super::sqlite::require_component;
 
 const FORMAT: &str = "hermes-messages";
-const PREFIX: &str = "hermes:";
 const FILE: &str = "state.db";
 
 #[derive(Debug)]
@@ -53,7 +52,7 @@ impl HermesTranscriptReader {
         session: &SessionId,
         offset: u64,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
-        let Some(native_id) = native(session, PREFIX) else {
+        let Some(native_id) = native(session, HarnessId::Hermes) else {
             return Ok(TranscriptSlice::empty(offset));
         };
         let root = self.root.clone();

@@ -23,7 +23,6 @@ use crate::transcript::parse_lines;
 use crate::transcript::read_capped;
 
 const FORMAT: &str = "cowork-jsonl";
-const PREFIX: &str = "cowork:";
 
 #[derive(Debug)]
 pub struct CoworkTranscriptReader {
@@ -41,7 +40,7 @@ impl CoworkTranscriptReader {
         session: &SessionId,
         offset: u64,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
-        let Some(native_id) = native(session, PREFIX).map(str::to_owned) else {
+        let Some(native_id) = native(session, HarnessId::Cowork).map(str::to_owned) else {
             return Ok(TranscriptSlice::empty(offset));
         };
         let root = self.root.clone();

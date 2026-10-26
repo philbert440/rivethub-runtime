@@ -83,10 +83,7 @@ fn session_of(event: &HarnessEvent) -> Option<&SessionId> {
 }
 
 fn served_by(session: &SessionId, harness: HarnessId) -> bool {
-    session
-        .as_str()
-        .split_once(':')
-        .is_some_and(|(prefix, _)| prefix == harness.to_string())
+    session.harness() == harness
 }
 
 async fn next_event(

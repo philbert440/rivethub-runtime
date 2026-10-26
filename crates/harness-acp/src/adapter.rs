@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
-use std::str::FromStr as _;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
@@ -225,12 +224,10 @@ impl AcpHarnessAdapter {
     }
 
     fn requested_session(spec: &SessionSpec) -> Result<(), HarnessAdapterError> {
-        let Some((prefix, _native)) = spec.session.as_str().split_once(':') else {
-            return Err(HarnessAdapterError::InvalidSession(spec.session.clone()));
-        };
-        match HarnessId::from_str(prefix) {
-            Ok(harness) if harness == spec.harness => Ok(()),
-            _ => Err(HarnessAdapterError::InvalidSession(spec.session.clone())),
+        if spec.session.harness() == spec.harness {
+            Ok(())
+        } else {
+            Err(HarnessAdapterError::InvalidSession(spec.session.clone()))
         }
     }
 }

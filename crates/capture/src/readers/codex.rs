@@ -40,7 +40,6 @@ use crate::store_path::session_component;
 use crate::store_path::utf8_stem;
 
 const FORMAT: &str = "codex-rollout";
-const PREFIX: &str = "codex:";
 
 #[derive(Debug)]
 pub struct CodexTranscriptReader {
@@ -58,7 +57,7 @@ impl CodexTranscriptReader {
         session: &SessionId,
         offset: u64,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
-        let Some(native_id) = native(session, PREFIX).map(str::to_owned) else {
+        let Some(native_id) = native(session, HarnessId::Codex).map(str::to_owned) else {
             return Ok(TranscriptSlice::empty(offset));
         };
         let root = self.root.clone();

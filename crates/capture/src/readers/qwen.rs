@@ -37,7 +37,6 @@ use crate::store_path::session_component;
 use crate::store_path::utf8_stem;
 
 const FORMAT: &str = "qwen-jsonl";
-const PREFIX: &str = "qwen-code:";
 
 #[derive(Debug)]
 pub struct QwenTranscriptReader {
@@ -55,7 +54,7 @@ impl QwenTranscriptReader {
         session: &SessionId,
         offset: u64,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
-        let Some(native_id) = native(session, PREFIX).map(str::to_owned) else {
+        let Some(native_id) = native(session, HarnessId::QwenCode).map(str::to_owned) else {
             return Ok(TranscriptSlice::empty(offset));
         };
         let root = self.root.clone();

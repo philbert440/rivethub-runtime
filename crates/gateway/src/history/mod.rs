@@ -77,17 +77,6 @@ async fn registered(gateway: &Gateway) -> Result<Vec<HarnessId>, ApiError> {
         .collect())
 }
 
-fn native_of(session: &SessionId) -> Result<(HarnessId, String), ApiError> {
-    let (prefix, native) = session
-        .as_str()
-        .split_once(':')
-        .ok_or_else(|| invalid(format!("invalid session id: {session}")))?;
-    let harness = prefix
-        .parse::<HarnessId>()
-        .map_err(|_| invalid(format!("invalid session id: {session}")))?;
-    Ok((harness, native.to_owned()))
-}
-
 impl History {
     pub(crate) async fn resolve(
         &self,
@@ -98,7 +87,7 @@ impl History {
         let registry = registered(gateway).await?;
         let session = match &decoded.session {
             SessionRef::Canonical(session) => {
-                let (harness, _) = native_of(session)?;
+                let harness = session.harness();
                 if !registry.contains(&harness) {
                     return Err(invalid(format!("no driver registered for {harness}")));
                 }
@@ -109,12 +98,11 @@ impl History {
                 native,
             ),
         };
-        let (harness, native) = native_of(&session)?;
         Ok(Resolved {
             redirected_to: decoded.redirected_to(&session),
+            harness: session.harness(),
+            native: session.native().to_owned(),
             session,
-            harness,
-            native,
         })
     }
 
