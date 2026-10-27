@@ -237,8 +237,9 @@ async fn stream(
             },
             event = events.recv() => match event {
                 Ok(event) => {
-                    let session = match &event { SessionBroadcast::Event(event) => &event.session, SessionBroadcast::Removed(event) => &event.session, SessionBroadcast::Snapshot(_) => return Err(SocketError::Lagged) };
-                    if filter.as_ref().is_none_or(|filter| filter == session) { send(&mut socket, &event).await?; }
+                    let session = match &event { SessionBroadcast::Event(event) => Some(&event.session), SessionBroadcast::Removed(event) => Some(&event.session), SessionBroadcast::HubState(_) => None, SessionBroadcast::Snapshot(_) => return Err(SocketError::Lagged) };
+                    let wanted = match (filter.as_ref(), session) { (None, _) => true, (Some(filter), Some(session)) => filter == session, (Some(_), None) => false };
+                    if wanted { send(&mut socket, &event).await?; }
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => return Ok(()),
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {

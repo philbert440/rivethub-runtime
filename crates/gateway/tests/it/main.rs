@@ -31,6 +31,7 @@ mod extract;
 mod files;
 mod harness_registry;
 mod harnesses;
+mod hub_state;
 mod memory_api;
 mod mesh_channel;
 mod mesh_registry;

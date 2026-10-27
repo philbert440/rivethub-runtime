@@ -9,6 +9,7 @@ mod embedding_store;
 pub mod error;
 mod graphile;
 mod graphile_sql;
+mod hub_state;
 mod listen;
 mod loss;
 mod memory_jobs;
@@ -39,6 +40,7 @@ pub mod wiki_writer;
 mod resilience;
 
 pub use agent_presets::PostgresPresets;
+pub use hub_state::PostgresHubState;
 pub use task_db::PostgresTasks;
 
 use std::cmp::Ordering;
@@ -59,7 +61,7 @@ pub use queue::PostgresQueue;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-pub const SCHEMA_VERSION: i64 = 25;
+pub const SCHEMA_VERSION: i64 = 26;
 pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]

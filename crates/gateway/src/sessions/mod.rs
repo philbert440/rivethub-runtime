@@ -16,6 +16,7 @@ use wire::events::{
     AgentEvent, AgentEventKind, ProtocolVersion, SessionBroadcast, SessionRemoved, Snapshot,
     StateResponse,
 };
+use wire::gateway::hub_state::HubStateChanged;
 
 use crate::error::ApiError;
 use crate::tenancy::UserId;
@@ -247,6 +248,16 @@ impl SessionRegistry {
             Some(owner) if owner == user => Ok(key),
             Some(_) => Err(ApiError::SessionForbidden),
             None => Err(ApiError::NotFound("unknown session")),
+        }
+    }
+
+    pub(crate) fn hub_state_changed(&self, user: &UserId, version: u64) {
+        let tenant = self.tenants.read().get(user).cloned();
+        if let Some(tenant) = tenant {
+            tenant.publish(SessionBroadcast::HubState(HubStateChanged {
+                v: ProtocolVersion::V1,
+                version,
+            }));
         }
     }
 

@@ -228,5 +228,6 @@ pub struct SessionRemoved {
 pub enum SessionBroadcast {
     Snapshot(Snapshot),
     Removed(SessionRemoved),
+    HubState(crate::gateway::hub_state::HubStateChanged),
     Event(AgentEvent),
 }
