@@ -63,7 +63,7 @@ pub(super) fn failed(operation: &'static str) -> impl FnOnce(sqlx::Error) -> Top
     move |source| TopicError::Unavailable(Box::new(Error::operation(operation, source)))
 }
 
-fn stored(
+pub(super) fn stored(
     field: &'static str,
 ) -> impl FnOnce(Box<dyn std::error::Error + Send + Sync>) -> TopicError {
     move |source| TopicError::Unavailable(Box::new(Error::StoredValue { field, source }))

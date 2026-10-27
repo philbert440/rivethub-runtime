@@ -51,7 +51,7 @@ pub(super) fn failed(operation: &'static str) -> impl FnOnce(rusqlite::Error) ->
     move |source| TopicError::Unavailable(Box::new(SqliteError::Query { operation, source }))
 }
 
-fn stored(field: &'static str) -> impl FnOnce(kernel::BoxError) -> TopicError {
+pub(super) fn stored(field: &'static str) -> impl FnOnce(kernel::BoxError) -> TopicError {
     move |source| {
         TopicError::Unavailable(Box::new(SqliteError::Invalid {
             message: format!("stored {field} is invalid: {source}"),

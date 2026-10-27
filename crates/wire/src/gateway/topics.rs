@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
 use crate::gateway::wiki::WikiPageResponse;
+use crate::gateway::wiki::WikiSlug;
 use crate::session_id::SessionId;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -151,4 +152,36 @@ pub struct TopicPage {
     pub topic: TopicRecord,
     #[serde(default)]
     pub page: Option<WikiPageResponse>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum StartupKind {
+    Topic,
+    Recent,
+    Relevant,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum StartupSource {
+    Session(SessionId),
+    Wiki(WikiSlug),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupSection {
+    pub kind: StartupKind,
+    pub title: String,
+    pub text: String,
+    pub sources: Vec<StartupSource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupContext {
+    pub topic_id: String,
+    pub sections: Vec<StartupSection>,
+    pub tokens: usize,
 }

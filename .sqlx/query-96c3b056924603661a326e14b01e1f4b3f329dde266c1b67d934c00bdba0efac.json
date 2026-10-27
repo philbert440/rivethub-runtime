@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT topic_id, tokens, sections FROM rh_session_startup WHERE session_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "topic_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rh_session_startup",
+            "name": "topic_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tokens",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "rh_session_startup",
+            "name": "tokens"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "sections",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "rh_session_startup",
+            "name": "sections"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "96c3b056924603661a326e14b01e1f4b3f329dde266c1b67d934c00bdba0efac"
+}

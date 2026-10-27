@@ -5,6 +5,8 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::BrowseFilter;
 use kernel::memory::SearchMode;
+use kernel::memory::budget::push_within_budget;
+use kernel::memory::budget::relative_when;
 use kernel::memory_core::TimeRange;
 use std::str::FromStr as _;
 use uuid::Uuid;
@@ -455,29 +457,5 @@ impl crate::PostgresMemory {
             section.push_str(&line);
         }
         Ok(Some(section))
-    }
-}
-
-fn push_within_budget(budget: &mut usize, line: &str) -> bool {
-    let tokens = line.chars().count().div_ceil(4);
-    if tokens > *budget {
-        return false;
-    }
-    *budget -= tokens;
-    true
-}
-
-fn relative_when(delta: chrono::Duration) -> String {
-    let minutes = delta.num_minutes().max(0);
-    if minutes < 1 {
-        "just now".to_string()
-    } else if minutes < 60 {
-        format!("{minutes} minutes ago")
-    } else if minutes < 60 * 24 {
-        format!("{} hours ago", minutes / 60)
-    } else if minutes < 60 * 24 * 30 {
-        format!("{} days ago", minutes / (60 * 24))
-    } else {
-        format!("{} months ago", minutes / (60 * 24 * 30))
     }
 }

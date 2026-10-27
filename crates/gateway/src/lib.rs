@@ -250,6 +250,12 @@ pub struct Gateway {
     providers: Vec<kernel::model::ProviderHealth>,
     memory_export: Option<Arc<dyn kernel::memory::MemoryExport>>,
     topics: Option<Arc<dyn kernel::topics::TopicStore>>,
+    startup: Option<StartupMemory>,
+}
+
+struct StartupMemory {
+    pages: Arc<dyn kernel::topics::TopicPageStore>,
+    kept: Arc<dyn kernel::topics::StartupStore>,
 }
 
 impl Gateway {
@@ -290,6 +296,7 @@ impl Gateway {
             providers: Vec::new(),
             memory_export: None,
             topics: None,
+            startup: None,
         }
     }
 
@@ -328,6 +335,27 @@ impl Gateway {
         self.topics
             .as_ref()
             .ok_or_else(|| error::ApiError::Unavailable("topic store unavailable".into()))
+    }
+
+    #[must_use]
+    pub fn with_startup_memory(
+        mut self,
+        pages: Arc<dyn kernel::topics::TopicPageStore>,
+        kept: Arc<dyn kernel::topics::StartupStore>,
+    ) -> Self {
+        self.startup = Some(StartupMemory { pages, kept });
+        self
+    }
+
+    pub(crate) fn startup_memory(
+        &self,
+    ) -> Option<(
+        &dyn kernel::topics::TopicPageStore,
+        &dyn kernel::topics::StartupStore,
+    )> {
+        self.startup
+            .as_ref()
+            .map(|startup| (startup.pages.as_ref(), startup.kept.as_ref()))
     }
 
     pub(crate) fn memory_export(&self) -> Option<&Arc<dyn kernel::memory::MemoryExport>> {

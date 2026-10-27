@@ -16,7 +16,7 @@ async fn sqlite_status_is_read_only_and_migrate_is_idempotent() -> Result {
     assert_eq!(before.exit, Exit::Ok);
     assert_eq!(
         before.stdout,
-        format!("sqlite {path_text}: current 0, required 14, pending 14\n")
+        format!("sqlite {path_text}: current 0, required 15, pending 15\n")
     );
     assert!(!path.exists());
     for _ in 0..2 {
@@ -24,14 +24,14 @@ async fn sqlite_status_is_read_only_and_migrate_is_idempotent() -> Result {
         assert_eq!(applied.exit, Exit::Ok, "{}", applied.stderr);
         assert_eq!(
             applied.stdout,
-            format!("sqlite {path_text}: applied; current 14, required 14, pending 0\n")
+            format!("sqlite {path_text}: applied; current 15, required 15, pending 0\n")
         );
     }
     let bytes = std::fs::read(&path)?;
     let after = run(&["db", "status", "--path", path_text], &env).await;
     assert_eq!(
         after.stdout,
-        format!("sqlite {path_text}: current 14, required 14, pending 0\n")
+        format!("sqlite {path_text}: current 15, required 15, pending 0\n")
     );
     assert_eq!(std::fs::read(path)?, bytes);
     Ok(())
