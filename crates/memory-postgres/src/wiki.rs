@@ -96,7 +96,7 @@ impl PostgresMemory {
     pub(crate) async fn read_wiki_page(&self, slug: &WikiSlug) -> Result<WikiLookup, Error> {
         let row = sqlx::query!(
             "SELECT slug, title, aliases, tags, entities, current_state, article, related,
-                    git_sha, last_verified_at, updated_at
+                    git_sha, last_verified_at, updated_at, topic_id
              FROM rh_wiki_topics WHERE slug = $1",
             slug.as_ref()
         )
@@ -135,6 +135,7 @@ impl PostgresMemory {
             last_verified: row.last_verified_at,
             updated_at: row.updated_at,
             related: Some(row.related),
+            topic_id: row.topic_id.map(|id| id.to_string()),
         })))
     }
 

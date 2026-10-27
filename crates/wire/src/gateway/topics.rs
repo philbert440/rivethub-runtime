@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
+use crate::gateway::wiki::WikiPageResponse;
 use crate::session_id::SessionId;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -141,4 +142,13 @@ pub struct TopicSession {
 #[serde(rename_all = "camelCase")]
 pub struct TopicSessionList {
     pub sessions: Vec<TopicSession>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicPage {
+    pub topic: TopicRecord,
+    #[serde(default)]
+    pub page: Option<WikiPageResponse>,
 }

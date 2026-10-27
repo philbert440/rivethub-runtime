@@ -104,6 +104,8 @@ pub trait TopicStore: Send + Sync {
 
     async fn suggestion(&self, session: &SessionId) -> Result<Option<Suggestion>, TopicError>;
 
+    async fn page_slug(&self, topic: TopicId) -> Result<Option<String>, TopicError>;
+
     async fn search(
         &self,
         query: &TopicQuery,

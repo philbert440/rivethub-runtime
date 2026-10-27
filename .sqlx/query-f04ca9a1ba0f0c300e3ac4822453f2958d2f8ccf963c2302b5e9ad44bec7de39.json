@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT slug, title, aliases, tags, entities, current_state, article, related,\n                    git_sha, last_verified_at, updated_at\n             FROM rh_wiki_topics WHERE slug = $1",
+  "query": "SELECT slug, title, aliases, tags, entities, current_state, article, related,\n                    git_sha, last_verified_at, updated_at, topic_id\n             FROM rh_wiki_topics WHERE slug = $1",
   "describe": {
     "columns": [
       {
@@ -123,6 +123,17 @@
             "name": "updated_at"
           }
         }
+      },
+      {
+        "ordinal": 11,
+        "name": "topic_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rh_wiki_topics",
+            "name": "topic_id"
+          }
+        }
       }
     ],
     "parameters": {
@@ -141,8 +152,9 @@
       false,
       true,
       true,
-      false
+      false,
+      true
     ]
   },
-  "hash": "cbe2a1ee996e9bd512ba60d545112732b56dd0123c7862317f8ff1bd6c297bd7"
+  "hash": "f04ca9a1ba0f0c300e3ac4822453f2958d2f8ccf963c2302b5e9ad44bec7de39"
 }

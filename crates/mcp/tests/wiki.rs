@@ -61,6 +61,7 @@ fn page() -> WikiPageResponse {
             .expect("instant")
             .with_timezone(&chrono::Utc),
         related: None,
+        topic_id: None,
     }
 }
 

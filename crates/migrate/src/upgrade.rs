@@ -40,6 +40,9 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         SchemaVersion::V12 => in_transaction(conn, to, |tx| {
             tx.execute_batch(include_str!("schema/topic_suggestions_v12.sql"))
         }),
+        SchemaVersion::V13 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/topic_pages_v13.sql"))
+        }),
     }
 }
 
