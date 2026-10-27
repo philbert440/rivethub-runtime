@@ -42,7 +42,9 @@ pub(super) fn page_error(error: TopicPageError) -> ApiError {
     match error {
         TopicPageError::Topic(error) => self::error(error),
         TopicPageError::Memory(error) => ApiError::Store(error),
-        TopicPageError::Wiki(_) | TopicPageError::Payload(_) | TopicPageError::Lineage(_) => {
+        TopicPageError::Wiki(_)
+        | TopicPageError::Payload(_)
+        | TopicPageError::ParentPlacement(_) => {
             tracing::error!("topic page lookup failed: {error}");
             ApiError::Internal
         }

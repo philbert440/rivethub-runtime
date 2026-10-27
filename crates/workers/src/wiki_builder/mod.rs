@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use kernel::memory::{EmbedTable, EmbedTarget};
 use kernel::model::{ModelProvider, ModelProviderError, ModelRequest};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
+use kernel::topics::TopicPageError;
 use kernel::wiki::builder::{
     ExtractWiki, WikiBuilderStore, WikiPatch, WikiSummary, WikiWork, extraction_schema,
 };
@@ -133,7 +134,14 @@ async fn extract_and_apply(
         topics: env.topics,
         now: env.now,
     };
-    let topic = router.target(summary).await?;
+    let topic = match router.target(summary).await {
+        Ok(topic) => topic,
+        Err(TopicPageError::ParentPlacement(error)) => {
+            tracing::warn!("extract-wiki: {} routed as unplaced: {error}", summary.id);
+            None
+        }
+        Err(error) => return Err(error.into()),
+    };
     let input = ExtractionInput {
         summary,
         topic: topic.as_ref(),

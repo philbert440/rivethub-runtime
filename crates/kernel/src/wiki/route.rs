@@ -14,7 +14,9 @@ use super::builder::WikiPatch;
 use super::builder::WikiRouting;
 use super::builder::WikiStoreError;
 use super::builder::WikiSummary;
+use crate::BoxError;
 use crate::topics::NewTopic;
+use crate::topics::Placement;
 use crate::topics::Slug;
 use crate::topics::Topic;
 use crate::topics::TopicError;
@@ -104,10 +106,10 @@ impl WikiRouter<'_> {
         };
         let placement = match ports.topics.placement(&session).await? {
             Some(placement) => Some(placement),
-            None => match ports.parent(&session).await? {
-                Some(parent) => ports.topics.placement(&parent).await?,
-                None => None,
-            },
+            None => ports
+                .parent_placement(&session)
+                .await
+                .map_err(TopicPageError::ParentPlacement)?,
         };
         let Some(placement) = placement else {
             return Ok(None);
@@ -205,6 +207,13 @@ impl WikiRouter<'_> {
 }
 
 impl TopicPorts<'_> {
+    async fn parent_placement(&self, session: &SessionId) -> Result<Option<Placement>, BoxError> {
+        match self.parent(session).await? {
+            Some(parent) => Ok(self.topics.placement(&parent).await?),
+            None => Ok(None),
+        }
+    }
+
     async fn parent(
         &self,
         session: &SessionId,

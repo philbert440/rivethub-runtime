@@ -23,7 +23,6 @@ use crate::queue::FixedJob;
 use crate::queue::Job;
 use crate::queue::JobKeyMode;
 use crate::queue::JobName;
-use crate::transcript::TranscriptReaderError;
 use crate::wiki::WikiLookup;
 use crate::wiki::builder::WikiStoreError;
 use crate::wiki::builder::WikiWriteError;
@@ -122,8 +121,8 @@ pub enum TopicPageError {
     Wiki(#[from] WikiStoreError),
     #[error(transparent)]
     Memory(#[from] MemoryStoreError),
-    #[error(transparent)]
-    Lineage(#[from] TranscriptReaderError),
+    #[error("the parent session's placement could not be read: {0}")]
+    ParentPlacement(#[source] BoxError),
     #[error("sync-topic-page payload: {0}")]
     Payload(#[source] BoxError),
 }
