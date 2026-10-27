@@ -145,6 +145,7 @@ impl TerminalService {
             task_id: None,
             effort: effort.map(|level| level.to_string()),
             transport: Some(Transport::Protocol),
+            startup_context: None,
             extra: wire::Extra::default(),
         };
         let key = self.registry.authorize(user, summary.session_id.as_str())?;

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
@@ -10,18 +11,31 @@ use axum::http::StatusCode;
 use axum::http::header;
 use gateway::Gateway;
 use gateway::Settings;
+use gateway::sessions::SessionRegistry;
+use gateway::tenancy::Tenancy;
+use gateway::tenancy::UserId;
+use gateway::term::LaunchCommand;
+use gateway::term::TerminalOptions;
+use gateway::term::TerminalService;
 use kernel::memory::MemoryStore;
+use kernel::topics::TopicId;
+use kernel::topics::TopicPageStore as _;
 use memory_sqlite::SqliteStore;
 use serde::de::DeserializeOwned;
 use tower::ServiceExt;
 use wire::gateway::GatewayError;
 use wire::gateway::topics::PlacedBy;
 use wire::gateway::topics::PlacementReply;
+use wire::gateway::topics::StartupContext;
+use wire::gateway::topics::StartupKind;
 use wire::gateway::topics::TopicDirectory;
 use wire::gateway::topics::TopicList;
 use wire::gateway::topics::TopicPage;
 use wire::gateway::topics::TopicRecord;
 use wire::gateway::topics::TopicSessionList;
+use wire::harness::HarnessId;
+use wire::harness::HarnessSessionList;
+use wire::harness::HarnessSessionSummary;
 use wire::session_id::SessionId;
 use wire::session_id::encode_segment;
 
@@ -54,6 +68,7 @@ fn settings(root: &Path) -> Settings {
 struct Api {
     router: axum::Router,
     root: tempfile::TempDir,
+    store: Arc<SqliteStore>,
 }
 
 impl Api {
@@ -65,11 +80,52 @@ impl Api {
         let memory: Arc<dyn MemoryStore> = store.clone();
         let mut gateway = Gateway::new(memory, settings(root.path()));
         if topics {
-            gateway = gateway.with_topics(store);
+            gateway = gateway.with_topics(store.clone());
         }
         Ok(Self {
             router: Arc::new(gateway).router(false),
             root,
+            store,
+        })
+    }
+
+    async fn with_chat() -> TestResult<Self> {
+        let root = tempfile::tempdir()?;
+        let path = root.path().join("memory.sqlite");
+        migrate::sqlite(&path)?;
+        let store = Arc::new(SqliteStore::open(&path)?);
+        let memory: Arc<dyn MemoryStore> = store.clone();
+        let registry = Arc::new(SessionRegistry::new(Duration::from_secs(1)));
+        let terminal = TerminalService::new(
+            Arc::new(testkit::FakeMux::default()),
+            registry.clone(),
+            TerminalOptions {
+                root: root.path().to_path_buf(),
+                default: "claude".to_owned(),
+                commands: vec![LaunchCommand {
+                    id: "claude".to_owned(),
+                    label: "Claude".to_owned(),
+                    argv: vec!["claude".to_owned()],
+                    cwd: root.path().to_path_buf(),
+                    harness: Some(HarnessId::ClaudeCode),
+                    session: true,
+                    env: BTreeMap::new(),
+                }],
+                max_ptys: 4,
+            },
+        )
+        .await?
+        .with_harness(Arc::new(testkit::FakeHarness::default()));
+        let gateway = Gateway::new(memory, settings(root.path()))
+            .with_tenancy(Tenancy::local(UserId::new("owner".to_owned())?))
+            .with_sessions(registry)
+            .with_terminal(Arc::new(terminal))
+            .with_topics(store.clone())
+            .with_startup_memory(store.clone(), store.clone());
+        Ok(Self {
+            router: Arc::new(gateway).router(false),
+            root,
+            store,
         })
     }
 
@@ -114,6 +170,11 @@ impl Api {
             .into());
         }
         Ok(serde_json::from_slice(&bytes)?)
+    }
+
+    async fn start(&self, body: &str) -> TestResult<HarnessSessionSummary> {
+        self.json("POST", "/api/harness-sessions", body, StatusCode::OK)
+            .await
     }
 
     async fn error(
@@ -245,6 +306,84 @@ async fn a_topic_answers_with_its_root_page() -> TestResult {
         api.error("GET", "/api/topics/nowhere/page", "").await?.0,
         StatusCode::NOT_FOUND
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_session_created_in_a_topic_is_placed_and_starts_with_its_memory() -> TestResult {
+    let api = Api::with_chat().await?;
+    let (status, _) = api
+        .call(
+            "POST",
+            "/api/harness-sessions",
+            r#"{"harness":"claude-code","topicId":"nowhere"}"#,
+        )
+        .await?;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let listed: HarnessSessionList = api
+        .json("GET", "/api/harness-sessions", "", StatusCode::OK)
+        .await?;
+    assert_eq!(listed.sessions, [], "an unknown topic spawns nothing");
+
+    let scratch: TopicRecord = api
+        .json(
+            "POST",
+            "/api/topics",
+            r#"{"name":"Scratch"}"#,
+            StatusCode::CREATED,
+        )
+        .await?;
+    let bare = api
+        .start(r#"{"harness":"claude-code","topicId":"scratch"}"#)
+        .await?;
+    let placed: PlacementReply = api
+        .json("GET", &placement_path(&bare.session_id), "", StatusCode::OK)
+        .await?;
+    let placement = placed.placement.ok_or("the new session must be placed")?;
+    assert_eq!(
+        (placement.topic_id.as_str(), placement.by),
+        (scratch.id.as_str(), PlacedBy::You)
+    );
+    let context = bare
+        .startup_context
+        .ok_or("a topic start carries its context")?;
+    assert_eq!(context.sections, []);
+
+    let mesh: TopicRecord = api
+        .json(
+            "POST",
+            "/api/topics",
+            r#"{"name":"Mesh"}"#,
+            StatusCode::CREATED,
+        )
+        .await?;
+    let slug = "mesh".to_owned().try_into()?;
+    let mut page = kernel::topics::TopicPage::empty(slug, "Mesh");
+    page.summary = "Mesh certificates come from step-ca and renew weekly.".to_owned();
+    api.store
+        .save_topic_page(mesh.id.parse::<TopicId>()?, &page, chrono::Utc::now())
+        .await?;
+    let started = api
+        .start(r#"{"harness":"claude-code","topicId":"mesh","prompt":"renew the certs"}"#)
+        .await?;
+    let context = started
+        .startup_context
+        .ok_or("a topic start carries its context")?;
+    let topic = context.sections.first().ok_or("the page is a section")?;
+    assert_eq!(topic.kind, StartupKind::Topic);
+    assert!(topic.text.contains("renew weekly"), "{}", topic.text);
+    let kept: StartupContext = api
+        .json(
+            "GET",
+            &format!(
+                "/api/harness-sessions/{}/startup-context",
+                encode_segment(&started.session_id)
+            ),
+            "",
+            StatusCode::OK,
+        )
+        .await?;
+    assert_eq!(kept, context);
     Ok(())
 }
 

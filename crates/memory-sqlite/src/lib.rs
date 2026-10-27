@@ -90,7 +90,7 @@ impl SharedClock {
     }
 }
 
-pub const SCHEMA_VERSION: i64 = 14;
+pub const SCHEMA_VERSION: i64 = 15;
 
 const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
@@ -351,7 +351,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(state, (crate::SCHEMA_VERSION, 50));
+        assert_eq!(state, (crate::SCHEMA_VERSION, 51));
     }
 
     #[tokio::test]

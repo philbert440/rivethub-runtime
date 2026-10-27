@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::budget::push_within_budget;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params_from_iter;
@@ -210,7 +211,7 @@ fn take_budget(
         } else {
             format!("[{}] {}", row.role, char_prefix(&row.content, LINE_CAP))
         };
-        if !fits(budget, &text) {
+        if !push_within_budget(budget, &text) {
             break;
         }
         kept.push(Line {
@@ -276,7 +277,7 @@ fn kept_blocks(
     let mut kept = Vec::new();
     for (state, block) in blocks {
         dedup.insert(char_prefix(&state, DEDUP_PREFIX).to_owned());
-        if !fits(budget, &block) {
+        if !push_within_budget(budget, &block) {
             break;
         }
         kept.push(block);
@@ -327,15 +328,6 @@ fn agent_of(conn: &Connection, session: &str) -> Result<Option<String>, SqliteEr
     )
     .optional()
     .map_err(SqliteError::query("context session"))
-}
-
-fn fits(budget: &mut usize, line: &str) -> bool {
-    let tokens = line.chars().count().div_ceil(4);
-    if tokens > *budget {
-        return false;
-    }
-    *budget -= tokens;
-    true
 }
 
 fn char_prefix(text: &str, max: usize) -> &str {

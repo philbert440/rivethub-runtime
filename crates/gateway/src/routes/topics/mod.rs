@@ -1,4 +1,5 @@
 mod map;
+mod startup;
 
 use std::sync::Arc;
 
@@ -40,6 +41,8 @@ use crate::error::ApiError;
 use crate::extract::Body;
 use crate::extract::Query;
 
+pub(super) use startup::begin;
+
 const SEARCH_LIMIT_DEFAULT: usize = 10;
 const SEARCH_LIMIT_MAX: usize = 50;
 
@@ -74,6 +77,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::get(sessions).fallback(super::method_not_allowed),
         )
         .route(
+            "/api/harness-sessions/{session}/startup-context",
+            routing::get(startup::kept).fallback(super::method_not_allowed),
+        )
+        .route(
             "/api/sessions/{session}/placement",
             routing::get(placement)
                 .put(place)
@@ -83,7 +90,7 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .layer(DefaultBodyLimit::max(super::BODY_LIMIT))
 }
 
-async fn resolve(store: &dyn TopicStore, key: &str) -> Result<Topic, ApiError> {
+pub(super) async fn resolve(store: &dyn TopicStore, key: &str) -> Result<Topic, ApiError> {
     let parsed = TopicKey::parse(key).map_err(map::error)?;
     store
         .find(&parsed)

@@ -1,6 +1,7 @@
 use crate::Extra;
 use crate::events::ContextSource;
 use crate::gateway::sessions::HarnessTranscriptTurn;
+use crate::gateway::topics::StartupContext;
 use crate::json::JsonObject;
 use crate::session_id::SessionId;
 use chrono::{DateTime, Utc};
@@ -520,8 +521,28 @@ pub struct HarnessSessionSummary {
     pub task_id: Option<String>,
     pub effort: Option<String>,
     pub transport: Option<Transport>,
+    #[serde(default)]
+    pub startup_context: Option<StartupContext>,
     #[serde(flatten, default)]
     pub extra: Extra,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HarnessSessionCreateRequest {
+    #[serde(default)]
+    pub harness: Option<HarnessId>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub cwd: Option<String>,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub topic_id: Option<String>,
+    #[serde(default)]
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

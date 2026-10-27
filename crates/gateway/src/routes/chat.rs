@@ -18,7 +18,7 @@ use wire::gateway::sessions::{
     MessageUsage, SessionMessage, SessionMessageRole, SessionPostAccepted, SessionPostReply,
     SessionPostRequest,
 };
-use wire::harness::{ApprovalDecision, HarnessId, HarnessSessionSummary};
+use wire::harness::{ApprovalDecision, HarnessSessionCreateRequest, HarnessSessionSummary};
 use wire::hooks::HookContextBase;
 use wire::message::{Message, MessageContent, Role};
 
@@ -31,15 +31,6 @@ use crate::routes::agents::Failure;
 use crate::tenancy::UserId;
 use crate::term::{ChatStart, DelegatedTurn};
 use crate::uploads::AttachedTurn;
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Create {
-    harness: Option<HarnessId>,
-    model: Option<String>,
-    cwd: Option<std::path::PathBuf>,
-    agent_id: Option<String>,
-}
 
 pub(crate) fn router() -> Router<Arc<Gateway>> {
     Router::new()
@@ -106,9 +97,13 @@ async fn transcript(
 async fn create(
     State(gateway): State<Arc<Gateway>>,
     user: UserId,
-    Body(request): Body<Create>,
+    Body(request): Body<HarnessSessionCreateRequest>,
 ) -> Result<Json<HarnessSessionSummary>, Failure> {
     let service = service(&gateway)?;
+    let topic = match request.topic_id.as_deref() {
+        Some(key) => Some(super::topics::resolve(gateway.topics()?.as_ref(), key).await?),
+        None => None,
+    };
     let agent = match request.agent_id {
         Some(id) => Some(crate::routes::agents::launch_preset(&gateway, id).await?),
         None => None,
@@ -121,10 +116,22 @@ async fn create(
         harness,
         model: request.model,
         effort: None,
-        cwd: request.cwd,
+        cwd: request.cwd.map(std::path::PathBuf::from),
         agent,
     };
-    Ok(Json(service.start_chat(&user, start).await?))
+    let mut summary = service.start_chat(&user, start).await?;
+    if let Some(topic) = topic {
+        super::topics::begin(
+            &gateway,
+            &service,
+            &user,
+            &mut summary,
+            &topic,
+            request.prompt.as_deref(),
+        )
+        .await?;
+    }
+    Ok(Json(summary))
 }
 
 #[derive(Debug, Deserialize)]

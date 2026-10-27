@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO rh_session_startup (session_id, topic_id, tokens, sections, created_at)\n             VALUES ($1, $2, $3, $4, $5)\n             ON CONFLICT (session_id) DO UPDATE\n                SET topic_id = EXCLUDED.topic_id, tokens = EXCLUDED.tokens,\n                    sections = EXCLUDED.sections, created_at = EXCLUDED.created_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Int4",
+        "Jsonb",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "197fcd14c77d60630cb0ea6ee0104f4039433f39d66c271adcbb47c3257af79a"
+}

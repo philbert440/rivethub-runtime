@@ -5676,6 +5676,16 @@
             }
           ]
         },
+        "startupContext": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StartupContext"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "redirectedTo": {
           "anyOf": [
             {
@@ -5714,6 +5724,95 @@
       "enum": [
         "protocol"
       ]
+    },
+    "StartupContext": {
+      "type": "object",
+      "properties": {
+        "topicId": {
+          "type": "string"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StartupSection"
+          }
+        },
+        "tokens": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "topicId",
+        "sections",
+        "tokens"
+      ]
+    },
+    "StartupSection": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/StartupKind"
+        },
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StartupSource"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "text",
+        "sources"
+      ]
+    },
+    "StartupKind": {
+      "type": "string",
+      "enum": [
+        "topic",
+        "recent",
+        "relevant"
+      ]
+    },
+    "StartupSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "session": {
+              "$ref": "#/$defs/SessionId"
+            }
+          },
+          "required": [
+            "session"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "wiki": {
+              "$ref": "#/$defs/WikiSlug"
+            }
+          },
+          "required": [
+            "wiki"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "WikiSlug": {
+      "type": "string"
     },
     "HarnessSessionTitleRequest": {
       "type": "object",
@@ -7104,9 +7203,6 @@
       "required": [
         "slug"
       ]
-    },
-    "WikiSlug": {
-      "type": "string"
     },
     "WikiHistoryEntry": {
       "type": "object",
@@ -11054,6 +11150,16 @@
               "type": "null"
             }
           ]
+        },
+        "startupContext": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StartupContext"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -11484,6 +11590,51 @@
         "liveStream",
         "listSessions"
       ]
+    },
+    "HarnessSessionCreateRequest": {
+      "type": "object",
+      "properties": {
+        "harness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HarnessId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     },
     "HarnessSessionList": {
       "type": "object",

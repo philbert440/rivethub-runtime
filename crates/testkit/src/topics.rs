@@ -12,6 +12,11 @@ use kernel::topics::PlacementOutcome;
 use kernel::topics::PlacementSource;
 use kernel::topics::Root;
 use kernel::topics::Slug;
+use kernel::topics::StartupContext;
+use kernel::topics::StartupKind;
+use kernel::topics::StartupSection;
+use kernel::topics::StartupSource;
+use kernel::topics::StartupStore;
 use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicChanges;
@@ -21,6 +26,7 @@ use kernel::topics::TopicKey;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
 use kernel::topics::TopicStore;
+use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 pub type Outcome = Result<(), Box<dyn std::error::Error>>;
@@ -431,6 +437,47 @@ pub async fn suggestions_hold_until_the_session_is_placed(store: &dyn TopicStore
     same(
         "a placed session takes no suggestion",
         store.suggestion(&session).await?,
+        None,
+    )?;
+    Ok(())
+}
+
+pub async fn startup_context_is_kept_per_session(store: &dyn StartupStore) -> Outcome {
+    let first = session("startup-one")?;
+    same("before any start", store.startup(&first).await?, None)?;
+    let empty = StartupContext {
+        topic: TopicId::random(),
+        sections: Vec::new(),
+        tokens: 0,
+    };
+    store.keep_startup(&first, &empty, at(1)).await?;
+    same(
+        "an empty context",
+        store.startup(&first).await?,
+        Some(empty),
+    )?;
+    let kept = StartupContext {
+        topic: TopicId::random(),
+        sections: vec![StartupSection {
+            kind: StartupKind::Topic,
+            title: "Mesh".to_owned(),
+            text: "The mesh runs step-ca.".to_owned(),
+            sources: vec![
+                StartupSource::Wiki(WikiSlug::try_from("mesh".to_owned())?),
+                StartupSource::Session(session("startup-two")?),
+            ],
+        }],
+        tokens: 7,
+    };
+    store.keep_startup(&first, &kept, at(2)).await?;
+    same(
+        "the latest context",
+        store.startup(&first).await?,
+        Some(kept),
+    )?;
+    same(
+        "another session",
+        store.startup(&session("startup-two")?).await?,
         None,
     )?;
     Ok(())

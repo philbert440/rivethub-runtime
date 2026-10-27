@@ -30,6 +30,7 @@ use wire::message::Role;
 
 use crate::BoxError;
 
+pub mod budget;
 mod embed;
 mod export;
 mod origin;

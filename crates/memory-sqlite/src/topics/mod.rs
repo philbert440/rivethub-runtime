@@ -1,4 +1,5 @@
 mod rows;
+mod startup;
 mod write;
 
 use async_trait::async_trait;

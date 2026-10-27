@@ -11,12 +11,12 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 27);
+    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 28);
 
     let applied = sqlx::query("SELECT count(*)::bigint AS n FROM _sqlx_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 27);
+    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 28);
 
     migrate::postgres_pool(&pool).await?;
 
@@ -190,8 +190,8 @@ async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
         .await?;
     assert_eq!(
         tracked.try_get::<i64, _>("n").unwrap(),
-        27,
-        "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, 0025 adds topic suggestions, 0026 adds the hub state table, and 0027 binds wiki pages to topics"
+        28,
+        "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, 0025 adds topic suggestions, 0026 adds the hub state table, 0027 binds wiki pages to topics, and 0028 keeps each session's startup context"
     );
     let summaries_trgm =
         sqlx::query("SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_ros_summaries_trgm'")
@@ -362,5 +362,24 @@ async fn migration_0027_binds_a_page_to_the_root_topic_with_its_slug(pool: PgPoo
         ],
         "only a root topic takes the page with its slug"
     );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn migration_0028_keeps_one_startup_context_per_session(pool: PgPool) -> TestResult {
+    let insert = "INSERT INTO rh_session_startup (session_id, topic_id, tokens, sections, created_at)
+                  VALUES ('claude-code:one', '00000000-0000-0000-0000-000000000001', 0, '[]', now())";
+    sqlx::raw_sql(insert).execute(&pool).await?;
+    assert!(
+        sqlx::raw_sql(insert).execute(&pool).await.is_err(),
+        "a session keeps one startup context"
+    );
+    let last = POSTGRES.migrations.get(27).unwrap();
+    let sql: &'static str = Box::leak(last.sql.as_str().to_string().into_boxed_str());
+    sqlx::raw_sql(sql).execute(&pool).await?;
+    let kept: i64 = sqlx::query_scalar("SELECT count(*) FROM rh_session_startup")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(kept, 1, "a second run of 0028 changes nothing");
     Ok(())
 }

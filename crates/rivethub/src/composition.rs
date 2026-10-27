@@ -18,6 +18,8 @@ use kernel::agent_presets::AgentPresetStore;
 use kernel::hub_state::HubStateStore;
 use kernel::memory::MemoryExport;
 use kernel::memory::MemoryStore;
+use kernel::topics::StartupStore;
+use kernel::topics::TopicPageStore;
 use kernel::topics::TopicStore;
 use memory_postgres::PostgresMemory;
 use memory_sqlite::SqliteStore;
@@ -123,6 +125,7 @@ struct Backing<'tasks> {
     hub_state: Option<Arc<dyn HubStateStore>>,
     export: Option<Arc<dyn MemoryExport>>,
     topics: Option<Arc<dyn TopicStore>>,
+    startup: Option<(Arc<dyn TopicPageStore>, Arc<dyn StartupStore>)>,
     tasks: Option<&'tasks crate::agent::LocalTasks>,
 }
 
@@ -156,8 +159,12 @@ fn with_backing(gateway: Gateway, backing: &Backing<'_>) -> Gateway {
         Some(export) => gateway.with_memory_export(export),
         None => gateway,
     };
-    match backing.topics.clone() {
+    let gateway = match backing.topics.clone() {
         Some(topics) => gateway.with_topics(topics),
+        None => gateway,
+    };
+    match backing.startup.clone() {
+        Some((pages, kept)) => gateway.with_startup_memory(pages, kept),
         None => gateway,
     }
 }
@@ -245,6 +252,7 @@ impl Composition {
             hub_state: hub_state(memory).await?,
             export: Some(Arc::new(MemoryExporter::postgres(Arc::clone(memory), url))),
             topics: Some(memory.clone()),
+            startup: Some((memory.clone(), memory.clone())),
             tasks: None,
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
@@ -267,6 +275,7 @@ impl Composition {
             hub_state: None,
             export: Some(Arc::new(MemoryExporter::sqlite(Arc::clone(store)))),
             topics: Some(store.clone()),
+            startup: Some((store.clone(), store.clone())),
             tasks,
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)

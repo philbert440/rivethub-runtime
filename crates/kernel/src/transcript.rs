@@ -136,6 +136,7 @@ impl StoreSession {
             task_id: self.task_id.clone(),
             effort: None,
             transport: None,
+            startup_context: None,
             extra: wire::Extra::default(),
         }
     }
