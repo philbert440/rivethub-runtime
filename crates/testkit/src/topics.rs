@@ -127,6 +127,14 @@ pub async fn topics_are_created_found_and_renamed(store: &dyn TopicStore) -> Out
         store.find(&TopicKey::Id(topic.id)).await?.as_ref(),
         Some(&renamed),
     )?;
+    same(
+        "old slug still finds it",
+        store
+            .find(&TopicKey::parse("rivethub-desktop")?)
+            .await?
+            .map(|found| found.id),
+        Some(topic.id),
+    )?;
     let missing = store.find(&TopicKey::parse("no-such-topic")?).await?;
     same("missing", missing, None)?;
     let listed = store.list().await?;
