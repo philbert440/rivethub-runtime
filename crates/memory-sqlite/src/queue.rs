@@ -269,6 +269,13 @@ pub(crate) fn enqueue_embed_due(
     Ok(insert_job(conn, &job)?.is_some())
 }
 
+pub(crate) fn enqueue_in(conn: &Connection, job: &JobInsert) -> Result<(), SqliteError> {
+    match (insert_job(conn, job)?, &job.key) {
+        (None, Some(key)) => replace(conn, key, &job.payload, job.run_at, job.now),
+        _ => Ok(()),
+    }
+}
+
 fn insert_job(conn: &Connection, job: &JobInsert) -> Result<Option<String>, SqliteError> {
     let id = Uuid::new_v4().to_string();
     let stamped = time::stamp(job.now);

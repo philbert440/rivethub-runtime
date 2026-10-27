@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{LastVerified, PageSource, WikiMeta};
+use super::{LastVerified, PageSource, WikiMeta, WikiSectionRef};
 use crate::Extra;
 use crate::gateway::wiki::WikiSlug;
 
@@ -19,6 +19,8 @@ pub(super) struct StoredFrontmatter {
     pub last_verified: Option<LastVerified>,
     #[serde(default)]
     pub sources: Vec<PageSource>,
+    #[serde(default)]
+    pub sections: Vec<WikiSectionRef>,
     #[serde(flatten)]
     pub extra: Extra,
 }
@@ -36,6 +38,8 @@ pub(super) struct WrittenFrontmatter<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_verified: Option<&'a LastVerified>,
     pub sources: &'a [PageSource],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub sections: &'a [WikiSectionRef],
 }
 
 impl<'a> WrittenFrontmatter<'a> {
@@ -50,6 +54,7 @@ impl<'a> WrittenFrontmatter<'a> {
             related,
             last_verified: meta.last_verified.as_ref(),
             sources: &meta.sources,
+            sections: &meta.sections,
         }
     }
 }

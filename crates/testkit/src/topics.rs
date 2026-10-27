@@ -33,7 +33,11 @@ pub struct Mismatch {
     actual: String,
 }
 
-fn same<T: PartialEq + Debug>(what: &'static str, actual: T, expected: T) -> Result<(), Mismatch> {
+pub(crate) fn same<T: PartialEq + Debug>(
+    what: &'static str,
+    actual: T,
+    expected: T,
+) -> Result<(), Mismatch> {
     match (actual, expected) {
         (actual, expected) if actual == expected => Ok(()),
         (actual, expected) => Err(Mismatch {

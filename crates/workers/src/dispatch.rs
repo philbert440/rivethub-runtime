@@ -31,6 +31,7 @@ pub(crate) struct JobEnv {
     pub(crate) summary: SummarySettings,
     pub(crate) tags: TagSettings,
     pub(crate) topics: Option<SessionTopics>,
+    pub(crate) topic_pages: Option<crate::topic_page::TopicPages>,
 }
 
 pub(crate) async fn dispatch<Q: JobQueue>(
@@ -107,12 +108,27 @@ pub(crate) async fn dispatch<Q: JobQueue>(
         JobName::Fixed(FixedJob::ConsolidateWiki) => {
             dispatch_consolidate(queue, env, job, cancel).await
         }
+        JobName::Fixed(FixedJob::SyncTopicPage) => dispatch_topic_page(env, job, cancel).await,
         JobName::Fixed(FixedJob::RecompileWiki | FixedJob::RunTask)
         | JobName::Heartbeat { .. }
         | JobName::RunTaskOn { .. } => Err(WorkerError::Unhandled {
             name: job.name.to_string(),
         }),
     }
+}
+
+async fn dispatch_topic_page(
+    env: &JobEnv,
+    job: &ClaimedJob,
+    cancel: &CancellationToken,
+) -> Result<(), WorkerError> {
+    let deps = env
+        .topic_pages
+        .as_ref()
+        .ok_or(WorkerError::MissingDependencies {
+            role: ProcessRole::Summarizer,
+        })?;
+    crate::topic_page::handle_sync_topic_page(deps, &job.payload, cancel).await
 }
 
 async fn dispatch_wiki<Q: JobQueue>(

@@ -27,6 +27,10 @@ impl JsonObject {
         serde_json::from_value(serde_json::to_value(value)?)
     }
 
+    pub fn deserialize<T: serde::de::DeserializeOwned>(&self) -> Result<T, serde_json::Error> {
+        serde_json::from_value(Value::Object(self.0.clone()))
+    }
+
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.0.get(key)

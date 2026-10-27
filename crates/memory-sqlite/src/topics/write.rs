@@ -3,11 +3,14 @@ use kernel::topics::Placement;
 use kernel::topics::Root;
 use kernel::topics::Slug;
 use kernel::topics::Suggestion;
+use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
+use kernel::topics::TopicId;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
+use wire::gateway::wiki::WikiSlug;
 
 use super::rows::failed;
 use crate::time;
@@ -218,4 +221,35 @@ pub(super) fn suggestion(conn: &Connection, suggestion: &Suggestion) -> Result<(
     )
     .map_err(failed("session suggestion write"))?;
     Ok(())
+}
+
+pub(super) fn page_of(conn: &Connection, topic: TopicId) -> Result<Option<WikiSlug>, TopicError> {
+    conn.query_row(
+        "SELECT page_slug FROM rh_topic_pages WHERE topic_id = ?1",
+        params![topic.to_string()],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(failed("topic page"))?
+    .map(WikiSlug::try_from)
+    .transpose()
+    .map_err(|source| TopicError::Unavailable(Box::new(source)))
+}
+
+pub(super) fn enqueue_syncs(
+    conn: &Connection,
+    syncs: Vec<SyncTopicPage>,
+) -> Result<(), TopicError> {
+    let now = chrono::Utc::now();
+    for sync in syncs {
+        let job = sync.job().map_err(unavailable)?;
+        let payload = serde_json::to_string(&job.payload).map_err(unavailable)?;
+        let insert = crate::port::job_insert(&job, payload, now).map_err(unavailable)?;
+        crate::queue::enqueue_in(conn, &insert).map_err(unavailable)?;
+    }
+    Ok(())
+}
+
+fn unavailable(source: impl std::error::Error + Send + Sync + 'static) -> TopicError {
+    TopicError::Unavailable(Box::new(source))
 }

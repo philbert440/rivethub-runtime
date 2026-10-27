@@ -14,6 +14,7 @@ mod runner;
 pub mod schedule;
 mod summarize;
 pub mod tool_synthesis;
+mod topic_page;
 
 pub use categorize::CategorizeEnv;
 pub use categorize::SuggestOutcome;

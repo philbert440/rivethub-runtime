@@ -127,7 +127,8 @@ fn page(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
         .query_row(
             "SELECT slug, title, aliases, tags, entities, current_state, article, related, \
                     git_sha, last_verified_at, updated_at, \
-                    (SELECT topic_id FROM rh_topic_pages WHERE page_slug = ros_wiki_topics.slug) \
+                    (SELECT topic_id FROM rh_topic_pages WHERE page_slug = ros_wiki_topics.slug), \
+                    (SELECT sections FROM rh_topic_pages WHERE page_slug = ros_wiki_topics.slug) \
                FROM ros_wiki_topics WHERE slug = ?1",
             params_from_iter([Value::Text(slug.to_owned())]),
             |row| {
@@ -144,6 +145,7 @@ fn page(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
                     row.get::<_, Option<String>>(9)?,
                     row.get::<_, String>(10)?,
                     row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<String>>(12)?,
                 ))
             },
         )
@@ -162,6 +164,7 @@ fn page(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
         verified,
         updated,
         topic_id,
+        sections,
     )) = found
     else {
         return redirect(conn, slug);
@@ -171,9 +174,10 @@ fn page(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
     } else {
         Some(article)
     };
+    let sections = sections_markdown(sections.as_deref())?;
     let markdown = match &article_text {
-        None => format!("# {title}\n\n{state}\n"),
-        Some(body) => format!("# {title}\n\n{state}\n\n{body}\n"),
+        None => format!("# {title}\n\n{state}\n{sections}"),
+        Some(body) => format!("# {title}\n\n{state}\n\n{body}\n{sections}"),
     };
     Ok(WikiLookup::Page(Box::new(WikiPageResponse {
         slug: slug.clone(),
@@ -413,6 +417,17 @@ fn topic_wire(topic: Topic) -> Result<WikiTopic, SqliteError> {
         entities: topic.entities,
         updated_at: time::stored(&topic.updated_at, "updated_at")?,
         excerpt: topic.current_state.chars().take(EXCERPT_CHARS).collect(),
+    })
+}
+
+fn sections_markdown(sections: Option<&str>) -> Result<String, SqliteError> {
+    crate::topic_pages::rendered(sections).map_err(|source| SqliteError::Query {
+        operation: "sections",
+        source: rusqlite::Error::FromSqlConversionFailure(
+            0,
+            rusqlite::types::Type::Text,
+            Box::new(source),
+        ),
     })
 }
 

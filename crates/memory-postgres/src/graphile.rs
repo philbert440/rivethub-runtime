@@ -398,7 +398,7 @@ fn key_mode(mode: JobKeyMode) -> &'static str {
 pub(crate) fn attempts_for(name: &JobName) -> i32 {
     match name {
         JobName::Fixed(fixed) => match fixed {
-            FixedJob::EmbedTarget => 5,
+            FixedJob::EmbedTarget | FixedJob::SyncTopicPage => 5,
             FixedJob::SummarizeConversation | FixedJob::SynthesizeToolCall => 3,
             FixedJob::SuggestTags | FixedJob::ExtractWiki => 2,
             FixedJob::RunTask => 1,

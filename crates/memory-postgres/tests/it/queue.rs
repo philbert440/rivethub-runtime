@@ -335,7 +335,7 @@ fn crontab_and_task_lists_follow_the_roles() {
         Some("unchunked-sweep")
     );
     let summarizer = PostgresQueue::crontab(WorkerRole::Summarizer);
-    assert_eq!(summarizer.len(), 3);
+    assert_eq!(summarizer.len(), 4);
     assert_eq!(PostgresQueue::crontab(WorkerRole::Categorizer).len(), 0);
 
     assert_eq!(

@@ -77,6 +77,29 @@ fn frontmatter_extras_preamble_sections_and_markdown_fences_survive() -> TestRes
 }
 
 #[test]
+fn topic_sections_are_typed_frontmatter_and_round_trip() -> TestResult {
+    let markdown = "---\ntitle: Mesh\nslug: mesh\naliases: []\ntags: []\nentities: []\nrelated: []\nsources: []\nsections:\n  - topic: 00000000-0000-4000-8000-000000000001\n    heading: Certificates\n---\n\n## Summary\n\n\n\n\n\n## History\n\n\n\n\n## Certificates\n\nRenewal notes.\n";
+    let page = parse_wiki_page(markdown)?;
+    assert_eq!(
+        page.meta.sections,
+        [wire::wiki::WikiSectionRef {
+            topic: "00000000-0000-4000-8000-000000000001".to_owned(),
+            heading: "Certificates".to_owned(),
+        }]
+    );
+    assert_eq!(page.meta.extra, wire::Extra::default());
+    assert_eq!(serialize_wiki_page(&page)?, markdown);
+    let plain = markdown.replace(
+        "sections:\n  - topic: 00000000-0000-4000-8000-000000000001\n    heading: Certificates\n",
+        "",
+    );
+    let page = parse_wiki_page(&plain)?;
+    assert_eq!(page.meta.sections, Vec::new());
+    assert_eq!(serialize_wiki_page(&page)?, plain);
+    Ok(())
+}
+
+#[test]
 fn citation_notes_with_pipes_survive_a_write_and_read() -> TestResult {
     let markdown = "---\ntitle: Notes\nslug: notes\n---\n\n## Summary\n\nText.\n\n## Citations\n\n| Date | Kind | Summary | Note |\n|------|------|---------|------|\n| 2026-10-10 | leaf | `00000000-0000-4000-8000-000000000001` | a \\| b \\\\| c |\n";
     let page = parse_wiki_page(markdown)?;

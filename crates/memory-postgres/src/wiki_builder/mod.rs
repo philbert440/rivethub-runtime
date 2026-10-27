@@ -1,5 +1,6 @@
 mod consolidate;
 mod gate;
+mod topic_pages;
 mod topics;
 
 use async_trait::async_trait;

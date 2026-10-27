@@ -79,6 +79,7 @@ pub(crate) fn handler_ready(name: &JobName) -> bool {
                 | FixedJob::EnqueueUnembedded
                 | FixedJob::EnqueueUnchunked
                 | FixedJob::EnqueueStaleWiki
+                | FixedJob::SyncTopicPage
         )
     )
 }

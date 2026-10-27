@@ -11,6 +11,7 @@ use kernel::topics::PlacementOutcome;
 use kernel::topics::Redirect;
 use kernel::topics::Slug;
 use kernel::topics::Suggestion;
+use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
 use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
@@ -20,6 +21,7 @@ use kernel::topics::TopicListing;
 use kernel::topics::TopicStore;
 use kernel::topics::by_activity;
 use kernel::topics::check_parent;
+use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use crate::PostgresMemory;
@@ -44,6 +46,7 @@ impl TopicStore for PostgresMemory {
         write::claim_names(&mut tx, &topic).await?;
         write::insert(&mut tx, &topic).await?;
         write::aliases(&mut tx, &topic).await?;
+        write::enqueue_syncs(&mut tx, SyncTopicPage::after_create(&topic)).await?;
         let stored = rows::by_id(&mut tx, topic.id)
             .await?
             .ok_or_else(|| not_found(topic.id))?;
@@ -61,7 +64,7 @@ impl TopicStore for PostgresMemory {
         let current = rows::by_id(&mut tx, id)
             .await?
             .ok_or_else(|| not_found(id))?;
-        let old_slug = current.slug.clone();
+        let before = current.clone();
         let updated = current.apply(changes, now)?;
         if let Some(parent) = updated.parent {
             let parent = rows::by_id(&mut tx, parent)
@@ -73,9 +76,10 @@ impl TopicStore for PostgresMemory {
         write::claim_names(&mut tx, &updated).await?;
         write::row(&mut tx, &updated).await?;
         write::aliases(&mut tx, &updated).await?;
-        if updated.slug != old_slug {
-            write::rename_redirect(&mut tx, &old_slug, &updated).await?;
+        if updated.slug != before.slug {
+            write::rename_redirect(&mut tx, &before.slug, &updated).await?;
         }
+        write::enqueue_syncs(&mut tx, SyncTopicPage::after_update(&before, &updated)).await?;
         let stored = rows::by_id(&mut tx, id)
             .await?
             .ok_or_else(|| not_found(id))?;
@@ -98,8 +102,11 @@ impl TopicStore for PostgresMemory {
             .ok_or_else(|| not_found(into))?;
         let subtopics = write::subtopics(&mut tx, source).await?;
         let plan = MergePlan::new(&from, &target, &subtopics)?;
+        let page = write::page_of(&mut tx, source).await?;
+        let syncs = SyncTopicPage::after_merge(&from, &target, page);
         let merged = plan.merged(target, now);
         write::fold_into(&mut tx, &plan, &merged).await?;
+        write::enqueue_syncs(&mut tx, syncs).await?;
         let stored = rows::by_id(&mut tx, into)
             .await?
             .ok_or_else(|| not_found(into))?;
@@ -284,13 +291,8 @@ impl TopicStore for PostgresMemory {
         .transpose()
     }
 
-    async fn page_slug(&self, topic: TopicId) -> Result<Option<String>, TopicError> {
-        sqlx::query_scalar!(
-            "SELECT slug FROM rh_wiki_topics WHERE topic_id = $1",
-            topic.uuid()
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(failed("topic page"))
+    async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError> {
+        let mut conn = self.pool.acquire().await.map_err(failed("topic page"))?;
+        write::page_of(&mut conn, topic).await
     }
 }

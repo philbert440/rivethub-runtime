@@ -4,6 +4,7 @@ use config::{Config, Environment};
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::JobQueue;
 use kernel::shutdown::Activities;
+use kernel::topics::TopicPageStore;
 use kernel::topics::TopicStore;
 use kernel::transcript::SessionLister;
 use kernel::wiki::builder::WikiBuilderStore;
@@ -137,6 +138,7 @@ async fn run(
         let store: Arc<dyn MemoryStore> = memory.clone();
         let consolidate: Arc<dyn WikiConsolidateStore> = memory.clone();
         let topics: Arc<dyn TopicStore> = memory.clone();
+        let pages: Arc<dyn TopicPageStore> = memory.clone();
         let mut runner = build_runner(
             role,
             WorkerPorts {
@@ -147,6 +149,7 @@ async fn run(
                 wiki,
                 consolidate: Some(consolidate),
                 topics,
+                pages,
                 lineage: session_lineage(env),
             },
             &config,
@@ -189,6 +192,7 @@ pub struct WorkerPorts<Q> {
     pub wiki: Arc<dyn WikiBuilderStore>,
     pub consolidate: Option<Arc<dyn WikiConsolidateStore>>,
     pub topics: Arc<dyn TopicStore>,
+    pub pages: Arc<dyn TopicPageStore>,
     pub lineage: Arc<dyn SessionLister>,
 }
 
@@ -246,6 +250,7 @@ pub fn with_models<Q: JobQueue + 'static>(
         consolidate: ports.consolidate,
         model,
     })
+    .with_topic_pages(Arc::clone(&ports.topics), ports.pages)
     .with_session_topics(workers::SessionTopics {
         store: ports.topics,
         lineage: ports.lineage,

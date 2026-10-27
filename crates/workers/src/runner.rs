@@ -13,6 +13,8 @@ use kernel::queue::JobNotifications;
 use kernel::queue::JobQueue;
 use kernel::queue::WorkerRole;
 use kernel::shutdown::Activities;
+use kernel::topics::TopicPageStore;
+use kernel::topics::TopicStore;
 use tokio::sync::Mutex;
 use tokio::sync::Notify;
 use tokio::sync::OwnedSemaphorePermit;
@@ -90,6 +92,7 @@ pub struct Runner<Q> {
     unembedded: Option<Arc<dyn kernel::memory::jobs::UnembeddedStore>>,
     wiki: Option<WikiBuilderDeps>,
     topics: Option<crate::SessionTopics>,
+    topic_pages: Option<crate::topic_page::TopicPages>,
     queue: Arc<Q>,
     targets: Arc<dyn EmbeddingStore>,
     summaries: Arc<dyn SummaryStore>,
@@ -123,6 +126,7 @@ where
             unembedded: None,
             wiki: None,
             topics: None,
+            topic_pages: None,
             queue,
             targets: deps.targets,
             summaries: deps.summaries,
@@ -205,6 +209,16 @@ where
     #[must_use]
     pub fn with_session_topics(mut self, topics: crate::SessionTopics) -> Self {
         self.topics = Some(topics);
+        self
+    }
+
+    #[must_use]
+    pub fn with_topic_pages(
+        mut self,
+        topics: Arc<dyn TopicStore>,
+        pages: Arc<dyn TopicPageStore>,
+    ) -> Self {
+        self.topic_pages = Some(crate::topic_page::TopicPages { topics, pages });
         self
     }
 
@@ -383,6 +397,7 @@ where
             summary: self.summary.clone(),
             tags: self.tags.clone(),
             topics: self.topics.clone(),
+            topic_pages: self.topic_pages.clone(),
         };
         let wake = Arc::clone(&self.wake);
         let open = Arc::clone(&self.open);
