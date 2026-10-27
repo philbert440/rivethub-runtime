@@ -7,6 +7,7 @@ use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicListing;
+use kernel::topics::TopicPageError;
 use wire::gateway::topics::PlacedBy;
 use wire::gateway::topics::TopicDirectory;
 use wire::gateway::topics::TopicPlacement;
@@ -33,6 +34,17 @@ pub(super) fn error(error: TopicError) -> ApiError {
         TopicError::Unavailable(source) => {
             tracing::error!("topic store failed: {source}");
             ApiError::Unavailable("topic store unavailable".into())
+        }
+    }
+}
+
+pub(super) fn page_error(error: TopicPageError) -> ApiError {
+    match error {
+        TopicPageError::Topic(error) => self::error(error),
+        TopicPageError::Memory(error) => ApiError::Store(error),
+        TopicPageError::Wiki(_) | TopicPageError::Payload(_) => {
+            tracing::error!("topic page lookup failed: {error}");
+            ApiError::Internal
         }
     }
 }

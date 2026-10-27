@@ -15,6 +15,7 @@ pub mod provider;
 pub mod sqlite;
 pub mod stub;
 pub mod task_memory;
+pub mod topic_pages;
 pub mod topics;
 pub mod ws;
 

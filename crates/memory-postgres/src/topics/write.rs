@@ -4,11 +4,13 @@ use kernel::topics::Placement;
 use kernel::topics::Root;
 use kernel::topics::Slug;
 use kernel::topics::Suggestion;
+use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
 use sqlx::PgConnection;
 use uuid::Uuid;
+use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use super::rows::failed;
@@ -318,5 +320,47 @@ pub(super) async fn suggestion(
     .execute(&mut *conn)
     .await
     .map_err(failed("session suggestion write"))?;
+    Ok(())
+}
+
+pub(super) async fn page_of(
+    conn: &mut PgConnection,
+    topic: TopicId,
+) -> Result<Option<WikiSlug>, TopicError> {
+    sqlx::query_scalar!(
+        "SELECT slug FROM rh_wiki_topics WHERE topic_id = $1",
+        topic.uuid()
+    )
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(failed("topic page"))?
+    .map(WikiSlug::try_from)
+    .transpose()
+    .map_err(|source| TopicError::Unavailable(Box::new(source)))
+}
+
+pub(super) async fn enqueue_syncs(
+    conn: &mut PgConnection,
+    syncs: Vec<SyncTopicPage>,
+) -> Result<(), TopicError> {
+    let queued = sqlx::query_scalar!(
+        r#"SELECT to_regprocedure(
+                  'graphile_worker.add_job(text,json,text,timestamptz,int,text,int,text[],text)'
+              ) IS NOT NULL AS "present!""#
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(failed("topic page sync"))?;
+    if !queued {
+        return Ok(());
+    }
+    for sync in syncs {
+        let job = sync
+            .job()
+            .map_err(|source| TopicError::Unavailable(Box::new(source)))?;
+        crate::task_jobs::enqueue_job(conn, &job)
+            .await
+            .map_err(|source| TopicError::Unavailable(Box::new(source)))?;
+    }
     Ok(())
 }

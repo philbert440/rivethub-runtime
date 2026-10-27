@@ -10,6 +10,7 @@ use kernel::topics::Placement;
 use kernel::topics::PlacementOutcome;
 use kernel::topics::Redirect;
 use kernel::topics::Suggestion;
+use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
 use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
@@ -20,8 +21,8 @@ use kernel::topics::TopicStore;
 use kernel::topics::by_activity;
 use kernel::topics::check_parent;
 use rusqlite::Connection;
-use rusqlite::OptionalExtension as _;
 use rusqlite::params;
+use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use crate::SqliteStore;
@@ -63,9 +64,11 @@ impl TopicStore for SqliteStore {
             write::claim_names(conn, &topic)?;
             write::insert(conn, &topic)?;
             write::aliases(conn, &topic)?;
+            write::enqueue_syncs(conn, SyncTopicPage::after_create(&topic))?;
             stored(conn, topic.id)
         })
         .await
+        .inspect(|_| self.notifications.send_replace(()))
     }
 
     async fn update(
@@ -76,7 +79,7 @@ impl TopicStore for SqliteStore {
     ) -> Result<Topic, TopicError> {
         self.topics("topic update", move |conn| {
             let current = rows::by_id(conn, id)?.ok_or_else(|| not_found(id))?;
-            let old_slug = current.slug.clone();
+            let before = current.clone();
             let updated = current.apply(changes, now)?;
             if let Some(parent) = updated.parent {
                 let parent = rows::by_id(conn, parent)?.ok_or_else(|| not_found(parent))?;
@@ -85,12 +88,14 @@ impl TopicStore for SqliteStore {
             write::claim_names(conn, &updated)?;
             write::row(conn, &updated)?;
             write::aliases(conn, &updated)?;
-            if updated.slug != old_slug {
-                write::rename_redirect(conn, &old_slug, &updated)?;
+            if updated.slug != before.slug {
+                write::rename_redirect(conn, &before.slug, &updated)?;
             }
+            write::enqueue_syncs(conn, SyncTopicPage::after_update(&before, &updated))?;
             stored(conn, id)
         })
         .await
+        .inspect(|_| self.notifications.send_replace(()))
     }
 
     async fn merge(
@@ -103,11 +108,14 @@ impl TopicStore for SqliteStore {
             let from = rows::by_id(conn, source)?.ok_or_else(|| not_found(source))?;
             let target = rows::by_id(conn, into)?.ok_or_else(|| not_found(into))?;
             let plan = MergePlan::new(&from, &target, &rows::subtopics(conn, source)?)?;
+            let syncs = SyncTopicPage::after_merge(&from, &target, write::page_of(conn, source)?);
             let merged = plan.merged(target, now);
             write::fold_into(conn, &plan, &merged)?;
+            write::enqueue_syncs(conn, syncs)?;
             stored(conn, into)
         })
         .await
+        .inspect(|_| self.notifications.send_replace(()))
     }
 
     async fn find(&self, key: &TopicKey) -> Result<Option<Topic>, TopicError> {
@@ -193,16 +201,8 @@ impl TopicStore for SqliteStore {
         .await
     }
 
-    async fn page_slug(&self, topic: TopicId) -> Result<Option<String>, TopicError> {
-        self.topics("topic page", move |conn| {
-            conn.query_row(
-                "SELECT page_slug FROM rh_topic_pages WHERE topic_id = ?1",
-                params![topic.to_string()],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(failed("topic page"))
-        })
-        .await
+    async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError> {
+        self.topics("topic page", move |conn| write::page_of(conn, topic))
+            .await
     }
 }

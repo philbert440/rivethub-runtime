@@ -68,6 +68,16 @@ pub fn fold_page(parent: &mut WikiPage, child: WikiPage) {
             parent.meta.sources.push(source);
         }
     }
+    for section in child.meta.sections {
+        if !parent
+            .meta
+            .sections
+            .iter()
+            .any(|existing| existing.topic == section.topic)
+        {
+            parent.meta.sections.push(section);
+        }
+    }
     for citation in child.citations {
         if !parent
             .citations

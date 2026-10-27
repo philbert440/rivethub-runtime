@@ -1,4 +1,5 @@
 mod categorize;
+mod page;
 mod placement;
 mod rules;
 mod search;
@@ -8,6 +9,7 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
+use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use crate::BoxError;
@@ -15,6 +17,13 @@ use crate::BoxError;
 pub use categorize::FirstLeaf;
 pub use categorize::Lineage;
 pub use categorize::Verdict;
+pub use page::PageSection;
+pub use page::SyncTopicPage;
+pub use page::TopicPage;
+pub use page::TopicPageError;
+pub use page::TopicPageStore;
+pub use page::bound_page;
+pub use page::sync_topic_page;
 pub use placement::PlacedSession;
 pub use placement::Placement;
 pub use placement::PlacementOutcome;
@@ -104,7 +113,7 @@ pub trait TopicStore: Send + Sync {
 
     async fn suggestion(&self, session: &SessionId) -> Result<Option<Suggestion>, TopicError>;
 
-    async fn page_slug(&self, topic: TopicId) -> Result<Option<String>, TopicError>;
+    async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError>;
 
     async fn search(
         &self,

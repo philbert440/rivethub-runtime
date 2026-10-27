@@ -115,6 +115,7 @@ pub fn parse_wiki_page(markdown: &str) -> Result<WikiPage, WikiPageError> {
             related: related.clone(),
             last_verified: stored.last_verified,
             sources: stored.sources,
+            sections: stored.sections,
             extra: stored.extra,
         },
         preamble: body.preamble,

@@ -69,6 +69,7 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
         wiki: store.clone(),
         consolidate: None,
         topics: store.clone(),
+        pages: store.clone(),
         lineage: Arc::new(capture::listing::StoreSessionLister::new(
             capture::listing::StoreRoots::default(),
         )),

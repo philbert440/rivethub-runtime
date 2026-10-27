@@ -94,6 +94,7 @@ fn fold_all(
     for slug in &fold.children {
         if let Some(child) = load(&tx, slug)? {
             absorb(&mut parent, child);
+            crate::topic_pages::carry(&tx, slug, &fold.parent, &mut parent.article)?;
             folded.push(slug.clone());
         }
     }

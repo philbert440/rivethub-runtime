@@ -111,6 +111,8 @@ pub enum WorkerError {
     TagSettings { message: String },
     #[error("the memory store failed: {0}")]
     Memory(#[source] MemoryStoreError),
+    #[error("topic page sync failed: {0}")]
+    TopicPage(#[from] kernel::topics::TopicPageError),
 }
 
 impl WorkerError {

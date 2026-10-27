@@ -26,6 +26,7 @@ impl WorkerRole {
                     15,
                 ),
                 cron("reap-dead-jobs", FixedJob::ReapDeadJobs, 60),
+                cron("topic-page-sweep", FixedJob::SyncTopicPage, 60),
             ],
             Self::Categorizer => vec![],
             Self::WikiBuilder => {

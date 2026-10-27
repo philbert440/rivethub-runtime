@@ -43,6 +43,7 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         SchemaVersion::V13 => in_transaction(conn, to, |tx| {
             tx.execute_batch(include_str!("schema/topic_pages_v13.sql"))
         }),
+        SchemaVersion::V14 => in_transaction(conn, to, add_topic_page_sections),
     }
 }
 
@@ -114,6 +115,13 @@ fn add_owner_columns(tx: &Transaction<'_>) -> rusqlite::Result<()> {
         tx.execute("ALTER TABLE ros_messages ADD COLUMN owner_user_id TEXT", [])?;
     }
     Ok(())
+}
+
+fn add_topic_page_sections(tx: &Transaction<'_>) -> rusqlite::Result<()> {
+    if column_present(tx, "rh_topic_pages", "sections")? {
+        return Ok(());
+    }
+    tx.execute_batch(include_str!("schema/topic_page_sections_v14.sql"))
 }
 
 fn add_tag_removal_columns(tx: &Transaction<'_>) -> rusqlite::Result<()> {

@@ -40,19 +40,8 @@ impl JobQueue for SqliteStore {
             })
         })?;
         let now = Utc::now();
-        let run_at = match job.run_at {
-            Some(at) => at,
-            None => now,
-        };
-        let max_attempts = resolved_attempts(&job)?;
-        let insert = JobInsert {
-            task: job.name.to_string(),
-            key: job.key.clone(),
-            payload: payload.clone(),
-            run_at,
-            max_attempts,
-            now,
-        };
+        let insert = job_insert(&job, payload.clone(), now)?;
+        let run_at = insert.run_at;
         let inserted = self.enqueue_returning(insert).await.map_err(unavailable)?;
         let text = match inserted {
             Some(id) => id,
@@ -208,6 +197,24 @@ fn missing(id: JobId, error: SqliteError) -> JobQueueError {
     }
 }
 
+pub(crate) fn job_insert(
+    job: &Job,
+    payload: String,
+    now: chrono::DateTime<Utc>,
+) -> Result<JobInsert, JobQueueError> {
+    Ok(JobInsert {
+        task: job.name.to_string(),
+        key: job.key.clone(),
+        payload,
+        run_at: match job.run_at {
+            Some(at) => at,
+            None => now,
+        },
+        max_attempts: resolved_attempts(job)?,
+        now,
+    })
+}
+
 fn resolved_attempts(job: &Job) -> Result<u32, JobQueueError> {
     match job.max_attempts {
         Some(attempts) => {
@@ -358,6 +365,7 @@ fn tasks_for(role: WorkerRole) -> Vec<JobName> {
             fixed(FixedJob::EnqueueIdle),
             fixed(FixedJob::EnqueueStaleSummaries),
             fixed(FixedJob::ReapDeadJobs),
+            fixed(FixedJob::SyncTopicPage),
         ],
         WorkerRole::Categorizer => vec![fixed(FixedJob::SuggestTags)],
         WorkerRole::WikiBuilder => vec![
@@ -394,6 +402,7 @@ fn fixed_attempts(fixed: FixedJob) -> u32 {
         | FixedJob::RecompileWiki
         | FixedJob::EnqueueStaleWiki
         | FixedJob::EnqueueStaleSummaries
-        | FixedJob::ReapDeadJobs => 5,
+        | FixedJob::ReapDeadJobs
+        | FixedJob::SyncTopicPage => 5,
     }
 }

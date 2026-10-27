@@ -8,7 +8,10 @@ use uuid::Uuid;
 
 use super::TopicError;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
 pub struct TopicId(Uuid);
 
 impl TopicId {
@@ -55,6 +58,12 @@ impl Slug {
         } else {
             Ok(Self(folded))
         }
+    }
+
+    #[must_use]
+    pub fn of_heading(text: &str) -> Option<Self> {
+        let folded = fold(text);
+        (!folded.is_empty()).then_some(Self(folded))
     }
 
     #[must_use]
@@ -245,6 +254,11 @@ impl Topic {
             created_at: now,
             updated_at: now,
         })
+    }
+
+    #[must_use]
+    pub fn root(&self) -> TopicId {
+        self.parent.unwrap_or(self.id)
     }
 
     pub fn apply(mut self, changes: TopicChanges, now: DateTime<Utc>) -> Result<Self, TopicError> {

@@ -3,9 +3,88 @@ use kernel::topics::PlacementSource;
 use kernel::topics::TopicStore;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
+use testkit::topic_pages;
+use testkit::topic_pages::PageStores;
 use testkit::topics;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+async fn page_stores(
+    pool: PgPool,
+) -> Result<
+    (
+        tempfile::TempDir,
+        PostgresMemory,
+        memory_postgres::PostgresQueue,
+    ),
+    Box<dyn std::error::Error>,
+> {
+    testkit::install_graphile_worker(&pool).await?;
+    let directory = tempfile::tempdir()?;
+    let memory = PostgresMemory::new(pool).with_wiki_directory(directory.path().join("wiki"));
+    let queue = memory.queue().await?;
+    Ok((directory, memory, queue))
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_new_root_topic_gets_an_empty_bound_page(pool: PgPool) -> TestResult {
+    let (_directory, memory, queue) = page_stores(pool).await?;
+    topic_pages::a_new_root_topic_gets_an_empty_bound_page(PageStores {
+        topics: &memory,
+        pages: &memory,
+        wiki: &memory,
+        queue: &queue,
+    })
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_rename_keeps_the_page_slug_and_follows_the_name(pool: PgPool) -> TestResult {
+    let (_directory, memory, queue) = page_stores(pool).await?;
+    topic_pages::a_rename_keeps_the_page_slug_and_follows_the_name(PageStores {
+        topics: &memory,
+        pages: &memory,
+        wiki: &memory,
+        queue: &queue,
+    })
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_merge_folds_the_page_and_redirects_its_slug(pool: PgPool) -> TestResult {
+    let (_directory, memory, queue) = page_stores(pool).await?;
+    topic_pages::a_merge_folds_the_page_and_redirects_its_slug(PageStores {
+        topics: &memory,
+        pages: &memory,
+        wiki: &memory,
+        queue: &queue,
+    })
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn sub_topics_are_sections_of_the_root_page(pool: PgPool) -> TestResult {
+    let (_directory, memory, queue) = page_stores(pool).await?;
+    topic_pages::sub_topics_are_sections_of_the_root_page(PageStores {
+        topics: &memory,
+        pages: &memory,
+        wiki: &memory,
+        queue: &queue,
+    })
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn syncing_twice_changes_nothing(pool: PgPool) -> TestResult {
+    let (_directory, memory, queue) = page_stores(pool).await?;
+    topic_pages::syncing_twice_changes_nothing(PageStores {
+        topics: &memory,
+        pages: &memory,
+        wiki: &memory,
+        queue: &queue,
+    })
+    .await
+}
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn topics_are_created_found_and_renamed(pool: PgPool) -> TestResult {

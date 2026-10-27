@@ -6,8 +6,7 @@ use super::article::{ArticlePatch, apply_article_patches, demote_h2_headings};
 use super::limits;
 use super::slug::{extract_wiki_links, normalize_slug};
 use super::summary::{SUMMARY_LIMIT, cap_summary, merge_summary_text};
-use super::{LastVerified, PageCitation, PageSource, WikiAction, WikiMeta, WikiPage};
-use crate::Extra;
+use super::{LastVerified, PageCitation, PageSource, WikiAction, WikiPage};
 use crate::gateway::wiki::{WikiHistoryEntry, WikiSlug, WikiSlugError};
 
 #[serde_as]
@@ -196,26 +195,8 @@ fn relate(page: &mut WikiPage, target: &str, additions: &[String]) {
 
 fn new_page(slug: &str) -> Result<WikiPage, WikiSlugError> {
     let slug = WikiSlug::try_from(normalize_slug(slug))?;
-    Ok(WikiPage {
-        meta: WikiMeta {
-            title: slug.as_ref().to_owned(),
-            slug,
-            aliases: Vec::new(),
-            tags: Vec::new(),
-            entities: Vec::new(),
-            related: Vec::new(),
-            last_verified: None,
-            sources: Vec::new(),
-            extra: Extra::default(),
-        },
-        preamble: None,
-        current_state: String::new(),
-        article: String::new(),
-        history: Vec::new(),
-        citations: Vec::new(),
-        see_also: Vec::new(),
-        extra_sections: Vec::new(),
-    })
+    let title = slug.as_ref().to_owned();
+    Ok(WikiPage::empty(slug, title))
 }
 
 fn shrinks(previous: &str, next: &str) -> bool {

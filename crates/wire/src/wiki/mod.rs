@@ -64,8 +64,43 @@ pub struct WikiMeta {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_verified: Option<LastVerified>,
     pub sources: Vec<PageSource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sections: Vec<WikiSectionRef>,
     #[serde(default, skip_serializing_if = "Extra::is_empty")]
     pub extra: Extra,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct WikiSectionRef {
+    pub topic: String,
+    pub heading: String,
+}
+
+impl WikiPage {
+    #[must_use]
+    pub fn empty(slug: WikiSlug, title: String) -> Self {
+        Self {
+            meta: WikiMeta {
+                title,
+                slug,
+                aliases: Vec::new(),
+                tags: Vec::new(),
+                entities: Vec::new(),
+                related: Vec::new(),
+                last_verified: None,
+                sources: Vec::new(),
+                sections: Vec::new(),
+                extra: Extra::default(),
+            },
+            preamble: None,
+            current_state: String::new(),
+            article: String::new(),
+            history: Vec::new(),
+            citations: Vec::new(),
+            see_also: Vec::new(),
+            extra_sections: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

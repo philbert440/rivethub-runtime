@@ -3,6 +3,8 @@ use kernel::topics::PlacementSource;
 use kernel::topics::TopicStore;
 use memory_sqlite::SqliteStore;
 use tempfile::TempDir;
+use testkit::topic_pages;
+use testkit::topic_pages::PageStores;
 use testkit::topics;
 
 use crate::common::TestResult;
@@ -13,6 +15,50 @@ fn store() -> TestResult<(TempDir, SqliteStore)> {
     migrate::sqlite(&path)?;
     let store = SqliteStore::open(&path)?;
     Ok((directory, store))
+}
+
+fn pages(store: &SqliteStore) -> PageStores<'_> {
+    PageStores {
+        topics: store,
+        pages: store,
+        wiki: store,
+        queue: store,
+    }
+}
+
+#[tokio::test]
+async fn a_new_root_topic_gets_an_empty_bound_page() -> TestResult {
+    let (_directory, store) = store()?;
+    topic_pages::a_new_root_topic_gets_an_empty_bound_page(pages(&store)).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_rename_keeps_the_page_slug_and_follows_the_name() -> TestResult {
+    let (_directory, store) = store()?;
+    topic_pages::a_rename_keeps_the_page_slug_and_follows_the_name(pages(&store)).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_merge_folds_the_page_and_redirects_its_slug() -> TestResult {
+    let (_directory, store) = store()?;
+    topic_pages::a_merge_folds_the_page_and_redirects_its_slug(pages(&store)).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn sub_topics_are_sections_of_the_root_page() -> TestResult {
+    let (_directory, store) = store()?;
+    topic_pages::sub_topics_are_sections_of_the_root_page(pages(&store)).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn syncing_twice_changes_nothing() -> TestResult {
+    let (_directory, store) = store()?;
+    topic_pages::syncing_twice_changes_nothing(pages(&store)).await?;
+    Ok(())
 }
 
 #[tokio::test]

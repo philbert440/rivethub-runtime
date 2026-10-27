@@ -63,6 +63,7 @@ fn roles_match_the_kernel_task_lists() {
             "enqueue-idle".to_owned(),
             "enqueue-stale-compaction".to_owned(),
             "reap-dead-jobs".to_owned(),
+            "sync-topic-page".to_owned(),
         ]
     );
     assert_eq!(

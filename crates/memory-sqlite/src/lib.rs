@@ -30,6 +30,7 @@ mod task_watch;
 mod taxonomy;
 mod time;
 mod title;
+mod topic_pages;
 mod topics;
 mod unembedded;
 mod vector;
@@ -89,7 +90,7 @@ impl SharedClock {
     }
 }
 
-pub const SCHEMA_VERSION: i64 = 13;
+pub const SCHEMA_VERSION: i64 = 14;
 
 const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
