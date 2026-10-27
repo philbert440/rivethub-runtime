@@ -38,6 +38,7 @@ pub(crate) fn patch() -> WikiPatch {
             title: "Blue-green adopted".to_owned(),
             body: "Decided to deploy blue-green.".to_owned(),
         }),
+        kind: None,
     }
 }
 

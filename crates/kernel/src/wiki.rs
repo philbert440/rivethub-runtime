@@ -1,5 +1,6 @@
 pub mod builder;
 pub mod consolidate;
+pub mod route;
 
 use wire::gateway::wiki::WikiPageResponse;
 use wire::gateway::wiki::WikiQuery;

@@ -145,7 +145,7 @@ fn epoch_ms(ms: i64) -> DateTime<Utc> {
     DateTime::from_timestamp_millis(ms).unwrap_or(DateTime::UNIX_EPOCH)
 }
 
-fn linked_parent(harness: HarnessId, parent: &str) -> Option<SessionId> {
+pub(crate) fn linked_parent(harness: HarnessId, parent: &str) -> Option<SessionId> {
     let linkable = !parent.is_empty()
         && !parent.contains('/')
         && !parent.contains("..")

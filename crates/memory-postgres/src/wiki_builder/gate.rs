@@ -1,5 +1,6 @@
 use kernel::wiki::builder::{WikiAction, WikiPatch, WikiStoreError};
 use sqlx::{Postgres, Transaction};
+use wire::gateway::wiki::WikiSlug;
 use wire::wiki::{find_stem_match, normalize_slug, topic_identity};
 
 use super::query_error;
@@ -14,6 +15,7 @@ const REDIRECT_HOPS: usize = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ResolveReason {
+    Topic,
     Exact,
     Redirect,
     Alias,
@@ -27,6 +29,7 @@ pub(super) enum ResolveReason {
 impl std::fmt::Display for ResolveReason {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
+            Self::Topic => "topic",
             Self::Exact => "exact",
             Self::Redirect => "redirect",
             Self::Alias => "alias",
@@ -48,10 +51,19 @@ pub(super) struct Gated {
 pub(super) async fn gate(
     tx: &mut Transaction<'_, Postgres>,
     patch: &WikiPatch,
+    page: Option<&WikiSlug>,
 ) -> Result<Gated, WikiStoreError> {
     let proposed = patch.slug.as_ref();
+    if let Some(page) = page.filter(|page| page.as_ref() == normalize_slug(proposed)) {
+        return Ok(Gated {
+            slug: page.as_ref().to_owned(),
+            action: WikiAction::Update,
+            reason: ResolveReason::Topic,
+        });
+    }
+    let page = page.map(AsRef::as_ref);
     Ok(
-        match resolve(tx, proposed, &patch.title, &patch.entities).await? {
+        match resolve(tx, proposed, &patch.title, &patch.entities, page).await? {
             Some((slug, reason)) => Gated {
                 slug,
                 action: WikiAction::Update,
@@ -70,6 +82,7 @@ async fn resolve(
     proposed: &str,
     title: &str,
     entities: &[String],
+    page: Option<&str>,
 ) -> Result<Option<(String, ResolveReason)>, WikiStoreError> {
     let slug = normalize_slug(proposed);
     if let Some(found) = topic(tx, &slug).await? {
@@ -88,10 +101,14 @@ async fn resolve(
     .fetch_optional(&mut **tx)
     .await
     .map_err(query_error)?;
-    if let Some(found) = alias {
+    if let Some(found) = alias
+        && open(tx, &found, page).await?
+    {
         return Ok(Some((found, ResolveReason::Alias)));
     }
-    if let Some(found) = same_identity(tx, &slug, title).await? {
+    if let Some(found) = same_identity(tx, &slug, title).await?
+        && open(tx, &found, page).await?
+    {
         return Ok(Some((found, ResolveReason::Identity)));
     }
     if !entities.is_empty() {
@@ -105,7 +122,9 @@ async fn resolve(
         .fetch_optional(&mut **tx)
         .await
         .map_err(query_error)?;
-        if let Some(found) = shared {
+        if let Some(found) = shared
+            && open(tx, &found, page).await?
+        {
             return Ok(Some((found, ResolveReason::Entity)));
         }
     }
@@ -120,6 +139,7 @@ async fn resolve(
     .map_err(query_error)?;
     if let Some(stem) = find_stem_match(&slug, &variants)
         && let Some(found) = topic(tx, &stem).await?
+        && open(tx, &found, page).await?
     {
         return Ok(Some((found, ResolveReason::Stem)));
     }
@@ -128,6 +148,7 @@ async fn resolve(
         && score >= RESOLVE_SEARCH_SCORE_MIN
         && (find_stem_match(&slug, &[&top]).as_deref() == Some(top.as_str())
             || score >= RESOLVE_SEARCH_SCORE_MIN * 1.5)
+        && open(tx, &top, page).await?
     {
         return Ok(Some((top, ResolveReason::Search)));
     }
@@ -172,6 +193,23 @@ async fn topic(
         .fetch_optional(&mut **tx)
         .await
         .map_err(query_error)
+}
+
+async fn open(
+    tx: &mut Transaction<'_, Postgres>,
+    slug: &str,
+    page: Option<&str>,
+) -> Result<bool, WikiStoreError> {
+    if page == Some(slug) {
+        return Ok(true);
+    }
+    sqlx::query_scalar::<_, bool>(
+        "SELECT NOT EXISTS (SELECT 1 FROM rh_wiki_topics WHERE slug = $1 AND topic_id IS NOT NULL)",
+    )
+    .bind(slug)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(query_error)
 }
 
 async fn follow_redirect(

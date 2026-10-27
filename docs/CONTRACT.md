@@ -26,7 +26,7 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 | B10 | `config.yaml` keys, defaults, validation messages; environment variables | operators, deploy tooling | config-and-boot.md §1–§2 | `golden/diff/config/` (realistic cases) | same accept/reject and same messages for the same file |
 | B11 | On-disk state: `~/.rivethub/` layout, pid and lock files, `mesh.json`, agent presets, device/pairing files, uploads, layouts, wiki pages (markdown + frontmatter), skills `_meta.json`, `codex-threads.json`. `mesh.json` node metadata stores `denUrl` as a URL and `denPort` as a `u16`. `parse_cutover_gateway_port` is the one cutover reader for a TypeScript node that wrote `denPort` as a decimal string; every other port type is a parse error. Rust writes `denPort` as a number | other nodes, backups, humans, TypeScript during cutover | config-and-boot.md §3.9; core-domain.md §1.11; gateway-api.md §8 | fixtures under `golden/` and the inventories' documented formats | files written by Rust are read by TypeScript and vice versa |
 | B12 | Harness protocol: ACP (`session/*`) natively or through the codex-acp and claude-code-acp adapter binaries; herdr control; terminal WS framing | the harness binaries, herdr, RivetHub clients terminal | harness-control-plane.md §1–§2; standardize/SESSION-MODEL.md | `golden/term/` (PTY, WS, roster) ; ACP conformance via the `agent-client-protocol` crate's schema | real binaries: new/resume/prompt/cancel work on every installed harness; term replays pass |
-| B13 | Workers: graphile job names, payloads, keys, priorities, cron entries; worker role split (the summarizer also claims `sync-topic-page` and runs its hourly `topic-page-sweep`, note 22) | the shared Postgres queue, other nodes' workers | data-layer.md §2.3–§2.6 | `golden/capture/pg/` job rows | same jobs enqueued; same job handled with the same result rows |
+| B13 | Workers: graphile job names, payloads, keys, priorities, cron entries; worker role split (the summarizer also claims `sync-topic-page` and runs its hourly `topic-page-sweep`, note 22; `extract-wiki` writes a placed session's summary into its topic page and files people, hosts and tools under category topics, note 23) | the shared Postgres queue, other nodes' workers | data-layer.md §2.3–§2.6 | `golden/capture/pg/` job rows | same jobs enqueued; same job handled with the same result rows |
 | B14 | Mesh registry, re-registration, heartbeat and agent channel; `/ca/v1/sign`, `/ca/v1/chain`, `/ca/v1/crl`; SPIFFE URI SAN identity, holder-generated P-256 keys, 7-day node/agent and 30-day device leaves, one-time enrollment through step-ca, verified-principal renewal by minting a fresh token, step-ca's X.509 CRL; the existing intermediate is bootstrapped into step-ca outside this runtime | peer nodes, holders, operators and legacy CRL readers during cutover | PKI-DESIGN addenda 2026-10-15/15b; mesh inventory unchanged | `crates/testkit/tests/fixtures/stepca/` and `crates/pki/tests` | recorded sign refusals, step-ca chain and CRL through the port, shared `rh ca token` minting, `CaError::Unavailable` when step-ca is unreachable; holder mTLS renew/revoke and local SAN-policy cases listed with reasons |
 | B15 | Hook events (names and context fields) seen by skills and the safety fence / audit log | skills, the audit log, operators | core-domain.md §1.6 | existing TypeScript test fixtures | the same hook sequence and fields for the same turn (the workflow journal belongs to the `rivethub-workflows` package, not the runtime) |
 | B16 | Logs operators read, health endpoint, `doctor` output | operators, monitoring | config-and-boot.md §3.10–§3.11; cli.md §2.5 | documented lines | same lines for the documented events |
@@ -177,7 +177,20 @@ its slug. Sub-topics are `## <name>` sections of the root's page, recorded in fr
 (SQLite keeps them in `rh_topic_pages.sections`, schema v14) in sub-topic order; a sub-topic that becomes a root takes its
 section's text to its own page, and a root that becomes a sub-topic folds its page into the parent's as its section. A sync
 is idempotent. Existing topics get their pages from the summarizer's hourly `topic-page-sweep` (an empty payload syncs
-every topic), queued once at start by `rh local`.
+every topic), queued once at start by `rh local`. When a root topic becomes a sub-topic, its page folds into the
+parent's section without the `#### Merged from <slug>` line that a merge or consolidation fold still writes.
+(23) Wiki builder topic routing (Phil, 2026-10-27): `extract-wiki` looks up the summary's session placement
+(`rh_session_placements`; a child session with no placement of its own uses its parent's, by the categorizer's lineage
+rule) and, when there is one, gives the model the topic as `topic: {pageSlug, name, section?}` beside the summary. A
+patch for that page slug lands on the topic's bound page (resolve reason `topic`, title kept as the topic name); for a
+sub-topic it is appended to the sub-topic's section of the root page instead. The alias, identity, entity, stem and
+search resolve steps never land a patch on a page bound to another topic: they fall through, and a patch with no other
+match creates an unbound page. The bound page always gets a citation row for the summary, even when the model proposes
+nothing. Patches carry an optional `kind` (`person`, `host`, `tool`): a kind patch for a known topic (by title, slug
+or alias) goes to that topic's page or section; otherwise the builder ensures the root topic `People`, `Hosts` or
+`Tools` and a sub-topic named after the patch title under it, and the text lands in that sub-topic's section of the
+category page. Patches without a kind, and summaries of unplaced sessions, resolve as before. Existing unbound pages are
+not converted. Consolidation never folds a page bound to a topic into another page; a bound page survives its group.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

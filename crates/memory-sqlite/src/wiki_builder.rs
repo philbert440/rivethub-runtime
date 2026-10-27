@@ -5,6 +5,7 @@ use kernel::wiki::builder::ExtractWiki;
 use kernel::wiki::builder::WIKI_PIPELINE_VERSION;
 use kernel::wiki::builder::WikiBuilderStore;
 use kernel::wiki::builder::WikiPatch;
+use kernel::wiki::builder::WikiRouting;
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::builder::WikiSummary;
 use kernel::wiki::builder::WikiWork;
@@ -37,10 +38,15 @@ impl WikiBuilderStore for SqliteStore {
         &self,
         job: &ExtractWiki,
         patches: Vec<WikiPatch>,
+        routing: &WikiRouting,
         now: DateTime<Utc>,
     ) -> Result<Vec<String>, WikiStoreError> {
         let job = job.clone();
-        blocking(self, move |conn| apply_all(conn, &job, patches, now)).await
+        let routing = routing.clone();
+        blocking(self, move |conn| {
+            apply_all(conn, &job, patches, &routing, now)
+        })
+        .await
     }
 
     async fn fail_wiki(
@@ -77,6 +83,7 @@ fn apply_all(
     conn: &mut Connection,
     job: &ExtractWiki,
     mut patches: Vec<WikiPatch>,
+    routing: &WikiRouting,
     now: DateTime<Utc>,
 ) -> Result<Vec<String>, WikiStoreError> {
     reject_empty(&patches)?;
@@ -89,9 +96,13 @@ fn apply_all(
     patches.sort_by(|left, right| left.slug.as_ref().cmp(right.slug.as_ref()));
     let mut touched = Vec::new();
     for patch in patches {
-        if let Some(slug) = crate::wiki_topics::apply(&tx, &summary, &patch, now)? {
+        let page = routing.topic_page.as_ref();
+        if let Some(slug) = crate::wiki_topics::apply(&tx, &summary, &patch, page, now)? {
             touched.push(slug);
         }
+    }
+    for slug in &routing.cited {
+        crate::wiki_topics::cite(&tx, slug.as_ref(), &summary, now)?;
     }
     touched.sort();
     touched.dedup();
@@ -196,13 +207,15 @@ fn record_done(
 fn load_summary(conn: &Connection, job: &ExtractWiki) -> Result<WikiSummary, WikiStoreError> {
     let row = conn
         .query_row(
-            "SELECT id, conversation_id, content FROM ros_summaries WHERE id = ?1",
+            "SELECT s.id, s.conversation_id, s.content, c.session_key FROM ros_summaries s
+               LEFT JOIN ros_conversations c ON c.id = s.conversation_id WHERE s.id = ?1",
             params![job.summary_id.to_string()],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, Option<String>>(1)?,
                     row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
                 ))
             },
         )
@@ -221,6 +234,7 @@ fn load_summary(conn: &Connection, job: &ExtractWiki) -> Result<WikiSummary, Wik
         id,
         conversation_id,
         content: row.2,
+        session_key: row.3,
     })
 }
 

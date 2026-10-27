@@ -10,6 +10,7 @@ use kernel::wiki::consolidate::WikiConsolidateStore;
 use kernel::wiki::consolidate::WikiFold;
 use memory_sqlite::SqliteStore;
 use wire::gateway::wiki::WikiSlug;
+use wire::wiki::FoldMark;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -112,6 +113,7 @@ fn fold() -> WikiFold {
         cluster: PARENT.to_owned(),
         parent: PARENT.to_owned(),
         children: vec![CHILD.to_owned()],
+        mark: FoldMark::Merged,
     }
 }
 
@@ -235,6 +237,7 @@ async fn a_missing_parent_is_an_error() -> TestResult {
         cluster: "staging-database".to_owned(),
         parent: "staging-database".to_owned(),
         children: vec![CHILD.to_owned()],
+        mark: FoldMark::Merged,
     };
     match fixture.store.fold_wiki(&absent, Utc::now()).await {
         Err(WikiStoreError::TopicMissing(slug)) => assert_eq!(slug, "staging-database"),

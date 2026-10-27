@@ -1,20 +1,30 @@
 use chrono::{DateTime, Utc};
 use kernel::wiki::builder::{WikiPatch, WikiStoreError, WikiSummary};
 use sqlx::{Postgres, Transaction};
-use wire::gateway::wiki::WikiSourceKind;
+use wire::gateway::wiki::{WikiSlug, WikiSourceKind};
 use wire::wiki::{CitationKind, PageCitation, PagePatch, PageSource, WikiPage};
 
 use super::{gate, lock_slug, query_error};
 
+pub(super) struct Source<'a> {
+    pub(super) summary: &'a WikiSummary,
+    pub(super) date: DateTime<Utc>,
+    pub(super) topic_page: Option<&'a WikiSlug>,
+}
+
 pub(super) async fn apply(
     tx: &mut Transaction<'_, Postgres>,
     repository: &mut crate::wiki_writer::LockedRepository,
-    summary: &WikiSummary,
-    date: DateTime<Utc>,
+    source: &Source<'_>,
     mut patch: WikiPatch,
     now: DateTime<Utc>,
 ) -> Result<(String, String), WikiStoreError> {
-    let gated = gate::gate(tx, &patch).await?;
+    let Source {
+        summary,
+        date,
+        topic_page,
+    } = *source;
+    let gated = gate::gate(tx, &patch, topic_page).await?;
     if gated.slug != patch.slug.as_ref() || gated.action != patch.action {
         tracing::info!(
             "extract-wiki: resolve {}/{} → {}/{} ({})",
@@ -101,6 +111,15 @@ pub(super) async fn store_topic(
     .bind(now).bind(now).bind(git_sha)
     .execute(&mut **tx).await.map_err(query_error)?;
     Ok(())
+}
+
+pub(super) async fn cite(
+    tx: &mut Transaction<'_, Postgres>,
+    slug: &str,
+    summary: &WikiSummary,
+    now: DateTime<Utc>,
+) -> Result<(), WikiStoreError> {
+    provenance(tx, slug, summary, None, now).await
 }
 
 async fn provenance(

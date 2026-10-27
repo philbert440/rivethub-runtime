@@ -4,7 +4,7 @@ use kernel::topics::{PageSection, TopicId, TopicPage, TopicPageStore};
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::{WikiConsolidateStore, WikiFold};
 use wire::gateway::wiki::WikiSlug;
-use wire::wiki::{ArticleSection, WikiPage, WikiSectionRef};
+use wire::wiki::{ArticleSection, FoldMark, WikiPage, WikiSectionRef};
 
 use super::{lock_slug, query_error, settle, topics};
 use crate::PostgresMemory;
@@ -79,12 +79,14 @@ impl TopicPageStore for PostgresMemory {
         &self,
         child: &WikiSlug,
         into: &WikiSlug,
+        mark: FoldMark,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
         let fold = WikiFold {
             cluster: into.as_ref().to_owned(),
             parent: into.as_ref().to_owned(),
             children: vec![child.as_ref().to_owned()],
+            mark,
         };
         self.fold_wiki(&fold, now).await.map(drop)
     }

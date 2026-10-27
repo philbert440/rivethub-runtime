@@ -23,4 +23,5 @@ mod tasks;
 mod topics;
 mod vector_search;
 mod verify;
+mod wiki_routes;
 mod wiki_writer;

@@ -2,7 +2,7 @@
 
 use crate::wiki_support;
 
-use kernel::wiki::builder::{WikiAction, WikiBuilderStore, WikiPatch};
+use kernel::wiki::builder::{WikiAction, WikiBuilderStore, WikiPatch, WikiRouting};
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use wiki_support::{TestResult, now, patch, seed, slug};
@@ -26,7 +26,9 @@ async fn store_with_deploys(
 ) -> Result<PostgresMemory, Box<dyn std::error::Error>> {
     let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let job = seed(pool).await?;
-    store.apply_wiki(&job, vec![patch()], now()).await?;
+    store
+        .apply_wiki(&job, vec![patch()], &WikiRouting::default(), now())
+        .await?;
     Ok(store)
 }
 
@@ -36,7 +38,9 @@ async fn apply(
     patches: Vec<WikiPatch>,
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let job = seed(pool).await?;
-    Ok(store.apply_wiki(&job, patches, now()).await?)
+    Ok(store
+        .apply_wiki(&job, patches, &WikiRouting::default(), now())
+        .await?)
 }
 
 async fn slugs(pool: &PgPool) -> Result<Vec<String>, sqlx::Error> {

@@ -11,6 +11,7 @@ use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::TransactionBehavior;
 use rusqlite::params;
+use wire::wiki::FoldMark;
 use wire::wiki::FoldedTopic;
 use wire::wiki::fold_text;
 
@@ -50,7 +51,8 @@ fn topics(conn: &Connection) -> Result<Vec<WikiTopicStats>, WikiStoreError> {
     let mut statement = conn
         .prepare(
             "SELECT t.slug, t.title, t.history_count, t.created_at,
-                    (SELECT count(*) FROM ros_wiki_citations c WHERE c.topic_slug = t.slug)
+                    (SELECT count(*) FROM ros_wiki_citations c WHERE c.topic_slug = t.slug),
+                    EXISTS (SELECT 1 FROM rh_topic_pages p WHERE p.page_slug = t.slug)
                FROM ros_wiki_topics t ORDER BY t.slug",
         )
         .map_err(query)?;
@@ -62,12 +64,13 @@ fn topics(conn: &Connection) -> Result<Vec<WikiTopicStats>, WikiStoreError> {
                 row.get::<_, u64>(2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, u64>(4)?,
+                row.get::<_, bool>(5)?,
             ))
         })
         .map_err(query)?;
     let mut topics = Vec::new();
     for row in rows {
-        let (slug, title, history, created_at, citations) = row.map_err(query)?;
+        let (slug, title, history, created_at, citations, bound) = row.map_err(query)?;
         topics.push(WikiTopicStats {
             slug,
             title,
@@ -75,6 +78,7 @@ fn topics(conn: &Connection) -> Result<Vec<WikiTopicStats>, WikiStoreError> {
             history,
             created_at: crate::time::stored(&created_at, "ros_wiki_topics.created_at")
                 .map_err(|source| WikiStoreError::Query(Box::new(source)))?,
+            bound,
         });
     }
     Ok(topics)
@@ -93,7 +97,7 @@ fn fold_all(
     let mut folded = Vec::new();
     for slug in &fold.children {
         if let Some(child) = load(&tx, slug)? {
-            absorb(&mut parent, child);
+            absorb(&mut parent, child, fold.mark);
             crate::topic_pages::carry(&tx, slug, &fold.parent, &mut parent.article)?;
             folded.push(slug.clone());
         }
@@ -111,7 +115,7 @@ fn fold_all(
     Ok(folded)
 }
 
-fn absorb(parent: &mut Topic, child: Topic) {
+fn absorb(parent: &mut Topic, child: Topic, mark: FoldMark) {
     let mut aliases: BTreeSet<String> = std::mem::take(&mut parent.aliases).into_iter().collect();
     aliases.insert(child.slug.clone());
     aliases.extend(child.aliases);
@@ -135,6 +139,7 @@ fn absorb(parent: &mut Topic, child: Topic) {
             current_state: child.current_state,
             article: child.article,
         },
+        mark,
     );
 }
 

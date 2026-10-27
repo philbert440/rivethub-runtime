@@ -14,6 +14,7 @@ use rusqlite::params;
 use serde::Deserialize;
 use serde::Serialize;
 use wire::gateway::wiki::WikiSlug;
+use wire::wiki::FoldMark;
 
 use crate::SqliteStore;
 use crate::time;
@@ -89,12 +90,14 @@ impl TopicPageStore for SqliteStore {
         &self,
         child: &WikiSlug,
         into: &WikiSlug,
+        mark: FoldMark,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
         let fold = WikiFold {
             cluster: into.as_ref().to_owned(),
             parent: into.as_ref().to_owned(),
             children: vec![child.as_ref().to_owned()],
+            mark,
         };
         self.fold_wiki(&fold, now).await.map(drop)
     }

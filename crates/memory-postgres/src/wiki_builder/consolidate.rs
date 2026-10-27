@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::{WikiConsolidateStore, WikiFold, WikiTopicStats};
 use sqlx::{Postgres, Transaction};
-use wire::wiki::{FoldedTopic, WikiPage, fold_page, fold_text};
+use wire::wiki::{FoldMark, FoldedTopic, WikiPage, fold_page, fold_text};
 
 use super::{lock_slug, query_error, settle, topics};
 use crate::PostgresMemory;
@@ -16,6 +16,7 @@ struct StatsRow {
     citations: i64,
     history_count: i32,
     created_at: DateTime<Utc>,
+    bound: bool,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -29,7 +30,7 @@ struct TextRow {
 impl WikiConsolidateStore for PostgresMemory {
     async fn wiki_topic_stats(&self) -> Result<Vec<WikiTopicStats>, WikiStoreError> {
         let rows = sqlx::query_as::<_, StatsRow>(
-            "SELECT t.slug, t.title, t.history_count, t.created_at,
+            "SELECT t.slug, t.title, t.history_count, t.created_at, t.topic_id IS NOT NULL AS bound,
                     (SELECT count(*) FROM rh_wiki_citations c WHERE c.topic_slug = t.slug) AS citations
                FROM rh_wiki_topics t ORDER BY t.slug",
         )
@@ -44,6 +45,7 @@ impl WikiConsolidateStore for PostgresMemory {
                     citations: count(row.citations)?,
                     history: count(row.history_count.into())?,
                     created_at: row.created_at,
+                    bound: row.bound,
                 })
             })
             .collect()
@@ -95,7 +97,13 @@ impl PostgresMemory {
             let Some(row) = text(&mut tx, child).await? else {
                 continue;
             };
-            absorb(&mut page, child, row, repository.read(child).await?);
+            absorb(
+                &mut page,
+                child,
+                row,
+                repository.read(child).await?,
+                fold.mark,
+            );
             folded.push(child.clone());
         }
         if folded.is_empty() {
@@ -117,9 +125,9 @@ impl PostgresMemory {
     }
 }
 
-fn absorb(page: &mut WikiPage, slug: &str, row: TextRow, child: Option<WikiPage>) {
+fn absorb(page: &mut WikiPage, slug: &str, row: TextRow, child: Option<WikiPage>, mark: FoldMark) {
     if let Some(child) = child {
-        fold_page(page, child);
+        fold_page(page, child, mark);
         return;
     }
     if !page.meta.aliases.iter().any(|alias| alias == slug) {
@@ -134,6 +142,7 @@ fn absorb(page: &mut WikiPage, slug: &str, row: TextRow, child: Option<WikiPage>
             current_state: row.current_state,
             article: row.article,
         },
+        mark,
     );
 }
 

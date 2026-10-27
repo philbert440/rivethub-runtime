@@ -32,6 +32,7 @@ impl Topics {
                 citations: 0,
                 history: 0,
                 created_at: DateTime::<Utc>::UNIX_EPOCH,
+                bound: false,
             })
             .collect(),
             folds: Mutex::new(Vec::new()),
@@ -83,6 +84,7 @@ async fn consolidation_folds_each_planned_cluster_and_reembeds_the_parent() -> T
             cluster: "acmekit-deploys".to_owned(),
             parent: "acmekit-deploys".to_owned(),
             children: vec!["acmekit-deploys-friday".to_owned()],
+            mark: wire::wiki::FoldMark::Merged,
         }]
     );
     assert!(embed_queued(&queue).await?);

@@ -10,6 +10,7 @@ use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
 use thiserror::Error;
+use wire::gateway::wiki::WikiSlug;
 use wire::wiki::topic_identity;
 
 use crate::time;
@@ -32,9 +33,10 @@ pub(crate) fn apply(
     conn: &Connection,
     summary: &WikiSummary,
     patch: &WikiPatch,
+    page: Option<&WikiSlug>,
     now: DateTime<Utc>,
 ) -> Result<Option<String>, WikiStoreError> {
-    let slug = canonical(conn, patch)?;
+    let slug = canonical(conn, patch, page)?;
     let aliases = alias_list(patch, &slug);
     let at = time::stamp(now);
     let existing = load(conn, &slug)?;
@@ -72,6 +74,15 @@ pub(crate) fn apply(
         &at,
     )?;
     Ok(changed.then_some(slug))
+}
+
+pub(crate) fn cite(
+    conn: &Connection,
+    slug: &str,
+    summary: &WikiSummary,
+    now: DateTime<Utc>,
+) -> Result<(), WikiStoreError> {
+    provenance(conn, slug, summary, None, &time::stamp(now))
 }
 
 struct TopicWrite {
@@ -206,23 +217,42 @@ fn load(conn: &Connection, slug: &str) -> Result<Option<Existing>, WikiStoreErro
     .map_err(query)
 }
 
-fn canonical(conn: &Connection, patch: &WikiPatch) -> Result<String, WikiStoreError> {
+fn canonical(
+    conn: &Connection,
+    patch: &WikiPatch,
+    page: Option<&WikiSlug>,
+) -> Result<String, WikiStoreError> {
+    if let Some(page) = page.filter(|page| **page == patch.slug) {
+        return Ok(page.as_ref().to_owned());
+    }
+    let page = page.map(AsRef::as_ref);
     let mut candidates = vec![patch.slug.as_ref().to_owned()];
     candidates.extend(patch.aliases.iter().map(|alias| alias.as_ref().to_owned()));
     let mut found = BTreeSet::new();
-    for candidate in &candidates {
-        for slug in matches(conn, candidate)? {
-            found.insert(slug);
+    let mut blocked = false;
+    for (index, candidate) in candidates.iter().enumerate() {
+        for (slug, explicit) in matches(conn, candidate)? {
+            if (index == 0 && explicit) || open(conn, &slug, page)? {
+                found.insert(slug);
+            } else {
+                blocked = true;
+            }
         }
     }
     if found.is_empty()
         && let Some(slug) = same_identity(conn, patch)?
     {
-        found.insert(slug);
+        if open(conn, &slug, page)? {
+            found.insert(slug);
+        } else {
+            blocked = true;
+        }
     }
     let mut found = found.into_iter();
     match (found.next(), found.next()) {
-        (None, _) if patch.action == WikiAction::Create => Ok(patch.slug.as_ref().to_owned()),
+        (None, _) if patch.action == WikiAction::Create || blocked => {
+            Ok(patch.slug.as_ref().to_owned())
+        }
         (None, _) => Err(WikiStoreError::TopicMissing(patch.slug.as_ref().to_owned())),
         (Some(slug), None) => Ok(slug),
         (Some(_), Some(_)) => Err(WikiStoreError::SlugConflict(patch.slug.as_ref().to_owned())),
@@ -248,19 +278,31 @@ fn same_identity(conn: &Connection, patch: &WikiPatch) -> Result<Option<String>,
     Ok(identity.closest(candidates))
 }
 
-fn matches(conn: &Connection, candidate: &str) -> Result<Vec<String>, WikiStoreError> {
+fn open(conn: &Connection, slug: &str, page: Option<&str>) -> Result<bool, WikiStoreError> {
+    if page == Some(slug) {
+        return Ok(true);
+    }
+    conn.query_row(
+        "SELECT NOT EXISTS (SELECT 1 FROM rh_topic_pages WHERE page_slug = ?1)",
+        params![slug],
+        |row| row.get(0),
+    )
+    .map_err(query)
+}
+
+fn matches(conn: &Connection, candidate: &str) -> Result<Vec<(String, bool)>, WikiStoreError> {
     let mut statement = conn
         .prepare(
-            "SELECT slug FROM ros_wiki_topics WHERE slug = ?1
+            "SELECT slug, 1 FROM ros_wiki_topics WHERE slug = ?1
              UNION
-             SELECT t.slug FROM ros_wiki_topics t, json_each(t.aliases) AS item
+             SELECT t.slug, 0 FROM ros_wiki_topics t, json_each(t.aliases) AS item
               WHERE item.value = ?1
              UNION
-             SELECT to_slug FROM ros_wiki_redirects WHERE from_slug = ?1",
+             SELECT to_slug, 1 FROM ros_wiki_redirects WHERE from_slug = ?1",
         )
         .map_err(query)?;
     let rows = statement
-        .query_map(params![candidate], |row| row.get(0))
+        .query_map(params![candidate], |row| Ok((row.get(0)?, row.get(1)?)))
         .map_err(query)?;
     let mut slugs = Vec::new();
     for row in rows {
