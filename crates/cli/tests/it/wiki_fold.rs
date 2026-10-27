@@ -14,7 +14,7 @@ use memory_postgres::wiki_writer::WikiRepository;
 use sqlx::PgPool;
 use wiki_support::{TestResult, now, seed};
 use wire::gateway::wiki::{WikiHistoryEntry, WikiSlug};
-use wire::wiki::{CitationKind, PageCitation, PagePatch, WikiAction};
+use wire::wiki::{CitationKind, FoldMark, PageCitation, PagePatch, WikiAction};
 
 struct Seed<'a> {
     slug: &'a str,
@@ -129,6 +129,7 @@ async fn prefixed_duplicates_fold_into_the_plain_page_and_redirect(pool: PgPool)
             cluster: "mesh".to_owned(),
             parent: "mesh".to_owned(),
             children: vec!["rivetos-mesh".to_owned()],
+            mark: FoldMark::Merged,
         }]
     );
     let fold = plan.first().ok_or("one fold")?;

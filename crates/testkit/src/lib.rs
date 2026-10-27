@@ -17,6 +17,7 @@ pub mod stub;
 pub mod task_memory;
 pub mod topic_pages;
 pub mod topics;
+pub mod wiki_routes;
 pub mod ws;
 
 use std::path::Path;

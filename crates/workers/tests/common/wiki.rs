@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use kernel::wiki::builder::{ExtractWiki, WikiBuilderStore, WikiPatch, WikiStoreError, WikiWork};
+use kernel::wiki::builder::{
+    ExtractWiki, WikiBuilderStore, WikiPatch, WikiRouting, WikiStoreError, WikiWork,
+};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -43,6 +45,7 @@ impl WikiBuilderStore for WikiStore {
         &self,
         job: &ExtractWiki,
         patches: Vec<WikiPatch>,
+        _routing: &WikiRouting,
         _now: DateTime<Utc>,
     ) -> Result<Vec<String>, WikiStoreError> {
         let topics: Vec<String> = patches

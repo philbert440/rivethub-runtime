@@ -9,6 +9,12 @@ struct Leftovers {
     merged: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoldMark {
+    Merged,
+    Section,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoldedTopic {
     pub slug: String,
@@ -17,7 +23,12 @@ pub struct FoldedTopic {
     pub article: String,
 }
 
-pub fn fold_text(current_state: &mut String, article: &mut String, child: FoldedTopic) {
+pub fn fold_text(
+    current_state: &mut String,
+    article: &mut String,
+    child: FoldedTopic,
+    mark: FoldMark,
+) {
     let mut leftovers = Leftovers::default();
     take_denser(
         current_state,
@@ -35,15 +46,20 @@ pub fn fold_text(current_state: &mut String, article: &mut String, child: Folded
             ),
         );
     }
-    let mut merged = format!("#### Merged from {}\n\n**{}**", child.slug, child.title);
-    for text in leftovers.merged {
-        merged.push_str("\n\n");
-        merged.push_str(&text);
+    let mut merged = match mark {
+        FoldMark::Merged => vec![format!(
+            "#### Merged from {}\n\n**{}**",
+            child.slug, child.title
+        )],
+        FoldMark::Section => Vec::new(),
+    };
+    merged.extend(leftovers.merged);
+    if !merged.is_empty() {
+        append_entry(article, &merged.join("\n\n"));
     }
-    append_entry(article, &merged);
 }
 
-pub fn fold_page(parent: &mut WikiPage, child: WikiPage) {
+pub fn fold_page(parent: &mut WikiPage, child: WikiPage, mark: FoldMark) {
     let parent_slug = parent.meta.slug.as_ref().to_owned();
     let child_slug = child.meta.slug.as_ref().to_owned();
     merge_list(
@@ -110,6 +126,7 @@ pub fn fold_page(parent: &mut WikiPage, child: WikiPage) {
             current_state: child.current_state,
             article: child.article,
         },
+        mark,
     );
 }
 

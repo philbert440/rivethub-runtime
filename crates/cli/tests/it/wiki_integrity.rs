@@ -2,7 +2,7 @@
 
 use crate::wiki_support;
 
-use kernel::wiki::builder::{WikiAction, WikiBuilderStore, WikiStoreError};
+use kernel::wiki::builder::{WikiAction, WikiBuilderStore, WikiRouting, WikiStoreError};
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use testkit::fakes::{FakeJobQueue, FakeProvider};
@@ -18,12 +18,16 @@ async fn wiki_alias_updates_and_new_sources_commit_provenance(pool: PgPool) -> T
     let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let first = seed(&pool).await?;
     assert_eq!(
-        store.apply_wiki(&first, vec![patch()], now()).await?,
+        store
+            .apply_wiki(&first, vec![patch()], &WikiRouting::default(), now())
+            .await?,
         vec!["acmekit-deploys"]
     );
     let second = seed(&pool).await?;
     assert_eq!(
-        store.apply_wiki(&second, vec![patch()], now()).await?,
+        store
+            .apply_wiki(&second, vec![patch()], &WikiRouting::default(), now())
+            .await?,
         vec!["acmekit-deploys"]
     );
     let count: (i64,) = sqlx::query_as("SELECT count(*) FROM rh_wiki_provenance")
@@ -38,7 +42,7 @@ async fn wiki_alias_updates_and_new_sources_commit_provenance(pool: PgPool) -> T
     update.article = None;
     assert_eq!(
         store
-            .apply_wiki(&third, vec![update.clone()], now())
+            .apply_wiki(&third, vec![update.clone()], &WikiRouting::default(), now())
             .await?,
         vec!["acmekit-deploys"]
     );
@@ -66,7 +70,9 @@ async fn wiki_alias_of_another_topic_no_longer_loses_the_other_patches(pool: PgP
     let wiki = tempfile::tempdir()?;
     let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let first = seed(&pool).await?;
-    store.apply_wiki(&first, vec![patch()], now()).await?;
+    store
+        .apply_wiki(&first, vec![patch()], &WikiRouting::default(), now())
+        .await?;
     let second = seed(&pool).await?;
     let mut other = patch();
     other.slug = slug("other");
@@ -76,7 +82,9 @@ async fn wiki_alias_of_another_topic_no_longer_loses_the_other_patches(pool: PgP
     other.history_entry = None;
     other.aliases = vec![slug("other-alias")];
     other.entities.clear();
-    store.apply_wiki(&second, vec![other], now()).await?;
+    store
+        .apply_wiki(&second, vec![other], &WikiRouting::default(), now())
+        .await?;
     let third = seed(&pool).await?;
     let mut conflict = patch();
     conflict.aliases.push(slug("other-alias"));
@@ -87,7 +95,12 @@ async fn wiki_alias_of_another_topic_no_longer_loses_the_other_patches(pool: PgP
     fresh.entities.clear();
     assert_eq!(
         store
-            .apply_wiki(&third, vec![fresh, conflict], now())
+            .apply_wiki(
+                &third,
+                vec![fresh, conflict],
+                &WikiRouting::default(),
+                now()
+            )
             .await?,
         vec!["a-fresh-topic", "acmekit-deploys"]
     );
@@ -139,6 +152,7 @@ async fn wiki_rejects_wrong_conversation_before_model_or_writes(pool: PgPool) ->
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
+        topics: None,
     };
     assert!(matches!(
         handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload).await,
@@ -174,6 +188,7 @@ async fn wiki_bad_model_output_is_failed_and_retryable(pool: PgPool) -> TestResu
             model: "fake-chat",
             now: now(),
             cancel: &cancel,
+            topics: None,
         };
         assert!(
             handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload)
@@ -207,9 +222,10 @@ async fn wiki_duplicate_concurrent_commits_do_not_duplicate_history(pool: PgPool
     let wiki = tempfile::tempdir()?;
     let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let job = seed(&pool).await?;
+    let routing = WikiRouting::default();
     let (left, right) = tokio::try_join!(
-        store.apply_wiki(&job, vec![patch()], now()),
-        store.apply_wiki(&job, vec![patch()], now())
+        store.apply_wiki(&job, vec![patch()], &routing, now()),
+        store.apply_wiki(&job, vec![patch()], &routing, now())
     )?;
     assert_eq!(left, right);
     let row: (i32,) = sqlx::query_as("SELECT history_count FROM rh_wiki_topics")
@@ -242,6 +258,7 @@ async fn wiki_cancellation_leaves_no_extraction(pool: PgPool) -> TestResult {
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
+        topics: None,
     };
     assert!(matches!(
         handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload).await,
@@ -288,7 +305,9 @@ async fn wiki_summary_without_conversation_preserves_absence(pool: PgPool) -> Te
         panic!("new work");
     };
     assert_eq!(summary.conversation_id, None);
-    store.apply_wiki(&job, vec![patch()], now()).await?;
+    store
+        .apply_wiki(&job, vec![patch()], &WikiRouting::default(), now())
+        .await?;
     let row: (Option<uuid::Uuid>,) =
         sqlx::query_as("SELECT conversation_id FROM rh_wiki_provenance")
             .fetch_one(&pool)
@@ -316,6 +335,7 @@ async fn wiki_file_failure_marks_extraction_failed_and_retry_reconciles(
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
+        topics: None,
     };
     assert!(
         handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload)
@@ -360,7 +380,9 @@ async fn index_only_completion_is_rebuilt_as_a_page(pool: PgPool) -> TestResult 
         store.wiki_work(&job).await?,
         kernel::wiki::builder::WikiWork::Pending(_)
     ));
-    store.apply_wiki(&job, vec![patch()], now()).await?;
+    store
+        .apply_wiki(&job, vec![patch()], &WikiRouting::default(), now())
+        .await?;
     assert!(wiki.path().join("topics/acmekit-deploys.md").is_file());
     assert!(!store.wiki_backfill(100).await?.contains(&job));
     Ok(())

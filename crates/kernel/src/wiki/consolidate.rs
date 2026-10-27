@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use wire::wiki::topic_identity;
+use wire::wiki::{FoldMark, topic_identity};
 
 use super::builder::WikiStoreError;
 
@@ -35,6 +35,7 @@ pub struct WikiTopicStats {
     pub citations: u64,
     pub history: u64,
     pub created_at: DateTime<Utc>,
+    pub bound: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +43,7 @@ pub struct WikiFold {
     pub cluster: String,
     pub parent: String,
     pub children: Vec<String>,
+    pub mark: FoldMark,
 }
 
 #[async_trait]
@@ -71,6 +73,11 @@ pub fn consolidation_plan(topics: &[WikiTopicStats], options: &ConsolidateWiki) 
         .filter(|topic| !folded.contains(topic.slug.as_str()))
         .map(|topic| topic.slug.clone())
         .collect();
+    let bound: BTreeSet<&str> = topics
+        .iter()
+        .filter(|topic| topic.bound)
+        .map(|topic| topic.slug.as_str())
+        .collect();
     let mut planned: Vec<(usize, WikiFold)> = identity
         .into_iter()
         .chain(
@@ -78,7 +85,7 @@ pub fn consolidation_plan(topics: &[WikiTopicStats], options: &ConsolidateWiki) 
                 .into_iter()
                 .filter_map(|(cluster, members)| {
                     let size = members.len();
-                    fold_for(cluster, &members).map(|fold| (size, fold))
+                    fold_for(cluster, &members, &bound).map(|fold| (size, fold))
                 }),
         )
         .filter(|(size, _)| !u32::try_from(*size).is_ok_and(|size| size < options.min_cluster_size))
@@ -111,7 +118,7 @@ fn identity_folds(topics: &[&WikiTopicStats]) -> Vec<(usize, WikiFold)> {
             let parent = survivor(&members)?;
             let mut children: Vec<String> = members
                 .iter()
-                .filter(|(_, topic)| topic.slug != parent)
+                .filter(|(_, topic)| topic.slug != parent && !topic.bound)
                 .map(|(_, topic)| topic.slug.clone())
                 .collect();
             children.sort();
@@ -121,6 +128,7 @@ fn identity_folds(topics: &[&WikiTopicStats]) -> Vec<(usize, WikiFold)> {
                     cluster,
                     parent,
                     children,
+                    mark: FoldMark::Merged,
                 },
             ))
         })
@@ -132,6 +140,7 @@ fn survivor(members: &[(usize, &WikiTopicStats)]) -> Option<String> {
         .iter()
         .min_by_key(|&&(noise, topic)| {
             (
+                !topic.bound,
                 noise,
                 Reverse(topic.citations),
                 Reverse(topic.history),
@@ -143,17 +152,20 @@ fn survivor(members: &[(usize, &WikiTopicStats)]) -> Option<String> {
         .map(|(_, topic)| topic.slug.clone())
 }
 
-fn fold_for(cluster: String, members: &[String]) -> Option<WikiFold> {
+fn fold_for(cluster: String, members: &[String], bound: &BTreeSet<&str>) -> Option<WikiFold> {
     let parent = canonical_parent(&cluster, members)?;
     let children: Vec<String> = members
         .iter()
-        .filter(|slug| **slug != parent && is_slug_variant(slug, &parent))
+        .filter(|slug| {
+            **slug != parent && !bound.contains(slug.as_str()) && is_slug_variant(slug, &parent)
+        })
         .cloned()
         .collect();
     (!children.is_empty()).then_some(WikiFold {
         cluster,
         parent,
         children,
+        mark: FoldMark::Merged,
     })
 }
 

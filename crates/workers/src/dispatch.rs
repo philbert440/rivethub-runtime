@@ -143,6 +143,14 @@ async fn dispatch_wiki<Q: JobQueue>(
     let wiki = env.wiki.as_ref().ok_or(WorkerError::MissingDependencies {
         role: ProcessRole::WikiBuilder,
     })?;
+    let topics = match (&env.topics, &env.topic_pages) {
+        (Some(sessions), Some(pages)) => Some(kernel::wiki::route::TopicPorts {
+            topics: sessions.store.as_ref(),
+            pages: pages.pages.as_ref(),
+            lineage: sessions.lineage.as_ref(),
+        }),
+        (None, _) | (_, None) => None,
+    };
     let wiki_env = WikiBuilderEnv {
         store: wiki.store.as_ref(),
         provider: env.provider.as_ref(),
@@ -150,6 +158,7 @@ async fn dispatch_wiki<Q: JobQueue>(
         model: &wiki.model,
         now: Utc::now(),
         cancel,
+        topics,
     };
     if job.name == JobName::Fixed(FixedJob::ExtractWiki) {
         handle_extract_wiki(&wiki_env, &job.payload)

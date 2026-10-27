@@ -35,7 +35,7 @@ pub struct PageStores<'a> {
 }
 
 impl PageStores<'_> {
-    async fn settle(&self) -> Outcome {
+    pub(crate) async fn settle(&self) -> Outcome {
         let selector = ClaimSelector::matching(vec![JobName::Fixed(FixedJob::SyncTopicPage)]);
         while let Some(job) = self.queue.claim(&selector).await? {
             let sync = SyncTopicPage::from_payload(&job.payload)?;
@@ -45,7 +45,7 @@ impl PageStores<'_> {
         Ok(())
     }
 
-    async fn create(&self, topic: Topic) -> Result<Topic, Box<dyn std::error::Error>> {
+    pub(crate) async fn create(&self, topic: Topic) -> Result<Topic, Box<dyn std::error::Error>> {
         let created = self.topics.create(topic).await?;
         self.settle().await?;
         Ok(created)
@@ -64,7 +64,10 @@ impl PageStores<'_> {
             .ok_or("topic has no page")?)
     }
 
-    async fn page(&self, topic: &Topic) -> Result<TopicPage, Box<dyn std::error::Error>> {
+    pub(crate) async fn page(
+        &self,
+        topic: &Topic,
+    ) -> Result<TopicPage, Box<dyn std::error::Error>> {
         let slug = self.slug(topic).await?;
         Ok(self
             .pages
@@ -73,14 +76,20 @@ impl PageStores<'_> {
             .ok_or("page is missing")?)
     }
 
-    async fn lookup(&self, slug: &str) -> Result<WikiLookup, Box<dyn std::error::Error>> {
+    pub(crate) async fn lookup(
+        &self,
+        slug: &str,
+    ) -> Result<WikiLookup, Box<dyn std::error::Error>> {
         Ok(self
             .wiki
             .wiki_page(&WikiSlug::try_from(slug.to_owned())?)
             .await?)
     }
 
-    async fn shown(&self, slug: &str) -> Result<WikiPageResponse, Box<dyn std::error::Error>> {
+    pub(crate) async fn shown(
+        &self,
+        slug: &str,
+    ) -> Result<WikiPageResponse, Box<dyn std::error::Error>> {
         match self.lookup(slug).await? {
             WikiLookup::Page(page) => Ok(*page),
             other @ (WikiLookup::Redirect(_) | WikiLookup::Missing) => {
@@ -203,6 +212,15 @@ pub async fn sub_topics_are_sections_of_the_root_page(stores: PageStores<'_>) ->
     };
     stores.update(&sub, demoted).await?;
     same("unbound", stores.topics.page_slug(sub.id).await?, None)?;
+    same(
+        "fold marker",
+        stores
+            .shown("infra")
+            .await?
+            .markdown
+            .contains("Merged from"),
+        false,
+    )?;
     same(
         "folded slug",
         stores.lookup("certs").await?,

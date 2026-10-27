@@ -123,6 +123,7 @@ async fn wiki_queue_failure_retries_delivery_without_reextracting(pool: PgPool) 
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
+        topics: None,
     };
     assert!(matches!(
         handle_extract_wiki(&env, &payload).await,
@@ -168,6 +169,7 @@ async fn wiki_cancels_an_inflight_provider_request(pool: PgPool) -> TestResult {
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
+        topics: None,
     };
     let payload = extract_wiki_job(&job)?.payload;
     let (result, ()) = tokio::time::timeout(Duration::from_secs(5), async {

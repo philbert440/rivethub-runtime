@@ -2,7 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 use kernel::wiki::consolidate::{
     ConsolidateWiki, WikiFold, WikiTopicStats, consolidation_plan, is_slug_variant,
 };
-use wire::wiki::topic_identity;
+use wire::wiki::{FoldMark, topic_identity};
 
 fn names(items: &[&str]) -> Vec<String> {
     items.iter().map(|item| (*item).to_owned()).collect()
@@ -19,6 +19,7 @@ fn topic(slug: &str, title: &str, citations: u64) -> WikiTopicStats {
         citations,
         history: 0,
         created_at: DateTime::<Utc>::UNIX_EPOCH,
+        bound: false,
     }
 }
 
@@ -27,6 +28,7 @@ fn fold(cluster: &str, parent: &str, children: &[&str]) -> WikiFold {
         cluster: cluster.to_owned(),
         parent: parent.to_owned(),
         children: names(children),
+        mark: FoldMark::Merged,
     }
 }
 
@@ -281,6 +283,25 @@ fn a_variant_is_a_hyphen_boundary_prefix() {
     assert!(is_slug_variant("acmekit", "acmekit"));
     assert!(!is_slug_variant("acme", "acmekit"));
     assert!(!is_slug_variant("", ""));
+}
+
+#[test]
+fn a_page_bound_to_a_topic_is_never_folded_as_a_child() -> Result<(), serde_json::Error> {
+    let bound = |slug: &str| WikiTopicStats {
+        bound: true,
+        ..topic(slug, slug, 0)
+    };
+    let plan = consolidation_plan(
+        &[
+            topic("rivet-billing", "Billing", 9),
+            bound("billing"),
+            topic("acmekit-deploys", "acmekit-deploys", 0),
+            bound("acmekit-deploys-friday"),
+        ],
+        &defaults()?,
+    );
+    assert_eq!(plan, vec![fold("billing", "billing", &["rivet-billing"])]);
+    Ok(())
 }
 
 #[test]

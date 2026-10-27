@@ -6,8 +6,8 @@ mod topics;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use kernel::wiki::builder::{
-    ExtractWiki, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiPatch, WikiStoreError, WikiSummary,
-    WikiWork, WikiWriteError,
+    ExtractWiki, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiPatch, WikiRouting, WikiStoreError,
+    WikiSummary, WikiWork, WikiWriteError,
 };
 use sqlx::{PgConnection, Postgres, Transaction};
 use uuid::Uuid;
@@ -21,6 +21,7 @@ struct SummaryRow {
     id: Uuid,
     conversation_id: Option<Uuid>,
     content: String,
+    session_key: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -71,6 +72,7 @@ impl WikiBuilderStore for PostgresMemory {
         &self,
         job: &ExtractWiki,
         patches: Vec<WikiPatch>,
+        routing: &WikiRouting,
         now: DateTime<Utc>,
     ) -> Result<Vec<String>, WikiStoreError> {
         let directory = self
@@ -81,7 +83,9 @@ impl WikiBuilderStore for PostgresMemory {
             let mut repository = crate::wiki_writer::WikiRepository::new(directory.clone())
                 .lock()
                 .await?;
-            let applied = self.apply_pages(&mut repository, job, patches, now).await;
+            let applied = self
+                .apply_pages(&mut repository, job, patches, routing, now)
+                .await;
             (applied, repository.release().await)
         };
         settle(applied, released)
@@ -113,6 +117,7 @@ impl PostgresMemory {
         repository: &mut crate::wiki_writer::LockedRepository,
         job: &ExtractWiki,
         mut patches: Vec<WikiPatch>,
+        routing: &WikiRouting,
         now: DateTime<Utc>,
     ) -> Result<Vec<String>, WikiStoreError> {
         for patch in &mut patches {
@@ -130,20 +135,27 @@ impl PostgresMemory {
             tx.commit().await.map_err(query_error)?;
             return Ok(topics);
         }
-        lock_slugs(&mut tx, &patches).await?;
+        lock_slugs(&mut tx, &patches, &routing.cited).await?;
         let date: DateTime<Utc> =
             sqlx::query_scalar("SELECT created_at FROM rh_summaries WHERE id = $1")
                 .bind(job.summary_id)
                 .fetch_one(&mut *tx)
                 .await
                 .map_err(query_error)?;
+        let source = topics::Source {
+            summary: &summary,
+            date,
+            topic_page: routing.topic_page.as_ref(),
+        };
         let mut touched = Vec::new();
         let mut last_sha = None;
         for patch in patches {
-            let (slug, sha) =
-                topics::apply(&mut tx, repository, &summary, date, patch, now).await?;
+            let (slug, sha) = topics::apply(&mut tx, repository, &source, patch, now).await?;
             touched.push(slug);
             last_sha = Some(sha);
+        }
+        for slug in &routing.cited {
+            topics::cite(&mut tx, slug.as_ref(), &summary, now).await?;
         }
         touched.sort();
         touched.dedup();
@@ -181,11 +193,12 @@ async fn load_summary(
     lock: bool,
 ) -> Result<WikiSummary, WikiStoreError> {
     let mut query = sqlx::QueryBuilder::<Postgres>::new(
-        "SELECT id, conversation_id, content FROM rh_summaries WHERE id = ",
+        "SELECT s.id, s.conversation_id, s.content, c.session_key FROM rh_summaries s
+         LEFT JOIN rh_conversations c ON c.id = s.conversation_id WHERE s.id = ",
     );
     query.push_bind(job.summary_id);
     if lock {
-        query.push(" FOR UPDATE");
+        query.push(" FOR UPDATE OF s");
     }
     let row = query
         .build_query_as::<SummaryRow>()
@@ -203,6 +216,7 @@ async fn load_summary(
         id: row.id,
         conversation_id: row.conversation_id,
         content: row.content,
+        session_key: row.session_key,
     })
 }
 
@@ -226,12 +240,14 @@ async fn completed(
 async fn lock_slugs(
     tx: &mut Transaction<'_, Postgres>,
     patches: &[WikiPatch],
+    cited: &[WikiSlug],
 ) -> Result<(), WikiStoreError> {
     let mut slugs: Vec<&str> = patches
         .iter()
         .flat_map(|patch| {
             std::iter::once(patch.slug.as_ref()).chain(patch.aliases.iter().map(AsRef::as_ref))
         })
+        .chain(cited.iter().map(AsRef::as_ref))
         .collect();
     slugs.sort_unstable();
     slugs.dedup();

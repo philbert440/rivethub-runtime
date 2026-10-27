@@ -34,3 +34,4 @@ mod task_spec;
 mod topics;
 mod unembedded_sweep;
 mod wiki_consolidate;
+mod wiki_routes;

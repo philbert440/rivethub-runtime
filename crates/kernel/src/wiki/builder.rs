@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
+use wire::gateway::wiki::WikiSlug;
 
 use crate::BoxError;
 
@@ -16,7 +17,7 @@ pub struct ExtractWiki {
     pub conversation_id: Option<Uuid>,
 }
 
-pub use wire::wiki::{WikiAction, WikiPatch};
+pub use wire::wiki::{EntityKind, WikiAction, WikiPatch};
 
 #[must_use]
 pub fn extraction_schema() -> schemars::Schema {
@@ -28,6 +29,14 @@ pub struct WikiSummary {
     pub id: Uuid,
     pub conversation_id: Option<Uuid>,
     pub content: String,
+    #[serde(skip)]
+    pub session_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WikiRouting {
+    pub topic_page: Option<WikiSlug>,
+    pub cited: Vec<WikiSlug>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,6 +75,7 @@ pub trait WikiBuilderStore: Send + Sync {
         &self,
         job: &ExtractWiki,
         patches: Vec<WikiPatch>,
+        routing: &WikiRouting,
         now: DateTime<Utc>,
     ) -> Result<Vec<String>, WikiStoreError>;
 

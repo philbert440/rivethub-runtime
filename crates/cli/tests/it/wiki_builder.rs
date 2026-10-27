@@ -67,6 +67,7 @@ async fn wiki_replays_every_recorded_summary_shape(pool: PgPool) -> TestResult {
                 model: "fake-chat",
                 now: row.created_at,
                 cancel: &cancel,
+                topics: None,
             };
             let job = ExtractWiki {
                 summary_id: row.id,
@@ -142,6 +143,7 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
+        topics: None,
     };
     let topics = handle_extract_wiki(&env, &claimed.payload).await?;
     assert_eq!(topics, vec!["acmekit-deploys"]);
@@ -250,6 +252,7 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
+        topics: None,
     };
     assert_eq!(handle_wiki_backfill(&env).await?, expected.len());
     assert_eq!(handle_wiki_backfill(&env).await?, expected.len());

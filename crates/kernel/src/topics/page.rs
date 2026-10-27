@@ -7,6 +7,7 @@ use thiserror::Error;
 use wire::JsonObject;
 use wire::gateway::wiki::WikiPageResponse;
 use wire::gateway::wiki::WikiSlug;
+use wire::wiki::FoldMark;
 use wire::wiki::normalize_slug;
 
 use super::Slug;
@@ -22,6 +23,7 @@ use crate::queue::FixedJob;
 use crate::queue::Job;
 use crate::queue::JobKeyMode;
 use crate::queue::JobName;
+use crate::transcript::TranscriptReaderError;
 use crate::wiki::WikiLookup;
 use crate::wiki::builder::WikiStoreError;
 use crate::wiki::builder::WikiWriteError;
@@ -64,18 +66,18 @@ impl TopicPage {
         text
     }
 
-    fn add_to_section(&mut self, topic: &Topic, body: &str) {
+    pub(crate) fn add_to_section(&mut self, topic: TopicId, heading: &str, body: &str) {
         if let Some(section) = self
             .sections
             .iter_mut()
-            .find(|section| section.topic == Some(topic.id))
+            .find(|section| section.topic == Some(topic))
         {
             append(&mut section.body, body);
             return;
         }
         let mut section = PageSection {
-            topic: Some(topic.id),
-            heading: topic.name.as_str().to_owned(),
+            topic: Some(topic),
+            heading: heading.to_owned(),
             body: String::new(),
         };
         append(&mut section.body, body);
@@ -107,6 +109,7 @@ pub trait TopicPageStore: Send + Sync {
         &self,
         child: &WikiSlug,
         into: &WikiSlug,
+        mark: FoldMark,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError>;
 }
@@ -119,6 +122,8 @@ pub enum TopicPageError {
     Wiki(#[from] WikiStoreError),
     #[error(transparent)]
     Memory(#[from] MemoryStoreError),
+    #[error(transparent)]
+    Lineage(#[from] TranscriptReaderError),
     #[error("sync-topic-page payload: {0}")]
     Payload(#[source] BoxError),
 }
@@ -211,6 +216,15 @@ pub async fn bound_page(
     })
 }
 
+pub(crate) async fn root_page(
+    topics: &dyn TopicStore,
+    pages: &dyn TopicPageStore,
+    root: &Topic,
+    now: DateTime<Utc>,
+) -> Result<WikiSlug, TopicPageError> {
+    PageSync { topics, pages, now }.ensure(root).await
+}
+
 pub async fn sync_topic_page(
     topics: &dyn TopicStore,
     pages: &dyn TopicPageStore,
@@ -257,7 +271,9 @@ impl PageSync<'_> {
             self.absorb(&root, &topic, &own, &home).await?;
         }
         for child in fold.iter().filter(|child| **child != home) {
-            self.pages.fold_page(child, &home, self.now).await?;
+            self.pages
+                .fold_page(child, &home, FoldMark::Merged, self.now)
+                .await?;
         }
         self.reconcile(&root, &home).await
     }
@@ -334,14 +350,16 @@ impl PageSync<'_> {
         if !text.is_empty() {
             let before = self.read(home).await?;
             let mut after = before.clone();
-            after.add_to_section(topic, &text);
+            after.add_to_section(topic.id, topic.name.as_str(), &text);
             self.save(root.id, &before, &after).await?;
             let mut emptied = child.clone();
             emptied.summary.clear();
             emptied.article.clear();
             self.save(topic.id, &child, &emptied).await?;
         }
-        self.pages.fold_page(own, home, self.now).await?;
+        self.pages
+            .fold_page(own, home, FoldMark::Section, self.now)
+            .await?;
         Ok(())
     }
 
@@ -439,7 +457,7 @@ impl PageSync<'_> {
         let before = self.read(&slug).await?;
         let mut after = before.clone();
         if target.parent.is_some() {
-            after.add_to_section(target, body);
+            after.add_to_section(target.id, target.name.as_str(), body);
         } else {
             append(&mut after.article, body);
         }

@@ -23,6 +23,7 @@ pub use page::TopicPage;
 pub use page::TopicPageError;
 pub use page::TopicPageStore;
 pub use page::bound_page;
+pub(crate) use page::root_page;
 pub use page::sync_topic_page;
 pub use placement::PlacedSession;
 pub use placement::Placement;

@@ -10,6 +10,7 @@ use kernel::wiki::builder::ExtractWiki;
 use kernel::wiki::builder::WikiAction;
 use kernel::wiki::builder::WikiBuilderStore;
 use kernel::wiki::builder::WikiPatch;
+use kernel::wiki::builder::WikiRouting;
 use memory_sqlite::SqliteStore;
 use uuid::Uuid;
 use wire::gateway::wiki::WikiSlug;
@@ -65,6 +66,7 @@ fn patch() -> TestResult<WikiPatch> {
         article: None,
         related: None,
         history_entry: None,
+        kind: None,
     })
 }
 
@@ -88,7 +90,12 @@ async fn apply_wiki_stores_the_topic_and_a_repeat_returns_it() -> TestResult {
     seed_summary(&fixture.path, id)?;
     let created = fixture
         .store
-        .apply_wiki(&job(id), vec![patch()?], Utc::now())
+        .apply_wiki(
+            &job(id),
+            vec![patch()?],
+            &WikiRouting::default(),
+            Utc::now(),
+        )
         .await?;
     assert_eq!(created, vec!["acmekit-deploys".to_owned()]);
     let title = cell(
@@ -99,7 +106,12 @@ async fn apply_wiki_stores_the_topic_and_a_repeat_returns_it() -> TestResult {
     assert_eq!(title, "AcmeKit deploys");
     let again = fixture
         .store
-        .apply_wiki(&job(id), vec![patch()?], Utc::now())
+        .apply_wiki(
+            &job(id),
+            vec![patch()?],
+            &WikiRouting::default(),
+            Utc::now(),
+        )
         .await?;
     assert_eq!(again, created);
     Ok(())
@@ -112,7 +124,12 @@ async fn fail_wiki_does_not_clobber_a_done_extraction() -> TestResult {
     seed_summary(&fixture.path, id)?;
     fixture
         .store
-        .apply_wiki(&job(id), vec![patch()?], Utc::now())
+        .apply_wiki(
+            &job(id),
+            vec![patch()?],
+            &WikiRouting::default(),
+            Utc::now(),
+        )
         .await?;
     fixture
         .store
