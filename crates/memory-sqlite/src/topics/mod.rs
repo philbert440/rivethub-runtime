@@ -20,6 +20,7 @@ use kernel::topics::TopicStore;
 use kernel::topics::by_activity;
 use kernel::topics::check_parent;
 use rusqlite::Connection;
+use rusqlite::OptionalExtension as _;
 use rusqlite::params;
 use wire::session_id::SessionId;
 
@@ -184,6 +185,19 @@ impl TopicStore for SqliteStore {
         let session = session.clone();
         self.topics("session suggestion read", move |conn| {
             rows::suggestion_of(conn, &session)
+        })
+        .await
+    }
+
+    async fn page_slug(&self, topic: TopicId) -> Result<Option<String>, TopicError> {
+        self.topics("topic page", move |conn| {
+            conn.query_row(
+                "SELECT page_slug FROM rh_topic_pages WHERE topic_id = ?1",
+                params![topic.to_string()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(failed("topic page"))
         })
         .await
     }

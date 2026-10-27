@@ -126,7 +126,8 @@ fn page(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
     let found = conn
         .query_row(
             "SELECT slug, title, aliases, tags, entities, current_state, article, related, \
-                    git_sha, last_verified_at, updated_at \
+                    git_sha, last_verified_at, updated_at, \
+                    (SELECT topic_id FROM rh_topic_pages WHERE page_slug = ros_wiki_topics.slug) \
                FROM ros_wiki_topics WHERE slug = ?1",
             params_from_iter([Value::Text(slug.to_owned())]),
             |row| {
@@ -142,6 +143,7 @@ fn page(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
                     row.get::<_, Option<String>>(8)?,
                     row.get::<_, Option<String>>(9)?,
                     row.get::<_, String>(10)?,
+                    row.get::<_, Option<String>>(11)?,
                 ))
             },
         )
@@ -159,6 +161,7 @@ fn page(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
         git_sha,
         verified,
         updated,
+        topic_id,
     )) = found
     else {
         return redirect(conn, slug);
@@ -192,6 +195,7 @@ fn page(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
             .transpose()?,
         updated_at: time::stored(&updated, "updated_at")?,
         related: Some(json_list(&related, "related")?),
+        topic_id,
     })))
 }
 

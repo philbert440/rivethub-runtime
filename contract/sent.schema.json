@@ -7313,6 +7313,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -7842,6 +7848,27 @@
       },
       "required": [
         "sessions"
+      ]
+    },
+    "TopicPage": {
+      "type": "object",
+      "properties": {
+        "topic": {
+          "$ref": "#/$defs/TopicRecord"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WikiPageResponse"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "topic"
       ]
     },
     "AgentEvent": {

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT slug FROM rh_wiki_topics WHERE topic_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_wiki_topics",
+            "name": "slug"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1d61f1e1343628d0917e1c8b5b1ad7c058eaf82a4e4890433e14d3ffdf29f5ec"
+}

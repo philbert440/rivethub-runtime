@@ -14,6 +14,7 @@ pub enum SchemaVersion {
     V10 = 10,
     V11 = 11,
     V12 = 12,
+    V13 = 13,
 }
 
 impl SchemaVersion {
@@ -36,7 +37,8 @@ impl SchemaVersion {
             Self::V9 => Some(Self::V10),
             Self::V10 => Some(Self::V11),
             Self::V11 => Some(Self::V12),
-            Self::V12 => None,
+            Self::V12 => Some(Self::V13),
+            Self::V13 => None,
         }
     }
 }
@@ -58,6 +60,7 @@ impl TryFrom<i64> for SchemaVersion {
             10 => Ok(Self::V10),
             11 => Ok(Self::V11),
             12 => Ok(Self::V12),
+            13 => Ok(Self::V13),
             other => Err(Error::Unsupported { found: other }),
         }
     }
@@ -70,7 +73,7 @@ mod tests {
 
     #[test]
     fn every_recorded_user_version_maps_to_a_schema_version() {
-        for found in 1..=12 {
+        for found in 1..=13 {
             let version = SchemaVersion::try_from(found).unwrap_or_else(|error| {
                 panic!("user_version {found} must map to a schema version: {error}")
             });
@@ -80,7 +83,7 @@ mod tests {
 
     #[test]
     fn versions_outside_the_ladder_are_typed_errors() {
-        for found in [-3, 0, 13, 99] {
+        for found in [-3, 0, 14, 99] {
             match SchemaVersion::try_from(found) {
                 Err(Error::Unsupported { found: reported }) => {
                     assert_eq!(reported, found);
@@ -91,15 +94,15 @@ mod tests {
     }
 
     #[test]
-    fn the_ladder_runs_from_any_version_to_the_twelfth() {
-        for from in 1..=12 {
+    fn the_ladder_runs_from_any_version_to_the_thirteenth() {
+        for from in 1..=13 {
             let mut current = SchemaVersion::try_from(from).unwrap();
             let mut visited = Vec::new();
             while let Some(next) = current.next() {
                 visited.push(next.number());
                 current = next;
             }
-            let expected: Vec<i64> = (from + 1..=12).collect();
+            let expected: Vec<i64> = (from + 1..=13).collect();
             assert_eq!(visited, expected, "ladder from user_version {from}");
         }
     }

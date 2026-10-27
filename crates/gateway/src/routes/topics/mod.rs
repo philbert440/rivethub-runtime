@@ -21,15 +21,18 @@ use kernel::topics::TopicKey;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
 use kernel::topics::TopicStore;
+use kernel::wiki::WikiLookup;
 use serde::Deserialize;
 use wire::gateway::topics::PlacementReply;
 use wire::gateway::topics::PlacementRequest;
 use wire::gateway::topics::TopicCreateRequest;
 use wire::gateway::topics::TopicList;
 use wire::gateway::topics::TopicMergeRequest;
+use wire::gateway::topics::TopicPage;
 use wire::gateway::topics::TopicRecord;
 use wire::gateway::topics::TopicSessionList;
 use wire::gateway::topics::TopicUpdate;
+use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 use wire::session_id::SessionRef;
 
@@ -62,6 +65,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route(
             "/api/topics/{topic}/merge",
             routing::post(merge).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/topics/{topic}/page",
+            routing::get(page).fallback(super::method_not_allowed),
         )
         .route(
             "/api/topics/{topic}/sessions",
@@ -207,6 +214,29 @@ async fn merge(
         .await
         .map_err(map::error)?;
     Ok(Json(map::record(merged)))
+}
+
+async fn page(
+    State(gateway): State<Arc<Gateway>>,
+    Path(key): Path<String>,
+) -> Result<Json<TopicPage>, ApiError> {
+    let store = gateway.topics()?;
+    let topic = resolve(store.as_ref(), &key).await?;
+    let root = topic.parent.unwrap_or(topic.id);
+    let page = match store.page_slug(root).await.map_err(map::error)? {
+        Some(slug) => {
+            let slug = WikiSlug::try_from(slug).map_err(|_| ApiError::Internal)?;
+            match gateway.store().wiki_page(&slug).await? {
+                WikiLookup::Page(page) => Some(*page),
+                WikiLookup::Redirect(_) | WikiLookup::Missing => None,
+            }
+        }
+        None => None,
+    };
+    Ok(Json(TopicPage {
+        topic: map::record(topic),
+        page,
+    }))
 }
 
 async fn sessions(

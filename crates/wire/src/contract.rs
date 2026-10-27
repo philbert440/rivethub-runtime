@@ -246,6 +246,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::gateway::topics::PlacementRequest>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicSession>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicSessionList>,
+    SchemaGenerator::subschema_for::<crate::gateway::topics::TopicPage>,
     SchemaGenerator::subschema_for::<crate::events::ProtocolVersion>,
     SchemaGenerator::subschema_for::<crate::events::AgentEvent>,
     SchemaGenerator::subschema_for::<crate::events::AgentEventKind>,

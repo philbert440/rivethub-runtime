@@ -279,4 +279,14 @@ impl TopicStore for PostgresMemory {
         .map(rows::suggestion)
         .transpose()
     }
+
+    async fn page_slug(&self, topic: TopicId) -> Result<Option<String>, TopicError> {
+        sqlx::query_scalar!(
+            "SELECT slug FROM rh_wiki_topics WHERE topic_id = $1",
+            topic.uuid()
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(failed("topic page"))
+    }
 }

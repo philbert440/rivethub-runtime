@@ -70,6 +70,7 @@ fn page() -> WikiPageResponse {
             .expect("instant")
             .with_timezone(&chrono::Utc),
         related: Some(vec!["quotes 'and' $(substitutions) 🚀".to_owned()]),
+        topic_id: None,
     }
 }
 

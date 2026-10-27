@@ -139,6 +139,8 @@ pub struct WikiPageResponse {
     #[serde_as(as = "crate::time::Millis")]
     pub updated_at: DateTime<Utc>,
     pub related: Option<Vec<String>>,
+    #[serde(default)]
+    pub topic_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

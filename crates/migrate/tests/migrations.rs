@@ -11,12 +11,12 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 26);
+    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 27);
 
     let applied = sqlx::query("SELECT count(*)::bigint AS n FROM _sqlx_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 26);
+    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 27);
 
     migrate::postgres_pool(&pool).await?;
 
@@ -190,8 +190,8 @@ async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
         .await?;
     assert_eq!(
         tracked.try_get::<i64, _>("n").unwrap(),
-        26,
-        "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, 0025 adds topic suggestions, and 0026 adds the hub state table"
+        27,
+        "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, 0025 adds topic suggestions, 0026 adds the hub state table, and 0027 binds wiki pages to topics"
     );
     let summaries_trgm =
         sqlx::query("SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_ros_summaries_trgm'")
@@ -324,5 +324,43 @@ async fn a_missing_tracking_row_is_a_typed_error(pool: PgPool) -> TestResult {
         }
         other => panic!("expected TrackingMissing, got {other:?}"),
     }
+    Ok(())
+}
+
+#[sqlx::test(migrations = false)]
+async fn migration_0027_binds_a_page_to_the_root_topic_with_its_slug(pool: PgPool) -> TestResult {
+    for migration in POSTGRES.migrations.iter().take(26) {
+        let sql: &'static str = Box::leak(migration.sql.as_str().to_string().into_boxed_str());
+        sqlx::raw_sql(sql).execute(&pool).await?;
+    }
+    sqlx::raw_sql(
+        "INSERT INTO rh_topics (id, slug, name, parent_id, created_at, updated_at) VALUES
+           ('00000000-0000-0000-0000-000000000001', 'mesh', 'Mesh', NULL, now(), now()),
+           ('00000000-0000-0000-0000-000000000002', 'certs', 'Certs',
+            '00000000-0000-0000-0000-000000000001', now(), now());
+         INSERT INTO rh_wiki_topics (slug, title) VALUES ('mesh', 'Mesh'), ('certs', 'Certs');",
+    )
+    .execute(&pool)
+    .await?;
+
+    let last = POSTGRES.migrations.get(26).unwrap();
+    let sql: &'static str = Box::leak(last.sql.as_str().to_string().into_boxed_str());
+    sqlx::raw_sql(sql).execute(&pool).await?;
+
+    let bound: Vec<(String, Option<sqlx::types::Uuid>)> =
+        sqlx::query_as("SELECT slug, topic_id FROM rh_wiki_topics ORDER BY slug")
+            .fetch_all(&pool)
+            .await?;
+    assert_eq!(
+        bound,
+        vec![
+            ("certs".to_owned(), None),
+            (
+                "mesh".to_owned(),
+                Some("00000000-0000-0000-0000-000000000001".parse()?)
+            ),
+        ],
+        "only a root topic takes the page with its slug"
+    );
     Ok(())
 }

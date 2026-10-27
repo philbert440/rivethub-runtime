@@ -19,6 +19,7 @@ use wire::gateway::topics::PlacedBy;
 use wire::gateway::topics::PlacementReply;
 use wire::gateway::topics::TopicDirectory;
 use wire::gateway::topics::TopicList;
+use wire::gateway::topics::TopicPage;
 use wire::gateway::topics::TopicRecord;
 use wire::gateway::topics::TopicSessionList;
 use wire::session_id::SessionId;
@@ -52,7 +53,7 @@ fn settings(root: &Path) -> Settings {
 
 struct Api {
     router: axum::Router,
-    _root: tempfile::TempDir,
+    root: tempfile::TempDir,
 }
 
 impl Api {
@@ -68,8 +69,12 @@ impl Api {
         }
         Ok(Self {
             router: Arc::new(gateway).router(false),
-            _root: root,
+            root,
         })
+    }
+
+    fn database(&self) -> rusqlite::Result<rusqlite::Connection> {
+        rusqlite::Connection::open(self.root.path().join("memory.sqlite"))
     }
 
     async fn call(
@@ -190,6 +195,56 @@ async fn topics_are_created_listed_searched_and_edited() -> TestResult {
     assert_eq!(renamed.slug, "menus");
     assert_eq!(renamed.parent, None);
     assert_eq!(renamed.aliases, ["menu bar"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_topic_answers_with_its_root_page() -> TestResult {
+    let api = Api::new(true)?;
+    let root: TopicRecord = api
+        .json(
+            "POST",
+            "/api/topics",
+            r#"{"name":"Mesh"}"#,
+            StatusCode::CREATED,
+        )
+        .await?;
+    let _child: TopicRecord = api
+        .json(
+            "POST",
+            "/api/topics",
+            r#"{"name":"Certs","parent":"mesh"}"#,
+            StatusCode::CREATED,
+        )
+        .await?;
+    let database = api.database()?;
+    database.execute(
+        "INSERT INTO ros_wiki_topics (slug, title, created_at, updated_at)
+         VALUES ('mesh-overview', 'Mesh overview', '2026-10-27T00:00:00Z', '2026-10-27T00:00:00Z')",
+        [],
+    )?;
+    database.execute(
+        "INSERT INTO rh_topic_pages (topic_id, page_slug) VALUES (?1, 'mesh-overview')",
+        [root.id.as_str()],
+    )?;
+    let own: TopicPage = api
+        .json("GET", "/api/topics/mesh/page", "", StatusCode::OK)
+        .await?;
+    assert_eq!(own.topic, root);
+    let page = own.page.ok_or("the root topic must answer with its page")?;
+    assert_eq!(page.slug, "mesh-overview");
+    assert_eq!(page.topic_id.as_deref(), Some(root.id.as_str()));
+    let inherited: TopicPage = api
+        .json("GET", "/api/topics/certs/page", "", StatusCode::OK)
+        .await?;
+    assert_eq!(
+        inherited.page.map(|page| page.slug).as_deref(),
+        Some("mesh-overview")
+    );
+    assert_eq!(
+        api.error("GET", "/api/topics/nowhere/page", "").await?.0,
+        StatusCode::NOT_FOUND
+    );
     Ok(())
 }
 
