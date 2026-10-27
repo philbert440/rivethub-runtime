@@ -75,6 +75,7 @@ impl TopicStore for SqliteStore {
     ) -> Result<Topic, TopicError> {
         self.topics("topic update", move |conn| {
             let current = rows::by_id(conn, id)?.ok_or_else(|| not_found(id))?;
+            let old_slug = current.slug.clone();
             let updated = current.apply(changes, now)?;
             if let Some(parent) = updated.parent {
                 let parent = rows::by_id(conn, parent)?.ok_or_else(|| not_found(parent))?;
@@ -83,6 +84,9 @@ impl TopicStore for SqliteStore {
             write::claim_names(conn, &updated)?;
             write::row(conn, &updated)?;
             write::aliases(conn, &updated)?;
+            if updated.slug != old_slug {
+                write::rename_redirect(conn, &old_slug, &updated)?;
+            }
             stored(conn, id)
         })
         .await

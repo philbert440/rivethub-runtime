@@ -61,6 +61,7 @@ impl TopicStore for PostgresMemory {
         let current = rows::by_id(&mut tx, id)
             .await?
             .ok_or_else(|| not_found(id))?;
+        let old_slug = current.slug.clone();
         let updated = current.apply(changes, now)?;
         if let Some(parent) = updated.parent {
             let parent = rows::by_id(&mut tx, parent)
@@ -72,6 +73,9 @@ impl TopicStore for PostgresMemory {
         write::claim_names(&mut tx, &updated).await?;
         write::row(&mut tx, &updated).await?;
         write::aliases(&mut tx, &updated).await?;
+        if updated.slug != old_slug {
+            write::rename_redirect(&mut tx, &old_slug, &updated).await?;
+        }
         let stored = rows::by_id(&mut tx, id)
             .await?
             .ok_or_else(|| not_found(id))?;

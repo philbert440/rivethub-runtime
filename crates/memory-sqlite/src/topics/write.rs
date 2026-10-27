@@ -1,6 +1,7 @@
 use kernel::topics::MergePlan;
 use kernel::topics::Placement;
 use kernel::topics::Root;
+use kernel::topics::Slug;
 use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
@@ -153,6 +154,30 @@ pub(super) fn fold_into(
         ],
     )
     .map_err(failed("topic merge redirect"))?;
+    Ok(())
+}
+
+pub(super) fn rename_redirect(
+    conn: &Connection,
+    old: &Slug,
+    renamed: &Topic,
+) -> Result<(), TopicError> {
+    conn.execute(
+        "DELETE FROM rh_topic_redirects WHERE slug = ?1",
+        params![renamed.slug.as_str()],
+    )
+    .map_err(failed("topic rename redirect"))?;
+    conn.execute(
+        "INSERT INTO rh_topic_redirects (slug, topic_id, created_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT (slug) DO UPDATE SET topic_id = excluded.topic_id,
+                                          created_at = excluded.created_at",
+        params![
+            old.as_str(),
+            renamed.id.to_string(),
+            time::stamp(renamed.updated_at)
+        ],
+    )
+    .map_err(failed("topic rename redirect"))?;
     Ok(())
 }
 
