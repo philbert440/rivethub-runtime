@@ -232,8 +232,29 @@ fn event_msg(
             at,
             format: FORMAT,
         }),
+        EventBody::ItemCompleted { item } => completed_item(session, position, at, &item),
         EventBody::AgentMessage | EventBody::TokenCount => Ok(Mapped::None),
         EventBody::Other => Ok(Mapped::Skip(unknown(position, "unknown codex event"))),
+    }
+}
+
+fn completed_item(
+    session: &SessionId,
+    position: u64,
+    at: &str,
+    item: &CompletedItem,
+) -> Result<Mapped, TranscriptReaderError> {
+    match item {
+        CompletedItem::UserMessage { content } => text_turn(&TextTurn {
+            session,
+            position,
+            role: Role::User,
+            content: &joined(content.iter().filter_map(ItemPart::text)),
+            at,
+            format: FORMAT,
+        }),
+        CompletedItem::AgentMessage => Ok(Mapped::None),
+        CompletedItem::Other => Ok(Mapped::Skip(unknown(position, "unknown codex item"))),
     }
 }
 
@@ -291,7 +312,7 @@ fn response_message(
     if role == Role::User {
         return Ok(Mapped::None);
     }
-    let text = part_text(content);
+    let text = joined(content.iter().filter_map(CodexPart::text));
     text_turn(&TextTurn {
         session,
         position,
@@ -371,18 +392,8 @@ fn leftover_call(session: &SessionId, call: PendingCall) -> Result<Mapped, Trans
     )
 }
 
-fn part_text(parts: &[CodexPart]) -> String {
-    let mut text = String::new();
-    for part in parts {
-        let Some(piece) = part.text() else {
-            continue;
-        };
-        if !text.is_empty() {
-            text.push('\n');
-        }
-        text.push_str(piece);
-    }
-    text
+fn joined<'a>(pieces: impl Iterator<Item = &'a str>) -> String {
+    pieces.collect::<Vec<_>>().join("\n")
 }
 
 fn type_detail(record: &super::scan::RawLine) -> String {
@@ -479,6 +490,39 @@ enum EventBody {
     },
     AgentMessage,
     TokenCount,
+    ItemCompleted {
+        item: CompletedItem,
+    },
     #[serde(other)]
     Other,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+enum CompletedItem {
+    UserMessage {
+        content: Vec<ItemPart>,
+    },
+    AgentMessage,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ItemPart {
+    Text {
+        text: String,
+    },
+    #[serde(other)]
+    Other,
+}
+
+impl ItemPart {
+    fn text(&self) -> Option<&str> {
+        match self {
+            Self::Text { text } => Some(text),
+            Self::Other => None,
+        }
+    }
 }

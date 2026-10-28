@@ -170,6 +170,21 @@ async fn codex_rollout_maps_events_and_paired_tools() -> Result<(), Box<dyn std:
     {
         return Err("append".into());
     }
+    let mut appended = std::fs::read_to_string(&path)?;
+    appended.push_str(
+        "{\"timestamp\":\"2026-10-14T12:00:05Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"item\":{\"type\":\"UserMessage\",\"content\":[{\"type\":\"text\",\"text\":\"one\\ntwo\"}]}}}\n",
+    );
+    std::fs::write(&path, appended)?;
+    let item = reader.messages(&session, fresh.next_offset).await?;
+    if item
+        .messages
+        .iter()
+        .map(|message| (message.role, message.content.as_str()))
+        .collect::<Vec<_>>()
+        != [(Role::User, "one\ntwo")]
+    {
+        return Err("completed user item".into());
+    }
     Ok(())
 }
 
