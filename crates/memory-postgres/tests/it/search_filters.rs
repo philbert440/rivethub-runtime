@@ -202,6 +202,7 @@ async fn summary_search_reads_legacy_string_tool_args_and_drops_nul(pool: PgPool
     tx.commit().await?;
     let mut search = query(SearchMode::Fts);
     search.text = "backup\0 disk".into();
+    search.agent = Some("rivet\0".into());
     search.scope = MemoryScope::Summaries;
     search.expand = None;
     let outcome = memory.search(search).await?;

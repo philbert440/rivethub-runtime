@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use kernel::memory::{MemoryStoreError, SearchOutcome, SearchQuery};
+use kernel::memory::{MemoryStoreError, SearchOutcome, SearchQuery, TagLiteral};
 use kernel::model::{ModelProvider, ModelRequest};
 use tokio_util::sync::CancellationToken;
 use wire::gateway::memory::{MemoryDegraded, MemoryHitSource};
@@ -109,6 +109,7 @@ impl crate::PostgresMemory {
         &self,
         query: SearchQuery,
     ) -> Result<SearchOutcome, MemoryStoreError> {
+        let query = without_nul(query);
         let range = kernel::memory_core::TimeRange {
             since: query.since,
             before: query.before,
@@ -219,5 +220,19 @@ impl crate::PostgresMemory {
             .await
             .map_err(|source| Error::operation("summary expansion", source))?;
         Ok(crate::read::readable_entries(rows))
+    }
+}
+
+fn without_nul(query: SearchQuery) -> SearchQuery {
+    let strip = |text: String| text.replace('\0', "");
+    SearchQuery {
+        text: strip(query.text),
+        agent: query.agent.map(strip),
+        tool_name: query.tool_name.map(strip),
+        tag: query.tag.map(|tag| TagLiteral {
+            key: strip(tag.key),
+            value: strip(tag.value),
+        }),
+        ..query
     }
 }
