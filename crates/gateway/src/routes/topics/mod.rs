@@ -1,3 +1,4 @@
+mod decisions;
 mod map;
 mod startup;
 
@@ -75,6 +76,20 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::get(page).fallback(super::method_not_allowed),
         )
         .route(
+            "/api/topics/{topic}/decisions",
+            routing::get(decisions::list)
+                .post(decisions::add)
+                .fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/topics/{topic}/decisions/{decision}",
+            routing::patch(decisions::edit).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/topics/{topic}/decisions/{decision}/supersede",
+            routing::post(decisions::supersede).fallback(super::method_not_allowed),
+        )
+        .route(
             "/api/topics/{topic}/sessions",
             routing::get(sessions).fallback(super::method_not_allowed),
         )
@@ -101,7 +116,7 @@ pub(super) async fn resolve(store: &dyn TopicStore, key: &str) -> Result<Topic, 
         .ok_or_else(|| ApiError::Missing(format!("unknown topic {key}")))
 }
 
-async fn resolve_id(store: &dyn TopicStore, key: &str) -> Result<TopicId, ApiError> {
+pub(super) async fn resolve_id(store: &dyn TopicStore, key: &str) -> Result<TopicId, ApiError> {
     Ok(resolve(store, key).await?.id)
 }
 

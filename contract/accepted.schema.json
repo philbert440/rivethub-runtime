@@ -7965,6 +7965,157 @@
         "topic"
       ]
     },
+    "DecisionStatus": {
+      "type": "string",
+      "enum": [
+        "active",
+        "superseded"
+      ]
+    },
+    "TopicDecision": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "topicId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/DecisionStatus"
+        },
+        "supersededBy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "by": {
+          "type": "string"
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "updatedAt": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "id",
+        "topicId",
+        "text",
+        "status",
+        "by",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TopicDecisionList": {
+      "type": "object",
+      "properties": {
+        "decisions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicDecision"
+          }
+        }
+      },
+      "required": [
+        "decisions"
+      ]
+    },
+    "DecisionCreateRequest": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ]
+    },
+    "DecisionUpdate": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ]
+    },
+    "DecisionSupersedeRequest": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "DecisionSuperseded": {
+      "type": "object",
+      "properties": {
+        "superseded": {
+          "$ref": "#/$defs/TopicDecision"
+        },
+        "replacement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TopicDecision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "superseded"
+      ]
+    },
     "AgentEvent": {
       "type": "object",
       "properties": {

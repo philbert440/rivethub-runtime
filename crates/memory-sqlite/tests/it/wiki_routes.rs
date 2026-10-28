@@ -40,6 +40,7 @@ fn stores(store: &SqliteStore) -> RouteStores<'_> {
         pages: PageStores {
             topics: store,
             pages: store,
+            decisions: store,
             wiki: store,
             queue: store,
         },

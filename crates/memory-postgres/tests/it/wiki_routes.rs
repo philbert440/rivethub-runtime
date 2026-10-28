@@ -58,6 +58,7 @@ impl Seeded {
             pages: PageStores {
                 topics: &self.memory,
                 pages: &self.memory,
+                decisions: &self.memory,
                 wiki: &self.memory,
                 queue: &self.queue,
             },

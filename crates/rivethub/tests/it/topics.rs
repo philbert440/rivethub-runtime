@@ -1,3 +1,5 @@
+mod decisions;
+
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -81,7 +83,10 @@ impl Api {
         let memory: Arc<dyn MemoryStore> = store.clone();
         let mut gateway = Gateway::new(memory, settings(root.path()));
         if topics {
-            gateway = gateway.with_topics(store.clone());
+            gateway = gateway
+                .with_tenancy(Tenancy::local(UserId::new("owner".to_owned())?))
+                .with_topics(store.clone())
+                .with_decisions(store.clone());
         }
         Ok(Self {
             router: Arc::new(gateway).router(false),

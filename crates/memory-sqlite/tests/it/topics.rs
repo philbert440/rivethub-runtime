@@ -21,6 +21,7 @@ fn pages(store: &SqliteStore) -> PageStores<'_> {
     PageStores {
         topics: store,
         pages: store,
+        decisions: store,
         wiki: store,
         queue: store,
     }
@@ -196,5 +197,12 @@ async fn listings_count_sessions_and_take_last_activity_from_conversations() -> 
             .collect::<Vec<_>>(),
         [first, second]
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn decisions_are_the_topic_page_decisions_section() -> TestResult {
+    let (_directory, store) = store()?;
+    testkit::decisions::decisions_are_the_topic_page_decisions_section(pages(&store)).await?;
     Ok(())
 }

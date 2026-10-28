@@ -32,6 +32,7 @@ async fn a_new_root_topic_gets_an_empty_bound_page(pool: PgPool) -> TestResult {
     topic_pages::a_new_root_topic_gets_an_empty_bound_page(PageStores {
         topics: &memory,
         pages: &memory,
+        decisions: &memory,
         wiki: &memory,
         queue: &queue,
     })
@@ -44,6 +45,7 @@ async fn a_rename_keeps_the_page_slug_and_follows_the_name(pool: PgPool) -> Test
     topic_pages::a_rename_keeps_the_page_slug_and_follows_the_name(PageStores {
         topics: &memory,
         pages: &memory,
+        decisions: &memory,
         wiki: &memory,
         queue: &queue,
     })
@@ -56,6 +58,7 @@ async fn a_merge_folds_the_page_and_redirects_its_slug(pool: PgPool) -> TestResu
     topic_pages::a_merge_folds_the_page_and_redirects_its_slug(PageStores {
         topics: &memory,
         pages: &memory,
+        decisions: &memory,
         wiki: &memory,
         queue: &queue,
     })
@@ -68,6 +71,7 @@ async fn sub_topics_are_sections_of_the_root_page(pool: PgPool) -> TestResult {
     topic_pages::sub_topics_are_sections_of_the_root_page(PageStores {
         topics: &memory,
         pages: &memory,
+        decisions: &memory,
         wiki: &memory,
         queue: &queue,
     })
@@ -80,6 +84,7 @@ async fn syncing_twice_changes_nothing(pool: PgPool) -> TestResult {
     topic_pages::syncing_twice_changes_nothing(PageStores {
         topics: &memory,
         pages: &memory,
+        decisions: &memory,
         wiki: &memory,
         queue: &queue,
     })
@@ -194,4 +199,17 @@ async fn listings_count_sessions_and_take_last_activity_from_conversations(
         [first, second]
     );
     Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn decisions_are_the_topic_page_decisions_section(pool: PgPool) -> TestResult {
+    let (_directory, memory, queue) = page_stores(pool).await?;
+    testkit::decisions::decisions_are_the_topic_page_decisions_section(PageStores {
+        topics: &memory,
+        pages: &memory,
+        decisions: &memory,
+        wiki: &memory,
+        queue: &queue,
+    })
+    .await
 }

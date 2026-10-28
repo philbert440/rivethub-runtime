@@ -1,4 +1,6 @@
 use kernel::topics::Alias;
+use kernel::topics::Decision;
+use kernel::topics::DecisionStatus;
 use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
@@ -9,6 +11,7 @@ use kernel::topics::TopicError;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicPageError;
 use wire::gateway::topics::PlacedBy;
+use wire::gateway::topics::TopicDecision;
 use wire::gateway::topics::TopicDirectory;
 use wire::gateway::topics::TopicPlacement;
 use wire::gateway::topics::TopicRecord;
@@ -24,13 +27,18 @@ pub(super) fn error(error: TopicError) -> ApiError {
         | TopicError::EmptyAlias
         | TopicError::EmptySlug { .. }
         | TopicError::OwnParent
-        | TopicError::SelfMerge => ApiError::BadRequest(error.to_string()),
+        | TopicError::SelfMerge
+        | TopicError::EmptyDecision
+        | TopicError::ForeignReplacement => ApiError::BadRequest(error.to_string()),
         TopicError::SlugTaken { .. }
         | TopicError::AliasTaken { .. }
         | TopicError::ParentIsSubtopic { .. }
         | TopicError::HasSubtopics
-        | TopicError::MergeWouldNest { .. } => ApiError::Conflict(error.to_string()),
-        TopicError::NotFound { .. } => ApiError::Missing(error.to_string()),
+        | TopicError::MergeWouldNest { .. }
+        | TopicError::DecisionSuperseded { .. } => ApiError::Conflict(error.to_string()),
+        TopicError::NotFound { .. } | TopicError::UnknownDecision { .. } => {
+            ApiError::Missing(error.to_string())
+        }
         TopicError::Unavailable(source) => {
             tracing::error!("topic store failed: {source}");
             ApiError::Unavailable("topic store unavailable".into())
@@ -124,5 +132,22 @@ pub(super) fn session(placed: PlacedSession) -> TopicSession {
     TopicSession {
         placement: placement(placed.placement),
         last_active: placed.last_active,
+    }
+}
+
+pub(super) fn decision(decision: Decision) -> TopicDecision {
+    TopicDecision {
+        id: decision.id.to_string(),
+        topic_id: decision.topic.to_string(),
+        text: decision.text.as_str().to_owned(),
+        status: match decision.status {
+            DecisionStatus::Active => wire::gateway::topics::DecisionStatus::Active,
+            DecisionStatus::Superseded => wire::gateway::topics::DecisionStatus::Superseded,
+        },
+        superseded_by: decision.superseded_by.map(|id| id.to_string()),
+        by: decision.by,
+        session_id: decision.session,
+        created_at: decision.created_at,
+        updated_at: decision.updated_at,
     }
 }

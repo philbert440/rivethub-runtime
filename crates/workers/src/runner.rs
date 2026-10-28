@@ -13,6 +13,7 @@ use kernel::queue::JobNotifications;
 use kernel::queue::JobQueue;
 use kernel::queue::WorkerRole;
 use kernel::shutdown::Activities;
+use kernel::topics::DecisionStore;
 use kernel::topics::TopicPageStore;
 use kernel::topics::TopicStore;
 use tokio::sync::Mutex;
@@ -217,8 +218,13 @@ where
         mut self,
         topics: Arc<dyn TopicStore>,
         pages: Arc<dyn TopicPageStore>,
+        decisions: Arc<dyn DecisionStore>,
     ) -> Self {
-        self.topic_pages = Some(crate::topic_page::TopicPages { topics, pages });
+        self.topic_pages = Some(crate::topic_page::TopicPages {
+            topics,
+            pages,
+            decisions,
+        });
         self
     }
 
