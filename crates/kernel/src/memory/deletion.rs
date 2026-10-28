@@ -14,8 +14,6 @@ use super::MemoryStoreError;
 
 pub const TRASH_MIN_AGE: TimeDelta = TimeDelta::hours(1);
 const TRASH_REPLY_MAX_CHARS: usize = 80;
-/// A prompt longer than this carries real content, so its session is kept
-/// even when the reply was a single word.
 const TRASH_PROMPT_MAX_CHARS: usize = 280;
 pub const TOMBSTONE_PURGE_BATCH: u32 = 100;
 
@@ -218,8 +216,6 @@ pub fn trash_verdict(signals: &TrashSignals<'_>) -> Option<TrashVerdict> {
     }
     let user_turns = memory.user.max(transcript.user);
     let reply = transcript.reply.as_deref().or(memory.reply.as_deref());
-    // An unanswered prompt or a long one is not obviously junk: the user may
-    // still want to retry it, or the prompt itself was the content.
     let answered = reply.is_some_and(|reply| !reply.trim().is_empty());
     let brief = user_turns == 1
         && answered
