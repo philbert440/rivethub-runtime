@@ -6,6 +6,7 @@ use std::path::Path;
 use kernel::transcript::StoreTranscript;
 use kernel::transcript::TranscriptReaderError;
 use serde::Deserialize;
+use wire::JsonObject;
 use wire::gateway::sessions::HarnessToolOutput;
 use wire::gateway::sessions::HarnessTranscriptTool;
 use wire::gateway::sessions::HarnessTranscriptTurn;
@@ -27,11 +28,11 @@ use super::super::text::text_elements;
 use super::super::time::parse_date;
 use super::display::tail_chars;
 use super::display::token_label;
+use super::tools::RESULT_CHARS;
 use super::tools::args_summary;
 use super::tools::is_prompt_tool;
 use super::tools::prompt_input;
 
-const RESULT_CHARS: usize = 2048;
 const OUTPUT_BYTES: usize = 64 * 1024;
 
 pub(crate) fn transcript(root: &Path, id: &str) -> Result<StoreTranscript, TranscriptReaderError> {
@@ -494,7 +495,10 @@ impl Draft {
             let input = block.input.as_ref();
             self.tools.push(HarnessTranscriptTool {
                 status: TranscriptToolStatus::Running,
-                args: input.and_then(args_summary),
+                args: input
+                    .and_then(Field::object::<JsonObject>)
+                    .as_ref()
+                    .and_then(args_summary),
                 id: text_of(block.id.as_ref()),
                 input: input
                     .filter(|_| is_prompt_tool(&name))

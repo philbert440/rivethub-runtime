@@ -2,6 +2,7 @@ use wire::JsonObject;
 
 use super::super::field::Field;
 
+pub(super) const RESULT_CHARS: usize = 2048;
 const ARG_ENTRIES: usize = 12;
 const ARG_CHARS: usize = 200;
 const PROMPT_INPUT_CHARS: usize = 8192;
@@ -29,8 +30,7 @@ fn clip_arg(text: &str) -> String {
     clipped
 }
 
-pub(super) fn args_summary(input: &Field) -> Option<JsonObject> {
-    let object = input.object::<JsonObject>()?;
+pub(super) fn args_summary(object: &JsonObject) -> Option<JsonObject> {
     let mut args = JsonObject::default();
     let mut kept = 0;
     for (key, value) in object.as_map() {
@@ -59,7 +59,16 @@ struct Truncated {
 }
 
 pub(super) fn prompt_input(input: &Field) -> Option<JsonObject> {
-    if input.raw().chars().count() > PROMPT_INPUT_CHARS {
+    bounded_prompt(input.raw(), || input.object::<JsonObject>())
+}
+
+pub(super) fn prompt_object(object: &JsonObject) -> Result<Option<JsonObject>, serde_json::Error> {
+    let raw = serde_json::to_string(object)?;
+    Ok(bounded_prompt(&raw, || Some(object.clone())))
+}
+
+fn bounded_prompt(raw: &str, object: impl FnOnce() -> Option<JsonObject>) -> Option<JsonObject> {
+    if raw.chars().count() > PROMPT_INPUT_CHARS {
         return match JsonObject::from_serialize(&Truncated { truncated: true }) {
             Ok(object) => Some(object),
             Err(error) => {
@@ -68,5 +77,5 @@ pub(super) fn prompt_input(input: &Field) -> Option<JsonObject> {
             }
         };
     }
-    input.object::<JsonObject>()
+    object()
 }

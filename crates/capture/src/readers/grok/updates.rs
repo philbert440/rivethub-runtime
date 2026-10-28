@@ -26,10 +26,35 @@ use crate::readers::message::tool_turn;
 use crate::readers::message::unknown;
 use crate::readers::scan::terminated_lines;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Extent {
+    Settled,
+    Live,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct UpdateLines {
+    pub(crate) lines: Vec<(u64, UpdateLine)>,
+    pub(crate) skipped: Vec<SkippedRecord>,
+}
+
+pub(super) fn parse_lines(text: &str) -> Result<UpdateLines, TranscriptReaderError> {
+    let (records, _) = terminated_lines(text)?;
+    let mut parsed = UpdateLines::default();
+    for record in &records {
+        match parse_json::<UpdateLine>(record.number, &record.text) {
+            Ok(line) => parsed.lines.push((record.number, line)),
+            Err(skipped) => parsed.skipped.push(skipped),
+        }
+    }
+    Ok(parsed)
+}
+
 pub(super) fn map_updates(
     session: &SessionId,
     text: &str,
     offset: u64,
+    extent: Extent,
 ) -> Result<TranscriptSlice, TranscriptReaderError> {
     let (records, last) = terminated_lines(text)?;
     let mut reading = Reading {
@@ -46,7 +71,10 @@ pub(super) fn map_updates(
         };
         push_mapped(mapped, &mut drafts, &mut skipped);
     }
-    let settled = reading.ledger.settled(last);
+    let settled = match extent {
+        Extent::Settled => reading.ledger.settled(last),
+        Extent::Live => last,
+    };
     drafts.retain(|draft| draft.position <= settled);
     skipped.retain(|record| record.position <= settled);
     Ok(assemble(offset, settled, drafts, skipped))
@@ -93,7 +121,7 @@ impl Reading<'_> {
                 Ok(Mapped::None)
             }
             SessionUpdate::ToolCallUpdate(update) => self.tool(position, at, update),
-            SessionUpdate::TurnCompleted { prompt_id } => {
+            SessionUpdate::TurnCompleted { prompt_id, .. } => {
                 self.ledger.completed(&prompt_id, position);
                 Ok(Mapped::None)
             }
@@ -212,27 +240,27 @@ fn instant(position: u64, millis: Option<i64>) -> Result<String, SkippedRecord> 
 }
 
 #[derive(Debug, Deserialize)]
-struct UpdateLine {
-    params: Params,
+pub(crate) struct UpdateLine {
+    pub(crate) params: Params,
 }
 
 #[derive(Debug, Deserialize)]
-struct Params {
+pub(crate) struct Params {
     #[serde(rename = "_meta", default)]
-    meta: LineMeta,
-    update: SessionUpdate,
+    pub(crate) meta: LineMeta,
+    pub(crate) update: SessionUpdate,
 }
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LineMeta {
-    agent_timestamp_ms: Option<i64>,
+pub(crate) struct LineMeta {
+    pub(crate) agent_timestamp_ms: Option<i64>,
     prompt_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "sessionUpdate", rename_all = "snake_case")]
-enum SessionUpdate {
+pub(crate) enum SessionUpdate {
     UserMessageChunk {
         content: AcpContent,
     },
@@ -246,6 +274,7 @@ enum SessionUpdate {
     ToolCallUpdate(ToolUpdate),
     TurnCompleted {
         prompt_id: String,
+        stop_reason: Option<String>,
     },
     MemoryFlushStarted,
     MemoryFlushCompleted,
@@ -272,27 +301,27 @@ enum SessionUpdate {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CallStart {
-    tool_call_id: String,
-    title: Option<String>,
-    raw_input: Option<JsonObject>,
+pub(crate) struct CallStart {
+    pub(crate) tool_call_id: String,
+    pub(crate) title: Option<String>,
+    pub(crate) raw_input: Option<JsonObject>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolUpdate {
-    tool_call_id: String,
-    status: Option<ToolStatus>,
-    title: Option<String>,
-    raw_input: Option<JsonObject>,
-    raw_output: Option<JsonObject>,
+pub(crate) struct ToolUpdate {
+    pub(crate) tool_call_id: String,
+    pub(crate) status: Option<ToolStatus>,
+    pub(crate) title: Option<String>,
+    pub(crate) raw_input: Option<JsonObject>,
+    pub(crate) raw_output: Option<JsonObject>,
     #[serde(default)]
-    content: Vec<ContentItem>,
+    pub(crate) content: Vec<ContentItem>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum ToolStatus {
+pub(crate) enum ToolStatus {
     Pending,
     InProgress,
     Completed,
@@ -303,7 +332,7 @@ enum ToolStatus {
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub(super) enum AcpContent {
+pub(crate) enum AcpContent {
     Text {
         text: String,
     },
@@ -312,7 +341,7 @@ pub(super) enum AcpContent {
 }
 
 impl AcpContent {
-    pub(super) fn text(&self) -> Option<&str> {
+    pub(crate) fn text(&self) -> Option<&str> {
         match self {
             Self::Text { text } => Some(text),
             Self::Other => None,
