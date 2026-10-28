@@ -284,6 +284,8 @@ fn b5_1_turns_serialize_with_optional_fields_omitted() {
                 attachments: None,
                 complete: false,
                 compact: false,
+                started_at_ms: None,
+                ended_at_ms: None,
             },
             HarnessTranscriptTurn {
                 role: SessionMessageRole::Assistant,
@@ -301,6 +303,8 @@ fn b5_1_turns_serialize_with_optional_fields_omitted() {
                 attachments: None,
                 complete: true,
                 compact: false,
+                started_at_ms: None,
+                ended_at_ms: None,
             },
         ]
     );

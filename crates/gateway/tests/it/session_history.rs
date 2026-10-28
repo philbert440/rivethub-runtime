@@ -145,6 +145,8 @@ fn turn(role: SessionMessageRole, text: &str) -> HarnessTranscriptTurn {
         attachments: None,
         complete: false,
         compact: false,
+        started_at_ms: None,
+        ended_at_ms: None,
     }
 }
 

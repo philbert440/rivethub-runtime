@@ -5348,6 +5348,20 @@
         },
         "compact": {
           "type": "boolean"
+        },
+        "startedAtMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "endedAtMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
         }
       },
       "required": [

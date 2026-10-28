@@ -24,11 +24,13 @@ use super::super::files::read_tail;
 use super::super::text::human_turn;
 use super::super::text::strip_paste;
 use super::super::text::text_elements;
+use super::super::time::parse_date;
+use super::display::tail_chars;
+use super::display::token_label;
 use super::tools::args_summary;
 use super::tools::is_prompt_tool;
 use super::tools::prompt_input;
 
-const THINKING_CHARS: usize = 8000;
 const RESULT_CHARS: usize = 2048;
 const OUTPUT_BYTES: usize = 64 * 1024;
 
@@ -133,6 +135,7 @@ struct Record {
     compact_metadata: Option<Field>,
     message: Option<Field>,
     tool_use_result: Option<Field>,
+    timestamp: Option<Field>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -174,6 +177,12 @@ impl Record {
 
     fn body(&self) -> Option<Body> {
         self.message.as_ref().and_then(Field::object::<Body>)
+    }
+
+    fn at_ms(&self) -> Option<i64> {
+        text_of(self.timestamp.as_ref())
+            .as_deref()
+            .and_then(parse_date)
     }
 }
 
@@ -255,6 +264,8 @@ struct Draft {
     stop_reason: Option<String>,
     last_block: Option<TranscriptBlock>,
     last_line_had_text: bool,
+    started_at_ms: Option<i64>,
+    ended_at_ms: Option<i64>,
 }
 
 impl Draft {
@@ -289,18 +300,10 @@ impl Draft {
             attachments: None,
             complete,
             compact: false,
+            started_at_ms: self.started_at_ms,
+            ended_at_ms: self.ended_at_ms,
         })
     }
-}
-
-fn tail_chars(thinking: &str) -> String {
-    let count = thinking.chars().count();
-    if count <= THINKING_CHARS {
-        return thinking.to_owned();
-    }
-    let mut kept = String::from("…");
-    kept.extend(thinking.chars().skip(count - THINKING_CHARS));
-    kept
 }
 
 #[derive(Debug, Default)]
@@ -380,6 +383,7 @@ impl Folder {
             None => return,
         };
         self.flush();
+        let at = record.at_ms();
         self.turns.push(HarnessTranscriptTurn {
             role: SessionMessageRole::User,
             text,
@@ -392,6 +396,8 @@ impl Folder {
             attachments: (!images.is_empty()).then_some(images),
             complete: false,
             compact: false,
+            started_at_ms: at,
+            ended_at_ms: at,
         });
     }
 
@@ -400,6 +406,7 @@ impl Folder {
             return;
         };
         pending.last_block = Some(TranscriptBlock::ToolResult);
+        pending.stamp(record.at_ms());
         let Some(id) = text_of(block.tool_use_id.as_ref()) else {
             return;
         };
@@ -426,6 +433,7 @@ impl Folder {
             return;
         };
         let pending = self.pending.get_or_insert_with(Draft::default);
+        pending.stamp(record.at_ms());
         if let Some(stop) = text_of(body.stop_reason.as_ref()) {
             pending.stop_reason = Some(stop);
         }
@@ -450,6 +458,13 @@ impl Folder {
 }
 
 impl Draft {
+    fn stamp(&mut self, at: Option<i64>) {
+        if let Some(at) = at {
+            self.started_at_ms.get_or_insert(at);
+            self.ended_at_ms = Some(at);
+        }
+    }
+
     fn text(&mut self, text: &str) -> bool {
         if text.trim().is_empty() {
             return false;
@@ -581,6 +596,7 @@ fn slash_command(text: &str) -> bool {
 }
 
 fn compact_marker(record: &Record) -> HarnessTranscriptTurn {
+    let at = record.at_ms();
     let metadata = record
         .compact_metadata
         .as_ref()
@@ -617,16 +633,7 @@ fn compact_marker(record: &Record) -> HarnessTranscriptTurn {
         attachments: None,
         complete: true,
         compact: true,
-    }
-}
-
-fn token_label(tokens: u64) -> String {
-    if tokens >= 1_000_000 {
-        let tenths = (tokens + 50_000) / 100_000;
-        format!("{}.{}M tokens", tenths / 10, tenths % 10)
-    } else if tokens >= 1000 {
-        format!("{}k tokens", (tokens + 500) / 1000)
-    } else {
-        format!("{tokens} tokens")
+        started_at_ms: at,
+        ended_at_ms: at,
     }
 }
