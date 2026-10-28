@@ -191,12 +191,12 @@ async fn accept(
     session: String,
     request: SessionPostRequest,
 ) -> Result<Response, ApiError> {
+    let attachments = staged(&gateway, &user, request.attachments).await?;
+    let chat = service(&gateway)?.chat(&user, &session)?;
     let options = SessionOption::for_turn(request.model, request.thinking);
     if !options.is_empty() {
         admit(&gateway, &session, &options)?;
     }
-    let attachments = staged(&gateway, &user, request.attachments).await?;
-    let chat = service(&gateway)?.chat(&user, &session)?;
     if !attachments.is_empty() {
         let canonical = session
             .parse::<wire::session_id::SessionId>()
