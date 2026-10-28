@@ -16,7 +16,6 @@ use crate::{Error, Report, configuration, process};
 struct Health {
     #[serde(flatten)]
     response: HealthzResponse,
-    version: Option<String>,
     uptime: Option<f64>,
 }
 
@@ -59,7 +58,7 @@ async fn health(env: &Environment) -> Result<Report, Error> {
         "RivetHub is not running".to_owned()
     };
     let mut parts = vec![text];
-    if let Some(version) = health.version {
+    if let Some(version) = health.response.version {
         parts.push(format!(" (v{version})"));
     }
     if let Some(uptime) = health.uptime {

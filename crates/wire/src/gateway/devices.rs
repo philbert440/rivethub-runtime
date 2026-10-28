@@ -24,6 +24,8 @@ pub struct MeshOverviewNode {
     pub online: bool,
     pub sessions: Option<u64>,
     pub latest: Option<MeshLatest>,
+    pub version: Option<String>,
+    pub revision: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

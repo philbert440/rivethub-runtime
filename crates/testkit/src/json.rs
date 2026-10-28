@@ -25,6 +25,8 @@ enum TokenClass {
     Repo,
     Node,
     NodeVersion,
+    Version,
+    Revision,
     Key,
     GenId,
     Pty { id: String },
@@ -41,6 +43,8 @@ impl TokenClass {
     const EPOCH_MS_PATTERN: &'static str = "[0-9]{13}";
     const PATHISH_PATTERN: &'static str = r#"[^"\\]{1,1024}"#;
     const NODE_VERSION_PATTERN: &'static str = "v?[0-9]+[.][0-9]+[.][0-9]+";
+    const VERSION_PATTERN: &'static str = "[0-9]+[.][0-9]+[.][0-9]+(?:-[0-9A-Za-z.-]+)?";
+    const REVISION_PATTERN: &'static str = "[0-9a-f]{7,40}";
     const KEY_PATTERN: &'static str = "[0-9]{13}-[0-9a-z]+";
     const GENID_PATTERN: &'static str = "(?:aitxt-[0-9A-Za-z]{24,}|[0-9A-Za-z]{16,})";
     const PTY_PATTERN: &'static str = "pty-[0-9a-f]{8}";
@@ -56,6 +60,8 @@ impl TokenClass {
             "REPO" => Some(Self::Repo),
             "NODE" => Some(Self::Node),
             "NODE_VERSION" => Some(Self::NodeVersion),
+            "VERSION" => Some(Self::Version),
+            "REVISION" => Some(Self::Revision),
             "KEY" => Some(Self::Key),
             "GENID" => Some(Self::GenId),
             _ => None,
@@ -85,6 +91,8 @@ impl TokenClass {
             Self::EpochMs => Self::EPOCH_MS_PATTERN,
             Self::Repo | Self::Node => Self::PATHISH_PATTERN,
             Self::NodeVersion => Self::NODE_VERSION_PATTERN,
+            Self::Version => Self::VERSION_PATTERN,
+            Self::Revision => Self::REVISION_PATTERN,
             Self::Key => Self::KEY_PATTERN,
             Self::GenId => Self::GENID_PATTERN,
             Self::Pty { .. } => Self::PTY_PATTERN,
@@ -102,6 +110,8 @@ impl TokenClass {
             | Self::Repo
             | Self::Node
             | Self::NodeVersion
+            | Self::Version
+            | Self::Revision
             | Self::Key
             | Self::GenId
             | Self::Pty { .. }
@@ -173,6 +183,8 @@ fn masked_pattern(rec: &str, masks: &Masks) -> Result<Masked, regex::Error> {
             | TokenClass::Repo
             | TokenClass::Node
             | TokenClass::NodeVersion
+            | TokenClass::Version
+            | TokenClass::Revision
             | TokenClass::Key
             | TokenClass::GenId => source.push_str(class.pattern()),
         }

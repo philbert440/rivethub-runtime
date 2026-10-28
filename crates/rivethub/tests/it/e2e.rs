@@ -401,7 +401,10 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
         .output()
         .await?;
     assert!(status.status.success());
-    assert_eq!(String::from_utf8(status.stdout)?, "RivetHub is running\n");
+    assert_eq!(
+        String::from_utf8(status.stdout)?,
+        format!("RivetHub is running (v{})\n", env!("CARGO_PKG_VERSION"))
+    );
     assert!(health.ok);
     assert_ne!(health.node, "");
     assert_ne!(health.name, "");

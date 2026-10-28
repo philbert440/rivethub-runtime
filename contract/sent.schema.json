@@ -1210,6 +1210,18 @@
               "type": "null"
             }
           ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -4574,6 +4586,18 @@
           "items": {
             "$ref": "#/$defs/DegradedProvider"
           }
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

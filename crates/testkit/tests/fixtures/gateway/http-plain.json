@@ -121,7 +121,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": false
@@ -176,7 +176,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": false
@@ -273,7 +273,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": false
@@ -327,7 +327,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": false
@@ -528,7 +528,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": false
@@ -567,7 +567,7 @@
               ]
             ],
             "framing": "until-close",
-            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": true
@@ -2450,7 +2450,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": false
@@ -2604,7 +2604,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": false
@@ -5565,7 +5565,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"ok\":true,\"sessions\":5,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":5,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": false
@@ -10594,7 +10594,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"ok\":true,\"sessions\":2,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":2,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": false
@@ -10715,7 +10715,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\"}",
+            "body": "{\"ok\":true,\"sessions\":0,\"name\":\"{{HOSTNAME}}\",\"node\":\"golden-node\",\"version\":\"{{VERSION}}\",\"revision\":\"{{REVISION}}\"}",
             "bodyLength": null,
             "bodyMasked": true,
             "serverClosed": false

@@ -205,6 +205,8 @@ async fn health(State(observed): State<Observed>, headers: HeaderMap) -> axum::r
         node: "local".to_owned(),
         degraded: None,
         degraded_providers: Vec::new(),
+        version: None,
+        revision: None,
     })
 }
 

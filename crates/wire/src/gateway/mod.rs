@@ -28,6 +28,10 @@ pub struct HealthzResponse {
     pub degraded: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub degraded_providers: Vec<DegradedProvider>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

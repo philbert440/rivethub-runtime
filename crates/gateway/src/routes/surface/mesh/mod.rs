@@ -235,18 +235,20 @@ async fn probe_nodes(settings: &Settings, nodes: &mut [MeshOverviewNode]) -> Res
     let mut tasks = JoinSet::new();
     for (index, url) in targets {
         let client = client.clone();
-        tasks.spawn(async move { (index, probe_online(&client, &url).await) });
+        tasks.spawn(async move { (index, probe(&client, &url).await) });
     }
     while let Some(joined) = tasks.join_next().await {
-        let (index, online) = match joined {
+        let (index, health) = match joined {
             Ok(pair) => pair,
             Err(error) => {
                 tracing::error!("mesh probe task failed: {error}");
                 return Err(ApiError::Task(error));
             }
         };
-        if let Some(node) = nodes.get_mut(index) {
-            node.online = online;
+        if let (Some(node), Some(health)) = (nodes.get_mut(index), health) {
+            node.online = true;
+            node.version = health.version;
+            node.revision = health.revision;
         }
     }
     Ok(())
@@ -283,24 +285,24 @@ fn probe_client(
         })
 }
 
-async fn probe_online(client: &reqwest::Client, url: &str) -> bool {
+async fn probe(client: &reqwest::Client, url: &str) -> Option<HealthzResponse> {
     let target = format!("{}/healthz", url.trim_end_matches('/'));
     let response = match client.get(target).send().await {
         Ok(response) => response,
         Err(error) => {
             tracing::debug!("mesh probe: {error}");
-            return false;
+            return None;
         }
     };
     if !response.status().is_success() {
         tracing::debug!(status = %response.status(), "mesh probe status");
-        return false;
+        return None;
     }
     match response.json::<HealthzResponse>().await {
-        Ok(_) => true,
+        Ok(health) => Some(health),
         Err(error) => {
             tracing::debug!("mesh healthz: {error}");
-            false
+            None
         }
     }
 }

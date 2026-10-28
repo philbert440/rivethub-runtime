@@ -14,7 +14,10 @@ pub(super) fn compare(id: &str, case: &Case, actual: Response, masks: &Masks) ->
         name.eq_ignore_ascii_case("content-type") && value == "application/json"
     });
     if json && !expected.is_empty() {
-        let expected: wire::JsonObject = serde_json::from_str(&substitute(expected, masks))?;
+        let expected = substitute(expected, masks)
+            .replace("{{VERSION}}", gateway::VERSION)
+            .replace("{{REVISION}}", gateway::REVISION.unwrap_or_default());
+        let expected: wire::JsonObject = serde_json::from_str(&expected)?;
         let body: wire::JsonObject = serde_json::from_slice(&actual.body)?;
         if expected != body {
             return Err(Error::Mismatch(format!(

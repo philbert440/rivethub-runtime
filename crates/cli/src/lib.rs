@@ -214,8 +214,8 @@ async fn run_local(
 }
 
 fn version() -> String {
-    let version = env!("CARGO_PKG_VERSION");
-    match option_env!("RIVETHUB_BUILD_REVISION") {
+    let version = gateway::VERSION;
+    match gateway::REVISION {
         Some(revision) => format!("RivetHub v{version} ({revision})\n"),
         None => format!("RivetHub v{version}\n"),
     }
