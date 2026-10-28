@@ -57,7 +57,7 @@ impl TopicTarget {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumIter)]
 pub enum Category {
     People,
     Hosts,

@@ -34,6 +34,8 @@ pub(super) fn error(error: TopicError) -> ApiError {
         | TopicError::AliasTaken { .. }
         | TopicError::ParentIsSubtopic { .. }
         | TopicError::HasSubtopics
+        | TopicError::CategoryTopic { .. }
+        | TopicError::SubtopicsRemain { .. }
         | TopicError::MergeWouldNest { .. }
         | TopicError::DecisionSuperseded { .. } => ApiError::Conflict(error.to_string()),
         TopicError::NotFound { .. } | TopicError::UnknownDecision { .. } => {

@@ -116,6 +116,17 @@ impl TopicStore for PostgresMemory {
         Ok(stored)
     }
 
+    async fn delete(&self, id: TopicId) -> Result<(), TopicError> {
+        let mut tx = self.pool.begin().await.map_err(failed("topic delete"))?;
+        let topic = rows::by_id(&mut tx, id)
+            .await?
+            .ok_or_else(|| not_found(id))?;
+        topic.check_delete(!write::subtopics(&mut tx, id).await?.is_empty())?;
+        write::remove(&mut tx, id).await?;
+        write::enqueue_syncs(&mut tx, SyncTopicPage::after_delete(&topic)).await?;
+        tx.commit().await.map_err(failed("topic delete"))
+    }
+
     async fn find(&self, key: &TopicKey) -> Result<Option<Topic>, TopicError> {
         let mut conn = self.pool.acquire().await.map_err(failed("topic read"))?;
         match key {

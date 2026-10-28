@@ -206,3 +206,11 @@ async fn decisions_are_the_topic_page_decisions_section() -> TestResult {
     testkit::decisions::decisions_are_the_topic_page_decisions_section(pages(&store)).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound() -> TestResult {
+    let (_directory, store) = store()?;
+    topic_pages::a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(pages(&store))
+        .await?;
+    Ok(())
+}

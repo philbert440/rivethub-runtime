@@ -283,7 +283,8 @@ fn open(conn: &Connection, slug: &str, page: Option<&str>) -> Result<bool, WikiS
         return Ok(true);
     }
     conn.query_row(
-        "SELECT NOT EXISTS (SELECT 1 FROM rh_topic_pages WHERE page_slug = ?1)",
+        "SELECT NOT EXISTS (SELECT 1 FROM rh_topic_pages
+                             WHERE page_slug = ?1 AND topic_id IS NOT NULL)",
         params![slug],
         |row| row.get(0),
     )
