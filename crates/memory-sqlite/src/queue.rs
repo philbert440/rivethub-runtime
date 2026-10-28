@@ -224,19 +224,6 @@ impl SqliteStore {
     pub async fn job_counts(&self) -> Result<Vec<JobCount>, SqliteError> {
         self.with_conn(counts).await
     }
-
-    pub(crate) async fn replace_job(
-        &self,
-        key: String,
-        payload: String,
-        run_at: DateTime<Utc>,
-        now: DateTime<Utc>,
-    ) -> Result<(), SqliteError> {
-        self.with_conn(move |conn| replace(conn, &key, &payload, run_at, now))
-            .await?;
-        self.notifications.send_replace(());
-        Ok(())
-    }
 }
 
 pub(crate) fn enqueue_embed(
@@ -276,7 +263,10 @@ pub(crate) fn enqueue_in(conn: &Connection, job: &JobInsert) -> Result<(), Sqlit
     }
 }
 
-fn insert_job(conn: &Connection, job: &JobInsert) -> Result<Option<String>, SqliteError> {
+pub(crate) fn insert_job(
+    conn: &Connection,
+    job: &JobInsert,
+) -> Result<Option<String>, SqliteError> {
     let id = Uuid::new_v4().to_string();
     let stamped = time::stamp(job.now);
     let run_at = time::stamp(job.run_at);
@@ -514,7 +504,7 @@ fn delete_job(conn: &Connection, id: &str) -> Result<(), SqliteError> {
     }
 }
 
-fn revive_one(
+pub(crate) fn revive_one(
     conn: &Connection,
     key: &str,
     payload: &str,
@@ -589,7 +579,7 @@ fn count_row(task: String, state: String, count: i64) -> Result<JobCount, Sqlite
     })
 }
 
-fn replace(
+pub(crate) fn replace(
     conn: &Connection,
     key: &str,
     payload: &str,
