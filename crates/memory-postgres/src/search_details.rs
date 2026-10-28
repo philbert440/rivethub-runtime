@@ -102,6 +102,6 @@ impl PostgresMemory {
              ORDER BY m.created_at, m.id LIMIT 200")
             .bind(id).bind(&query.agent).bind(query.since).bind(query.before)
             .fetch_all(&self.pool).await.map_err(|source| Error::operation("summary source messages", source))?;
-        rows.into_iter().map(MemoryEntry::try_from).collect()
+        Ok(crate::read::readable_entries(rows))
     }
 }

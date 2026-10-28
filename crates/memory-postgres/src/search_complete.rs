@@ -218,6 +218,6 @@ impl crate::PostgresMemory {
             .fetch_all(&self.pool)
             .await
             .map_err(|source| Error::operation("summary expansion", source))?;
-        rows.into_iter().map(MemoryEntry::try_from).collect()
+        Ok(crate::read::readable_entries(rows))
     }
 }

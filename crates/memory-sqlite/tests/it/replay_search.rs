@@ -361,6 +361,7 @@ fn asked(text: &str, scope: MemoryScope, limit: u32) -> SearchQuery {
         scope,
         agent: None,
         role: None,
+        exclude_roles: Vec::new(),
         tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(limit), 10, 1..=50),
@@ -399,7 +400,20 @@ fn expect_hits(
     let hits = recorded.as_array().ok_or("hits are not an array")?;
     let expected: Vec<MemorySearchResult> =
         hits.iter().map(project_hit).collect::<TestResult<_>>()?;
-    expect_json(&serde_json::to_value(expected)?, &codec(actual)?, at, ids)
+    let unrecorded: Vec<MemorySearchResult> = actual
+        .iter()
+        .cloned()
+        .map(|hit| MemorySearchResult {
+            session_id: None,
+            ..hit
+        })
+        .collect();
+    expect_json(
+        &serde_json::to_value(expected)?,
+        &codec(&unrecorded)?,
+        at,
+        ids,
+    )
 }
 
 fn codec<T: Serialize + ?Sized>(value: &T) -> TestResult<Json> {

@@ -187,6 +187,7 @@ pub async fn search(
             scope,
             agent: args.agent,
             role: args.role,
+            exclude_roles: Vec::new(),
             tool_name: args.tool_name,
             tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
                 |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),

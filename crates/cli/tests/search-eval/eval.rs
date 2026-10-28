@@ -210,6 +210,7 @@ fn search(query: &EvalQuery, limit: u32) -> SearchQuery {
         scope: MemoryScope::Both,
         agent: None,
         role: None,
+        exclude_roles: Vec::new(),
         tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(limit), limit, 1..=limit),

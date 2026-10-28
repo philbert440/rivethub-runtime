@@ -28,8 +28,26 @@ pub(crate) struct SearchOptions {
     pub(crate) limit: u32,
     pub(crate) agent: Option<String>,
     pub(crate) role: Option<Role>,
+    pub(crate) exclude_roles: Vec<Role>,
     pub(crate) tool_name: Option<String>,
     pub(crate) tag: Option<TagLiteral>,
+}
+
+impl SearchOptions {
+    fn without_nul(&self) -> Self {
+        let strip = |text: &str| text.replace('\0', "");
+        Self {
+            text: strip(&self.text),
+            agent: self.agent.as_deref().map(strip),
+            tool_name: self.tool_name.as_deref().map(strip),
+            tag: self.tag.as_ref().map(|tag| TagLiteral {
+                key: strip(&tag.key),
+                value: strip(&tag.value),
+            }),
+            exclude_roles: self.exclude_roles.clone(),
+            ..*self
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -194,6 +212,7 @@ impl crate::PostgresMemory {
             limit: query.limit.get(),
             agent: query.agent.clone(),
             role: query.role,
+            exclude_roles: query.exclude_roles.clone(),
             tool_name: query.tool_name.clone(),
             tag: query.tag.clone(),
         })
@@ -204,6 +223,7 @@ impl crate::PostgresMemory {
         &self,
         options: &SearchOptions,
     ) -> Result<SearchOutcome, Error> {
+        let options = &options.without_nul();
         let tag_filter = options.tag.as_ref().map(TagFilter::from);
         match options.mode {
             SearchMode::Hybrid => self.hybrid_search(options, tag_filter.as_ref()).await,

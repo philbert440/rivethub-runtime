@@ -220,6 +220,11 @@ opencode, kimi-code and cursor have no append option and get nothing. The kept c
 (`metaAppend`, `cliFlag` or `none`), set when the session starts and served by `GET …/startup-context`; a terminal
 resume keeps no context. Kept on `rh_session_startup.delivered_via` (migration 0029, `none` for earlier rows; SQLite
 schema v16). The text is never recorded as a user message.
+(26) Memory search hits (Phil, 2026-10-27): summary hits on `GET /api/memory/search` carry `sessionId`, the session of
+the summarised conversation, as message hits already did. The route takes optional `exclude_roles`, a comma-separated
+list of roles (`exclude_roles=tool,system`) whose message hits are left out; summaries are unaffected. NUL characters
+in the search text and filters are dropped before the query runs, and legacy rows whose `tool_args` is a JSON string
+are read as their decoded object when the string holds one, otherwise without arguments.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

@@ -343,16 +343,23 @@ fn load(conn: &Connection, plan: &Plan) -> Result<Vec<ArmRow>, SqliteError> {
     Ok(rows)
 }
 
+const MESSAGE_CANDIDATES: &str = "SELECT id, content, created_at, conversation_id, role, agent, embedding, access_count,
+         CASE WHEN role = 'system' THEN 0.5 WHEN tool_name IS NOT NULL THEN 0.3 WHEN role = 'user' THEN 0.7 ELSE 0.6 END,
+         (SELECT c.session_key FROM ros_conversations c WHERE c.id = m.conversation_id)
+         FROM ros_messages m WHERE (?1 IS NULL OR agent = ?1) AND (?2 IS NULL OR created_at >= ?2) AND (?3 IS NULL OR created_at < ?3)
+         AND (?4 IS NULL OR role = ?4) AND (?5 IS NULL OR tool_name = ?5)
+         AND (?6 IS NULL OR role NOT IN (SELECT value FROM json_each(?6)))";
+
+const SUMMARY_CANDIDATES: &str = "SELECT id, content, created_at, conversation_id, NULL, NULL, embedding, access_count, 0.6,
+         (SELECT c.session_key FROM ros_conversations c WHERE c.id = s.conversation_id)
+         FROM ros_summaries s WHERE (?1 IS NULL OR EXISTS (SELECT 1 FROM ros_conversations c WHERE c.id = s.conversation_id AND c.agent = ?1))
+         AND (?2 IS NULL OR created_at >= ?2) AND (?3 IS NULL OR created_at < ?3)";
+
 fn load_table(conn: &Connection, plan: &Plan, message: bool) -> Result<Vec<ArmRow>, SqliteError> {
     let sql = if message {
-        "SELECT id, content, created_at, conversation_id, role, agent, embedding, access_count,
-         CASE WHEN role = 'system' THEN 0.5 WHEN tool_name IS NOT NULL THEN 0.3 WHEN role = 'user' THEN 0.7 ELSE 0.6 END
-         FROM ros_messages WHERE (?1 IS NULL OR agent = ?1) AND (?2 IS NULL OR created_at >= ?2) AND (?3 IS NULL OR created_at < ?3)
-         AND (?4 IS NULL OR role = ?4) AND (?5 IS NULL OR tool_name = ?5)"
+        MESSAGE_CANDIDATES
     } else {
-        "SELECT id, content, created_at, conversation_id, NULL, NULL, embedding, access_count, 0.6
-         FROM ros_summaries s WHERE (?1 IS NULL OR EXISTS (SELECT 1 FROM ros_conversations c WHERE c.id = s.conversation_id AND c.agent = ?1))
-         AND (?2 IS NULL OR created_at >= ?2) AND (?3 IS NULL OR created_at < ?3)"
+        SUMMARY_CANDIDATES
     };
     let mut statement = conn
         .prepare(sql)
@@ -365,6 +372,7 @@ fn load_table(conn: &Connection, plan: &Plan, message: bool) -> Result<Vec<ArmRo
             &plan.before,
             &role,
             &plan.tool_name,
+            &plan.exclude_roles,
         ]
     } else {
         vec![&plan.agent, &plan.since, &plan.before]
@@ -376,10 +384,12 @@ fn load_table(conn: &Connection, plan: &Plan, message: bool) -> Result<Vec<ArmRo
                     role: crate::message::stored_role(row, 4)?,
                     agent: row.get(5)?,
                     conversation_id: row.get(3)?,
+                    session_id: row.get(9)?,
                 }
             } else {
                 Kind::Summary {
                     conversation_id: row.get(3)?,
+                    session_id: row.get(9)?,
                 }
             };
             Ok((
