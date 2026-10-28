@@ -66,7 +66,9 @@ async fn hermes_lists_the_sessions_table_with_the_first_user_message() -> TestRe
          INSERT INTO sessions VALUES ('h3', 1600000000, 1600000500);\
          INSERT INTO messages VALUES ('h1', 'assistant', 'not me', 1);\
          INSERT INTO messages VALUES ('h1', 'user', '  hi ', 2);\
-         INSERT INTO messages VALUES ('h1', 'user', 'later', 3);",
+         INSERT INTO messages VALUES ('h1', 'user', 'later', 3);\
+         INSERT INTO messages VALUES ('h2', 'user', '', 1);\
+         INSERT INTO messages VALUES ('h3', 'user', 'old', 1);",
     )?;
     let lister = lister(StoreRoots {
         hermes: Some(dir.path().to_path_buf()),
@@ -79,7 +81,7 @@ async fn hermes_lists_the_sessions_table_with_the_first_user_message() -> TestRe
         vec![
             ("h2", "h2", 1_700_000_000_123),
             ("h1", "hi", 1_700_000_000_000),
-            ("h3", "h3", 1_600_000_500_000),
+            ("h3", "old", 1_600_000_500_000),
         ]
     );
     assert!(rows.iter().all(|row| row.created_at.is_none()));
@@ -92,7 +94,7 @@ async fn hermes_lists_the_sessions_table_with_the_first_user_message() -> TestRe
 }
 
 #[tokio::test]
-async fn hermes_without_user_message_titles_by_id_and_missing_db_is_empty() -> TestResult {
+async fn hermes_lists_no_unprompted_session_and_missing_db_is_empty() -> TestResult {
     let dir = tempfile::tempdir()?;
     let connection = hermes_db(&dir.path().join("present"))?;
     connection.execute("INSERT INTO sessions VALUES ('h1', 1700000000, NULL)", [])?;
@@ -100,11 +102,15 @@ async fn hermes_without_user_message_titles_by_id_and_missing_db_is_empty() -> T
         hermes: Some(dir.path().join("present")),
         ..StoreRoots::default()
     });
-    let rows = only(&present, HarnessId::Hermes).await;
     assert_eq!(
-        rows.iter().map(summary).collect::<Vec<_>>(),
-        vec![("h1", "h1", 1_700_000_000_000)]
+        only(&present, HarnessId::Hermes).await,
+        Vec::<StoreSession>::new()
     );
+    let described = present
+        .describe(HarnessId::Hermes, "h1", None)
+        .await?
+        .ok_or("h1")?;
+    assert_eq!(described.title, "h1");
     let missing = lister(StoreRoots {
         hermes: Some(dir.path().join("missing")),
         ..StoreRoots::default()
@@ -121,7 +127,8 @@ fn opencode_db(root: &Path, with_model: bool) -> Result<Connection, Box<dyn std:
     let connection = Connection::open(root.join("opencode.db"))?;
     let model = if with_model { "model TEXT," } else { "" };
     connection.execute_batch(&format!(
-        "CREATE TABLE session (id TEXT PRIMARY KEY, title TEXT, {model} time_created, time_updated);"
+        "CREATE TABLE session (id TEXT PRIMARY KEY, title TEXT, {model} time_created, time_updated);\
+         CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT);"
     ))?;
     Ok(connection)
 }
@@ -133,7 +140,11 @@ async fn opencode_reads_the_session_table_and_labels_models() -> TestResult {
     connection.execute_batch(
         "INSERT INTO session VALUES ('ses_a', 'T  x', '{\"providerID\":\"anthropic\",\"id\":\"claude\"}', 1690000000, 1700000000);\
          INSERT INTO session VALUES ('ses_b', '', 'gpt-5', 1600000000000, 0);\
-         INSERT INTO session VALUES ('ses_c', NULL, '{\"id\":\"only-id\"}', NULL, 1500000000);",
+         INSERT INTO session VALUES ('ses_c', NULL, '{\"id\":\"only-id\"}', NULL, 1500000000);\
+         INSERT INTO session VALUES ('ses_d', 'New session - 2026-10-28T00:00:00.000Z', NULL, 1800000000, 1800000000);\
+         INSERT INTO message VALUES ('m_a', 'ses_a');\
+         INSERT INTO message VALUES ('m_b', 'ses_b');\
+         INSERT INTO message VALUES ('m_c', 'ses_c');",
     )?;
     let lister = lister(StoreRoots {
         opencode: Some(dir.path().to_path_buf()),
@@ -179,9 +190,9 @@ async fn opencode_reads_the_session_table_and_labels_models() -> TestResult {
 async fn opencode_without_a_model_column_still_lists_rows() -> TestResult {
     let dir = tempfile::tempdir()?;
     let connection = opencode_db(dir.path(), false)?;
-    connection.execute(
-        "INSERT INTO session VALUES ('ses_a', 'T', 1690000000, 1700000000)",
-        [],
+    connection.execute_batch(
+        "INSERT INTO session VALUES ('ses_a', 'T', 1690000000, 1700000000);\
+         INSERT INTO message VALUES ('m_a', 'ses_a');",
     )?;
     let lister = lister(StoreRoots {
         opencode: Some(dir.path().to_path_buf()),
@@ -596,6 +607,97 @@ fn with_ancestors_terminates_on_cycles() {
     assert_eq!(ids(&with_ancestors(unchanged, 0)), vec!["a"]);
 }
 
+fn unprompted_fixture(root: &Path) -> Result<StoreRoots, Box<dyn std::error::Error>> {
+    write(
+        root,
+        "kimi/sessions/wd_x/session_probe/state.json",
+        r#"{"cwd":"/w","updatedAt":2,"isCustomTitle":false}"#,
+    )?;
+    write(
+        root,
+        "kimi/sessions/wd_x/session_probe/agents/main/wire.jsonl",
+        r#"{"type":"metadata"}"#,
+    )?;
+    write(
+        root,
+        "kimi/sessions/wd_x/session_used/state.json",
+        r#"{"updatedAt":1}"#,
+    )?;
+    write(
+        root,
+        "kimi/sessions/wd_x/session_used/agents/main/wire.jsonl",
+        &kimi_append("user", r#""hello""#),
+    )?;
+    write(
+        root,
+        &format!("grok/sessions/enc/{U1}/summary.json"),
+        &format!(r#"{{"info":{{"id":"{U1}"}},"session_summary":"","num_chat_messages":2}}"#),
+    )?;
+    write(
+        root,
+        &format!("grok/sessions/enc/{U1}/chat_history.jsonl"),
+        concat!(
+            r#"{"type":"system","content":"s"}"#,
+            "\n",
+            r#"{"type":"user","content":"r","synthetic_reason":"system_reminder"}"#,
+        ),
+    )?;
+    write(
+        root,
+        &format!("grok/sessions/enc/{U2}/summary.json"),
+        &format!(r#"{{"info":{{"id":"{U2}"}},"session_summary":""}}"#),
+    )?;
+    write(
+        root,
+        &format!("grok/sessions/enc/{U2}/chat_history.jsonl"),
+        r#"{"type":"user","content":"<user_query>hello</user_query>"}"#,
+    )?;
+    write(
+        root,
+        &format!("codex/sessions/2026/10/01/rollout-2026-10-01T00-00-00-{U1}.jsonl"),
+        r#"{"type":"session_meta","payload":{"cwd":"/w"}}"#,
+    )?;
+    write(
+        root,
+        &format!("codex/sessions/2026/10/01/rollout-2026-10-01T00-00-01-{U2}.jsonl"),
+        &codex_line("hello"),
+    )?;
+    Ok(StoreRoots {
+        kimi: Some(root.join("kimi")),
+        grok: Some(root.join("grok")),
+        codex: Some(root.join("codex")),
+        ..StoreRoots::default()
+    })
+}
+
+#[tokio::test]
+async fn sessions_without_a_user_turn_are_described_but_not_listed() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let lister = lister(unprompted_fixture(dir.path())?);
+    let mut rows: Vec<_> = lister
+        .list(&capture::listing::LISTING_ORDER, ListLimit::DEFAULT)
+        .await
+        .into_iter()
+        .map(|row| (row.harness, row.id))
+        .collect();
+    rows.sort();
+    let mut expected = vec![
+        (HarnessId::GrokBuild, U2.to_owned()),
+        (HarnessId::KimiCode, "session_used".to_owned()),
+        (HarnessId::Codex, U2.to_owned()),
+    ];
+    expected.sort();
+    assert_eq!(rows, expected);
+    for (harness, id) in [
+        (HarnessId::KimiCode, "session_probe"),
+        (HarnessId::GrokBuild, U1),
+        (HarnessId::Codex, U1),
+    ] {
+        assert!(lister.describe(harness, id, None).await?.is_some());
+    }
+    Ok(())
+}
+
 fn mixed_fixture(root: &Path) -> Result<StoreRoots, Box<dyn std::error::Error>> {
     let claude = write(
         root,
@@ -606,7 +708,9 @@ fn mixed_fixture(root: &Path) -> Result<StoreRoots, Box<dyn std::error::Error>> 
     let connection = hermes_db(&root.join("hermes"))?;
     connection.execute_batch(
         "INSERT INTO sessions VALUES ('h-tied', 1700000000, NULL);\
-         INSERT INTO sessions VALUES ('h-new', 1800000000, NULL);",
+         INSERT INTO sessions VALUES ('h-new', 1800000000, NULL);\
+         INSERT INTO messages VALUES ('h-tied', 'user', 'a', 1);\
+         INSERT INTO messages VALUES ('h-new', 'user', 'b', 1);",
     )?;
     for index in 0..7_u64 {
         let rollout = write(
@@ -614,7 +718,7 @@ fn mixed_fixture(root: &Path) -> Result<StoreRoots, Box<dyn std::error::Error>> 
             &format!(
                 "codex/sessions/2026/10/01/rollout-x-00000000-0000-4000-8000-00000000000{index}.jsonl"
             ),
-            "",
+            &codex_line("ask"),
         )?;
         set_mtime(&rollout, 1_600_000_000_000 + index)?;
     }

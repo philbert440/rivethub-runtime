@@ -210,6 +210,7 @@ struct Info {
 struct GrokRow {
     row: StoreSession,
     nested: bool,
+    untitled: bool,
 }
 
 struct Scan {
@@ -237,12 +238,33 @@ fn scan(store: &Root, only: Option<&str>) -> Scan {
             }
             if let Some(row) =
                 whole_file(&summary).and_then(|text| summary_row(&text, &session.name))
+                && (only.is_some()
+                    || !row.untitled
+                    || user_turn(&session.path.join("chat_history.jsonl")))
             {
                 scan.rows.push(row);
             }
         }
     }
     scan
+}
+
+#[derive(Debug, Deserialize)]
+struct HistoryLine {
+    #[serde(rename = "type")]
+    kind: Option<Field>,
+    synthetic_reason: Option<Field>,
+}
+
+fn user_turn(history: &Path) -> bool {
+    whole_file(history).is_none_or(|text| {
+        text.lines()
+            .filter_map(object_line::<HistoryLine>)
+            .any(|line| {
+                line.synthetic_reason.is_none()
+                    && line.kind.as_ref().is_some_and(|kind| kind.is_text("user"))
+            })
+    })
 }
 
 fn summary_row(text: &str, dir_name: &str) -> Option<GrokRow> {
@@ -258,7 +280,10 @@ fn summary_row(text: &str, dir_name: &str) -> Option<GrokRow> {
         .and_then(|text| parse_date(&text))
         .unwrap_or(UNKNOWN_TIME);
     let mut row = StoreSession::new(HarnessId::GrokBuild, &id, updated_at);
-    if let Some(title) = non_empty(clip_field(summary.session_summary.as_ref(), 120)) {
+    let opening = non_empty(clip_field(summary.session_summary.as_ref(), 120));
+    let untitled = opening.is_none()
+        && text_of(summary.generated_title.as_ref()).is_none_or(|title| title.trim().is_empty());
+    if let Some(title) = opening {
         row.title = title;
     }
     summary.titles().apply(&mut row);
@@ -267,13 +292,18 @@ fn summary_row(text: &str, dir_name: &str) -> Option<GrokRow> {
     row.model = non_empty(clip_field(summary.current_model_id.as_ref(), 80));
     let nested = text_of(summary.session_kind.as_ref())
         .is_some_and(|kind| kind == "subagent" || kind == "subagent_fork");
-    Some(GrokRow { row, nested })
+    Some(GrokRow {
+        row,
+        nested,
+        untitled,
+    })
 }
 
 fn stamp(rows: Vec<GrokRow>, parents: &HashMap<String, String>) -> Vec<StoreSession> {
     rows.into_iter()
-        .map(|GrokRow { mut row, nested }| {
-            if nested {
+        .map(|grok| {
+            let mut row = grok.row;
+            if grok.nested {
                 row.parent_session_id = parents
                     .get(&row.id)
                     .filter(|parent| **parent != row.id)

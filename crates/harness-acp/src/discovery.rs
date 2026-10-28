@@ -100,6 +100,12 @@ pub(crate) async fn discover(
     cwd: &Path,
     timeout: Duration,
 ) -> Result<Advertisement, AcpError> {
+    tokio::fs::create_dir_all(cwd)
+        .await
+        .map_err(|source| AcpError::DiscoveryDir {
+            path: cwd.to_path_buf(),
+            source,
+        })?;
     let agent = tokio::time::timeout(timeout, crate::connection::start_new(command, cwd, None))
         .await
         .map_err(|_| AcpError::DiscoveryTimeout { timeout })??;

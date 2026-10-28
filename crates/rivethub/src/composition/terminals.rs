@@ -29,7 +29,8 @@ pub(super) async fn build(
                 .and_then(|runtime| runtime.workspace.clone())
         })
         .ok_or_else(|| ComposeError::Invalid("terminal filesystem root is required".into()))?;
-    let state_dir = config::Paths::new(env)?.state_dir();
+    let paths = config::Paths::new(env)?;
+    let state_dir = paths.state_dir();
     let roster_path =
         terminal::resolve_roster_path(gateway.commands_file.as_deref(), env, &state_dir);
     let home = env
@@ -43,13 +44,13 @@ pub(super) async fn build(
         crate::identity::resolve(config, env)?.name,
     );
     let max_ptys = settings.limits.max_ptys;
-    let paths = match env.get("PATH") {
+    let search = match env.get("PATH") {
         Some(path) => std::env::split_paths(path).collect::<Vec<_>>(),
         None => Vec::new(),
     };
     let plan = terminal::mux::resolve(
         env.term_mux_choice(),
-        &paths,
+        &search,
         env.home().map(std::path::Path::new),
         &state_dir,
         gateway.port,
@@ -81,7 +82,9 @@ pub(super) async fn build(
     .await?
     .with_shutdown(shutdown.child_token())
     .with_harness(Arc::new(
-        harness_acp::AcpHarnessAdapter::new(config).with_search_paths(paths),
+        harness_acp::AcpHarnessAdapter::new(config)
+            .with_search_paths(search)
+            .with_discovery_dir(paths.discovery_dir()),
     ))
     .with_session_lister(Arc::new(capture::listing::StoreSessionLister::new(
         super::store_roots(env),

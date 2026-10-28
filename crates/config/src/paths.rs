@@ -114,6 +114,10 @@ impl Paths {
         session_owners_file(&self.state_dir())
     }
 
+    pub fn discovery_dir(&self) -> PathBuf {
+        self.state_dir().join("discovery")
+    }
+
     pub fn ca_dir(&self) -> PathBuf {
         self.state_dir().join("ca")
     }

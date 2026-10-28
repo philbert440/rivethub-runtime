@@ -73,8 +73,8 @@ pub(crate) fn list(root: &Path, limit: usize) -> Result<Vec<StoreSession>, Trans
     };
     Ok(session_dirs(&store, None)
         .iter()
+        .filter_map(|found| kimi_row(found, true))
         .take(limit)
-        .filter_map(kimi_row)
         .collect())
 }
 
@@ -88,7 +88,9 @@ pub(crate) fn describe(
     let Some(store) = sessions(root)? else {
         return Ok(None);
     };
-    Ok(session_dirs(&store, Some(id)).first().and_then(kimi_row))
+    Ok(session_dirs(&store, Some(id))
+        .first()
+        .and_then(|found| kimi_row(found, false)))
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,17 +102,24 @@ struct KimiState {
     created_at: Option<Field>,
 }
 
-fn kimi_row(found: &KimiDir) -> Option<StoreSession> {
+fn kimi_row(found: &KimiDir, listing: bool) -> Option<StoreSession> {
     let state = whole_file(&found.dir.join("state.json"))
         .and_then(|text| object_line::<KimiState>(&text))?;
     let updated_at = finite_or_date(&RawTime::from_field(state.updated_at.as_ref()))
         .filter(|ms| *ms != 0)
         .unwrap_or(found.mtime);
     let mut row = StoreSession::new(HarnessId::KimiCode, &found.id, updated_at);
-    let typed = [state.title.as_ref(), state.last_prompt.as_ref()]
+    let stated = [state.title.as_ref(), state.last_prompt.as_ref()]
         .into_iter()
-        .find_map(|field| text_of(field).and_then(|text| non_empty(text.trim().to_owned())))
-        .or_else(|| kimi_wire_title(&found.dir));
+        .find_map(|field| text_of(field).and_then(|text| non_empty(text.trim().to_owned())));
+    let typed = match stated {
+        Some(title) => Some(title),
+        None => match kimi_wire(&found.dir) {
+            Wire::Titled(title) => Some(title),
+            Wire::Unprompted if listing => return None,
+            Wire::Unprompted | Wire::Unknown => None,
+        },
+    };
     if let Some(title) =
         typed.and_then(|title| non_empty(collapse(&title).chars().take(TITLE_CHARS).collect()))
     {
@@ -139,7 +148,12 @@ struct Origin {
     kind: Option<Field>,
 }
 
-fn wire_text(line: &str) -> Option<String> {
+enum Turn {
+    Titled(String),
+    Untitled,
+}
+
+fn user_turn(line: &str) -> Option<Turn> {
     let parsed = object_line::<WireLine>(line)?;
     if !parsed.kind.as_ref()?.is_text("context.append_message") {
         return None;
@@ -148,42 +162,63 @@ fn wire_text(line: &str) -> Option<String> {
     if !message.origin?.object::<Origin>()?.kind?.is_text("user") {
         return None;
     }
-    non_empty(clip(&user_text(message.content.as_ref()?)?, TITLE_CHARS))
+    Some(
+        message
+            .content
+            .as_ref()
+            .and_then(user_text)
+            .and_then(|text| non_empty(clip(&text, TITLE_CHARS)))
+            .map_or(Turn::Untitled, Turn::Titled),
+    )
 }
 
-pub(crate) fn kimi_wire_title(dir: &Path) -> Option<String> {
+enum Wire {
+    Titled(String),
+    Unprompted,
+    Unknown,
+}
+
+fn kimi_wire(dir: &Path) -> Wire {
     let path = dir.join("agents").join("main").join("wire.jsonl");
     let mut file = match File::open(&path) {
         Ok(file) => file,
         Err(error) => {
             unreadable(&path, &error);
-            return None;
+            return Wire::Unknown;
         }
     };
     let mut pending: Vec<u8> = Vec::new();
     let mut chunk = vec![0_u8; WIRE_CHUNK];
     let mut total = 0;
+    let mut prompted = false;
     loop {
         let read = match file.read(&mut chunk) {
             Ok(read) => read,
             Err(error) => {
                 unreadable(&path, &error);
-                return None;
+                return Wire::Unknown;
             }
         };
         if read == 0 {
-            return wire_text(&String::from_utf8_lossy(&pending));
+            return match user_turn(&String::from_utf8_lossy(&pending)) {
+                Some(Turn::Titled(title)) => Wire::Titled(title),
+                Some(Turn::Untitled) => Wire::Unknown,
+                None if prompted => Wire::Unknown,
+                None => Wire::Unprompted,
+            };
         }
         pending.extend(chunk.iter().take(read));
         total += read;
         while let Some(newline) = pending.iter().position(|byte| *byte == b'\n') {
             let line: Vec<u8> = pending.drain(..=newline).collect();
-            if let Some(title) = wire_text(&String::from_utf8_lossy(&line)) {
-                return Some(title);
+            match user_turn(&String::from_utf8_lossy(&line)) {
+                Some(Turn::Titled(title)) => return Wire::Titled(title),
+                Some(Turn::Untitled) => prompted = true,
+                None => {}
             }
         }
         if total >= WIRE_BUDGET {
-            return None;
+            return Wire::Unknown;
         }
     }
 }

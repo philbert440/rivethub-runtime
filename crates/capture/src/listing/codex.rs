@@ -80,6 +80,7 @@ pub(crate) fn list(root: &Path, limit: usize) -> Result<Vec<StoreSession>, Trans
     let names = thread_names(root);
     Ok(found
         .iter()
+        .filter(|rollout| names.contains_key(&rollout.id) || !unprompted(&rollout.path))
         .take(limit)
         .map(|rollout| rollout_row(rollout, &names))
         .collect())
@@ -191,6 +192,11 @@ fn user_message(line: &str) -> Option<String> {
     .iter()
     .any(|prefix| trimmed.starts_with(prefix));
     (!trimmed.is_empty() && !injected).then(|| clip(trimmed, TITLE_CHARS))
+}
+
+fn unprompted(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|metadata| metadata.len() <= HEAD_WINDOW)
+        && codex_title(path).is_empty()
 }
 
 pub(crate) fn codex_title(path: &Path) -> String {
