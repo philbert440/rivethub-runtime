@@ -10,12 +10,15 @@ use wire::gateway::wiki::WikiSlug;
 use wire::wiki::FoldMark;
 use wire::wiki::normalize_slug;
 
+use super::DECISIONS_HEADING;
+use super::DecisionStore;
 use super::Slug;
 use super::Topic;
 use super::TopicError;
 use super::TopicId;
 use super::TopicKey;
 use super::TopicStore;
+use super::render_decisions;
 use crate::BoxError;
 use crate::memory::MemoryStore;
 use crate::memory::MemoryStoreError;
@@ -227,17 +230,18 @@ pub(crate) async fn root_page(
 pub async fn sync_topic_page(
     topics: &dyn TopicStore,
     pages: &dyn TopicPageStore,
+    decisions: &dyn DecisionStore,
     job: &SyncTopicPage,
     now: DateTime<Utc>,
 ) -> Result<(), TopicPageError> {
     let sync = PageSync { topics, pages, now };
     if let Some(id) = job.topic_id {
-        return sync.topic(id, &job.fold).await;
+        return sync.topic(id, &job.fold, decisions).await;
     }
     for listing in topics.list().await? {
         let topic = listing.topic;
         if topic.parent.is_none() || topics.page_slug(topic.id).await?.is_some() {
-            sync.topic(topic.id, &[]).await?;
+            sync.topic(topic.id, &[], decisions).await?;
         }
     }
     Ok(())
@@ -257,7 +261,12 @@ struct PageSync<'a> {
 }
 
 impl PageSync<'_> {
-    async fn topic(&self, id: TopicId, fold: &[WikiSlug]) -> Result<(), TopicPageError> {
+    async fn topic(
+        &self,
+        id: TopicId,
+        fold: &[WikiSlug],
+        decisions: &dyn DecisionStore,
+    ) -> Result<(), TopicPageError> {
         let Some(topic) = self.topics.find(&TopicKey::Id(id)).await? else {
             return Ok(());
         };
@@ -274,7 +283,7 @@ impl PageSync<'_> {
                 .fold_page(child, &home, FoldMark::Merged, self.now)
                 .await?;
         }
-        self.reconcile(&root, &home).await
+        self.reconcile(&root, &home, decisions).await
     }
 
     async fn owner(&self, topic: &Topic) -> Result<Topic, TopicError> {
@@ -362,9 +371,15 @@ impl PageSync<'_> {
         Ok(())
     }
 
-    async fn reconcile(&self, root: &Topic, home: &WikiSlug) -> Result<(), TopicPageError> {
+    async fn reconcile(
+        &self,
+        root: &Topic,
+        home: &WikiSlug,
+        decisions: &dyn DecisionStore,
+    ) -> Result<(), TopicPageError> {
         let before = self.read(home).await?;
         let subtopics = self.subtopics(root.id).await?;
+        let decided = decided(root, &subtopics, decisions).await?;
         let mut owned: Vec<PageSection> = Vec::new();
         let mut plain: Vec<PageSection> = Vec::new();
         let mut into_article: Vec<String> = Vec::new();
@@ -372,6 +387,7 @@ impl PageSync<'_> {
         let mut moved: Vec<(Topic, String)> = Vec::new();
         for section in &before.sections {
             match section.topic {
+                None if section.heading == DECISIONS_HEADING => {}
                 None => plain.push(section.clone()),
                 Some(id) if subtopics.iter().any(|sub| sub.id == id) => {
                     match owned.iter_mut().find(|kept| kept.topic == Some(id)) {
@@ -394,6 +410,16 @@ impl PageSync<'_> {
         root.name.as_str().clone_into(&mut after.title);
         after.sections = arranged(&subtopics, owned, &mut plain, &into_sections);
         after.sections.extend(plain);
+        if !decided.is_empty() {
+            after.sections.insert(
+                0,
+                PageSection {
+                    topic: None,
+                    heading: DECISIONS_HEADING.to_owned(),
+                    body: decided,
+                },
+            );
+        }
         for body in &into_article {
             append(&mut after.article, body);
         }
@@ -462,6 +488,19 @@ impl PageSync<'_> {
         }
         self.save(owner.id, &before, &after).await
     }
+}
+
+async fn decided(
+    root: &Topic,
+    subtopics: &[Topic],
+    decisions: &dyn DecisionStore,
+) -> Result<String, TopicError> {
+    let own = decisions.decisions(root.id).await?;
+    let mut theirs = Vec::with_capacity(subtopics.len());
+    for sub in subtopics {
+        theirs.push((sub, decisions.decisions(sub.id).await?));
+    }
+    Ok(render_decisions(&own, &theirs))
 }
 
 fn arranged(

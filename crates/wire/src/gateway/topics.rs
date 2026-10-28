@@ -206,3 +206,68 @@ pub enum DeliveredVia {
     CliFlag,
     None,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum DecisionStatus {
+    Active,
+    Superseded,
+}
+
+#[serde_as]
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicDecision {
+    pub id: String,
+    pub topic_id: String,
+    pub text: String,
+    pub status: DecisionStatus,
+    #[serde(default)]
+    pub superseded_by: Option<String>,
+    pub by: String,
+    #[serde(default)]
+    pub session_id: Option<SessionId>,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub created_at: DateTime<Utc>,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicDecisionList {
+    pub decisions: Vec<TopicDecision>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DecisionCreateRequest {
+    pub text: String,
+    #[serde(default)]
+    pub session_id: Option<SessionId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct DecisionUpdate {
+    pub text: String,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema, Default)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+pub struct DecisionSupersedeRequest {
+    pub text: Option<String>,
+    pub session_id: Option<SessionId>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DecisionSuperseded {
+    pub superseded: TopicDecision,
+    #[serde(default)]
+    pub replacement: Option<TopicDecision>,
+}

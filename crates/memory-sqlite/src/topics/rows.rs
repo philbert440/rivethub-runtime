@@ -59,7 +59,7 @@ pub(super) fn stored(field: &'static str) -> impl FnOnce(kernel::BoxError) -> To
     }
 }
 
-fn timestamp(
+pub(super) fn timestamp(
     text: &str,
     column: &'static str,
 ) -> Result<chrono::DateTime<chrono::Utc>, TopicError> {

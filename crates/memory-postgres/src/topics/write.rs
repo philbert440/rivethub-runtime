@@ -191,6 +191,14 @@ pub(super) async fn fold_into(
     .execute(&mut *conn)
     .await
     .map_err(failed("topic merge suggestions"))?;
+    sqlx::query!(
+        "UPDATE rh_topic_decisions SET topic_id = $2 WHERE topic_id = $1",
+        source,
+        into
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(failed("topic merge decisions"))?;
     sqlx::query!("DELETE FROM rh_topic_aliases WHERE topic_id = $1", source)
         .execute(&mut *conn)
         .await
