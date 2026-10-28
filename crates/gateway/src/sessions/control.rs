@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use kernel::harness::{HarnessAdapter, SessionEvent, TurnAttachment, TurnInput};
+use kernel::harness::{HarnessAdapter, SessionEvent, SessionOption, TurnAttachment, TurnInput};
 use tokio::sync::{mpsc, oneshot};
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::gateway::term::TermSpawnResponse;
@@ -61,12 +61,14 @@ impl ChatHandle {
         text: String,
         system_prompt: Option<String>,
         attachments: Vec<TurnAttachment>,
+        options: Vec<SessionOption>,
     ) -> Result<(), ApiError> {
         let (reply, result) = oneshot::channel();
         let turn = Queued {
             text,
             system_prompt,
             attachments,
+            options,
         };
         self.send(Request::Prompt { turn, reply }).await?;
         result.await.map_err(|_| closed())?
@@ -96,9 +98,14 @@ struct Queued {
     text: String,
     system_prompt: Option<String>,
     attachments: Vec<TurnAttachment>,
+    options: Vec<SessionOption>,
 }
 
 impl Queued {
+    fn split(mut self) -> (Vec<SessionOption>, TurnInput) {
+        (std::mem::take(&mut self.options), self.input())
+    }
+
     fn input(self) -> TurnInput {
         let text = with_system_prompt(self.system_prompt.as_deref(), self.text);
         if self.attachments.is_empty() {
@@ -339,10 +346,16 @@ impl ChatActor {
             self.publish(SessionEvent::UserMessageChunk {
                 text: queued.text.clone(),
             })?;
-            let input = queued.input();
+            let (options, input) = queued.split();
             let harness = self.harness.clone();
             let session = self.session.clone();
+            let service = self.service.clone();
+            let key = self.key.clone();
             turn.spawn(async move {
+                for option in options {
+                    harness.set_option(&session, option.clone()).await?;
+                    service.chose(&key, option);
+                }
                 harness
                     .prompt(&session, input)
                     .await

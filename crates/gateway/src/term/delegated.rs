@@ -109,7 +109,8 @@ async fn exchange(
     system_prompt: Option<String>,
     attachments: Vec<TurnAttachment>,
 ) -> Result<DelegatedReply, ApiError> {
-    chat.prompt(text, system_prompt, attachments).await?;
+    chat.prompt(text, system_prompt, attachments, Vec::new())
+        .await?;
     let mut reply = DelegatedReply::default();
     loop {
         let event = match events.recv().await {
