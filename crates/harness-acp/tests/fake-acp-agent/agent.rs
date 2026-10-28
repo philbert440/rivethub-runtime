@@ -90,7 +90,15 @@ struct AgentState {
     record_new: Option<std::path::PathBuf>,
     cancelled: AtomicBool,
     cancel_notify: Notify,
+    crashed: Notify,
     selection: Mutex<Selection>,
+}
+
+impl AgentState {
+    async fn crash(&self) -> std::convert::Infallible {
+        self.crashed.notify_one();
+        std::future::pending().await
+    }
 }
 
 fn prepare(args: FakeArgs) -> Option<AgentState> {
@@ -118,6 +126,7 @@ fn prepare(args: FakeArgs) -> Option<AgentState> {
         record_new: args.record_new,
         cancelled: AtomicBool::new(false),
         cancel_notify: Notify::new(),
+        crashed: Notify::new(),
         selection: Mutex::new(Selection::initial()),
     })
 }
@@ -155,9 +164,6 @@ fn on_new_session(
     request: &acp::NewSessionRequest,
     responder: Responder<acp::NewSessionResponse>,
 ) -> Result<(), acp::Error> {
-    if matches!(state.crash_on, Some(CrashPoint::New)) {
-        std::process::abort();
-    }
     if let Some(path) = &state.record_new {
         use std::io::Write as _;
         std::fs::OpenOptions::new()
@@ -295,7 +301,7 @@ async fn execute_prompt(
     session_id: &acp::SessionId,
 ) -> Result<acp::StopReason, acp::Error> {
     if matches!(state.crash_on, Some(CrashPoint::Prompt)) {
-        std::process::abort();
+        match state.crash().await {}
     }
     for step in &state.steps {
         if let Some(stop) = script::run_step(connection, session_id, step).await? {
@@ -344,6 +350,9 @@ async fn serve(state: Arc<AgentState>) -> Result<(), acp::Error> {
         )
         .on_receive_request(
             async move |request: acp::NewSessionRequest, responder, _connection| {
+                if matches!(new_state.crash_on, Some(CrashPoint::New)) {
+                    match new_state.crash().await {}
+                }
                 on_new_session(&new_state, &request, responder)
             },
             agent_client_protocol::on_receive_request!(),
@@ -385,7 +394,16 @@ fn main() -> std::process::ExitCode {
     let Ok(runtime) = tokio::runtime::Runtime::new() else {
         return std::process::ExitCode::FAILURE;
     };
-    if runtime.block_on(serve(Arc::new(state))).is_ok() {
+    let state = Arc::new(state);
+    let watched = Arc::clone(&state);
+    let served = runtime.block_on(async {
+        tokio::select! {
+            served = serve(state) => served.is_ok(),
+            () = watched.crashed.notified() => false,
+        }
+    });
+    runtime.shutdown_background();
+    if served {
         std::process::ExitCode::SUCCESS
     } else {
         std::process::ExitCode::FAILURE
