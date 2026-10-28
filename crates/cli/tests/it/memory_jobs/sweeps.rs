@@ -261,19 +261,19 @@ async fn cron_registration_and_due_jobs_follow_roles_and_wiki_switch(pool: PgPoo
     workers::schedule::enqueue_due(&queue, &entries, "2026-10-16T12:30:00Z".parse()?, &cancel)
         .await?;
     let expected: Vec<_> = [
-        FixedJob::EnqueueUnembedded,
-        FixedJob::EnqueueUnchunked,
-        FixedJob::EnqueueIdle,
-        FixedJob::EnqueueStaleSummaries,
-        FixedJob::EnqueueWikiBackfill,
-        FixedJob::EnqueueStaleWiki,
+        (FixedJob::EnqueueUnembedded, "unembedded-sweep"),
+        (FixedJob::EnqueueUnchunked, "unchunked-sweep"),
+        (FixedJob::EnqueueIdle, "idle-enqueue"),
+        (FixedJob::EnqueueStaleSummaries, "stale-compaction-sweep"),
+        (FixedJob::EnqueueWikiBackfill, "wiki-backfill"),
+        (FixedJob::EnqueueStaleWiki, "stale-wiki-sweep"),
     ]
     .into_iter()
-    .map(|task| Job {
+    .map(|(task, key)| Job {
         name: JobName::Fixed(task),
         payload: JsonObject::default(),
-        key: None,
-        key_mode: JobKeyMode::Replace,
+        key: Some(key.to_owned()),
+        key_mode: JobKeyMode::KeepRunAt,
         priority: 0,
         run_at: None,
         max_attempts: Some(25),

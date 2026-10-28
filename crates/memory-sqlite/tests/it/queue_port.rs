@@ -287,3 +287,9 @@ async fn queue_notifications_survive_the_empty_claim_to_wait_transition() -> Tes
     store.complete(claimed.id).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn a_pending_sweep_is_queued_once() -> TestResult {
+    let opened = open()?;
+    testkit::sweeps::a_pending_sweep_is_queued_once(&opened.store).await
+}

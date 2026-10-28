@@ -14,6 +14,7 @@ pub mod pgdump;
 pub mod provider;
 pub mod sqlite;
 pub mod stub;
+pub mod sweeps;
 pub mod task_memory;
 pub mod topic_pages;
 pub mod topics;
