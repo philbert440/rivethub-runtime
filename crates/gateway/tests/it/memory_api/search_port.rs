@@ -72,6 +72,7 @@ fn search_routes_reject_wrong_types_before_the_port() {
         "/api/memory/search?q=x&window=wrong",
         "/api/memory/search?q=x&mode=wrong",
         "/api/memory/search?q=x&role=wrong",
+        "/api/memory/search?q=x&exclude_roles=tool,wrong",
     ] {
         let response =
             block_on(answer(app.clone(), recorded("GET", target, Vec::new()))).expect("http");
@@ -96,5 +97,28 @@ fn search_routes_reject_wrong_types_before_the_port() {
     assert_eq!(
         recorded_searches(&block_on(store.requests())),
         Vec::<&kernel::memory::SearchQuery>::new()
+    );
+}
+
+#[test]
+fn search_route_forwards_excluded_roles() {
+    let (store, app) = seeded().expect("store");
+    let http = block_on(answer(
+        app,
+        recorded(
+            "GET",
+            "/api/memory/search?q=release&exclude_roles=tool,system",
+            Vec::new(),
+        ),
+    ))
+    .expect("http");
+    assert_eq!(http.status, 200);
+    let requests = block_on(store.requests());
+    let [query] = recorded_searches(&requests)[..] else {
+        panic!("one search")
+    };
+    assert_eq!(
+        query.exclude_roles,
+        vec![wire::message::Role::Tool, wire::message::Role::System]
     );
 }

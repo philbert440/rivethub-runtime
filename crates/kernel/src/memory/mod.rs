@@ -190,6 +190,7 @@ pub struct SearchQuery {
     pub scope: MemoryScope,
     pub agent: Option<String>,
     pub role: Option<Role>,
+    pub exclude_roles: Vec<Role>,
     pub tool_name: Option<String>,
     pub tag: Option<TagLiteral>,
     pub limit: Limit,

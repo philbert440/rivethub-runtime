@@ -19,6 +19,7 @@ pub(crate) fn query(text: &str, mode: SearchMode) -> SearchQuery {
         scope: MemoryScope::Both,
         agent: None,
         role: None,
+        exclude_roles: Vec::new(),
         tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(10), 10, 1..=50),

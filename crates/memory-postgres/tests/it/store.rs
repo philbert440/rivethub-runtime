@@ -144,6 +144,7 @@ fn query(text: &str, limit: u32) -> SearchQuery {
         scope: MemoryScope::Both,
         agent: None,
         role: None,
+        exclude_roles: Vec::new(),
         tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(limit), 20, 1..=50),
@@ -293,8 +294,13 @@ async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
             deploy_summary.agent.as_deref(),
             deploy_summary.session_id.as_deref()
         ),
-        (MemoryHitSource::Summary, None, None, None),
-        "a summary hit carries no role, agent or session"
+        (
+            MemoryHitSource::Summary,
+            None,
+            None,
+            Some("claude-code:seed")
+        ),
+        "a summary hit carries its session but no role or agent"
     );
 
     let staging = memory.search(query("staging database", 5)).await?;

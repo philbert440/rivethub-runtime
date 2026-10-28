@@ -130,3 +130,28 @@ async fn without_filters_every_matching_row_is_found() -> TestResult {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn excluded_roles_drop_messages_and_summary_hits_name_their_session() -> TestResult {
+    let (_dir, store) = store(None)?;
+    seed(&store).await?;
+    for mode in MODES {
+        let mut search = query(TEXT, mode);
+        search.exclude_roles = vec![Role::Tool, Role::System];
+        assert_eq!(
+            hits(&store, search).await?,
+            ids(&[USER, ASSISTANT, SUMMARY]),
+            "{mode}"
+        );
+        let mut search = query(TEXT, mode);
+        search.scope = MemoryScope::Summaries;
+        let outcome = store.search_at(search, clock()?, &Utc).await?;
+        let sessions: Vec<Option<&str>> = outcome
+            .results
+            .iter()
+            .map(|hit| hit.session_id.as_deref())
+            .collect();
+        assert_eq!(sessions, vec![Some("ops")], "{mode}");
+    }
+    Ok(())
+}

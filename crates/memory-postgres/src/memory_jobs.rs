@@ -15,7 +15,7 @@ use crate::graphile::GraphileQueue;
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-enum ToolArguments {
+pub(crate) enum ToolArguments {
     Object(JsonObject),
     Encoded(String),
 }
