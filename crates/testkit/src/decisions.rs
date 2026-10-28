@@ -35,6 +35,15 @@ pub async fn decisions_are_the_topic_page_decisions_section(stores: PageStores<'
     store
         .keep_decisions(&[replacement.clone(), superseded.clone()])
         .await?;
+    let stale = edited.edit(text("Use step-ca everywhere")?, at(4))?;
+    same(
+        "a stale edit leaves the superseded decision alone",
+        matches!(
+            store.keep_decisions(&[stale]).await,
+            Err(TopicError::DecisionSuperseded { .. })
+        ),
+        true,
+    )?;
     same(
         "listed",
         store.decisions(root.id).await?,

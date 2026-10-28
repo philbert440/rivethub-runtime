@@ -5,6 +5,8 @@ use axum::Json;
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
+use chrono::DateTime;
+use chrono::SubsecRound as _;
 use chrono::Utc;
 use kernel::topics::Decision;
 use kernel::topics::DecisionId;
@@ -47,7 +49,7 @@ pub(super) async fn add(
 ) -> Result<(StatusCode, Json<TopicDecision>), ApiError> {
     let topic = resolve_id(gateway.topics()?.as_ref(), &key).await?;
     let text = DecisionText::new(&request.text).map_err(map::error)?;
-    let added = Decision::new(topic, text, user.as_str(), request.session_id, Utc::now());
+    let added = Decision::new(topic, text, user.as_str(), request.session_id, now());
     gateway
         .decisions()?
         .keep_decisions(std::slice::from_ref(&added))
@@ -64,7 +66,7 @@ pub(super) async fn edit(
     let store = gateway.decisions()?;
     let current = found(&gateway, &key, &id).await?;
     let text = DecisionText::new(&request.text).map_err(map::error)?;
-    let edited = current.edit(text, Utc::now()).map_err(map::error)?;
+    let edited = current.edit(text, now()).map_err(map::error)?;
     store
         .keep_decisions(std::slice::from_ref(&edited))
         .await
@@ -80,7 +82,7 @@ pub(super) async fn supersede(
 ) -> Result<Json<DecisionSuperseded>, ApiError> {
     let store = gateway.decisions()?;
     let current = found(&gateway, &key, &id).await?;
-    let now = Utc::now();
+    let now = now();
     let replacement = match request.text.as_deref() {
         Some(text) => Some(Decision::new(
             current.topic,
@@ -113,4 +115,8 @@ async fn found(gateway: &Gateway, key: &str, id: &str) -> Result<Decision, ApiEr
     topic_decision(gateway.decisions()?.as_ref(), topic, id)
         .await
         .map_err(map::error)
+}
+
+fn now() -> DateTime<Utc> {
+    Utc::now().trunc_subsecs(3)
 }

@@ -76,26 +76,31 @@ fn decision(row: DecisionRow) -> Result<Decision, TopicError> {
 }
 
 fn upsert(conn: &Connection, decision: &Decision) -> Result<(), TopicError> {
-    conn.execute(
-        "INSERT INTO rh_topic_decisions (id, topic_id, text, status, superseded_by, decided_by,
+    let kept = conn
+        .execute(
+            "INSERT INTO rh_topic_decisions (id, topic_id, text, status, superseded_by, decided_by,
                                          session_id, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
          ON CONFLICT (id) DO UPDATE
             SET text = excluded.text, status = excluded.status,
-                superseded_by = excluded.superseded_by, updated_at = excluded.updated_at",
-        params![
-            decision.id.to_string(),
-            decision.topic.to_string(),
-            decision.text.as_str(),
-            decision.status.to_string(),
-            decision.superseded_by.map(|id| id.to_string()),
-            decision.by,
-            decision.session.as_ref().map(SessionId::as_str),
-            time::stamp(decision.created_at),
-            time::stamp(decision.updated_at)
-        ],
-    )
-    .map_err(failed("decision write"))?;
+                superseded_by = excluded.superseded_by, updated_at = excluded.updated_at
+          WHERE rh_topic_decisions.status = 'active'",
+            params![
+                decision.id.to_string(),
+                decision.topic.to_string(),
+                decision.text.as_str(),
+                decision.status.to_string(),
+                decision.superseded_by.map(|id| id.to_string()),
+                decision.by,
+                decision.session.as_ref().map(SessionId::as_str),
+                time::stamp(decision.created_at),
+                time::stamp(decision.updated_at)
+            ],
+        )
+        .map_err(failed("decision write"))?;
+    if kept == 0 {
+        return Err(TopicError::DecisionSuperseded { id: decision.id });
+    }
     Ok(())
 }
 

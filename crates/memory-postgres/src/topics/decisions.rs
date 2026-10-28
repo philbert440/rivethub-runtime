@@ -87,13 +87,14 @@ impl DecisionStore for PostgresMemory {
     async fn keep_decisions(&self, decisions: &[Decision]) -> Result<(), TopicError> {
         let mut tx = self.pool.begin().await.map_err(failed("decision write"))?;
         for decision in decisions {
-            sqlx::query!(
+            let kept = sqlx::query!(
                 "INSERT INTO rh_topic_decisions (id, topic_id, text, status, superseded_by,
                                                  decided_by, session_id, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                  ON CONFLICT (id) DO UPDATE
                     SET text = EXCLUDED.text, status = EXCLUDED.status,
-                        superseded_by = EXCLUDED.superseded_by, updated_at = EXCLUDED.updated_at",
+                        superseded_by = EXCLUDED.superseded_by, updated_at = EXCLUDED.updated_at
+                  WHERE rh_topic_decisions.status = 'active'",
                 decision.id.uuid(),
                 decision.topic.uuid(),
                 decision.text.as_str(),
@@ -107,6 +108,9 @@ impl DecisionStore for PostgresMemory {
             .execute(&mut *tx)
             .await
             .map_err(failed("decision write"))?;
+            if kept.rows_affected() == 0 {
+                return Err(TopicError::DecisionSuperseded { id: decision.id });
+            }
         }
         let topics: BTreeSet<TopicId> = decisions.iter().map(|decision| decision.topic).collect();
         enqueue_syncs(
