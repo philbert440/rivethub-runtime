@@ -86,6 +86,10 @@ fn a_one_word_reply_is_trimmed_of_punctuation_and_previewed() {
         ),
         Some((SessionTrashReason::OneWordReply, 1, Some("Hi!".to_owned())))
     );
+}
+
+#[test]
+fn an_unanswered_or_long_prompt_is_kept() {
     let unanswered = [turn(SessionMessageRole::User, "hello?")];
     assert_eq!(
         verdict(
@@ -94,7 +98,47 @@ fn a_one_word_reply_is_trimmed_of_punctuation_and_previewed() {
             None,
             TimeDelta::hours(2)
         ),
-        Some((SessionTrashReason::OneWordReply, 1, None))
+        None
+    );
+    let blank_reply = [
+        turn(SessionMessageRole::User, "hello?"),
+        turn(SessionMessageRole::Assistant, "  "),
+    ];
+    assert_eq!(
+        verdict(
+            &SessionActivity::default(),
+            &blank_reply,
+            None,
+            TimeDelta::hours(2)
+        ),
+        None
+    );
+    let long_prompt = "a".repeat(281);
+    let noted = [
+        turn(SessionMessageRole::User, &long_prompt),
+        turn(SessionMessageRole::Assistant, "Noted."),
+    ];
+    assert_eq!(
+        verdict(
+            &SessionActivity::default(),
+            &noted,
+            None,
+            TimeDelta::hours(2)
+        ),
+        None
+    );
+    let short_prompt = "a".repeat(280);
+    let ok = [
+        turn(SessionMessageRole::User, &short_prompt),
+        turn(SessionMessageRole::Assistant, "Noted."),
+    ];
+    assert_eq!(
+        verdict(&SessionActivity::default(), &ok, None, TimeDelta::hours(2)),
+        Some((
+            SessionTrashReason::OneWordReply,
+            1,
+            Some("Noted.".to_owned())
+        ))
     );
 }
 

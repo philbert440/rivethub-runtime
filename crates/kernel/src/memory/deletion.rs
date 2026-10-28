@@ -15,6 +15,9 @@ use super::MemoryStoreError;
 
 pub const TRASH_MIN_AGE: TimeDelta = TimeDelta::hours(1);
 const TRASH_REPLY_MAX_CHARS: usize = 80;
+/// A prompt longer than this carries real content, so its session is kept
+/// even when the reply was a single word.
+const TRASH_PROMPT_MAX_CHARS: usize = 280;
 pub const TOMBSTONE_PURGE_BATCH: u32 = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -127,6 +130,7 @@ struct Turns {
     user: u64,
     assistant: u64,
     reply: Option<String>,
+    prompt_chars: usize,
     kept: bool,
 }
 
@@ -142,8 +146,10 @@ impl Turns {
             turns.kept |= tools || attachments;
             match turn.role {
                 SessionMessageRole::User => {
-                    if !turn.text.trim().is_empty() {
+                    let prompt = turn.text.trim();
+                    if !prompt.is_empty() {
                         turns.user += 1;
+                        turns.prompt_chars = turns.prompt_chars.max(prompt.chars().count());
                     }
                 }
                 SessionMessageRole::Assistant => {
@@ -170,6 +176,7 @@ impl Turns {
             user: activity.user_messages,
             assistant: activity.assistant_messages,
             reply: activity.reply.clone(),
+            prompt_chars: 0,
             kept: activity.kept(),
         }
     }
@@ -203,8 +210,15 @@ pub fn trash_verdict(signals: &TrashSignals<'_>) -> Option<TrashVerdict> {
         });
     }
     let user_turns = memory.user.max(transcript.user);
-    let brief = user_turns == 1 && memory.brief() && transcript.brief();
     let reply = transcript.reply.as_deref().or(memory.reply.as_deref());
+    // An unanswered prompt or a long one is not obviously junk: the user may
+    // still want to retry it, or the prompt itself was the content.
+    let answered = reply.is_some_and(|reply| !reply.trim().is_empty());
+    let brief = user_turns == 1
+        && answered
+        && transcript.prompt_chars <= TRASH_PROMPT_MAX_CHARS
+        && memory.brief()
+        && transcript.brief();
     brief.then(|| TrashVerdict {
         reason: SessionTrashReason::OneWordReply,
         user_turns,
