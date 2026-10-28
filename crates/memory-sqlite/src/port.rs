@@ -21,6 +21,9 @@ use crate::error::SqliteError;
 use crate::queue::FailOutcome;
 use crate::queue::JobInsert;
 use crate::queue::JobPayload;
+use crate::queue::insert_job;
+use crate::queue::replace;
+use crate::queue::revive_one;
 
 #[async_trait]
 impl JobQueue for SqliteStore {
@@ -39,14 +42,15 @@ impl JobQueue for SqliteStore {
                 source,
             })
         })?;
-        let now = Utc::now();
-        let insert = job_insert(&job, payload.clone(), now)?;
-        let run_at = insert.run_at;
-        let inserted = self.enqueue_returning(insert).await.map_err(unavailable)?;
-        let text = match inserted {
-            Some(id) => id,
-            None => self.existing_key(&job, payload, run_at, now).await?,
-        };
+        let insert = job_insert(&job, payload, Utc::now())?;
+        let mode = job.key_mode;
+        let (text, wake) = self
+            .with_conn(move |conn| enqueue_atomically(conn, &insert, mode))
+            .await
+            .map_err(unavailable)?;
+        if wake {
+            self.notifications.send_replace(());
+        }
         self.remember_claim(&text).map_err(unavailable)
     }
 
@@ -134,37 +138,31 @@ impl JobQueue for SqliteStore {
     }
 }
 
-impl SqliteStore {
-    async fn existing_key(
-        &self,
-        job: &Job,
-        payload: String,
-        run_at: chrono::DateTime<Utc>,
-        now: chrono::DateTime<Utc>,
-    ) -> Result<String, JobQueueError> {
-        let Some(key) = job.key.clone() else {
-            return Err(unavailable(SqliteError::InsertRejected));
-        };
-        match job.key_mode {
-            JobKeyMode::Replace => self
-                .replace_job(key.clone(), payload, run_at, now)
-                .await
-                .map_err(unavailable)?,
-            JobKeyMode::KeepRunAt => {
-                if self
-                    .revive(key.clone(), payload, now)
-                    .await
-                    .map_err(unavailable)?
-                {
-                    self.notifications.send_replace(());
+fn enqueue_atomically(
+    conn: &mut rusqlite::Connection,
+    job: &JobInsert,
+    mode: JobKeyMode,
+) -> Result<(String, bool), SqliteError> {
+    let tx = conn
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(SqliteError::query("job enqueue begin"))?;
+    let enqueued = match (insert_job(&tx, job)?, &job.key) {
+        (Some(id), _) => (id, true),
+        (None, None) => return Err(SqliteError::InsertRejected),
+        (None, Some(key)) => {
+            let wake = match mode {
+                JobKeyMode::Replace => {
+                    replace(&tx, key, &job.payload, job.run_at, job.now)?;
+                    true
                 }
-            }
+                JobKeyMode::KeepRunAt => revive_one(&tx, key, &job.payload, job.now)?,
+            };
+            (id_for_key(&tx, key)?, wake)
         }
-        let key_for_lookup = key;
-        self.with_conn(move |conn| id_for_key(conn, &key_for_lookup))
-            .await
-            .map_err(unavailable)
-    }
+    };
+    tx.commit()
+        .map_err(SqliteError::query("job enqueue commit"))?;
+    Ok(enqueued)
 }
 
 fn revive_dead_jobs(
