@@ -7,7 +7,7 @@ use config::Config;
 use config::provider::CliProvider;
 use kernel::harness::{
     HarnessAdapter, HarnessAdapterError, HarnessCommands, SessionEvent, SessionOption, SessionSpec,
-    TurnInput,
+    SystemPromptSupport, TurnInput,
 };
 use kernel::model::{Degradation, ProviderHealth, ProviderStatus};
 use tokio::sync::mpsc::Receiver;
@@ -222,6 +222,10 @@ impl HeadlessHarness {
 impl HarnessAdapter for HeadlessHarness {
     async fn release(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
         self.ready()?.release(session).await
+    }
+
+    fn system_prompt(&self, harness: HarnessId) -> SystemPromptSupport {
+        crate::launch::system_prompt(harness)
     }
 
     async fn new_session(&self, spec: SessionSpec) -> Result<SessionId, HarnessAdapterError> {

@@ -9,10 +9,8 @@ use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
 use kernel::topics::StartupContext;
 use kernel::topics::Topic;
-use kernel::topics::TopicStore;
 use kernel::topics::startup_context;
 use wire::gateway::topics::StartupContext as StartupBody;
-use wire::harness::HarnessSessionSummary;
 use wire::session_id::SessionId;
 
 use super::map;
@@ -21,17 +19,62 @@ use crate::error::ApiError;
 use crate::tenancy::UserId;
 use crate::term::TerminalService;
 
+pub(crate) async fn prepare(
+    gateway: &Gateway,
+    topic: &Topic,
+    prompt: Option<&str>,
+) -> Option<StartupContext> {
+    match build(gateway, topic, prompt).await {
+        Ok(context) => Some(context),
+        Err(error) => {
+            tracing::warn!(topic = %topic.id, "startup context was not built: {error}");
+            None
+        }
+    }
+}
+
+async fn build(
+    gateway: &Gateway,
+    topic: &Topic,
+    prompt: Option<&str>,
+) -> Result<StartupContext, BoxError> {
+    let (pages, _) = gateway
+        .startup_memory()
+        .ok_or("startup memory is not configured")?;
+    let topics = gateway.topics()?;
+    let memory = gateway.store();
+    Ok(startup_context(
+        topics.as_ref(),
+        pages,
+        memory.as_ref(),
+        topic,
+        prompt,
+        Utc::now(),
+    )
+    .await?)
+}
+
+pub(crate) struct Started<'a> {
+    pub(crate) session: &'a SessionId,
+    pub(crate) owner: &'a str,
+    pub(crate) topic: &'a Topic,
+    pub(crate) context: Option<StartupContext>,
+}
+
 pub(crate) async fn begin(
     gateway: &Gateway,
     service: &Arc<TerminalService>,
     user: &UserId,
-    summary: &mut HarnessSessionSummary,
-    topic: &Topic,
-    prompt: Option<&str>,
-) -> Result<(), ApiError> {
-    let topics = gateway.topics()?;
-    let session = summary.session_id.clone();
-    let placed = topics
+    started: Started<'_>,
+) -> Result<Option<StartupBody>, ApiError> {
+    let Started {
+        session,
+        owner,
+        topic,
+        context,
+    } = started;
+    let placed = gateway
+        .topics()?
         .place(Placement {
             session: session.clone(),
             topic: topic.id,
@@ -40,36 +83,25 @@ pub(crate) async fn begin(
         })
         .await;
     if let Err(error) = placed {
-        if let Err(cleanup) = service.remove_session(user, session.as_str()).await {
+        if let Err(cleanup) = service.remove_session(user, owner).await {
             tracing::warn!(%session, "an unplaced new session was not removed: {cleanup}");
         }
         return Err(map::error(error));
     }
-    summary.startup_context = match build(gateway, topics.as_ref(), &session, topic, prompt).await {
-        Ok(context) => Some((&context).into()),
-        Err(error) => {
-            tracing::warn!(%session, "startup context was not built: {error}");
-            None
-        }
+    let Some(context) = context else {
+        return Ok(None);
     };
-    Ok(())
-}
-
-async fn build(
-    gateway: &Gateway,
-    topics: &dyn TopicStore,
-    session: &SessionId,
-    topic: &Topic,
-    prompt: Option<&str>,
-) -> Result<StartupContext, BoxError> {
-    let (pages, kept) = gateway
-        .startup_memory()
-        .ok_or("startup memory is not configured")?;
-    let now = Utc::now();
-    let context =
-        startup_context(topics, pages, gateway.store().as_ref(), topic, prompt, now).await?;
-    kept.keep_startup(session, &context, now).await?;
-    Ok(context)
+    let kept = match gateway.startup_memory() {
+        Some((_, kept)) => kept.keep_startup(session, &context, Utc::now()).await,
+        None => return Ok(None),
+    };
+    match kept {
+        Ok(()) => Ok(Some((&context).into())),
+        Err(error) => {
+            tracing::warn!(%session, "startup context was not kept: {error}");
+            Ok(None)
+        }
+    }
 }
 
 pub(super) async fn kept(

@@ -21,6 +21,7 @@ pub(crate) struct ChatStart {
     pub(crate) effort: Option<ThinkingLevel>,
     pub(crate) cwd: Option<std::path::PathBuf>,
     pub(crate) agent: Option<AgentLaunch>,
+    pub(crate) startup_context: Option<String>,
 }
 
 type ChatDefaults = (
@@ -77,6 +78,7 @@ impl TerminalService {
                 effort: None,
                 cwd,
                 agent: None,
+                startup_context: None,
             },
         )
         .await
@@ -93,6 +95,7 @@ impl TerminalService {
             effort,
             cwd,
             agent,
+            startup_context,
         } = start;
         let harness = self
             .harness
@@ -119,6 +122,7 @@ impl TerminalService {
             model: model.clone(),
             effort,
             working_dir: Some(directory.clone()),
+            startup_context,
         };
         let session = harness.new_session(spec).await?;
         let initialized = self

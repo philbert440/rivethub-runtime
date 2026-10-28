@@ -16,6 +16,7 @@ use kernel::harness::HarnessCommands;
 use kernel::harness::SessionEvent;
 use kernel::harness::SessionOption;
 use kernel::harness::SessionSpec;
+use kernel::harness::SystemPromptSupport;
 use kernel::harness::TurnInput;
 use parking_lot::Mutex;
 use tokio::sync::mpsc;
@@ -258,11 +259,19 @@ impl HarnessAdapter for AcpHarnessAdapter {
         entry.tasks.wait().await;
         outcome
     }
+    fn system_prompt(&self, harness: HarnessId) -> SystemPromptSupport {
+        crate::launch::system_prompt(harness)
+    }
+
     async fn new_session(&self, spec: SessionSpec) -> Result<SessionId, HarnessAdapterError> {
         Self::requested_session(&spec)?;
         let command = self.launch_command(spec.harness)?;
         let working_dir = self.working_dir(&spec, &command)?;
-        let agent = crate::connection::start_new(&command, &working_dir)
+        let meta = match spec.startup_context.as_deref() {
+            Some(text) => crate::launch::startup_meta(spec.harness, text).map_err(port)?,
+            None => None,
+        };
+        let agent = crate::connection::start_new(&command, &working_dir, meta)
             .await
             .map_err(port)?;
         let native =

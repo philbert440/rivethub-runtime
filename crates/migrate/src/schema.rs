@@ -10,7 +10,7 @@ use crate::error::Error;
 use crate::upgrade;
 use crate::version::SchemaVersion;
 
-const CURRENT: SchemaVersion = SchemaVersion::V15;
+const CURRENT: SchemaVersion = SchemaVersion::V16;
 
 const SCHEMA_SQL: &str = include_str!("schema/schema_v7.sql");
 
@@ -175,6 +175,8 @@ fn create_fresh(conn: &mut Connection) -> Result<(), Error> {
     tx.execute_batch(include_str!("schema/topic_page_sections_v14.sql"))
         .map_err(Error::SqliteCreate)?;
     tx.execute_batch(include_str!("schema/session_startup_v15.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/startup_delivery_v16.sql"))
         .map_err(Error::SqliteCreate)?;
     apply_tail_indexes(&tx)?;
     stamp_current(&tx)?;

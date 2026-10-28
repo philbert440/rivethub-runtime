@@ -34,6 +34,7 @@ const COMMAND_CAPACITY: usize = 32;
 pub(crate) enum SessionCommand {
     NewSession {
         cwd: PathBuf,
+        meta: Option<acp::Meta>,
         reply: oneshot::Sender<Result<acp::NewSessionResponse, acp::Error>>,
     },
     LoadSession {
@@ -151,10 +152,12 @@ pub(crate) async fn request<R>(
 pub(crate) async fn start_new(
     command: &AcpCommand,
     working_dir: &Path,
+    meta: Option<acp::Meta>,
 ) -> Result<AgentConnection, AcpError> {
     let connected = connect(command, working_dir).await?;
     let response = request(&connected.commands, |reply| SessionCommand::NewSession {
         cwd: working_dir.to_path_buf(),
+        meta,
         reply,
     })
     .await
@@ -398,8 +401,8 @@ async fn command_loop(
                 };
                 match command {
                     SessionCommand::Cancel { acp_session } => send_cancel(&connection, acp_session),
-                    SessionCommand::NewSession { cwd, reply } => {
-                        deliver(reply, new_session(&connection, cwd).await);
+                    SessionCommand::NewSession { cwd, meta, reply } => {
+                        deliver(reply, new_session(&connection, cwd, meta).await);
                     }
                     SessionCommand::LoadSession { native, cwd, reply } => {
                         deliver(reply, load_session(&connection, native, cwd).await);
@@ -439,9 +442,10 @@ fn send_cancel(connection: &ConnectionTo<Agent>, acp_session: acp::SessionId) {
 async fn new_session(
     connection: &ConnectionTo<Agent>,
     cwd: PathBuf,
+    meta: Option<acp::Meta>,
 ) -> Result<acp::NewSessionResponse, acp::Error> {
     connection
-        .send_request(acp::NewSessionRequest::new(cwd))
+        .send_request(acp::NewSessionRequest::new(cwd).meta(meta))
         .block_task()
         .await
 }

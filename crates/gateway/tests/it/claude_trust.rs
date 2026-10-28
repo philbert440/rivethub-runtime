@@ -105,6 +105,7 @@ impl Lab {
             force: None,
             cols: None,
             rows: None,
+            topic_id: None,
         };
         http(
             &self.gateway,

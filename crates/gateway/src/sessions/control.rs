@@ -308,7 +308,11 @@ impl ChatActor {
                 self.surface = Surface::Idle;
             }
             launch.resume = Some(self.session.native().into());
-            let result = self.service.spawn_raw(&self.user, &self.key, launch).await;
+            let result = self
+                .service
+                .spawn_raw(&self.user, &self.key, launch)
+                .await
+                .map(|spawned| spawned.response);
             if result.is_ok() {
                 self.surface = Surface::Terminal;
                 self.terminal_busy = true;
