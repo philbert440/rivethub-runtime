@@ -128,6 +128,16 @@ pub struct HarnessSessionResponse {
     #[serde(flatten)]
     pub summary: HarnessSessionSummary,
     pub redirected_to: Option<SessionId>,
+    pub switches: Option<SessionSwitches>,
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSwitches {
+    pub model: bool,
+    pub effort: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

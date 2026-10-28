@@ -29,6 +29,10 @@ impl Advertisement {
         }
     }
 
+    pub(crate) fn options(&self) -> Arc<SessionOptions> {
+        Arc::clone(&self.options)
+    }
+
     pub(crate) fn commands(&self) -> &[Command] {
         &self.commands
     }

@@ -3,6 +3,7 @@ use crate::topics::DeliveredVia;
 use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
+use wire::gateway::sessions::SessionSwitches;
 use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
 use wire::json::JsonObject;
@@ -23,6 +24,8 @@ pub enum HarnessAdapterError {
     EventStreamTaken(SessionId),
     #[error("the harness does not offer a {option} option")]
     OptionUnavailable { option: String },
+    #[error("the harness does not offer {value} as its {option}")]
+    OptionRejected { option: String, value: String },
     #[error("harness failed: {message}")]
     Failed {
         message: String,
@@ -205,6 +208,26 @@ pub enum SessionOption {
     Effort(ThinkingLevel),
 }
 
+impl SessionOption {
+    #[must_use]
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Mode(_) => "mode",
+            Self::Model(_) => "model",
+            Self::Effort(_) => "effort",
+        }
+    }
+
+    #[must_use]
+    pub fn for_turn(model: Option<String>, effort: Option<ThinkingLevel>) -> Vec<Self> {
+        model
+            .map(Self::Model)
+            .into_iter()
+            .chain(effort.map(Self::Effort))
+            .collect()
+    }
+}
+
 #[async_trait]
 pub trait HarnessAdapter: Send + Sync {
     async fn release(&self, _session: &SessionId) -> Result<(), HarnessAdapterError> {
@@ -238,6 +261,20 @@ pub trait HarnessAdapter: Send + Sync {
         session: &SessionId,
         option: SessionOption,
     ) -> Result<(), HarnessAdapterError>;
+
+    fn switches(&self, _session: &SessionId) -> SessionSwitches {
+        SessionSwitches::default()
+    }
+
+    fn admit(
+        &self,
+        _session: &SessionId,
+        option: &SessionOption,
+    ) -> Result<(), HarnessAdapterError> {
+        Err(HarnessAdapterError::OptionUnavailable {
+            option: option.name().to_owned(),
+        })
+    }
 
     async fn events(
         &self,

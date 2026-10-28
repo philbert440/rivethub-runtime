@@ -153,6 +153,12 @@ pub(crate) fn port(error: impl Into<AcpError>) -> kernel::harness::HarnessAdapte
             option: (*category).to_owned(),
         };
     }
+    if let AcpError::ConfigValueRejected { category, value } = &error {
+        return kernel::harness::HarnessAdapterError::OptionRejected {
+            option: (*category).to_owned(),
+            value: value.clone(),
+        };
+    }
     kernel::harness::HarnessAdapterError::Failed {
         message: error.to_string(),
         source: Box::new(error),

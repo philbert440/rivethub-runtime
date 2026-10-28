@@ -15,6 +15,7 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use wire::gateway::ProviderRecovery;
+use wire::gateway::sessions::SessionSwitches;
 use wire::harness::{ApprovalDecision, HarnessId, HarnessOffering};
 use wire::session_id::SessionId;
 
@@ -265,6 +266,21 @@ impl HarnessAdapter for HeadlessHarness {
         option: SessionOption,
     ) -> Result<(), HarnessAdapterError> {
         self.ready()?.set_option(session, option).await
+    }
+
+    fn switches(&self, session: &SessionId) -> SessionSwitches {
+        match &*self.discovery.borrow() {
+            Discovery::Ready(adapter) => adapter.switches(session),
+            Discovery::Degraded(_) => SessionSwitches::default(),
+        }
+    }
+
+    fn admit(
+        &self,
+        session: &SessionId,
+        option: &SessionOption,
+    ) -> Result<(), HarnessAdapterError> {
+        self.ready()?.admit(session, option)
     }
 
     async fn events(

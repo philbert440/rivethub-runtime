@@ -22,6 +22,7 @@ use parking_lot::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::CancellationToken;
+use wire::gateway::sessions::SessionSwitches;
 use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
@@ -176,6 +177,21 @@ impl AcpHarnessAdapter {
                 images: agent.capabilities.prompt_capabilities.image,
             },
         );
+    }
+
+    fn session_options(&self, session: &SessionId) -> Arc<SessionOptions> {
+        let live = self
+            .sessions
+            .lock()
+            .get(session)
+            .map(|entry| Arc::clone(&entry.options));
+        live.or_else(|| {
+            self.advertised
+                .lock()
+                .get(&session.harness())
+                .map(crate::discovery::Advertisement::options)
+        })
+        .unwrap_or_default()
     }
 
     fn remove(&self, session: &SessionId) {
@@ -426,6 +442,21 @@ impl HarnessAdapter for AcpHarnessAdapter {
         .map_err(|failure| port(port_failure(failure, "session/set_config_option")))?;
         snapshot.options.replace(response.config_options);
         Ok(())
+    }
+
+    fn switches(&self, session: &SessionId) -> SessionSwitches {
+        self.session_options(session).switches()
+    }
+
+    fn admit(
+        &self,
+        session: &SessionId,
+        option: &SessionOption,
+    ) -> Result<(), HarnessAdapterError> {
+        self.session_options(session)
+            .select(option)
+            .map(drop)
+            .map_err(port)
     }
 
     async fn events(

@@ -7,7 +7,7 @@ use axum::{Extension, Json, Router};
 use chrono::Utc;
 use kernel::ToolContext;
 use kernel::agent::{Turn, TurnError, TurnLimits, TurnResult, TurnRunner, excluded_names};
-use kernel::harness::TurnAttachment;
+use kernel::harness::{SessionOption, TurnAttachment};
 use kernel::model::ModelRequest;
 use kernel::topics::DeliveredVia;
 use kernel::topics::StartupContext;
@@ -191,6 +191,10 @@ async fn accept(
     session: String,
     request: SessionPostRequest,
 ) -> Result<Response, ApiError> {
+    let options = SessionOption::for_turn(request.model, request.thinking);
+    if !options.is_empty() {
+        admit(&gateway, &session, &options)?;
+    }
     let attachments = staged(&gateway, &user, request.attachments).await?;
     let chat = service(&gateway)?.chat(&user, &session)?;
     if !attachments.is_empty() {
@@ -207,13 +211,26 @@ async fn accept(
             .await
             .map_err(super::harnesses::upload_error)?;
     }
-    chat.prompt(request.text, request.system_prompt, attachments)
+    chat.prompt(request.text, request.system_prompt, attachments, options)
         .await?;
     Ok(Json(SessionPostAccepted {
         accepted: true,
         session,
     })
     .into_response())
+}
+
+fn admit(gateway: &Gateway, session: &str, options: &[SessionOption]) -> Result<(), ApiError> {
+    let canonical = session
+        .parse::<wire::session_id::SessionId>()
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let adapter = service(gateway)?
+        .adapter()
+        .ok_or_else(|| ApiError::Unavailable("chat harness unavailable".into()))?;
+    for option in options {
+        adapter.admit(&canonical, option)?;
+    }
+    Ok(())
 }
 
 async fn staged(

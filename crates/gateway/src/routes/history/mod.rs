@@ -11,7 +11,7 @@ use chrono::Utc;
 use kernel::transcript::{ListLimit, SessionRenameError, StoreSession};
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTitleRequest, HarnessSessionTranscriptResponse,
-    HarnessToolOutput,
+    HarnessToolOutput, SessionSwitches,
 };
 use wire::harness::{
     HarnessCode, HarnessId, HarnessSessionList, HarnessSessionSummary, HarnessStoreSessionList,
@@ -176,8 +176,17 @@ async fn summary(
     };
     Ok(Json(HarnessSessionResponse {
         summary,
+        switches: switches(&gateway, &resolved.session),
         redirected_to: resolved.redirected_to,
     }))
+}
+
+fn switches(gateway: &Gateway, session: &wire::session_id::SessionId) -> Option<SessionSwitches> {
+    gateway
+        .terminal
+        .as_ref()
+        .and_then(|service| service.adapter())
+        .map(|adapter| adapter.switches(session))
 }
 
 async fn transcript(
@@ -235,6 +244,7 @@ async fn rename(
     let summary = store_summary(&gateway, &row, live.as_ref()).await;
     Ok(Json(HarnessSessionResponse {
         summary,
+        switches: switches(&gateway, &resolved.session),
         redirected_to: resolved.redirected_to,
     }))
 }

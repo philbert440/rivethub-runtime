@@ -1,6 +1,7 @@
 use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::SessionOption;
 use parking_lot::Mutex;
+use wire::gateway::sessions::SessionSwitches;
 
 use crate::error::AcpError;
 
@@ -56,6 +57,20 @@ impl SessionOptions {
     pub(crate) fn select(&self, option: &SessionOption) -> Result<ConfigSelection, AcpError> {
         let options = self.options.lock();
         select(&options, option)
+    }
+
+    pub(crate) fn switches(&self) -> SessionSwitches {
+        let options = self.options.lock();
+        let offers = |category: acp::SessionConfigOptionCategory| {
+            options.iter().any(|option| {
+                option.category.as_ref() == Some(&category)
+                    && matches!(option.kind, acp::SessionConfigKind::Select(_))
+            })
+        };
+        SessionSwitches {
+            model: offers(acp::SessionConfigOptionCategory::Model),
+            effort: offers(acp::SessionConfigOptionCategory::ThoughtLevel),
+        }
     }
 }
 
