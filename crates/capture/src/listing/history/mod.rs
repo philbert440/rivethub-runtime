@@ -1,4 +1,5 @@
 mod claude;
+mod display;
 mod tools;
 
 use std::path::Path;
@@ -80,6 +81,7 @@ fn text_turn(turn: Turn) -> Option<HarnessTranscriptTurn> {
         Role::Assistant => SessionMessageRole::Assistant,
         Role::System | Role::Tool => return None,
     };
+    let at = turn.at.timestamp_millis();
     Some(HarnessTranscriptTurn {
         role,
         text: turn.content,
@@ -92,5 +94,7 @@ fn text_turn(turn: Turn) -> Option<HarnessTranscriptTurn> {
         attachments: None,
         complete: false,
         compact: false,
+        started_at_ms: Some(at),
+        ended_at_ms: Some(at),
     })
 }
