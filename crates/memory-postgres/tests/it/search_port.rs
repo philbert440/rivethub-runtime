@@ -21,6 +21,7 @@ fn query(mode: SearchMode) -> SearchQuery {
         scope: MemoryScope::Both,
         agent: None,
         role: None,
+        exclude_roles: Vec::new(),
         tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(1), 10, 1..=50),

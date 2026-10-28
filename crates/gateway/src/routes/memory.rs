@@ -47,6 +47,7 @@ use crate::extract::Body;
 use crate::extract::Query;
 use crate::extract::RawLimit;
 use crate::extract::RoleParam;
+use crate::extract::RolesParam;
 use crate::extract::ScopeParam;
 use crate::extract::SinceParam;
 use crate::extract::TagFilter;
@@ -131,6 +132,7 @@ struct SearchParams {
     scope: Option<ScopeParam>,
     agent: Option<String>,
     role: Option<RoleParam>,
+    exclude_roles: Option<RolesParam>,
     tool_name: Option<String>,
     tag: Option<TagFilter>,
     limit: Option<RawLimit>,
@@ -171,6 +173,10 @@ async fn search(
         scope,
         agent: params.agent,
         role: params.role.map(RoleParam::get),
+        exclude_roles: params
+            .exclude_roles
+            .map(RolesParam::get)
+            .unwrap_or_default(),
         tool_name: params.tool_name,
         tag: params.tag.map(TagFilter::get),
         limit: Limit::clamped(
@@ -388,6 +394,7 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
         scope,
         agent: args.agent,
         role: args.role,
+        exclude_roles: Vec::new(),
         tool_name: args.tool_name,
         tag,
         limit: Limit::clamped(args.limit, SEARCH_TOOL_LIMIT_DEFAULT, 1..=SEARCH_LIMIT_MAX),

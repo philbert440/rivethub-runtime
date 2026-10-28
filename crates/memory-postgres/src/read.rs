@@ -1,5 +1,6 @@
 use crate::capture::char_prefix;
 use crate::error::Error;
+use crate::memory_jobs::ToolArguments;
 use crate::search::SearchOptions;
 use chrono::DateTime;
 use chrono::Utc;
@@ -62,12 +63,46 @@ impl TryFrom<MessageEntryRow> for MemoryEntry {
             role,
             content: row.content,
             tool_name: row.tool_name,
-            tool_args: stored_json(row.tool_args, "tool_args")?,
+            tool_args: stored_tool_args(row.tool_args)?,
             tool_result: row.tool_result,
             metadata: stored_json(row.metadata, "metadata")?,
             created_at: row.created_at,
         })
     }
+}
+
+fn stored_tool_args(raw: Option<String>) -> Result<Option<JsonObject>, Error> {
+    let Some(text) = raw else {
+        return Ok(None);
+    };
+    let legacy =
+        match serde_json::from_str(&text).map_err(|source| Error::stored("tool_args", source))? {
+            ToolArguments::Object(arguments) => return Ok(Some(arguments)),
+            ToolArguments::Encoded(legacy) => legacy,
+        };
+    #[cfg_attr(
+        dylint_lib = "rr_lints",
+        expect(
+            fallback,
+            reason = "CONTRACT B6 (decision 26): a legacy tool_args string that holds no JSON object is read without arguments"
+        )
+    )]
+    let decoded = serde_json::from_str(&legacy).ok();
+    Ok(decoded)
+}
+
+pub(crate) fn readable_entries(rows: Vec<MessageEntryRow>) -> Vec<MemoryEntry> {
+    let mut entries = Vec::with_capacity(rows.len());
+    for row in rows {
+        let id = row.id.clone();
+        match MemoryEntry::try_from(row) {
+            Ok(entry) => entries.push(entry),
+            Err(error) => {
+                tracing::warn!(id = id.as_deref(), %error, "skipping unreadable memory row");
+            }
+        }
+    }
+    entries
 }
 
 fn stored_json(raw: Option<String>, column: &'static str) -> Result<Option<JsonObject>, Error> {
@@ -354,6 +389,7 @@ impl crate::PostgresMemory {
                 limit: CONTEXT_RELEVANT_LIMIT,
                 agent: Some(agent.clone()),
                 role: None,
+                exclude_roles: Vec::new(),
                 tool_name: None,
                 tag: None,
             })
