@@ -126,6 +126,18 @@ impl TerminalService {
         self.publish_update(key, session, status, reported);
     }
 
+    pub(crate) fn chose(&self, key: &str, option: kernel::harness::SessionOption) {
+        if let Some(summary) = self.summaries.write().get_mut(key) {
+            match option {
+                kernel::harness::SessionOption::Model(model) => summary.model = Some(model),
+                kernel::harness::SessionOption::Effort(level) => {
+                    summary.effort = Some(level.to_string());
+                }
+                kernel::harness::SessionOption::Mode(_) => {}
+            }
+        }
+    }
+
     pub(crate) fn set_blocked(&self, key: &str, session: &SessionId, blocked: bool) {
         let status = match self.summaries.write().get_mut(key) {
             Some(summary) if summary.blocked.unwrap_or(false) != blocked => {

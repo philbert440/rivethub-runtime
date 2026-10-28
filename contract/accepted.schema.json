@@ -5687,6 +5687,16 @@
               "type": "null"
             }
           ]
+        },
+        "switches": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionSwitches"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -5816,6 +5826,21 @@
         "metaAppend",
         "cliFlag",
         "none"
+      ]
+    },
+    "SessionSwitches": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "boolean"
+        },
+        "effort": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "effort"
       ]
     },
     "HarnessSessionTitleRequest": {

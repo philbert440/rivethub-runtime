@@ -93,10 +93,7 @@ impl ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 GatewayError::new(error.to_string()),
             ),
-            Self::Harness(error) => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                GatewayError::new(error.to_string()),
-            ),
+            Self::Harness(error) => (adapter_status(&error), GatewayError::new(error.to_string())),
             Self::Io(_) | Self::Task(_) | Self::Serialize(_) | Self::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 GatewayError::new(INTERNAL_ERROR),
@@ -181,5 +178,19 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, body) = self.status_and_body();
         (status, Json(body)).into_response()
+    }
+}
+
+fn adapter_status(error: &kernel::harness::HarnessAdapterError) -> StatusCode {
+    use kernel::harness::HarnessAdapterError;
+    match error {
+        HarnessAdapterError::OptionUnavailable { .. }
+        | HarnessAdapterError::OptionRejected { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+        HarnessAdapterError::ReleaseUnsupported
+        | HarnessAdapterError::InvalidSession(_)
+        | HarnessAdapterError::UnknownSession(_)
+        | HarnessAdapterError::TurnInFlight(_)
+        | HarnessAdapterError::EventStreamTaken(_)
+        | HarnessAdapterError::Failed { .. } => StatusCode::SERVICE_UNAVAILABLE,
     }
 }

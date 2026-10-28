@@ -183,9 +183,33 @@ impl HarnessAdapter for Harness {
     async fn set_option(
         &self,
         _session: &SessionId,
-        _option: SessionOption,
+        option: SessionOption,
     ) -> Result<(), HarnessAdapterError> {
+        self.trace
+            .send_modify(|trace| trace.push(format!("{}:{option:?}", option.name())));
         Ok(())
+    }
+
+    fn switches(&self, _session: &SessionId) -> wire::gateway::sessions::SessionSwitches {
+        wire::gateway::sessions::SessionSwitches {
+            model: true,
+            effort: false,
+        }
+    }
+
+    fn admit(
+        &self,
+        _session: &SessionId,
+        option: &SessionOption,
+    ) -> Result<(), HarnessAdapterError> {
+        match option {
+            SessionOption::Model(_) => Ok(()),
+            SessionOption::Mode(_) | SessionOption::Effort(_) => {
+                Err(HarnessAdapterError::OptionUnavailable {
+                    option: option.name().to_owned(),
+                })
+            }
+        }
     }
 
     async fn events(

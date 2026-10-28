@@ -132,6 +132,60 @@ async fn a_new_chat_and_its_turn_reach_the_registry_socket() {
 }
 
 #[tokio::test]
+async fn a_turn_switches_only_what_the_harness_offers() {
+    let setup = setup().await;
+    let session = create(&setup, "hermes", None).await;
+    let turn = format!("/api/harness-sessions/{session}/turn");
+    let gateway = &setup.fixture.gateway;
+    let (status, _) = http(
+        gateway,
+        "POST",
+        &turn,
+        r#"{"text":"hi","thinking":"high"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 422);
+    let (status, body) = http(
+        gateway,
+        "POST",
+        &turn,
+        r#"{"text":"hi","model":"opus"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup.harness.traced("prompt:hi").await;
+    let trace = setup.harness.trace.borrow().clone();
+    assert_eq!(trace, ["new", r#"model:Model("opus")"#, "prompt:hi"]);
+    setup.harness.finish.add_permits(1);
+    setup.harness.traced("ended").await;
+    let (status, body) = http(
+        gateway,
+        "GET",
+        &format!(
+            "/api/harness-sessions/{}",
+            wire::session_id::encode_segment(&session)
+        ),
+        "",
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    let described: wire::gateway::sessions::HarnessSessionResponse =
+        serde_json::from_slice(&body).expect("described");
+    assert_eq!(described.summary.model.as_deref(), Some("opus"));
+    assert_eq!(
+        described.switches,
+        Some(wire::gateway::sessions::SessionSwitches {
+            model: true,
+            effort: false
+        })
+    );
+    setup.stop.cancel();
+}
+
+#[tokio::test]
 async fn another_users_chats_stay_off_the_registry_socket() {
     let setup = setup().await;
     let mut socket = watch(&setup, "", ALICE).await;

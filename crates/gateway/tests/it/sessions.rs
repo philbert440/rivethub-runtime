@@ -341,7 +341,7 @@ async fn handoff_waits_for_turn_end_releases_then_resumes_and_delivers_queued_ch
         .service
         .chat(&user("owner"), session.session_id.as_str())
         .expect("chat");
-    chat.prompt("first".into(), None, Vec::new())
+    chat.prompt("first".into(), None, Vec::new(), Vec::new())
         .await
         .expect("prompt accepted");
     harness.traced("prompt:first").await;
@@ -371,7 +371,7 @@ async fn handoff_waits_for_turn_end_releases_then_resumes_and_delivers_queued_ch
     );
     let native = session.session_id.native();
     assert!(fixture.mux.calls.borrow().iter().any(|call| matches!(call, Call::Spawn { argv, .. } if argv.ends_with(&["--resume".into(), native.into()]))));
-    chat.prompt("queued".into(), None, Vec::new())
+    chat.prompt("queued".into(), None, Vec::new(), Vec::new())
         .await
         .expect("queued chat");
     assert!(
@@ -418,7 +418,7 @@ async fn terminal_first_session_queues_chat_until_the_hook_and_delete_releases_c
             "claude-code:11111111-2222-4333-8444-555555555555",
         )
         .expect("registered session");
-    chat.prompt("queued".into(), None, Vec::new())
+    chat.prompt("queued".into(), None, Vec::new(), Vec::new())
         .await
         .expect("queued");
     assert_eq!(*harness.trace.borrow(), Vec::<String>::new());
