@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE rh_topic_decisions SET topic_id = $2 WHERE topic_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a4d4f577cfd5e5835225adad6bd9afa2ca94506f1c704c503244c0d63dce8e77"
+}

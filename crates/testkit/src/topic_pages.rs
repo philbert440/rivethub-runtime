@@ -4,6 +4,7 @@ use kernel::queue::FixedJob;
 use kernel::queue::JobName;
 use kernel::queue::JobQueue;
 use kernel::topics::Change;
+use kernel::topics::DecisionStore;
 use kernel::topics::PageSection;
 use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
@@ -30,6 +31,7 @@ use crate::topics::same;
 pub struct PageStores<'a> {
     pub topics: &'a dyn TopicStore,
     pub pages: &'a dyn TopicPageStore,
+    pub decisions: &'a dyn DecisionStore,
     pub wiki: &'a dyn MemoryStore,
     pub queue: &'a dyn JobQueue,
 }
@@ -39,7 +41,7 @@ impl PageStores<'_> {
         let selector = ClaimSelector::matching(vec![JobName::Fixed(FixedJob::SyncTopicPage)]);
         while let Some(job) = self.queue.claim(&selector).await? {
             let sync = SyncTopicPage::from_payload(&job.payload)?;
-            sync_topic_page(self.topics, self.pages, &sync, at(30)).await?;
+            sync_topic_page(self.topics, self.pages, self.decisions, &sync, at(30)).await?;
             self.queue.complete(job.id).await?;
         }
         Ok(())
@@ -251,6 +253,7 @@ pub async fn syncing_twice_changes_nothing(stores: PageStores<'_>) -> Outcome {
     sync_topic_page(
         stores.topics,
         stores.pages,
+        stores.decisions,
         &SyncTopicPage::every_topic(),
         at(40),
     )
