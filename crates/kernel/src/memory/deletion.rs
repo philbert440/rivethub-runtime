@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::ops::AddAssign;
 
 use async_trait::async_trait;
@@ -70,10 +69,10 @@ pub trait SessionDeletion: Send + Sync {
         now: DateTime<Utc>,
     ) -> Result<DeletedSession, MemoryStoreError>;
 
-    async fn tombstoned(
+    async fn tombstones(
         &self,
         sessions: &[SessionId],
-    ) -> Result<BTreeSet<SessionId>, MemoryStoreError>;
+    ) -> Result<BTreeMap<SessionId, DateTime<Utc>>, MemoryStoreError>;
 
     async fn session_activity(
         &self,
@@ -81,6 +80,14 @@ pub trait SessionDeletion: Send + Sync {
     ) -> Result<BTreeMap<SessionId, SessionActivity>, MemoryStoreError>;
 
     async fn purge_tombstoned(&self, limit: u32) -> Result<DeletedSession, MemoryStoreError>;
+}
+
+#[must_use]
+pub fn used_since(
+    deleted_at: DateTime<Utc>,
+    stamps: impl IntoIterator<Item = Option<DateTime<Utc>>>,
+) -> bool {
+    stamps.into_iter().flatten().any(|stamp| stamp > deleted_at)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]

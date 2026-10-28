@@ -46,14 +46,51 @@ fn requested(sessions: &[SessionId], found: &[String]) -> BTreeSet<SessionId> {
         .collect()
 }
 
-pub(crate) async fn tombstoned(conn: &mut PgConnection, session_key: &str) -> Result<bool, Error> {
+pub(crate) async fn tombstone_at(
+    conn: &mut PgConnection,
+    session_key: &str,
+) -> Result<Option<DateTime<Utc>>, Error> {
     sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM rh_session_tombstones WHERE session_key = $1) AS "tombstoned!""#,
+        "SELECT deleted_at FROM rh_session_tombstones WHERE session_key = $1",
         session_key
+    )
+    .fetch_optional(conn)
+    .await
+    .map_err(|source| Error::operation("tombstone lookup", source))
+}
+
+pub(crate) async fn lift(conn: &mut PgConnection, session_key: &str) -> Result<(), Error> {
+    sqlx::query!(
+        "DELETE FROM rh_session_tombstones WHERE session_key = $1",
+        session_key
+    )
+    .execute(conn)
+    .await
+    .map_err(|source| Error::operation("tombstone lift", source))?;
+    tracing::info!(
+        session_key,
+        "deleted session was used again; tombstone lifted"
+    );
+    Ok(())
+}
+
+async fn used_after(
+    conn: &mut PgConnection,
+    session_key: &str,
+    deleted_at: DateTime<Utc>,
+) -> Result<bool, Error> {
+    sqlx::query_scalar!(
+        r#"SELECT EXISTS (
+               SELECT 1 FROM rh_messages m
+                 JOIN rh_conversations c ON c.id = m.conversation_id
+                WHERE c.session_key = $1 AND m.created_at > $2
+           ) AS "used!""#,
+        session_key,
+        deleted_at
     )
     .fetch_one(conn)
     .await
-    .map_err(|source| Error::operation("tombstone lookup", source))
+    .map_err(|source| Error::operation("tombstone use check", source))
 }
 
 async fn lock(conn: &mut PgConnection, session_key: &str) -> Result<(), Error> {
@@ -153,6 +190,18 @@ impl PostgresMemory {
             .await
             .map_err(|source| Error::operation("session delete begin", source))?;
         lock(&mut tx, session_key).await?;
+        if tombstone.is_none() {
+            let Some(deleted_at) = tombstone_at(&mut tx, session_key).await? else {
+                return Ok(DeletedSession::default());
+            };
+            if used_after(&mut tx, session_key, deleted_at).await? {
+                lift(&mut tx, session_key).await?;
+                tx.commit()
+                    .await
+                    .map_err(|source| Error::operation("tombstone lift commit", source))?;
+                return Ok(DeletedSession::default());
+            }
+        }
         if let Some((deleted_at, deleted_by)) = tombstone {
             sqlx::query!(
                 "INSERT INTO rh_session_tombstones (session_key, deleted_at, deleted_by)
@@ -322,19 +371,27 @@ impl SessionDeletion for PostgresMemory {
             .map_err(Into::into)
     }
 
-    async fn tombstoned(
+    async fn tombstones(
         &self,
         sessions: &[SessionId],
-    ) -> Result<BTreeSet<SessionId>, MemoryStoreError> {
+    ) -> Result<BTreeMap<SessionId, DateTime<Utc>>, MemoryStoreError> {
         let keys = keys(sessions);
-        let found = sqlx::query_scalar!(
-            "SELECT session_key FROM rh_session_tombstones WHERE session_key = ANY($1)",
+        let found = sqlx::query!(
+            "SELECT session_key, deleted_at FROM rh_session_tombstones WHERE session_key = ANY($1)",
             &keys
         )
         .fetch_all(&self.pool)
         .await
         .map_err(|source| Error::operation("tombstones", source))?;
-        Ok(requested(sessions, &found))
+        Ok(sessions
+            .iter()
+            .filter_map(|session| {
+                found
+                    .iter()
+                    .find(|row| row.session_key == session.as_str())
+                    .map(|row| (session.clone(), row.deleted_at))
+            })
+            .collect())
     }
 
     async fn session_activity(

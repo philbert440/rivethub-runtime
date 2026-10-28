@@ -9,6 +9,7 @@ use kernel::memory::MemoryStoreError;
 use kernel::memory::SessionActivity;
 use kernel::memory::SessionDeletion;
 use rusqlite::Connection;
+use rusqlite::OptionalExtension as _;
 use rusqlite::params;
 use wire::session_id::SessionId;
 
@@ -27,13 +28,66 @@ fn usize_count(value: usize) -> Result<u64, SqliteError> {
     u64::try_from(value).map_err(SqliteError::Count)
 }
 
-pub(crate) fn tombstoned(conn: &Connection, session_key: &str) -> Result<bool, SqliteError> {
-    conn.query_row(
-        "SELECT EXISTS (SELECT 1 FROM rh_session_tombstones WHERE session_key = ?1)",
+pub(crate) fn tombstone_at(
+    conn: &Connection,
+    session_key: &str,
+) -> Result<Option<DateTime<Utc>>, SqliteError> {
+    let stored: Option<String> = conn
+        .query_row(
+            "SELECT deleted_at FROM rh_session_tombstones WHERE session_key = ?1",
+            [session_key],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(SqliteError::query("tombstone lookup"))?;
+    stored
+        .map(|text| time::stored(&text, "rh_session_tombstones.deleted_at"))
+        .transpose()
+}
+
+pub(crate) fn lift(conn: &Connection, session_key: &str) -> Result<(), SqliteError> {
+    conn.execute(
+        "DELETE FROM rh_session_tombstones WHERE session_key = ?1",
         [session_key],
+    )
+    .map_err(SqliteError::query("tombstone lift"))?;
+    tracing::info!(
+        session_key,
+        "deleted session was used again; tombstone lifted"
+    );
+    Ok(())
+}
+
+pub(crate) fn admits(
+    conn: &Connection,
+    session_key: &str,
+    stamps: impl IntoIterator<Item = Option<DateTime<Utc>>>,
+) -> Result<bool, SqliteError> {
+    let Some(deleted_at) = tombstone_at(conn, session_key)? else {
+        return Ok(true);
+    };
+    if kernel::memory::used_since(deleted_at, stamps) {
+        lift(conn, session_key)?;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn used_after(
+    conn: &Connection,
+    session_key: &str,
+    deleted_at: DateTime<Utc>,
+) -> Result<bool, SqliteError> {
+    conn.query_row(
+        "SELECT EXISTS (
+             SELECT 1 FROM ros_messages m
+               JOIN ros_conversations c ON c.id = m.conversation_id
+              WHERE c.session_key = ?1 AND julianday(m.created_at) > julianday(?2)
+         )",
+        params![session_key, time::stamp(deleted_at)],
         |row| row.get(0),
     )
-    .map_err(SqliteError::query("tombstone lookup"))
+    .map_err(SqliteError::query("tombstone use check"))
 }
 
 fn purge(conn: &Connection, session_key: &str) -> Result<DeletedSession, SqliteError> {
@@ -92,6 +146,17 @@ fn erase(
     let tx = conn
         .transaction()
         .map_err(SqliteError::query("session delete begin"))?;
+    if tombstone.is_none() {
+        let Some(deleted_at) = tombstone_at(&tx, session_key)? else {
+            return Ok(DeletedSession::default());
+        };
+        if used_after(&tx, session_key, deleted_at)? {
+            lift(&tx, session_key)?;
+            tx.commit()
+                .map_err(SqliteError::query("tombstone lift commit"))?;
+            return Ok(DeletedSession::default());
+        }
+    }
     if let Some((deleted_at, deleted_by)) = tombstone {
         tx.execute(
             "INSERT INTO rh_session_tombstones (session_key, deleted_at, deleted_by)
@@ -301,20 +366,19 @@ impl SessionDeletion for SqliteStore {
             .map_err(Into::into)
     }
 
-    async fn tombstoned(
+    async fn tombstones(
         &self,
         sessions: &[SessionId],
-    ) -> Result<BTreeSet<SessionId>, MemoryStoreError> {
-        let keys = session_keys(sessions)?;
+    ) -> Result<BTreeMap<SessionId, DateTime<Utc>>, MemoryStoreError> {
         let sessions = sessions.to_vec();
         self.with_conn(move |conn| {
-            let found = found_keys(
-                conn,
-                "SELECT session_key FROM rh_session_tombstones
-                  WHERE session_key IN (SELECT value FROM json_each(?1))",
-                &keys,
-            )?;
-            Ok(matching(&sessions, &found))
+            let mut found = BTreeMap::new();
+            for session in sessions {
+                if let Some(deleted_at) = tombstone_at(conn, session.as_str())? {
+                    found.insert(session, deleted_at);
+                }
+            }
+            Ok(found)
         })
         .await
         .map_err(Into::into)

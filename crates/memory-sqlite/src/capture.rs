@@ -75,7 +75,7 @@ impl SqliteStore {
                 let tx = conn
                     .transaction()
                     .map_err(SqliteError::query("capture begin"))?;
-                if crate::deletion::tombstoned(&tx, &prepared.key.session_key)? {
+                if !crate::deletion::admits(&tx, &prepared.key.session_key, prepared.stamps())? {
                     tracing::debug!(
                         session_key = %prepared.key.session_key,
                         "capture dropped for a deleted session"
@@ -122,6 +122,16 @@ impl PreparedBatch {
             updated_at,
             messages,
         })
+    }
+
+    fn stamps(&self) -> Vec<Option<DateTime<Utc>>> {
+        self.messages
+            .iter()
+            .map(|message| match message.created_at {
+                Stamp::Source(at) => Some(at),
+                Stamp::CaptureTime => None,
+            })
+            .collect()
     }
 
     fn dropped(&self) -> Result<CaptureResult, SqliteError> {

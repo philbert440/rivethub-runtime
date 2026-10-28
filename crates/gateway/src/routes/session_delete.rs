@@ -238,11 +238,11 @@ async fn trash(
         .filter(|row| !live(&gateway, &row.session))
         .collect();
     let ids: Vec<SessionId> = rows.iter().map(|row| row.session.clone()).collect();
-    let deleted = deletions.tombstoned(&ids).await?;
+    let deleted = deletions.tombstones(&ids).await?;
     let activity = deletions.session_activity(&ids).await?;
     let mut candidates = Vec::new();
     for row in rows {
-        if deleted.contains(&row.session) {
+        if deleted.contains_key(&row.session) {
             continue;
         }
         let Some(memory) = activity.get(&row.session) else {

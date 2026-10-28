@@ -175,8 +175,8 @@ async fn a_session_without_memory_rows_still_gets_a_tombstone() -> TestResult {
     let erased = store.delete_session(&session, None, at(1)).await?;
     assert_eq!(erased, DeletedSession::default());
     assert_eq!(
-        store.tombstoned(std::slice::from_ref(&session)).await?,
-        std::collections::BTreeSet::from([session.clone()])
+        store.tombstones(std::slice::from_ref(&session)).await?,
+        std::collections::BTreeMap::from([(session.clone(), at(1))])
     );
     let conn = connection(&directory)?;
     assert_eq!(
@@ -228,7 +228,7 @@ async fn a_summary_cited_by_a_wiki_page_marks_the_session_cited() -> TestResult 
     Ok(())
 }
 
-fn insert_behind(path: &Path, session: &SessionId) -> TestResult {
+fn insert_behind(path: &Path, session: &SessionId, created_at: &str) -> TestResult {
     let conn = Connection::open(path)?;
     conn.execute(
         "INSERT INTO ros_conversations (id, session_key, agent, created_at, updated_at)
@@ -237,8 +237,8 @@ fn insert_behind(path: &Path, session: &SessionId) -> TestResult {
     )?;
     conn.execute(
         "INSERT INTO ros_messages (id, conversation_id, agent, channel, role, content, created_at)
-         VALUES ('behind-1', 'behind', 'external', 'cli', 'user', 'written directly', '2026-10-27T12:00:00.000Z')",
-        [],
+         VALUES ('behind-1', 'behind', 'external', 'cli', 'user', 'written directly', ?1)",
+        [created_at],
     )?;
     Ok(())
 }
@@ -248,7 +248,11 @@ async fn the_sweep_removes_rows_written_behind_the_gateway() -> TestResult {
     let (directory, store) = store()?;
     let (deleted, sibling) = session_delete::seed(&store).await?;
     store.delete_session(&deleted, None, at(10)).await?;
-    insert_behind(&directory.path().join("memory.sqlite"), &deleted)?;
+    insert_behind(
+        &directory.path().join("memory.sqlite"),
+        &deleted,
+        "2026-09-01T12:00:00.000Z",
+    )?;
     let purged = store.purge_tombstoned(100).await?;
     assert_eq!(
         purged,
@@ -272,5 +276,46 @@ async fn the_sweep_removes_rows_written_behind_the_gateway() -> TestResult {
         )?,
         1
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_sweep_lifts_the_tombstone_when_the_session_was_used_again() -> TestResult {
+    let (directory, store) = store()?;
+    let (deleted, _sibling) = session_delete::seed(&store).await?;
+    store.delete_session(&deleted, None, at(10)).await?;
+    insert_behind(
+        &directory.path().join("memory.sqlite"),
+        &deleted,
+        "2026-12-01T12:00:00.000Z",
+    )?;
+    assert_eq!(
+        store.purge_tombstoned(100).await?,
+        DeletedSession::default()
+    );
+    assert!(
+        store
+            .tombstones(std::slice::from_ref(&deleted))
+            .await?
+            .is_empty()
+    );
+    let conn = connection(&directory)?;
+    assert_eq!(
+        count(
+            &conn,
+            "SELECT count(*) FROM ros_messages m
+               JOIN ros_conversations c ON c.id = m.conversation_id
+              WHERE c.session_key = ?1",
+            &deleted
+        )?,
+        1
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_deleted_session_used_again_comes_back() -> TestResult {
+    let (_directory, store) = store()?;
+    session_delete::a_deleted_session_used_again_comes_back(&store, &store).await?;
     Ok(())
 }

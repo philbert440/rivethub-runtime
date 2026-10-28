@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 
 use async_trait::async_trait;
 use chrono::DateTime;
@@ -11,10 +10,12 @@ use kernel::memory::SessionDeletion;
 use parking_lot::Mutex;
 use wire::session_id::SessionId;
 
+type Tombstone = (DateTime<Utc>, Option<String>);
+
 #[derive(Debug, Default)]
 pub struct FakeSessionDeletion {
     activity: Mutex<BTreeMap<SessionId, SessionActivity>>,
-    tombstones: Mutex<BTreeMap<SessionId, Option<String>>>,
+    tombstones: Mutex<BTreeMap<SessionId, Tombstone>>,
 }
 
 impl FakeSessionDeletion {
@@ -24,8 +25,8 @@ impl FakeSessionDeletion {
         self
     }
 
-    pub fn tombstone(&self, session: SessionId) {
-        self.tombstones.lock().insert(session, None);
+    pub fn tombstone(&self, session: SessionId, deleted_at: DateTime<Utc>) {
+        self.tombstones.lock().insert(session, (deleted_at, None));
     }
 
     #[must_use]
@@ -35,7 +36,10 @@ impl FakeSessionDeletion {
 
     #[must_use]
     pub fn deleted_by(&self, session: &SessionId) -> Option<Option<String>> {
-        self.tombstones.lock().get(session).cloned()
+        self.tombstones
+            .lock()
+            .get(session)
+            .map(|(_, deleted_by)| deleted_by.clone())
     }
 }
 
@@ -45,11 +49,11 @@ impl SessionDeletion for FakeSessionDeletion {
         &self,
         session: &SessionId,
         deleted_by: Option<&str>,
-        _now: DateTime<Utc>,
+        now: DateTime<Utc>,
     ) -> Result<DeletedSession, MemoryStoreError> {
         self.tombstones
             .lock()
-            .insert(session.clone(), deleted_by.map(str::to_owned));
+            .insert(session.clone(), (now, deleted_by.map(str::to_owned)));
         let removed = self.activity.lock().remove(session);
         Ok(match removed {
             Some(removed) => DeletedSession {
@@ -61,15 +65,18 @@ impl SessionDeletion for FakeSessionDeletion {
         })
     }
 
-    async fn tombstoned(
+    async fn tombstones(
         &self,
         sessions: &[SessionId],
-    ) -> Result<BTreeSet<SessionId>, MemoryStoreError> {
+    ) -> Result<BTreeMap<SessionId, DateTime<Utc>>, MemoryStoreError> {
         let tombstones = self.tombstones.lock();
         Ok(sessions
             .iter()
-            .filter(|session| tombstones.contains_key(*session))
-            .cloned()
+            .filter_map(|session| {
+                tombstones
+                    .get(session)
+                    .map(|(deleted_at, _)| (session.clone(), *deleted_at))
+            })
             .collect())
     }
 

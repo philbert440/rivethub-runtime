@@ -229,9 +229,14 @@ stopped. Otherwise every agent's conversation for that session key is deleted in
 lock: its tags, its summaries (sources and wiki extractions cascade), its placement, suggestion and startup context,
 then the conversations (messages and chunks cascade); wiki provenance and citation rows are left. The answer is
 `{"ok":true,"session","conversations","messages","summaries"}`. A tombstone (`rh_session_tombstones`, migration 0030;
-SQLite schema v17) is written in the same transaction: both session lists omit the session, capture and append drop its
-events (logged at debug, answered `ok` with nothing inserted), and the summarizer's 15-minute `deleted-session-sweep`
-(`purge-deleted-sessions`) deletes rows that writers outside rh add later. `POST /api/sessions/delete` takes
+SQLite schema v17) is written in the same transaction and holds only until the session is used again. While it holds,
+both session lists omit the session unless its harness store row was updated after `deleted_at` (a resumed session is
+listed again; the read does not lift the tombstone), capture and append drop batches whose messages are all at or before
+`deleted_at` (a message without a timestamp counts as old; logged at debug, answered `ok` with nothing inserted), and
+the summarizer's 15-minute `deleted-session-sweep` (`purge-deleted-sessions`) deletes rows that writers outside rh add
+later. A capture or append batch with any message newer than `deleted_at` lifts the tombstone in its transaction and is
+captured whole; the sweep lifts the tombstone instead of purging when memory holds a message created after `deleted_at`.
+`POST /api/sessions/delete` takes
 `{"sessions":[ids]}` (1 to 200 after removing duplicates) and answers `{"results":[...]}` with one deleted body or
 `{"session","ok":false,"error":"session is live"|"not found"|"delete failed"}` per session. `GET /api/sessions/trash`
 answers `{"candidates":[{"session","harness","title","updatedAt","reason","userTurns","reply"}]}`; a candidate is

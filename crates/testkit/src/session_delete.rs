@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use kernel::memory::MemoryStore;
 use kernel::memory::SessionActivity;
@@ -101,15 +101,25 @@ pub async fn capture_for_a_deleted_session_writes_nothing(
     same(
         "tombstoned",
         deletions
-            .tombstoned(&[deleted.clone(), sibling.clone()])
+            .tombstones(&[deleted.clone(), sibling.clone()])
             .await?,
-        BTreeSet::from([deleted.clone()]),
+        BTreeMap::from([(deleted.clone(), at(5))]),
     )?;
     let resent = memory
         .capture(batch(&deleted, "opus", exchange("again")))
         .await?;
     same("capture inserts nothing", resent.inserted, 0)?;
     same("capture reports the batch skipped", resent.skipped, 2)?;
+    let mut unstamped = exchange("unstamped");
+    for message in &mut unstamped {
+        message.created_at = None;
+    }
+    let unstamped = memory.capture(batch(&deleted, "opus", unstamped)).await?;
+    same(
+        "messages without a timestamp count as old",
+        unstamped.inserted,
+        0,
+    )?;
     let appended = memory
         .append(vec![MemoryEntry {
             id: Some("append-1".to_owned()),
@@ -122,10 +132,18 @@ pub async fn capture_for_a_deleted_session_writes_nothing(
             tool_args: None,
             tool_result: None,
             metadata: None,
-            created_at: Some(at(6)),
+            created_at: Some(at(5)),
         }])
         .await?;
     same("append inserts nothing", appended, 0)?;
+    same(
+        "the tombstone holds",
+        deletions
+            .tombstones(std::slice::from_ref(&deleted))
+            .await?
+            .len(),
+        1,
+    )?;
     let activity = deletions
         .session_activity(&[deleted.clone(), sibling.clone()])
         .await?;
@@ -217,6 +235,71 @@ pub async fn activity_counts_turns_tools_and_placements(
         "absent",
         activity.get(&absent).cloned(),
         Some(SessionActivity::default()),
+    )?;
+    Ok(())
+}
+
+pub async fn a_deleted_session_used_again_comes_back(
+    memory: &dyn MemoryStore,
+    deletions: &dyn SessionDeletion,
+) -> Outcome {
+    let (deleted, _sibling) = seed(memory).await?;
+    deletions.delete_session(&deleted, None, at(5)).await?;
+    let mut resumed = exchange("resumed");
+    if let Some(reply) = resumed.get_mut(1) {
+        reply.created_at = Some(at(7));
+    }
+    let revived = memory.capture(batch(&deleted, "opus", resumed)).await?;
+    same("the whole batch is captured", revived.inserted, 2)?;
+    same(
+        "the tombstone is lifted",
+        deletions.tombstones(std::slice::from_ref(&deleted)).await?,
+        BTreeMap::new(),
+    )?;
+    let activity = deletions
+        .session_activity(std::slice::from_ref(&deleted))
+        .await?;
+    same(
+        "memory holds the resumed work",
+        activity.get(&deleted).map(|entry| entry.messages),
+        Some(2),
+    )?;
+    deletions.delete_session(&deleted, None, at(10)).await?;
+    let appended = memory
+        .append(vec![
+            MemoryEntry {
+                id: Some("append-old".to_owned()),
+                session_id: deleted.as_str().to_owned(),
+                agent: "opus".to_owned(),
+                channel: "cli".to_owned(),
+                role: Role::User,
+                content: "an old line".to_owned(),
+                tool_name: None,
+                tool_args: None,
+                tool_result: None,
+                metadata: None,
+                created_at: Some(at(9)),
+            },
+            MemoryEntry {
+                id: Some("append-new".to_owned()),
+                session_id: deleted.as_str().to_owned(),
+                agent: "opus".to_owned(),
+                channel: "cli".to_owned(),
+                role: Role::Assistant,
+                content: "a new reply".to_owned(),
+                tool_name: None,
+                tool_args: None,
+                tool_result: None,
+                metadata: None,
+                created_at: Some(at(11)),
+            },
+        ])
+        .await?;
+    same("append keeps the whole batch", appended, 2)?;
+    same(
+        "append lifts the tombstone",
+        deletions.tombstones(std::slice::from_ref(&deleted)).await?,
+        BTreeMap::new(),
     )?;
     Ok(())
 }

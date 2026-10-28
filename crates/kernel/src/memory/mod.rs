@@ -49,6 +49,7 @@ pub use deletion::TrashSignals;
 pub use deletion::TrashVerdict;
 pub use deletion::placeholder_title;
 pub use deletion::trash_verdict;
+pub use deletion::used_since;
 pub use embed::EmbedModelMismatch;
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;

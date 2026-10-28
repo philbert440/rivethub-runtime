@@ -1,13 +1,13 @@
 mod registry;
 mod socket;
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use axum::extract::{Path, RawQuery, State};
 use axum::routing::{get, put};
 use axum::{Json, Router};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use kernel::transcript::{ListLimit, SessionRenameError, StoreSession};
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTitleRequest, HarnessSessionTranscriptResponse,
@@ -74,19 +74,38 @@ async fn listed(gateway: &Gateway, harnesses: &[HarnessId], limit: ListLimit) ->
         .collect();
     let deleted = deleted_sessions(gateway, &ids).await;
     rows.into_iter()
-        .filter(|row| !deleted.contains(&SessionId::new(row.harness, &row.id)))
+        .filter(|row| {
+            !hidden(
+                &deleted,
+                &SessionId::new(row.harness, &row.id),
+                DateTime::from_timestamp_millis(row.updated_at),
+            )
+        })
         .collect()
 }
 
-async fn deleted_sessions(gateway: &Gateway, ids: &[SessionId]) -> BTreeSet<SessionId> {
+fn hidden(
+    deleted: &BTreeMap<SessionId, DateTime<Utc>>,
+    session: &SessionId,
+    updated_at: Option<DateTime<Utc>>,
+) -> bool {
+    deleted
+        .get(session)
+        .is_some_and(|deleted_at| updated_at.is_none_or(|updated_at| updated_at <= *deleted_at))
+}
+
+async fn deleted_sessions(
+    gateway: &Gateway,
+    ids: &[SessionId],
+) -> BTreeMap<SessionId, DateTime<Utc>> {
     let Some(deletions) = gateway.session_deletion() else {
-        return BTreeSet::new();
+        return BTreeMap::new();
     };
-    match deletions.tombstoned(ids).await {
+    match deletions.tombstones(ids).await {
         Ok(deleted) => deleted,
         Err(error) => {
             tracing::warn!(%error, "session tombstones are unreadable; listing every session");
-            BTreeSet::new()
+            BTreeMap::new()
         }
     }
 }
@@ -166,7 +185,7 @@ async fn plane(
     let deleted = deleted_sessions(&gateway, &live_ids).await;
     for (key, summary) in live {
         if !stored.contains(&key)
-            && !deleted.contains(&summary.session_id)
+            && !hidden(&deleted, &summary.session_id, Some(summary.updated_at))
             && gateway.sessions().visible(&user, &key, None)?
         {
             sessions.push(summary);

@@ -28,9 +28,21 @@ impl SqliteStore {
             let tx = conn
                 .transaction()
                 .map_err(SqliteError::query("append begin"))?;
+            let mut admitted = std::collections::BTreeMap::new();
+            for entry in &entries {
+                if admitted.contains_key(&entry.session_id) {
+                    continue;
+                }
+                let stamps = entries
+                    .iter()
+                    .filter(|other| other.session_id == entry.session_id)
+                    .map(|other| other.created_at);
+                let admits = crate::deletion::admits(&tx, &entry.session_id, stamps)?;
+                admitted.insert(entry.session_id.clone(), admits);
+            }
             let mut ids = Vec::with_capacity(entries.len());
             for entry in &entries {
-                if crate::deletion::tombstoned(&tx, &entry.session_id)? {
+                if admitted.get(&entry.session_id) == Some(&false) {
                     tracing::debug!(
                         session_key = %entry.session_id,
                         "append dropped for a deleted session"

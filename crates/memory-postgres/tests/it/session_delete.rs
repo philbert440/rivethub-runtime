@@ -219,10 +219,11 @@ async fn the_sweep_removes_rows_written_behind_the_gateway(pool: PgPool) -> Test
     .fetch_one(&pool)
     .await?;
     sqlx::query(
-        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content)
-         VALUES ($1, 'external', 'cli', 'user', 'written directly')",
+        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content, created_at)
+         VALUES ($1, 'external', 'cli', 'user', 'written directly', $2)",
     )
     .bind(conversation)
+    .bind(at(4))
     .execute(&pool)
     .await?;
     let topic = memory.create(new_topic("Late", &[], None)?).await?;
@@ -258,4 +259,43 @@ async fn the_sweep_removes_rows_written_behind_the_gateway(pool: PgPool) -> Test
         1
     );
     Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_sweep_lifts_the_tombstone_when_the_session_was_used_again(pool: PgPool) -> TestResult {
+    crate::common::install_graphile(&pool).await?;
+    let memory = PostgresMemory::new(pool.clone());
+    let (deleted, _sibling) = session_delete::seed(&memory).await?;
+    memory.delete_session(&deleted, None, at(10)).await?;
+    let conversation: Uuid = sqlx::query_scalar(
+        "INSERT INTO rh_conversations (session_key, agent) VALUES ($1, 'external') RETURNING id",
+    )
+    .bind(deleted.as_str())
+    .fetch_one(&pool)
+    .await?;
+    sqlx::query(
+        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content)
+         VALUES ($1, 'external', 'cli', 'user', 'new work written directly')",
+    )
+    .bind(conversation)
+    .execute(&pool)
+    .await?;
+    assert_eq!(
+        memory.purge_tombstoned(100).await?,
+        DeletedSession::default()
+    );
+    assert!(
+        memory
+            .tombstones(std::slice::from_ref(&deleted))
+            .await?
+            .is_empty()
+    );
+    assert_eq!(remaining(&pool, &deleted).await?.get(1), Some(&1));
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_deleted_session_used_again_comes_back(pool: PgPool) -> TestResult {
+    let memory = PostgresMemory::new(pool);
+    session_delete::a_deleted_session_used_again_comes_back(&memory, &memory).await
 }

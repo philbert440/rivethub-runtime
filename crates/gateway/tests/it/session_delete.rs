@@ -554,7 +554,7 @@ async fn trash_skips_tombstoned_live_and_unseen_sessions() {
         ..Stores::default()
     };
     let deletion = FakeSessionDeletion::default();
-    deletion.tombstone(claude("t-gone"));
+    deletion.tombstone(claude("t-gone"), Utc::now());
     let setup = setup(r#"{"t-alice":"alice"}"#, stores, deletion).await;
     let (_, body) = call(&setup, "GET", "/api/sessions/trash", "", None).await;
     assert_eq!(String::from_utf8_lossy(&body), r#"{"candidates":[]}"#);
@@ -581,6 +581,40 @@ async fn memory_tool_rows_keep_a_session_out_of_the_trash() {
         },
     );
     let setup = setup("{}", stores, deletion).await;
+    let (_, body) = call(&setup, "GET", "/api/sessions/trash", "", None).await;
+    assert_eq!(String::from_utf8_lossy(&body), r#"{"candidates":[]}"#);
+}
+
+#[tokio::test]
+async fn a_deleted_session_resumed_in_its_harness_is_listed_again() {
+    let stores = Stores {
+        rows: vec![
+            row("s-resumed", minutes_ago(1)),
+            row("s-gone", hours_ago(2)),
+        ],
+        ..Stores::default()
+    };
+    let deletion = FakeSessionDeletion::default();
+    let deleted_at = Utc::now() - TimeDelta::hours(1);
+    deletion.tombstone(claude("s-resumed"), deleted_at);
+    deletion.tombstone(claude("s-gone"), deleted_at);
+    let setup = setup("{}", stores, deletion).await;
+    let (_, body) = call(&setup, "GET", "/api/terminal/harness-sessions", "", None).await;
+    assert_eq!(listed_ids(&body), ["s-resumed"]);
+    let (_, body) = call(
+        &setup,
+        "GET",
+        "/api/harnesses/claude-code/sessions",
+        "",
+        None,
+    )
+    .await;
+    let sessions: Vec<SessionId> = parsed::<HarnessSessionList>(&body)
+        .sessions
+        .into_iter()
+        .map(|summary| summary.session_id)
+        .collect();
+    assert_eq!(sessions, [claude("s-resumed")]);
     let (_, body) = call(&setup, "GET", "/api/sessions/trash", "", None).await;
     assert_eq!(String::from_utf8_lossy(&body), r#"{"candidates":[]}"#);
 }
