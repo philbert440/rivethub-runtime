@@ -5719,12 +5719,16 @@
           "type": "integer",
           "format": "uint",
           "minimum": 0
+        },
+        "deliveredVia": {
+          "$ref": "#/$defs/DeliveredVia"
         }
       },
       "required": [
         "topicId",
         "sections",
-        "tokens"
+        "tokens",
+        "deliveredVia"
       ]
     },
     "StartupSection": {
@@ -5791,6 +5795,14 @@
     },
     "WikiSlug": {
       "type": "string"
+    },
+    "DeliveredVia": {
+      "type": "string",
+      "enum": [
+        "metaAppend",
+        "cliFlag",
+        "none"
+      ]
     },
     "HarnessSessionTitleRequest": {
       "type": "object",
@@ -5931,6 +5943,12 @@
           "format": "uint16",
           "minimum": 0,
           "maximum": 65535
+        },
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },

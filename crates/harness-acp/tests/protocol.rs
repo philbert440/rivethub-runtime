@@ -25,7 +25,9 @@ use wire::stream::ThinkingLevel;
 
 #[cfg(test)]
 mod protocol_support;
-use protocol_support::{SESSION, collect_until_turn_end, launch, launch_in, run, spec};
+use protocol_support::{
+    SESSION, collect_until_turn_end, fake_agent_program, launch, launch_in, run, spec,
+};
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 struct CommandInput {
@@ -518,6 +520,7 @@ fn the_spec_model_and_effort_are_applied_at_new_session() {
             model: Some("grok-5".to_owned()),
             effort: Some(ThinkingLevel::Low),
             working_dir: Some(cwd.path().to_path_buf()),
+            startup_context: None,
         };
         let session = adapter.new_session(full).await.expect("new session");
         let mut events = adapter.events(&session).await.expect("events");
@@ -578,6 +581,7 @@ fn port_refusals_are_typed() {
             model: None,
             effort: None,
             working_dir: Some(cwd.path().to_path_buf()),
+            startup_context: None,
         };
         let error = adapter
             .new_session(mismatched)
@@ -682,4 +686,76 @@ fn attachments_reach_the_agent_as_image_and_link_blocks() {
             assert_eq!(collected, expected);
         }
     });
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RecordedMeta {
+    system_prompt: Appended,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Appended {
+    append: String,
+}
+
+#[test]
+fn the_startup_context_is_appended_on_session_new_where_the_adapter_reads_it() {
+    const CLAUDE: &str = "0b9e5f8a-3c1d-4e2f-9a7b-6c5d4e3f2a1b";
+    let dir = tempdir().expect("dir");
+    let fake = |harness: HarnessId, native: &str| {
+        let record = dir.path().join(harness.to_string());
+        let args = ["--session-id", native, "--record-meta"]
+            .map(str::to_owned)
+            .into_iter()
+            .chain([record.display().to_string()])
+            .collect();
+        (
+            harness,
+            harness_acp::AcpLaunch::Native(harness_acp::AcpCommand {
+                program: fake_agent_program(),
+                args,
+                working_dir: Some(dir.path().to_path_buf()),
+                env: Vec::new(),
+            }),
+        )
+    };
+    let adapter = AcpHarnessAdapter::with_launch_table(harness_acp::LaunchTable::from_entries([
+        fake(HarnessId::ClaudeCode, CLAUDE),
+        fake(HarnessId::Opencode, SESSION),
+    ]));
+    let memory =
+        "## Memory for this session (topic: Mesh)\n\n### Topic page\n\nThe mesh runs step-ca.";
+    run(async {
+        for (harness, native) in [
+            (HarnessId::ClaudeCode, CLAUDE),
+            (HarnessId::Opencode, SESSION),
+        ] {
+            adapter
+                .new_session(SessionSpec {
+                    session: SessionId::new(harness, native),
+                    harness,
+                    model: None,
+                    effort: None,
+                    working_dir: Some(dir.path().to_path_buf()),
+                    startup_context: Some(memory.to_owned()),
+                })
+                .await
+                .expect("new session");
+        }
+    });
+    let recorded = |harness: HarnessId| -> Option<RecordedMeta> {
+        let text = std::fs::read_to_string(dir.path().join(harness.to_string())).expect("recorded");
+        serde_json::from_str(&text).expect("recorded meta")
+    };
+    assert_eq!(
+        recorded(HarnessId::ClaudeCode),
+        Some(RecordedMeta {
+            system_prompt: Appended {
+                append: memory.to_owned()
+            }
+        })
+    );
+    assert_eq!(recorded(HarnessId::Opencode), None);
 }

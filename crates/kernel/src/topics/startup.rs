@@ -7,6 +7,7 @@ use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryScope;
 use wire::gateway::memory::SummaryKind;
 use wire::gateway::topics as dto;
+pub use wire::gateway::topics::DeliveredVia;
 pub use wire::gateway::topics::StartupKind;
 use wire::gateway::wiki::WikiSlug;
 use wire::memory::MemorySearchResult;
@@ -67,6 +68,7 @@ pub struct StartupContext {
     pub topic: TopicId,
     pub sections: Vec<StartupSection>,
     pub tokens: usize,
+    pub delivered_via: DeliveredVia,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,7 +127,26 @@ pub fn assemble(parts: StartupParts, budget: usize) -> StartupContext {
         topic: parts.topic,
         sections,
         tokens: used,
+        delivered_via: DeliveredVia::None,
     }
+}
+
+#[must_use]
+pub fn render(context: &StartupContext, topic: &str) -> Option<String> {
+    if context.sections.is_empty() {
+        return None;
+    }
+    let mut text = format!("## Memory for this session (topic: {topic})");
+    for section in &context.sections {
+        let title = match section.kind {
+            StartupKind::Topic => "Topic page",
+            StartupKind::Recent | StartupKind::Relevant => section.title.as_str(),
+        };
+        for piece in ["\n\n### ", title, "\n\n", section.text.as_str()] {
+            text.push_str(piece);
+        }
+    }
+    Some(text)
 }
 
 fn fill(kind: StartupKind, part: StartupPart, allowance: usize) -> Option<(StartupSection, usize)> {
@@ -399,6 +420,7 @@ impl From<&StartupContext> for dto::StartupContext {
             topic_id: context.topic.to_string(),
             sections: context.sections.iter().map(Into::into).collect(),
             tokens: context.tokens,
+            delivered_via: context.delivered_via,
         }
     }
 }

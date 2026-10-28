@@ -15,7 +15,7 @@ fn runtime() -> Result<&'static tokio::runtime::Runtime, String> {
     }
 }
 
-fn fake_agent_program() -> PathBuf {
+pub(super) fn fake_agent_program() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_fake-acp-agent"))
 }
 
@@ -62,6 +62,7 @@ pub(super) fn spec(cwd: &Path) -> SessionSpec {
         model: None,
         effort: None,
         working_dir: Some(cwd.to_path_buf()),
+        startup_context: None,
     }
 }
 

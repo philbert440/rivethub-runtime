@@ -3,11 +3,12 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use kernel::terminal::{TermSize, TerminalId};
+use kernel::topics::DeliveredVia;
 use tokio::sync::{mpsc, oneshot, watch};
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::gateway::term::{PtyInfo, PtyState, TermSpawnResponse};
 
-use super::{Launch, TerminalService};
+use super::{Launch, Spawned, TerminalService};
 use crate::error::ApiError;
 use crate::tenancy::UserId;
 
@@ -17,7 +18,7 @@ type Reply<T> = oneshot::Sender<Result<T, ApiError>>;
 pub(super) enum Command {
     Spawn {
         launch: Launch,
-        reply: Reply<TermSpawnResponse>,
+        reply: Reply<Spawned>,
     },
     Kill {
         reply: Reply<()>,
@@ -170,12 +171,17 @@ impl TerminalActor {
         &mut self,
         launch: Launch,
         exits: &mut tokio::task::JoinSet<Result<(TerminalId, i32), ApiError>>,
-    ) -> Result<TermSpawnResponse, ApiError> {
+    ) -> Result<Spawned, ApiError> {
+        let port_session = TerminalService::port_session(&launch.command, &self.session)?;
         let previous = self.status.borrow().clone();
         if let Some(state) = previous
             && state.state == PtyState::Running
         {
-            return response(state);
+            return Ok(Spawned {
+                response: response(state)?,
+                session: port_session,
+                startup: None,
+            });
         }
         let permit = self
             .service
@@ -188,20 +194,8 @@ impl TerminalActor {
                     self.service.options.max_ptys
                 ))
             })?;
-        let mut argv = launch.command.argv.clone();
-        let resume = self
-            .service
-            .resume(launch.command.harness, &self.session, launch.resume)
-            .await?;
-        argv.extend(session_args(launch.command.harness, &self.session, resume));
-        if let Some(model) = launch.model {
-            argv.extend(["--model".into(), model]);
-        }
-        if let Some(effort) = launch.effort {
-            argv.extend(["--effort".into(), effort]);
-        }
+        let (argv, startup) = self.argv(&launch).await?;
         self.service.trust_claude_directory(&launch.command).await?;
-        let port_session = TerminalService::port_session(&launch.command, &self.session)?;
         let id = self
             .service
             .mux
@@ -246,7 +240,35 @@ impl TerminalActor {
             let code = mux.wait(&id).await?;
             Ok((id, code))
         });
-        Ok(response)
+        Ok(Spawned {
+            response,
+            session: port_session,
+            startup,
+        })
+    }
+
+    async fn argv(&self, launch: &Launch) -> Result<(Vec<String>, Option<DeliveredVia>), ApiError> {
+        let harness = launch.command.harness;
+        let resume = self
+            .service
+            .resume(harness, &self.session, launch.resume.clone())
+            .await?;
+        let fresh = resume.is_none();
+        let mut argv = launch.command.argv.clone();
+        argv.extend(session_args(harness, &self.session, resume));
+        let startup = startup_args(harness, launch.startup.as_deref(), fresh);
+        let delivered = match &startup {
+            Some(_) => DeliveredVia::CliFlag,
+            None => DeliveredVia::None,
+        };
+        argv.extend(startup.into_iter().flatten());
+        if let Some(model) = &launch.model {
+            argv.extend(["--model".into(), model.clone()]);
+        }
+        if let Some(effort) = &launch.effort {
+            argv.extend(["--effort".into(), effort.clone()]);
+        }
+        Ok((argv, fresh.then_some(delivered)))
     }
 
     fn register(&self, command: &super::LaunchCommand, id: &TerminalId) -> Result<(), ApiError> {
@@ -373,6 +395,15 @@ fn session_args(
     }
 }
 
+fn startup_args(
+    harness: Option<wire::harness::HarnessId>,
+    startup: Option<&str>,
+    fresh: bool,
+) -> Option<[String; 2]> {
+    let (harness, text) = harness.zip(startup).filter(|_| fresh)?;
+    kernel::harness::cli_system_prompt(harness).cli_args(text)
+}
+
 fn respond<T>(reply: Reply<T>, result: Result<T, ApiError>) {
     if reply.send(result).is_err() {
         tracing::debug!("terminal request caller disconnected");
@@ -401,6 +432,7 @@ mod tests {
     use wire::harness::HarnessId;
 
     use super::session_args;
+    use super::startup_args;
 
     const UUID: &str = "8922b6dd-d60f-42d9-9690-51b0d6e63176";
 
@@ -455,5 +487,18 @@ mod tests {
             Vec::<String>::new()
         );
         assert_eq!(session_args(None, UUID, None), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_fresh_claude_launch_appends_the_startup_memory_and_a_resume_does_not() {
+        let memory = "## Memory for this session (topic: Mesh)";
+        assert_eq!(
+            startup_args(Some(HarnessId::ClaudeCode), Some(memory), true),
+            Some(["--append-system-prompt".to_owned(), memory.to_owned()])
+        );
+        assert_eq!(
+            startup_args(Some(HarnessId::ClaudeCode), Some(memory), false),
+            None
+        );
     }
 }

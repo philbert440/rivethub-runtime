@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use kernel::terminal::{TermSize, TerminalId, TerminalMux};
+use kernel::topics::DeliveredVia;
 use parking_lot::RwLock;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -63,6 +64,14 @@ pub(crate) struct Launch {
     pub(crate) resume: Option<String>,
     pub(crate) model: Option<String>,
     pub(crate) effort: Option<String>,
+    pub(crate) startup: Option<String>,
+}
+
+#[derive(Debug)]
+pub(crate) struct Spawned {
+    pub(crate) response: TermSpawnResponse,
+    pub(crate) session: SessionId,
+    pub(crate) startup: Option<DeliveredVia>,
 }
 
 #[derive(Debug, Clone)]
@@ -236,6 +245,7 @@ impl TerminalService {
             resume,
             model,
             effort,
+            startup: None,
         })
     }
 
@@ -244,7 +254,7 @@ impl TerminalService {
         user: &UserId,
         request: TermSpawnRequest,
     ) -> Result<TermSpawnResponse, ApiError> {
-        self.spawn_from(user, request, None).await
+        Ok(self.spawn_from(user, request, None, None).await?.response)
     }
 
     pub(crate) async fn spawn_from(
@@ -252,7 +262,8 @@ impl TerminalService {
         user: &UserId,
         request: TermSpawnRequest,
         preset: Option<AgentLaunch>,
-    ) -> Result<TermSpawnResponse, ApiError> {
+        startup: Option<String>,
+    ) -> Result<Spawned, ApiError> {
         let session = match (&request.session, &request.resume) {
             (Some(session), Some(resume)) => {
                 if crate::sessions::session_key(session)? != crate::sessions::session_key(resume)? {
@@ -267,14 +278,21 @@ impl TerminalService {
             (None, None) => format!("rivethub-{}", uuid::Uuid::new_v4()),
         };
         let session = self.registry.claim(user, &session)?;
-        let launch = self.launch(request, preset)?;
+        let launch = Launch {
+            startup,
+            ..self.launch(request, preset)?
+        };
+        let port_session = Self::port_session(&launch.command, &session)?;
         let chat = self.chats.read().get(&session).cloned();
         if let Some(chat) = chat {
-            return chat.terminal(launch).await;
+            return Ok(Spawned {
+                response: chat.terminal(launch).await?,
+                session: port_session,
+                startup: None,
+            });
         }
-        let port_session = Self::port_session(&launch.command, &session)?;
         let chat_capable = launch.command.harness.is_some();
-        let response = self.spawn_raw(user, &session, launch).await?;
+        let spawned = self.spawn_raw(user, &session, launch).await?;
         if chat_capable && let Some(harness) = &self.harness {
             let mut chats = self.chats.write();
             if let std::collections::btree_map::Entry::Vacant(entry) = chats.entry(session) {
@@ -289,7 +307,7 @@ impl TerminalService {
             }
             drop(chats);
         }
-        Ok(response)
+        Ok(spawned)
     }
 
     pub(crate) async fn spawn_raw(
@@ -297,7 +315,7 @@ impl TerminalService {
         user: &UserId,
         session: &str,
         launch: Launch,
-    ) -> Result<TermSpawnResponse, ApiError> {
+    ) -> Result<Spawned, ApiError> {
         let handle = {
             let mut entries = self.entries.write();
             entries

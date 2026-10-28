@@ -39,6 +39,8 @@ struct FakeArgs {
     prompt: PromptMode,
     #[arg(long, default_value = "none")]
     usage: UsageMode,
+    #[arg(long)]
+    record_meta: Option<std::path::PathBuf>,
 }
 
 const REPLAYED_CHUNKS: usize = 300;
@@ -82,6 +84,7 @@ struct AgentState {
     list_sessions: bool,
     prompt: PromptMode,
     usage: UsageMode,
+    record_meta: Option<std::path::PathBuf>,
     cancelled: AtomicBool,
     cancel_notify: Notify,
     selection: Mutex<Selection>,
@@ -108,6 +111,7 @@ fn prepare(args: FakeArgs) -> Option<AgentState> {
         list_sessions: args.list_sessions,
         prompt: args.prompt,
         usage: args.usage,
+        record_meta: args.record_meta,
         cancelled: AtomicBool::new(false),
         cancel_notify: Notify::new(),
         selection: Mutex::new(Selection::initial()),
@@ -144,10 +148,17 @@ fn on_initialize(
 
 fn on_new_session(
     state: &AgentState,
+    request: &acp::NewSessionRequest,
     responder: Responder<acp::NewSessionResponse>,
 ) -> Result<(), acp::Error> {
     if matches!(state.crash_on, Some(CrashPoint::New)) {
         std::process::abort();
+    }
+    if let Some(path) = &state.record_meta {
+        let recorded = serde_json::to_string(&request.meta)
+            .map_err(|error| acp::Error::internal_error().data(error.to_string()))?;
+        std::fs::write(path, recorded)
+            .map_err(|error| acp::Error::internal_error().data(error.to_string()))?;
     }
     responder.respond(
         acp::NewSessionResponse::new(session_id(state)).config_options(current_options(state)),
@@ -319,8 +330,8 @@ async fn serve(state: Arc<AgentState>) -> Result<(), acp::Error> {
             agent_client_protocol::on_receive_request!(),
         )
         .on_receive_request(
-            async move |_request: acp::NewSessionRequest, responder, _connection| {
-                on_new_session(&new_state, responder)
+            async move |request: acp::NewSessionRequest, responder, _connection| {
+                on_new_session(&new_state, &request, responder)
             },
             agent_client_protocol::on_receive_request!(),
         )

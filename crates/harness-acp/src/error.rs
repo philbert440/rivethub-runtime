@@ -106,6 +106,8 @@ pub enum AcpError {
     ToolInput { source: serde_json::Error },
     #[error("the agent reported turn usage under _meta that is not token counts: {source}")]
     UsageMeta { source: serde_json::Error },
+    #[error("the startup context did not encode as session/new _meta: {source}")]
+    StartupMeta { source: serde_json::Error },
     #[error(
         "no working directory: the request, the launch command and runtime.workspace all leave it unset"
     )]
@@ -137,6 +139,7 @@ impl AcpError {
             | Self::UnanswerablePermission { .. }
             | Self::ToolInput { .. }
             | Self::UsageMeta { .. }
+            | Self::StartupMeta { .. }
             | Self::Attachment { .. }
             | Self::WorkingDir => ProviderRecovery::Permanent,
         }

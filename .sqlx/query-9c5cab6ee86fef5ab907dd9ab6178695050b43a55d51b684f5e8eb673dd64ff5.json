@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT topic_id, tokens, sections FROM rh_session_startup WHERE session_id = $1",
+  "query": "SELECT topic_id, tokens, sections, delivered_via\n             FROM rh_session_startup WHERE session_id = $1",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,17 @@
             "name": "sections"
           }
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "delivered_via",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_session_startup",
+            "name": "delivered_via"
+          }
+        }
       }
     ],
     "parameters": {
@@ -45,8 +56,9 @@
     "nullable": [
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "96c3b056924603661a326e14b01e1f4b3f329dde266c1b67d934c00bdba0efac"
+  "hash": "9c5cab6ee86fef5ab907dd9ab6178695050b43a55d51b684f5e8eb673dd64ff5"
 }

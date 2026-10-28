@@ -184,4 +184,25 @@ pub struct StartupContext {
     pub topic_id: String,
     pub sections: Vec<StartupSection>,
     pub tokens: usize,
+    pub delivered_via: DeliveredVia,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    strum::Display,
+    strum::EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "camelCase")]
+pub enum DeliveredVia {
+    MetaAppend,
+    CliFlag,
+    None,
 }

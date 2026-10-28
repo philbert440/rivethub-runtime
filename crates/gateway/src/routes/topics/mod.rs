@@ -41,7 +41,9 @@ use crate::error::ApiError;
 use crate::extract::Body;
 use crate::extract::Query;
 
+pub(super) use startup::Started;
 pub(super) use startup::begin;
+pub(super) use startup::prepare;
 
 const SEARCH_LIMIT_DEFAULT: usize = 10;
 const SEARCH_LIMIT_MAX: usize = 50;

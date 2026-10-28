@@ -24,6 +24,7 @@ use memory_sqlite::SqliteStore;
 use serde::de::DeserializeOwned;
 use tower::ServiceExt;
 use wire::gateway::GatewayError;
+use wire::gateway::topics::DeliveredVia;
 use wire::gateway::topics::PlacedBy;
 use wire::gateway::topics::PlacementReply;
 use wire::gateway::topics::StartupContext;
@@ -347,7 +348,11 @@ async fn a_session_created_in_a_topic_is_placed_and_starts_with_its_memory() -> 
     let context = bare
         .startup_context
         .ok_or("a topic start carries its context")?;
-    assert_eq!(context.sections, []);
+    assert_eq!(
+        (context.sections.as_slice(), context.delivered_via),
+        ([].as_slice(), DeliveredVia::None),
+        "an empty context has nothing to deliver"
+    );
 
     let mesh: TopicRecord = api
         .json(
@@ -372,6 +377,7 @@ async fn a_session_created_in_a_topic_is_placed_and_starts_with_its_memory() -> 
     let topic = context.sections.first().ok_or("the page is a section")?;
     assert_eq!(topic.kind, StartupKind::Topic);
     assert!(topic.text.contains("renew weekly"), "{}", topic.text);
+    assert_eq!(context.delivered_via, DeliveredVia::MetaAppend);
     let kept: StartupContext = api
         .json(
             "GET",

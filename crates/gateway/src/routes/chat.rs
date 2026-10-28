@@ -9,6 +9,9 @@ use kernel::ToolContext;
 use kernel::agent::{Turn, TurnError, TurnLimits, TurnResult, TurnRunner, excluded_names};
 use kernel::harness::TurnAttachment;
 use kernel::model::ModelRequest;
+use kernel::topics::DeliveredVia;
+use kernel::topics::StartupContext;
+use kernel::topics::render;
 use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -104,6 +107,14 @@ async fn create(
         Some(key) => Some(super::topics::resolve(gateway.topics()?.as_ref(), key).await?),
         None => None,
     };
+    let context = match &topic {
+        Some(topic) => super::topics::prepare(&gateway, topic, request.prompt.as_deref()).await,
+        None => None,
+    };
+    let rendered = topic
+        .as_ref()
+        .zip(context.as_ref())
+        .and_then(|(topic, context)| render(context, topic.name.as_str()));
     let agent = match request.agent_id {
         Some(id) => Some(crate::routes::agents::launch_preset(&gateway, id).await?),
         None => None,
@@ -112,22 +123,34 @@ async fn create(
         .harness
         .or_else(|| agent.as_ref().and_then(|agent| agent.harness))
         .ok_or_else(|| ApiError::BadRequest("harness is required".into()))?;
+    let delivered = match (&rendered, service.adapter()) {
+        (Some(_), Some(adapter)) => adapter.system_prompt(harness).delivered_via(),
+        _ => DeliveredVia::None,
+    };
     let start = ChatStart {
         harness,
         model: request.model,
         effort: None,
         cwd: request.cwd.map(std::path::PathBuf::from),
         agent,
+        startup_context: rendered,
     };
     let mut summary = service.start_chat(&user, start).await?;
     if let Some(topic) = topic {
-        super::topics::begin(
+        let session = summary.session_id.clone();
+        summary.startup_context = super::topics::begin(
             &gateway,
             &service,
             &user,
-            &mut summary,
-            &topic,
-            request.prompt.as_deref(),
+            super::topics::Started {
+                session: &session,
+                owner: session.as_str(),
+                topic: &topic,
+                context: context.map(|context| StartupContext {
+                    delivered_via: delivered,
+                    ..context
+                }),
+            },
         )
         .await?;
     }
@@ -260,6 +283,7 @@ async fn delegated(
             effort: request.thinking,
             cwd: request.working_dir.map(std::path::PathBuf::from),
             agent: None,
+            startup_context: None,
         },
         text: request.text,
         system_prompt: request.system_prompt,

@@ -16,6 +16,7 @@ use kernel::harness::HarnessCommands;
 use kernel::harness::SessionEvent;
 use kernel::harness::SessionOption;
 use kernel::harness::SessionSpec;
+use kernel::harness::SystemPromptSupport;
 use kernel::harness::TurnInput;
 use kernel::terminal::PtyInfo;
 use kernel::terminal::TermSize;
@@ -27,6 +28,7 @@ use kernel::tool::ToolError;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::Receiver;
 use wire::harness::ApprovalDecision;
+use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 
 #[derive(Debug)]
@@ -64,6 +66,10 @@ impl FakeHarness {
 
 #[async_trait]
 impl HarnessAdapter for FakeHarness {
+    fn system_prompt(&self, _harness: HarnessId) -> SystemPromptSupport {
+        SystemPromptSupport::MetaAppend
+    }
+
     async fn new_session(&self, spec: SessionSpec) -> Result<SessionId, HarnessAdapterError> {
         let (tx, rx) = tokio::sync::mpsc::channel(16);
         self.sessions

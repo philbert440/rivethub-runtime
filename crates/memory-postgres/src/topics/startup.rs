@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::topics::DeliveredVia;
 use kernel::topics::StartupContext;
 use kernel::topics::StartupStore;
 use kernel::topics::TopicError;
@@ -26,15 +27,18 @@ impl StartupStore for PostgresMemory {
         let tokens = i32::try_from(context.tokens)
             .map_err(|source| stored("startup tokens")(Box::new(source)))?;
         sqlx::query!(
-            "INSERT INTO rh_session_startup (session_id, topic_id, tokens, sections, created_at)
-             VALUES ($1, $2, $3, $4, $5)
+            "INSERT INTO rh_session_startup
+                (session_id, topic_id, tokens, sections, delivered_via, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (session_id) DO UPDATE
                 SET topic_id = EXCLUDED.topic_id, tokens = EXCLUDED.tokens,
-                    sections = EXCLUDED.sections, created_at = EXCLUDED.created_at",
+                    sections = EXCLUDED.sections, delivered_via = EXCLUDED.delivered_via,
+                    created_at = EXCLUDED.created_at",
             session.as_str(),
             context.topic.uuid(),
             tokens,
             sections,
+            context.delivered_via.to_string(),
             now
         )
         .execute(&self.pool)
@@ -45,7 +49,8 @@ impl StartupStore for PostgresMemory {
 
     async fn startup(&self, session: &SessionId) -> Result<Option<StartupContext>, TopicError> {
         let Some(row) = sqlx::query!(
-            "SELECT topic_id, tokens, sections FROM rh_session_startup WHERE session_id = $1",
+            "SELECT topic_id, tokens, sections, delivered_via
+             FROM rh_session_startup WHERE session_id = $1",
             session.as_str()
         )
         .fetch_optional(&self.pool)
@@ -61,6 +66,10 @@ impl StartupStore for PostgresMemory {
             sections: sections.into_iter().map(Into::into).collect(),
             tokens: usize::try_from(row.tokens)
                 .map_err(|source| stored("startup tokens")(Box::new(source)))?,
+            delivered_via: row
+                .delivered_via
+                .parse::<DeliveredVia>()
+                .map_err(|source| stored("startup delivery")(Box::new(source)))?,
         }))
     }
 }

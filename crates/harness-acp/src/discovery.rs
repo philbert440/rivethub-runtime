@@ -100,7 +100,7 @@ pub(crate) async fn discover(
     cwd: &Path,
     timeout: Duration,
 ) -> Result<Advertisement, AcpError> {
-    let agent = tokio::time::timeout(timeout, crate::connection::start_new(command, cwd))
+    let agent = tokio::time::timeout(timeout, crate::connection::start_new(command, cwd, None))
         .await
         .map_err(|_| AcpError::DiscoveryTimeout { timeout })??;
     let mut advertised = Advertisement::from_agent(&agent);

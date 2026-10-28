@@ -90,6 +90,7 @@ fn spawn(session: &str) -> TermSpawnRequest {
         force: None,
         cols: None,
         rows: None,
+        topic_id: None,
     }
 }
 

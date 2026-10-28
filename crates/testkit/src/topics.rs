@@ -6,6 +6,7 @@ use chrono::TimeDelta;
 use chrono::Utc;
 use kernel::topics::Alias;
 use kernel::topics::Change;
+use kernel::topics::DeliveredVia;
 use kernel::topics::NewTopic;
 use kernel::topics::Placement;
 use kernel::topics::PlacementOutcome;
@@ -449,6 +450,7 @@ pub async fn startup_context_is_kept_per_session(store: &dyn StartupStore) -> Ou
         topic: TopicId::random(),
         sections: Vec::new(),
         tokens: 0,
+        delivered_via: DeliveredVia::None,
     };
     store.keep_startup(&first, &empty, at(1)).await?;
     same(
@@ -468,6 +470,7 @@ pub async fn startup_context_is_kept_per_session(store: &dyn StartupStore) -> Ou
             ],
         }],
         tokens: 7,
+        delivered_via: DeliveredVia::MetaAppend,
     };
     store.keep_startup(&first, &kept, at(2)).await?;
     same(

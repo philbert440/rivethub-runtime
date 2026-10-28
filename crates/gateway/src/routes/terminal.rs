@@ -4,6 +4,8 @@ use axum::extract::{FromRequestParts, State, WebSocketUpgrade};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use axum::{Json, Router};
+use kernel::topics::StartupContext;
+use kernel::topics::render;
 use serde::Deserialize;
 use wire::gateway::term::{PtyList, TermConfig, TermSpawnRequest, TermSpawnResponse};
 
@@ -70,10 +72,42 @@ async fn spawn(
         Some(id) => Some(crate::routes::agents::launch_preset(&gateway, id).await?),
         None => None,
     };
-    Ok((
-        axum::http::StatusCode::CREATED,
-        Json(service.spawn_from(&user, request, preset).await?),
-    ))
+    let topic = match request.topic_id.as_deref() {
+        Some(key) => Some(super::topics::resolve(gateway.topics()?.as_ref(), key).await?),
+        None => None,
+    };
+    let context = match &topic {
+        Some(topic) => super::topics::prepare(&gateway, topic, None).await,
+        None => None,
+    };
+    let rendered = topic
+        .as_ref()
+        .zip(context.as_ref())
+        .and_then(|(topic, context)| render(context, topic.name.as_str()));
+    let spawned = service.spawn_from(&user, request, preset, rendered).await?;
+    let mut response = spawned.response;
+    if let Some(topic) = topic {
+        super::topics::begin(
+            &gateway,
+            &service,
+            &user,
+            super::topics::Started {
+                session: &spawned.session,
+                owner: &response.session,
+                topic: &topic,
+                context: spawned
+                    .startup
+                    .zip(context)
+                    .map(|(via, context)| StartupContext {
+                        delivered_via: via,
+                        ..context
+                    }),
+            },
+        )
+        .await?;
+        response.harness_session_id = Some(spawned.session);
+    }
+    Ok((axum::http::StatusCode::CREATED, Json(response)))
 }
 
 async fn kill(

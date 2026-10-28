@@ -49,6 +49,7 @@ fn spec() -> SessionSpec {
         model: None,
         effort: None,
         working_dir: None,
+        startup_context: None,
     }
 }
 

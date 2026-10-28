@@ -183,6 +183,7 @@ fn request(agent: &str) -> TermSpawnRequest {
         force: None,
         cols: None,
         rows: None,
+        topic_id: None,
     }
 }
 

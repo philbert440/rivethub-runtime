@@ -17,6 +17,7 @@ pub struct TermSpawnRequest {
     pub force: Option<bool>,
     pub cols: Option<u16>,
     pub rows: Option<u16>,
+    pub topic_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

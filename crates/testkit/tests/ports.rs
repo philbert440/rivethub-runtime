@@ -451,6 +451,7 @@ fn harness_delivers_session_events() {
                 model: None,
                 effort: None,
                 working_dir: None,
+                startup_context: None,
             })
             .await
             .unwrap();

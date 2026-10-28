@@ -47,6 +47,7 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         SchemaVersion::V15 => in_transaction(conn, to, |tx| {
             tx.execute_batch(include_str!("schema/session_startup_v15.sql"))
         }),
+        SchemaVersion::V16 => in_transaction(conn, to, add_startup_delivery),
     }
 }
 
@@ -125,6 +126,13 @@ fn add_topic_page_sections(tx: &Transaction<'_>) -> rusqlite::Result<()> {
         return Ok(());
     }
     tx.execute_batch(include_str!("schema/topic_page_sections_v14.sql"))
+}
+
+fn add_startup_delivery(tx: &Transaction<'_>) -> rusqlite::Result<()> {
+    if column_present(tx, "rh_session_startup", "delivered_via")? {
+        return Ok(());
+    }
+    tx.execute_batch(include_str!("schema/startup_delivery_v16.sql"))
 }
 
 fn add_tag_removal_columns(tx: &Transaction<'_>) -> rusqlite::Result<()> {

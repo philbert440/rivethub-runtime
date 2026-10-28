@@ -251,6 +251,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::gateway::topics::StartupSource>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::StartupSection>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::StartupContext>,
+    SchemaGenerator::subschema_for::<crate::gateway::topics::DeliveredVia>,
     SchemaGenerator::subschema_for::<crate::events::ProtocolVersion>,
     SchemaGenerator::subschema_for::<crate::events::AgentEvent>,
     SchemaGenerator::subschema_for::<crate::events::AgentEventKind>,

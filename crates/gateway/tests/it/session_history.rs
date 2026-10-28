@@ -1190,6 +1190,7 @@ async fn a_fresh_terminal_resumes_a_session_its_store_already_holds() {
             force: None,
             cols: None,
             rows: None,
+            topic_id: None,
         };
         setup
             .fixture
