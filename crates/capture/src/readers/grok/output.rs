@@ -7,7 +7,7 @@ use crate::readers::message::unparseable;
 
 const OUTPUT_TAG: &str = "type";
 
-pub(super) fn tool_result(
+pub(crate) fn tool_result(
     position: u64,
     raw: Option<JsonObject>,
     content: &[ContentItem],
@@ -35,7 +35,7 @@ fn content_text(content: &[ContentItem]) -> Option<String> {
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub(super) enum ContentItem {
+pub(crate) enum ContentItem {
     Content {
         content: AcpContent,
     },

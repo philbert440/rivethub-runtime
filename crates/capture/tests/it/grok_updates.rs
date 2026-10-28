@@ -182,7 +182,7 @@ async fn tool_results_use_the_readable_output_of_each_tool() -> TestResult {
 }
 
 #[tokio::test]
-async fn turns_carry_the_agent_clock() -> TestResult {
+async fn reads_carry_the_agent_clock_through_the_open_turn() -> TestResult {
     let (_dir, reader) = store()?;
     let turns = reader.read(&session()).await?;
     let first = turns.first().ok_or("no turns")?;
@@ -191,6 +191,11 @@ async fn turns_carry_the_agent_clock() -> TestResult {
         first.at,
         "2026-10-11T12:00:02Z".parse::<chrono::DateTime<chrono::Utc>>()?
     );
-    assert_eq!(turns.len(), 13);
+    assert_eq!(turns.len(), 15);
+    let open = turns.last().ok_or("no open turn")?;
+    assert_eq!(
+        (open.role, open.content.as_str()),
+        (Role::Assistant, "Counting.")
+    );
     Ok(())
 }

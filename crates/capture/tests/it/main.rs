@@ -2,6 +2,7 @@ mod argument_order;
 mod batch_validation;
 mod cowork_reader;
 mod event_id;
+mod grok_transcript;
 mod grok_updates;
 mod hook_replay;
 mod listing_claude_grok;

@@ -1,5 +1,6 @@
 mod claude;
 mod display;
+mod grok;
 mod tools;
 
 use std::path::Path;
@@ -32,13 +33,18 @@ pub(super) async fn transcript(
     let Some(root) = roots.single(harness).map(Path::to_path_buf) else {
         return Ok(TranscriptRead::Read(StoreTranscript::default()));
     };
+    let native = native.to_owned();
     if harness == HarnessId::ClaudeCode {
-        let native = native.to_owned();
         return blocking(move || claude::transcript(&root, &native))
             .await
             .map(TranscriptRead::Read);
     }
-    text_turns(harness, root, native).await
+    if harness == HarnessId::GrokBuild {
+        return blocking(move || grok::transcript(&root, &native))
+            .await
+            .map(TranscriptRead::Read);
+    }
+    text_turns(harness, root, &native).await
 }
 
 pub(super) async fn tool_output(
