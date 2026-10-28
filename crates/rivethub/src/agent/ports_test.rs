@@ -82,6 +82,8 @@ async fn healthz() -> axum::Json<HealthzResponse> {
         node: NODE.to_owned(),
         degraded: None,
         degraded_providers: Vec::new(),
+        version: None,
+        revision: None,
     })
 }
 

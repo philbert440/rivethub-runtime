@@ -10,7 +10,6 @@ use wire::gateway::HealthzResponse;
 struct Health {
     #[serde(flatten)]
     response: HealthzResponse,
-    version: &'static str,
     uptime: f64,
 }
 
@@ -27,8 +26,9 @@ async fn status_reads_health_and_optional_version_and_uptime() {
                     node: "node".to_owned(),
                     degraded: None,
                     degraded_providers: Vec::new(),
+                    version: Some("1.2.3".to_owned()),
+                    revision: None,
                 },
-                version: "1.2.3",
                 uptime: 12.5,
             })
         }),
@@ -94,6 +94,8 @@ async fn ordinary_redirects_reach_the_health_route() {
                         node: "node".to_owned(),
                         degraded: None,
                         degraded_providers: Vec::new(),
+                        version: None,
+                        revision: None,
                     })
                 }),
             ),
@@ -190,6 +192,8 @@ async fn status_names_each_degraded_provider() {
                         reason: "not installed".to_owned(),
                     },
                 ],
+                version: None,
+                revision: None,
             })
         }),
     ))

@@ -80,6 +80,8 @@ fn overview_node(node: &MeshNode, url: String) -> MeshOverviewNode {
         online: false,
         sessions: None,
         latest: None,
+        version: None,
+        revision: None,
     }
 }
 

@@ -196,6 +196,8 @@ async fn health(State(gate): State<Gate>) -> axum::response::Response {
         node: "local".to_owned(),
         degraded: None,
         degraded_providers: Vec::new(),
+        version: None,
+        revision: None,
     })
 }
 

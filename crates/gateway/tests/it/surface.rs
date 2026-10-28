@@ -84,7 +84,7 @@ fn a_live_peer_is_online_and_a_refused_peer_is_not() {
         let (mut stream, _) = listener.accept().expect("accept");
         let mut buf = [0_u8; 2048];
         let _read = stream.read(&mut buf).expect("request");
-        let body = br#"{"ok":true,"sessions":0,"name":"peer","node":"peer"}"#;
+        let body = br#"{"ok":true,"sessions":0,"name":"peer","node":"peer","version":"9.9.9","revision":"abc1234"}"#;
         let head = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             body.len()
@@ -130,7 +130,10 @@ fn a_live_peer_is_online_and_a_refused_peer_is_not() {
         .find(|node| node.id == "golden-node")
         .expect("refused");
     assert!(live.online);
+    assert_eq!(live.version.as_deref(), Some("9.9.9"));
+    assert_eq!(live.revision.as_deref(), Some("abc1234"));
     assert!(!refused.online);
+    assert!(refused.version.is_none());
 }
 
 #[test]

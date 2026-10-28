@@ -220,6 +220,10 @@ opencode, kimi-code and cursor have no append option and get nothing. The kept c
 (`metaAppend`, `cliFlag` or `none`), set when the session starts and served by `GET …/startup-context`; a terminal
 resume keeps no context. Kept on `rh_session_startup.delivered_via` (migration 0029, `none` for earlier rows; SQLite
 schema v16). The text is never recorded as a user message.
+(26) Node version: `/healthz` answers with optional `version` (the rh package version) and `revision` (the short git sha,
+present when the build had one), and each `/mesh.json` node carries the `version` and `revision` its own `/healthz`
+reported, absent while it is offline. The recorded healthz bodies match them with the `{{VERSION}}` and `{{REVISION}}`
+tokens. `rh status` prints the version.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice
