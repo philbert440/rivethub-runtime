@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
+use config::Config;
 use config::Effort;
 use config::ModelsMode;
 use thiserror::Error;
@@ -369,4 +371,27 @@ fn flagged_empty() -> StaticSheet {
         default_model: None,
         publish_empty: false,
     }
+}
+
+pub(crate) fn sheet_inputs(config: &Config) -> BTreeMap<HarnessId, SheetInput> {
+    let Some(tasks) = &config.tasks else {
+        return BTreeMap::new();
+    };
+    let Some(harnesses) = &tasks.harnesses else {
+        return BTreeMap::new();
+    };
+    harnesses
+        .iter()
+        .filter_map(|(slot, entry)| match slot {
+            config::HarnessSlot::Known(harness) => Some((
+                *harness,
+                SheetInput {
+                    models: entry.models.clone(),
+                    efforts: entry.efforts.clone(),
+                    mode: entry.models_mode,
+                },
+            )),
+            config::HarnessSlot::Unknown(_) => None,
+        })
+        .collect()
 }

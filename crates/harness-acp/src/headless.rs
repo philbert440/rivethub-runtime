@@ -89,7 +89,7 @@ fn resolve_executable(
     search: &[PathBuf],
 ) -> Result<Option<PathBuf>, std::io::Error> {
     use std::os::unix::fs::PermissionsExt as _;
-    let Some(path) = crate::adapter::resolve_program(program, search)? else {
+    let Some(path) = crate::launch::resolve_program(program, search)? else {
         return Ok(None);
     };
     let permissions = std::fs::metadata(&path)?.permissions();
