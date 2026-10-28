@@ -121,6 +121,17 @@ fn push_scope_conditions(
         query.push(" AND m.role = ");
         query.push_bind(role.to_string());
     }
+    if !options.exclude_roles.is_empty() {
+        query.push(" AND m.role <> ALL(");
+        query.push_bind(
+            options
+                .exclude_roles
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+        );
+        query.push(")");
+    }
     if let Some(tool_name) = &options.tool_name {
         query.push(" AND m.tool_name = ");
         query.push_bind(tool_name.clone());
@@ -275,7 +286,9 @@ fn push_select_prefix(query: &mut QueryBuilder<sqlx::Postgres>, is_message: bool
     } else {
         query.push(
             "s.id::text, s.content, s.kind AS role_or_kind, NULL AS agent, \
-             NULL AS tool_name, NULL AS conversation_id, NULL AS session_id, s.created_at, ",
+             NULL AS tool_name, s.conversation_id::text AS conversation_id, \
+             (SELECT conv.session_key FROM rh_conversations conv WHERE conv.id = s.conversation_id) AS session_id, \
+             s.created_at, ",
         );
     }
 }

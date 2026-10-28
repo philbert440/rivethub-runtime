@@ -105,6 +105,7 @@ fn search(text: &str, mode: SearchMode, scope: MemoryScope) -> SearchQuery {
         scope,
         agent: None,
         role: None,
+        exclude_roles: Vec::new(),
         tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(20), 20, 1..=50),

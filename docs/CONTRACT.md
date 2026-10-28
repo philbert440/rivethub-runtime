@@ -236,6 +236,11 @@ through these routes. Kept in `rh_topic_decisions` (migration 0030; SQLite schem
 present when the build had one), and each `/mesh.json` node carries the `version` and `revision` its own `/healthz`
 reported, absent while it is offline. The recorded healthz bodies match them with the `{{VERSION}}` and `{{REVISION}}`
 tokens. `rh status` prints the version.
+(28) Memory search hits (Phil, 2026-10-27): summary hits on `GET /api/memory/search` carry `sessionId`, the session of
+the summarised conversation, as message hits already did. The route takes optional `exclude_roles`, a comma-separated
+list of roles (`exclude_roles=tool,system`) whose message hits are left out; summaries are unaffected. NUL characters
+in the search text and filters are dropped before the query runs, and legacy rows whose `tool_args` is a JSON string
+are read as their decoded object when the string holds one, otherwise without arguments.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

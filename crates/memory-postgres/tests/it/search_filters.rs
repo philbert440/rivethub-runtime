@@ -92,6 +92,7 @@ fn query(mode: SearchMode) -> SearchQuery {
         scope: MemoryScope::Both,
         agent: None,
         role: None,
+        exclude_roles: Vec::new(),
         tool_name: None,
         tag: None,
         limit: Limit::clamped(Some(20), 10, 1..=50),
@@ -159,5 +160,57 @@ async fn role_and_tool_filters_narrow_message_hits_and_keep_summaries(pool: PgPo
         search.scope = MemoryScope::Messages;
         assert_eq!(hits(&memory, search).await?, set(&["du"]), "{mode}");
     }
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn excluded_roles_drop_messages_and_summary_hits_name_their_session(
+    pool: PgPool,
+) -> TestResult {
+    let memory = seed(&pool).await?;
+    for mode in MODES {
+        let mut search = query(mode);
+        search.exclude_roles = vec![Role::Tool, Role::System];
+        assert_eq!(
+            hits(&memory, search).await?,
+            set(&["the", "prune", "summary"]),
+            "{mode}"
+        );
+    }
+    let mut search = query(SearchMode::Fts);
+    search.scope = MemoryScope::Summaries;
+    let outcome = memory.search(search).await?;
+    let sessions: Vec<Option<&str>> = outcome
+        .results
+        .iter()
+        .map(|hit| hit.session_id.as_deref())
+        .collect();
+    assert_eq!(sessions, vec![Some("filters-ops")]);
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn summary_search_reads_legacy_string_tool_args_and_drops_nul(pool: PgPool) -> TestResult {
+    let memory = seed(&pool).await?;
+    let mut tx = testkit::capture_tx(&pool).await?;
+    sqlx::query("UPDATE rh_messages SET tool_args = to_jsonb('text(await tools.exec_command({cmd:\"pwd\"}))'::text) WHERE content LIKE 'prune%'")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("INSERT INTO rh_summary_sources (summary_id, message_id) SELECT s.id, m.id FROM rh_summaries s, rh_messages m WHERE m.content LIKE 'prune%'")
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    let mut search = query(SearchMode::Fts);
+    search.text = "backup\0 disk".into();
+    search.agent = Some("rivet\0".into());
+    search.scope = MemoryScope::Summaries;
+    search.expand = None;
+    let outcome = memory.search(search).await?;
+    let expanded: Vec<(String, bool)> = outcome
+        .expanded
+        .iter()
+        .map(|entry| (first_word(&entry.content), entry.tool_args.is_none()))
+        .collect();
+    assert_eq!(expanded, vec![("prune".to_owned(), true)]);
     Ok(())
 }

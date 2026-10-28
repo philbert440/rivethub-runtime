@@ -34,7 +34,8 @@ const KEYWORD_EFFECT: &str = "Keyword / FTS ranking only \u{2014} not meaning-ba
 const SUMMARY_AGENT: &str = "summary";
 
 const MESSAGE_SQL: &str = "SELECT m.id, m.content, m.role, m.agent, m.created_at, m.conversation_id, \
-     ros_messages_fts.rank \
+     ros_messages_fts.rank, \
+     (SELECT c.session_key FROM ros_conversations c WHERE c.id = m.conversation_id) \
      FROM ros_messages_fts \
      JOIN ros_messages m ON m.id = ros_messages_fts.id \
      WHERE ros_messages_fts MATCH ?1 \
@@ -43,11 +44,13 @@ const MESSAGE_SQL: &str = "SELECT m.id, m.content, m.role, m.agent, m.created_at
        AND (?4 IS NULL OR m.created_at < ?4) \
        AND (?6 IS NULL OR m.role = ?6) \
        AND (?7 IS NULL OR m.tool_name = ?7) \
+       AND (?8 IS NULL OR m.role NOT IN (SELECT value FROM json_each(?8))) \
      ORDER BY ros_messages_fts.rank ASC \
      LIMIT ?5";
 
 const SUMMARY_SQL: &str = "SELECT s.id, s.content, s.created_at, s.conversation_id, \
-     ros_summaries_fts.rank \
+     ros_summaries_fts.rank, \
+     (SELECT c.session_key FROM ros_conversations c WHERE c.id = s.conversation_id) \
      FROM ros_summaries_fts \
      JOIN ros_summaries s ON s.id = ros_summaries_fts.id \
      WHERE ros_summaries_fts MATCH ?1 \
@@ -80,6 +83,7 @@ struct Plan {
     scope: MemoryScope,
     agent: Option<String>,
     role: Option<Role>,
+    exclude_roles: Option<String>,
     tool_name: Option<String>,
     tag: Option<TagLiteral>,
     since: Option<String>,
@@ -95,9 +99,11 @@ enum Kind {
         role: Role,
         agent: String,
         conversation_id: String,
+        session_id: Option<String>,
     },
     Summary {
         conversation_id: Option<String>,
+        session_id: Option<String>,
     },
 }
 
@@ -187,6 +193,18 @@ impl Plan {
             return Err(SqliteError::InvertedRange);
         }
         let pattern = fts_or(&query.text);
+        let exclude_roles = if query.exclude_roles.is_empty() {
+            None
+        } else {
+            Some(
+                serde_json::to_string(&query.exclude_roles).map_err(|source| {
+                    SqliteError::Encode {
+                        column: "exclude_roles",
+                        source,
+                    }
+                })?,
+            )
+        };
         let limit = i64::from(query.limit.get());
         let fetch_limit = if query.tag.is_some() {
             hybrid_pool(query.limit.get())
@@ -200,6 +218,7 @@ impl Plan {
             scope: query.scope,
             agent: query.agent,
             role: query.role,
+            exclude_roles,
             tool_name: query.tool_name,
             tag: query.tag,
             since: range.since.map(time::stamp),
@@ -279,6 +298,7 @@ fn fetch_messages(conn: &Connection, plan: &Plan) -> Result<Vec<Candidate>, Sqli
                 plan.fetch_limit,
                 plan.role.map(|role| role.to_string()),
                 plan.tool_name,
+                plan.exclude_roles,
             ],
             read_message,
         )
@@ -318,6 +338,7 @@ struct MessageRow {
     created_at: String,
     conversation_id: String,
     rank: f64,
+    session_id: Option<String>,
 }
 
 struct SummaryRow {
@@ -326,6 +347,7 @@ struct SummaryRow {
     created_at: String,
     conversation_id: Option<String>,
     rank: f64,
+    session_id: Option<String>,
 }
 
 fn read_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRow> {
@@ -337,6 +359,7 @@ fn read_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageRow> {
         created_at: row.get(4)?,
         conversation_id: row.get(5)?,
         rank: row.get(6)?,
+        session_id: row.get(7)?,
     })
 }
 
@@ -347,6 +370,7 @@ fn read_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<SummaryRow> {
         created_at: row.get(2)?,
         conversation_id: row.get(3)?,
         rank: row.get(4)?,
+        session_id: row.get(5)?,
     })
 }
 
@@ -361,6 +385,7 @@ impl Candidate {
                 role: row.role,
                 agent: row.agent,
                 conversation_id: row.conversation_id,
+                session_id: row.session_id,
             },
         })
     }
@@ -373,6 +398,7 @@ impl Candidate {
             rank: row.rank,
             kind: Kind::Summary {
                 conversation_id: row.conversation_id,
+                session_id: row.session_id,
             },
         })
     }
@@ -382,16 +408,21 @@ impl Candidate {
             Kind::Message {
                 conversation_id, ..
             } => index.message_has(conversation_id, tag),
-            Kind::Summary { conversation_id } => {
-                index.summary_has(&self.id, conversation_id.as_deref(), tag)
-            }
+            Kind::Summary {
+                conversation_id, ..
+            } => index.summary_has(&self.id, conversation_id.as_deref(), tag),
         }
     }
 
     fn into_result(self) -> MemorySearchResult {
         let relevance_score = relevance(self.rank);
         match self.kind {
-            Kind::Message { role, agent, .. } => MemorySearchResult {
+            Kind::Message {
+                role,
+                agent,
+                session_id,
+                ..
+            } => MemorySearchResult {
                 chunk: None,
                 id: self.id,
                 source: MemoryHitSource::Message,
@@ -400,9 +431,9 @@ impl Candidate {
                 agent: Some(agent),
                 relevance_score,
                 created_at: self.created_at,
-                session_id: None,
+                session_id,
             },
-            Kind::Summary { .. } => MemorySearchResult {
+            Kind::Summary { session_id, .. } => MemorySearchResult {
                 chunk: None,
                 id: self.id,
                 source: MemoryHitSource::Summary,
@@ -411,7 +442,7 @@ impl Candidate {
                 agent: Some(SUMMARY_AGENT.to_owned()),
                 relevance_score,
                 created_at: self.created_at,
-                session_id: None,
+                session_id,
             },
         }
     }

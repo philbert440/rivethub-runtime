@@ -28,6 +28,7 @@ pub(crate) struct SearchOptions {
     pub(crate) limit: u32,
     pub(crate) agent: Option<String>,
     pub(crate) role: Option<Role>,
+    pub(crate) exclude_roles: Vec<Role>,
     pub(crate) tool_name: Option<String>,
     pub(crate) tag: Option<TagLiteral>,
 }
@@ -194,6 +195,7 @@ impl crate::PostgresMemory {
             limit: query.limit.get(),
             agent: query.agent.clone(),
             role: query.role,
+            exclude_roles: query.exclude_roles.clone(),
             tool_name: query.tool_name.clone(),
             tag: query.tag.clone(),
         })

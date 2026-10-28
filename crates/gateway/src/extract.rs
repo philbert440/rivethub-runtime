@@ -236,6 +236,30 @@ impl RoleParam {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "String")]
+pub struct RolesParam(pub Vec<Role>);
+
+impl TryFrom<String> for RolesParam {
+    type Error = ParamError;
+
+    fn try_from(raw: String) -> Result<Self, Self::Error> {
+        raw.split(',')
+            .map(|role| {
+                enum_from_str::<Role>(role.trim()).ok_or(ParamError("invalid exclude_roles"))
+            })
+            .collect::<Result<_, _>>()
+            .map(Self)
+    }
+}
+
+impl RolesParam {
+    #[must_use]
+    pub fn get(self) -> Vec<Role> {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "String")]
 pub struct SinceParam(pub DateTime<Utc>);
