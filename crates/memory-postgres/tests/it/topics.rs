@@ -211,5 +211,21 @@ async fn decisions_are_the_topic_page_decisions_section(pool: PgPool) -> TestRes
         wiki: &memory,
         queue: &queue,
     })
+    .await?;
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(
+    pool: PgPool,
+) -> TestResult {
+    let (_directory, memory, queue) = page_stores(pool).await?;
+    topic_pages::a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(PageStores {
+        topics: &memory,
+        pages: &memory,
+        decisions: &memory,
+        wiki: &memory,
+        queue: &queue,
+    })
     .await
 }

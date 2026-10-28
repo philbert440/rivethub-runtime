@@ -52,7 +52,8 @@ fn topics(conn: &Connection) -> Result<Vec<WikiTopicStats>, WikiStoreError> {
         .prepare(
             "SELECT t.slug, t.title, t.history_count, t.created_at,
                     (SELECT count(*) FROM ros_wiki_citations c WHERE c.topic_slug = t.slug),
-                    EXISTS (SELECT 1 FROM rh_topic_pages p WHERE p.page_slug = t.slug)
+                    EXISTS (SELECT 1 FROM rh_topic_pages p
+                             WHERE p.page_slug = t.slug AND p.topic_id IS NOT NULL)
                FROM ros_wiki_topics t ORDER BY t.slug",
         )
         .map_err(query)?;

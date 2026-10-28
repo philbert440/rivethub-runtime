@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM rh_session_suggestions WHERE topic_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8570f8757cef7e8229aee30640226a17b762d9d476f0e5a915b78e9621a8662e"
+}
