@@ -48,6 +48,7 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
             tx.execute_batch(include_str!("schema/session_startup_v15.sql"))
         }),
         SchemaVersion::V16 => in_transaction(conn, to, add_startup_delivery),
+        SchemaVersion::V17 => in_transaction(conn, to, unbind_topic_pages_on_delete),
     }
 }
 
@@ -133,6 +134,21 @@ fn add_startup_delivery(tx: &Transaction<'_>) -> rusqlite::Result<()> {
         return Ok(());
     }
     tx.execute_batch(include_str!("schema/startup_delivery_v16.sql"))
+}
+
+fn unbind_topic_pages_on_delete(tx: &Transaction<'_>) -> rusqlite::Result<()> {
+    let keyed_by_page = tx
+        .query_row(
+            "SELECT pk FROM pragma_table_info('rh_topic_pages') WHERE name = 'page_slug'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?
+        == Some(1);
+    if keyed_by_page {
+        return Ok(());
+    }
+    tx.execute_batch(include_str!("schema/topic_page_unbind_v17.sql"))
 }
 
 fn add_tag_removal_columns(tx: &Transaction<'_>) -> rusqlite::Result<()> {

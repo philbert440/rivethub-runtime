@@ -29,6 +29,8 @@ pub(super) fn error(error: TopicError) -> ApiError {
         | TopicError::AliasTaken { .. }
         | TopicError::ParentIsSubtopic { .. }
         | TopicError::HasSubtopics
+        | TopicError::CategoryTopic { .. }
+        | TopicError::SubtopicsRemain { .. }
         | TopicError::MergeWouldNest { .. } => ApiError::Conflict(error.to_string()),
         TopicError::NotFound { .. } => ApiError::Missing(error.to_string()),
         TopicError::Unavailable(source) => {

@@ -88,6 +88,10 @@ pub enum TopicError {
     SelfMerge,
     #[error("topic \"{into}\" is a sub-topic and cannot take over sub-topics")]
     MergeWouldNest { into: Slug },
+    #[error("\"{slug}\" is a category topic and cannot be deleted")]
+    CategoryTopic { slug: Slug },
+    #[error("topic \"{slug}\" has sub-topics; delete or move them first")]
+    SubtopicsRemain { slug: Slug },
     #[error("topic store is unavailable")]
     Unavailable(#[source] BoxError),
 }
@@ -109,6 +113,8 @@ pub trait TopicStore: Send + Sync {
         into: TopicId,
         now: DateTime<Utc>,
     ) -> Result<Topic, TopicError>;
+
+    async fn delete(&self, id: TopicId) -> Result<(), TopicError>;
 
     async fn find(&self, key: &TopicKey) -> Result<Option<Topic>, TopicError>;
 

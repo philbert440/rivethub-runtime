@@ -195,3 +195,17 @@ async fn listings_count_sessions_and_take_last_activity_from_conversations(
     );
     Ok(())
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(
+    pool: PgPool,
+) -> TestResult {
+    let (_directory, memory, queue) = page_stores(pool).await?;
+    topic_pages::a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(PageStores {
+        topics: &memory,
+        pages: &memory,
+        wiki: &memory,
+        queue: &queue,
+    })
+    .await
+}

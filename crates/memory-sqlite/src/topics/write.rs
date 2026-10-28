@@ -160,6 +160,29 @@ pub(super) fn fold_into(
     Ok(())
 }
 
+pub(super) fn remove(conn: &Connection, id: TopicId) -> Result<(), TopicError> {
+    let id = id.to_string();
+    for (statement, operation) in [
+        (
+            "DELETE FROM rh_session_placements WHERE topic_id = ?1",
+            "topic delete placements",
+        ),
+        (
+            "DELETE FROM rh_session_suggestions WHERE topic_id = ?1",
+            "topic delete suggestions",
+        ),
+        (
+            "DELETE FROM rh_session_startup WHERE topic_id = ?1",
+            "topic delete startup",
+        ),
+        ("DELETE FROM rh_topics WHERE id = ?1", "topic delete"),
+    ] {
+        conn.execute(statement, params![id])
+            .map_err(failed(operation))?;
+    }
+    Ok(())
+}
+
 pub(super) fn rename_redirect(
     conn: &Connection,
     old: &Slug,

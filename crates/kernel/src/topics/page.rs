@@ -176,6 +176,11 @@ impl SyncTopicPage {
         syncs
     }
 
+    #[must_use]
+    pub fn after_delete(topic: &Topic) -> Vec<Self> {
+        topic.parent.map(Self::topic).into_iter().collect()
+    }
+
     pub fn job(&self) -> Result<Job, TopicPageError> {
         let key = match (self.topic_id, self.fold.is_empty()) {
             (Some(id), true) => Some(format!("sync-topic-page:{id}")),

@@ -64,6 +64,7 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             "/api/topics/{topic}",
             routing::get(show)
                 .patch(update)
+                .delete(delete)
                 .fallback(super::method_not_allowed),
         )
         .route(
@@ -207,6 +208,16 @@ async fn update(
         .await
         .map_err(map::error)?;
     Ok(Json(map::record(updated)))
+}
+
+async fn delete(
+    State(gateway): State<Arc<Gateway>>,
+    Path(key): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let store = gateway.topics()?;
+    let id = resolve_id(store.as_ref(), &key).await?;
+    store.delete(id).await.map_err(map::error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn merge(

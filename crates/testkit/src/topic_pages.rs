@@ -5,9 +5,13 @@ use kernel::queue::JobName;
 use kernel::queue::JobQueue;
 use kernel::topics::Change;
 use kernel::topics::PageSection;
+use kernel::topics::Placement;
+use kernel::topics::PlacementSource;
 use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
 use kernel::topics::TopicChanges;
+use kernel::topics::TopicError;
+use kernel::topics::TopicKey;
 use kernel::topics::TopicName;
 use kernel::topics::TopicPage;
 use kernel::topics::TopicPageStore;
@@ -21,6 +25,7 @@ use crate::topics::Outcome;
 use crate::topics::at;
 use crate::topics::new_topic;
 use crate::topics::same;
+use crate::topics::session;
 
 #[expect(
     missing_debug_implementations,
@@ -260,5 +265,55 @@ pub async fn syncing_twice_changes_nothing(stores: PageStores<'_>) -> Outcome {
         stores.lookup("disks").await?,
     );
     same("second sync", after, before)?;
+    Ok(())
+}
+
+pub async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(
+    stores: PageStores<'_>,
+) -> Outcome {
+    let topic = stores
+        .create(new_topic("Desktop smoke", &[], None)?)
+        .await?;
+    let mut page = stores.page(&topic).await?;
+    "Smoke notes.".clone_into(&mut page.summary);
+    stores.pages.save_topic_page(topic.id, &page, at(5)).await?;
+    stores.update(&topic, renamed("Smoke run")?).await?;
+    let placed = session("00000000-0000-4000-8000-000000000031")?;
+    stores
+        .topics
+        .place(Placement {
+            session: placed.clone(),
+            topic: topic.id,
+            by: PlacementSource::You,
+            at: at(11),
+        })
+        .await?;
+    let sub = stores
+        .create(new_topic("Smoke step", &[], Some(topic.id))?)
+        .await?;
+    let refused = stores.topics.delete(topic.id).await;
+    if !matches!(refused, Err(TopicError::SubtopicsRemain { .. })) {
+        return Err(format!("a topic with sub-topics must stay: {refused:?}").into());
+    }
+    stores.topics.delete(sub.id).await?;
+    stores.topics.delete(topic.id).await?;
+    stores.settle().await?;
+    same("placement", stores.topics.placement(&placed).await?, None)?;
+    same(
+        "redirect",
+        stores
+            .topics
+            .find(&TopicKey::parse("desktop-smoke")?)
+            .await?,
+        None,
+    )?;
+    let shown = stores.shown("desktop-smoke").await?;
+    same("unbound", shown.topic_id, None)?;
+    same("kept", shown.current_state.as_str(), "Smoke notes.")?;
+    let category = stores.create(new_topic("Hosts", &[], None)?).await?;
+    let refused = stores.topics.delete(category.id).await;
+    if !matches!(refused, Err(TopicError::CategoryTopic { .. })) {
+        return Err(format!("a category topic must stay: {refused:?}").into());
+    }
     Ok(())
 }

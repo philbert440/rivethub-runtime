@@ -225,6 +225,27 @@ pub(super) async fn fold_into(
     Ok(())
 }
 
+pub(super) async fn remove(conn: &mut PgConnection, id: TopicId) -> Result<(), TopicError> {
+    let id = id.uuid();
+    sqlx::query!("DELETE FROM rh_session_placements WHERE topic_id = $1", id)
+        .execute(&mut *conn)
+        .await
+        .map_err(failed("topic delete placements"))?;
+    sqlx::query!("DELETE FROM rh_session_suggestions WHERE topic_id = $1", id)
+        .execute(&mut *conn)
+        .await
+        .map_err(failed("topic delete suggestions"))?;
+    sqlx::query!("DELETE FROM rh_session_startup WHERE topic_id = $1", id)
+        .execute(&mut *conn)
+        .await
+        .map_err(failed("topic delete startup"))?;
+    sqlx::query!("DELETE FROM rh_topics WHERE id = $1", id)
+        .execute(&mut *conn)
+        .await
+        .map_err(failed("topic delete"))?;
+    Ok(())
+}
+
 pub(super) async fn rename_redirect(
     conn: &mut PgConnection,
     old: &Slug,

@@ -198,3 +198,11 @@ async fn listings_count_sessions_and_take_last_activity_from_conversations() -> 
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound() -> TestResult {
+    let (_directory, store) = store()?;
+    topic_pages::a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(pages(&store))
+        .await?;
+    Ok(())
+}
