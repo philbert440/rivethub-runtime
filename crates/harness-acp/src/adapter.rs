@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -38,11 +37,13 @@ use crate::error::AcpError;
 use crate::error::port;
 use crate::identity;
 use crate::launch::AcpCommand;
-use crate::launch::LaunchFact;
 use crate::launch::LaunchTable;
+use crate::launch::probe;
+use crate::launch::resolve_program;
 use crate::options::SessionOptions;
 use crate::permissions::PermissionRegistry;
 use crate::sheets::SheetInput;
+use crate::sheets::sheet_inputs;
 
 #[derive(Debug)]
 struct SessionEntry {
@@ -589,78 +590,5 @@ impl HarnessAdapter for AcpHarnessAdapter {
                     })
             })
             .collect())
-    }
-}
-
-fn sheet_inputs(config: &Config) -> BTreeMap<HarnessId, SheetInput> {
-    let Some(tasks) = &config.tasks else {
-        return BTreeMap::new();
-    };
-    let Some(harnesses) = &tasks.harnesses else {
-        return BTreeMap::new();
-    };
-    harnesses
-        .iter()
-        .filter_map(|(slot, entry)| match slot {
-            config::HarnessSlot::Known(harness) => Some((
-                *harness,
-                SheetInput {
-                    models: entry.models.clone(),
-                    efforts: entry.efforts.clone(),
-                    mode: entry.models_mode,
-                },
-            )),
-            config::HarnessSlot::Unknown(_) => None,
-        })
-        .collect()
-}
-
-fn probe(
-    facts: &[LaunchFact],
-    search: &[PathBuf],
-) -> Result<Vec<(LaunchFact, bool)>, std::io::Error> {
-    let mut installed = Vec::with_capacity(facts.len());
-    for fact in facts {
-        let present = match &fact.program {
-            Some(program) => program_installed(program, search)?,
-            None => false,
-        };
-        installed.push((fact.clone(), present));
-    }
-    Ok(installed)
-}
-
-fn program_installed(program: &Path, search: &[PathBuf]) -> Result<bool, std::io::Error> {
-    Ok(resolve_program(program, search)?.is_some())
-}
-
-pub(crate) fn resolve_program(
-    program: &Path,
-    search: &[PathBuf],
-) -> Result<Option<PathBuf>, std::io::Error> {
-    if program.as_os_str().is_empty()
-        || program
-            .components()
-            .any(|component| component == Component::ParentDir)
-    {
-        return Ok(None);
-    }
-    if program.is_absolute() {
-        return Ok(is_file(program)?.then(|| program.to_owned()));
-    }
-    for directory in search {
-        let candidate = directory.join(program);
-        if is_file(&candidate)? {
-            return Ok(Some(candidate));
-        }
-    }
-    Ok(None)
-}
-
-fn is_file(path: &Path) -> Result<bool, std::io::Error> {
-    match std::fs::metadata(path) {
-        Ok(metadata) => Ok(metadata.is_file()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(error),
     }
 }

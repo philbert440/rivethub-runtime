@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::path::Component;
+use std::path::Path;
 use std::path::PathBuf;
 
 use agent_client_protocol::schema::v1 as acp;
@@ -288,4 +290,54 @@ fn configured_dir(config: &Config, harness: HarnessId) -> Option<PathBuf> {
         .and_then(|tasks| tasks.harnesses.as_ref())
         .and_then(|harnesses| harnesses.get(&HarnessSlot::Known(harness)))
         .and_then(|entry| entry.cwd.clone())
+}
+
+pub(crate) fn probe(
+    facts: &[LaunchFact],
+    search: &[PathBuf],
+) -> Result<Vec<(LaunchFact, bool)>, std::io::Error> {
+    let mut installed = Vec::with_capacity(facts.len());
+    for fact in facts {
+        let present = match &fact.program {
+            Some(program) => program_installed(program, search)?,
+            None => false,
+        };
+        installed.push((fact.clone(), present));
+    }
+    Ok(installed)
+}
+
+fn program_installed(program: &Path, search: &[PathBuf]) -> Result<bool, std::io::Error> {
+    Ok(resolve_program(program, search)?.is_some())
+}
+
+pub(crate) fn resolve_program(
+    program: &Path,
+    search: &[PathBuf],
+) -> Result<Option<PathBuf>, std::io::Error> {
+    if program.as_os_str().is_empty()
+        || program
+            .components()
+            .any(|component| component == Component::ParentDir)
+    {
+        return Ok(None);
+    }
+    if program.is_absolute() {
+        return Ok(is_file(program)?.then(|| program.to_owned()));
+    }
+    for directory in search {
+        let candidate = directory.join(program);
+        if is_file(&candidate)? {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
+}
+
+fn is_file(path: &Path) -> Result<bool, std::io::Error> {
+    match std::fs::metadata(path) {
+        Ok(metadata) => Ok(metadata.is_file()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
 }
