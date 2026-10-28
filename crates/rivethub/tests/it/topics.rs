@@ -101,7 +101,7 @@ impl Api {
             Arc::new(testkit::FakeMux::default()),
             registry.clone(),
             TerminalOptions {
-                root: root.path().to_path_buf(),
+                roots: vec![root.path().to_path_buf()],
                 default: "claude".to_owned(),
                 commands: vec![LaunchCommand {
                     id: "claude".to_owned(),

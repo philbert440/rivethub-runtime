@@ -273,7 +273,7 @@ async fn roster_commands_may_start_outside_the_files_root_but_must_be_absolute()
             fixture.mux.clone(),
             fixture.registry.clone(),
             TerminalOptions {
-                root: root.clone(),
+                roots: vec![root.clone()],
                 default: "shell".into(),
                 max_ptys: 1,
                 commands: vec![LaunchCommand {
@@ -301,7 +301,7 @@ async fn a_chat_directory_outside_the_root_or_missing_is_named_in_the_refusal() 
     for (cwd, refusal) in [
         (
             outside.path().to_path_buf(),
-            "working directory is outside the terminal root",
+            "working directory is outside the terminal roots",
         ),
         (
             fixture.directory.path().join("missing"),

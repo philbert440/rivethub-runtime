@@ -19,16 +19,7 @@ pub(super) async fn build(
     let gateway = config.gateway.as_ref().ok_or_else(|| {
         ComposeError::Invalid("gateway settings are required for terminals".into())
     })?;
-    let root = gateway
-        .files_root
-        .clone()
-        .or_else(|| {
-            config
-                .runtime
-                .as_ref()
-                .and_then(|runtime| runtime.workspace.clone())
-        })
-        .ok_or_else(|| ComposeError::Invalid("terminal filesystem root is required".into()))?;
+    let roots = config.terminal_roots(env);
     let state_dir = config::Paths::new(env)?.state_dir();
     let roster_path =
         terminal::resolve_roster_path(gateway.commands_file.as_deref(), env, &state_dir);
@@ -72,7 +63,7 @@ pub(super) async fn build(
         Arc::clone(&mux) as Arc<dyn TerminalMux>,
         sessions,
         TerminalOptions {
-            root,
+            roots,
             default: roster.default_id,
             commands,
             max_ptys,

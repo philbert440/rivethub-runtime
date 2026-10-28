@@ -172,10 +172,12 @@ impl TerminalService {
     ) -> Result<std::path::PathBuf, ApiError> {
         match cwd {
             Some(directory) => {
-                let root = self.options.root.clone();
-                tokio::task::spawn_blocking(move || super::contained_directory(&root, &directory))
-                    .await
-                    .map_err(ApiError::Task)?
+                let roots = self.options.roots.clone();
+                tokio::task::spawn_blocking(move || {
+                    super::roots::contained_directory(&roots, &directory)
+                })
+                .await
+                .map_err(ApiError::Task)?
             }
             None => Ok(fallback.to_path_buf()),
         }

@@ -3,12 +3,13 @@ mod chat;
 mod delegated;
 mod inject;
 pub(crate) mod live;
+mod roots;
 pub mod socket;
 mod stored;
 mod trust;
 
 use std::collections::BTreeMap;
-use std::path::{Component, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -51,7 +52,7 @@ pub struct RememberedSession {
 
 #[derive(Debug, Clone)]
 pub struct TerminalOptions {
-    pub root: PathBuf,
+    pub roots: Vec<PathBuf>,
     pub default: String,
     pub commands: Vec<LaunchCommand>,
     pub max_ptys: usize,
@@ -175,7 +176,7 @@ impl TerminalService {
     ) -> Result<(), ApiError> {
         match &self.claude_trust {
             Some(trust) if command.harness == Some(HarnessId::ClaudeCode) => {
-                trust.apply(&self.options.root, &command.cwd).await
+                trust.apply(&self.options.roots, &command.cwd).await
             }
             _ => Ok(()),
         }
@@ -547,7 +548,7 @@ fn valid_token(value: &str) -> bool {
 }
 
 fn validate_options(mut options: TerminalOptions) -> Result<TerminalOptions, ApiError> {
-    options.root = options.root.canonicalize().map_err(ApiError::Io)?;
+    options.roots = roots::existing_roots(&options.roots)?;
     if options.max_ptys == 0
         || !options
             .commands
@@ -571,41 +572,6 @@ fn validate_options(mut options: TerminalOptions) -> Result<TerminalOptions, Api
         }
     }
     Ok(options)
-}
-
-fn contained_directory(
-    root: &std::path::Path,
-    directory: &std::path::Path,
-) -> Result<PathBuf, ApiError> {
-    if !directory.is_absolute()
-        || directory
-            .components()
-            .any(|part| part == Component::ParentDir)
-    {
-        return Err(ApiError::BadRequest(
-            "invalid terminal command or directory".into(),
-        ));
-    }
-    let directory = match directory.canonicalize() {
-        Ok(directory) => directory,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Err(ApiError::BadRequest(
-                "working directory does not exist".into(),
-            ));
-        }
-        Err(error) => return Err(ApiError::Io(error)),
-    };
-    if !directory.starts_with(root) {
-        return Err(ApiError::Forbidden(
-            "working directory is outside the terminal root".into(),
-        ));
-    }
-    if !directory.is_dir() {
-        return Err(ApiError::BadRequest(
-            "working directory is not a directory".into(),
-        ));
-    }
-    Ok(directory)
 }
 
 fn native_id(value: &str) -> &str {

@@ -88,7 +88,7 @@ gateway:
 With the flag set, before the gateway launches a `claude-code` terminal command it marks the launch directory trusted in
 the Claude Code config file (`$CLAUDE_CONFIG_DIR/.claude.json`, or `~/.claude.json`) by setting
 `projects.<dir>.hasTrustDialogAccepted` and `hasCompletedProjectOnboarding`. Only a directory that resolves inside the
-terminal root (`gateway.files_root`, else `runtime.workspace`) or inside a configured `tasks.harnesses.<id>.cwd` is trusted;
+terminal roots (`gateway.terminal.roots`, see `crates/rivethub/README.md`) or inside a configured `tasks.harnesses.<id>.cwd` is trusted;
 any other directory launches normally and Claude Code asks as usual. Every other setting and project in the file is kept,
 the file is written through a temporary file and a rename, and a file that cannot be parsed is left untouched and the
 launch is refused with the parse error. The flag is off by default because trusting a folder lets that folder's own
