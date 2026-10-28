@@ -251,6 +251,7 @@ pub struct Gateway {
     memory_export: Option<Arc<dyn kernel::memory::MemoryExport>>,
     topics: Option<Arc<dyn kernel::topics::TopicStore>>,
     startup: Option<StartupMemory>,
+    deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
 }
 
 struct StartupMemory {
@@ -297,6 +298,7 @@ impl Gateway {
             memory_export: None,
             topics: None,
             startup: None,
+            deletions: None,
         }
     }
 
@@ -356,6 +358,19 @@ impl Gateway {
         self.startup
             .as_ref()
             .map(|startup| (startup.pages.as_ref(), startup.kept.as_ref()))
+    }
+
+    #[must_use]
+    pub fn with_session_deletion(
+        mut self,
+        deletions: Arc<dyn kernel::memory::SessionDeletion>,
+    ) -> Self {
+        self.deletions = Some(deletions);
+        self
+    }
+
+    pub(crate) fn session_deletion(&self) -> Option<&dyn kernel::memory::SessionDeletion> {
+        self.deletions.as_deref()
     }
 
     pub(crate) fn memory_export(&self) -> Option<&Arc<dyn kernel::memory::MemoryExport>> {

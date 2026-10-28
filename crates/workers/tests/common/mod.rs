@@ -404,7 +404,8 @@ fn default_max_attempts(name: &JobName) -> u32 {
             | FixedJob::RecompileWiki
             | FixedJob::EnqueueStaleWiki
             | FixedJob::EnqueueStaleSummaries
-            | FixedJob::ReapDeadJobs => 25,
+            | FixedJob::ReapDeadJobs
+            | FixedJob::PurgeDeletedSessions => 25,
         },
         JobName::Heartbeat { .. } | JobName::RunTaskOn { .. } => 1,
     }

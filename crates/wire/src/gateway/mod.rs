@@ -6,6 +6,7 @@ pub mod hub_state;
 pub mod memory;
 pub mod notifications;
 pub mod roster;
+pub mod session_delete;
 pub mod sessions;
 pub mod term;
 pub mod topics;

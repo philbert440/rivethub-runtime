@@ -28,10 +28,17 @@ impl SqliteStore {
             let tx = conn
                 .transaction()
                 .map_err(SqliteError::query("append begin"))?;
-            let ids = entries
-                .iter()
-                .map(|entry| append_one(&tx, entry, owner.as_deref(), now))
-                .collect::<Result<Vec<_>, _>>()?;
+            let mut ids = Vec::with_capacity(entries.len());
+            for entry in &entries {
+                if crate::deletion::tombstoned(&tx, &entry.session_id)? {
+                    tracing::debug!(
+                        session_key = %entry.session_id,
+                        "append dropped for a deleted session"
+                    );
+                    continue;
+                }
+                ids.push(append_one(&tx, entry, owner.as_deref(), now)?);
+            }
             tx.commit().map_err(SqliteError::query("append commit"))?;
             Ok(ids)
         })

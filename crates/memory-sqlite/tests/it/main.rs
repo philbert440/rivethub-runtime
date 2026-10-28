@@ -26,6 +26,7 @@ mod replay_wiki;
 mod search_filters;
 mod search_modes;
 mod search_parity;
+mod session_delete;
 mod summarizer_health;
 mod summary_dag;
 mod summary_title;

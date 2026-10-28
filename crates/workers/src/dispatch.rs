@@ -32,6 +32,7 @@ pub(crate) struct JobEnv {
     pub(crate) tags: TagSettings,
     pub(crate) topics: Option<SessionTopics>,
     pub(crate) topic_pages: Option<crate::topic_page::TopicPages>,
+    pub(crate) deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
 }
 
 pub(crate) async fn dispatch<Q: JobQueue>(
@@ -109,6 +110,7 @@ pub(crate) async fn dispatch<Q: JobQueue>(
             dispatch_consolidate(queue, env, job, cancel).await
         }
         JobName::Fixed(FixedJob::SyncTopicPage) => dispatch_topic_page(env, job, cancel).await,
+        JobName::Fixed(FixedJob::PurgeDeletedSessions) => dispatch_purge(env, cancel).await,
         JobName::Fixed(FixedJob::RecompileWiki | FixedJob::RunTask)
         | JobName::Heartbeat { .. }
         | JobName::RunTaskOn { .. } => Err(WorkerError::Unhandled {
@@ -129,6 +131,18 @@ async fn dispatch_topic_page(
             role: ProcessRole::Summarizer,
         })?;
     crate::topic_page::handle_sync_topic_page(deps, &job.payload, cancel).await
+}
+
+async fn dispatch_purge(env: &JobEnv, cancel: &CancellationToken) -> Result<(), WorkerError> {
+    let deletions = env
+        .deletions
+        .as_ref()
+        .ok_or(WorkerError::MissingDependencies {
+            role: ProcessRole::Summarizer,
+        })?;
+    crate::deleted_sessions::handle_purge(deletions.as_ref(), cancel)
+        .await
+        .map(|_| ())
 }
 
 async fn dispatch_wiki<Q: JobQueue>(

@@ -1,0 +1,261 @@
+use kernel::memory::DeletedSession;
+use kernel::memory::SessionDeletion;
+use kernel::topics::Placement;
+use kernel::topics::PlacementSource;
+use kernel::topics::TopicStore;
+use memory_postgres::PostgresMemory;
+use sqlx::PgPool;
+use testkit::session_delete;
+use testkit::topics::at;
+use testkit::topics::new_topic;
+use uuid::Uuid;
+use wire::session_id::SessionId;
+
+type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+async fn conversations(pool: &PgPool, session: &SessionId) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar("SELECT id FROM rh_conversations WHERE session_key = $1 ORDER BY agent")
+        .bind(session.as_str())
+        .fetch_all(pool)
+        .await
+}
+
+async fn seed_related(pool: &PgPool, session: &SessionId) -> Result<Vec<Uuid>, sqlx::Error> {
+    let mut summaries = Vec::new();
+    for conversation in conversations(pool, session).await? {
+        let summary = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO rh_summaries (id, conversation_id, content) VALUES ($1, $2, 'summary text')",
+        )
+        .bind(summary)
+        .bind(conversation)
+        .execute(pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO rh_summary_sources (summary_id, message_id, ordinal)
+             SELECT $1, id, 0 FROM rh_messages WHERE conversation_id = $2",
+        )
+        .bind(summary)
+        .bind(conversation)
+        .execute(pool)
+        .await?;
+        for (entity_type, entity) in [("conversation", conversation), ("summary", summary)] {
+            sqlx::query(
+                "INSERT INTO rh_tags (entity_type, entity_id, key, value, source, state)
+                 VALUES ($1, $2, 'project', 'demo', 'user', 'accepted')",
+            )
+            .bind(entity_type)
+            .bind(entity)
+            .execute(pool)
+            .await?;
+        }
+        summaries.push(summary);
+    }
+    sqlx::query(
+        "INSERT INTO rh_session_startup (session_id, topic_id, tokens, sections, created_at)
+         VALUES ($1, $2, 0, '[]'::jsonb, now())",
+    )
+    .bind(session.as_str())
+    .bind(Uuid::new_v4())
+    .execute(pool)
+    .await?;
+    Ok(summaries)
+}
+
+async fn count(pool: &PgPool, sql: &str, session: &SessionId) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql.to_owned()))
+        .bind(session.as_str())
+        .fetch_one(pool)
+        .await
+}
+
+async fn remaining(pool: &PgPool, session: &SessionId) -> Result<[i64; 7], sqlx::Error> {
+    let of_conversations = "SELECT id FROM rh_conversations WHERE session_key = $1";
+    let of_summaries =
+        format!("SELECT id FROM rh_summaries WHERE conversation_id IN ({of_conversations})");
+    Ok([
+        count(
+            pool,
+            "SELECT count(*) FROM rh_conversations WHERE session_key = $1",
+            session,
+        )
+        .await?,
+        count(
+            pool,
+            &format!(
+                "SELECT count(*) FROM rh_messages WHERE conversation_id IN ({of_conversations})"
+            ),
+            session,
+        )
+        .await?,
+        count(
+            pool,
+            &format!("SELECT count(*) FROM ({of_summaries}) s"),
+            session,
+        )
+        .await?,
+        count(
+            pool,
+            &format!(
+                "SELECT count(*) FROM rh_summary_sources WHERE summary_id IN ({of_summaries})"
+            ),
+            session,
+        )
+        .await?,
+        count(
+            pool,
+            &format!(
+                "SELECT count(*) FROM rh_tags
+                  WHERE entity_id IN ({of_conversations}) OR entity_id IN ({of_summaries})"
+            ),
+            session,
+        )
+        .await?,
+        count(
+            pool,
+            "SELECT count(*) FROM rh_session_placements WHERE session_id = $1",
+            session,
+        )
+        .await?,
+        count(
+            pool,
+            "SELECT count(*) FROM rh_session_startup WHERE session_id = $1",
+            session,
+        )
+        .await?,
+    ])
+}
+
+async fn place(memory: &PostgresMemory, sessions: &[&SessionId]) -> TestResult {
+    let topic = memory.create(new_topic("Release", &[], None)?).await?;
+    for session in sessions {
+        memory
+            .place(Placement {
+                session: (*session).clone(),
+                topic: topic.id,
+                by: PlacementSource::You,
+                at: at(3),
+            })
+            .await?;
+    }
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn delete_removes_one_session_and_leaves_its_sibling(pool: PgPool) -> TestResult {
+    crate::common::install_graphile(&pool).await?;
+    let memory = PostgresMemory::new(pool.clone());
+    let (deleted, sibling) = session_delete::seed(&memory).await?;
+    place(&memory, &[&deleted, &sibling]).await?;
+    seed_related(&pool, &deleted).await?;
+    seed_related(&pool, &sibling).await?;
+    let sibling_before = remaining(&pool, &sibling).await?;
+    assert_eq!(remaining(&pool, &deleted).await?, [2, 4, 2, 4, 4, 1, 1]);
+    let erased = memory
+        .delete_session(&deleted, Some("user-1"), at(10))
+        .await?;
+    assert_eq!(
+        erased,
+        DeletedSession {
+            conversations: 2,
+            messages: 4,
+            summaries: 2,
+        }
+    );
+    assert_eq!(remaining(&pool, &deleted).await?, [0; 7]);
+    assert_eq!(remaining(&pool, &sibling).await?, sibling_before);
+    let deleted_by: Option<String> =
+        sqlx::query_scalar("SELECT deleted_by FROM rh_session_tombstones WHERE session_key = $1")
+            .bind(deleted.as_str())
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(deleted_by.as_deref(), Some("user-1"));
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn capture_and_append_for_a_deleted_session_write_nothing(pool: PgPool) -> TestResult {
+    let memory = PostgresMemory::new(pool);
+    session_delete::capture_for_a_deleted_session_writes_nothing(&memory, &memory).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn activity_counts_turns_tools_and_placements(pool: PgPool) -> TestResult {
+    let memory = PostgresMemory::new(pool);
+    session_delete::activity_counts_turns_tools_and_placements(&memory, &memory, &memory).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_summary_cited_by_a_wiki_page_marks_the_session_cited(pool: PgPool) -> TestResult {
+    crate::common::install_graphile(&pool).await?;
+    let memory = PostgresMemory::new(pool.clone());
+    let (deleted, sibling) = session_delete::seed(&memory).await?;
+    let summaries = seed_related(&pool, &deleted).await?;
+    sqlx::query("INSERT INTO rh_wiki_topics (slug, title) VALUES ('release', 'Release')")
+        .execute(&pool)
+        .await?;
+    sqlx::query("INSERT INTO rh_wiki_citations (topic_slug, summary_id) VALUES ('release', $1)")
+        .bind(summaries.first().copied().ok_or("a seeded summary")?)
+        .execute(&pool)
+        .await?;
+    let activity = memory
+        .session_activity(&[deleted.clone(), sibling.clone()])
+        .await?;
+    assert_eq!(activity.get(&deleted).map(|entry| entry.cited), Some(true));
+    assert_eq!(activity.get(&sibling).map(|entry| entry.cited), Some(false));
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_sweep_removes_rows_written_behind_the_gateway(pool: PgPool) -> TestResult {
+    crate::common::install_graphile(&pool).await?;
+    let memory = PostgresMemory::new(pool.clone());
+    let (deleted, sibling) = session_delete::seed(&memory).await?;
+    memory.delete_session(&deleted, None, at(10)).await?;
+    let conversation: Uuid = sqlx::query_scalar(
+        "INSERT INTO rh_conversations (session_key, agent) VALUES ($1, 'external') RETURNING id",
+    )
+    .bind(deleted.as_str())
+    .fetch_one(&pool)
+    .await?;
+    sqlx::query(
+        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content)
+         VALUES ($1, 'external', 'cli', 'user', 'written directly')",
+    )
+    .bind(conversation)
+    .execute(&pool)
+    .await?;
+    let topic = memory.create(new_topic("Late", &[], None)?).await?;
+    memory
+        .place(Placement {
+            session: deleted.clone(),
+            topic: topic.id,
+            by: PlacementSource::Categorizer,
+            at: at(11),
+        })
+        .await?;
+    let purged = memory.purge_tombstoned(100).await?;
+    assert_eq!(
+        purged,
+        DeletedSession {
+            conversations: 1,
+            messages: 1,
+            summaries: 0,
+        }
+    );
+    assert_eq!(
+        memory.purge_tombstoned(100).await?,
+        DeletedSession::default()
+    );
+    assert_eq!(remaining(&pool, &deleted).await?, [0; 7]);
+    assert_eq!(
+        count(
+            &pool,
+            "SELECT count(*) FROM rh_conversations WHERE session_key = $1",
+            &sibling
+        )
+        .await?,
+        1
+    );
+    Ok(())
+}

@@ -75,6 +75,13 @@ impl SqliteStore {
                 let tx = conn
                     .transaction()
                     .map_err(SqliteError::query("capture begin"))?;
+                if crate::deletion::tombstoned(&tx, &prepared.key.session_key)? {
+                    tracing::debug!(
+                        session_key = %prepared.key.session_key,
+                        "capture dropped for a deleted session"
+                    );
+                    return prepared.dropped();
+                }
                 let result = prepared.write(&tx, owner.as_deref(), now, embed)?;
                 tx.commit().map_err(SqliteError::query("capture commit"))?;
                 Ok(result)
@@ -114,6 +121,15 @@ impl PreparedBatch {
             created_at,
             updated_at,
             messages,
+        })
+    }
+
+    fn dropped(&self) -> Result<CaptureResult, SqliteError> {
+        Ok(CaptureResult {
+            ok: true,
+            conversation_id: String::new(),
+            inserted: 0,
+            skipped: u64::try_from(self.messages.len()).map_err(SqliteError::Count)?,
         })
     }
 

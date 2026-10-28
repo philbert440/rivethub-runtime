@@ -163,6 +163,11 @@ impl ListLimit {
     pub const MAX: usize = 500;
 
     #[must_use]
+    pub const fn most() -> Self {
+        Self(Self::MAX)
+    }
+
+    #[must_use]
     pub const fn per_harness_route() -> Self {
         Self::DEFAULT
     }

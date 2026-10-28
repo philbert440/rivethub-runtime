@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM rh_session_tombstones WHERE session_key = $1) AS \"tombstoned!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tombstoned!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ebab8e58c44d0d3db9187ffb553e021d480d3e43798b43395c3498eb3320c17c"
+}

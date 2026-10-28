@@ -1,0 +1,350 @@
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+
+use async_trait::async_trait;
+use chrono::DateTime;
+use chrono::Utc;
+use kernel::memory::DeletedSession;
+use kernel::memory::MemoryStoreError;
+use kernel::memory::SessionActivity;
+use kernel::memory::SessionDeletion;
+use sqlx::PgConnection;
+use uuid::Uuid;
+use wire::session_id::SessionId;
+
+use crate::PostgresMemory;
+use crate::error::Error;
+
+struct ActivityRow {
+    session_key: String,
+    conversations: i64,
+    messages: i64,
+    user_messages: i64,
+    assistant_messages: i64,
+    tool_rows: i64,
+    attachments: i64,
+    tasked: bool,
+    reply: Option<String>,
+}
+
+fn count(value: i64) -> Result<u64, Error> {
+    u64::try_from(value).map_err(Error::from)
+}
+
+fn keys(sessions: &[SessionId]) -> Vec<String> {
+    sessions
+        .iter()
+        .map(|session| session.as_str().to_owned())
+        .collect()
+}
+
+fn requested(sessions: &[SessionId], found: &[String]) -> BTreeSet<SessionId> {
+    sessions
+        .iter()
+        .filter(|session| found.iter().any(|key| key == session.as_str()))
+        .cloned()
+        .collect()
+}
+
+pub(crate) async fn tombstoned(conn: &mut PgConnection, session_key: &str) -> Result<bool, Error> {
+    sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM rh_session_tombstones WHERE session_key = $1) AS "tombstoned!""#,
+        session_key
+    )
+    .fetch_one(conn)
+    .await
+    .map_err(|source| Error::operation("tombstone lookup", source))
+}
+
+async fn lock(conn: &mut PgConnection, session_key: &str) -> Result<(), Error> {
+    sqlx::query!(
+        "select pg_advisory_xact_lock(hashtext($1)) is not null as locked",
+        session_key
+    )
+    .fetch_one(conn)
+    .await
+    .map_err(|source| Error::operation("session delete lock", source))?;
+    Ok(())
+}
+
+async fn purge(conn: &mut PgConnection, session_key: &str) -> Result<DeletedSession, Error> {
+    let fail = |operation| move |source| Error::operation(operation, source);
+    let conversations: Vec<Uuid> = sqlx::query_scalar!(
+        "SELECT id FROM rh_conversations WHERE session_key = $1 FOR UPDATE",
+        session_key
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(fail("session conversations"))?;
+    let summaries: Vec<Uuid> = sqlx::query_scalar!(
+        "SELECT id FROM rh_summaries WHERE conversation_id = ANY($1)",
+        &conversations
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(fail("session summaries"))?;
+    sqlx::query!(
+        "DELETE FROM rh_tags
+          WHERE (entity_type = 'conversation' AND entity_id = ANY($1))
+             OR (entity_type = 'summary' AND entity_id = ANY($2))",
+        &conversations,
+        &summaries
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(fail("session tags delete"))?;
+    let messages = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM rh_messages WHERE conversation_id = ANY($1)"#,
+        &conversations
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(fail("session messages count"))?;
+    let removed_summaries = sqlx::query!("DELETE FROM rh_summaries WHERE id = ANY($1)", &summaries)
+        .execute(&mut *conn)
+        .await
+        .map_err(fail("session summaries delete"))?
+        .rows_affected();
+    sqlx::query!(
+        "DELETE FROM rh_session_placements WHERE session_id = $1",
+        session_key
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(fail("session placement delete"))?;
+    sqlx::query!(
+        "DELETE FROM rh_session_suggestions WHERE session_id = $1",
+        session_key
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(fail("session suggestion delete"))?;
+    sqlx::query!(
+        "DELETE FROM rh_session_startup WHERE session_id = $1",
+        session_key
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(fail("session startup delete"))?;
+    let removed_conversations = sqlx::query!(
+        "DELETE FROM rh_conversations WHERE id = ANY($1)",
+        &conversations
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(fail("session conversations delete"))?
+    .rows_affected();
+    Ok(DeletedSession {
+        conversations: removed_conversations,
+        messages: count(messages)?,
+        summaries: removed_summaries,
+    })
+}
+
+impl PostgresMemory {
+    async fn erase(
+        &self,
+        session_key: &str,
+        tombstone: Option<(DateTime<Utc>, Option<&str>)>,
+    ) -> Result<DeletedSession, Error> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|source| Error::operation("session delete begin", source))?;
+        lock(&mut tx, session_key).await?;
+        if let Some((deleted_at, deleted_by)) = tombstone {
+            sqlx::query!(
+                "INSERT INTO rh_session_tombstones (session_key, deleted_at, deleted_by)
+                 VALUES ($1, $2, $3)
+                 ON CONFLICT (session_key) DO UPDATE
+                    SET deleted_at = EXCLUDED.deleted_at, deleted_by = EXCLUDED.deleted_by",
+                session_key,
+                deleted_at,
+                deleted_by
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|source| Error::operation("tombstone write", source))?;
+        }
+        let deleted = purge(&mut tx, session_key).await?;
+        tx.commit()
+            .await
+            .map_err(|source| Error::operation("session delete commit", source))?;
+        Ok(deleted)
+    }
+
+    async fn activity_rows(&self, keys: &[String]) -> Result<Vec<ActivityRow>, Error> {
+        sqlx::query_as!(
+            ActivityRow,
+            r#"SELECT c.session_key AS "session_key!",
+                      count(DISTINCT c.id) AS "conversations!",
+                      count(m.id) AS "messages!",
+                      count(m.id) FILTER (
+                          WHERE m.role = 'user' AND m.content ~ '[^[:space:]]'
+                      ) AS "user_messages!",
+                      count(m.id) FILTER (WHERE m.role = 'assistant') AS "assistant_messages!",
+                      count(m.id) FILTER (
+                          WHERE m.role = 'tool' OR m.tool_name IS NOT NULL
+                             OR m.tool_args IS NOT NULL OR m.tool_result IS NOT NULL
+                      ) AS "tool_rows!",
+                      count(m.id) FILTER (
+                          WHERE m.metadata ? 'attachments'
+                             OR m.metadata ? 'images'
+                      ) AS "attachments!",
+                      bool_or(c.task_id IS NOT NULL) AS "tasked!",
+                      (array_agg(m.content ORDER BY m.created_at, m.id)
+                          FILTER (WHERE m.role = 'assistant'))[1] AS reply
+                 FROM rh_conversations c
+                 LEFT JOIN rh_messages m ON m.conversation_id = c.id
+                WHERE c.session_key = ANY($1)
+                GROUP BY c.session_key"#,
+            keys
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|source| Error::operation("session activity", source))
+    }
+
+    async fn placed_keys(&self, keys: &[String]) -> Result<Vec<String>, Error> {
+        sqlx::query_scalar!(
+            "SELECT session_id FROM rh_session_placements WHERE session_id = ANY($1)",
+            keys
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|source| Error::operation("session placements", source))
+    }
+
+    async fn cited_keys(&self, keys: &[String]) -> Result<Vec<String>, Error> {
+        sqlx::query_scalar!(
+            r#"SELECT DISTINCT c.session_key AS "session_key!"
+                 FROM rh_conversations c
+                WHERE c.session_key = ANY($1)
+                  AND (
+                      EXISTS (
+                          SELECT 1 FROM rh_summaries s
+                            JOIN rh_wiki_citations w ON w.summary_id = s.id
+                           WHERE s.conversation_id = c.id
+                      )
+                      OR EXISTS (
+                          SELECT 1 FROM rh_wiki_provenance p
+                           WHERE p.conversation_id = c.id
+                              OR (p.source_kind = 'conversation' AND p.source_id = c.id)
+                              OR (p.source_kind = 'summary' AND p.source_id IN (
+                                  SELECT s.id FROM rh_summaries s WHERE s.conversation_id = c.id
+                              ))
+                              OR (p.source_kind = 'message' AND p.source_id IN (
+                                  SELECT m.id FROM rh_messages m WHERE m.conversation_id = c.id
+                              ))
+                      )
+                  )"#,
+            keys
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|source| Error::operation("session citations", source))
+    }
+
+    async fn activity(
+        &self,
+        sessions: &[SessionId],
+    ) -> Result<BTreeMap<SessionId, SessionActivity>, Error> {
+        let keys = keys(sessions);
+        let rows = self.activity_rows(&keys).await?;
+        let placed = requested(sessions, &self.placed_keys(&keys).await?);
+        let cited = requested(sessions, &self.cited_keys(&keys).await?);
+        let mut activity: BTreeMap<SessionId, SessionActivity> = sessions
+            .iter()
+            .map(|session| (session.clone(), SessionActivity::default()))
+            .collect();
+        for row in rows {
+            for session in sessions
+                .iter()
+                .filter(|session| session.as_str() == row.session_key)
+            {
+                activity.insert(
+                    session.clone(),
+                    SessionActivity {
+                        conversations: count(row.conversations)?,
+                        messages: count(row.messages)?,
+                        user_messages: count(row.user_messages)?,
+                        assistant_messages: count(row.assistant_messages)?,
+                        reply: row.reply.clone(),
+                        tool_rows: count(row.tool_rows)?,
+                        attachments: count(row.attachments)?,
+                        tasked: row.tasked,
+                        placed: false,
+                        cited: false,
+                    },
+                );
+            }
+        }
+        for (session, entry) in &mut activity {
+            entry.placed = placed.contains(session);
+            entry.cited = cited.contains(session);
+        }
+        Ok(activity)
+    }
+
+    async fn purge_all(&self, limit: u32) -> Result<DeletedSession, Error> {
+        let pending = sqlx::query_scalar!(
+            "SELECT t.session_key FROM rh_session_tombstones t
+              WHERE EXISTS (SELECT 1 FROM rh_conversations c WHERE c.session_key = t.session_key)
+                 OR EXISTS (SELECT 1 FROM rh_session_placements p WHERE p.session_id = t.session_key)
+                 OR EXISTS (SELECT 1 FROM rh_session_suggestions s WHERE s.session_id = t.session_key)
+                 OR EXISTS (SELECT 1 FROM rh_session_startup u WHERE u.session_id = t.session_key)
+              ORDER BY t.deleted_at, t.session_key
+              LIMIT $1",
+            i64::from(limit)
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|source| Error::operation("tombstone sweep", source))?;
+        let mut total = DeletedSession::default();
+        for session_key in pending {
+            total += self.erase(&session_key, None).await?;
+        }
+        Ok(total)
+    }
+}
+
+#[async_trait]
+impl SessionDeletion for PostgresMemory {
+    async fn delete_session(
+        &self,
+        session: &SessionId,
+        deleted_by: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> Result<DeletedSession, MemoryStoreError> {
+        self.erase(session.as_str(), Some((now, deleted_by)))
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn tombstoned(
+        &self,
+        sessions: &[SessionId],
+    ) -> Result<BTreeSet<SessionId>, MemoryStoreError> {
+        let keys = keys(sessions);
+        let found = sqlx::query_scalar!(
+            "SELECT session_key FROM rh_session_tombstones WHERE session_key = ANY($1)",
+            &keys
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|source| Error::operation("tombstones", source))?;
+        Ok(requested(sessions, &found))
+    }
+
+    async fn session_activity(
+        &self,
+        sessions: &[SessionId],
+    ) -> Result<BTreeMap<SessionId, SessionActivity>, MemoryStoreError> {
+        self.activity(sessions).await.map_err(Into::into)
+    }
+
+    async fn purge_tombstoned(&self, limit: u32) -> Result<DeletedSession, MemoryStoreError> {
+        self.purge_all(limit).await.map_err(Into::into)
+    }
+}

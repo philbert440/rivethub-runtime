@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::worker::ComposedRunner;
 use config::{Config, Environment, ServiceSwitch};
 use gateway::server::ServeOptions;
+use kernel::memory::SessionDeletion;
 use kernel::memory::jobs::UnembeddedStore;
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
@@ -503,6 +504,9 @@ async fn build_runners(
                 .runner
                 .with_unembedded(Arc::clone(store) as Arc<dyn UnembeddedStore>);
         }
+        runner.runner = runner
+            .runner
+            .with_session_deletion(Arc::clone(store) as Arc<dyn SessionDeletion>);
         if matches!(role, ProcessRole::Embedder | ProcessRole::Summarizer) {
             runner.runner = runner.runner.with_schedules(true).with_schedule_at_start();
         }

@@ -1,4 +1,5 @@
 mod categorize;
+mod deleted_sessions;
 mod dispatch;
 mod embed;
 pub mod embedding_sweep;
@@ -23,6 +24,7 @@ pub use categorize::TagSettings;
 pub use categorize::handle_suggest;
 pub use categorize::suggest_tags_job;
 pub use categorize::tag_user_prompt;
+pub use deleted_sessions::handle_purge;
 pub use embed::EmbedSettings;
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;

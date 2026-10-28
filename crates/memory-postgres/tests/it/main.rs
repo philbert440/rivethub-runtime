@@ -12,6 +12,7 @@ mod queue;
 mod queue_notifications;
 mod search_filters;
 mod search_port;
+mod session_delete;
 mod store;
 mod summary_dag;
 mod summary_store;

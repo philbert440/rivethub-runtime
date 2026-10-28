@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.session_key AS \"session_key!\",\n                      count(DISTINCT c.id) AS \"conversations!\",\n                      count(m.id) AS \"messages!\",\n                      count(m.id) FILTER (\n                          WHERE m.role = 'user' AND m.content ~ '[^[:space:]]'\n                      ) AS \"user_messages!\",\n                      count(m.id) FILTER (WHERE m.role = 'assistant') AS \"assistant_messages!\",\n                      count(m.id) FILTER (\n                          WHERE m.role = 'tool' OR m.tool_name IS NOT NULL\n                             OR m.tool_args IS NOT NULL OR m.tool_result IS NOT NULL\n                      ) AS \"tool_rows!\",\n                      count(m.id) FILTER (\n                          WHERE m.metadata ? 'attachments'\n                             OR m.metadata ? 'images'\n                      ) AS \"attachments!\",\n                      bool_or(c.task_id IS NOT NULL) AS \"tasked!\",\n                      (array_agg(m.content ORDER BY m.created_at, m.id)\n                          FILTER (WHERE m.role = 'assistant'))[1] AS reply\n                 FROM rh_conversations c\n                 LEFT JOIN rh_messages m ON m.conversation_id = c.id\n                WHERE c.session_key = ANY($1)\n                GROUP BY c.session_key",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_key!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "session_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "conversations!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "messages!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "user_messages!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "assistant_messages!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "tool_rows!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "attachments!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "tasked!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "reply",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "911a3cf60de1f14134cecb405fb72a40fede36537b48433191b871a7e64df801"
+}

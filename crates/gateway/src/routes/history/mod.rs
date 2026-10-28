@@ -1,7 +1,7 @@
 mod registry;
 mod socket;
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 
 use axum::extract::{Path, RawQuery, State};
@@ -16,6 +16,7 @@ use wire::gateway::sessions::{
 use wire::harness::{
     HarnessCode, HarnessId, HarnessSessionList, HarnessSessionSummary, HarnessStoreSessionList,
 };
+use wire::session_id::SessionId;
 
 use super::terminal::require;
 use crate::Gateway;
@@ -63,9 +64,30 @@ pub(super) fn first_param(query: Option<&str>, name: &str) -> Result<Option<Stri
 }
 
 async fn listed(gateway: &Gateway, harnesses: &[HarnessId], limit: ListLimit) -> Vec<StoreSession> {
-    match gateway.session_lister() {
+    let rows = match gateway.session_lister() {
         Some(lister) => lister.list(harnesses, limit).await,
         None => Vec::new(),
+    };
+    let ids: Vec<SessionId> = rows
+        .iter()
+        .map(|row| SessionId::new(row.harness, &row.id))
+        .collect();
+    let deleted = deleted_sessions(gateway, &ids).await;
+    rows.into_iter()
+        .filter(|row| !deleted.contains(&SessionId::new(row.harness, &row.id)))
+        .collect()
+}
+
+async fn deleted_sessions(gateway: &Gateway, ids: &[SessionId]) -> BTreeSet<SessionId> {
+    let Some(deletions) = gateway.session_deletion() else {
+        return BTreeSet::new();
+    };
+    match deletions.tombstoned(ids).await {
+        Ok(deleted) => deleted,
+        Err(error) => {
+            tracing::warn!(%error, "session tombstones are unreadable; listing every session");
+            BTreeSet::new()
+        }
     }
 }
 
@@ -77,7 +99,11 @@ fn row_parent(row: &StoreSession) -> Option<&str> {
     row.parent_session_id.as_deref()
 }
 
-fn visible_rows(gateway: &Gateway, user: &UserId, rows: Vec<StoreSession>) -> Vec<StoreSession> {
+pub(super) fn visible_rows(
+    gateway: &Gateway,
+    user: &UserId,
+    rows: Vec<StoreSession>,
+) -> Vec<StoreSession> {
     let registry = gateway.sessions();
     registry.stamp_nested(&rows, row_id, row_parent);
     registry.filter(user, rows, row_id, row_parent)
@@ -133,8 +159,16 @@ async fn plane(
         sessions.push(store_summary(&gateway, row, current).await);
         stored.insert(row.id.clone());
     }
+    let live_ids: Vec<SessionId> = live
+        .iter()
+        .map(|(_, summary)| summary.session_id.clone())
+        .collect();
+    let deleted = deleted_sessions(&gateway, &live_ids).await;
     for (key, summary) in live {
-        if !stored.contains(&key) && gateway.sessions().visible(&user, &key, None)? {
+        if !stored.contains(&key)
+            && !deleted.contains(&summary.session_id)
+            && gateway.sessions().visible(&user, &key, None)?
+        {
             sessions.push(summary);
         }
     }

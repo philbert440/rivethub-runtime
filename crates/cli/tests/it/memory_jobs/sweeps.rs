@@ -255,7 +255,7 @@ async fn cron_registration_and_due_jobs_follow_roles_and_wiki_switch(pool: PgPoo
         .into_iter()
         .flat_map(|role| role.crontab(true))
         .collect();
-    assert_eq!(entries.len(), 8);
+    assert_eq!(entries.len(), 9);
     assert_eq!(WorkerRole::WikiBuilder.crontab(false).len(), 1);
     assert!(entries.iter().all(|entry| entry.backfill_seconds == 0));
     workers::schedule::enqueue_due(&queue, &entries, "2026-10-16T12:30:00Z".parse()?, &cancel)
@@ -265,6 +265,7 @@ async fn cron_registration_and_due_jobs_follow_roles_and_wiki_switch(pool: PgPoo
         (FixedJob::EnqueueUnchunked, "unchunked-sweep"),
         (FixedJob::EnqueueIdle, "idle-enqueue"),
         (FixedJob::EnqueueStaleSummaries, "stale-compaction-sweep"),
+        (FixedJob::PurgeDeletedSessions, "deleted-session-sweep"),
         (FixedJob::EnqueueWikiBackfill, "wiki-backfill"),
         (FixedJob::EnqueueStaleWiki, "stale-wiki-sweep"),
     ]

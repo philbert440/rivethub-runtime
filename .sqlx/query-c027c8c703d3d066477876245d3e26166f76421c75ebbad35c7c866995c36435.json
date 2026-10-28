@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM rh_tags\n          WHERE (entity_type = 'conversation' AND entity_id = ANY($1))\n             OR (entity_type = 'summary' AND entity_id = ANY($2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c027c8c703d3d066477876245d3e26166f76421c75ebbad35c7c866995c36435"
+}

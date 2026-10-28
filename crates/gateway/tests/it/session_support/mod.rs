@@ -314,6 +314,16 @@ impl Fixture {
         lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
         extra: &[(&str, HarnessId)],
     ) -> Self {
+        Self::with_deletion(harness, registry, lister, extra, None).await
+    }
+
+    pub(crate) async fn with_deletion(
+        harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
+        registry: gateway::sessions::SessionRegistry,
+        lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
+        extra: &[(&str, HarnessId)],
+        deletion: Option<Arc<dyn kernel::memory::SessionDeletion>>,
+    ) -> Self {
         let directory = tempfile::tempdir().expect("temporary terminal directory");
         let root = directory.path().to_path_buf();
         let registry = Arc::new(registry);
@@ -377,8 +387,12 @@ impl Fixture {
         .with_sessions(registry.clone())
         .with_terminal(service.clone())
         .with_uploads(uploads(directory.path()));
-        let gateway = Arc::new(match lister {
+        let gateway = match lister {
             Some(lister) => gateway.with_session_lister(lister),
+            None => gateway,
+        };
+        let gateway = Arc::new(match deletion {
+            Some(deletion) => gateway.with_session_deletion(deletion),
             None => gateway,
         });
         Self {
