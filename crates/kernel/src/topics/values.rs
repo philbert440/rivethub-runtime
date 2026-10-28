@@ -4,9 +4,11 @@ use std::str::FromStr;
 
 use chrono::DateTime;
 use chrono::Utc;
+use strum::IntoEnumIterator as _;
 use uuid::Uuid;
 
 use super::TopicError;
+use crate::wiki::route::Category;
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
@@ -259,6 +261,26 @@ impl Topic {
     #[must_use]
     pub fn root(&self) -> TopicId {
         self.parent.unwrap_or(self.id)
+    }
+
+    #[must_use]
+    pub fn is_category(&self) -> bool {
+        self.parent.is_none()
+            && Category::iter().any(|category| fold(&category.to_string()) == self.slug.as_str())
+    }
+
+    pub fn check_delete(&self, has_subtopics: bool) -> Result<(), TopicError> {
+        if self.is_category() {
+            return Err(TopicError::CategoryTopic {
+                slug: self.slug.clone(),
+            });
+        }
+        if has_subtopics {
+            return Err(TopicError::SubtopicsRemain {
+                slug: self.slug.clone(),
+            });
+        }
+        Ok(())
     }
 
     pub fn apply(mut self, changes: TopicChanges, now: DateTime<Utc>) -> Result<Self, TopicError> {

@@ -120,6 +120,17 @@ impl TopicStore for SqliteStore {
         .inspect(|_| self.notifications.send_replace(()))
     }
 
+    async fn delete(&self, id: TopicId) -> Result<(), TopicError> {
+        self.topics("topic delete", move |conn| {
+            let topic = rows::by_id(conn, id)?.ok_or_else(|| not_found(id))?;
+            topic.check_delete(!rows::subtopics(conn, id)?.is_empty())?;
+            write::remove(conn, id)?;
+            write::enqueue_syncs(conn, SyncTopicPage::after_delete(&topic))
+        })
+        .await
+        .inspect(|()| self.notifications.send_replace(()))
+    }
+
     async fn find(&self, key: &TopicKey) -> Result<Option<Topic>, TopicError> {
         let key = key.clone();
         self.topics("topic read", move |conn| match &key {
