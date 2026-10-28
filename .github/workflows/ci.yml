@@ -49,6 +49,13 @@ jobs:
             install -m 755 "${RUNNER_TEMP}/${archive%.tar.gz}/${tool}" "${CARGO_HOME:-$HOME/.cargo}/bin/${tool}"
           done
           cargo dylint --version
+          # The dylint_driver build clones rust-clippy and checks out `master`, which upstream
+          # renamed to `main`. Serve it a mirror whose `master` is `main`.
+          clippy="${RUNNER_TEMP}/rust-clippy.git"
+          git clone --quiet --bare https://github.com/rust-lang/rust-clippy "${clippy}"
+          git -C "${clippy}" branch master main
+          git -C "${clippy}" symbolic-ref HEAD refs/heads/master
+          git config --global url."${clippy}".insteadOf https://github.com/rust-lang/rust-clippy
       - name: cargo xtask check
         # The Tests job compiles and runs every test binary, so the gate skips
         # the nextest list compile; a local `cargo xtask check` still runs it.
