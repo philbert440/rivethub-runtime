@@ -378,7 +378,7 @@ async fn other_harnesses_read_text_turns_from_their_stores() -> TestResult {
     let read = read(&lister, HarnessId::QwenCode, QWEN).await;
     assert_eq!(
         serde_json::to_string(&read.turns)?,
-        r#"[{"role":"user","text":"list the files"},{"role":"assistant","text":"Running ls."}]"#
+        r#"[{"role":"user","text":"list the files","startedAtMs":1791979200000,"endedAtMs":1791979200000},{"role":"assistant","text":"Running ls.","startedAtMs":1791979201000,"endedAtMs":1791979201000}]"#
     );
     Ok(())
 }
@@ -411,5 +411,33 @@ async fn an_image_only_user_turn_is_kept_with_empty_text() {
     assert_eq!(
         claude_json(&[&image_turn(None), &done]).await,
         r#"[{"role":"user","text":"","attachments":[{"mediaType":"image/png"}]},{"role":"assistant","text":"Red","stopReason":"end_turn","lastBlock":"text","complete":true}]"#
+    );
+}
+
+#[tokio::test]
+async fn a_turn_spans_its_first_and_last_store_timestamps() {
+    let stamped = |line: &str, at: &str| format!(r#"{{"timestamp":"{at}",{}"#, &line[1..]);
+    let result = r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"a.txt"}]}}"#;
+    let done = assistant(r#"[{"type":"text","text":"done"}]"#, "end_turn");
+    let turns = claude_turns(&[
+        &stamped(&user("list"), "2026-10-14T12:00:00Z"),
+        &stamped(
+            &tool_use("t1", "Bash", r#"{"command":"ls"}"#),
+            "2026-10-14T12:00:01Z",
+        ),
+        &stamped(result, "2026-10-14T12:00:03Z"),
+        &stamped(&done, "2026-10-14T12:00:04.500Z"),
+    ])
+    .await;
+    let times: Vec<_> = turns
+        .iter()
+        .map(|turn| (turn.started_at_ms, turn.ended_at_ms))
+        .collect();
+    assert_eq!(
+        times,
+        [
+            (Some(1_791_979_200_000), Some(1_791_979_200_000)),
+            (Some(1_791_979_201_000), Some(1_791_979_204_500)),
+        ]
     );
 }

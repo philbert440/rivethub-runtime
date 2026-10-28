@@ -89,6 +89,8 @@ pub struct HarnessTranscriptTurn {
     pub complete: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub compact: bool,
+    pub started_at_ms: Option<i64>,
+    pub ended_at_ms: Option<i64>,
 }
 
 #[serde_with::skip_serializing_none]

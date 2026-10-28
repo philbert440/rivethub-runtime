@@ -143,6 +143,8 @@ mod tests {
             attachments: None,
             complete: false,
             compact: false,
+            started_at_ms: None,
+            ended_at_ms: None,
         }
     }
 
