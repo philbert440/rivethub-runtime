@@ -33,6 +33,9 @@ pub use crate::routes::audio::AudioConfig;
 pub use crate::routes::audio::VoiceConfigError;
 pub use crate::routes::audio::VoiceSettings;
 
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const REVISION: Option<&str> = option_env!("RIVETHUB_BUILD_REVISION");
+
 const DEFAULT_PROBE_TIMEOUT: Duration = Duration::from_millis(1_500);
 const DEFAULT_MESH_CACHE_TTL: Duration = Duration::from_secs(10);
 

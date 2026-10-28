@@ -232,6 +232,10 @@ before the sub-topic sections): the root's decisions as `- <text> (<by>, <date>)
 and marked `superseded`, then each sub-topic's under `### <name>`. The section is rewritten on every sync, so edits go
 through these routes. Kept in `rh_topic_decisions` (migration 0030; SQLite schema v17). Bodies are the
 `wire::gateway::topics` decision types in `contract/*.schema.json`. The routes are new, with no TypeScript recording.
+(27) Node version: `/healthz` answers with optional `version` (the rh package version) and `revision` (the short git sha,
+present when the build had one), and each `/mesh.json` node carries the `version` and `revision` its own `/healthz`
+reported, absent while it is offline. The recorded healthz bodies match them with the `{{VERSION}}` and `{{REVISION}}`
+tokens. `rh status` prints the version.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

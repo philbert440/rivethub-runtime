@@ -82,6 +82,8 @@ pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> axum::respon
                 node,
                 degraded: None,
                 degraded_providers,
+                version: Some(crate::VERSION.to_owned()),
+                revision: crate::REVISION.map(str::to_owned),
             }),
         )
             .into_response(),
@@ -94,6 +96,8 @@ pub(crate) async fn healthz(State(gateway): State<Arc<Gateway>>) -> axum::respon
                 node,
                 degraded: Some(degraded_reason(&error)),
                 degraded_providers,
+                version: Some(crate::VERSION.to_owned()),
+                revision: crate::REVISION.map(str::to_owned),
             }),
         )
             .into_response(),

@@ -62,6 +62,8 @@ async fn tls_health(dns_name: &str) -> Result<Served> {
                             node: "node".to_owned(),
                             degraded: None,
                             degraded_providers: Vec::new(),
+                            version: None,
+                            revision: None,
                         })
                     }),
                 );
