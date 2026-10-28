@@ -28,6 +28,8 @@ pub enum ModelError {
     Provider(#[from] providers::BuildError),
     #[error(transparent)]
     Cli(#[from] providers::cli::CliError),
+    #[error(transparent)]
+    Paths(#[from] config::ConfigError),
 }
 
 #[expect(
@@ -230,7 +232,9 @@ impl ModelFactory {
                 let kind = slot.kind.ok_or_else(|| ModelError::Type(id.into()))?;
                 let harness = providers::cli::harness_id(kind)?;
                 let launch =
-                    HeadlessLaunch::prepare(config, harness, body, search.clone(), id.into()).await;
+                    HeadlessLaunch::prepare(config, harness, body, search.clone(), id.into())
+                        .await
+                        .with_discovery_dir(config::Paths::new(env)?.discovery_dir());
                 starting.spawn(launch.start(supervisor.clone()));
             }
         }

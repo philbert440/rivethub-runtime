@@ -568,10 +568,16 @@ async fn grok_missing_updated_at_is_zero() -> TestResult {
     write(
         dir.path(),
         "sessions/enc/d1/summary.json",
-        r#"{"session_summary":"  "}"#,
+        r#"{"session_summary":"ask"}"#,
     )?;
     write(dir.path(), "sessions/enc/d2/summary.json", "not json")?;
     let rows = grok_rows(&grok_lister(dir.path())).await;
-    assert_eq!(rows, vec![StoreSession::new(HarnessId::GrokBuild, "d1", 0)]);
+    assert_eq!(
+        rows,
+        vec![StoreSession {
+            title: "ask".to_owned(),
+            ..StoreSession::new(HarnessId::GrokBuild, "d1", 0)
+        }]
+    );
     Ok(())
 }

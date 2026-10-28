@@ -66,6 +66,14 @@ impl HeadlessLaunch {
         }
     }
 
+    #[must_use]
+    pub fn with_discovery_dir(mut self, directory: PathBuf) -> Self {
+        if let Ok(prepared) = &mut self.launch {
+            prepared.discover_in(directory);
+        }
+        self
+    }
+
     pub async fn start(self, supervisor: Supervisor) -> HeadlessHarness {
         let Self { provider, launch } = self;
         let prepared = match launch {

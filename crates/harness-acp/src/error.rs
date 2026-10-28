@@ -89,6 +89,11 @@ pub enum AcpError {
     NonTextContent,
     #[error("ACP discovery timed out after {}ms", timeout.as_millis())]
     DiscoveryTimeout { timeout: std::time::Duration },
+    #[error("failed to prepare the discovery directory {}: {source}", path.display())]
+    DiscoveryDir {
+        path: std::path::PathBuf,
+        source: std::io::Error,
+    },
     #[error("provider {provider} is degraded ({recovery}): {cause}", recovery = degradation.recovery, cause = degradation.cause)]
     ProviderDegraded {
         provider: String,
@@ -119,6 +124,7 @@ impl AcpError {
     pub const fn recovery(&self) -> ProviderRecovery {
         match self {
             Self::DiscoveryTimeout { .. }
+            | Self::DiscoveryDir { .. }
             | Self::Launch { .. }
             | Self::Stdio { .. }
             | Self::Closed { .. }

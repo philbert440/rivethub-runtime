@@ -22,6 +22,10 @@ impl Prepared {
         crate::discovery::discover(&self.command, &self.cwd, self.timeout).await
     }
 
+    pub(crate) fn discover_in(&mut self, directory: PathBuf) {
+        self.cwd = directory;
+    }
+
     pub(crate) fn ready(self, advertisement: Advertisement) -> AcpHarnessAdapter {
         self.adapter.advertise(self.harness, advertisement)
     }

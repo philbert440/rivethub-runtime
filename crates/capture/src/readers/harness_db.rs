@@ -22,7 +22,8 @@ SELECT s.id AS id, s.started_at AS started_at, s.ended_at AS ended_at, \
         ORDER BY m.timestamp ASC LIMIT 1) AS title \
 FROM sessions s";
 
-const RECENT_HERMES: &str = " ORDER BY COALESCE(s.ended_at, s.started_at) DESC LIMIT ?1";
+const RECENT_HERMES: &str = " WHERE EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id AND m.role = 'user') \
+ORDER BY COALESCE(s.ended_at, s.started_at) DESC LIMIT ?1";
 const ONE_HERMES: &str =
     " WHERE s.id = ?1 ORDER BY COALESCE(s.ended_at, s.started_at) DESC LIMIT 1";
 
@@ -30,7 +31,10 @@ const OPENCODE_SESSION_ROWS: &str =
     "SELECT id, title, model, time_created, time_updated FROM session";
 const OPENCODE_SESSION_ROWS_WITHOUT_MODEL: &str =
     "SELECT id, title, NULL AS model, time_created, time_updated FROM session";
-const RECENT_OPENCODE: &str = " ORDER BY time_updated DESC LIMIT ?1";
+const RECENT_OPENCODE: &str = " WHERE EXISTS (SELECT 1 FROM message WHERE message.session_id = session.id) \
+ORDER BY time_updated DESC LIMIT ?1";
+const RECENT_OPENCODE_EVENTS: &str = " WHERE EXISTS (SELECT 1 FROM session_message WHERE session_message.session_id = session_v2.id) \
+ORDER BY time_updated DESC LIMIT ?1";
 const ONE_OPENCODE: &str = " WHERE id = ?1 ORDER BY time_updated DESC LIMIT 1";
 
 const OPENCODE_SESSIONS: &str = "SELECT DISTINCT session_id FROM message ORDER BY session_id";
@@ -214,7 +218,7 @@ pub(crate) fn opencode_session_rows(
         OpencodeLayout::Events => session_rows(
             &connection,
             OPENCODE_EVENT_SESSION_ROWS,
-            RECENT_OPENCODE,
+            RECENT_OPENCODE_EVENTS,
             ONE_OPENCODE,
             query,
             read,

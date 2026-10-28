@@ -41,6 +41,8 @@ struct FakeArgs {
     usage: UsageMode,
     #[arg(long)]
     record_meta: Option<std::path::PathBuf>,
+    #[arg(long)]
+    record_new: Option<std::path::PathBuf>,
 }
 
 const REPLAYED_CHUNKS: usize = 300;
@@ -85,6 +87,7 @@ struct AgentState {
     prompt: PromptMode,
     usage: UsageMode,
     record_meta: Option<std::path::PathBuf>,
+    record_new: Option<std::path::PathBuf>,
     cancelled: AtomicBool,
     cancel_notify: Notify,
     selection: Mutex<Selection>,
@@ -112,6 +115,7 @@ fn prepare(args: FakeArgs) -> Option<AgentState> {
         prompt: args.prompt,
         usage: args.usage,
         record_meta: args.record_meta,
+        record_new: args.record_new,
         cancelled: AtomicBool::new(false),
         cancel_notify: Notify::new(),
         selection: Mutex::new(Selection::initial()),
@@ -153,6 +157,15 @@ fn on_new_session(
 ) -> Result<(), acp::Error> {
     if matches!(state.crash_on, Some(CrashPoint::New)) {
         std::process::abort();
+    }
+    if let Some(path) = &state.record_new {
+        use std::io::Write as _;
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut file| writeln!(file, "{}", request.cwd.display()))
+            .map_err(|error| acp::Error::internal_error().data(error.to_string()))?;
     }
     if let Some(path) = &state.record_meta {
         let recorded = serde_json::to_string(&request.meta)

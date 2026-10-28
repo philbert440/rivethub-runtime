@@ -7,6 +7,14 @@ use wire::harness::{HarnessId, HarnessModelsSource};
 use wire::session_id::SessionId;
 
 fn adapter(cwd: Option<&Path>, listing: bool) -> AcpHarnessAdapter {
+    recording_adapter(cwd, listing, None)
+}
+
+fn recording_adapter(
+    cwd: Option<&Path>,
+    listing: bool,
+    record: Option<&Path>,
+) -> AcpHarnessAdapter {
     let mut args = vec![
         "--session-id".to_owned(),
         "ses_fake0123456789abcdefgh".to_owned(),
@@ -15,6 +23,10 @@ fn adapter(cwd: Option<&Path>, listing: bool) -> AcpHarnessAdapter {
     ];
     if listing {
         args.push("--list-sessions".to_owned());
+    }
+    if let Some(record) = record {
+        args.push("--record-new".to_owned());
+        args.push(record.display().to_string());
     }
     AcpHarnessAdapter::with_launch_table(LaunchTable::from_entries([(
         HarnessId::Opencode,
@@ -50,6 +62,36 @@ async fn discovery_uses_advertised_labels_current_model_and_session_listing() {
             assert_eq!(current.label, "Grok 4.7 (recommended)");
             assert!(models.iter().all(|model| model.label != model.id));
         }
+    })
+    .await
+    .expect("discovery timeout");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn concurrent_offerings_discover_once_in_the_discovery_dir() {
+    tokio::time::timeout(Duration::from_secs(30), async {
+        let root = tempfile::tempdir().expect("root");
+        let record = root.path().join("new-sessions");
+        let discovery = root.path().join("state").join("discovery");
+        let adapter = std::sync::Arc::new(
+            recording_adapter(Some(root.path()), false, Some(&record))
+                .with_discovery_dir(discovery.clone()),
+        );
+        let mut calls = tokio::task::JoinSet::new();
+        for _ in 0..4 {
+            let adapter = std::sync::Arc::clone(&adapter);
+            calls.spawn(async move { adapter.offerings().await });
+        }
+        while let Some(offered) = calls.join_next().await {
+            let offerings = offered.expect("join").expect("offerings");
+            assert!(offerings.first().expect("offering").chat);
+        }
+        adapter.offerings().await.expect("cached offerings");
+        let recorded = std::fs::read_to_string(&record).expect("record");
+        assert_eq!(
+            recorded.lines().collect::<Vec<_>>(),
+            vec![discovery.display().to_string()]
+        );
     })
     .await
     .expect("discovery timeout");
