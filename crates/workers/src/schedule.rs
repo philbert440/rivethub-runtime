@@ -1,8 +1,7 @@
 use chrono::{DateTime, Timelike, Utc};
 use kernel::memory::schedule::CronEntry;
-use kernel::queue::{Job, JobKeyMode, JobQueue, WorkerRole};
+use kernel::queue::{JobQueue, WorkerRole};
 use tokio_util::sync::CancellationToken;
-use wire::JsonObject;
 
 use crate::WorkerError;
 
@@ -24,19 +23,10 @@ async fn enqueue(
     cancel: &CancellationToken,
 ) -> Result<(), WorkerError> {
     for entry in entries {
-        let job = Job {
-            name: entry.task.clone(),
-            payload: JsonObject::default(),
-            key: None,
-            key_mode: JobKeyMode::Replace,
-            priority: 0,
-            run_at: None,
-            max_attempts: Some(i32::try_from(entry.max_attempts).map_err(|_| WorkerError::Count)?),
-        };
         tokio::select! {
             biased;
             () = cancel.cancelled() => return Ok(()),
-            result = queue.enqueue(job) => { result.map_err(WorkerError::Queue)?; }
+            result = queue.enqueue(entry.job()) => { result.map_err(WorkerError::Queue)?; }
         }
     }
     Ok(())

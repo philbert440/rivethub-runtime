@@ -1,4 +1,5 @@
-use crate::queue::{FixedJob, JobName, WorkerRole};
+use crate::queue::{FixedJob, Job, JobKeyMode, JobName, WorkerRole};
+use wire::JsonObject;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CronEntry {
@@ -6,8 +7,23 @@ pub struct CronEntry {
     pub task: JobName,
     pub schedule: String,
     pub backfill_seconds: u64,
-    pub max_attempts: u32,
+    pub max_attempts: i32,
     pub every_minutes: u32,
+}
+
+impl CronEntry {
+    #[must_use]
+    pub fn job(&self) -> Job {
+        Job {
+            name: self.task.clone(),
+            payload: JsonObject::default(),
+            key: Some(self.identifier.clone()),
+            key_mode: JobKeyMode::KeepRunAt,
+            priority: 0,
+            run_at: None,
+            max_attempts: Some(self.max_attempts),
+        }
+    }
 }
 
 impl WorkerRole {

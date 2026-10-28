@@ -351,3 +351,9 @@ fn crontab_and_task_lists_follow_the_roles() {
             .contains(&JobName::Fixed(FixedJob::SummarizeConversation))
     );
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_pending_sweep_is_queued_once(pool: PgPool) -> TestResult {
+    common::install_graphile(&pool).await?;
+    testkit::sweeps::a_pending_sweep_is_queued_once(&queue(&pool).await?).await
+}
