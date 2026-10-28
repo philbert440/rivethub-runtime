@@ -250,6 +250,7 @@ pub struct Gateway {
     providers: Vec<kernel::model::ProviderHealth>,
     memory_export: Option<Arc<dyn kernel::memory::MemoryExport>>,
     topics: Option<Arc<dyn kernel::topics::TopicStore>>,
+    decisions: Option<Arc<dyn kernel::topics::DecisionStore>>,
     startup: Option<StartupMemory>,
 }
 
@@ -296,6 +297,7 @@ impl Gateway {
             providers: Vec::new(),
             memory_export: None,
             topics: None,
+            decisions: None,
             startup: None,
         }
     }
@@ -335,6 +337,20 @@ impl Gateway {
         self.topics
             .as_ref()
             .ok_or_else(|| error::ApiError::Unavailable("topic store unavailable".into()))
+    }
+
+    #[must_use]
+    pub fn with_decisions(mut self, store: Arc<dyn kernel::topics::DecisionStore>) -> Self {
+        self.decisions = Some(store);
+        self
+    }
+
+    pub(crate) fn decisions(
+        &self,
+    ) -> Result<&Arc<dyn kernel::topics::DecisionStore>, error::ApiError> {
+        self.decisions
+            .as_ref()
+            .ok_or_else(|| error::ApiError::Unavailable("decision store unavailable".into()))
     }
 
     #[must_use]

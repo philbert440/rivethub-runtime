@@ -1,4 +1,5 @@
 mod categorize;
+mod decision;
 mod page;
 mod placement;
 mod rules;
@@ -18,6 +19,14 @@ use crate::BoxError;
 pub use categorize::FirstLeaf;
 pub use categorize::Lineage;
 pub use categorize::Verdict;
+pub use decision::DECISIONS_HEADING;
+pub use decision::Decision;
+pub use decision::DecisionId;
+pub use decision::DecisionStatus;
+pub use decision::DecisionStore;
+pub use decision::DecisionText;
+pub use decision::render_decisions;
+pub use decision::topic_decision;
 pub use page::PageSection;
 pub use page::SyncTopicPage;
 pub use page::TopicPage;
@@ -88,6 +97,14 @@ pub enum TopicError {
     SelfMerge,
     #[error("topic \"{into}\" is a sub-topic and cannot take over sub-topics")]
     MergeWouldNest { into: Slug },
+    #[error("a decision must not be empty")]
+    EmptyDecision,
+    #[error("unknown decision {key}")]
+    UnknownDecision { key: String },
+    #[error("decision {id} is superseded")]
+    DecisionSuperseded { id: DecisionId },
+    #[error("a decision is superseded only by another decision of its topic")]
+    ForeignReplacement,
     #[error("topic store is unavailable")]
     Unavailable(#[source] BoxError),
 }
