@@ -10,7 +10,7 @@ use crate::argv::Scan;
 use crate::argv::Taken;
 
 const ALLOWED_TASKS: &str =
-    "extract-wiki, compact-conversation, embed-target, synthesize-tool-call, suggest-tags";
+    "extract-wiki, compact-conversation, embed-target, synthesize-tool-call, file-conversation";
 const REQUEUE_DEFAULT: u32 = 200;
 const REQUEUE_CAP: u32 = 1000;
 
@@ -47,10 +47,6 @@ pub(super) enum MemoryCommand {
         dry_run: bool,
         sqlite: Option<PathBuf>,
     },
-    Rules {
-        since: Option<DateTime<Utc>>,
-        sqlite: Option<PathBuf>,
-    },
     Titles {
         dry_run: bool,
         json: bool,
@@ -74,7 +70,6 @@ enum Verb {
     ToolSynth,
     Export,
     Import,
-    Tags,
     Titles,
     Reembed,
     ConsolidateWiki,
@@ -88,7 +83,6 @@ fn verb(text: &str) -> Option<Verb> {
         "backfill-tool-synth" => Some(Verb::ToolSynth),
         "export" => Some(Verb::Export),
         "import" => Some(Verb::Import),
-        "tags" => Some(Verb::Tags),
         "backfill-titles" => Some(Verb::Titles),
         "reembed" => Some(Verb::Reembed),
         "consolidate-wiki" => Some(Verb::ConsolidateWiki),
@@ -116,7 +110,6 @@ pub(super) fn parse(args: &[String]) -> Result<Option<MemoryCommand>, Error> {
         Verb::ToolSynth => tool_synth(rest).map(Some),
         Verb::Export => export(rest).map(Some),
         Verb::Import => import(rest).map(Some),
-        Verb::Tags => tags(rest),
         Verb::Titles => titles(rest).map(Some),
         Verb::Reembed => reembed(rest).map(Some),
         Verb::ConsolidateWiki => consolidate_wiki(rest).map(Some),
@@ -355,45 +348,6 @@ fn import(args: &[String]) -> Result<MemoryCommand, Error> {
     })
 }
 
-fn tags(args: &[String]) -> Result<Option<MemoryCommand>, Error> {
-    let Some((head, rest)) = args.split_first() else {
-        return Ok(None);
-    };
-    if head == "backfill-rule" {
-        return rules(rest).map(Some);
-    }
-    if head.starts_with('-') {
-        return Err(Error::UnknownOption(head.clone()));
-    }
-    Ok(None)
-}
-
-fn rules(args: &[String]) -> Result<MemoryCommand, Error> {
-    let mut scan = Scan::new(args);
-    let mut since = None;
-    let mut sqlite = None;
-    while scan.current().is_some() {
-        match scan.option("--since", None) {
-            Taken::Value(value) => {
-                since = Some(timestamp(&value)?);
-                continue;
-            }
-            Taken::Missing => return Err(Error::SinceRequired),
-            Taken::Absent => {}
-        }
-        match scan.option("--sqlite", None) {
-            Taken::Value(value) => {
-                sqlite = Some(nonempty(&value, Error::SqliteRequired)?);
-                continue;
-            }
-            Taken::Missing => return Err(Error::SqliteRequired),
-            Taken::Absent => {}
-        }
-        return Err(reject(&scan));
-    }
-    Ok(MemoryCommand::Rules { since, sqlite })
-}
-
 fn titles(args: &[String]) -> Result<MemoryCommand, Error> {
     let mut scan = Scan::new(args);
     let mut dry_run = false;
@@ -492,7 +446,7 @@ fn allowed_task(text: &str) -> Result<JobName, Error> {
         "compact-conversation" => FixedJob::SummarizeConversation,
         "embed-target" => FixedJob::EmbedTarget,
         "synthesize-tool-call" => FixedJob::SynthesizeToolCall,
-        "suggest-tags" => FixedJob::SuggestTags,
+        "file-conversation" => FixedJob::FileConversation,
         _ => {
             return Err(Error::TaskNotAllowed {
                 task: text.to_owned(),

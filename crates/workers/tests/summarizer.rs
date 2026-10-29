@@ -312,7 +312,6 @@ fn small_settings() -> SummarySettings {
         stale_min_batch: 2,
         max_leaf_rounds: 10,
         pipeline_version: 5,
-        session_tagging: false,
     })
     .expect("small settings")
 }

@@ -65,10 +65,10 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
         queue: queue.clone(),
         targets: store.clone(),
         summaries: store.clone(),
-        memory: store.clone(),
         wiki: store.clone(),
         consolidate: None,
         topics: store.clone(),
+        filing: store.clone(),
         pages: store.clone(),
         decisions: store.clone(),
         lineage: Arc::new(capture::listing::StoreSessionLister::new(

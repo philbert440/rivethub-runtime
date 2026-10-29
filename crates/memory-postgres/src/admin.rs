@@ -1,7 +1,3 @@
-use std::collections::BTreeMap;
-
-use chrono::DateTime;
-use chrono::Utc;
 use kernel::queue::FixedJob;
 use kernel::queue::Job;
 use kernel::queue::JobKeyMode;
@@ -12,8 +8,6 @@ use wire::JsonObject;
 use crate::PostgresMemory;
 use crate::error::Error;
 use crate::graphile::GraphileQueue;
-use crate::project;
-use crate::project::ProjectTag;
 use crate::queue::QueueHealth;
 
 const QUEUE_TASKS: [FixedJob; 5] = [
@@ -21,7 +15,7 @@ const QUEUE_TASKS: [FixedJob; 5] = [
     FixedJob::SummarizeConversation,
     FixedJob::EmbedTarget,
     FixedJob::SynthesizeToolCall,
-    FixedJob::SuggestTags,
+    FixedJob::FileConversation,
 ];
 
 impl PostgresMemory {
@@ -99,24 +93,6 @@ impl PostgresMemory {
         Ok(rows)
     }
 
-    pub async fn backfill_project_rules(&self, since: Option<DateTime<Utc>>) -> Result<u64, Error> {
-        let found = directories(&self.pool, since).await?;
-        let mut grouped: BTreeMap<String, Vec<Uuid>> = BTreeMap::new();
-        for row in found {
-            grouped.entry(row.cwd).or_default().push(row.id);
-        }
-        let mut applied = 0u64;
-        for (cwd, ids) in grouped {
-            let Some(tag) = project::project_rule_tag(Some(cwd), true).await? else {
-                continue;
-            };
-            for id in ids {
-                applied += insert_rule(&self.pool, id, &tag).await?;
-            }
-        }
-        Ok(applied)
-    }
-
     async fn queue_ready(&self) -> Result<(), Error> {
         if GraphileQueue::schema_present(&self.pool).await? {
             Ok(())
@@ -180,29 +156,6 @@ async fn tool_messages(pool: &sqlx::PgPool, limit: Option<i64>) -> Result<Vec<Uu
     Ok(rows.into_iter().map(|row| row.id).collect())
 }
 
-async fn directories(
-    pool: &sqlx::PgPool,
-    since: Option<DateTime<Utc>>,
-) -> Result<Vec<CwdRow>, Error> {
-    sqlx::query_as(DIRECTORIES)
-        .bind(since)
-        .fetch_all(pool)
-        .await
-        .map_err(|source| Error::operation("project directories", source))
-}
-
-async fn insert_rule(pool: &sqlx::PgPool, id: Uuid, tag: &ProjectTag) -> Result<u64, Error> {
-    let result = sqlx::query(project::RULE_TAG_SQL)
-        .bind(id)
-        .bind(&tag.key)
-        .bind(&tag.value)
-        .bind(&tag.display)
-        .execute(pool)
-        .await
-        .map_err(|source| Error::operation("project rule", source))?;
-    Ok(result.rows_affected())
-}
-
 #[derive(Debug, sqlx::FromRow)]
 struct CountRow {
     count: i64,
@@ -211,12 +164,6 @@ struct CountRow {
 #[derive(Debug, sqlx::FromRow)]
 struct MessageRow {
     id: Uuid,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-struct CwdRow {
-    id: Uuid,
-    cwd: String,
 }
 
 const RETRY_COUNT: &str = "\
@@ -267,9 +214,3 @@ SELECT m.id
    )
  ORDER BY m.created_at ASC
  LIMIT $1";
-
-const DIRECTORIES: &str = "\
-SELECT id, settings->>'cwd' AS cwd
-  FROM rh_conversations
- WHERE nullif(btrim(settings->>'cwd'), '') IS NOT NULL
-   AND ($1::timestamptz IS NULL OR created_at >= $1 OR updated_at >= $1)";

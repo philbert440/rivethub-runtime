@@ -185,7 +185,6 @@ fn summary_settings_reject_an_empty_batch() {
         stale_min_batch: 2,
         max_leaf_rounds: 10,
         pipeline_version: 5,
-        session_tagging: false,
     })
     .expect_err("empty batch");
     assert!(error.to_string().contains("leaf batch"));
@@ -193,7 +192,7 @@ fn summary_settings_reject_an_empty_batch() {
 }
 
 #[tokio::test]
-async fn a_leaf_enqueues_suggest_tags_when_tagging_is_on() {
+async fn a_first_leaf_enqueues_filing() {
     let id = Uuid::parse_str("00000000-0000-4000-8000-000000000002").expect("id");
     let store = Arc::new(MemStore::new(vec![window(
         id,
@@ -203,7 +202,7 @@ async fn a_leaf_enqueues_suggest_tags_when_tagging_is_on() {
     )]));
     let script = Arc::new(Scripted::success());
     let jobs = Arc::new(Seen::default());
-    let settings = tagging_settings();
+    let settings = settings();
     let token = cancel();
     let env = bind(
         &store,
@@ -218,13 +217,12 @@ async fn a_leaf_enqueues_suggest_tags_when_tagging_is_on() {
         .expect("summarize");
     assert_eq!(outcome.summaries, 1);
     assert!(!outcome.reenqueued);
-    let job = jobs.only().await;
-    let summary_id = store.written.lock().await.first().expect("leaf").id;
-    let key = format!("tags-{summary_id}");
-    assert_eq!(job.name, JobName::Fixed(FixedJob::SuggestTags));
+    let [job] = <[Job; 1]>::try_from(jobs.filing().await).expect("one filing job");
+    let key = format!("file-{id}");
+    assert_eq!(job.name, JobName::Fixed(FixedJob::FileConversation));
     assert_eq!(job.key.as_deref(), Some(key.as_str()));
     assert_eq!(job.key_mode, JobKeyMode::Replace);
     assert_eq!(job.priority, 6);
     assert!(job.run_at.is_none());
-    assert_tag_payload(&job, summary_id, id);
+    assert_eq!(workers::file_target(&job.payload).expect("payload"), id);
 }

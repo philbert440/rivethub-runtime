@@ -4,7 +4,6 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use kernel::memory::EmbeddingStore;
-use kernel::memory::MemoryStore;
 use kernel::memory::SummaryStore;
 use kernel::model::ModelProvider;
 use kernel::queue::ClaimedJob;
@@ -24,7 +23,6 @@ use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
-use crate::categorize::TagSettings;
 use crate::dispatch::{JobEnv, dispatch};
 use crate::embed::EmbedSettings;
 use crate::error::WorkerError;
@@ -73,11 +71,9 @@ impl RunnerConfig {
 pub struct WorkerDeps {
     pub targets: Arc<dyn EmbeddingStore>,
     pub summaries: Arc<dyn SummaryStore>,
-    pub memory: Arc<dyn MemoryStore>,
     pub provider: Arc<dyn ModelProvider>,
     pub embed: EmbedSettings,
     pub summary: SummarySettings,
-    pub tags: TagSettings,
 }
 
 #[expect(
@@ -97,12 +93,10 @@ pub struct Runner<Q> {
     queue: Arc<Q>,
     targets: Arc<dyn EmbeddingStore>,
     summaries: Arc<dyn SummaryStore>,
-    memory: Arc<dyn MemoryStore>,
     provider: Arc<dyn ModelProvider>,
     config: RunnerConfig,
     embed: EmbedSettings,
     summary: SummarySettings,
-    tags: TagSettings,
     wake: Arc<Notify>,
     outage: Arc<OutageGate>,
     idle: watch::Sender<bool>,
@@ -131,12 +125,10 @@ where
             queue,
             targets: deps.targets,
             summaries: deps.summaries,
-            memory: deps.memory,
             provider: deps.provider,
             config,
             embed: deps.embed,
             summary: deps.summary,
-            tags: deps.tags,
             wake: Arc::new(Notify::new()),
             outage: Arc::new(OutageGate::new()),
             idle,
@@ -397,11 +389,9 @@ where
             wiki: self.wiki.clone(),
             targets: Arc::clone(&self.targets),
             summaries: Arc::clone(&self.summaries),
-            memory: Arc::clone(&self.memory),
             provider: Arc::clone(&self.provider),
             embed: self.embed,
             summary: self.summary.clone(),
-            tags: self.tags.clone(),
             topics: self.topics.clone(),
             topic_pages: self.topic_pages.clone(),
         };

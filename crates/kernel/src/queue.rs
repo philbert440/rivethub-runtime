@@ -89,7 +89,7 @@ pub enum FixedJob {
     #[strum(serialize = "compact-conversation")]
     SummarizeConversation,
     SynthesizeToolCall,
-    SuggestTags,
+    FileConversation,
     EnqueueIdle,
     ExtractWiki,
     EnqueueWikiBackfill,
@@ -278,13 +278,12 @@ impl WorkerRole {
             Self::Summarizer => &[
                 JobName::Fixed(FixedJob::SummarizeConversation),
                 JobName::Fixed(FixedJob::SynthesizeToolCall),
-                JobName::Fixed(FixedJob::SuggestTags),
                 JobName::Fixed(FixedJob::EnqueueIdle),
                 JobName::Fixed(FixedJob::EnqueueStaleSummaries),
                 JobName::Fixed(FixedJob::ReapDeadJobs),
                 JobName::Fixed(FixedJob::SyncTopicPage),
             ],
-            Self::Categorizer => &[JobName::Fixed(FixedJob::SuggestTags)],
+            Self::Categorizer => &[JobName::Fixed(FixedJob::FileConversation)],
             Self::WikiBuilder => &[
                 JobName::Fixed(FixedJob::ExtractWiki),
                 JobName::Fixed(FixedJob::EnqueueWikiBackfill),

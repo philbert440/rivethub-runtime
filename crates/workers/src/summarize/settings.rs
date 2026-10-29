@@ -42,7 +42,6 @@ pub struct SummarySettings {
     pub stale_min_batch: u32,
     pub max_leaf_rounds: u32,
     pub pipeline_version: i32,
-    pub session_tagging: bool,
     pub leaf_max_tokens: u32,
     pub branch_max_tokens: u32,
     pub root_max_tokens: u32,
@@ -61,7 +60,6 @@ pub struct SummaryParts {
     pub stale_min_batch: u32,
     pub max_leaf_rounds: u32,
     pub pipeline_version: i32,
-    pub session_tagging: bool,
 }
 
 impl SummarySettings {
@@ -78,7 +76,6 @@ impl SummarySettings {
             stale_min_batch: STALE_MIN_BATCH,
             max_leaf_rounds: MAX_LEAF_ROUNDS,
             pipeline_version: PIPELINE_VERSION,
-            session_tagging: false,
         })
     }
 
@@ -108,7 +105,6 @@ impl SummarySettings {
             stale_min_batch: parts.stale_min_batch,
             max_leaf_rounds: parts.max_leaf_rounds,
             pipeline_version: parts.pipeline_version,
-            session_tagging: parts.session_tagging,
             leaf_max_tokens: LEAF_MAX_TOKENS,
             branch_max_tokens: BRANCH_MAX_TOKENS,
             root_max_tokens: ROOT_MAX_TOKENS,

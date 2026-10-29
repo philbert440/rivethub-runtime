@@ -14,9 +14,7 @@ use wire::JsonObject;
 use workers::wiki_builder::{
     WikiBuilderDeps, WikiBuilderEnv, extract_wiki_job, handle_extract_wiki,
 };
-use workers::{
-    EmbedSettings, ProcessRole, Runner, RunnerConfig, SummarySettings, TagSettings, WorkerDeps,
-};
+use workers::{EmbedSettings, ProcessRole, Runner, RunnerConfig, SummarySettings, WorkerDeps};
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestResult {
@@ -55,11 +53,9 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
         WorkerDeps {
             targets: store.clone(),
             summaries: store.clone(),
-            memory: store.clone(),
             provider: model.clone(),
             embed: EmbedSettings::standard(),
             summary: SummarySettings::standard("fake-chat")?,
-            tags: TagSettings::new("fake-chat", false)?,
         },
     )
     .with_wiki_builder(WikiBuilderDeps {

@@ -394,7 +394,7 @@ fn default_max_attempts(name: &JobName) -> u32 {
         JobName::Fixed(fixed) => match fixed {
             FixedJob::EmbedTarget | FixedJob::SyncTopicPage => 5,
             FixedJob::SummarizeConversation | FixedJob::SynthesizeToolCall => 3,
-            FixedJob::SuggestTags | FixedJob::ExtractWiki => 2,
+            FixedJob::FileConversation | FixedJob::ExtractWiki => 2,
             FixedJob::RunTask => 1,
             FixedJob::EnqueueUnembedded
             | FixedJob::EnqueueUnchunked

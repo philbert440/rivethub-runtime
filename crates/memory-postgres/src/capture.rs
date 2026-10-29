@@ -1,8 +1,6 @@
 use crate::error::Error;
-use crate::project;
 use chrono::DateTime;
 use chrono::Utc;
-use sqlx::Acquire as _;
 use sqlx::PgPool;
 use sqlx::Transaction;
 use sqlx::postgres::Postgres;
@@ -16,7 +14,6 @@ pub const MAX_CONTENT_CHARS: usize = 16_000;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CaptureOptions {
     pub owner_user_id: Option<String>,
-    pub allow_filesystem: bool,
 }
 
 #[derive(Debug)]
@@ -294,30 +291,6 @@ impl<'a> CaptureWriter<'a> {
         .await
         .map_err(|source| Error::operation("ingest key lookup", source))?;
         Ok(record.seen)
-    }
-
-    pub async fn apply_project_tag(
-        &mut self,
-        conversation_id: Uuid,
-        tag: &project::ProjectTag,
-    ) -> Result<(), Error> {
-        let mut savepoint = self
-            .tx
-            .begin()
-            .await
-            .map_err(|source| Error::operation("tag savepoint", source))?;
-        sqlx::query(project::RULE_TAG_SQL)
-            .bind(conversation_id)
-            .bind(tag.key.as_str())
-            .bind(tag.value.as_str())
-            .bind(tag.display.as_str())
-            .execute(&mut *savepoint)
-            .await
-            .map_err(|source| Error::operation("project tag", source))?;
-        savepoint
-            .commit()
-            .await
-            .map_err(|source| Error::operation("project tag", source))
     }
 }
 
