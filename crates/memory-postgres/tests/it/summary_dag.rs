@@ -3,24 +3,33 @@
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::MemoryStore as _;
+use kernel::memory::SummaryDag;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
+use wire::gateway::memory::MemoryMessageTally;
 use wire::gateway::memory::SummaryKind;
+use wire::gateway::memory::VectorState;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 const SEED: &[&str] = &[
-    "insert into rh_conversations (id, session_key, agent, channel, created_at, updated_at) values
-      ('00000000-0000-4000-8000-000000000001', 'cli:dag', 'rivet', 'cli', '2026-10-10T12:00:00Z', '2026-10-10T13:00:00Z'),
-      ('00000000-0000-4000-8000-000000000002', 'cli:dag', 'helper', 'cli', '2026-10-10T11:00:00Z', '2026-10-10T11:30:00Z')",
-    "insert into rh_messages (id, conversation_id, agent, channel, role, content, created_at) values
-      ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'user', 'one', '2026-10-10T12:00:00Z'),
-      ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'assistant', 'two', '2026-10-10T12:01:00Z')",
-    "insert into rh_summaries (id, conversation_id, depth, content, kind, message_count, earliest_at, latest_at, created_at) values
-      ('00000000-0000-4000-8000-000000000014', '00000000-0000-4000-8000-000000000001', 1, 'branch', 'branch', 2, '2026-10-10T12:00:00Z', '2026-10-10T12:01:00Z', '2026-10-10T12:30:00Z'),
-      ('00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000001', 0, 'first', 'leaf', 1, '2026-10-10T12:00:00Z', '2026-10-10T12:00:00Z', '2026-10-10T12:30:00Z'),
-      ('00000000-0000-4000-8000-000000000012', '00000000-0000-4000-8000-000000000001', 0, 'second', 'leaf', 1, '2026-10-10T12:01:00Z', '2026-10-10T12:01:00Z', '2026-10-10T12:30:00Z'),
-      ('00000000-0000-4000-8000-000000000015', '00000000-0000-4000-8000-000000000002', 0, 'stale', 'leaf', 0, '2026-10-10T11:00:00Z', '2026-10-10T11:00:00Z', '2026-10-10T11:30:00Z')",
+    "insert into rh_conversations (id, session_key, agent, channel, active, created_at, updated_at) values
+      ('00000000-0000-4000-8000-000000000001', 'cli:dag', 'rivet', 'cli', false, '2026-10-10T12:00:00Z', '2026-10-10T13:00:00Z'),
+      ('00000000-0000-4000-8000-000000000002', 'cli:dag', 'helper', 'cli', false, '2026-10-10T11:00:00Z', '2026-10-10T11:30:00Z')",
+    "insert into rh_messages (id, conversation_id, agent, channel, role, content, tool_name, embed_status, created_at) values
+      ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'user', 'one', null, null, '2026-10-10T12:00:00Z'),
+      ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'assistant', 'two', null, 'failed', '2026-10-10T12:01:00Z'),
+      ('00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'assistant', 'three', 'Bash', 'unembeddable', '2026-10-10T12:02:00Z'),
+      ('00000000-0000-4000-8000-000000000104', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'tool', 'four', null, null, '2026-10-10T12:03:00Z')",
+    "insert into rh_summaries (id, conversation_id, depth, content, kind, message_count, earliest_at, latest_at, created_at, embed_status) values
+      ('00000000-0000-4000-8000-000000000014', '00000000-0000-4000-8000-000000000001', 1, 'branch', 'branch', 2, '2026-10-10T12:00:00Z', '2026-10-10T12:01:00Z', '2026-10-10T12:30:00Z', null),
+      ('00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000001', 0, 'first', 'leaf', 1, '2026-10-10T12:00:00Z', '2026-10-10T12:00:00Z', '2026-10-10T12:30:00Z', 'failed'),
+      ('00000000-0000-4000-8000-000000000012', '00000000-0000-4000-8000-000000000001', 0, 'second', 'leaf', 1, '2026-10-10T12:01:00Z', '2026-10-10T12:01:00Z', '2026-10-10T12:30:00Z', 'unembeddable'),
+      ('00000000-0000-4000-8000-000000000015', '00000000-0000-4000-8000-000000000002', 0, 'stale', 'leaf', 0, '2026-10-10T11:00:00Z', '2026-10-10T11:00:00Z', '2026-10-10T11:30:00Z', null)",
+    "update rh_messages set embedding = array_fill(0.5::real, array[1024])::halfvec
+      where id = '00000000-0000-4000-8000-000000000101'",
+    "update rh_summaries set embedding = array_fill(0.5::real, array[1024])::halfvec
+      where id = '00000000-0000-4000-8000-000000000014'",
     "update rh_summaries set parent_id = '00000000-0000-4000-8000-000000000014'
       where id in ('00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000012')",
     "insert into rh_summary_sources (summary_id, message_id, ordinal) values
@@ -46,11 +55,14 @@ fn at(text: &str) -> DateTime<Utc> {
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn the_summary_dag_walks_from_the_session_leaves_to_the_root(pool: PgPool) -> TestResult {
+async fn an_ended_session_walks_its_summary_dag_and_tallies_its_messages(
+    pool: PgPool,
+) -> TestResult {
     seed(&pool).await?;
     let memory = PostgresMemory::new(pool);
-    let nodes = memory.summary_dag("cli:dag").await?;
-    let shape: Vec<_> = nodes
+    let dag = memory.summary_dag("cli:dag").await?;
+    let shape: Vec<_> = dag
+        .summaries
         .iter()
         .map(|node| {
             (
@@ -58,6 +70,7 @@ async fn the_summary_dag_walks_from_the_session_leaves_to_the_root(pool: PgPool)
                 node.parent_id.as_deref(),
                 node.level,
                 node.kind,
+                node.vector,
             )
         })
         .collect();
@@ -65,22 +78,24 @@ async fn the_summary_dag_walks_from_the_session_leaves_to_the_root(pool: PgPool)
     assert_eq!(
         shape,
         vec![
-            (branch, None, 1, SummaryKind::Branch),
+            (branch, None, 1, SummaryKind::Branch, VectorState::Embedded),
             (
                 "00000000-0000-4000-8000-000000000011",
                 Some(branch),
                 0,
-                SummaryKind::Leaf
+                SummaryKind::Leaf,
+                VectorState::Failed
             ),
             (
                 "00000000-0000-4000-8000-000000000012",
                 Some(branch),
                 0,
-                SummaryKind::Leaf
+                SummaryKind::Leaf,
+                VectorState::Skipped
             ),
         ]
     );
-    let first = nodes.get(1).expect("first leaf");
+    let first = dag.summaries.get(1).expect("first leaf");
     assert_eq!(
         first.source_message_ids,
         vec!["00000000-0000-4000-8000-000000000101"]
@@ -89,7 +104,46 @@ async fn the_summary_dag_walks_from_the_session_leaves_to_the_root(pool: PgPool)
     assert_eq!(first.content, "first");
     assert_eq!(first.earliest_at, Some(at("2026-10-10T12:00:00Z")));
     assert_eq!(first.created_at, at("2026-10-10T12:30:00Z"));
-    assert_eq!(nodes.first().expect("branch").source_message_ids.len(), 0);
-    assert_eq!(memory.summary_dag("cli:missing").await?.len(), 0);
+    assert_eq!(
+        dag.summaries
+            .first()
+            .expect("branch")
+            .source_message_ids
+            .len(),
+        0
+    );
+    assert_eq!(
+        dag.messages,
+        MemoryMessageTally {
+            total: 4,
+            user: 1,
+            assistant: 2,
+            system: 0,
+            tool: 2,
+            embedded: 1,
+            pending: 1,
+            failed: 1,
+            skipped: 1,
+        }
+    );
+    assert_eq!(
+        memory.summary_dag("cli:missing").await?,
+        SummaryDag::default()
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn an_active_conversation_wins_over_a_newer_ended_one(pool: PgPool) -> TestResult {
+    seed(&pool).await?;
+    sqlx::query(
+        "update rh_conversations set active = true where id = '00000000-0000-4000-8000-000000000002'",
+    )
+    .execute(&pool)
+    .await?;
+    let dag = PostgresMemory::new(pool).summary_dag("cli:dag").await?;
+    let ids: Vec<_> = dag.summaries.iter().map(|node| node.id.as_str()).collect();
+    assert_eq!(ids, vec!["00000000-0000-4000-8000-000000000015"]);
+    assert_eq!(dag.messages, MemoryMessageTally::default());
     Ok(())
 }

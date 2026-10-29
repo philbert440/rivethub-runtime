@@ -12,6 +12,7 @@ use thiserror::Error;
 use uuid::Uuid;
 use wire::gateway::memory::BrowseWindow;
 use wire::gateway::memory::MemoryBrowseOrder;
+use wire::gateway::memory::MemoryMessageTally;
 use wire::gateway::memory::MemoryScope;
 use wire::gateway::memory::MemoryStatsResponse;
 use wire::gateway::memory::MemorySummaryNode;
@@ -227,6 +228,12 @@ impl SearchQuery {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SummaryDag {
+    pub summaries: Vec<MemorySummaryNode>,
+    pub messages: MemoryMessageTally,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BrowseFilter {
     pub conversation_id: Option<Uuid>,
@@ -378,7 +385,7 @@ pub trait MemoryStore: Send + Sync {
 
     async fn context(&self, session: &str, now: DateTime<Utc>) -> Result<String, MemoryStoreError>;
 
-    async fn summary_dag(&self, session: &str) -> Result<Vec<MemorySummaryNode>, MemoryStoreError>;
+    async fn summary_dag(&self, session: &str) -> Result<SummaryDag, MemoryStoreError>;
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError>;
 

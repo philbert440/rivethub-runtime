@@ -225,7 +225,7 @@ impl MemoryStore for FailingStore {
     async fn summary_dag(
         &self,
         _session: &str,
-    ) -> Result<Vec<wire::gateway::memory::MemorySummaryNode>, MemoryStoreError> {
+    ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
         unavailable()
     }
 
@@ -434,7 +434,7 @@ impl MemoryStore for GatedStore {
     async fn summary_dag(
         &self,
         session: &str,
-    ) -> Result<Vec<wire::gateway::memory::MemorySummaryNode>, MemoryStoreError> {
+    ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
         self.inner.summary_dag(session).await
     }
 

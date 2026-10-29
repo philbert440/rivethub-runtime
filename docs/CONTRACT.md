@@ -248,6 +248,14 @@ without a topic (`rh_wiki_topics.topic_id` set to null; SQLite schema v18 keys `
 binding's `topic_id` can be cleared); a deleted sub-topic's section stays on its root's page as a plain section. A topic
 with sub-topics, and the category roots `People`, `Hosts` and `Tools`, answer `409`; an unknown topic is `404`. The
 route is new, with no TypeScript recording.
+(30) Session summary DAG (Phil, 2026-10-28): `GET /api/memory/summaries/{session}` reads the session's one conversation,
+the active row first and then the most recently updated, so an ended session (finalized, `active = false`) still answers
+its DAG; it was filtered out before. Each node carries `vector` and the body gains `messages`, a tally of that
+conversation's messages: `total`, `user`, `assistant`, `system` by role, `tool` (role `tool` or a tool name, as in
+stats), and `embedded`, `pending`, `failed`, `skipped` by vector state. A row with an embedding is `embedded`,
+`embed_status` `failed` is `failed`, `unembeddable` is `skipped`, anything else is `pending`. An unknown session answers
+`200` with no summaries and a zero tally. Topic startup memory reads ended sessions the same way. Bodies are
+`wire::gateway::memory::MemorySummaryDagResponse`, `MemoryMessageTally` and `VectorState` in `contract/*.schema.json`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

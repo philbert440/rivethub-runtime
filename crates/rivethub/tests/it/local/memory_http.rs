@@ -29,7 +29,7 @@ fn batch() -> CaptureBatchRequest {
         title: Some("Export".to_owned()),
         settings: None,
         task_id: None,
-        finalize: None,
+        finalize: Some(true),
         created_at: None,
         updated_at: None,
         messages: vec![
@@ -148,6 +148,14 @@ async fn local_serves_the_summary_dag_and_a_gzip_export_over_http() -> TestResul
     assert_eq!(
         dag.summaries.get(1).ok_or("leaf")?.source_message_ids.len(),
         2
+    );
+    assert_eq!(
+        (
+            dag.messages.total,
+            dag.messages.user,
+            dag.messages.assistant
+        ),
+        (2, 1, 1)
     );
     assert_eq!(media, "application/gzip");
     assert!(dump.contains("-- source local"), "{dump}");

@@ -1,32 +1,53 @@
 use kernel::memory::MemoryStoreError;
+use kernel::memory::SummaryDag;
+use rusqlite::Connection;
+use rusqlite::OptionalExtension as _;
 use rusqlite::Row;
 use rusqlite::Statement;
 use rusqlite::params_from_iter;
 use rusqlite::types::Type;
 use rusqlite::types::Value;
+use wire::gateway::memory::MemoryMessageTally;
 use wire::gateway::memory::MemorySummaryNode;
 use wire::gateway::memory::SummaryKind;
+use wire::gateway::memory::VectorState;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;
 use crate::time;
 
-const DAG_SQL: &str = "WITH RECURSIVE conversation(id) AS ( \
-        SELECT id FROM ros_conversations WHERE session_key = ?1 AND active = 1 \
-         ORDER BY updated_at DESC, id LIMIT 1), \
-    dag(id, level) AS ( \
-        SELECT s.id, 0 FROM ros_summaries s JOIN conversation c ON s.conversation_id = c.id \
+const CONVERSATION_SQL: &str = "SELECT id FROM ros_conversations WHERE session_key = ?1 \
+     ORDER BY (active IS NOT 0) DESC, updated_at DESC, id LIMIT 1";
+
+const DAG_SQL: &str = "WITH RECURSIVE dag(id, level) AS ( \
+        SELECT id, 0 FROM ros_summaries WHERE conversation_id = ?1 \
         UNION \
         SELECT s.parent_id, dag.level + 1 FROM ros_summaries s JOIN dag ON dag.id = s.id \
          WHERE s.parent_id IS NOT NULL) \
     SELECT s.id, s.parent_id, max(dag.level) AS level, s.kind, s.content, s.message_count, \
-           s.earliest_at, s.latest_at, s.created_at \
+           s.earliest_at, s.latest_at, s.created_at, \
+           CASE WHEN s.embedding IS NOT NULL THEN 'embedded' \
+                WHEN s.embed_status = 'failed' THEN 'failed' \
+                WHEN s.embed_status = 'unembeddable' THEN 'skipped' \
+                ELSE 'pending' END AS vector \
       FROM dag JOIN ros_summaries s ON s.id = dag.id \
      GROUP BY s.id \
      ORDER BY level DESC, s.latest_at, s.id";
 
 const SOURCES_SQL: &str =
     "SELECT message_id FROM ros_summary_sources WHERE summary_id = ?1 ORDER BY ordinal";
+
+const TALLY_SQL: &str = "SELECT count(*), \
+        count(*) FILTER (WHERE role = 'user'), \
+        count(*) FILTER (WHERE role = 'assistant'), \
+        count(*) FILTER (WHERE role = 'system'), \
+        count(*) FILTER (WHERE role = 'tool' OR tool_name IS NOT NULL), \
+        count(embedding), \
+        count(*) FILTER (WHERE embedding IS NULL AND embed_status IS NOT 'failed' \
+                           AND embed_status IS NOT 'unembeddable'), \
+        count(*) FILTER (WHERE embedding IS NULL AND embed_status = 'failed'), \
+        count(*) FILTER (WHERE embedding IS NULL AND embed_status = 'unembeddable') \
+      FROM ros_messages WHERE conversation_id = ?1";
 
 struct DagRow {
     id: String,
@@ -38,13 +59,14 @@ struct DagRow {
     earliest_at: Option<String>,
     latest_at: Option<String>,
     created_at: String,
+    vector: VectorState,
 }
 
 impl SqliteStore {
     pub(crate) async fn read_summary_dag(
         &self,
         session: &str,
-    ) -> Result<Vec<MemorySummaryNode>, MemoryStoreError> {
+    ) -> Result<SummaryDag, MemoryStoreError> {
         let session = session.to_owned();
         self.with_conn(move |conn| summary_dag(conn, session))
             .await
@@ -52,28 +74,42 @@ impl SqliteStore {
     }
 }
 
-fn summary_dag(
-    conn: &rusqlite::Connection,
-    session: String,
-) -> Result<Vec<MemorySummaryNode>, SqliteError> {
+fn summary_dag(conn: &Connection, session: String) -> Result<SummaryDag, SqliteError> {
+    let conversation = conn
+        .query_row(
+            CONVERSATION_SQL,
+            params_from_iter([Value::Text(session)]),
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(SqliteError::query("summary dag"))?;
+    let Some(conversation) = conversation else {
+        return Ok(SummaryDag::default());
+    };
     let mut statement = conn
         .prepare(DAG_SQL)
         .map_err(SqliteError::query("summary dag"))?;
     let rows = statement
-        .query_map(params_from_iter([Value::Text(session)]), dag_row)
+        .query_map([&conversation], dag_row)
         .map_err(SqliteError::query("summary dag"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(SqliteError::query("summary dag"))?;
     let mut sources = conn
         .prepare(SOURCES_SQL)
         .map_err(SqliteError::query("summary dag sources"))?;
-    rows.into_iter()
+    let summaries = rows
+        .into_iter()
         .map(|row| summary_node(&mut sources, row))
-        .collect()
+        .collect::<Result<_, _>>()?;
+    Ok(SummaryDag {
+        summaries,
+        messages: message_tally(conn, &conversation)?,
+    })
 }
 
 fn dag_row(row: &Row<'_>) -> rusqlite::Result<DagRow> {
     let kind = row.get::<_, String>(3)?;
+    let vector = row.get::<_, String>(9)?;
     Ok(DagRow {
         id: row.get(0)?,
         parent_id: row.get(1)?,
@@ -86,6 +122,9 @@ fn dag_row(row: &Row<'_>) -> rusqlite::Result<DagRow> {
         earliest_at: row.get(6)?,
         latest_at: row.get(7)?,
         created_at: row.get(8)?,
+        vector: vector.parse::<VectorState>().map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(9, Type::Text, Box::new(error))
+        })?,
     })
 }
 
@@ -119,5 +158,46 @@ fn summary_node(
             .transpose()?,
         created_at: time::stored(&row.created_at, "created_at")?,
         source_message_ids,
+        vector: row.vector,
+    })
+}
+
+fn message_tally(conn: &Connection, conversation: &str) -> Result<MemoryMessageTally, SqliteError> {
+    let counts = conn
+        .query_row(TALLY_SQL, [conversation], |row| {
+            Ok([
+                row.get::<_, i64>(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+                row.get(8)?,
+            ])
+        })
+        .map_err(SqliteError::query("summary dag messages"))?;
+    let [
+        total,
+        user,
+        assistant,
+        system,
+        tool,
+        embedded,
+        pending,
+        failed,
+        skipped,
+    ] = counts.map(|value| u32::try_from(value).map_err(SqliteError::Count));
+    Ok(MemoryMessageTally {
+        total: total?,
+        user: user?,
+        assistant: assistant?,
+        system: system?,
+        tool: tool?,
+        embedded: embedded?,
+        pending: pending?,
+        failed: failed?,
+        skipped: skipped?,
     })
 }
