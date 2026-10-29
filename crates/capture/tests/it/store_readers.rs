@@ -22,7 +22,7 @@ CREATE TABLE messages (\
     session_id TEXT NOT NULL,\
     role TEXT NOT NULL,\
     content TEXT NOT NULL,\
-    timestamp TEXT NOT NULL\
+    timestamp REAL NOT NULL\
 );";
 
 const OPENCODE_SCHEMA: &str = "\
@@ -270,21 +270,12 @@ fn hermes_store(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "INSERT INTO messages (session_id, role, content, timestamp) VALUES (?1, ?2, ?3, ?4)";
     connection.execute(
         insert,
-        (SESSION, "assistant", "Running ls.", "2026-10-14T12:00:01Z"),
+        (SESSION, "assistant", "Running ls.", 1_791_979_201.0),
     )?;
-    connection.execute(
-        insert,
-        (SESSION, "user", "list the files", "2026-10-14T12:00:00Z"),
-    )?;
-    connection.execute(insert, (SESSION, "tool", "a.txt", "2026-10-14T12:00:02Z"))?;
-    connection.execute(
-        insert,
-        (SESSION, "narrator", "aside", "2026-10-14T12:00:03Z"),
-    )?;
-    connection.execute(
-        insert,
-        ("other", "user", "elsewhere", "2026-10-14T12:00:00Z"),
-    )?;
+    connection.execute(insert, (SESSION, "user", "list the files", 1_791_979_200.0))?;
+    connection.execute(insert, (SESSION, "tool", "a.txt", 1_791_979_202.0))?;
+    connection.execute(insert, (SESSION, "narrator", "aside", 1_791_979_203.0))?;
+    connection.execute(insert, ("other", "user", "elsewhere", 1_791_979_200.0))?;
     Ok(())
 }
 

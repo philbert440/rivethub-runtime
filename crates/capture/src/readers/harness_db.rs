@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use chrono::DateTime;
+use chrono::SecondsFormat;
 use kernel::transcript::TranscriptReaderError;
 use rusqlite::Connection;
 use rusqlite::OpenFlags;
@@ -7,6 +9,10 @@ use rusqlite::Row;
 use rusqlite::types::Value as SqlValue;
 use thiserror::Error;
 use wire::message::Role;
+
+use crate::listing::time::RawTime;
+use crate::listing::time::UNKNOWN_TIME;
+use crate::listing::time::epoch_flex;
 
 const HERMES_SESSIONS: &str = "SELECT DISTINCT session_id FROM messages ORDER BY session_id";
 
@@ -98,7 +104,7 @@ pub(crate) struct HermesMessage {
     pub(crate) session_id: String,
     pub(crate) speaker: Speaker,
     pub(crate) content: String,
-    pub(crate) at: String,
+    pub(crate) at: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -422,8 +428,15 @@ fn hermes_row(row: &Row<'_>) -> rusqlite::Result<HermesMessage> {
         session_id: row.get("session_id")?,
         speaker: speaker_from_text(role),
         content: row.get("content")?,
-        at: row.get("timestamp")?,
+        at: instant(&row.get("timestamp")?),
     })
+}
+
+fn instant(value: &SqlValue) -> Option<String> {
+    let millis = epoch_flex(&RawTime::from_sql(value));
+    DateTime::from_timestamp_millis(millis)
+        .filter(|_| millis != UNKNOWN_TIME)
+        .map(|at| at.to_rfc3339_opts(SecondsFormat::Millis, true))
 }
 
 fn read_opencode(
