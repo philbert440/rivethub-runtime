@@ -109,7 +109,7 @@ async fn status_reports_a_fresh_postgres_database_and_migrate_applies_the_chain(
     assert!(
         stdout.contains("current 0")
             && stdout.contains("required 33")
-            && stdout.contains("pending 32"),
+            && stdout.contains("pending 33"),
         "a fresh database reads as version 0 with the whole chain pending: {stdout}"
     );
 

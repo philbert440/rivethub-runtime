@@ -11,12 +11,12 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 32);
+    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 33);
 
     let applied = sqlx::query("SELECT count(*)::bigint AS n FROM _sqlx_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 32);
+    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 33);
 
     migrate::postgres_pool(&pool).await?;
 
@@ -191,7 +191,7 @@ async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
         .await?;
     assert_eq!(
         tracked.try_get::<i64, _>("n").unwrap(),
-        32,
+        33,
         "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, 0025 adds topic suggestions, 0026 adds the hub state table, 0027 binds wiki pages to topics, 0028 keeps each session's startup context, 0029 records how it was delivered, 0030 adds topic decisions, 0031 records closed topics and sessions marked as history, 0032 adds topic kinds and entities, and 0033 files conversations and keeps filing corrections"
     );
     let summaries_trgm =

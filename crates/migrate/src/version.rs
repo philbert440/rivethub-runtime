@@ -95,7 +95,6 @@ mod tests {
     use super::SchemaVersion;
     use crate::error::Error;
 
-
     #[test]
     fn every_recorded_user_version_maps_to_a_schema_version() {
         for found in 1..=21 {
