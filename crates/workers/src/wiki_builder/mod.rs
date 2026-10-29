@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use kernel::memory::{EmbedTable, EmbedTarget};
 use kernel::model::{ModelProvider, ModelProviderError, ModelRequest};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
@@ -11,10 +11,12 @@ use kernel::wiki::builder::{
 use kernel::wiki::consolidate::WikiConsolidateStore;
 use kernel::wiki::route::{TopicPorts, TopicTarget, WikiRouter};
 use serde::Serialize;
+use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 use wire::JsonObject;
 use wire::message::{Message, MessageContent, Role};
 use wire::stream::openai::FinishReason;
+use wire::wiki::normalize_slug;
 
 use crate::{WorkerError, embed_key};
 
@@ -204,7 +206,59 @@ async fn extract(env: &WikiBuilderEnv<'_>, user: String) -> Result<Vec<WikiPatch
         return Err(WorkerError::Truncated);
     }
     let text = response.content.ok_or(WorkerError::EmptySummary)?;
-    serde_json::from_str(&text).map_err(WorkerError::WikiJson)
+    parse_patches(&text)
+}
+
+fn parse_patches(text: &str) -> Result<Vec<WikiPatch>, WorkerError> {
+    let mut patches: Vec<Value> = serde_json::from_str(text).map_err(WorkerError::WikiJson)?;
+    for patch in &mut patches {
+        if let Some(Value::String(date)) = patch.pointer_mut("/history_entry/date")
+            && let Some(day) = date.get(..10).filter(|day| day.len() < date.len())
+            && NaiveDate::parse_from_str(day, "%Y-%m-%d").is_ok()
+        {
+            *date = day.to_owned();
+        }
+        if let Some(slug) = patch.get_mut("slug") {
+            normalize_slug_value(slug);
+        }
+        for list in ["aliases", "related"] {
+            if let Some(Value::Array(slugs)) = patch.get_mut(list) {
+                slugs.iter_mut().for_each(normalize_slug_value);
+                slugs.retain(|slug| slug.as_str().is_none_or(|slug| !slug.is_empty()));
+            }
+        }
+        if let Some(object) = patch.as_object_mut()
+            && !object.get("history_entry").is_none_or(dated_entry)
+        {
+            tracing::info!(
+                "extract-wiki: history entry dropped for an unreadable date: {:?}",
+                object
+                    .get("history_entry")
+                    .and_then(|entry| entry.get("date"))
+            );
+            object.remove("history_entry");
+        }
+    }
+    serde_json::from_value(Value::Array(patches)).map_err(WorkerError::WikiJson)
+}
+
+fn dated_entry(entry: &Value) -> bool {
+    entry.is_null()
+        || entry
+            .get("date")
+            .and_then(Value::as_str)
+            .is_some_and(|date| NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok())
+}
+
+fn normalize_slug_value(value: &mut Value) {
+    let Value::String(raw) = value else {
+        return;
+    };
+    let normalized = normalize_slug(raw);
+    if normalized != *raw {
+        tracing::info!("extract-wiki: slug {raw:?} normalized to {normalized:?}");
+        *raw = normalized;
+    }
 }
 
 fn wiki_chat_error(error: ModelProviderError) -> WorkerError {
