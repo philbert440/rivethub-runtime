@@ -40,7 +40,8 @@ fn probe_programs() -> Vec<HarnessId> {
         HarnessId::Hermes,
         HarnessId::KimiCode,
         HarnessId::Opencode,
-        HarnessId::QwenCode,
+        HarnessId::Omp,
+        HarnessId::Dsh,
         HarnessId::ClaudeCode,
         HarnessId::Codex,
     ]

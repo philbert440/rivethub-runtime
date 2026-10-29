@@ -463,7 +463,7 @@ mod tests {
             args(HarnessId::KimiCode, UUID, Some(UUID)),
             ["--session", UUID]
         );
-        assert_eq!(args(HarnessId::Pi, UUID, Some(UUID)), ["--session", UUID]);
+        assert_eq!(args(HarnessId::Omp, UUID, Some(UUID)), ["--resume", UUID]);
     }
 
     #[test]
@@ -473,6 +473,7 @@ mod tests {
             HarnessId::KimiCode,
             HarnessId::Hermes,
             HarnessId::Opencode,
+            HarnessId::Omp,
             HarnessId::Cursor,
         ] {
             assert_eq!(args(harness, UUID, None), Vec::<String>::new());

@@ -57,8 +57,8 @@ pub fn from_canonical(session: &SessionId) -> Result<NativeSession, IdentityErro
 fn matches_shape(harness: HarnessId, native: &str) -> Result<(), IdentityError> {
     let shaped = match harness {
         HarnessId::ClaudeCode
-        | HarnessId::Pi
-        | HarnessId::QwenCode
+        | HarnessId::Omp
+        | HarnessId::Dsh
         | HarnessId::Cursor
         | HarnessId::Cowork
         | HarnessId::Codex

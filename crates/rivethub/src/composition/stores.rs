@@ -49,8 +49,7 @@ pub fn store_roots(env: &Environment) -> StoreRoots {
         codex: overridable(env, "CODEX_HOME", ".codex"),
         opencode: overridable(env, "XDG_DATA_HOME", ".local/share")
             .map(|data| data.join("opencode")),
-        pi: home_dir(env, ".pi"),
-        qwen: home_dir(env, ".qwen"),
+        omp: overridable(env, "PI_CODING_AGENT_DIR", ".omp/agent"),
         cursor: home_dir(env, ".cursor"),
         cowork: cowork_roots(env),
     }

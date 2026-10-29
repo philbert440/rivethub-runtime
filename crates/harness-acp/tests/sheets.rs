@@ -46,8 +46,7 @@ fn absent_binaries_and_unsupported_harnesses_are_omitted() {
     let directory = tempfile::tempdir().expect("directory");
     std::fs::write(directory.path().join("not-a-harness"), b"bin").expect("file");
     let listed = offerings(&format!(
-        "tasks:\n  harnesses:\n    pi:\n      binary: {}\n    cursor:\n      binary: {}\n    cowork:\n      binary: {}\n",
-        quote_path(&directory.path().join("not-a-harness")),
+        "tasks:\n  harnesses:\n    cursor:\n      binary: {}\n    cowork:\n      binary: {}\n",
         quote_path(&directory.path().join("not-a-harness")),
         quote_path(&directory.path().join("not-a-harness")),
     ))

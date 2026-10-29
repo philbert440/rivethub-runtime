@@ -37,8 +37,8 @@ pub enum HarnessId {
     Hermes,
     Codex,
     Opencode,
-    Pi,
-    QwenCode,
+    Omp,
+    Dsh,
     Cursor,
     Cowork,
 }
@@ -124,8 +124,8 @@ pub enum RosterCommand {
     Opencode,
     Hermes,
     Codex,
-    Pi,
-    Qwen,
+    Omp,
+    Dsh,
     Cursor,
     Cowork,
 }
@@ -139,8 +139,8 @@ impl From<HarnessId> for RosterCommand {
             HarnessId::Hermes => Self::Hermes,
             HarnessId::Codex => Self::Codex,
             HarnessId::Opencode => Self::Opencode,
-            HarnessId::Pi => Self::Pi,
-            HarnessId::QwenCode => Self::Qwen,
+            HarnessId::Omp => Self::Omp,
+            HarnessId::Dsh => Self::Dsh,
             HarnessId::Cursor => Self::Cursor,
             HarnessId::Cowork => Self::Cowork,
         }
@@ -156,8 +156,8 @@ impl From<RosterCommand> for HarnessId {
             RosterCommand::Hermes => Self::Hermes,
             RosterCommand::Codex => Self::Codex,
             RosterCommand::Opencode => Self::Opencode,
-            RosterCommand::Pi => Self::Pi,
-            RosterCommand::Qwen => Self::QwenCode,
+            RosterCommand::Omp => Self::Omp,
+            RosterCommand::Dsh => Self::Dsh,
             RosterCommand::Cursor => Self::Cursor,
             RosterCommand::Cowork => Self::Cowork,
         }

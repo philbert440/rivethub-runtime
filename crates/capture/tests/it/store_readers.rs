@@ -231,28 +231,16 @@ async fn kimi_reads_listing_ids_that_keep_the_session_prefix()
 }
 
 #[tokio::test]
-async fn pi_jsonl_skips_the_session_header() -> Result<(), Box<dyn std::error::Error>> {
+async fn omp_jsonl_skips_the_title_and_session_header() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempfile::tempdir()?;
     place(
         dir.path(),
-        &format!("agent/sessions/---work-demo--/2026-10-14T12-00-00_{SESSION}.jsonl"),
-        "capture/stores/pi.jsonl",
+        &format!("sessions/-work-demo/2026-10-14T12-00-00-000Z_{SESSION}.jsonl"),
+        "capture/stores/omp.jsonl",
     )?;
-    replay(&open(HarnessId::Pi, dir.path())?, HarnessId::Pi, dir.path()).await
-}
-
-#[tokio::test]
-async fn qwen_jsonl_skips_the_runtime_sidecar() -> Result<(), Box<dyn std::error::Error>> {
-    let dir = tempfile::tempdir()?;
-    let chats = format!("projects/-work-demo/chats/{SESSION}.jsonl");
-    place(dir.path(), &chats, "capture/stores/qwen.jsonl")?;
-    let sidecar = dir
-        .path()
-        .join(format!("projects/-work-demo/chats/{SESSION}.runtime.json"));
-    std::fs::write(&sidecar, "{}")?;
     replay(
-        &open(HarnessId::QwenCode, dir.path())?,
-        HarnessId::QwenCode,
+        &open(HarnessId::Omp, dir.path())?,
+        HarnessId::Omp,
         dir.path(),
     )
     .await
@@ -511,8 +499,8 @@ async fn out_of_slice_names_are_the_scenarios_this_slice_does_not_read() {
         "hermes",
         "codex",
         "opencode",
-        "pi",
-        "qwen-code",
+        "omp",
+        "dsh",
         "cursor",
         "cowork",
     ] {
@@ -520,6 +508,7 @@ async fn out_of_slice_names_are_the_scenarios_this_slice_does_not_read() {
     }
     assert!(StoreReader::open(HarnessId::Cowork, std::path::PathBuf::new()).is_some());
     assert!(StoreReader::open(HarnessId::Codex, std::path::PathBuf::new()).is_some());
+    assert!(StoreReader::open(HarnessId::Dsh, std::path::PathBuf::new()).is_none());
 }
 
 #[tokio::test]

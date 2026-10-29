@@ -99,7 +99,7 @@ fn toml_string(text: &str) -> String {
 #[must_use]
 pub fn cli_system_prompt(harness: HarnessId) -> SystemPromptSupport {
     match harness {
-        HarnessId::ClaudeCode | HarnessId::QwenCode | HarnessId::Pi => {
+        HarnessId::ClaudeCode | HarnessId::Omp => {
             SystemPromptSupport::CliFlag("--append-system-prompt")
         }
         HarnessId::GrokBuild => SystemPromptSupport::CliFlag("--rules"),
@@ -107,6 +107,7 @@ pub fn cli_system_prompt(harness: HarnessId) -> SystemPromptSupport {
         HarnessId::Opencode
         | HarnessId::Hermes
         | HarnessId::KimiCode
+        | HarnessId::Dsh
         | HarnessId::Cursor
         | HarnessId::Cowork => SystemPromptSupport::None,
     }

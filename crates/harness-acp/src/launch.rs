@@ -149,8 +149,8 @@ fn meta_append(harness: HarnessId) -> Option<MetaAppend> {
         HarnessId::Opencode
         | HarnessId::Hermes
         | HarnessId::KimiCode
-        | HarnessId::QwenCode
-        | HarnessId::Pi
+        | HarnessId::Omp
+        | HarnessId::Dsh
         | HarnessId::Cursor
         | HarnessId::Cowork => None,
     }
@@ -203,9 +203,7 @@ fn sheet_chat(harness: HarnessId) -> bool {
 
 fn entry_for(config: &Config, harness: HarnessId) -> LaunchEntry {
     match harness {
-        HarnessId::Pi | HarnessId::Cursor => {
-            LaunchEntry::Unsupported(ChatUnsupportedReason::TerminalOnly)
-        }
+        HarnessId::Cursor => LaunchEntry::Unsupported(ChatUnsupportedReason::TerminalOnly),
         HarnessId::Cowork => LaunchEntry::Unsupported(ChatUnsupportedReason::CaptureOnly),
         HarnessId::GrokBuild => LaunchEntry::Launch(AcpLaunch::Native(acp_command(
             config,
@@ -243,7 +241,18 @@ fn entry_for(config: &Config, harness: HarnessId) -> LaunchEntry {
             "kimi",
             vec!["acp".to_owned()],
         ))),
-        HarnessId::QwenCode => unverified(config, harness, "qwen", Vec::new()),
+        HarnessId::Omp => LaunchEntry::Launch(AcpLaunch::Native(acp_command(
+            config,
+            harness,
+            "omp",
+            vec!["acp".to_owned()],
+        ))),
+        HarnessId::Dsh => LaunchEntry::Launch(AcpLaunch::Native(acp_command(
+            config,
+            harness,
+            "dsh",
+            vec!["acp".to_owned()],
+        ))),
     }
 }
 
@@ -259,18 +268,6 @@ fn acp_command(
         working_dir: configured_dir(config, harness),
         env: Vec::new(),
     }
-}
-
-fn unverified(
-    config: &Config,
-    harness: HarnessId,
-    program: &str,
-    args: Vec<String>,
-) -> LaunchEntry {
-    LaunchEntry::Launch(AcpLaunch::Unverified {
-        command: acp_command(config, harness, program, args),
-        reason: UnverifiedReason::NotInstalled,
-    })
 }
 
 fn configured(config: &Config, harness: HarnessId, default: &str) -> PathBuf {

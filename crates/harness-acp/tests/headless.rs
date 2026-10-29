@@ -84,7 +84,7 @@ async fn configured_headless_binary_and_directory_reach_the_acp_process() -> Tes
             HarnessId::Hermes => "20261015_120000_a1b2c3",
             HarnessId::KimiCode => "session_00000000-0000-4000-8000-000000000001",
             HarnessId::ClaudeCode | HarnessId::Codex => "00000000-0000-4000-8000-000000000001",
-            HarnessId::Pi | HarnessId::QwenCode | HarnessId::Cursor | HarnessId::Cowork => {
+            HarnessId::Omp | HarnessId::Dsh | HarnessId::Cursor | HarnessId::Cowork => {
                 panic!("not a CLI provider")
             }
         };
@@ -245,7 +245,7 @@ fn headless_setup(
             };
             Ok((config::Config::default(), provider))
         }
-        HarnessId::Pi | HarnessId::QwenCode | HarnessId::Cursor | HarnessId::Cowork => {
+        HarnessId::Omp | HarnessId::Dsh | HarnessId::Cursor | HarnessId::Cowork => {
             Err("not a CLI provider".into())
         }
     }

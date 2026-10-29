@@ -256,6 +256,17 @@ stats), and `embedded`, `pending`, `failed`, `skipped` by vector state. A row wi
 `embed_status` `failed` is `failed`, `unembeddable` is `skipped`, anything else is `pending`. An unknown session answers
 `200` with no summaries and a zero tally. Topic startup memory reads ended sessions the same way. Bodies are
 `wire::gateway::memory::MemorySummaryDagResponse`, `MemoryMessageTally` and `VectorState` in `contract/*.schema.json`.
+(31) Harness set (Phil, 2026-10-29): `HarnessId` drops `pi` and `qwen-code` and gains `omp` (oh-my-pi) and `dsh`
+(DeepSeek Harness); `RosterCommand` drops `pi` and `qwen` and gains `omp` and `dsh`. omp chats natively over ACP
+(`omp acp`) with launch flags `--model` and `--thinking` and models discovered from its ACP model option; the built-in
+terminal command `omp` (label `omp`) resumes with `--resume <id>`, has no pin flag, and a fresh spawn gets
+`--append-system-prompt <text>`. Its store is the omp agent directory (`PI_CODING_AGENT_DIR`, else `~/.omp/agent`):
+`sessions/<encoded-cwd>/<stamp>_<uuid>.jsonl`, listed with the leading `title` line as the title when it is not blank,
+else the first user message, and the last `model_change` as the model. dsh chats natively over ACP (`dsh acp`) and is
+offered when `dsh` is installed; it has no terminal command, no session store and no transcript source, so its harness
+session list holds only the chats live in this gateway and their transcript reads empty. A `qwen-code` or `pi` entry
+under `tasks.harnesses` is now an unknown harness id. Bodies are `wire::harness::HarnessId` and `RosterCommand` in
+`contract/*.schema.json`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

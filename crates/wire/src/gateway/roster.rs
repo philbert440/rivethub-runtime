@@ -54,15 +54,9 @@ const BUILTIN: &[BuiltinCommand] = &[
         session: true,
     },
     BuiltinCommand {
-        id: "pi",
-        label: "Pi",
-        argv: &["pi"],
-        session: true,
-    },
-    BuiltinCommand {
-        id: "qwen",
-        label: "Qwen Code",
-        argv: &["qwen", "--approval-mode", "yolo"],
+        id: "omp",
+        label: "omp",
+        argv: &["omp"],
         session: true,
     },
     BuiltinCommand {
@@ -93,8 +87,7 @@ pub fn harness_for_roster_key(key: &str) -> Option<HarnessId> {
         "kimi" => Some(HarnessId::KimiCode),
         "codex" => Some(HarnessId::Codex),
         "opencode" => Some(HarnessId::Opencode),
-        "pi" => Some(HarnessId::Pi),
-        "qwen" => Some(HarnessId::QwenCode),
+        "omp" => Some(HarnessId::Omp),
         "cursor" => Some(HarnessId::Cursor),
         _ => None,
     }
@@ -109,14 +102,11 @@ pub struct SessionFlags {
 #[must_use]
 pub fn session_flags(harness: HarnessId) -> Option<SessionFlags> {
     let (pin, resume) = match harness {
-        HarnessId::ClaudeCode | HarnessId::GrokBuild | HarnessId::QwenCode => {
-            (Some("--session-id"), "--resume")
-        }
-        HarnessId::Pi => (Some("--session-id"), "--session"),
-        HarnessId::Hermes | HarnessId::Cursor => (None, "--resume"),
+        HarnessId::ClaudeCode | HarnessId::GrokBuild => (Some("--session-id"), "--resume"),
+        HarnessId::Hermes | HarnessId::Cursor | HarnessId::Omp => (None, "--resume"),
         HarnessId::KimiCode | HarnessId::Opencode => (None, "--session"),
         HarnessId::Codex => (None, "resume"),
-        HarnessId::Cowork => return None,
+        HarnessId::Dsh | HarnessId::Cowork => return None,
     };
     Some(SessionFlags { pin, resume })
 }

@@ -1,4 +1,0 @@
-{"type":"user","content":"list the files","timestamp":"2026-10-14T12:00:00Z"}
-{"type":"assistant","content":"Running ls.","timestamp":"2026-10-14T12:00:01Z"}
-{"type":"tool","name":"bash","arguments":{"cmd":"ls"},"result":"a.txt","timestamp":"2026-10-14T12:00:02Z"}
-{"type":"status","detail":"idle"}

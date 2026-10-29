@@ -23,11 +23,11 @@ fn place(root: &Path, relative: &str, fixture: &str) -> TestResult {
     Ok(())
 }
 
-fn qwen_store(root: &Path) -> TestResult {
+fn omp_store(root: &Path) -> TestResult {
     place(
         root,
-        &format!("projects/-work-demo/chats/{SESSION}.jsonl"),
-        "capture/stores/qwen.jsonl",
+        &format!("sessions/-work-demo/2026-10-14T12-00-00-000Z_{SESSION}.jsonl"),
+        "capture/stores/omp.jsonl",
     )
 }
 
@@ -53,32 +53,28 @@ const DIALOGUE: [(Role, &str); 3] = [
 ];
 
 struct Stores {
-    qwen: tempfile::TempDir,
+    omp: tempfile::TempDir,
     codex: tempfile::TempDir,
     reader: StoreTranscriptReader,
 }
 
 fn stores() -> TestResult<Stores> {
-    let qwen = tempfile::tempdir()?;
+    let omp = tempfile::tempdir()?;
     let codex = tempfile::tempdir()?;
-    qwen_store(qwen.path())?;
+    omp_store(omp.path())?;
     codex_store(codex.path())?;
     let reader = StoreTranscriptReader::new(StoreRoots {
-        qwen: Some(qwen.path().to_path_buf()),
+        omp: Some(omp.path().to_path_buf()),
         codex: Some(codex.path().to_path_buf()),
         ..StoreRoots::default()
     });
-    Ok(Stores {
-        qwen,
-        codex,
-        reader,
-    })
+    Ok(Stores { omp, codex, reader })
 }
 
 #[tokio::test]
 async fn one_reader_serves_each_harness_from_its_own_store() -> TestResult {
     let stores = stores()?;
-    for harness in [HarnessId::QwenCode, HarnessId::Codex] {
+    for harness in [HarnessId::Omp, HarnessId::Codex] {
         let session = SessionId::new(harness, SESSION);
         assert_eq!(roles(&stores.reader.read(&session).await?), DIALOGUE);
         let since = "2026-10-14T12:00:01Z".parse()?;
@@ -92,8 +88,8 @@ async fn one_reader_serves_each_harness_from_its_own_store() -> TestResult {
 async fn sessions_are_listed_from_the_store_they_name() -> TestResult {
     let stores = stores()?;
     assert_eq!(
-        stores.reader.sessions(stores.qwen.path()).await?,
-        [SessionId::new(HarnessId::QwenCode, SESSION)]
+        stores.reader.sessions(stores.omp.path()).await?,
+        [SessionId::new(HarnessId::Omp, SESSION)]
     );
     assert_eq!(
         stores.reader.sessions(stores.codex.path()).await?,
