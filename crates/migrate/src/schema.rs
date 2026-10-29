@@ -182,7 +182,9 @@ fn create_fresh(conn: &mut Connection) -> Result<(), Error> {
         .map_err(Error::SqliteCreate)?;
     tx.execute_batch(include_str!("schema/topic_page_unbind_v18.sql"))
         .map_err(Error::SqliteCreate)?;
-    tx.execute_batch(include_str!("schema/done_state_v19.sql"))
+    tx.execute_batch(include_str!("schema/topic_closed_v19.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/session_history_v19.sql"))
         .map_err(Error::SqliteCreate)?;
     apply_tail_indexes(&tx)?;
     stamp_current(&tx)?;

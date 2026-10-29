@@ -141,10 +141,10 @@ fn add_startup_delivery(tx: &Transaction<'_>) -> rusqlite::Result<()> {
 }
 
 fn add_done_state(tx: &Transaction<'_>) -> rusqlite::Result<()> {
-    if column_present(tx, "rh_topics", "closed_at")? {
-        return Ok(());
+    if !column_present(tx, "rh_topics", "closed_at")? {
+        tx.execute_batch(include_str!("schema/topic_closed_v19.sql"))?;
     }
-    tx.execute_batch(include_str!("schema/done_state_v19.sql"))
+    tx.execute_batch(include_str!("schema/session_history_v19.sql"))
 }
 
 fn unbind_topic_pages_on_delete(tx: &Transaction<'_>) -> rusqlite::Result<()> {
