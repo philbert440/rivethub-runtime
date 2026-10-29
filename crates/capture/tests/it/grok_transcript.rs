@@ -138,6 +138,38 @@ async fn a_running_turn_is_read_with_its_open_tool_call() -> TestResult {
 }
 
 #[tokio::test]
+async fn a_todo_list_keeps_its_items() -> TestResult {
+    let dir = store(
+        &[
+            update(
+                1_791_720_001_000,
+                false,
+                r#"{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"check the date"}}"#,
+            ),
+            update(
+                1_791_720_002_000,
+                true,
+                &format!(
+                    r#"{{"sessionUpdate":"tool_call","toolCallId":"{CALL}","title":"todo_write","rawInput":{{"todos":[{{"id":"date","content":"Check the date","status":"in_progress"}}],"merge":false}}}}"#
+                ),
+            ),
+        ]
+        .concat(),
+    )?;
+    let turns = turns(dir.path()).await?;
+    let item = turns
+        .iter()
+        .flat_map(tools)
+        .find(|tool| tool.name == "todo_write")
+        .and_then(|tool| tool.input.as_ref())
+        .and_then(|input| input.get("todos"))
+        .and_then(|todos| todos.pointer("/0/content"))
+        .and_then(|content| content.as_str());
+    assert_eq!(item, Some("Check the date"));
+    Ok(())
+}
+
+#[tokio::test]
 async fn the_answered_turn_settles_with_the_answer() -> TestResult {
     let dir = store(&mid_turn())?;
     append(

@@ -13,7 +13,8 @@ use super::display::tail_chars;
 use super::tools::RESULT_CHARS;
 use super::tools::args_summary;
 use super::tools::is_prompt_tool;
-use super::tools::prompt_object;
+use super::tools::keeps_input;
+use super::tools::kept_object;
 use crate::readers::SkippedRecord;
 use crate::readers::grok::FORMAT;
 use crate::readers::grok::tool_result;
@@ -195,8 +196,8 @@ impl Draft {
         let Some(name) = title else {
             return Ok(());
         };
-        let prompt = match input.filter(|_| is_prompt_tool(&name)) {
-            Some(input) => prompt_object(input).map_err(|error| TranscriptReaderError::Read {
+        let kept = match input.filter(|_| keeps_input(&name)) {
+            Some(input) => kept_object(input).map_err(|error| TranscriptReaderError::Read {
                 message: format!("grok tool call {id} input did not serialize"),
                 source: Box::new(error),
             })?,
@@ -206,7 +207,7 @@ impl Draft {
             status: TranscriptToolStatus::Running,
             args: input.and_then(args_summary),
             id: Some(id),
-            input: prompt,
+            input: kept,
             result_text: None,
             name,
         });
