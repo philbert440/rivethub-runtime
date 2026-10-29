@@ -112,6 +112,11 @@ async fn placements_keep_your_choice(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn topics_close_and_sessions_are_marked_as_history(pool: PgPool) -> TestResult {
+    topics::topics_close_and_sessions_are_marked_as_history(&PostgresMemory::new(pool)).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn merges_move_placements_aliases_and_slugs(pool: PgPool) -> TestResult {
     topics::merges_move_placements_aliases_and_slugs(&PostgresMemory::new(pool)).await
 }

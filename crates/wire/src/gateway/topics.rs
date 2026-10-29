@@ -37,6 +37,9 @@ pub struct TopicRecord {
     pub created_at: DateTime<Utc>,
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub closed_at: Option<DateTime<Utc>>,
 }
 
 #[serde_as]
@@ -125,6 +128,21 @@ pub struct PlacementReply {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct PlacementRequest {
     pub topic_id: String,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionHistoryMark {
+    pub session_id: SessionId,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub marked_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionHistoryList {
+    pub sessions: Vec<SessionHistoryMark>,
 }
 
 #[serde_as]

@@ -31,6 +31,7 @@ pub(super) struct TopicRow {
     pub(super) directory_path: Option<String>,
     pub(super) created_at: DateTime<Utc>,
     pub(super) updated_at: DateTime<Utc>,
+    pub(super) closed_at: Option<DateTime<Utc>>,
 }
 
 pub(super) struct AliasRow {
@@ -94,6 +95,7 @@ pub(super) fn topic(row: TopicRow, aliases: Vec<Alias>) -> Result<Topic, TopicEr
         directory,
         created_at: row.created_at,
         updated_at: row.updated_at,
+        closed_at: row.closed_at,
     })
 }
 
@@ -162,7 +164,7 @@ pub(super) async fn by_id(
     let row = sqlx::query_as!(
         TopicRow,
         "SELECT id, slug, name, parent_id, directory_kind, directory_node, directory_path,
-                created_at, updated_at
+                created_at, updated_at, closed_at
            FROM rh_topics WHERE id = $1 FOR UPDATE",
         id.uuid()
     )
@@ -185,7 +187,7 @@ pub(super) async fn by_slug(
     let row = sqlx::query_as!(
         TopicRow,
         "SELECT t.id, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
-                t.directory_path, t.created_at, t.updated_at
+                t.directory_path, t.created_at, t.updated_at, t.closed_at
            FROM rh_topics t
           WHERE t.slug = $1
              OR t.id = (SELECT r.topic_id FROM rh_topic_redirects r WHERE r.slug = $1)

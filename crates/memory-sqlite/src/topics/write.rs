@@ -50,8 +50,8 @@ pub(super) fn insert(conn: &Connection, topic: &Topic) -> Result<(), TopicError>
     let directory = topic.directory.as_ref();
     conn.execute(
         "INSERT INTO rh_topics (id, slug, name, parent_id, directory_kind, directory_node,
-                                directory_path, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                                directory_path, created_at, updated_at, closed_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             topic.id.to_string(),
             topic.slug.as_str(),
@@ -62,9 +62,23 @@ pub(super) fn insert(conn: &Connection, topic: &Topic) -> Result<(), TopicError>
             directory.map(Root::path),
             time::stamp(topic.created_at),
             time::stamp(topic.updated_at),
+            topic.closed_at.map(time::stamp),
         ],
     )
     .map_err(failed("topic create"))?;
+    Ok(())
+}
+
+pub(super) fn closure(conn: &Connection, topic: &Topic) -> Result<(), TopicError> {
+    conn.execute(
+        "UPDATE rh_topics SET closed_at = ?2, updated_at = ?3 WHERE id = ?1",
+        params![
+            topic.id.to_string(),
+            topic.closed_at.map(time::stamp),
+            time::stamp(topic.updated_at),
+        ],
+    )
+    .map_err(failed("topic close"))?;
     Ok(())
 }
 

@@ -7,6 +7,7 @@ use chrono::Utc;
 use kernel::topics::Alias;
 use kernel::topics::Change;
 use kernel::topics::DeliveredVia;
+use kernel::topics::HistoryMark;
 use kernel::topics::NewTopic;
 use kernel::topics::Placement;
 use kernel::topics::PlacementOutcome;
@@ -287,6 +288,77 @@ pub async fn placements_keep_your_choice(store: &dyn TopicStore) -> Outcome {
     same("unplaced", store.unplace(&session).await?, Some(yours))?;
     same("forming again", store.placement(&session).await?, None)?;
     same("unplace twice", store.unplace(&session).await?, None)?;
+    Ok(())
+}
+
+pub async fn topics_close_and_sessions_are_marked_as_history(store: &dyn TopicStore) -> Outcome {
+    let topic = store.create(new_topic("Release", &[], None)?).await?;
+    same("open when created", topic.closed_at, None)?;
+    let closed = store.set_closed(topic.id, Some(at(5)), at(5)).await?;
+    same("closed", closed.closed_at, Some(at(5)))?;
+    same(
+        "listed as closed",
+        store
+            .list()
+            .await?
+            .into_iter()
+            .find(|listing| listing.topic.id == topic.id)
+            .and_then(|listing| listing.topic.closed_at),
+        Some(at(5)),
+    )?;
+    same(
+        "closing again moves the time",
+        store
+            .set_closed(topic.id, Some(at(7)), at(7))
+            .await?
+            .closed_at,
+        Some(at(7)),
+    )?;
+    same(
+        "reopened",
+        store.set_closed(topic.id, None, at(8)).await?.closed_at,
+        None,
+    )?;
+    let unknown = store
+        .set_closed(TopicId::random(), Some(at(9)), at(9))
+        .await;
+    if !matches!(unknown, Err(TopicError::NotFound { .. })) {
+        return Err(format!("an unknown topic cannot be closed: {unknown:?}").into());
+    }
+    let loose = session("00000000-0000-4000-8000-000000000031")?;
+    let filed = session("00000000-0000-4000-8000-000000000032")?;
+    let mark = |session: &SessionId, minute: u32| HistoryMark {
+        session: session.clone(),
+        at: at(minute),
+    };
+    same(
+        "marked",
+        store.mark_history(mark(&loose, 10)).await?,
+        mark(&loose, 10),
+    )?;
+    store.mark_history(mark(&filed, 11)).await?;
+    store
+        .place(Placement {
+            session: filed.clone(),
+            topic: topic.id,
+            by: PlacementSource::You,
+            at: at(12),
+        })
+        .await?;
+    store.unplace(&filed).await?;
+    same(
+        "newest mark first, kept through place and unplace",
+        store.history().await?,
+        vec![mark(&filed, 11), mark(&loose, 10)],
+    )?;
+    same(
+        "marking again moves the time",
+        store.mark_history(mark(&loose, 13)).await?,
+        mark(&loose, 13),
+    )?;
+    store.unmark_history(&loose).await?;
+    store.unmark_history(&loose).await?;
+    same("unmarked", store.history().await?, vec![mark(&filed, 11)])?;
     Ok(())
 }
 

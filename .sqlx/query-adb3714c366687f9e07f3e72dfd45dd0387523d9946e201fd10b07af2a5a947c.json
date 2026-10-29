@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT t.id, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,\n                t.directory_path, t.created_at, t.updated_at\n           FROM rh_topics t\n          WHERE t.slug = $1\n             OR t.id = (SELECT r.topic_id FROM rh_topic_redirects r WHERE r.slug = $1)\n          ORDER BY (t.slug = $1) DESC\n          LIMIT 1",
+  "query": "SELECT id, slug, name, parent_id, directory_kind, directory_node, directory_path,\n                created_at, updated_at, closed_at\n           FROM rh_topics WHERE id = $1 FOR UPDATE",
   "describe": {
     "columns": [
       {
@@ -101,11 +101,22 @@
             "name": "updated_at"
           }
         }
+      },
+      {
+        "ordinal": 9,
+        "name": "closed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "closed_at"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -117,8 +128,9 @@
       true,
       true,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "c75bf4da02980704d400d298b358abdc53efc5cf365a90e47d1e781a13c02a6d"
+  "hash": "adb3714c366687f9e07f3e72dfd45dd0387523d9946e201fd10b07af2a5a947c"
 }

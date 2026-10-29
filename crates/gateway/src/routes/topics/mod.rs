@@ -1,4 +1,5 @@
 mod decisions;
+mod done;
 mod map;
 mod startup;
 
@@ -73,6 +74,14 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::post(merge).fallback(super::method_not_allowed),
         )
         .route(
+            "/api/topics/{topic}/close",
+            routing::post(done::close).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/topics/{topic}/reopen",
+            routing::post(done::reopen).fallback(super::method_not_allowed),
+        )
+        .route(
             "/api/topics/{topic}/page",
             routing::get(page).fallback(super::method_not_allowed),
         )
@@ -103,6 +112,16 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::get(placement)
                 .put(place)
                 .delete(unplace)
+                .fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/sessions/history",
+            routing::get(done::history).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/sessions/{session}/history",
+            routing::put(done::mark)
+                .delete(done::unmark)
                 .fallback(super::method_not_allowed),
         )
         .layer(DefaultBodyLimit::max(super::BODY_LIMIT))

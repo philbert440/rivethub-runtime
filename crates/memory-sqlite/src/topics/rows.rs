@@ -24,7 +24,7 @@ use crate::error::SqliteError;
 use crate::time;
 
 const TOPIC_COLUMNS: &str = "t.id, t.slug, t.name, t.parent_id, t.directory_kind, \
-     t.directory_node, t.directory_path, t.created_at, t.updated_at";
+     t.directory_node, t.directory_path, t.created_at, t.updated_at, t.closed_at";
 
 const PLACEMENT_COLUMNS: &str = "p.session_id, p.topic_id, p.placed_by, p.placed_at";
 
@@ -38,6 +38,7 @@ pub(super) struct TopicRow {
     directory_path: Option<String>,
     created_at: String,
     updated_at: String,
+    closed_at: Option<String>,
 }
 
 pub(super) struct PlacementRow {
@@ -81,6 +82,7 @@ fn read_topic(row: &rusqlite::Row<'_>) -> rusqlite::Result<TopicRow> {
         directory_path: row.get(6)?,
         created_at: row.get(7)?,
         updated_at: row.get(8)?,
+        closed_at: row.get(9)?,
     })
 }
 
@@ -118,6 +120,11 @@ fn topic(row: TopicRow, aliases: Vec<Alias>) -> Result<Topic, TopicError> {
         directory,
         created_at: timestamp(&row.created_at, "created_at")?,
         updated_at: timestamp(&row.updated_at, "updated_at")?,
+        closed_at: row
+            .closed_at
+            .as_deref()
+            .map(|text| timestamp(text, "closed_at"))
+            .transpose()?,
     })
 }
 
@@ -191,8 +198,8 @@ pub(super) fn listings(conn: &Connection) -> Result<Vec<TopicListing>, TopicErro
                 .query_map([], |row| {
                     Ok((
                         read_topic(row)?,
-                        row.get::<_, i64>(9)?,
-                        row.get::<_, Option<String>>(10)?,
+                        row.get::<_, i64>(10)?,
+                        row.get::<_, Option<String>>(11)?,
                     ))
                 })?
                 .collect::<Result<Vec<_>, _>>()

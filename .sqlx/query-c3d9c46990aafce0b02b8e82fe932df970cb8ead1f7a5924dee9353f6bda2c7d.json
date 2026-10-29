@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT t.id, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,\n                      t.directory_path, t.created_at, t.updated_at,\n                      (SELECT count(*) FROM rh_session_placements p WHERE p.topic_id = t.id)\n                        AS \"session_count!\",\n                      (SELECT max(c.updated_at)\n                         FROM rh_session_placements p\n                         JOIN rh_conversations c ON c.session_key = p.session_id\n                        WHERE p.topic_id = t.id) AS last_active\n                 FROM rh_topics t",
+  "query": "SELECT t.id, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,\n                t.directory_path, t.created_at, t.updated_at, t.closed_at\n           FROM rh_topics t\n          WHERE t.slug = $1\n             OR t.id = (SELECT r.topic_id FROM rh_topic_redirects r WHERE r.slug = $1)\n          ORDER BY (t.slug = $1) DESC\n          LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -104,19 +104,20 @@
       },
       {
         "ordinal": 9,
-        "name": "session_count!",
-        "type_info": "Int8",
-        "origin": "Expression"
-      },
-      {
-        "ordinal": 10,
-        "name": "last_active",
+        "name": "closed_at",
         "type_info": "Timestamptz",
-        "origin": "Expression"
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "closed_at"
+          }
+        }
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Text"
+      ]
     },
     "nullable": [
       false,
@@ -128,9 +129,8 @@
       true,
       false,
       false,
-      null,
-      null
+      true
     ]
   },
-  "hash": "fb238c3d3738d1c829136843c196a8ef7424bf1fbb1a3d4f7c634bc9a6377f05"
+  "hash": "c3d9c46990aafce0b02b8e82fe932df970cb8ead1f7a5924dee9353f6bda2c7d"
 }

@@ -1,4 +1,5 @@
 mod decisions;
+mod history;
 mod rows;
 mod startup;
 mod write;
@@ -6,6 +7,7 @@ mod write;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::topics::HistoryMark;
 use kernel::topics::MergePlan;
 use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
@@ -127,6 +129,25 @@ impl TopicStore for PostgresMemory {
         tx.commit().await.map_err(failed("topic delete"))
     }
 
+    async fn set_closed(
+        &self,
+        id: TopicId,
+        closed: Option<DateTime<Utc>>,
+        now: DateTime<Utc>,
+    ) -> Result<Topic, TopicError> {
+        let mut tx = self.pool.begin().await.map_err(failed("topic close"))?;
+        let topic = rows::by_id(&mut tx, id)
+            .await?
+            .ok_or_else(|| not_found(id))?
+            .closed(closed, now);
+        write::closure(&mut tx, &topic).await?;
+        let stored = rows::by_id(&mut tx, id)
+            .await?
+            .ok_or_else(|| not_found(id))?;
+        tx.commit().await.map_err(failed("topic close"))?;
+        Ok(stored)
+    }
+
     async fn find(&self, key: &TopicKey) -> Result<Option<Topic>, TopicError> {
         let mut conn = self.pool.acquire().await.map_err(failed("topic read"))?;
         match key {
@@ -138,7 +159,7 @@ impl TopicStore for PostgresMemory {
     async fn list(&self) -> Result<Vec<TopicListing>, TopicError> {
         let topics = sqlx::query!(
             r#"SELECT t.id, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
-                      t.directory_path, t.created_at, t.updated_at,
+                      t.directory_path, t.created_at, t.updated_at, t.closed_at,
                       (SELECT count(*) FROM rh_session_placements p WHERE p.topic_id = t.id)
                         AS "session_count!",
                       (SELECT max(c.updated_at)
@@ -173,6 +194,7 @@ impl TopicStore for PostgresMemory {
                         directory_path: row.directory_path,
                         created_at: row.created_at,
                         updated_at: row.updated_at,
+                        closed_at: row.closed_at,
                     },
                     own,
                 )?;
@@ -272,6 +294,18 @@ impl TopicStore for PostgresMemory {
         .into_iter()
         .map(rows::placed)
         .collect()
+    }
+
+    async fn mark_history(&self, mark: HistoryMark) -> Result<HistoryMark, TopicError> {
+        history::keep(&self.pool, &mark).await
+    }
+
+    async fn unmark_history(&self, session: &SessionId) -> Result<(), TopicError> {
+        history::forget(&self.pool, session).await
+    }
+
+    async fn history(&self) -> Result<Vec<HistoryMark>, TopicError> {
+        history::marks(&self.pool).await
     }
 
     async fn suggest(&self, suggestion: Suggestion) -> Result<(), TopicError> {

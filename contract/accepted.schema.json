@@ -7813,6 +7813,13 @@
         "updatedAt": {
           "type": "integer",
           "format": "int64"
+        },
+        "closedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
         }
       },
       "required": [
@@ -7864,6 +7871,13 @@
         },
         "updatedAt": {
           "type": "integer",
+          "format": "int64"
+        },
+        "closedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "int64"
         },
         "sessionCount": {
@@ -8063,6 +8077,36 @@
       "additionalProperties": false,
       "required": [
         "topicId"
+      ]
+    },
+    "SessionHistoryMark": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "markedAt": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "sessionId",
+        "markedAt"
+      ]
+    },
+    "SessionHistoryList": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionHistoryMark"
+          }
+        }
+      },
+      "required": [
+        "sessions"
       ]
     },
     "TopicSession": {

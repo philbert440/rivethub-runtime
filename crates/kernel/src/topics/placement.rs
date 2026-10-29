@@ -58,6 +58,12 @@ impl PlacementOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryMark {
+    pub session: SessionId,
+    pub at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlacedSession {
     pub placement: Placement,
     pub last_active: Option<DateTime<Utc>>,

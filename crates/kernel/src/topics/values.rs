@@ -208,6 +208,7 @@ pub struct Topic {
     pub directory: Option<Root>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub closed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -255,7 +256,15 @@ impl Topic {
             directory: new.directory,
             created_at: now,
             updated_at: now,
+            closed_at: None,
         })
+    }
+
+    #[must_use]
+    pub fn closed(mut self, at: Option<DateTime<Utc>>, now: DateTime<Utc>) -> Self {
+        self.closed_at = at;
+        self.updated_at = now;
+        self
     }
 
     #[must_use]

@@ -1,6 +1,7 @@
 use kernel::topics::Alias;
 use kernel::topics::Decision;
 use kernel::topics::DecisionStatus;
+use kernel::topics::HistoryMark;
 use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
@@ -11,6 +12,7 @@ use kernel::topics::TopicError;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicPageError;
 use wire::gateway::topics::PlacedBy;
+use wire::gateway::topics::SessionHistoryMark;
 use wire::gateway::topics::TopicDecision;
 use wire::gateway::topics::TopicDirectory;
 use wire::gateway::topics::TopicPlacement;
@@ -103,6 +105,7 @@ pub(super) fn record(topic: Topic) -> TopicRecord {
         directory: topic.directory.map(directory),
         created_at: topic.created_at,
         updated_at: topic.updated_at,
+        closed_at: topic.closed_at,
     }
 }
 
@@ -120,6 +123,13 @@ pub(super) fn placement(placement: Placement) -> TopicPlacement {
         topic_id: placement.topic.to_string(),
         by: placed_by(placement.by),
         at: placement.at,
+    }
+}
+
+pub(super) fn history_mark(mark: HistoryMark) -> SessionHistoryMark {
+    SessionHistoryMark {
+        session_id: mark.session,
+        marked_at: mark.at,
     }
 }
 

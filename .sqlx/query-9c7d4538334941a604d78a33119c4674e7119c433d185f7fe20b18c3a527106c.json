@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, slug, name, parent_id, directory_kind, directory_node, directory_path,\n                created_at, updated_at\n           FROM rh_topics WHERE id = $1 FOR UPDATE",
+  "query": "SELECT t.id, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,\n                      t.directory_path, t.created_at, t.updated_at, t.closed_at,\n                      (SELECT count(*) FROM rh_session_placements p WHERE p.topic_id = t.id)\n                        AS \"session_count!\",\n                      (SELECT max(c.updated_at)\n                         FROM rh_session_placements p\n                         JOIN rh_conversations c ON c.session_key = p.session_id\n                        WHERE p.topic_id = t.id) AS last_active\n                 FROM rh_topics t",
   "describe": {
     "columns": [
       {
@@ -101,12 +101,33 @@
             "name": "updated_at"
           }
         }
+      },
+      {
+        "ordinal": 9,
+        "name": "closed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "closed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "session_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "last_active",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
       }
     ],
     "parameters": {
-      "Left": [
-        "Uuid"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -117,8 +138,11 @@
       true,
       true,
       false,
-      false
+      false,
+      true,
+      null,
+      null
     ]
   },
-  "hash": "e0e70395473e15c25845b3f2e6e84fc145030173346f2b0fa7ba92cda018bbff"
+  "hash": "9c7d4538334941a604d78a33119c4674e7119c433d185f7fe20b18c3a527106c"
 }

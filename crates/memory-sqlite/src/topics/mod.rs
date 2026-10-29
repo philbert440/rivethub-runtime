@@ -1,4 +1,5 @@
 mod decisions;
+mod history;
 mod rows;
 mod startup;
 mod write;
@@ -6,6 +7,7 @@ mod write;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::topics::HistoryMark;
 use kernel::topics::MergePlan;
 use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
@@ -131,6 +133,22 @@ impl TopicStore for SqliteStore {
         .inspect(|()| self.notifications.send_replace(()))
     }
 
+    async fn set_closed(
+        &self,
+        id: TopicId,
+        closed: Option<DateTime<Utc>>,
+        now: DateTime<Utc>,
+    ) -> Result<Topic, TopicError> {
+        self.topics("topic close", move |conn| {
+            let topic = rows::by_id(conn, id)?
+                .ok_or_else(|| not_found(id))?
+                .closed(closed, now);
+            write::closure(conn, &topic)?;
+            stored(conn, id)
+        })
+        .await
+    }
+
     async fn find(&self, key: &TopicKey) -> Result<Option<Topic>, TopicError> {
         let key = key.clone();
         self.topics("topic read", move |conn| match &key {
@@ -194,6 +212,25 @@ impl TopicStore for SqliteStore {
     async fn sessions(&self, topic: TopicId) -> Result<Vec<PlacedSession>, TopicError> {
         self.topics("topic sessions", move |conn| rows::placed_in(conn, topic))
             .await
+    }
+
+    async fn mark_history(&self, mark: HistoryMark) -> Result<HistoryMark, TopicError> {
+        self.topics("session history mark", move |conn| {
+            history::keep(conn, &mark)
+        })
+        .await
+    }
+
+    async fn unmark_history(&self, session: &SessionId) -> Result<(), TopicError> {
+        let session = session.clone();
+        self.topics("session history unmark", move |conn| {
+            history::forget(conn, &session)
+        })
+        .await
+    }
+
+    async fn history(&self) -> Result<Vec<HistoryMark>, TopicError> {
+        self.topics("session history", history::marks).await
     }
 
     async fn suggest(&self, suggestion: Suggestion) -> Result<(), TopicError> {

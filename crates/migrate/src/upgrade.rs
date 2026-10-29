@@ -52,6 +52,7 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
             tx.execute_batch(include_str!("schema/topic_decisions_v17.sql"))
         }),
         SchemaVersion::V18 => in_transaction(conn, to, unbind_topic_pages_on_delete),
+        SchemaVersion::V19 => in_transaction(conn, to, add_done_state),
     }
 }
 
@@ -137,6 +138,13 @@ fn add_startup_delivery(tx: &Transaction<'_>) -> rusqlite::Result<()> {
         return Ok(());
     }
     tx.execute_batch(include_str!("schema/startup_delivery_v16.sql"))
+}
+
+fn add_done_state(tx: &Transaction<'_>) -> rusqlite::Result<()> {
+    if column_present(tx, "rh_topics", "closed_at")? {
+        return Ok(());
+    }
+    tx.execute_batch(include_str!("schema/done_state_v19.sql"))
 }
 
 fn unbind_topic_pages_on_delete(tx: &Transaction<'_>) -> rusqlite::Result<()> {

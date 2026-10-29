@@ -91,6 +91,13 @@ async fn placements_keep_your_choice() -> TestResult {
 }
 
 #[tokio::test]
+async fn topics_close_and_sessions_are_marked_as_history() -> TestResult {
+    let (_directory, store) = store()?;
+    topics::topics_close_and_sessions_are_marked_as_history(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn merges_move_placements_aliases_and_slugs() -> TestResult {
     let (_directory, store) = store()?;
     topics::merges_move_placements_aliases_and_slugs(&store).await?;

@@ -299,6 +299,20 @@ invalid byte sequence, or `22P05` untranslatable character, such as a NUL inside
 `metadata`) answers `400` with the database's message instead of `500`, so a capture client sets the batch aside as
 a bad batch rather than retrying it ahead of every later one. The write still rolls back whole, as the recorded
 TypeScript arms expect.
+(36) Done state (Phil, 2026-10-29): a topic can be closed and a session marked as history. `TopicRecord` gains
+optional `closedAt` (epoch milliseconds, like its other times; absent while the topic is open) wherever it appears:
+list, show, search, create and merge replies. `POST /api/topics/{topic}/close` sets the closed time to now (closing a
+closed topic moves it to now) and `POST /api/topics/{topic}/reopen` clears it; both answer the `TopicRecord`, take any
+topic, category topics included, and answer `404` for an unknown one. `GET /api/sessions/history` answers
+`{ "sessions": [{ "sessionId", "markedAt" }] }`, every marked session, newest mark first.
+`PUT /api/sessions/{session}/history` marks the session at now and answers `{ "sessionId", "markedAt" }`;
+`DELETE /api/sessions/{session}/history` removes the mark, is idempotent and answers `204`. The session segment is the
+canonical id `/api/sessions/{session}/placement` takes, validated the same way. A mark is independent of placement: an
+unplaced session can be marked, and placing or unplacing keeps it. rh never clears either by itself: a client shows a
+closed topic as open again once one of its sessions is active after `closedAt`, and a marked session as active again
+once it is active after `markedAt`. Postgres migration `0031_done_state.sql` adds `rh_topics.closed_at` and
+`rh_session_history`; SQLite schema 19 does the same. Bodies are `wire::gateway::topics::SessionHistoryMark` and
+`SessionHistoryList` in `contract/*.schema.json`. The routes are new, with no TypeScript recording.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

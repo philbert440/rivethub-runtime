@@ -79,8 +79,8 @@ pub(super) async fn insert(conn: &mut PgConnection, topic: &Topic) -> Result<(),
     let directory = topic.directory.as_ref();
     sqlx::query!(
         "INSERT INTO rh_topics (id, slug, name, parent_id, directory_kind, directory_node,
-                                directory_path, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                                directory_path, created_at, updated_at, closed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         topic.id.uuid(),
         topic.slug.as_str(),
         topic.name.as_str(),
@@ -89,11 +89,25 @@ pub(super) async fn insert(conn: &mut PgConnection, topic: &Topic) -> Result<(),
         directory.and_then(Root::node),
         directory.map(Root::path),
         topic.created_at,
-        topic.updated_at
+        topic.updated_at,
+        topic.closed_at
     )
     .execute(&mut *conn)
     .await
     .map_err(written("topic create", topic))?;
+    Ok(())
+}
+
+pub(super) async fn closure(conn: &mut PgConnection, topic: &Topic) -> Result<(), TopicError> {
+    sqlx::query!(
+        "UPDATE rh_topics SET closed_at = $2, updated_at = $3 WHERE id = $1",
+        topic.id.uuid(),
+        topic.closed_at,
+        topic.updated_at
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(failed("topic close"))?;
     Ok(())
 }
 

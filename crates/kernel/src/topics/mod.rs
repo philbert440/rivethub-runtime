@@ -35,6 +35,7 @@ pub use page::TopicPageStore;
 pub use page::bound_page;
 pub(crate) use page::root_page;
 pub use page::sync_topic_page;
+pub use placement::HistoryMark;
 pub use placement::PlacedSession;
 pub use placement::Placement;
 pub use placement::PlacementOutcome;
@@ -133,6 +134,13 @@ pub trait TopicStore: Send + Sync {
 
     async fn delete(&self, id: TopicId) -> Result<(), TopicError>;
 
+    async fn set_closed(
+        &self,
+        id: TopicId,
+        closed: Option<DateTime<Utc>>,
+        now: DateTime<Utc>,
+    ) -> Result<Topic, TopicError>;
+
     async fn find(&self, key: &TopicKey) -> Result<Option<Topic>, TopicError>;
 
     async fn list(&self) -> Result<Vec<TopicListing>, TopicError>;
@@ -146,6 +154,12 @@ pub trait TopicStore: Send + Sync {
     async fn placement(&self, session: &SessionId) -> Result<Option<Placement>, TopicError>;
 
     async fn sessions(&self, topic: TopicId) -> Result<Vec<PlacedSession>, TopicError>;
+
+    async fn mark_history(&self, mark: HistoryMark) -> Result<HistoryMark, TopicError>;
+
+    async fn unmark_history(&self, session: &SessionId) -> Result<(), TopicError>;
+
+    async fn history(&self) -> Result<Vec<HistoryMark>, TopicError>;
 
     async fn suggest(&self, suggestion: Suggestion) -> Result<(), TopicError>;
 
