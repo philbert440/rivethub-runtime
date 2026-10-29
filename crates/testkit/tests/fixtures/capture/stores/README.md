@@ -1,6 +1,6 @@
 # Harness transcript store fixtures
 
-These files are the replay inputs for the capture store readers. They are not copies of a recorded harness session. The inventory's store section names paths and, for Hermes, a `messages` query. It does not include sample records for Codex, Grok, Hermes, Kimi, OpenCode, Pi, Qwen, or Cursor. Each file below is a typed example built from that path description so the reader has something to parse. Claude Code is not duplicated here; its reader replays `capture/claude-hook/transcript.jsonl`.
+These files are the replay inputs for the capture store readers. They are not copies of a recorded harness session. The inventory's store section names paths and, for Hermes, a `messages` query. It does not include sample records for Codex, Grok, Hermes, Kimi, OpenCode, or Cursor. Each file below is a typed example built from that path description so the reader has something to parse. Claude Code is not duplicated here; its reader replays `capture/claude-hook/transcript.jsonl`.
 
 `codex-rollout.jsonl` is one Codex rollout. A user turn comes from `event_msg` / `user_message`, or from `event_msg` / `item_completed` with a `UserMessage` item (newer Codex builds write only this form). An assistant turn comes from `response_item` / `message`. A `function_call` is paired with `function_call_output` into one tool message on the output line; `arguments` is a JSON string. `session_meta`, `agent_message`, `token_count`, a user `response_item`, `turn_context`, and `compacted` are known non-turns. The filename in a store is `sessions/YYYY/MM/DD/rollout-<stamp>-<uuid>.jsonl`.
 
@@ -8,9 +8,7 @@ These files are the replay inputs for the capture store readers. They are not co
 
 `kimi-wire.jsonl` and `kimi-index.jsonl` sit in `sessions/<work-dir>/session_<uuid>/`. The transcript is `agents/main/wire.jsonl` (`user`, `assistant`, `tool_call`, `tool_result`). `session_index.jsonl` records the session id and is not a turn. Live deltas are out of slice.
 
-`pi.jsonl` is `agent/sessions/<encoded-cwd>/<stamp>_<uuid>.jsonl`. A `session` header is not a turn. Turns are `message` and `tool_result`.
-
-`qwen.jsonl` is `projects/<encoded-cwd>/chats/<uuid>.jsonl`. A sibling `<uuid>.runtime.json` is not a transcript. Turns are `user`, `assistant`, and `tool`.
+`omp.jsonl` follows the record shapes of a recorded omp 18.13.3 session with sanitized content. It sits at `sessions/<encoded-cwd>/<stamp>_<uuid>.jsonl` under the omp agent directory. The leading `title` line, the `session` header, `model_change`, `thinking_level_change` and `custom` records are not turns. Turns are `message` records: `user`, `assistant` text parts, and `toolResult` as a tool message named by `toolName`. The `status` line stands in for a record type the reader does not know.
 
 `cursor.jsonl` is `projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl`. The record tag is `role` (`user`, `assistant`, `tool`). Live turns are out of slice.
 

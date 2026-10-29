@@ -1,5 +1,0 @@
-{"type":"session","id":"33333333-3333-3333-3333-333333333333","timestamp":"2026-10-14T11:59:59Z"}
-{"type":"message","role":"user","content":"list the files","timestamp":"2026-10-14T12:00:00Z"}
-{"type":"message","role":"assistant","content":"Running ls.","timestamp":"2026-10-14T12:00:01Z"}
-{"type":"tool_result","name":"bash","result":"a.txt","timestamp":"2026-10-14T12:00:02Z"}
-{"type":"status","detail":"idle"}

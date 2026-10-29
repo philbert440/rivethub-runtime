@@ -260,7 +260,7 @@ async fn b2_1_the_legacy_list_merges_stores_newest_first() {
             row(HarnessId::ClaudeCode, U1, 1_760_700_000_000),
             row(HarnessId::ClaudeCode, U2, 1_760_600_000_000),
             row(HarnessId::Hermes, "h1", 1_760_650_000_000),
-            row(HarnessId::Pi, U3, 1_760_800_000_000),
+            row(HarnessId::Omp, U3, 1_760_800_000_000),
         ],
         ..Stores::default()
     };
@@ -384,9 +384,9 @@ async fn b3_3_unknown_and_unregistered_harnesses_are_not_found() {
     let (status, body) = get(&setup, "/api/harnesses/claude/sessions", None).await;
     assert_eq!(status, 404);
     assert_eq!(error(&body).error, "unknown harness: claude");
-    let (status, body) = get(&setup, "/api/harnesses/pi/sessions", None).await;
+    let (status, body) = get(&setup, "/api/harnesses/omp/sessions", None).await;
     assert_eq!(status, 404);
-    assert_eq!(error(&body).error, "no driver registered for pi");
+    assert_eq!(error(&body).error, "no driver registered for omp");
 }
 
 #[tokio::test]

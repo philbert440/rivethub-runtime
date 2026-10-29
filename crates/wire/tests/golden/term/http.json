@@ -7446,7 +7446,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"enabled\":true,\"default\":\"claude\",\"maxPtys\":4,\"active\":2,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"pi\",\"label\":\"Pi\",\"room\":true},{\"id\":\"qwen\",\"label\":\"Qwen Code\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
+            "body": "{\"enabled\":true,\"default\":\"claude\",\"maxPtys\":4,\"active\":2,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"omp\",\"label\":\"omp\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
             "bodyLength": 523,
             "serverClosed": false
           },
@@ -7498,7 +7498,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"enabled\":true,\"default\":\"claude\",\"maxPtys\":4,\"active\":2,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"pi\",\"label\":\"Pi\",\"room\":true},{\"id\":\"qwen\",\"label\":\"Qwen Code\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
+            "body": "{\"enabled\":true,\"default\":\"claude\",\"maxPtys\":4,\"active\":2,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"omp\",\"label\":\"omp\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
             "bodyLength": 523,
             "serverClosed": false
           },
@@ -7550,7 +7550,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"enabled\":true,\"default\":\"claude\",\"maxPtys\":4,\"active\":2,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"pi\",\"label\":\"Pi\",\"room\":true},{\"id\":\"qwen\",\"label\":\"Qwen Code\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
+            "body": "{\"enabled\":true,\"default\":\"claude\",\"maxPtys\":4,\"active\":2,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"omp\",\"label\":\"omp\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
             "bodyLength": 523,
             "serverClosed": false
           }
@@ -7597,7 +7597,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"enabled\":true,\"default\":\"claude\",\"maxPtys\":4,\"active\":2,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"pi\",\"label\":\"Pi\",\"room\":true},{\"id\":\"qwen\",\"label\":\"Qwen Code\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
+            "body": "{\"enabled\":true,\"default\":\"claude\",\"maxPtys\":4,\"active\":2,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"omp\",\"label\":\"omp\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
             "bodyLength": 523,
             "serverClosed": false
           },
@@ -7649,7 +7649,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"enabled\":true,\"default\":\"claude\",\"maxPtys\":4,\"active\":2,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"pi\",\"label\":\"Pi\",\"room\":true},{\"id\":\"qwen\",\"label\":\"Qwen Code\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
+            "body": "{\"enabled\":true,\"default\":\"claude\",\"maxPtys\":4,\"active\":2,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"omp\",\"label\":\"omp\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
             "bodyLength": 523,
             "serverClosed": false
           }

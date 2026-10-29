@@ -9,8 +9,7 @@ mod files;
 mod grok;
 mod history;
 mod kimi;
-mod pi;
-mod qwen;
+mod omp;
 mod text;
 mod time;
 mod title;
@@ -35,15 +34,14 @@ pub use transcripts::StoreTranscriptReader;
 
 use crate::readers::blocking;
 
-pub const LISTING_ORDER: [HarnessId; 10] = [
+pub const LISTING_ORDER: [HarnessId; 9] = [
     HarnessId::ClaudeCode,
     HarnessId::GrokBuild,
     HarnessId::Hermes,
     HarnessId::KimiCode,
     HarnessId::Codex,
     HarnessId::Opencode,
-    HarnessId::Pi,
-    HarnessId::QwenCode,
+    HarnessId::Omp,
     HarnessId::Cursor,
     HarnessId::Cowork,
 ];
@@ -56,8 +54,7 @@ pub struct StoreRoots {
     pub kimi: Option<PathBuf>,
     pub codex: Option<PathBuf>,
     pub opencode: Option<PathBuf>,
-    pub pi: Option<PathBuf>,
-    pub qwen: Option<PathBuf>,
+    pub omp: Option<PathBuf>,
     pub cursor: Option<PathBuf>,
     pub cowork: Vec<PathBuf>,
 }
@@ -71,10 +68,9 @@ impl StoreRoots {
             HarnessId::KimiCode => self.kimi.as_deref(),
             HarnessId::Codex => self.codex.as_deref(),
             HarnessId::Opencode => self.opencode.as_deref(),
-            HarnessId::Pi => self.pi.as_deref(),
-            HarnessId::QwenCode => self.qwen.as_deref(),
+            HarnessId::Omp => self.omp.as_deref(),
             HarnessId::Cursor => self.cursor.as_deref(),
-            HarnessId::Cowork => None,
+            HarnessId::Dsh | HarnessId::Cowork => None,
         }
     }
 }
@@ -126,12 +122,12 @@ fn list_harness(
         HarnessId::Opencode => absent_store(roots.opencode.as_deref(), |root| {
             databases::opencode_list(root, limit)
         }),
-        HarnessId::Pi => absent_store(roots.pi.as_deref(), |root| pi::list(root, limit)),
-        HarnessId::QwenCode => absent_store(roots.qwen.as_deref(), |root| qwen::list(root, limit)),
+        HarnessId::Omp => absent_store(roots.omp.as_deref(), |root| omp::list(root, limit)),
         HarnessId::Cursor => {
             absent_store(roots.cursor.as_deref(), |root| cursor::list(root, limit))
         }
         HarnessId::Cowork => Ok(cowork::list(&roots.cowork, limit)),
+        HarnessId::Dsh => Ok(Vec::new()),
     }
 }
 
@@ -161,14 +157,12 @@ fn describe_harness(
         HarnessId::Opencode => absent_store(roots.opencode.as_deref(), |root| {
             databases::opencode_describe(root, native)
         }),
-        HarnessId::Pi => absent_store(roots.pi.as_deref(), |root| pi::describe(root, native)),
-        HarnessId::QwenCode => {
-            absent_store(roots.qwen.as_deref(), |root| qwen::describe(root, native))
-        }
+        HarnessId::Omp => absent_store(roots.omp.as_deref(), |root| omp::describe(root, native)),
         HarnessId::Cursor => absent_store(roots.cursor.as_deref(), |root| {
             cursor::describe(root, native)
         }),
         HarnessId::Cowork => Ok(cowork::describe(&roots.cowork, native)),
+        HarnessId::Dsh => Ok(None),
     }
 }
 
@@ -181,16 +175,14 @@ fn store_cwd_of(
         HarnessId::ClaudeCode => absent_store(roots.claude.as_deref(), |root| {
             claude::store_cwd(root, native)
         }),
-        HarnessId::QwenCode => {
-            absent_store(roots.qwen.as_deref(), |root| qwen::store_cwd(root, native))
-        }
         HarnessId::Cowork => Ok(cowork::describe(&roots.cowork, native).and_then(|row| row.cwd)),
         HarnessId::GrokBuild
         | HarnessId::Hermes
         | HarnessId::KimiCode
         | HarnessId::Codex
         | HarnessId::Opencode
-        | HarnessId::Pi
+        | HarnessId::Omp
+        | HarnessId::Dsh
         | HarnessId::Cursor => Ok(None),
     }
 }
@@ -215,8 +207,8 @@ fn rename_harness(
         | HarnessId::KimiCode
         | HarnessId::Codex
         | HarnessId::Opencode
-        | HarnessId::Pi
-        | HarnessId::QwenCode
+        | HarnessId::Omp
+        | HarnessId::Dsh
         | HarnessId::Cursor
         | HarnessId::Cowork => return Err(SessionRenameError::Unsupported(harness)),
     };

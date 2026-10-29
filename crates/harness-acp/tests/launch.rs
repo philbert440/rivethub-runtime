@@ -6,20 +6,11 @@ use harness_acp::AcpError;
 use harness_acp::AcpLaunch;
 use harness_acp::ChatUnsupportedReason;
 use harness_acp::LaunchTable;
-use harness_acp::UnverifiedReason;
 use wire::harness::HarnessId;
 
 #[test]
 fn terminal_only_harnesses_refuse_chat_with_the_recorded_reason() {
     let table = LaunchTable::from_config(&Config::default());
-    let pi = table.launch(HarnessId::Pi).expect_err("pi refuses chat");
-    assert!(matches!(
-        pi,
-        AcpError::ChatUnsupported {
-            reason: ChatUnsupportedReason::TerminalOnly,
-            ..
-        }
-    ));
     let cursor = table
         .launch(HarnessId::Cursor)
         .expect_err("cursor refuses chat");
@@ -58,25 +49,6 @@ fn grok_launches_the_argv_verified_by_initialize() {
 }
 
 #[test]
-fn harnesses_that_are_not_installed_stay_unverified() {
-    let table = LaunchTable::from_config(&Config::default());
-    let AcpLaunch::Unverified { command, reason } =
-        table.launch(HarnessId::QwenCode).expect("entry")
-    else {
-        panic!("qwen is an unverified entry");
-    };
-    assert_eq!(reason, UnverifiedReason::NotInstalled);
-    assert_eq!(command.program, Path::new("qwen"));
-    assert_eq!(command.args, Vec::<String>::new());
-    let error = table
-        .verified_command(HarnessId::QwenCode)
-        .expect_err("unverified invocations are refused");
-    let message = error.to_string();
-    assert!(message.contains("not verified"), "{message}");
-    assert!(message.contains("not installed"), "{message}");
-}
-
-#[test]
 fn verified_acp_modes_launch_with_their_arguments() {
     let table = LaunchTable::from_config(&Config::default());
     let verified = [
@@ -84,6 +56,8 @@ fn verified_acp_modes_launch_with_their_arguments() {
         (HarnessId::Opencode, "opencode", vec!["acp".to_owned()]),
         (HarnessId::Hermes, "hermes", vec!["acp".to_owned()]),
         (HarnessId::KimiCode, "kimi", vec!["acp".to_owned()]),
+        (HarnessId::Omp, "omp", vec!["acp".to_owned()]),
+        (HarnessId::Dsh, "dsh", vec!["acp".to_owned()]),
     ];
     for (harness, program, args) in verified {
         let command = table.verified_command(harness).expect("verified launch");
@@ -113,30 +87,6 @@ tasks:
         Some(std::path::PathBuf::from("/home/user/workspace"))
     );
     assert_eq!(launch.command().args, vec!["acp".to_owned()]);
-}
-
-#[test]
-fn a_configured_binary_does_not_verify_an_unverified_invocation() {
-    let document = "
-tasks:
-  harnesses:
-    qwen-code:
-      binary: /home/user/bin/qwen
-";
-    let config: Config = serde_yaml_ng::from_str(document).expect("config parses");
-    let table = LaunchTable::from_config(&config);
-    let AcpLaunch::Unverified { command, reason } =
-        table.launch(HarnessId::QwenCode).expect("entry")
-    else {
-        panic!("a configured path does not verify an invocation that is not installed");
-    };
-    assert_eq!(reason, UnverifiedReason::NotInstalled);
-    assert_eq!(command.program, Path::new("/home/user/bin/qwen"));
-    assert_eq!(command.args, Vec::<String>::new());
-    let error = table
-        .verified_command(HarnessId::QwenCode)
-        .expect_err("configuration does not verify the invocation");
-    assert!(error.to_string().contains("not installed"));
 }
 
 #[test]

@@ -6000,7 +6000,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"enabled\":false,\"default\":\"claude\",\"maxPtys\":4,\"active\":0,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"pi\",\"label\":\"Pi\",\"room\":true},{\"id\":\"qwen\",\"label\":\"Qwen Code\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
+            "body": "{\"enabled\":false,\"default\":\"claude\",\"maxPtys\":4,\"active\":0,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"omp\",\"label\":\"omp\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
             "bodyLength": 524,
             "serverClosed": false
           }
@@ -6047,7 +6047,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"enabled\":false,\"default\":\"claude\",\"maxPtys\":4,\"active\":0,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"pi\",\"label\":\"Pi\",\"room\":true},{\"id\":\"qwen\",\"label\":\"Qwen Code\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
+            "body": "{\"enabled\":false,\"default\":\"claude\",\"maxPtys\":4,\"active\":0,\"commands\":[{\"id\":\"claude\",\"label\":\"Claude Code\",\"room\":true},{\"id\":\"grok\",\"label\":\"Grok Build\",\"room\":true},{\"id\":\"hermes\",\"label\":\"Hermes\",\"room\":true},{\"id\":\"kimi\",\"label\":\"Kimi Code\",\"room\":true},{\"id\":\"codex\",\"label\":\"Codex\",\"room\":true},{\"id\":\"opencode\",\"label\":\"OpenCode\",\"room\":true},{\"id\":\"omp\",\"label\":\"omp\",\"room\":true},{\"id\":\"cursor\",\"label\":\"Cursor\",\"room\":true},{\"id\":\"shell\",\"label\":\"Shell\",\"room\":false}]}",
             "bodyLength": 524,
             "serverClosed": false
           }
@@ -8343,7 +8343,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"subsystems\":{\"den\":true,\"devices\":false,\"mesh\":true},\"harnesses\":[{\"harnessId\":\"claude-code\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"grok-build\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"hermes\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"kimi-code\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"pi\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"qwen-code\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"cursor\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"cowork\",\"list\":true,\"read\":true,\"drive\":false,\"resume\":false},{\"harnessId\":\"opencode\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"codex\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false}]}",
+            "body": "{\"subsystems\":{\"den\":true,\"devices\":false,\"mesh\":true},\"harnesses\":[{\"harnessId\":\"claude-code\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"grok-build\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"hermes\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"kimi-code\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"omp\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"cursor\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"cowork\",\"list\":true,\"read\":true,\"drive\":false,\"resume\":false},{\"harnessId\":\"opencode\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"codex\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false}]}",
             "bodyLength": 832,
             "serverClosed": false
           }
@@ -9970,7 +9970,7 @@
             ],
             "framing": "chunked",
             "chunks": 1,
-            "body": "{\"subsystems\":{\"den\":true,\"devices\":false,\"mesh\":false},\"harnesses\":[{\"harnessId\":\"claude-code\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"grok-build\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"hermes\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"kimi-code\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"pi\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"qwen-code\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"cursor\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"cowork\",\"list\":true,\"read\":true,\"drive\":false,\"resume\":false},{\"harnessId\":\"opencode\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"codex\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false}]}",
+            "body": "{\"subsystems\":{\"den\":true,\"devices\":false,\"mesh\":false},\"harnesses\":[{\"harnessId\":\"claude-code\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"grok-build\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"hermes\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"kimi-code\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"omp\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"cursor\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"cowork\",\"list\":true,\"read\":true,\"drive\":false,\"resume\":false},{\"harnessId\":\"opencode\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false},{\"harnessId\":\"codex\",\"list\":true,\"read\":true,\"drive\":true,\"resume\":false}]}",
             "bodyLength": 833,
             "serverClosed": false
           }

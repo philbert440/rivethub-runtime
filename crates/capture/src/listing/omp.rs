@@ -12,33 +12,37 @@ use super::field::text_of;
 use super::files::Entry;
 use super::files::entries;
 use super::files::file_times;
+use super::files::head;
 use super::files::newest_per_key;
 use super::files::open_store;
 use super::files::tail_window;
 use super::text::TextElement;
 use super::text::clip;
+use super::text::clip_field;
 use super::text::human_turn;
 use super::text::non_empty;
 use super::time::FileTimes;
-use crate::readers::pi::pi_id;
+use crate::readers::omp::omp_id;
 use crate::store_path::Root;
 
 const TITLE_CHARS: usize = 120;
+const MODEL_CHARS: usize = 80;
+const HEAD_WINDOW: u64 = 65_536;
 
 #[derive(Debug, Clone)]
-struct PiFile {
+struct OmpFile {
     prefix: String,
     id: String,
     path: PathBuf,
     times: FileTimes,
 }
 
-fn candidate(entry: &Entry) -> Option<PiFile> {
+fn candidate(entry: &Entry) -> Option<OmpFile> {
     if !entry.is_file() {
         return None;
     }
-    let (prefix, id) = pi_id(entry.name.strip_suffix(".jsonl")?)?;
-    Some(PiFile {
+    let (prefix, id) = omp_id(entry.name.strip_suffix(".jsonl")?)?;
+    Some(OmpFile {
         prefix,
         id,
         path: entry.path.clone(),
@@ -46,7 +50,7 @@ fn candidate(entry: &Entry) -> Option<PiFile> {
     })
 }
 
-fn files(store: &Root) -> Vec<PiFile> {
+fn files(store: &Root) -> Vec<OmpFile> {
     let mut found = Vec::new();
     for entry in entries(store, store.canonical()) {
         if entry.hidden() {
@@ -67,7 +71,7 @@ fn files(store: &Root) -> Vec<PiFile> {
 }
 
 fn sessions(root: &Path) -> Result<Option<Root>, TranscriptReaderError> {
-    open_store(&root.join("agent").join("sessions"))
+    open_store(&root.join("sessions"))
 }
 
 pub(crate) fn list(root: &Path, limit: usize) -> Result<Vec<StoreSession>, TranscriptReaderError> {
@@ -80,7 +84,7 @@ pub(crate) fn list(root: &Path, limit: usize) -> Result<Vec<StoreSession>, Trans
         |file| file.times.mtime,
     );
     kept.sort_by_key(|item| std::cmp::Reverse(item.times.mtime));
-    Ok(kept.iter().take(limit).map(pi_row).collect())
+    Ok(kept.iter().take(limit).map(omp_row).collect())
 }
 
 pub(crate) fn describe(
@@ -99,49 +103,65 @@ pub(crate) fn describe(
                 .cmp(&right.times.mtime)
                 .then_with(|| left.prefix.cmp(&right.prefix))
         });
-    Ok(newest.as_ref().map(pi_row))
+    Ok(newest.as_ref().map(omp_row))
 }
 
-fn pi_row(file: &PiFile) -> StoreSession {
-    let mut row = StoreSession::new(HarnessId::Pi, &file.id, file.times.mtime);
+fn omp_row(file: &OmpFile) -> StoreSession {
+    let mut row = StoreSession::new(HarnessId::Omp, &file.id, file.times.mtime);
     row.created_at = Some(file.times.birth);
-    if let Some(title) = tail_window(&file.path).and_then(|text| pi_title(&text)) {
+    let lines = tail_window(&file.path)
+        .map(|text| {
+            text.lines()
+                .filter_map(object_line::<OmpLine>)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let title = head(&file.path, HEAD_WINDOW)
+        .and_then(|text| text.lines().next().and_then(object_line::<OmpLine>))
+        .as_ref()
+        .and_then(titled)
+        .or_else(|| lines.iter().find_map(user_turn));
+    if let Some(title) = title {
         row.title = title;
     }
+    row.model = lines.iter().rev().find_map(model_of);
     row
 }
 
 #[derive(Debug, Deserialize)]
-struct PiLine {
+struct OmpLine {
     #[serde(rename = "type")]
     kind: Option<Field>,
-    name: Option<Field>,
-    session_name: Option<Field>,
+    title: Option<Field>,
+    model: Option<Field>,
     message: Option<Field>,
 }
 
 #[derive(Debug, Deserialize)]
-struct PiMessage {
+struct OmpMessage {
     role: Option<Field>,
     content: Option<Field>,
 }
 
-fn named(line: &PiLine) -> Option<String> {
-    let kind = text_of(line.kind.as_ref())?;
-    if kind != "name" && kind != "session_name" {
+fn titled(line: &OmpLine) -> Option<String> {
+    if !line.kind.as_ref()?.is_text("title") {
         return None;
     }
-    [line.name.as_ref(), line.session_name.as_ref()]
-        .into_iter()
-        .find_map(|field| text_of(field).filter(|name| !name.trim().is_empty()))
-        .map(|name| clip(&name, TITLE_CHARS))
+    non_empty(clip_field(line.title.as_ref(), TITLE_CHARS))
 }
 
-fn user_turn(line: &PiLine) -> Option<String> {
+fn model_of(line: &OmpLine) -> Option<String> {
+    if !line.kind.as_ref()?.is_text("model_change") {
+        return None;
+    }
+    non_empty(clip_field(line.model.as_ref(), MODEL_CHARS))
+}
+
+fn user_turn(line: &OmpLine) -> Option<String> {
     if !line.kind.as_ref()?.is_text("message") {
         return None;
     }
-    let message = line.message.as_ref()?.object::<PiMessage>()?;
+    let message = line.message.as_ref()?.object::<OmpMessage>()?;
     if !message.role?.is_text("user") {
         return None;
     }
@@ -167,12 +187,4 @@ fn user_turn(line: &PiLine) -> Option<String> {
     .join("\n");
     let text = human_turn(&joined).unwrap_or(joined);
     non_empty(clip(&text, TITLE_CHARS))
-}
-
-pub(crate) fn pi_title(text: &str) -> Option<String> {
-    let lines: Vec<PiLine> = text.lines().filter_map(object_line::<PiLine>).collect();
-    lines
-        .iter()
-        .find_map(named)
-        .or_else(|| lines.iter().find_map(user_turn))
 }

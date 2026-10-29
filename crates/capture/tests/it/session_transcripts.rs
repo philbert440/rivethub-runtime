@@ -16,7 +16,7 @@ use wire::harness::HarnessId;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 const U1: &str = "00000000-0000-4000-8000-000000000001";
-const QWEN: &str = "33333333-3333-3333-3333-333333333333";
+const OMP: &str = "33333333-3333-3333-3333-333333333333";
 
 fn write(root: &Path, relative: &str, content: &str) -> Result<std::path::PathBuf, std::io::Error> {
     let path = root.join(relative);
@@ -366,16 +366,16 @@ async fn cowork_has_no_transcript_source() -> TestResult {
 #[tokio::test]
 async fn other_harnesses_read_text_turns_from_their_stores() -> TestResult {
     let dir = tempfile::tempdir()?;
-    let chats = dir
-        .path()
-        .join(format!("projects/-work-demo/chats/{QWEN}.jsonl"));
-    fs::create_dir_all(chats.parent().ok_or("parent")?)?;
-    fs::copy(testkit::recording("capture/stores/qwen.jsonl"), &chats)?;
+    let session = dir.path().join(format!(
+        "sessions/-work-demo/2026-10-14T12-00-00-000Z_{OMP}.jsonl"
+    ));
+    fs::create_dir_all(session.parent().ok_or("parent")?)?;
+    fs::copy(testkit::recording("capture/stores/omp.jsonl"), &session)?;
     let lister = StoreSessionLister::new(StoreRoots {
-        qwen: Some(dir.path().to_path_buf()),
+        omp: Some(dir.path().to_path_buf()),
         ..StoreRoots::default()
     });
-    let read = read(&lister, HarnessId::QwenCode, QWEN).await;
+    let read = read(&lister, HarnessId::Omp, OMP).await;
     assert_eq!(
         serde_json::to_string(&read.turns)?,
         r#"[{"role":"user","text":"list the files","startedAtMs":1791979200000,"endedAtMs":1791979200000},{"role":"assistant","text":"Running ls.","startedAtMs":1791979201000,"endedAtMs":1791979201000}]"#

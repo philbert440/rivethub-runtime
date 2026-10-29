@@ -1,10 +1,10 @@
 {
-  "default": "pi",
+  "default": "omp",
   "cwd": "/home/rivet",
   "commands": {
-    "pi": {
-      "label": "Pi",
-      "cmd": ["/home/rivet/.local/bin/pi"],
+    "omp": {
+      "label": "omp",
+      "cmd": ["/home/rivet/.local/bin/omp"],
       "room": true
     },
     "shell": {
