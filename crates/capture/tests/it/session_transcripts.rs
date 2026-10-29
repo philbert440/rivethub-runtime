@@ -41,6 +41,15 @@ async fn read(lister: &StoreSessionLister, harness: HarnessId, id: &str) -> Stor
     }
 }
 
+#[tokio::test]
+async fn dsh_has_no_transcript_source() {
+    let lister = StoreSessionLister::new(StoreRoots::default());
+    assert!(matches!(
+        lister.transcript(HarnessId::Dsh, U1).await,
+        Ok(TranscriptRead::NoSource)
+    ));
+}
+
 async fn claude_turns(lines: &[&str]) -> Vec<HarnessTranscriptTurn> {
     let dir = tempfile::tempdir().expect("store");
     write(

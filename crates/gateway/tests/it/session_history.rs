@@ -85,7 +85,7 @@ impl SessionLister for Stores {
         harness: HarnessId,
         native: &str,
     ) -> Result<TranscriptRead, TranscriptReaderError> {
-        if harness == HarnessId::Cowork {
+        if matches!(harness, HarnessId::Cowork | HarnessId::Dsh) {
             return Ok(TranscriptRead::NoSource);
         }
         Ok(TranscriptRead::Read(StoreTranscript {
@@ -845,6 +845,59 @@ async fn a_live_turn_streams_deltas_then_a_committed_snapshot() {
     assert_eq!(
         nth(&parsed::<HarnessSessionList>(&body).sessions, 0).status,
         HarnessSessionStatus::Idle
+    );
+    stop.cancel();
+}
+
+#[tokio::test]
+async fn a_live_turn_with_no_transcript_source_streams_without_a_snapshot() {
+    let setup = setup_with("{}", Stores::default(), &[HarnessId::Dsh]).await;
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        "/api/harness-sessions",
+        r#"{"harness":"dsh"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    let created: wire::harness::HarnessSessionSummary = parsed(&body);
+    let session = created.session_id.clone();
+    let (mut socket, stop) = socket(&setup, &encode_segment(&session), None).await;
+    silent(&mut socket).await;
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!("/api/harness-sessions/{session}/turn"),
+        r#"{"text":"hi"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup.harness.traced("prompt:hi").await;
+    setup.harness.finish.add_permits(1);
+    let mut kinds = Vec::new();
+    tokio::time::timeout(WAIT, async {
+        loop {
+            let next = event(&mut socket).await;
+            let done = matches!(
+                next,
+                HarnessEvent::SessionUpdated {
+                    status: HarnessSessionStatus::Idle,
+                    ..
+                }
+            );
+            kinds.push(kind(&next));
+            if done {
+                return;
+            }
+        }
+    })
+    .await
+    .expect("turn events");
+    assert_eq!(
+        kinds,
+        ["updated:Active", "delta:answer", "complete", "updated:Idle"]
     );
     stop.cancel();
 }

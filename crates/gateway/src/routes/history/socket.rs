@@ -187,6 +187,7 @@ impl Attached<'_> {
             .await
         {
             Ok(read) => read,
+            Err(ApiError::Code(HarnessCode::CapabilityUnsupported, _)) => return Ok(()),
             Err(error) => {
                 let code = if let ApiError::Code(code, _) = &error {
                     *code
