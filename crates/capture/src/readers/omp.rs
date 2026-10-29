@@ -205,7 +205,17 @@ fn map_message(
     };
     match message {
         OmpMessage::User { content } => text_turn(&turn(Role::User, &content.text())),
-        OmpMessage::Assistant { content } => text_turn(&turn(Role::Assistant, &joined(&content))),
+        OmpMessage::Assistant {
+            content,
+            error_message,
+        } => {
+            let said = joined(&content);
+            let reply = match error_message {
+                Some(error) if said.trim().is_empty() => error,
+                _ => said,
+            };
+            text_turn(&turn(Role::Assistant, &reply))
+        }
         OmpMessage::ToolResult { tool_name, content } => {
             let result = joined(&content);
             tool_turn(
@@ -275,8 +285,10 @@ enum OmpMessage {
     User {
         content: Content,
     },
+    #[serde(rename_all = "camelCase")]
     Assistant {
         content: Vec<Part>,
+        error_message: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
     ToolResult {
