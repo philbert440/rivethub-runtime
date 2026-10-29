@@ -7,10 +7,9 @@ pub(crate) mod harness_db;
 mod hermes;
 mod kimi;
 mod message;
+pub(crate) mod omp;
 mod opencode;
 mod opencode_events;
-pub(crate) mod pi;
-mod qwen;
 mod scan;
 pub(crate) mod sqlite;
 
@@ -67,8 +66,7 @@ pub enum StoreReader {
     Hermes(hermes::HermesTranscriptReader),
     Kimi(kimi::KimiTranscriptReader),
     Opencode(opencode::OpencodeTranscriptReader),
-    Pi(pi::PiTranscriptReader),
-    Qwen(qwen::QwenTranscriptReader),
+    Omp(omp::OmpTranscriptReader),
     Cursor(cursor::CursorTranscriptReader),
     Cowork(cowork::CoworkTranscriptReader),
 }
@@ -85,8 +83,8 @@ impl StoreReader {
             HarnessId::Hermes => Self::Hermes(hermes::HermesTranscriptReader::new(root)),
             HarnessId::KimiCode => Self::Kimi(kimi::KimiTranscriptReader::new(root)),
             HarnessId::Opencode => Self::Opencode(opencode::OpencodeTranscriptReader::new(root)),
-            HarnessId::Pi => Self::Pi(pi::PiTranscriptReader::new(root)),
-            HarnessId::QwenCode => Self::Qwen(qwen::QwenTranscriptReader::new(root)),
+            HarnessId::Omp => Self::Omp(omp::OmpTranscriptReader::new(root)),
+            HarnessId::Dsh => return None,
             HarnessId::Cursor => Self::Cursor(cursor::CursorTranscriptReader::new(root)),
             HarnessId::Cowork => Self::Cowork(cowork::CoworkTranscriptReader::new(root)),
         })
@@ -104,8 +102,7 @@ impl StoreReader {
             Self::Hermes(reader) => reader.messages(session, offset).await,
             Self::Kimi(reader) => reader.messages(session, offset).await,
             Self::Opencode(reader) => reader.messages(session, offset).await,
-            Self::Pi(reader) => reader.messages(session, offset).await,
-            Self::Qwen(reader) => reader.messages(session, offset).await,
+            Self::Omp(reader) => reader.messages(session, offset).await,
             Self::Cursor(reader) => reader.messages(session, offset).await,
             Self::Cowork(reader) => reader.messages(session, offset).await,
         }
@@ -125,8 +122,7 @@ impl TranscriptReader for StoreReader {
             Self::Hermes(reader) => reader.sessions(store).await,
             Self::Kimi(reader) => reader.sessions(store).await,
             Self::Opencode(reader) => reader.sessions(store).await,
-            Self::Pi(reader) => reader.sessions(store).await,
-            Self::Qwen(reader) => reader.sessions(store).await,
+            Self::Omp(reader) => reader.sessions(store).await,
             Self::Cursor(reader) => reader.sessions(store).await,
             Self::Cowork(reader) => reader.sessions(store).await,
         }
@@ -140,8 +136,7 @@ impl TranscriptReader for StoreReader {
             Self::Hermes(reader) => reader.read(session).await,
             Self::Kimi(reader) => reader.read(session).await,
             Self::Opencode(reader) => reader.read(session).await,
-            Self::Pi(reader) => reader.read(session).await,
-            Self::Qwen(reader) => reader.read(session).await,
+            Self::Omp(reader) => reader.read(session).await,
             Self::Cursor(reader) => reader.read(session).await,
             Self::Cowork(reader) => reader.read(session).await,
         }
@@ -159,8 +154,7 @@ impl TranscriptReader for StoreReader {
             Self::Hermes(reader) => reader.tail(session, since).await,
             Self::Kimi(reader) => reader.tail(session, since).await,
             Self::Opencode(reader) => reader.tail(session, since).await,
-            Self::Pi(reader) => reader.tail(session, since).await,
-            Self::Qwen(reader) => reader.tail(session, since).await,
+            Self::Omp(reader) => reader.tail(session, since).await,
             Self::Cursor(reader) => reader.tail(session, since).await,
             Self::Cowork(reader) => reader.tail(session, since).await,
         }

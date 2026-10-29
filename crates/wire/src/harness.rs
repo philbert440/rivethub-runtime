@@ -37,8 +37,8 @@ pub enum HarnessId {
     Hermes,
     Codex,
     Opencode,
-    Pi,
-    QwenCode,
+    Omp,
+    Dsh,
     Cursor,
     Cowork,
 }
@@ -124,8 +124,8 @@ pub enum RosterCommand {
     Opencode,
     Hermes,
     Codex,
-    Pi,
-    Qwen,
+    Omp,
+    Dsh,
     Cursor,
     Cowork,
 }
@@ -139,8 +139,8 @@ impl From<HarnessId> for RosterCommand {
             HarnessId::Hermes => Self::Hermes,
             HarnessId::Codex => Self::Codex,
             HarnessId::Opencode => Self::Opencode,
-            HarnessId::Pi => Self::Pi,
-            HarnessId::QwenCode => Self::Qwen,
+            HarnessId::Omp => Self::Omp,
+            HarnessId::Dsh => Self::Dsh,
             HarnessId::Cursor => Self::Cursor,
             HarnessId::Cowork => Self::Cowork,
         }
@@ -156,8 +156,8 @@ impl From<RosterCommand> for HarnessId {
             RosterCommand::Hermes => Self::Hermes,
             RosterCommand::Codex => Self::Codex,
             RosterCommand::Opencode => Self::Opencode,
-            RosterCommand::Pi => Self::Pi,
-            RosterCommand::Qwen => Self::QwenCode,
+            RosterCommand::Omp => Self::Omp,
+            RosterCommand::Dsh => Self::Dsh,
             RosterCommand::Cursor => Self::Cursor,
             RosterCommand::Cowork => Self::Cowork,
         }
@@ -188,6 +188,7 @@ pub enum HarnessCode {
     CapabilityUnsupported,
     UnknownApproval,
     UnknownPrompt,
+    TurnFailed,
 }
 
 impl HarnessCode {
@@ -198,6 +199,7 @@ impl HarnessCode {
             Self::UnknownApproval | Self::UnknownPrompt => 404,
             Self::SessionIdCollision | Self::TurnInFlight => 409,
             Self::CapabilityUnsupported => 501,
+            Self::TurnFailed => 502,
         }
     }
 
@@ -205,6 +207,14 @@ impl HarnessCode {
     pub const fn retryable(self) -> bool {
         matches!(self, Self::TurnInFlight)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SteerOutcome {
+    Steered,
+    StartedNewTurn,
+    PromptRequired,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -248,6 +258,20 @@ pub enum StatusSource {
     Transcript,
     Hooks,
     Protocol,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PlanEntry {
+    pub content: String,
+    pub status: PlanStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanStatus {
+    Pending,
+    InProgress,
+    Completed,
 }
 
 #[serde_with::skip_serializing_none]
@@ -304,6 +328,11 @@ pub enum HarnessEvent {
         session_id: SessionId,
         summary: Box<HarnessSessionSummary>,
         supersedes: Option<SessionId>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Plan {
+        session_id: SessionId,
+        entries: Vec<PlanEntry>,
     },
     #[serde(rename_all = "camelCase")]
     TurnComplete {
@@ -444,12 +473,14 @@ pub struct HarnessCapabilities {
     pub effort_flag: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessControlCapabilities {
     pub interrupt: bool,
     pub resume: bool,
     pub approvals: bool,
+    pub steering: Option<bool>,
 }
 
 #[serde_with::skip_serializing_none]

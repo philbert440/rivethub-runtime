@@ -6,6 +6,8 @@ use tokio::sync::mpsc::Receiver;
 use wire::gateway::sessions::SessionSwitches;
 use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
+use wire::harness::PlanStatus;
+use wire::harness::SteerOutcome;
 use wire::json::JsonObject;
 use wire::session_id::SessionId;
 use wire::stream::ThinkingLevel;
@@ -14,6 +16,8 @@ use wire::stream::ThinkingLevel;
 pub enum HarnessAdapterError {
     #[error("harness does not support releasing session ownership")]
     ReleaseUnsupported,
+    #[error("harness cannot steer a running turn")]
+    SteeringUnsupported,
     #[error("harness rejected the session id: {0}")]
     InvalidSession(SessionId),
     #[error("harness session is unknown: {0}")]
@@ -99,7 +103,7 @@ fn toml_string(text: &str) -> String {
 #[must_use]
 pub fn cli_system_prompt(harness: HarnessId) -> SystemPromptSupport {
     match harness {
-        HarnessId::ClaudeCode | HarnessId::QwenCode | HarnessId::Pi => {
+        HarnessId::ClaudeCode | HarnessId::Omp => {
             SystemPromptSupport::CliFlag("--append-system-prompt")
         }
         HarnessId::GrokBuild => SystemPromptSupport::CliFlag("--rules"),
@@ -107,6 +111,7 @@ pub fn cli_system_prompt(harness: HarnessId) -> SystemPromptSupport {
         HarnessId::Opencode
         | HarnessId::Hermes
         | HarnessId::KimiCode
+        | HarnessId::Dsh
         | HarnessId::Cursor
         | HarnessId::Cowork => SystemPromptSupport::None,
     }
@@ -146,6 +151,7 @@ pub struct ToolCallUpdate {
 pub struct PlanEntry {
     pub content: String,
     pub priority: PlanPriority,
+    pub status: PlanStatus,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -246,6 +252,14 @@ pub trait HarnessAdapter: Send + Sync {
         session: &SessionId,
         input: TurnInput,
     ) -> Result<(), HarnessAdapterError>;
+
+    async fn steer(
+        &self,
+        _session: &SessionId,
+        _input: TurnInput,
+    ) -> Result<SteerOutcome, HarnessAdapterError> {
+        Err(HarnessAdapterError::SteeringUnsupported)
+    }
 
     async fn cancel(&self, session: &SessionId) -> Result<(), HarnessAdapterError>;
 

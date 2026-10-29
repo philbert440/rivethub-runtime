@@ -210,8 +210,8 @@ fn nested_store(harness: HarnessId, native: &str) -> bool {
         | HarnessId::Hermes
         | HarnessId::Codex
         | HarnessId::Opencode
-        | HarnessId::Pi
-        | HarnessId::QwenCode
+        | HarnessId::Omp
+        | HarnessId::Dsh
         | HarnessId::Cursor
         | HarnessId::Cowork => false,
     }
@@ -279,7 +279,7 @@ pub(crate) async fn store_summary(
 }
 
 async fn recorded_cwd(gateway: &Gateway, row: &StoreSession) -> Option<String> {
-    if matches!(row.harness, HarnessId::ClaudeCode | HarnessId::QwenCode)
+    if row.harness == HarnessId::ClaudeCode
         && let Some(lister) = gateway.session_lister()
     {
         match lister.store_cwd(row.harness, &row.id).await {

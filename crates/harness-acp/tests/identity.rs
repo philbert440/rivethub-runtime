@@ -15,8 +15,8 @@ fn canonical(harness: HarnessId, native: &str) -> String {
 fn uuid_harnesses_accept_hyphenated_uuids() {
     for harness in [
         HarnessId::ClaudeCode,
-        HarnessId::Pi,
-        HarnessId::QwenCode,
+        HarnessId::Omp,
+        HarnessId::Dsh,
         HarnessId::Cursor,
         HarnessId::Cowork,
         HarnessId::Codex,

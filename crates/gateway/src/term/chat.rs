@@ -101,20 +101,10 @@ impl TerminalService {
             .harness
             .clone()
             .ok_or_else(|| ApiError::Unavailable("chat harness unavailable".into()))?;
-        let command = self
-            .options
-            .commands
-            .iter()
-            .find(|command| command.harness == Some(harness_id))
-            .ok_or_else(|| ApiError::BadRequest("harness is not allowed on this node".into()))?;
+        let home = self.chat_home(harness_id)?;
         let (directory, model, effort, agent_name) = match agent {
             Some(agent) => agent.chat_defaults(model, effort)?,
-            None => (
-                self.chat_directory(cwd, &command.cwd).await?,
-                model,
-                effort,
-                None,
-            ),
+            None => (self.chat_directory(cwd, &home).await?, model, effort, None),
         };
         let spec = SessionSpec {
             session: SessionId::new(harness_id, &uuid::Uuid::new_v4().to_string()),
@@ -163,6 +153,26 @@ impl TerminalService {
             },
         );
         Ok(summary)
+    }
+
+    fn chat_home(&self, harness: HarnessId) -> Result<std::path::PathBuf, ApiError> {
+        match self
+            .options
+            .commands
+            .iter()
+            .find(|command| command.harness == Some(harness))
+        {
+            Some(command) => Ok(command.cwd.clone()),
+            None if wire::gateway::roster::session_flags(harness).is_none() => Ok(self
+                .options
+                .commands
+                .iter()
+                .find(|command| command.id == self.options.default)
+                .map_or_else(|| self.options.root.clone(), |command| command.cwd.clone())),
+            None => Err(ApiError::BadRequest(
+                "harness is not allowed on this node".into(),
+            )),
+        }
     }
 
     async fn chat_directory(
@@ -227,17 +237,7 @@ impl TerminalService {
         let canonical = session
             .parse::<SessionId>()
             .map_err(|error| ApiError::BadRequest(error.to_string()))?;
-        let harness_id = canonical.harness();
-        if !self
-            .options
-            .commands
-            .iter()
-            .any(|command| command.harness == Some(harness_id))
-        {
-            return Err(ApiError::BadRequest(
-                "harness is not allowed on this node".into(),
-            ));
-        }
+        self.chat_home(canonical.harness())?;
         self.registry.claim(user, canonical.as_str())?;
         let mut chats = self.chats.write();
         if let Some(chat) = chats.get(&key).filter(|chat| !chat.is_closed()) {

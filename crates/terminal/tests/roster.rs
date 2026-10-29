@@ -22,8 +22,7 @@ const RECORDED_DISABLED: &str = concat!(
     r#"{"id":"kimi","label":"Kimi Code","room":true},"#,
     r#"{"id":"codex","label":"Codex","room":true},"#,
     r#"{"id":"opencode","label":"OpenCode","room":true},"#,
-    r#"{"id":"pi","label":"Pi","room":true},"#,
-    r#"{"id":"qwen","label":"Qwen Code","room":true},"#,
+    r#"{"id":"omp","label":"omp","room":true},"#,
     r#"{"id":"cursor","label":"Cursor","room":true},"#,
     r#"{"id":"shell","label":"Shell","room":false}]}"#
 );
@@ -155,15 +154,15 @@ fn roster_path_prefers_the_file_then_the_current_name_then_the_state_file() {
 #[tokio::test]
 async fn mesh_roster_uses_the_top_level_cwd_env_and_key_harness() -> TestResult {
     let loaded = load_fixture("mesh.json").await?;
-    assert_eq!(loaded.default_id, "pi");
-    let pi = command(&loaded, "pi")?;
-    assert_eq!(pi.label, "Pi");
-    assert_eq!(pi.argv, ["/home/rivet/.local/bin/pi"]);
-    assert_eq!(pi.cwd, Path::new("/roster-fixture/fallback"));
-    assert_eq!(pi.harness, Some(HarnessId::Pi));
-    assert!(pi.session);
+    assert_eq!(loaded.default_id, "omp");
+    let omp = command(&loaded, "omp")?;
+    assert_eq!(omp.label, "omp");
+    assert_eq!(omp.argv, ["/home/rivet/.local/bin/omp"]);
+    assert_eq!(omp.cwd, Path::new("/roster-fixture/fallback"));
+    assert_eq!(omp.harness, Some(HarnessId::Omp));
+    assert!(omp.session);
     assert_eq!(
-        env_value(pi, "PATH"),
+        env_value(omp, "PATH"),
         Some("/usr/bin:/home/rivet/.local/bin")
     );
     let shell = command(&loaded, "shell")?;
@@ -171,7 +170,7 @@ async fn mesh_roster_uses_the_top_level_cwd_env_and_key_harness() -> TestResult 
     assert_eq!(shell.cwd, Path::new("/home/rivet"));
     assert_eq!(shell.harness, None);
     assert!(!shell.session);
-    assert_eq!(shell.env, pi.env);
+    assert_eq!(shell.env, omp.env);
     Ok(())
 }
 
@@ -300,10 +299,6 @@ async fn a_missing_file_is_the_builtin_roster() -> TestResult {
     );
     assert_eq!(command(&loaded, "kimi")?.argv, ["kimi", "--yolo"]);
     assert_eq!(
-        command(&loaded, "qwen")?.argv,
-        ["qwen", "--approval-mode", "yolo"]
-    );
-    assert_eq!(
         command(&loaded, "cursor")?.argv,
         ["agent", "--force", "--trust"]
     );
@@ -431,7 +426,7 @@ async fn spawn_envdump(loaded: &terminal::LoadedRoster, home: &str) -> TestResul
         ("PATH", "/process/bin"),
         ("RIVETOS_USER_ID", "from-process"),
     ]));
-    let session = wire::session_id::SessionId::new(HarnessId::Pi, "envdump");
+    let session = wire::session_id::SessionId::new(HarnessId::Omp, "envdump");
     let id = manager
         .spawn(
             &session,

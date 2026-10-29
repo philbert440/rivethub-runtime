@@ -248,6 +248,57 @@ without a topic (`rh_wiki_topics.topic_id` set to null; SQLite schema v18 keys `
 binding's `topic_id` can be cleared); a deleted sub-topic's section stays on its root's page as a plain section. A topic
 with sub-topics, and the category roots `People`, `Hosts` and `Tools`, answer `409`; an unknown topic is `404`. The
 route is new, with no TypeScript recording.
+(30) Session summary DAG (Phil, 2026-10-28): `GET /api/memory/summaries/{session}` reads the session's one conversation,
+the active row first and then the most recently updated, so an ended session (finalized, `active = false`) still answers
+its DAG; it was filtered out before. Each node carries `vector` and the body gains `messages`, a tally of that
+conversation's messages: `total`, `user`, `assistant`, `system` by role, `tool` (role `tool` or a tool name, as in
+stats), and `embedded`, `pending`, `failed`, `skipped` by vector state. A row with an embedding is `embedded`,
+`embed_status` `failed` is `failed`, `unembeddable` is `skipped`, anything else is `pending`. An unknown session answers
+`200` with no summaries and a zero tally. Topic startup memory reads ended sessions the same way. Bodies are
+`wire::gateway::memory::MemorySummaryDagResponse`, `MemoryMessageTally` and `VectorState` in `contract/*.schema.json`.
+(31) Harness set (Phil, 2026-10-29): `HarnessId` drops `pi` and `qwen-code` and gains `omp` (oh-my-pi) and `dsh`
+(DeepSeek Harness); `RosterCommand` drops `pi` and `qwen` and gains `omp` and `dsh`. omp chats natively over ACP
+(`omp acp`) with launch flags `--model` and `--thinking` and models discovered from its ACP model option; the built-in
+terminal command `omp` (label `omp`) resumes with `--resume <id>`, has no pin flag, and a fresh spawn gets
+`--append-system-prompt <text>`. Its store is the omp agent directory (`PI_CODING_AGENT_DIR`, else `~/.omp/agent`):
+`sessions/<encoded-cwd>/<stamp>_<uuid>.jsonl`, listed with the leading `title` line as the title when it is not blank,
+else the first user message, and the last `model_change` as the model. dsh chats natively over ACP (`dsh acp`) and is
+offered when `dsh` is installed; it has no terminal command and no session store, so its harness session list holds only
+the chats live in this gateway. Its transcript has no source (`capability_unsupported`), so the history socket sends no
+transcript for a dsh chat and the client keeps what it streamed; a dsh chat starts in the directory of the node's default
+terminal command. A `qwen-code` or `pi` entry
+under `tasks.harnesses` is now an unknown harness id. Bodies are `wire::harness::HarnessId` and `RosterCommand` in
+`contract/*.schema.json`.
+(32) Agent plans (Phil, 2026-10-29): `HarnessEvent` gains `plan`,
+`{ "type": "plan", "sessionId", "entries": [{ "content", "status" }] }` with `status` one of `pending`, `in_progress`
+and `completed`. A harness session's event stream carries it, whole, each time an ACP agent replaces its plan with a
+`session/update` `plan`; it is not stored, so a transcript does not replay it. Bodies are `wire::harness::HarnessEvent`,
+`PlanEntry` and `PlanStatus` in `contract/*.schema.json`.
+(33) Failed turns (Phil, 2026-10-29): `HarnessCode` gains `turn_failed` (HTTP 502, not retryable). When a chat turn
+fails, such as a provider refusing the request, the harness session stream carries an `error` event with code
+`turn_failed` and the failure as its message, then `turn-complete`, and the session goes idle and takes the next turn;
+before, the failure ended the chat. Bodies are `wire::harness::HarnessCode` in `contract/*.schema.json`.
+(34) Steering (Phil, 2026-10-29): `POST /api/harness-sessions/{session}/steer` takes `{ "text", "attachments"? }` (the
+`/turn` text and uploads, without model, effort or system prompt) and is authorised like `/turn`. While a chat turn is
+running it hands the message to that turn instead of queuing a new one and answers `200` with `{ "outcome" }`:
+`steered` (the running turn took it) or `startedNewTurn` (the agent began a turn of its own with it); either way the text
+is published on the session stream as the user's message, as a turn's is, and its uploads are journalled like a turn's.
+With no turn running nothing is sent and it answers `200` with `{ "outcome": "promptRequired" }`: send the message with
+`POST …/turn`. A harness that cannot steer answers `501` with code `capability_unsupported`, empty text without
+attachments is `400`, and a steer the agent refuses or fails is `503`. Over ACP the gateway sends the agent's
+`_session/steering` request (`{ sessionId, prompt, _meta: { steering: { idleBehavior: "promptRequired" } } }`, the
+prompt as `session/prompt` content blocks) and reads its `outcome`: `injected` is `steered`, `startedNewTurn` and
+`promptRequired` pass through, and omp's `failed` is the `503` with its `reason`. A harness offers steering when its
+ACP `initialize` reply carries `_meta.steering.supported: true` (claude-code through claude-agent-acp, and omp):
+`HarnessControlCapabilities` gains optional `steering`, `true` for such a harness once discovered, `false` for one
+whose agent does not advertise it, and absent where no agent has answered. Bodies are
+`wire::gateway::sessions::SessionSteerRequest` and `SessionSteerResponse` and `wire::harness::SteerOutcome` in
+`contract/*.schema.json`. The route is new, with no TypeScript recording.
+(35) Unstorable text (Phil, 2026-10-29): a memory write that Postgres refuses for its characters (SQLSTATE `22021`
+invalid byte sequence, or `22P05` untranslatable character, such as a NUL inside a capture's `tool_args` or
+`metadata`) answers `400` with the database's message instead of `500`, so a capture client sets the batch aside as
+a bad batch rather than retrying it ahead of every later one. The write still rolls back whole, as the recorded
+TypeScript arms expect.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

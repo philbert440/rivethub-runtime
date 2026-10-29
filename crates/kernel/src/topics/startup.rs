@@ -275,6 +275,7 @@ async fn recent_part(
         let latest = memory
             .summary_dag(id.as_str())
             .await?
+            .summaries
             .into_iter()
             .filter(|node| node.kind == SummaryKind::Leaf && !node.content.trim().is_empty())
             .max_by_key(|node| node.latest_at.unwrap_or(node.created_at));

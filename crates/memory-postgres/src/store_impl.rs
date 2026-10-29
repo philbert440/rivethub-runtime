@@ -322,7 +322,7 @@ impl MemoryStore for crate::PostgresMemory {
     async fn summary_dag(
         &self,
         session: &str,
-    ) -> Result<Vec<wire::gateway::memory::MemorySummaryNode>, MemoryStoreError> {
+    ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
         self.read_summary_dag(session).await
     }
 

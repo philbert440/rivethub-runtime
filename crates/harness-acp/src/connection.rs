@@ -7,6 +7,7 @@ use agent_client_protocol::Agent;
 use agent_client_protocol::ByteStreams;
 use agent_client_protocol::Client;
 use agent_client_protocol::ConnectionTo;
+use agent_client_protocol::JsonRpcRequest;
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::SessionEvent;
@@ -26,6 +27,8 @@ use crate::options::stored_options;
 use crate::permissions::PermissionRegistry;
 use crate::process;
 use crate::process::ChildPipes;
+use crate::steering::SteeringRequest;
+use crate::steering::SteeringResponse;
 
 const EVENT_CAPACITY: usize = 128;
 const COMMAND_CAPACITY: usize = 32;
@@ -46,6 +49,11 @@ pub(crate) enum SessionCommand {
         acp_session: acp::SessionId,
         content: Vec<acp::ContentBlock>,
         reply: oneshot::Sender<Result<acp::PromptResponse, acp::Error>>,
+    },
+    Steer {
+        acp_session: acp::SessionId,
+        content: Vec<acp::ContentBlock>,
+        reply: oneshot::Sender<Result<SteeringResponse, acp::Error>>,
     },
     Cancel {
         acp_session: acp::SessionId,
@@ -73,6 +81,7 @@ pub(crate) fn port_failure(failure: RequestFailure, method: &'static str) -> Acp
 
 pub(crate) struct AgentConnection {
     pub(crate) capabilities: acp::AgentCapabilities,
+    pub(crate) steering: bool,
     pub(crate) tasks: TaskTracker,
     pub(crate) reaped: tokio::sync::oneshot::Receiver<Result<(), std::io::Error>>,
     pub(crate) commands: mpsc::Sender<SessionCommand>,
@@ -87,6 +96,7 @@ pub(crate) struct AgentConnection {
 
 struct Connecting {
     capabilities: acp::AgentCapabilities,
+    steering: bool,
     tasks: TaskTracker,
     reaped: tokio::sync::oneshot::Receiver<Result<(), std::io::Error>>,
     commands: mpsc::Sender<SessionCommand>,
@@ -108,6 +118,7 @@ impl Connecting {
         self.options.replace(config_options);
         let Self {
             capabilities,
+            steering,
             tasks,
             reaped,
             commands,
@@ -122,6 +133,7 @@ impl Connecting {
         drop(guard.disarm());
         AgentConnection {
             capabilities,
+            steering,
             tasks,
             reaped,
             commands,
@@ -282,13 +294,15 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
     let initialized = ready_rx.await.map_err(|_| AcpError::Closed {
         method: "initialize",
     })?;
-    let capabilities = initialized.map_err(|source| AcpError::Protocol {
+    let initialized = initialized.map_err(|source| AcpError::Protocol {
         method: "initialize",
         source,
     })?;
+    let steering = crate::steering::advertised(initialized.meta.as_ref())?;
     tasks.close();
     Ok(Connecting {
-        capabilities,
+        capabilities: initialized.agent_capabilities,
+        steering,
         tasks,
         reaped,
         commands,
@@ -307,7 +321,7 @@ async fn serve(
     stdout: tokio::process::ChildStdout,
     client: crate::client::SessionClient,
     commands_rx: mpsc::Receiver<SessionCommand>,
-    ready_tx: oneshot::Sender<Result<acp::AgentCapabilities, acp::Error>>,
+    ready_tx: oneshot::Sender<Result<acp::InitializeResponse, acp::Error>>,
 ) -> Result<(), acp::Error> {
     let session_client = client.clone();
     Client
@@ -360,7 +374,7 @@ fn initialize_request() -> acp::InitializeRequest {
 async fn drive(
     connection: ConnectionTo<Agent>,
     commands_rx: mpsc::Receiver<SessionCommand>,
-    ready_tx: oneshot::Sender<Result<acp::AgentCapabilities, acp::Error>>,
+    ready_tx: oneshot::Sender<Result<acp::InitializeResponse, acp::Error>>,
 ) -> Result<(), acp::Error> {
     let initialized = connection
         .send_request(initialize_request())
@@ -372,7 +386,7 @@ async fn drive(
                 load_session = response.agent_capabilities.load_session,
                 "agent initialized"
             );
-            if ready_tx.send(Ok(response.agent_capabilities)).is_err() {
+            if ready_tx.send(Ok(response)).is_err() {
                 return Ok(());
             }
         }
@@ -411,7 +425,12 @@ async fn command_loop(
                         acp_session,
                         content,
                         reply,
-                    } => spawn_prompt(&connection, acp_session, content, reply),
+                    } => spawn_request(&connection, acp::PromptRequest::new(acp_session, content), reply),
+                    SessionCommand::Steer {
+                        acp_session,
+                        content,
+                        reply,
+                    } => spawn_request(&connection, SteeringRequest::new(acp_session, content), reply),
                     SessionCommand::SetConfig {
                         acp_session,
                         config_id,
@@ -477,22 +496,18 @@ async fn set_config(
         .await
 }
 
-fn spawn_prompt(
+fn spawn_request<Request: JsonRpcRequest>(
     connection: &ConnectionTo<Agent>,
-    acp_session: acp::SessionId,
-    content: Vec<acp::ContentBlock>,
-    reply: oneshot::Sender<Result<acp::PromptResponse, acp::Error>>,
+    request: Request,
+    reply: oneshot::Sender<Result<Request::Response, acp::Error>>,
 ) {
-    let prompt_connection = connection.clone();
+    let request_connection = connection.clone();
     if let Err(error) = connection.spawn(async move {
-        let response = prompt_connection
-            .send_request(acp::PromptRequest::new(acp_session, content))
-            .block_task()
-            .await;
+        let response = request_connection.send_request(request).block_task().await;
         deliver(reply, response);
         Ok(())
     }) {
-        tracing::warn!(%error, "prompt task failed to start");
+        tracing::warn!(%error, "agent request task failed to start");
     }
 }
 

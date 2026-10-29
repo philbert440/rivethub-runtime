@@ -356,123 +356,172 @@ async fn codex_titles_skip_environment_context_and_ignore_bad_date_dirs() -> Tes
     Ok(())
 }
 
-fn pi_lister(root: &Path) -> StoreSessionLister {
+fn omp_lister(root: &Path) -> StoreSessionLister {
     lister(StoreRoots {
-        pi: Some(root.to_path_buf()),
+        omp: Some(root.to_path_buf()),
         ..StoreRoots::default()
     })
 }
 
-fn pi_user(text: &str) -> String {
+fn omp_user(text: &str) -> String {
     format!(
         r#"{{"type":"message","message":{{"role":"user","content":[{{"type":"text","text":"{text}"}}]}}}}"#
     )
 }
 
+fn omp_title(title: &str) -> String {
+    format!(r#"{{"type":"title","v":1,"title":"{title}","pad":"  "}}"#)
+}
+
 #[tokio::test]
-async fn pi_lists_flat_files_and_keeps_the_newest_copy() -> TestResult {
+async fn omp_lists_prompted_flat_files_and_keeps_the_newest_copy() -> TestResult {
     let dir = tempfile::tempdir()?;
     let flat = write(
         dir.path(),
-        &format!("agent/sessions/2026-10-01T00-00-00_{U1}.jsonl"),
-        &pi_user("flat"),
+        &format!("sessions/2026-10-01T00-00-00_{U1}.jsonl"),
+        &omp_user("flat"),
     )?;
     let bucketed = write(
         dir.path(),
-        &format!("agent/sessions/--work--/2026-09-01T00-00-00_{U1}.jsonl"),
-        &pi_user("bucketed"),
+        &format!("sessions/-work/2026-09-01T00-00-00_{U1}.jsonl"),
+        &omp_user("bucketed"),
     )?;
     write(
         dir.path(),
-        &format!("agent/sessions/.hidden/x_{U2}.jsonl"),
-        &pi_user("hidden"),
+        &format!("sessions/.hidden/x_{U2}.jsonl"),
+        &omp_user("hidden"),
+    )?;
+    write(
+        dir.path(),
+        &format!("sessions/-.rivethub-discovery/p_{U2}.jsonl"),
+        &[
+            omp_title(""),
+            r#"{"type":"model_change","model":"acme/probe"}"#.to_owned(),
+        ]
+        .join("\n"),
     )?;
     set_mtime(&flat, 2_000_000)?;
     set_mtime(&bucketed, 1_000_000)?;
-    let rows = only(&pi_lister(dir.path()), HarnessId::Pi).await;
+    let lister = omp_lister(dir.path());
+    let rows = only(&lister, HarnessId::Omp).await;
     assert_eq!(
         rows.iter().map(summary).collect::<Vec<_>>(),
         vec![(U1, "flat", 2_000_000)]
     );
+    assert!(lister.describe(HarnessId::Omp, U2, None).await?.is_some());
     Ok(())
 }
 
 #[tokio::test]
-async fn pi_session_name_wins_over_earlier_user_messages() -> TestResult {
+async fn omp_title_line_wins_over_the_user_message_and_the_last_model_is_kept() -> TestResult {
     let dir = tempfile::tempdir()?;
     write(
         dir.path(),
-        &format!("agent/sessions/--work--/p_{U1}.jsonl"),
+        &format!("sessions/-work/p_{U1}.jsonl"),
         &[
-            pi_user("<command-x>wrapped"),
-            r#"{"type":"session_name","session_name":"Named"}"#.to_owned(),
+            omp_title("Named"),
+            r#"{"type":"model_change","model":"acme/first"}"#.to_owned(),
+            omp_user("<command-x>wrapped"),
+            r#"{"type":"model_change","model":"acme/second"}"#.to_owned(),
         ]
         .join("\n"),
     )?;
     write(
         dir.path(),
-        &format!("agent/sessions/--work--/p_{U2}.jsonl"),
-        &pi_user("<command-x>wrapped"),
+        &format!("sessions/-work/p_{U2}.jsonl"),
+        &[omp_title(" "), omp_user("<command-x>wrapped")].join("\n"),
     )?;
-    let lister = pi_lister(dir.path());
-    let rows = only(&lister, HarnessId::Pi).await;
-    let mut titles: Vec<_> = rows
+    let lister = omp_lister(dir.path());
+    let rows = only(&lister, HarnessId::Omp).await;
+    let mut brief: Vec<_> = rows
         .iter()
-        .map(|row| (row.id.as_str(), row.title.as_str()))
+        .map(|row| (row.id.as_str(), row.title.as_str(), row.model.as_deref()))
         .collect();
-    titles.sort_unstable();
-    assert_eq!(titles, vec![(U1, "Named"), (U2, "<command-x>wrapped")]);
-    Ok(())
-}
-
-#[tokio::test]
-async fn pi_reader_reads_a_flat_session_file() -> TestResult {
-    let dir = tempfile::tempdir()?;
-    write(
-        dir.path(),
-        &format!("agent/sessions/2026-10-01T00-00-00_{U1}.jsonl"),
-        &pi_user("flat"),
-    )?;
-    let reader = capture::readers::StoreReader::open(HarnessId::Pi, dir.path().to_path_buf())
-        .ok_or("reader")?;
-    let sessions = kernel::transcript::TranscriptReader::sessions(&reader, dir.path()).await?;
+    brief.sort_unstable();
     assert_eq!(
-        sessions,
-        vec![wire::session_id::SessionId::new(HarnessId::Pi, U1)]
+        brief,
+        vec![
+            (U1, "Named", Some("acme/second")),
+            (U2, "<command-x>wrapped", None)
+        ]
     );
     Ok(())
 }
 
 #[tokio::test]
-async fn qwen_title_needs_a_real_user_and_reports_the_cwd() -> TestResult {
+async fn omp_reader_reads_a_refused_reply_as_its_error() -> TestResult {
     let dir = tempfile::tempdir()?;
+    let said = |message: &str| {
+        format!(
+            r#"{{"type":"message","timestamp":"2026-10-29T06:31:22.000Z","message":{message}}}"#
+        )
+    };
     write(
         dir.path(),
-        &format!("projects/bucket/chats/{U1}.jsonl"),
+        &format!("sessions/-work/p_{U1}.jsonl"),
         &[
-            r#"{"type":"user","provenance":"tool","message":{"parts":[{"text":"tool"}]},"cwd":"/w"}"#,
-            r#"{"type":"user","provenance":"real_user","message":{"parts":[{"text":"q1"}]},"cwd":"/x"}"#,
+            format!(r#"{{"type":"session","id":"{U1}","timestamp":"2026-10-29T06:31:21.000Z"}}"#),
+            said(r#"{"role":"user","content":[{"type":"text","text":"hi"}]}"#),
+            said(r#"{"role":"assistant","content":[],"stopReason":"error","errorMessage":"403 out of credits"}"#),
+            said(r#"{"role":"assistant","content":[{"type":"text","text":"half"}],"stopReason":"error","errorMessage":"reset"}"#),
         ]
         .join("\n"),
     )?;
+    let reader = capture::readers::StoreReader::open(HarnessId::Omp, dir.path().to_path_buf())
+        .ok_or("reader")?;
+    let turns = kernel::transcript::TranscriptReader::read(
+        &reader,
+        &wire::session_id::SessionId::new(HarnessId::Omp, U1),
+    )
+    .await?;
+    assert_eq!(
+        turns
+            .iter()
+            .map(|turn| turn.content.as_str())
+            .collect::<Vec<_>>(),
+        ["hi", "403 out of credits", "half\n\nreset"]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn omp_lists_a_session_opened_with_a_long_prompt_and_keeps_its_early_model() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let long = "x".repeat(70_000);
     write(
         dir.path(),
-        &format!("projects/bucket/chats/{U2}.runtime.json"),
-        "{}",
+        &format!("sessions/-work/p_{U1}.jsonl"),
+        &[
+            omp_title(""),
+            r#"{"type":"model_change","model":"acme/early"}"#.to_owned(),
+            omp_user(&long),
+            omp_user("short"),
+        ]
+        .join("\n"),
     )?;
-    let lister = lister(StoreRoots {
-        qwen: Some(dir.path().to_path_buf()),
-        ..StoreRoots::default()
-    });
-    let rows = only(&lister, HarnessId::QwenCode).await;
+    let rows = only(&omp_lister(dir.path()), HarnessId::Omp).await;
     let brief: Vec<_> = rows
         .iter()
-        .map(|row| (row.id.as_str(), row.title.as_str(), row.cwd.as_deref()))
+        .map(|row| (row.id.as_str(), row.model.as_deref()))
         .collect();
-    assert_eq!(brief, vec![(U1, "q1", Some("/w"))]);
+    assert_eq!(brief, vec![(U1, Some("acme/early"))]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn omp_reader_reads_a_flat_session_file() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        &format!("sessions/2026-10-01T00-00-00_{U1}.jsonl"),
+        &omp_user("flat"),
+    )?;
+    let reader = capture::readers::StoreReader::open(HarnessId::Omp, dir.path().to_path_buf())
+        .ok_or("reader")?;
+    let sessions = kernel::transcript::TranscriptReader::sessions(&reader, dir.path()).await?;
     assert_eq!(
-        lister.store_cwd(HarnessId::QwenCode, U1).await?.as_deref(),
-        Some("/w")
+        sessions,
+        vec![wire::session_id::SessionId::new(HarnessId::Omp, U1)]
     );
     Ok(())
 }

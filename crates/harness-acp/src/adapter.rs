@@ -26,6 +26,7 @@ use tokio_util::sync::CancellationToken;
 use wire::gateway::sessions::SessionSwitches;
 use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
+use wire::harness::SteerOutcome;
 use wire::session_id::SessionId;
 use wire::stream::LlmUsage;
 
@@ -58,6 +59,7 @@ struct SessionEntry {
     exited: Arc<AtomicBool>,
     shutdown: CancellationToken,
     images: bool,
+    steering: bool,
 }
 
 impl Drop for SessionEntry {
@@ -75,6 +77,7 @@ struct SessionSnapshot {
     turn_end: mpsc::UnboundedSender<Option<LlmUsage>>,
     exited: Arc<AtomicBool>,
     images: bool,
+    steering: bool,
 }
 
 #[derive(Debug)]
@@ -171,6 +174,7 @@ impl AcpHarnessAdapter {
             turn_end: entry.turn_end.clone(),
             exited: entry.exited.clone(),
             images: entry.images,
+            steering: entry.steering,
         });
         drop(sessions);
         snapshot.ok_or_else(|| HarnessAdapterError::UnknownSession(session.clone()))
@@ -192,6 +196,7 @@ impl AcpHarnessAdapter {
                 exited: agent.exited,
                 shutdown: agent.shutdown,
                 images: agent.capabilities.prompt_capabilities.image,
+                steering: agent.steering,
             },
         );
     }
@@ -444,6 +449,29 @@ impl HarnessAdapter for AcpHarnessAdapter {
             tracing::debug!("turn end had no listener");
         }
         Ok(())
+    }
+
+    async fn steer(
+        &self,
+        session: &SessionId,
+        input: TurnInput,
+    ) -> Result<SteerOutcome, HarnessAdapterError> {
+        let snapshot = self.snapshot(session)?;
+        if !snapshot.steering {
+            return Err(HarnessAdapterError::SteeringUnsupported);
+        }
+        let content = crate::prompt::content(input, snapshot.images)
+            .await
+            .map_err(port)?;
+        request(&snapshot.commands, |reply| SessionCommand::Steer {
+            acp_session: snapshot.acp_session.clone(),
+            content,
+            reply,
+        })
+        .await
+        .map_err(|failure| port(port_failure(failure, crate::steering::METHOD)))?
+        .outcome()
+        .map_err(port)
     }
 
     async fn cancel(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {

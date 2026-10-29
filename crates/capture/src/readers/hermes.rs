@@ -144,12 +144,19 @@ fn map_row(
     let Speaker::Known(role) = &row.speaker else {
         return Ok(Mapped::Skip(unrecognized(position, &row.speaker)));
     };
+    let Some(at) = row.at.as_deref() else {
+        return Ok(Mapped::Skip(SkippedRecord {
+            position,
+            rule: SkipRule::UnparseableTimestamp,
+            detail: "timestamp is not an instant".to_owned(),
+        }));
+    };
     text_turn(&TextTurn {
         session,
         position,
         role: *role,
         content: &row.content,
-        at: &row.at,
+        at,
         format: FORMAT,
     })
 }

@@ -93,7 +93,7 @@ impl ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 GatewayError::new(error.to_string()),
             ),
-            Self::Harness(error) => (adapter_status(&error), GatewayError::new(error.to_string())),
+            Self::Harness(error) => adapter_failure(&error),
             Self::Io(_) | Self::Task(_) | Self::Serialize(_) | Self::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 GatewayError::new(INTERNAL_ERROR),
@@ -171,6 +171,7 @@ pub fn harness_status(code: wire::harness::HarnessCode) -> StatusCode {
         HarnessCode::UnknownApproval | HarnessCode::UnknownPrompt => StatusCode::NOT_FOUND,
         HarnessCode::SessionIdCollision | HarnessCode::TurnInFlight => StatusCode::CONFLICT,
         HarnessCode::CapabilityUnsupported => StatusCode::NOT_IMPLEMENTED,
+        HarnessCode::TurnFailed => StatusCode::BAD_GATEWAY,
     }
 }
 
@@ -181,11 +182,25 @@ impl IntoResponse for ApiError {
     }
 }
 
+fn adapter_failure(error: &kernel::harness::HarnessAdapterError) -> (StatusCode, GatewayError) {
+    if matches!(
+        error,
+        kernel::harness::HarnessAdapterError::SteeringUnsupported
+    ) {
+        return harness_error(
+            wire::harness::HarnessCode::CapabilityUnsupported,
+            error.to_string(),
+        );
+    }
+    (adapter_status(error), GatewayError::new(error.to_string()))
+}
+
 fn adapter_status(error: &kernel::harness::HarnessAdapterError) -> StatusCode {
     use kernel::harness::HarnessAdapterError;
     match error {
         HarnessAdapterError::OptionUnavailable { .. }
         | HarnessAdapterError::OptionRejected { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+        HarnessAdapterError::SteeringUnsupported => StatusCode::NOT_IMPLEMENTED,
         HarnessAdapterError::ReleaseUnsupported
         | HarnessAdapterError::InvalidSession(_)
         | HarnessAdapterError::UnknownSession(_)

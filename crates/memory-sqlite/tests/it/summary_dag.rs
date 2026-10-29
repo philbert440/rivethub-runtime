@@ -6,12 +6,15 @@ use common::fresh_store;
 use common::instant;
 use kernel::memory::MemoryStore;
 use kernel::memory::NewSummary;
+use kernel::memory::SummaryDag;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummarySource;
 use kernel::memory::SummaryStore;
 use memory_sqlite::SqliteStore;
 use uuid::Uuid;
+use wire::gateway::memory::MemoryMessageTally;
 use wire::gateway::memory::MemorySummaryNode;
+use wire::gateway::memory::VectorState;
 
 const CURRENT: &str = "00000000-0000-4000-8000-000000000001";
 const STALE: &str = "00000000-0000-4000-8000-000000000002";
@@ -25,13 +28,20 @@ const OTHER_LEAF: &str = "00000000-0000-4000-8000-000000000016";
 
 const SEED: &str = "
 INSERT INTO ros_conversations (id, session_key, agent, channel, settings, active, created_at, updated_at) VALUES
-  ('00000000-0000-4000-8000-000000000001', 'cli:dag', 'rivet', 'cli', '{}', 1, '2026-10-10T12:00:00.000Z', '2026-10-10T13:00:00.000Z'),
-  ('00000000-0000-4000-8000-000000000002', 'cli:dag', 'helper', 'cli', '{}', 1, '2026-10-10T11:00:00.000Z', '2026-10-10T11:30:00.000Z'),
+  ('00000000-0000-4000-8000-000000000001', 'cli:dag', 'rivet', 'cli', '{}', 0, '2026-10-10T12:00:00.000Z', '2026-10-10T13:00:00.000Z'),
+  ('00000000-0000-4000-8000-000000000002', 'cli:dag', 'helper', 'cli', '{}', 0, '2026-10-10T11:00:00.000Z', '2026-10-10T11:30:00.000Z'),
   ('00000000-0000-4000-8000-000000000003', 'cli:other', 'rivet', 'cli', '{}', 1, '2026-10-10T12:00:00.000Z', '2026-10-10T14:00:00.000Z');
-INSERT INTO ros_messages (id, conversation_id, agent, channel, role, content, metadata, created_at) VALUES
-  ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'user', 'one', '{}', '2026-10-10T12:00:00.000Z'),
-  ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'assistant', 'two', '{}', '2026-10-10T12:01:00.000Z'),
-  ('00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'user', 'three', '{}', '2026-10-10T12:02:00.000Z');
+INSERT INTO ros_messages (id, conversation_id, agent, channel, role, content, tool_name, metadata, created_at, embed_status, embedding) VALUES
+  ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'user', 'one', NULL, '{}', '2026-10-10T12:00:00.000Z', 'done', X'0000803F'),
+  ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'assistant', 'two', 'Bash', '{}', '2026-10-10T12:01:00.000Z', 'unembeddable', NULL),
+  ('00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'user', 'three', NULL, '{}', '2026-10-10T12:02:00.000Z', 'failed', NULL),
+  ('00000000-0000-4000-8000-000000000104', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'tool', 'four', NULL, '{}', '2026-10-10T12:03:00.000Z', NULL, NULL);
+";
+
+const VECTORS: &str = "
+UPDATE ros_summaries SET embedding = X'0000803F' WHERE id = '00000000-0000-4000-8000-000000000014';
+UPDATE ros_summaries SET embed_status = 'failed' WHERE id = '00000000-0000-4000-8000-000000000013';
+UPDATE ros_summaries SET embed_status = 'unembeddable' WHERE id = '00000000-0000-4000-8000-000000000011';
 ";
 
 struct Planned<'a> {
@@ -125,10 +135,13 @@ async fn seeded() -> TestResult<common::Fresh> {
         children: &[BRANCH],
     };
     write(&fresh.store, root).await?;
+    execute(&fresh.store, VECTORS).await?;
     Ok(fresh)
 }
 
-fn shape(nodes: &[MemorySummaryNode]) -> Vec<(&str, Option<&str>, u32, SummaryKind)> {
+type Shape<'a> = (&'a str, Option<&'a str>, u32, SummaryKind, VectorState);
+
+fn shape(nodes: &[MemorySummaryNode]) -> Vec<Shape<'_>> {
     nodes
         .iter()
         .map(|node| {
@@ -137,25 +150,58 @@ fn shape(nodes: &[MemorySummaryNode]) -> Vec<(&str, Option<&str>, u32, SummaryKi
                 node.parent_id.as_deref(),
                 node.level,
                 node.kind,
+                node.vector,
             )
         })
         .collect()
 }
 
 #[tokio::test]
-async fn the_summary_dag_walks_from_the_session_leaves_to_the_root() -> TestResult {
+async fn an_ended_session_walks_its_summary_dag_and_tallies_its_messages() -> TestResult {
     let fresh = seeded().await?;
-    let nodes = fresh.store.summary_dag("cli:dag").await?;
+    let dag = fresh.store.summary_dag("cli:dag").await?;
     assert_eq!(
-        shape(&nodes),
+        shape(&dag.summaries),
         vec![
-            (ROOT, None, 2, SummaryKind::Root),
-            (BRANCH, Some(ROOT), 1, SummaryKind::Branch),
-            (LEAF_ONE, Some(BRANCH), 0, SummaryKind::Leaf),
-            (LEAF_TWO, Some(BRANCH), 0, SummaryKind::Leaf),
+            (ROOT, None, 2, SummaryKind::Root, VectorState::Embedded),
+            (
+                BRANCH,
+                Some(ROOT),
+                1,
+                SummaryKind::Branch,
+                VectorState::Failed
+            ),
+            (
+                LEAF_ONE,
+                Some(BRANCH),
+                0,
+                SummaryKind::Leaf,
+                VectorState::Skipped
+            ),
+            (
+                LEAF_TWO,
+                Some(BRANCH),
+                0,
+                SummaryKind::Leaf,
+                VectorState::Pending
+            ),
         ]
     );
-    let first = nodes.get(2).ok_or("first leaf")?;
+    assert_eq!(
+        dag.messages,
+        MemoryMessageTally {
+            total: 4,
+            user: 2,
+            assistant: 1,
+            system: 0,
+            tool: 2,
+            embedded: 1,
+            pending: 1,
+            failed: 1,
+            skipped: 1,
+        }
+    );
+    let first = dag.summaries.get(2).ok_or("first leaf")?;
     assert_eq!(
         first.source_message_ids,
         vec![
@@ -171,7 +217,7 @@ async fn the_summary_dag_walks_from_the_session_leaves_to_the_root() -> TestResu
     );
     assert_eq!(first.latest_at, Some(instant("2026-10-10T12:01:00.000Z")?));
     assert_eq!(first.created_at, instant("2026-10-10T12:30:00.000Z")?);
-    let root = nodes.first().ok_or("root")?;
+    let root = dag.summaries.first().ok_or("root")?;
     assert_eq!(root.source_message_ids.len(), 0);
     Ok(())
 }
@@ -179,11 +225,31 @@ async fn the_summary_dag_walks_from_the_session_leaves_to_the_root() -> TestResu
 #[tokio::test]
 async fn the_summary_dag_is_empty_for_a_session_without_a_conversation() -> TestResult {
     let fresh = seeded().await?;
-    assert_eq!(fresh.store.summary_dag("cli:missing").await?.len(), 0);
+    assert_eq!(
+        fresh.store.summary_dag("cli:missing").await?,
+        SummaryDag::default()
+    );
     let other = fresh.store.summary_dag("cli:other").await?;
     assert_eq!(
-        shape(&other),
-        vec![(OTHER_LEAF, None, 0, SummaryKind::Leaf)]
+        shape(&other.summaries),
+        vec![(OTHER_LEAF, None, 0, SummaryKind::Leaf, VectorState::Pending)]
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_active_conversation_wins_over_a_newer_ended_one() -> TestResult {
+    let fresh = seeded().await?;
+    execute(
+        &fresh.store,
+        "UPDATE ros_conversations SET active = 1 WHERE id = '00000000-0000-4000-8000-000000000002'",
+    )
+    .await?;
+    let dag = fresh.store.summary_dag("cli:dag").await?;
+    assert_eq!(
+        shape(&dag.summaries),
+        vec![(STALE_LEAF, None, 0, SummaryKind::Leaf, VectorState::Pending)]
+    );
+    assert_eq!(dag.messages, MemoryMessageTally::default());
     Ok(())
 }

@@ -695,6 +695,7 @@ fn sample_offering() -> HarnessOffering {
                 interrupt: true,
                 resume: true,
                 approvals: true,
+                steering: None,
             },
             observation: HarnessObservationCapabilities {
                 live_stream: true,

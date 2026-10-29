@@ -18,10 +18,11 @@ const SESSION: &str = "33333333-3333-3333-3333-333333333333";
 
 const HERMES_SCHEMA: &str = "\
 CREATE TABLE messages (\
+    id INTEGER PRIMARY KEY AUTOINCREMENT,\
     session_id TEXT NOT NULL,\
     role TEXT NOT NULL,\
     content TEXT NOT NULL,\
-    timestamp TEXT NOT NULL\
+    timestamp REAL NOT NULL\
 );";
 
 const OPENCODE_SCHEMA: &str = "\
@@ -231,28 +232,16 @@ async fn kimi_reads_listing_ids_that_keep_the_session_prefix()
 }
 
 #[tokio::test]
-async fn pi_jsonl_skips_the_session_header() -> Result<(), Box<dyn std::error::Error>> {
+async fn omp_jsonl_skips_the_title_and_session_header() -> Result<(), Box<dyn std::error::Error>> {
     let dir = tempfile::tempdir()?;
     place(
         dir.path(),
-        &format!("agent/sessions/---work-demo--/2026-10-14T12-00-00_{SESSION}.jsonl"),
-        "capture/stores/pi.jsonl",
+        &format!("sessions/-work-demo/2026-10-14T12-00-00-000Z_{SESSION}.jsonl"),
+        "capture/stores/omp.jsonl",
     )?;
-    replay(&open(HarnessId::Pi, dir.path())?, HarnessId::Pi, dir.path()).await
-}
-
-#[tokio::test]
-async fn qwen_jsonl_skips_the_runtime_sidecar() -> Result<(), Box<dyn std::error::Error>> {
-    let dir = tempfile::tempdir()?;
-    let chats = format!("projects/-work-demo/chats/{SESSION}.jsonl");
-    place(dir.path(), &chats, "capture/stores/qwen.jsonl")?;
-    let sidecar = dir
-        .path()
-        .join(format!("projects/-work-demo/chats/{SESSION}.runtime.json"));
-    std::fs::write(&sidecar, "{}")?;
     replay(
-        &open(HarnessId::QwenCode, dir.path())?,
-        HarnessId::QwenCode,
+        &open(HarnessId::Omp, dir.path())?,
+        HarnessId::Omp,
         dir.path(),
     )
     .await
@@ -281,21 +270,12 @@ fn hermes_store(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "INSERT INTO messages (session_id, role, content, timestamp) VALUES (?1, ?2, ?3, ?4)";
     connection.execute(
         insert,
-        (SESSION, "assistant", "Running ls.", "2026-10-14T12:00:01Z"),
+        (SESSION, "assistant", "Running ls.", 1_791_979_201.0),
     )?;
-    connection.execute(
-        insert,
-        (SESSION, "user", "list the files", "2026-10-14T12:00:00Z"),
-    )?;
-    connection.execute(insert, (SESSION, "tool", "a.txt", "2026-10-14T12:00:02Z"))?;
-    connection.execute(
-        insert,
-        (SESSION, "narrator", "aside", "2026-10-14T12:00:03Z"),
-    )?;
-    connection.execute(
-        insert,
-        ("other", "user", "elsewhere", "2026-10-14T12:00:00Z"),
-    )?;
+    connection.execute(insert, (SESSION, "user", "list the files", 1_791_979_200.0))?;
+    connection.execute(insert, (SESSION, "tool", "a.txt", 1_791_979_202.0))?;
+    connection.execute(insert, (SESSION, "narrator", "aside", 1_791_979_203.0))?;
+    connection.execute(insert, ("other", "user", "elsewhere", 1_791_979_200.0))?;
     Ok(())
 }
 
@@ -412,7 +392,7 @@ fn part_rows() -> [PartRow; 5] {
         PartRow {
             id: "p4",
             message: "m2",
-            kind: "reasoning",
+            kind: "unheard-of",
             text: Some("aside"),
             name: None,
             arguments: None,
@@ -446,6 +426,68 @@ async fn opencode_parts_map_text_tools_and_orphans() -> Result<(), Box<dyn std::
     let rules: Vec<SkipRule> = slice.skipped.iter().map(|record| record.rule).collect();
     if rules != [SkipRule::UnknownRecordType, SkipRule::UnrecognizedSpeaker] {
         return Err(format!("{rules:?}").into());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn opencode_json_parts_read_their_text_and_tools() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempfile::tempdir()?;
+    let connection = rusqlite::Connection::open(dir.path().join("opencode.db"))?;
+    connection.execute_batch(
+        "CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL);\
+         CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT NOT NULL, session_id TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL);",
+    )?;
+    let message = "INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?3, ?4)";
+    connection.execute(
+        message,
+        ("m1", SESSION, 1_791_979_200_000_i64, r#"{"role":"user"}"#),
+    )?;
+    connection.execute(
+        message,
+        (
+            "m2",
+            SESSION,
+            1_791_979_201_000_i64,
+            r#"{"role":"assistant"}"#,
+        ),
+    )?;
+    let part = "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?4, ?4, ?5)";
+    for (id, message, at, data) in [
+        (
+            "p1",
+            "m1",
+            1_791_979_200_000_i64,
+            r#"{"type":"text","text":"list the files"}"#,
+        ),
+        ("p2", "m2", 1_791_979_201_000, r#"{"type":"step-start"}"#),
+        (
+            "p2c",
+            "m2",
+            1_791_979_201_000,
+            r#"{"type":"compaction","auto":true,"overflow":false}"#,
+        ),
+        (
+            "p3",
+            "m2",
+            1_791_979_201_000,
+            r#"{"type":"text","text":"Running ls."}"#,
+        ),
+        (
+            "p4",
+            "m2",
+            1_791_979_202_000,
+            r#"{"type":"tool","tool":"bash","callID":"c1","state":{"status":"completed","input":{"command":"ls"},"output":"a.txt"}}"#,
+        ),
+    ] {
+        connection.execute(part, (id, message, SESSION, at, data))?;
+    }
+    let reader = StoreReader::open(HarnessId::Opencode, dir.path().to_path_buf()).expect("reader");
+    let session = session(HarnessId::Opencode);
+    dialogue(&reader.read(&session).await?)?;
+    let slice = reader.messages(&session, 0).await?;
+    if !tool_named(&slice, "bash") || !slice.skipped.is_empty() {
+        return Err(format!("tool or skips {:?}", slice.skipped).into());
     }
     Ok(())
 }
@@ -511,8 +553,8 @@ async fn out_of_slice_names_are_the_scenarios_this_slice_does_not_read() {
         "hermes",
         "codex",
         "opencode",
-        "pi",
-        "qwen-code",
+        "omp",
+        "dsh",
         "cursor",
         "cowork",
     ] {
@@ -520,6 +562,7 @@ async fn out_of_slice_names_are_the_scenarios_this_slice_does_not_read() {
     }
     assert!(StoreReader::open(HarnessId::Cowork, std::path::PathBuf::new()).is_some());
     assert!(StoreReader::open(HarnessId::Codex, std::path::PathBuf::new()).is_some());
+    assert!(StoreReader::open(HarnessId::Dsh, std::path::PathBuf::new()).is_none());
 }
 
 #[tokio::test]

@@ -6,7 +6,7 @@ use kernel::harness::{
 };
 use parking_lot::Mutex;
 use tokio::sync::{Semaphore, mpsc, watch};
-use wire::harness::ApprovalDecision;
+use wire::harness::{ApprovalDecision, SteerOutcome};
 use wire::session_id::SessionId;
 
 #[derive(Debug)]
@@ -23,6 +23,7 @@ pub(crate) struct Harness {
     pub(crate) finish: Semaphore,
     pub(crate) specs: Mutex<Vec<SessionSpec>>,
     pub(crate) usage: Mutex<Option<wire::stream::LlmUsage>>,
+    pub(crate) refusal: Mutex<Option<String>>,
 }
 
 impl Default for Harness {
@@ -34,6 +35,7 @@ impl Default for Harness {
             finish: Semaphore::new(0),
             specs: Mutex::new(Vec::new()),
             usage: Mutex::new(None),
+            refusal: Mutex::new(None),
         }
     }
 }
@@ -124,25 +126,16 @@ impl HarnessAdapter for Harness {
             .expect("live session")
             .sender
             .clone();
-        let traced = match input {
-            TurnInput::Text(text) => format!("prompt:{text}"),
-            TurnInput::Attached { text, attachments } => {
-                let attached: Vec<String> = attachments
-                    .iter()
-                    .map(|attachment| {
-                        format!(
-                            "{}:{}:{}",
-                            attachment.name,
-                            attachment.media_type,
-                            attachment.path.display()
-                        )
-                    })
-                    .collect();
-                format!("prompt:{text}|attached:{}", attached.join(","))
-            }
-        };
-        self.trace.send_modify(|trace| trace.push(traced));
+        self.trace
+            .send_modify(|trace| trace.push(format!("prompt:{}", described(input))));
         self.finish.acquire().await.expect("finish turn").forget();
+        let refusal = self.refusal.lock().take();
+        if let Some(message) = refusal {
+            return Err(HarnessAdapterError::Failed {
+                message,
+                source: Box::new(std::io::Error::other("refused")),
+            });
+        }
         sender
             .send(SessionEvent::AgentMessageChunk {
                 text: "answer".into(),
@@ -162,6 +155,16 @@ impl HarnessAdapter for Harness {
             .expect("turn end");
         self.trace.send_modify(|trace| trace.push("ended".into()));
         Ok(())
+    }
+
+    async fn steer(
+        &self,
+        _session: &SessionId,
+        input: TurnInput,
+    ) -> Result<SteerOutcome, HarnessAdapterError> {
+        self.trace
+            .send_modify(|trace| trace.push(format!("steer:{}", described(input))));
+        Ok(SteerOutcome::Steered)
     }
 
     async fn cancel(&self, _session: &SessionId) -> Result<(), HarnessAdapterError> {
@@ -235,6 +238,26 @@ impl HarnessAdapter for Harness {
     }
 }
 
+fn described(input: TurnInput) -> String {
+    match input {
+        TurnInput::Text(text) => text,
+        TurnInput::Attached { text, attachments } => {
+            let attached: Vec<String> = attachments
+                .iter()
+                .map(|attachment| {
+                    format!(
+                        "{}:{}:{}",
+                        attachment.name,
+                        attachment.media_type,
+                        attachment.path.display()
+                    )
+                })
+                .collect();
+            format!("{text}|attached:{}", attached.join(","))
+        }
+    }
+}
+
 fn offered(harness_id: wire::harness::HarnessId) -> wire::harness::HarnessOffering {
     use wire::harness::{
         HarnessCapabilities, HarnessControlCapabilities, HarnessObservationCapabilities,
@@ -247,6 +270,7 @@ fn offered(harness_id: wire::harness::HarnessId) -> wire::harness::HarnessOfferi
                 interrupt: true,
                 resume: true,
                 approvals: false,
+                steering: None,
             },
             observation: HarnessObservationCapabilities {
                 live_stream: true,

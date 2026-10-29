@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "with messages as (\n                select count(*) as total,\n                       count(*) filter (where role = 'tool' or tool_name is not null) as tool_calls,\n                       count(embedding) as embedded,\n                       count(*) filter (where embedding is null and embed_status is distinct from 'unembeddable'\n                           and embed_status is distinct from 'failed'\n                           and (length(coalesce(content, '')) > 0 or length(coalesce(tool_result, '')) > 0)) as queued,\n                       count(*) filter (where embed_status = 'failed') as failed\n                  from rh_messages),\n             summaries as (\n                select count(*) as total,\n                       count(*) filter (where embedding is null and embed_status is distinct from 'unembeddable'\n                           and embed_status is distinct from 'failed') as queued,\n                       count(*) filter (where embed_status = 'failed') as failed\n                  from rh_summaries)\n             select (select count(*) from rh_conversations) as \"conversations!\",\n                messages.total as \"messages!\",\n                messages.tool_calls as \"tool_calls!\",\n                summaries.total as \"summaries!\",\n                messages.embedded as \"embedded_messages!\",\n                messages.queued + summaries.queued as \"embed_queue_depth!\",\n                messages.failed + summaries.failed as \"failed_embeddings!\"\n             from messages, summaries",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "conversations!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "messages!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "tool_calls!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "summaries!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "embedded_messages!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "embed_queue_depth!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "failed_embeddings!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "a8787b93cde0ba3f28ba8531c2f8cbf641924c34e5b370e8efdb0bf4f8edac47"
+}

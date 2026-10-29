@@ -74,6 +74,7 @@ fn session_of(event: &HarnessEvent) -> Option<&SessionId> {
         | HarnessEvent::ToolResult { .. }
         | HarnessEvent::ApprovalRequest { .. }
         | HarnessEvent::ApprovalResolved { .. }
+        | HarnessEvent::Plan { .. }
         | HarnessEvent::TurnComplete { .. }
         | HarnessEvent::Error { .. }
         | HarnessEvent::Transcript { .. }

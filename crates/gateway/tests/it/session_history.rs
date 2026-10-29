@@ -22,11 +22,11 @@ use wire::gateway::GatewayError;
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTranscriptResponse, HarnessSocketRefusal,
     HarnessSocketRefusalCode, HarnessTranscriptTurn, MessageUsage, SessionMessageRole,
-    SessionPostRequest, TranscriptAttachment,
+    SessionPostRequest, SessionSteerResponse, TranscriptAttachment,
 };
 use wire::harness::{
     HarnessEvent, HarnessId, HarnessOfferingList, HarnessSessionList, HarnessSessionStatus,
-    HarnessStoreSessionList,
+    HarnessStoreSessionList, SteerOutcome,
 };
 use wire::session_id::{SessionId, encode_segment};
 
@@ -85,7 +85,7 @@ impl SessionLister for Stores {
         harness: HarnessId,
         native: &str,
     ) -> Result<TranscriptRead, TranscriptReaderError> {
-        if harness == HarnessId::Cowork {
+        if matches!(harness, HarnessId::Cowork | HarnessId::Dsh) {
             return Ok(TranscriptRead::NoSource);
         }
         Ok(TranscriptRead::Read(StoreTranscript {
@@ -260,7 +260,7 @@ async fn b2_1_the_legacy_list_merges_stores_newest_first() {
             row(HarnessId::ClaudeCode, U1, 1_760_700_000_000),
             row(HarnessId::ClaudeCode, U2, 1_760_600_000_000),
             row(HarnessId::Hermes, "h1", 1_760_650_000_000),
-            row(HarnessId::Pi, U3, 1_760_800_000_000),
+            row(HarnessId::Omp, U3, 1_760_800_000_000),
         ],
         ..Stores::default()
     };
@@ -384,9 +384,9 @@ async fn b3_3_unknown_and_unregistered_harnesses_are_not_found() {
     let (status, body) = get(&setup, "/api/harnesses/claude/sessions", None).await;
     assert_eq!(status, 404);
     assert_eq!(error(&body).error, "unknown harness: claude");
-    let (status, body) = get(&setup, "/api/harnesses/pi/sessions", None).await;
+    let (status, body) = get(&setup, "/api/harnesses/omp/sessions", None).await;
     assert_eq!(status, 404);
-    assert_eq!(error(&body).error, "no driver registered for pi");
+    assert_eq!(error(&body).error, "no driver registered for omp");
 }
 
 #[tokio::test]
@@ -849,6 +849,110 @@ async fn a_live_turn_streams_deltas_then_a_committed_snapshot() {
     stop.cancel();
 }
 
+#[tokio::test]
+async fn a_failed_turn_reports_its_error_and_the_chat_takes_the_next() {
+    let setup = setup("{}", Stores::default()).await;
+    let session = created_chat(&setup).await;
+    let (mut socket, stop) = socket(&setup, &encode_segment(&session), None).await;
+    silent(&mut socket).await;
+    *setup.harness.refusal.lock() = Some("out of credits".to_owned());
+    for text in ["first", "second"] {
+        let (status, body) = http(
+            &setup.fixture.gateway,
+            "POST",
+            &format!("/api/harness-sessions/{session}/turn"),
+            format!(r#"{{"text":"{text}"}}"#),
+            None,
+        )
+        .await;
+        assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+        setup.harness.traced(&format!("prompt:{text}")).await;
+        setup.harness.finish.add_permits(1);
+        let mut kinds = Vec::new();
+        tokio::time::timeout(WAIT, async {
+            loop {
+                let next = event(&mut socket).await;
+                let done = matches!(
+                    next,
+                    HarnessEvent::SessionUpdated {
+                        status: HarnessSessionStatus::Idle,
+                        ..
+                    }
+                );
+                kinds.push(if let HarnessEvent::Error { code, message, .. } = &next {
+                    format!("error:{code}:{message}")
+                } else {
+                    kind(&next)
+                });
+                if done {
+                    return;
+                }
+            }
+        })
+        .await
+        .expect("turn events");
+        let failed = kinds
+            .iter()
+            .any(|kind| kind.starts_with("error:turn_failed:") && kind.contains("out of credits"));
+        assert_eq!(failed, text == "first", "{kinds:?}");
+        assert!(kinds.contains(&"complete".to_owned()), "{kinds:?}");
+    }
+    stop.cancel();
+}
+
+#[tokio::test]
+async fn a_live_turn_with_no_transcript_source_streams_without_a_snapshot() {
+    let setup = setup_with("{}", Stores::default(), &[HarnessId::Dsh]).await;
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        "/api/harness-sessions",
+        r#"{"harness":"dsh"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    let created: wire::harness::HarnessSessionSummary = parsed(&body);
+    let session = created.session_id.clone();
+    let (mut socket, stop) = socket(&setup, &encode_segment(&session), None).await;
+    silent(&mut socket).await;
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        &format!("/api/harness-sessions/{session}/turn"),
+        r#"{"text":"hi"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup.harness.traced("prompt:hi").await;
+    setup.harness.finish.add_permits(1);
+    let mut kinds = Vec::new();
+    tokio::time::timeout(WAIT, async {
+        loop {
+            let next = event(&mut socket).await;
+            let done = matches!(
+                next,
+                HarnessEvent::SessionUpdated {
+                    status: HarnessSessionStatus::Idle,
+                    ..
+                }
+            );
+            kinds.push(kind(&next));
+            if done {
+                return;
+            }
+        }
+    })
+    .await
+    .expect("turn events");
+    assert_eq!(
+        kinds,
+        ["updated:Active", "delta:answer", "complete", "updated:Idle"]
+    );
+    stop.cancel();
+}
+
 async fn created_chat(setup: &Setup) -> SessionId {
     let (status, body) = http(
         &setup.fixture.gateway,
@@ -860,6 +964,58 @@ async fn created_chat(setup: &Setup) -> SessionId {
     .await;
     assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
     parsed::<wire::harness::HarnessSessionSummary>(&body).session_id
+}
+
+#[tokio::test]
+async fn a_steer_reaches_the_running_turn_and_an_idle_chat_asks_for_a_turn() {
+    let setup = setup("{}", Stores::default()).await;
+    let session = created_chat(&setup).await;
+    let gateway = &setup.fixture.gateway;
+    let steer = format!("/api/harness-sessions/{session}/steer");
+    let (status, body) = http(gateway, "POST", &steer, r#"{"text":"early"}"#, None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        parsed::<SessionSteerResponse>(&body).outcome,
+        SteerOutcome::PromptRequired
+    );
+    let turn = format!("/api/harness-sessions/{session}/turn");
+    let (status, body) = http(gateway, "POST", &turn, r#"{"text":"hi"}"#, None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup.harness.traced("prompt:hi").await;
+    let (status, body) = http(gateway, "POST", &steer, r#"{"text":"also this"}"#, None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        parsed::<SessionSteerResponse>(&body).outcome,
+        SteerOutcome::Steered
+    );
+    setup.harness.traced("steer:also this").await;
+    let logged: Vec<(String, String)> = setup
+        .fixture
+        .registry
+        .state(&user("owner"), session.as_str())
+        .expect("session view")
+        .state
+        .log
+        .into_iter()
+        .map(|line| (line.who, line.text))
+        .collect();
+    assert_eq!(
+        logged,
+        [
+            ("user".to_owned(), "hi".to_owned()),
+            ("user".to_owned(), "also this".to_owned())
+        ]
+    );
+    assert!(
+        !setup
+            .harness
+            .trace
+            .borrow()
+            .iter()
+            .any(|line| line.starts_with("steer:early"))
+    );
+    setup.harness.finish.add_permits(1);
+    setup.harness.traced("ended").await;
 }
 
 #[tokio::test]

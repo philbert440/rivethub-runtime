@@ -97,8 +97,8 @@
         "hermes",
         "codex",
         "opencode",
-        "pi",
-        "qwen-code",
+        "omp",
+        "dsh",
         "cursor",
         "cowork"
       ]
@@ -3489,6 +3489,15 @@
         "messages"
       ]
     },
+    "VectorState": {
+      "type": "string",
+      "enum": [
+        "embedded",
+        "pending",
+        "failed",
+        "skipped"
+      ]
+    },
     "MemorySummaryNode": {
       "type": "object",
       "properties": {
@@ -3540,6 +3549,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "vector": {
+          "$ref": "#/$defs/VectorState"
         }
       },
       "required": [
@@ -3549,7 +3561,69 @@
         "content",
         "messageCount",
         "createdAt",
-        "sourceMessageIds"
+        "sourceMessageIds",
+        "vector"
+      ]
+    },
+    "MemoryMessageTally": {
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "user": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "assistant": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "system": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "tool": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "embedded": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "pending": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "total",
+        "user",
+        "assistant",
+        "system",
+        "tool",
+        "embedded",
+        "pending",
+        "failed",
+        "skipped"
       ]
     },
     "MemorySummaryDagResponse": {
@@ -3563,11 +3637,15 @@
           "items": {
             "$ref": "#/$defs/MemorySummaryNode"
           }
+        },
+        "messages": {
+          "$ref": "#/$defs/MemoryMessageTally"
         }
       },
       "required": [
         "sessionId",
-        "summaries"
+        "summaries",
+        "messages"
       ]
     },
     "TopTool": {
@@ -5121,6 +5199,45 @@
       },
       "required": [
         "message"
+      ]
+    },
+    "SessionSteerRequest": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "attachments": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/UserTurnAttachment"
+          }
+        }
+      },
+      "required": [
+        "text"
+      ]
+    },
+    "SessionSteerResponse": {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "$ref": "#/$defs/SteerOutcome"
+        }
+      },
+      "required": [
+        "outcome"
+      ]
+    },
+    "SteerOutcome": {
+      "type": "string",
+      "enum": [
+        "steered",
+        "startedNewTurn",
+        "promptRequired"
       ]
     },
     "SessionWsClientMessage": {
@@ -10695,8 +10812,8 @@
         "opencode",
         "hermes",
         "codex",
-        "pi",
-        "qwen",
+        "omp",
+        "dsh",
         "cursor",
         "cowork"
       ]
@@ -10975,6 +11092,29 @@
             "type",
             "sessionId",
             "summary"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "plan"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PlanEntry"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "sessionId",
+            "entries"
           ]
         },
         {
@@ -11369,6 +11509,29 @@
       ],
       "additionalProperties": true
     },
+    "PlanEntry": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/PlanStatus"
+        }
+      },
+      "required": [
+        "content",
+        "status"
+      ]
+    },
+    "PlanStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "in_progress",
+        "completed"
+      ]
+    },
     "LlmUsage": {
       "type": "object",
       "properties": {
@@ -11601,6 +11764,12 @@
         "approvals": {
           "type": "boolean"
         },
+        "steering": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "liveStream": {
           "type": "boolean"
         },
@@ -11760,6 +11929,12 @@
         },
         "approvals": {
           "type": "boolean"
+        },
+        "steering": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [
@@ -11890,7 +12065,8 @@
         "turn_in_flight",
         "capability_unsupported",
         "unknown_approval",
-        "unknown_prompt"
+        "unknown_prompt",
+        "turn_failed"
       ]
     },
     "HarnessStoreSession": {

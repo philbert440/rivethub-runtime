@@ -204,8 +204,8 @@ fn roster_commands_map_to_harness_ids_both_ways() {
         (HarnessId::Hermes, "hermes"),
         (HarnessId::Codex, "codex"),
         (HarnessId::Opencode, "opencode"),
-        (HarnessId::Pi, "pi"),
-        (HarnessId::QwenCode, "qwen"),
+        (HarnessId::Omp, "omp"),
+        (HarnessId::Dsh, "dsh"),
         (HarnessId::Cursor, "cursor"),
         (HarnessId::Cowork, "cowork"),
     ];
@@ -244,6 +244,7 @@ fn harness_codes_carry_status_and_retryable() {
         ),
         (HarnessCode::UnknownApproval, "unknown_approval", 404, false),
         (HarnessCode::UnknownPrompt, "unknown_prompt", 404, false),
+        (HarnessCode::TurnFailed, "turn_failed", 502, false),
     ];
     assert_eq!(table.len(), HarnessCode::iter().count());
     for (code, name, status, retryable) in table {
@@ -654,7 +655,7 @@ fn b2_5_legacy_rows_use_id_and_integer_updated_at() {
 fn legacy_rows_never_emit_created_at() {
     let row = HarnessStoreSession {
         id: "x".to_owned(),
-        command: RosterCommand::Qwen,
+        command: RosterCommand::Omp,
         title: "x".to_owned(),
         updated_at: DateTime::<Utc>::from_timestamp_millis(1_760_700_000_123).unwrap(),
         created_at: Some(DateTime::<Utc>::UNIX_EPOCH),
@@ -665,6 +666,6 @@ fn legacy_rows_never_emit_created_at() {
     };
     assert_eq!(
         serde_json::to_value(&row).unwrap(),
-        json!({"id": "x", "command": "qwen", "title": "x", "updatedAt": 1_760_700_000_123_i64})
+        json!({"id": "x", "command": "omp", "title": "x", "updatedAt": 1_760_700_000_123_i64})
     );
 }

@@ -11,6 +11,7 @@ use kernel::memory::Limit;
 use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
 use kernel::memory::SearchQuery;
+use kernel::memory::SummaryDag;
 use kernel::memory::TagAdd;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
@@ -28,7 +29,6 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryStatsResponse;
-use wire::gateway::memory::MemorySummaryNode;
 use wire::gateway::memory::PendingTagWire;
 use wire::gateway::memory::TagCount;
 use wire::gateway::memory::TagState;
@@ -52,7 +52,7 @@ pub struct FakeMemoryStore {
     tag_context: Mutex<Option<TagJobContext>>,
     tag_entities: Mutex<BTreeMap<String, Uuid>>,
     embeddings_armed: std::sync::atomic::AtomicBool,
-    summary_dags: Mutex<BTreeMap<String, Vec<MemorySummaryNode>>>,
+    summary_dags: Mutex<BTreeMap<String, SummaryDag>>,
     embed_mismatch: Mutex<Option<EmbedModelMismatch>>,
 }
 
@@ -86,8 +86,8 @@ impl FakeMemoryStore {
         self.wiki_redirects.lock().await.insert(from, to);
     }
 
-    pub async fn script_summary_dag(&self, session: String, nodes: Vec<MemorySummaryNode>) {
-        self.summary_dags.lock().await.insert(session, nodes);
+    pub async fn script_summary_dag(&self, session: String, dag: SummaryDag) {
+        self.summary_dags.lock().await.insert(session, dag);
     }
 
     pub async fn requests(&self) -> Vec<MemoryRequest> {
@@ -393,7 +393,7 @@ impl MemoryStore for FakeMemoryStore {
             .join("\n"))
     }
 
-    async fn summary_dag(&self, session: &str) -> Result<Vec<MemorySummaryNode>, MemoryStoreError> {
+    async fn summary_dag(&self, session: &str) -> Result<SummaryDag, MemoryStoreError> {
         self.record(MemoryRequest::SummaryDag(session.to_owned()))
             .await;
         Ok(self
@@ -401,10 +401,8 @@ impl MemoryStore for FakeMemoryStore {
             .lock()
             .await
             .get(session)
-            .into_iter()
-            .flatten()
             .cloned()
-            .collect())
+            .unwrap_or_default())
     }
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError> {

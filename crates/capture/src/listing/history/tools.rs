@@ -5,7 +5,7 @@ use super::super::field::Field;
 pub(super) const RESULT_CHARS: usize = 2048;
 const ARG_ENTRIES: usize = 12;
 const ARG_CHARS: usize = 200;
-const PROMPT_INPUT_CHARS: usize = 8192;
+const KEPT_INPUT_CHARS: usize = 8192;
 
 #[derive(strum::EnumString)]
 enum PromptTool {
@@ -19,6 +19,10 @@ enum PromptTool {
 
 pub(super) fn is_prompt_tool(name: &str) -> bool {
     name.trim().to_lowercase().parse::<PromptTool>().is_ok()
+}
+
+pub(super) fn keeps_input(name: &str) -> bool {
+    is_prompt_tool(name) || name.trim().eq_ignore_ascii_case("todo_write")
 }
 
 fn clip_arg(text: &str) -> String {
@@ -58,21 +62,21 @@ struct Truncated {
     truncated: bool,
 }
 
-pub(super) fn prompt_input(input: &Field) -> Option<JsonObject> {
-    bounded_prompt(input.raw(), || input.object::<JsonObject>())
+pub(super) fn kept_input(input: &Field) -> Option<JsonObject> {
+    bounded(input.raw(), || input.object::<JsonObject>())
 }
 
-pub(super) fn prompt_object(object: &JsonObject) -> Result<Option<JsonObject>, serde_json::Error> {
+pub(super) fn kept_object(object: &JsonObject) -> Result<Option<JsonObject>, serde_json::Error> {
     let raw = serde_json::to_string(object)?;
-    Ok(bounded_prompt(&raw, || Some(object.clone())))
+    Ok(bounded(&raw, || Some(object.clone())))
 }
 
-fn bounded_prompt(raw: &str, object: impl FnOnce() -> Option<JsonObject>) -> Option<JsonObject> {
-    if raw.chars().count() > PROMPT_INPUT_CHARS {
+fn bounded(raw: &str, object: impl FnOnce() -> Option<JsonObject>) -> Option<JsonObject> {
+    if raw.chars().count() > KEPT_INPUT_CHARS {
         return match JsonObject::from_serialize(&Truncated { truncated: true }) {
             Ok(object) => Some(object),
             Err(error) => {
-                tracing::trace!(%error, "truncated prompt input marker did not serialize");
+                tracing::trace!(%error, "truncated tool input marker did not serialize");
                 None
             }
         };

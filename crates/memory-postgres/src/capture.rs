@@ -327,12 +327,13 @@ pub(crate) fn char_prefix(text: &str, max: usize) -> &str {
         .map_or(text, |(end, _)| &text[..end])
 }
 
-fn capped(text: &str) -> Result<(&str, Option<u64>), Error> {
-    let kept = char_prefix(text, MAX_CONTENT_CHARS);
+fn capped(text: &str) -> Result<(String, Option<u64>), Error> {
+    let text = text.replace('\0', "");
+    let kept = char_prefix(&text, MAX_CONTENT_CHARS);
     let full = (kept.len() < text.len())
         .then(|| u64::try_from(text.chars().count()))
         .transpose()?;
-    Ok((kept, full))
+    Ok((kept.to_owned(), full))
 }
 
 pub(crate) struct PreparedMessage {
@@ -347,7 +348,7 @@ pub(crate) fn prepare_capture_message(message: &CaptureMessage) -> Result<Prepar
     let (tool_result, full_tool_result_length) = match message.tool_result.as_deref() {
         Some(text) => {
             let (kept, full) = capped(text)?;
-            (Some(kept.to_owned()), full)
+            (Some(kept), full)
         }
         None => (None, None),
     };
@@ -362,7 +363,7 @@ pub(crate) fn prepare_capture_message(message: &CaptureMessage) -> Result<Prepar
         metadata.insert("full_tool_result_length", length)?;
     }
     Ok(PreparedMessage {
-        content: content.to_string(),
+        content,
         tool_result,
         metadata: metadata.clone(),
         created_at: message.created_at,

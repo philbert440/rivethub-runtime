@@ -117,6 +117,21 @@ async fn a_harness_this_node_does_not_offer_is_refused_before_any_session() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_harness_with_no_terminal_form_chats_from_the_node_root() {
+    let harness = Arc::new(Harness::default());
+    let fixture = Fixture::with_harness(Some(harness.clone())).await;
+    harness.finish.add_permits(1);
+    let (status, _) = post(&fixture, &delegated(HarnessId::Dsh, None)).await;
+    assert_eq!(status, 200);
+    let specs: Vec<SessionSpec> = harness.specs.lock().clone();
+    assert_eq!(
+        specs.first().and_then(|spec| spec.working_dir.clone()),
+        Some(fixture.directory.path().to_path_buf())
+    );
+    fixture.gateway.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_working_directory_outside_the_root_is_refused() {
     let harness = Arc::new(Harness::default());
     let fixture = Fixture::with_harness(Some(harness.clone())).await;

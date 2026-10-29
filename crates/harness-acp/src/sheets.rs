@@ -266,6 +266,7 @@ fn capabilities(chat: bool, sheet: &StaticSheet, resolved: &Resolved) -> Harness
             interrupt: chat,
             resume: chat,
             approvals: chat,
+            steering: None,
         },
         observation: HarnessObservationCapabilities {
             live_stream: chat,
@@ -291,10 +292,9 @@ fn static_sheet(harness: HarnessId) -> StaticSheet {
         HarnessId::KimiCode => flagged("--model", None),
         HarnessId::Codex => flagged("--model", Some("-c")),
         HarnessId::Opencode => flagged("--model", Some("--variant")),
-        HarnessId::Pi => pi_sheet(),
-        HarnessId::QwenCode => flagged("-m", None),
+        HarnessId::Omp => flagged("--model", Some("--thinking")),
         HarnessId::Cursor => cursor_sheet(),
-        HarnessId::Cowork => flagged_empty(),
+        HarnessId::Dsh | HarnessId::Cowork => flagged_empty(),
     }
 }
 
@@ -325,17 +325,6 @@ fn grok_sheet() -> StaticSheet {
         launch_model: false,
         models: &["grok-4.6"],
         default_model: Some("grok-4.6"),
-        publish_empty: false,
-    }
-}
-
-fn pi_sheet() -> StaticSheet {
-    StaticSheet {
-        model_flag: Some("--model"),
-        effort_flag: Some("--thinking"),
-        launch_model: false,
-        models: &["deepseek/deepseek-v4-flash"],
-        default_model: Some("deepseek/deepseek-v4-flash"),
         publish_empty: false,
     }
 }

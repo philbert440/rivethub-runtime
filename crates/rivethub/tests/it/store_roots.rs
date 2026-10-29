@@ -21,8 +21,7 @@ fn store_roots_default_under_home() {
             kimi: Some(home.join(".kimi-code")),
             codex: Some(home.join(".codex")),
             opencode: Some(home.join(".local/share/opencode")),
-            pi: Some(home.join(".pi")),
-            qwen: Some(home.join(".qwen")),
+            omp: Some(home.join(".omp/agent")),
             cursor: Some(home.join(".cursor")),
             cowork: vec![
                 home.join("Library/Application Support/Claude"),
@@ -42,6 +41,7 @@ fn store_roots_take_trimmed_overrides() {
         ("KIMI_CODE_HOME", "/k"),
         ("CODEX_HOME", "/c"),
         ("XDG_DATA_HOME", "/data"),
+        ("PI_CODING_AGENT_DIR", "/o"),
     ]);
     assert_eq!(roots.claude, Some(PathBuf::from("/tmp/cc")));
     assert_eq!(roots.grok, Some(PathBuf::from("/g")));
@@ -49,6 +49,7 @@ fn store_roots_take_trimmed_overrides() {
     assert_eq!(roots.kimi, Some(PathBuf::from("/k")));
     assert_eq!(roots.codex, Some(PathBuf::from("/c")));
     assert_eq!(roots.opencode, Some(PathBuf::from("/data/opencode")));
+    assert_eq!(roots.omp, Some(PathBuf::from("/o")));
     assert_eq!(roots.cowork.last(), Some(&PathBuf::from("/tmp/cc")));
 }
 
@@ -59,7 +60,7 @@ fn store_roots_ignore_blank_overrides_and_need_home_otherwise() {
     assert_eq!(blank.cowork.len(), 2);
     let homeless = roots(&[("CODEX_HOME", "/c")]);
     assert_eq!(homeless.claude, None);
-    assert_eq!(homeless.pi, None);
+    assert_eq!(homeless.omp, None);
     assert_eq!(homeless.codex, Some(PathBuf::from("/c")));
     assert_eq!(homeless.cowork, Vec::<PathBuf>::new());
 }

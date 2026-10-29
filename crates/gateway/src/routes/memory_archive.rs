@@ -26,10 +26,11 @@ pub(crate) async fn summaries(
     State(gateway): State<Arc<Gateway>>,
     Path(session): Path<String>,
 ) -> Result<Json<MemorySummaryDagResponse>, ApiError> {
-    let summaries = gateway.store().summary_dag(&session).await?;
+    let dag = gateway.store().summary_dag(&session).await?;
     Ok(Json(MemorySummaryDagResponse {
         session_id: session,
-        summaries,
+        summaries: dag.summaries,
+        messages: dag.messages,
     }))
 }
 

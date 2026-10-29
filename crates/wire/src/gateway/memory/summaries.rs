@@ -3,6 +3,26 @@ use serde::{Deserialize, Serialize};
 
 use super::SummaryKind;
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    strum::EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "camelCase")]
+pub enum VectorState {
+    Embedded,
+    Pending,
+    Failed,
+    Skipped,
+}
+
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +37,21 @@ pub struct MemorySummaryNode {
     pub latest_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub source_message_ids: Vec<String>,
+    pub vector: VectorState,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryMessageTally {
+    pub total: u32,
+    pub user: u32,
+    pub assistant: u32,
+    pub system: u32,
+    pub tool: u32,
+    pub embedded: u32,
+    pub pending: u32,
+    pub failed: u32,
+    pub skipped: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -24,4 +59,5 @@ pub struct MemorySummaryNode {
 pub struct MemorySummaryDagResponse {
     pub session_id: String,
     pub summaries: Vec<MemorySummaryNode>,
+    pub messages: MemoryMessageTally,
 }

@@ -96,6 +96,24 @@ async fn capture_caps_scalars_and_merges_provenance_without_losing_metadata(
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn capture_drops_nul_bytes_postgres_text_cannot_hold(pool: PgPool) -> TestResult {
+    let store = PostgresMemory::new(pool.clone());
+    let mut batch = batch("pnpm:1\n\u{7f}ELF\u{2}\u{1}\0\0".to_owned())?;
+    let message = batch.messages.first_mut().ok_or("message")?;
+    message.tool_result = Some("\0\0head\0".to_owned());
+    store
+        .capture_batch(&batch, &CaptureOptions::default())
+        .await?;
+    let (content, tool_result): (String, String) =
+        sqlx::query_as("SELECT content, tool_result FROM rh_messages")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(content, "pnpm:1\n\u{7f}ELF\u{2}\u{1}");
+    assert_eq!(tool_result, "head");
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn append_rejects_wrong_event_id_types_and_hashes_absent_ids_without_collisions(
     pool: PgPool,
 ) -> TestResult {
@@ -279,5 +297,28 @@ async fn missing_chunk_schema_is_a_query_error(pool: PgPool) -> TestResult {
             .as_deref(),
         Some("42P01")
     );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn capture_with_text_postgres_cannot_store_is_a_bad_request(pool: PgPool) -> TestResult {
+    let store = PostgresMemory::new(pool.clone());
+    let mut batch = batch("write it".to_owned())?;
+    let message = batch.messages.first_mut().ok_or("message")?;
+    message.tool_name = Some("Write".to_owned());
+    message.tool_args = Some(serde_json::from_str(r#"{ "content": "a\u0000b" }"#)?);
+    let refused = store
+        .capture_batch(&batch, &CaptureOptions::default())
+        .await
+        .err()
+        .ok_or("the insert went through")?;
+    assert!(matches!(
+        MemoryStoreError::from(refused),
+        MemoryStoreError::InvalidRequest { .. }
+    ));
+    let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM rh_messages")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(rows, 0);
     Ok(())
 }

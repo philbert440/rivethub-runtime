@@ -27,7 +27,7 @@ pub(super) async fn transcript(
     harness: HarnessId,
     native: &str,
 ) -> Result<TranscriptRead, TranscriptReaderError> {
-    if harness == HarnessId::Cowork {
+    if matches!(harness, HarnessId::Cowork | HarnessId::Dsh) {
         return Ok(TranscriptRead::NoSource);
     }
     let Some(root) = roots.single(harness).map(Path::to_path_buf) else {

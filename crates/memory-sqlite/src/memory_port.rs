@@ -10,6 +10,7 @@ use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
 use kernel::memory::SearchOutcome;
 use kernel::memory::SearchQuery;
+use kernel::memory::SummaryDag;
 use kernel::memory::TagAdd;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
@@ -26,7 +27,6 @@ use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
 use uuid::Uuid;
 use wire::gateway::memory::MemoryStatsResponse;
-use wire::gateway::memory::MemorySummaryNode;
 use wire::gateway::memory::PendingTagWire;
 use wire::gateway::memory::TagCount;
 use wire::gateway::memory::TagTaxonomyEntry;
@@ -127,7 +127,7 @@ impl MemoryStore for SqliteStore {
         self.context_for(session, now).await
     }
 
-    async fn summary_dag(&self, session: &str) -> Result<Vec<MemorySummaryNode>, MemoryStoreError> {
+    async fn summary_dag(&self, session: &str) -> Result<SummaryDag, MemoryStoreError> {
         self.read_summary_dag(session).await
     }
 

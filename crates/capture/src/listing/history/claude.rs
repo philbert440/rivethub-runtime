@@ -31,7 +31,8 @@ use super::display::token_label;
 use super::tools::RESULT_CHARS;
 use super::tools::args_summary;
 use super::tools::is_prompt_tool;
-use super::tools::prompt_input;
+use super::tools::keeps_input;
+use super::tools::kept_input;
 
 const OUTPUT_BYTES: usize = 64 * 1024;
 
@@ -500,9 +501,7 @@ impl Draft {
                     .as_ref()
                     .and_then(args_summary),
                 id: text_of(block.id.as_ref()),
-                input: input
-                    .filter(|_| is_prompt_tool(&name))
-                    .and_then(prompt_input),
+                input: input.filter(|_| keeps_input(&name)).and_then(kept_input),
                 result_text: None,
                 name,
             });

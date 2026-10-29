@@ -3,10 +3,13 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::MemoryExport;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::SummaryDag;
 use tokio_util::sync::CancellationToken;
+use wire::gateway::memory::MemoryMessageTally;
 use wire::gateway::memory::MemorySummaryDagResponse;
 use wire::gateway::memory::MemorySummaryNode;
 use wire::gateway::memory::SummaryKind;
+use wire::gateway::memory::VectorState;
 
 const DUMP: &[u8] = &[0x1f, 0x8b, 0x08, 0x00, 0x2d, 0x2d];
 
@@ -53,7 +56,13 @@ fn at(text: &str) -> DateTime<Utc> {
         .with_timezone(&Utc)
 }
 
-fn node(id: &str, parent: Option<&str>, level: u32, kind: SummaryKind) -> MemorySummaryNode {
+fn node(
+    id: &str,
+    parent: Option<&str>,
+    level: u32,
+    kind: SummaryKind,
+    vector: VectorState,
+) -> MemorySummaryNode {
     MemorySummaryNode {
         id: id.to_owned(),
         parent_id: parent.map(str::to_owned),
@@ -65,6 +74,7 @@ fn node(id: &str, parent: Option<&str>, level: u32, kind: SummaryKind) -> Memory
         latest_at: Some(at("2026-10-10T12:05:00Z")),
         created_at: at("2026-10-10T12:10:00Z"),
         source_message_ids: vec!["00000000-0000-4000-8000-000000000101".to_owned()],
+        vector,
     }
 }
 
@@ -82,23 +92,38 @@ fn exporting() -> (Arc<RecordingExport>, axum::Router) {
 fn summaries_route_returns_the_session_dag_root_first() {
     let (gateway, store) = common::gateway();
     let branch = "00000000-0000-4000-8000-000000000001";
-    let nodes = vec![
-        node(branch, None, 1, SummaryKind::Branch),
-        node(
-            "00000000-0000-4000-8000-000000000002",
-            Some(branch),
-            0,
-            SummaryKind::Leaf,
-        ),
-    ];
-    block_on(store.script_summary_dag(SESSION.to_owned(), nodes.clone()));
+    let dag = SummaryDag {
+        summaries: vec![
+            node(branch, None, 1, SummaryKind::Branch, VectorState::Embedded),
+            node(
+                "00000000-0000-4000-8000-000000000002",
+                Some(branch),
+                0,
+                SummaryKind::Leaf,
+                VectorState::Pending,
+            ),
+        ],
+        messages: MemoryMessageTally {
+            total: 3,
+            user: 1,
+            assistant: 1,
+            system: 0,
+            tool: 1,
+            embedded: 2,
+            pending: 1,
+            failed: 0,
+            skipped: 0,
+        },
+    };
+    block_on(store.script_summary_dag(SESSION.to_owned(), dag.clone()));
     let app = gateway.router(false);
     let response = get(&app, &format!("/api/memory/summaries/{SESSION}"));
     assert_eq!(response.status, 200);
     let parsed: MemorySummaryDagResponse =
         serde_json::from_slice(&response.body).expect("summary dag response");
     assert_eq!(parsed.session_id, SESSION);
-    assert_eq!(parsed.summaries, nodes);
+    assert_eq!(parsed.summaries, dag.summaries);
+    assert_eq!(parsed.messages, dag.messages);
     let requests = block_on(store.requests());
     assert!(requests.contains(&testkit::MemoryRequest::SummaryDag(SESSION.to_owned())));
 
@@ -108,6 +133,7 @@ fn summaries_route_returns_the_session_dag_root_first() {
         serde_json::from_slice(&response.body).expect("empty summary dag response");
     assert_eq!(parsed.session_id, "unknown-session");
     assert_eq!(parsed.summaries.len(), 0);
+    assert_eq!(parsed.messages, MemoryMessageTally::default());
 }
 
 #[test]

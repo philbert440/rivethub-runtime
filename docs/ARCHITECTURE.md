@@ -104,8 +104,8 @@ Postgres queue B4/B13). Inside a process: supervised tasks under one `Cancellati
 
 One `SessionId` (serialized exactly as today's session-id strings). Lifecycle new/resume/prompt/cancel/end. One typed
 `SessionEvent` stream mapped to ACP `session/update` kinds and emitted to RivetHub clients clients in today's v1 wire shape. Chat runs over
-ACP only: natively (grok, hermes, kimi, opencode, qwen, gemini, copilot) or through the codex-acp and claude-code-acp
-adapter binaries; pi and cursor are terminal-only until they have ACP. Terminal = PTY under herdr attached to the same SessionId.
+ACP only: natively (grok, hermes, kimi, opencode, omp, dsh, gemini, copilot) or through the codex-acp and claude-code-acp
+adapter binaries; cursor is terminal-only until it has ACP, and dsh is chat-only. Terminal = PTY under herdr attached to the same SessionId.
 Multi-client harnesses share one agent session; single-client ones have one owner (Idle|Chat|Terminal) and switch by turn-end
 handoff (TurnEnded from the protocol or the harness's own Stop hook; queued chat messages delivered after the handoff; never
 keystroke injection, never screen scraping). Transcript stores are read only to capture sessions run outside RivetHub.
