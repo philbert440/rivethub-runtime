@@ -23,6 +23,7 @@ pub(crate) struct Harness {
     pub(crate) finish: Semaphore,
     pub(crate) specs: Mutex<Vec<SessionSpec>>,
     pub(crate) usage: Mutex<Option<wire::stream::LlmUsage>>,
+    pub(crate) refusal: Mutex<Option<String>>,
 }
 
 impl Default for Harness {
@@ -34,6 +35,7 @@ impl Default for Harness {
             finish: Semaphore::new(0),
             specs: Mutex::new(Vec::new()),
             usage: Mutex::new(None),
+            refusal: Mutex::new(None),
         }
     }
 }
@@ -143,6 +145,13 @@ impl HarnessAdapter for Harness {
         };
         self.trace.send_modify(|trace| trace.push(traced));
         self.finish.acquire().await.expect("finish turn").forget();
+        let refusal = self.refusal.lock().take();
+        if let Some(message) = refusal {
+            return Err(HarnessAdapterError::Failed {
+                message,
+                source: Box::new(std::io::Error::other("refused")),
+            });
+        }
         sender
             .send(SessionEvent::AgentMessageChunk {
                 text: "answer".into(),

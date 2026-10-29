@@ -171,6 +171,7 @@ pub fn harness_status(code: wire::harness::HarnessCode) -> StatusCode {
         HarnessCode::UnknownApproval | HarnessCode::UnknownPrompt => StatusCode::NOT_FOUND,
         HarnessCode::SessionIdCollision | HarnessCode::TurnInFlight => StatusCode::CONFLICT,
         HarnessCode::CapabilityUnsupported => StatusCode::NOT_IMPLEMENTED,
+        HarnessCode::TurnFailed => StatusCode::BAD_GATEWAY,
     }
 }
 
