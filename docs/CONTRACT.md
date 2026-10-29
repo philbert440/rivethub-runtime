@@ -286,6 +286,11 @@ ACP `initialize` reply carries `_meta.steering.supported: true` (claude-code thr
 whose agent does not advertise it, and absent where no agent has answered. Bodies are
 `wire::gateway::sessions::SessionSteerRequest` and `SessionSteerResponse` and `wire::harness::SteerOutcome` in
 `contract/*.schema.json`. The route is new, with no TypeScript recording.
+(35) Unstorable text (Phil, 2026-10-29): a memory write that Postgres refuses for its characters (SQLSTATE `22021`
+invalid byte sequence, or `22P05` untranslatable character, such as a NUL inside a capture's `tool_args` or
+`metadata`) answers `400` with the database's message instead of `500`, so a capture client sets the batch aside as
+a bad batch rather than retrying it ahead of every later one. The write still rolls back whole, as the recorded
+TypeScript arms expect.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

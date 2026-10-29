@@ -281,3 +281,26 @@ async fn missing_chunk_schema_is_a_query_error(pool: PgPool) -> TestResult {
     );
     Ok(())
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn capture_with_text_postgres_cannot_store_is_a_bad_request(pool: PgPool) -> TestResult {
+    let store = PostgresMemory::new(pool.clone());
+    let mut batch = batch("write it".to_owned())?;
+    let message = batch.messages.first_mut().ok_or("message")?;
+    message.tool_name = Some("Write".to_owned());
+    message.tool_args = Some(serde_json::from_str(r#"{ "content": "a\u0000b" }"#)?);
+    let refused = store
+        .capture_batch(&batch, &CaptureOptions::default())
+        .await
+        .err()
+        .ok_or("the insert went through")?;
+    assert!(matches!(
+        MemoryStoreError::from(refused),
+        MemoryStoreError::InvalidRequest { .. }
+    ));
+    let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM rh_messages")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(rows, 0);
+    Ok(())
+}
