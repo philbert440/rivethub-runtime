@@ -5,7 +5,7 @@ use kernel::harness::{HarnessAdapter, SessionEvent, SessionOption, TurnAttachmen
 use tokio::sync::{mpsc, oneshot};
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::gateway::term::TermSpawnResponse;
-use wire::harness::{HarnessCode, HarnessEvent, HarnessSessionStatus};
+use wire::harness::{HarnessCode, HarnessEvent, HarnessSessionStatus, SteerOutcome};
 use wire::session_id::SessionId;
 
 use super::fanout::ToolNames;
@@ -32,6 +32,10 @@ enum Request {
     Terminal {
         launch: Launch,
         reply: oneshot::Sender<Result<TermSpawnResponse, ApiError>>,
+    },
+    Steer {
+        message: Queued,
+        reply: oneshot::Sender<Result<SteerOutcome, ApiError>>,
     },
     TurnEnd,
     Stop {
@@ -74,6 +78,22 @@ impl ChatHandle {
         result.await.map_err(|_| closed())?
     }
 
+    pub async fn steer(
+        &self,
+        text: String,
+        attachments: Vec<TurnAttachment>,
+    ) -> Result<SteerOutcome, ApiError> {
+        let (reply, result) = oneshot::channel();
+        let message = Queued {
+            text,
+            system_prompt: None,
+            attachments,
+            options: Vec::new(),
+        };
+        self.send(Request::Steer { message, reply }).await?;
+        result.await.map_err(|_| closed())?
+    }
+
     pub async fn stop(&self) -> Result<(), ApiError> {
         let (reply, result) = oneshot::channel();
         self.send(Request::Stop { reply }).await?;
@@ -102,6 +122,10 @@ struct Queued {
 }
 
 impl Queued {
+    fn is_empty(&self) -> bool {
+        self.text.trim().is_empty() && self.attachments.is_empty()
+    }
+
     fn split(mut self) -> (Vec<SessionOption>, TurnInput) {
         (std::mem::take(&mut self.options), self.input())
     }
@@ -140,6 +164,12 @@ fn closed() -> ApiError {
 
 type PendingTerminal = (Launch, oneshot::Sender<Result<TermSpawnResponse, ApiError>>);
 
+struct Steered {
+    text: String,
+    outcome: Result<SteerOutcome, ApiError>,
+    reply: oneshot::Sender<Result<SteerOutcome, ApiError>>,
+}
+
 pub(crate) struct ChatActor {
     service: Arc<TerminalService>,
     harness: Arc<dyn HarnessAdapter>,
@@ -154,6 +184,7 @@ pub(crate) struct ChatActor {
     events: Option<mpsc::Receiver<SessionEvent>>,
     closing: Option<oneshot::Sender<Result<(), ApiError>>>,
     tools: ToolNames,
+    steering: tokio::task::JoinSet<Steered>,
 }
 
 impl ChatActor {
@@ -205,6 +236,7 @@ impl ChatActor {
             events,
             closing: None,
             tools: ToolNames::default(),
+            steering: tokio::task::JoinSet::new(),
         };
         service.track(async move {
             if let Err(error) = actor.run(requests).await {
@@ -263,7 +295,7 @@ impl ChatActor {
                         Request::Close { reply } => { self.closing = Some(reply); return Ok(()); }
                         Request::Prompt { turn, reply } => {
                             let result = if self.queued.len() >= 64 { Err(ApiError::Conflict("session message queue full".into())) }
-                            else if turn.text.trim().is_empty() && turn.attachments.is_empty() { Err(ApiError::BadRequest("text required".into())) }
+                            else if turn.is_empty() { Err(ApiError::BadRequest("text required".into())) }
                             else { self.queued.push_back(turn); Ok(()) };
                             respond(reply, result);
                         }
@@ -272,6 +304,7 @@ impl ChatActor {
                             else if self.pending.is_some() { respond(reply, Err(ApiError::Conflict("surface switch already pending".into()))); }
                             else { self.pending = Some((launch, reply)); }
                         }
+                        Request::Steer { message, reply } => { let running = !turn.is_empty() || !self.turn_ended; self.steer(running, message, reply); }
                         Request::TurnEnd => self.terminal_busy = false,
                         Request::Stop { reply } => {
                             let result = match self.surface {
@@ -293,6 +326,9 @@ impl ChatActor {
                         self.publish(event)?;
                     }
                     else { return Err(ApiError::Unavailable("harness event stream closed".into())); }
+                }
+                steered = self.steering.join_next(), if !self.steering.is_empty() => {
+                    self.steered(steered.ok_or_else(closed)?.map_err(ApiError::Task)?)?;
                 }
                 completed = turn.join_next(), if !turn.is_empty() => {
                     if let Err(error) = completed.ok_or_else(closed)?.map_err(ApiError::Task)? {
@@ -364,6 +400,50 @@ impl ChatActor {
                     .map_err(ApiError::from)
             });
         }
+        Ok(())
+    }
+
+    fn steer(
+        &mut self,
+        running: bool,
+        message: Queued,
+        reply: oneshot::Sender<Result<SteerOutcome, ApiError>>,
+    ) {
+        if message.is_empty() {
+            respond(reply, Err(ApiError::BadRequest("text required".into())));
+            return;
+        }
+        if !running {
+            respond(reply, Ok(SteerOutcome::PromptRequired));
+            return;
+        }
+        let harness = self.harness.clone();
+        let session = self.session.clone();
+        let text = message.text.clone();
+        let input = message.input();
+        self.steering.spawn(async move {
+            let outcome = harness.steer(&session, input).await.map_err(ApiError::from);
+            Steered {
+                text,
+                outcome,
+                reply,
+            }
+        });
+    }
+
+    fn steered(&mut self, steered: Steered) -> Result<(), ApiError> {
+        let Steered {
+            text,
+            outcome,
+            reply,
+        } = steered;
+        if matches!(
+            outcome,
+            Ok(SteerOutcome::Steered | SteerOutcome::StartedNewTurn)
+        ) {
+            self.publish(SessionEvent::UserMessageChunk { text })?;
+        }
+        respond(reply, outcome);
         Ok(())
     }
 

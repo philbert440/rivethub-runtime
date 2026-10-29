@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use wire::gateway::ProviderRecovery;
 use wire::gateway::sessions::SessionSwitches;
-use wire::harness::{ApprovalDecision, HarnessId, HarnessOffering};
+use wire::harness::{ApprovalDecision, HarnessId, HarnessOffering, SteerOutcome};
 use wire::session_id::SessionId;
 
 use crate::error::port;
@@ -251,6 +251,14 @@ impl HarnessAdapter for HeadlessHarness {
         input: TurnInput,
     ) -> Result<(), HarnessAdapterError> {
         self.ready()?.prompt(session, input).await
+    }
+
+    async fn steer(
+        &self,
+        session: &SessionId,
+        input: TurnInput,
+    ) -> Result<SteerOutcome, HarnessAdapterError> {
+        self.ready()?.steer(session, input).await
     }
 
     async fn cancel(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {

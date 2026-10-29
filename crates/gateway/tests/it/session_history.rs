@@ -22,11 +22,11 @@ use wire::gateway::GatewayError;
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTranscriptResponse, HarnessSocketRefusal,
     HarnessSocketRefusalCode, HarnessTranscriptTurn, MessageUsage, SessionMessageRole,
-    SessionPostRequest, TranscriptAttachment,
+    SessionPostRequest, SessionSteerResponse, TranscriptAttachment,
 };
 use wire::harness::{
     HarnessEvent, HarnessId, HarnessOfferingList, HarnessSessionList, HarnessSessionStatus,
-    HarnessStoreSessionList,
+    HarnessStoreSessionList, SteerOutcome,
 };
 use wire::session_id::{SessionId, encode_segment};
 
@@ -964,6 +964,58 @@ async fn created_chat(setup: &Setup) -> SessionId {
     .await;
     assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
     parsed::<wire::harness::HarnessSessionSummary>(&body).session_id
+}
+
+#[tokio::test]
+async fn a_steer_reaches_the_running_turn_and_an_idle_chat_asks_for_a_turn() {
+    let setup = setup("{}", Stores::default()).await;
+    let session = created_chat(&setup).await;
+    let gateway = &setup.fixture.gateway;
+    let steer = format!("/api/harness-sessions/{session}/steer");
+    let (status, body) = http(gateway, "POST", &steer, r#"{"text":"early"}"#, None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        parsed::<SessionSteerResponse>(&body).outcome,
+        SteerOutcome::PromptRequired
+    );
+    let turn = format!("/api/harness-sessions/{session}/turn");
+    let (status, body) = http(gateway, "POST", &turn, r#"{"text":"hi"}"#, None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    setup.harness.traced("prompt:hi").await;
+    let (status, body) = http(gateway, "POST", &steer, r#"{"text":"also this"}"#, None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        parsed::<SessionSteerResponse>(&body).outcome,
+        SteerOutcome::Steered
+    );
+    setup.harness.traced("steer:also this").await;
+    let logged: Vec<(String, String)> = setup
+        .fixture
+        .registry
+        .state(&user("owner"), session.as_str())
+        .expect("session view")
+        .state
+        .log
+        .into_iter()
+        .map(|line| (line.who, line.text))
+        .collect();
+    assert_eq!(
+        logged,
+        [
+            ("user".to_owned(), "hi".to_owned()),
+            ("user".to_owned(), "also this".to_owned())
+        ]
+    );
+    assert!(
+        !setup
+            .harness
+            .trace
+            .borrow()
+            .iter()
+            .any(|line| line.starts_with("steer:early"))
+    );
+    setup.harness.finish.add_permits(1);
+    setup.harness.traced("ended").await;
 }
 
 #[tokio::test]

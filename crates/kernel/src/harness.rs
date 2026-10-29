@@ -7,6 +7,7 @@ use wire::gateway::sessions::SessionSwitches;
 use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
 use wire::harness::PlanStatus;
+use wire::harness::SteerOutcome;
 use wire::json::JsonObject;
 use wire::session_id::SessionId;
 use wire::stream::ThinkingLevel;
@@ -15,6 +16,8 @@ use wire::stream::ThinkingLevel;
 pub enum HarnessAdapterError {
     #[error("harness does not support releasing session ownership")]
     ReleaseUnsupported,
+    #[error("harness cannot steer a running turn")]
+    SteeringUnsupported,
     #[error("harness rejected the session id: {0}")]
     InvalidSession(SessionId),
     #[error("harness session is unknown: {0}")]
@@ -249,6 +252,14 @@ pub trait HarnessAdapter: Send + Sync {
         session: &SessionId,
         input: TurnInput,
     ) -> Result<(), HarnessAdapterError>;
+
+    async fn steer(
+        &self,
+        _session: &SessionId,
+        _input: TurnInput,
+    ) -> Result<SteerOutcome, HarnessAdapterError> {
+        Err(HarnessAdapterError::SteeringUnsupported)
+    }
 
     async fn cancel(&self, session: &SessionId) -> Result<(), HarnessAdapterError>;
 
