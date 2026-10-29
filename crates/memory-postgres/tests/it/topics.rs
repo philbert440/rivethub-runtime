@@ -234,3 +234,9 @@ async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(
     })
     .await
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn conversations_file_with_titles_and_corrections(pool: PgPool) -> TestResult {
+    testkit::filing::conversations_file_with_titles_and_corrections(&PostgresMemory::new(pool))
+        .await
+}
