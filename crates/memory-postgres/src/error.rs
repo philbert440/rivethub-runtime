@@ -127,12 +127,22 @@ impl From<Error> for MemoryStoreError {
             },
             Error::Operation {
                 message, source, ..
+            } if unstorable_text(&source) => Self::InvalidRequest { message },
+            Error::Operation {
+                message, source, ..
             } => Self::Query {
                 message,
                 source: Box::new(source),
             },
         }
     }
+}
+
+fn unstorable_text(source: &sqlx::Error) -> bool {
+    source
+        .as_database_error()
+        .and_then(sqlx::error::DatabaseError::code)
+        .is_some_and(|code| matches!(code.as_ref(), "22021" | "22P05"))
 }
 
 impl From<Error> for JobQueueError {
