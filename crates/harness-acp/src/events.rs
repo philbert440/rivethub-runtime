@@ -134,10 +134,16 @@ fn tool_update(update: &acp::ToolCallUpdate) -> Result<SessionEvent, AcpError> {
         None => ToolCallStatus::Running,
     };
     let output = content_text(update.fields.content.as_deref())?;
+    let input = match update.fields.raw_input.clone() {
+        Some(raw) => Some(object_input(Some(raw))?),
+        None => None,
+    };
     Ok(SessionEvent::ToolCallUpdate(ToolCallUpdate {
         tool_call_id: update.tool_call_id.0.to_string(),
         status,
         output,
+        title: update.fields.title.clone(),
+        input,
     }))
 }
 

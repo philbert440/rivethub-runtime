@@ -56,6 +56,8 @@ fn expected_events(input: JsonObject) -> Vec<SessionEvent> {
             tool_call_id: "fake-tool-1".to_owned(),
             status: ToolCallStatus::Completed,
             output: Some("build ok".to_owned()),
+            title: None,
+            input: None,
         }),
         SessionEvent::Plan(vec![PlanEntry {
             content: "measure the thing".to_owned(),

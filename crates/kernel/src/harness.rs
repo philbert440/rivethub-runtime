@@ -145,6 +145,8 @@ pub struct ToolCallUpdate {
     pub tool_call_id: String,
     pub status: ToolCallStatus,
     pub output: Option<String>,
+    pub title: Option<String>,
+    pub input: Option<JsonObject>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

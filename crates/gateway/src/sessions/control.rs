@@ -464,6 +464,9 @@ impl ChatActor {
     }
 
     fn fan_out(&mut self, event: &SessionEvent) {
+        if let SessionEvent::ToolCallUpdate(update) = event {
+            self.service.tool_updated(&self.key, update);
+        }
         if let Some(harness_event) = self.tools.harness_event(&self.session, event) {
             self.service.publish_harness(&self.key, harness_event);
         }

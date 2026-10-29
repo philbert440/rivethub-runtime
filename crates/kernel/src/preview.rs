@@ -84,13 +84,15 @@ fn one_line(text: &str) -> Option<String> {
     Some(clipped)
 }
 
-pub fn tool_label(name: &str, input: &JsonObject) -> String {
-    let gist = Gist::iter()
+fn gist(input: &JsonObject) -> Option<&str> {
+    Gist::iter()
         .find_map(|key| input.get(&key.to_string()).and_then(|value| value.as_str()))
-        .or_else(|| input.as_map().values().find_map(|value| value.as_str()))
         .map(str::trim)
-        .filter(|gist| !gist.is_empty());
-    match gist {
+        .filter(|gist| !gist.is_empty())
+}
+
+pub fn tool_label(name: &str, input: &JsonObject) -> String {
+    match gist(input) {
         Some(gist) => format!("{name}: {gist}"),
         None => name.to_owned(),
     }
@@ -111,6 +113,7 @@ fn question(input: &JsonObject) -> Option<&str> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Doing {
     id: String,
+    name: String,
     label: String,
     at: DateTime<Utc>,
 }
@@ -144,12 +147,29 @@ impl LiveActivity {
         let asked = question(input).filter(|_| is_prompt_tool(name));
         let doing = Doing {
             id: call.to_owned(),
+            name: name.to_owned(),
             label: asked.map_or_else(|| tool_label(name, input), str::to_owned),
             at,
         };
         match asked {
             Some(_) => self.asking = Some(doing),
             None => self.tools.push(doing),
+        }
+    }
+
+    pub fn tool_updated(&mut self, call: &str, title: Option<&str>, input: Option<&JsonObject>) {
+        let Some(doing) = self.tools.iter_mut().find(|doing| doing.id == call) else {
+            return;
+        };
+        if let Some(gist) = input.and_then(gist) {
+            doing.label = format!("{}: {gist}", doing.name);
+            return;
+        }
+        if let Some(title) = title
+            .map(|title| title.trim().trim_matches('`').trim())
+            .filter(|title| !title.is_empty())
+        {
+            title.clone_into(&mut doing.label);
         }
     }
 
@@ -169,6 +189,7 @@ impl LiveActivity {
     ) {
         self.approval = Some(Doing {
             id: request.to_owned(),
+            name: name.to_owned(),
             label: tool_label(name, input),
             at,
         });
@@ -214,6 +235,30 @@ mod tests {
         activity
             .preview()
             .map(|preview| (preview.kind, preview.text))
+    }
+
+    #[test]
+    fn a_running_tool_takes_the_command_a_later_update_names() {
+        let now = Utc::now();
+        let mut activity = LiveActivity::default();
+        activity.tool_started("t1", "Terminal", &input("{}"), now);
+        activity.tool_started("t2", "Terminal", &input("{}"), now);
+        assert_eq!(tool_label("Edit", &input(r#"{"new_string":"x"}"#)), "Edit");
+        activity.tool_updated("t1", Some("`ls -la`"), None);
+        activity.tool_updated(
+            "t2",
+            Some("`ignored`"),
+            Some(&input(r#"{"command":"cargo test"}"#)),
+        );
+        assert_eq!(
+            shown(&activity),
+            Some((SessionPreviewKind::Running, "Terminal: cargo test".into()))
+        );
+        activity.tool_finished("t2");
+        assert_eq!(
+            shown(&activity),
+            Some((SessionPreviewKind::Running, "ls -la".into()))
+        );
     }
 
     #[test]

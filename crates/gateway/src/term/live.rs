@@ -6,6 +6,7 @@ use wire::harness::{
     HarnessEvent, HarnessId, HarnessSessionStatus, HarnessSessionSummary, RosterCommand,
 };
 
+use kernel::harness::ToolCallUpdate;
 use kernel::preview::{LiveActivity, Preview};
 use wire::session_id::SessionId;
 
@@ -89,6 +90,16 @@ impl TerminalService {
             && sender.send(event).is_err()
         {
             tracing::trace!("harness event has no live session socket");
+        }
+    }
+
+    pub(crate) fn tool_updated(&self, key: &str, update: &ToolCallUpdate) {
+        if let Some(live) = self.activity.write().get_mut(key) {
+            live.tool_updated(
+                &update.tool_call_id,
+                update.title.as_deref(),
+                update.input.as_ref(),
+            );
         }
     }
 

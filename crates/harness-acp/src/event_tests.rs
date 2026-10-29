@@ -74,6 +74,38 @@ fn missing_tool_output_and_empty_tool_output_remain_distinct() {
     assert_eq!(present.output, Some(String::new()));
 }
 
+#[derive(serde::Serialize)]
+struct CommandInput {
+    command: &'static str,
+}
+
+#[test]
+fn a_tool_update_carries_the_title_and_input_it_brings() {
+    let raw = serde_json::to_value(CommandInput {
+        command: "cargo test",
+    })
+    .expect("input");
+    let update = session_event(acp::SessionUpdate::ToolCallUpdate(
+        acp::ToolCallUpdate::new(
+            "call",
+            acp::ToolCallUpdateFields::new()
+                .title("`cargo test`".to_owned())
+                .raw_input(raw),
+        ),
+    ))
+    .expect("tool update");
+    let Some(SessionEvent::ToolCallUpdate(update)) = update else {
+        panic!("tool update")
+    };
+    assert_eq!(update.title.as_deref(), Some("`cargo test`"));
+    let command = update
+        .input
+        .as_ref()
+        .and_then(|input| input.get("command"))
+        .and_then(|value| value.as_str());
+    assert_eq!(command, Some("cargo test"));
+}
+
 #[tokio::test]
 async fn config_notifications_refresh_the_current_model() {
     let options = crate::options::SessionOptions::default();
