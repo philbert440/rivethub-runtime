@@ -138,7 +138,7 @@ placements, sub-topics and aliases to B and keeps A's slug resolving to B. The B
 TypeScript recording; `{id}` takes a topic id or slug and `{session}` is the base64url session segment. Their
 bodies are the `wire::gateway::topics` types in `contract/*.schema.json`, and `lastActive` is the newest captured
 conversation update of the topic's sessions.
-(18) Session categorizer (Phil, 2026-10-26): when a session's first leaf summary is stored, the summarizer skips a
+(18) Session categorizer (Phil, 2026-10-26; superseded by (42) on 2026-10-29): when a session's first leaf summary is stored, the summarizer skips a
 session that is already placed or is a child of another session (it inherits its parent's topic on the client), then
 looks for the topics named in the conversation title and the leaf summary (slug, aliases and merge redirects, matched
 as whole words of three or more characters, a sub-topic winning over its parent). Exactly one named topic places the
@@ -363,6 +363,27 @@ repository as "Edited in Memory" with a `user` source and a dated history entry,
 `GET /api/wiki/{slug}` does. A slug that isn't a topic or entity page is `404`; wiki pages not configured is `503`. A page's
 title, an entity's name and its type change only through the topic routes, and the builder never renames a topic or an
 entity or moves an entity, so what a person sets stays.
+(42) Filing (Phil, 2026-10-29): a conversation's first leaf summary enqueues `file-conversation`
+(`{conversationId}`), which only the categorizer role runs, on the model of its config's default agent. The tag
+suggester (`suggest-tags`) and the folder rule that wrote `project:` tags are retired; tag storage and the tag routes
+stay. What is filed: a key that is a session id files that session; a bare uuid on the `claude-code` channel files
+`claude-code:<uuid>`; `task:<uuid>` files the conversation under the topic of the conversation whose messages name the
+task id (as a conversation when none is found or it is unfiled); any other key files as a conversation. Never filed:
+keys starting `grokbot-run-sand-subagent-` or `heartbeat`, and the channels `test-channel`, `env-test-channel` and
+`test`. Order: an existing placement is kept; a child session follows its parent on the client and is not filed; a
+task follows its parent; a working directory inside a topic's own directory (deepest wins, a tie decides nothing; a
+local directory matches by path, since captured conversations do not record their node) files it there; exactly one
+topic named in the title or first leaf files it there; otherwise the model answers file, suggest a name (with an
+optional parent) or nothing. A suggestion that matches a topic's slug or alias files there; one that repeats the title
+or reads like a sentence, path, file, ticket, PR, version, branch or id is refused; the rest is kept for sessions as the
+placement `suggestion` with an optional `parentId` (the parent a new topic would go under; `topicId` keeps its meaning).
+Conversations keep no suggestion. Filings are `by: "categorizer"` and never replace yours. `GET
+/api/conversations/{id}/placement`, `PUT` (`{topicId}`) and `DELETE` read, set and clear a conversation's placement.
+When you move or clear something the categorizer filed, the change is kept as a correction and the newest eight are
+shown to the model as examples. `GET /api/topics/{topic}/sessions` answers `sessions` (each with its newest `title` and
+`lastActive` across the session's conversation keys, so rows need no harness list) and `conversations`
+(`conversationId`, `topicId`, `by`, `at`, `channel`, optional `title` and `lastActive`). Merges move conversation
+placements and suggestion parents; deleting a topic drops its conversation placements and the corrections that name it.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

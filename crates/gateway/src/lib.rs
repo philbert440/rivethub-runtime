@@ -253,6 +253,7 @@ pub struct Gateway {
     providers: Vec<kernel::model::ProviderHealth>,
     memory_export: Option<Arc<dyn kernel::memory::MemoryExport>>,
     topics: Option<Arc<dyn kernel::topics::TopicStore>>,
+    filing: Option<Arc<dyn kernel::filing::FilingStore>>,
     decisions: Option<Arc<dyn kernel::topics::DecisionStore>>,
     startup: Option<StartupMemory>,
 }
@@ -300,6 +301,7 @@ impl Gateway {
             providers: Vec::new(),
             memory_export: None,
             topics: None,
+            filing: None,
             decisions: None,
             startup: None,
         }
@@ -331,9 +333,20 @@ impl Gateway {
     }
 
     #[must_use]
-    pub fn with_topics(mut self, store: Arc<dyn kernel::topics::TopicStore>) -> Self {
+    pub fn with_topics(
+        mut self,
+        store: Arc<dyn kernel::topics::TopicStore>,
+        filing: Arc<dyn kernel::filing::FilingStore>,
+    ) -> Self {
         self.topics = Some(store);
+        self.filing = Some(filing);
         self
+    }
+
+    pub(crate) fn filing(&self) -> Result<&Arc<dyn kernel::filing::FilingStore>, error::ApiError> {
+        self.filing
+            .as_ref()
+            .ok_or_else(|| error::ApiError::Unavailable("filing store unavailable".into()))
     }
 
     pub(crate) fn topics(&self) -> Result<&Arc<dyn kernel::topics::TopicStore>, error::ApiError> {

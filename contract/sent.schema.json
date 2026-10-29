@@ -8159,6 +8159,12 @@
             "string",
             "null"
           ]
+        },
+        "parentId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -8248,6 +8254,12 @@
           "type": "integer",
           "format": "int64"
         },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "lastActive": {
           "type": [
             "integer",
@@ -8271,11 +8283,99 @@
           "items": {
             "$ref": "#/$defs/TopicSession"
           }
+        },
+        "conversations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicConversation"
+          },
+          "default": []
         }
       },
       "required": [
-        "sessions"
+        "sessions",
+        "conversations"
       ]
+    },
+    "TopicConversation": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string"
+        },
+        "topicId": {
+          "type": "string"
+        },
+        "by": {
+          "$ref": "#/$defs/PlacedBy"
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "channel": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lastActive": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "required": [
+        "conversationId",
+        "topicId",
+        "by",
+        "at",
+        "channel"
+      ]
+    },
+    "ConversationPlacement": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string"
+        },
+        "topicId": {
+          "type": "string"
+        },
+        "by": {
+          "$ref": "#/$defs/PlacedBy"
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "conversationId",
+        "topicId",
+        "by",
+        "at"
+      ]
+    },
+    "ConversationPlacementReply": {
+      "type": "object",
+      "properties": {
+        "placement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConversationPlacement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
     },
     "TopicPage": {
       "type": "object",
