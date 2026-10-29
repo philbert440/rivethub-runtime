@@ -357,6 +357,12 @@ candidate and deferred tables; they make People and Hosts types, rename Tools to
 entities (dropping the filings that pointed at them and unbinding the type pages), and seed the types Agents, Hardware,
 Models, Services, Repos, Domains and Databases, with Software's CLIs and tools, Apps, Libraries and frameworks, OS and
 platforms, and Plugins and skills.
+(41) Wiki edits (Phil, 2026-10-29): `PUT /api/wiki/{slug}` with `{ "currentState"?, "article"? }`
+(`wire::gateway::wiki::WikiPageEdit`) replaces what it names on a topic or entity page, commits the page to the wiki
+repository as "Edited in Memory" with a `user` source and a dated history entry, and answers the page as
+`GET /api/wiki/{slug}` does. A slug that isn't a topic or entity page is `404`; wiki pages not configured is `503`. A page's
+title, an entity's name and its type change only through the topic routes, and the builder never renames a topic or an
+entity or moves an entity, so what a person sets stays.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

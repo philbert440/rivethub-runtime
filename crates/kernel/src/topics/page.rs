@@ -2,9 +2,13 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
+use wire::gateway::wiki::WikiHistoryEntry;
 use wire::gateway::wiki::WikiPageResponse;
 use wire::gateway::wiki::WikiSlug;
+use wire::gateway::wiki::WikiSourceKind;
 use wire::wiki::FoldMark;
+use wire::wiki::PageSource;
+use wire::wiki::WikiPage;
 use wire::wiki::normalize_slug;
 
 use super::DECISIONS_HEADING;
@@ -29,6 +33,7 @@ use crate::wiki::builder::WikiWriteError;
 
 const SLUG_ATTEMPTS: u32 = 1000;
 const UNNAMED_PAGE: &str = "topic";
+const USER_EDIT: &str = "Edited in Memory";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageSection {
@@ -100,6 +105,49 @@ impl TopicPage {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PageEdit {
+    pub current_state: Option<String>,
+    pub article: Option<String>,
+}
+
+impl PageEdit {
+    pub fn apply_to(&self, page: &mut WikiPage, now: DateTime<Utc>) {
+        if let Some(text) = &self.current_state {
+            text.trim().clone_into(&mut page.current_state);
+        }
+        if let Some(text) = &self.article {
+            text.trim().clone_into(&mut page.article);
+        }
+        let entry = WikiHistoryEntry {
+            date: now.date_naive(),
+            title: USER_EDIT.to_owned(),
+            body: "Edited by hand in RivetHub's Memory page.".to_owned(),
+        };
+        if !page.history.contains(&entry) {
+            page.history.insert(0, entry);
+        }
+        if !page
+            .meta
+            .sources
+            .iter()
+            .any(|source| source.kind == WikiSourceKind::User)
+        {
+            page.meta.sources.push(PageSource {
+                kind: WikiSourceKind::User,
+                ids: Vec::new(),
+                conversation_id: None,
+                extra: wire::Extra::default(),
+            });
+        }
+    }
+
+    #[must_use]
+    pub fn commit_message(slug: &WikiSlug) -> String {
+        format!("wiki({}): {USER_EDIT}\n\nSource: user", slug.as_ref())
+    }
+}
+
 #[async_trait]
 pub trait TopicPageStore: Send + Sync {
     async fn topic_page(&self, slug: &WikiSlug) -> Result<Option<TopicPage>, WikiStoreError>;
@@ -112,6 +160,13 @@ pub trait TopicPageStore: Send + Sync {
         page: &TopicPage,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError>;
+
+    async fn edit_page(
+        &self,
+        slug: &WikiSlug,
+        edit: &PageEdit,
+        now: DateTime<Utc>,
+    ) -> Result<bool, WikiStoreError>;
 
     async fn redirect_page(
         &self,

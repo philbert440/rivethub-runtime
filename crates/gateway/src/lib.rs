@@ -366,6 +366,13 @@ impl Gateway {
         self
     }
 
+    pub(crate) fn pages(&self) -> Result<&dyn kernel::topics::TopicPageStore, error::ApiError> {
+        self.startup
+            .as_ref()
+            .map(|startup| startup.pages.as_ref())
+            .ok_or_else(|| error::ApiError::Unavailable("wiki pages unavailable".into()))
+    }
+
     pub(crate) fn startup_memory(
         &self,
     ) -> Option<(

@@ -7510,7 +7510,8 @@
         "conversation",
         "task",
         "leaf",
-        "extract-wiki"
+        "extract-wiki",
+        "user"
       ]
     },
     "WikiSourceSpan": {
@@ -8018,6 +8019,24 @@
       "required": [
         "name"
       ]
+    },
+    "WikiPageEdit": {
+      "type": "object",
+      "properties": {
+        "currentState": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "article": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "TopicUpdate": {
       "type": "object",

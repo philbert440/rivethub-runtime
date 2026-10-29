@@ -103,6 +103,15 @@ pub enum WikiSourceKind {
     Task,
     Leaf,
     ExtractWiki,
+    User,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+pub struct WikiPageEdit {
+    pub current_state: Option<String>,
+    pub article: Option<String>,
 }
 
 #[serde_as]

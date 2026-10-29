@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::topics::PageEdit;
 use kernel::topics::PageSection;
 use kernel::topics::TopicId;
 use kernel::topics::TopicPage;
@@ -60,6 +61,42 @@ impl TopicPageStore for SqliteStore {
             let tx = conn.transaction().map_err(query)?;
             save(&tx, topic, &page, &time::stamp(now))?;
             tx.commit().map_err(query)
+        })
+        .await
+    }
+
+    async fn edit_page(
+        &self,
+        slug: &WikiSlug,
+        edit: &PageEdit,
+        now: DateTime<Utc>,
+    ) -> Result<bool, WikiStoreError> {
+        let (slug, edit) = (slug.clone(), edit.clone());
+        blocking(self, move |conn| {
+            let tx = conn.transaction().map_err(query)?;
+            let owner = tx
+                .query_row(
+                    "SELECT topic_id FROM rh_topic_pages WHERE page_slug = ?1",
+                    params![slug.as_ref()],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(query)?;
+            let (Some(owner), Some(mut page)) = (owner, read(&tx, &slug)?) else {
+                return Ok(false);
+            };
+            let topic = owner
+                .parse::<TopicId>()
+                .map_err(|error| WikiStoreError::Query(Box::new(error)))?;
+            if let Some(text) = &edit.current_state {
+                text.trim().clone_into(&mut page.summary);
+            }
+            if let Some(text) = &edit.article {
+                text.trim().clone_into(&mut page.article);
+            }
+            save(&tx, topic, &page, &time::stamp(now))?;
+            tx.commit().map_err(query)?;
+            Ok(true)
         })
         .await
     }
