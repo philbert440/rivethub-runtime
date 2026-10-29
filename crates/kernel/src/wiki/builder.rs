@@ -6,6 +6,7 @@ use uuid::Uuid;
 use wire::gateway::wiki::WikiSlug;
 
 use crate::BoxError;
+use crate::filing::Target;
 use crate::topics::Slug;
 
 pub const WIKI_PIPELINE_VERSION: i32 = 4;
@@ -52,7 +53,7 @@ pub struct HeldEntity {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeferredWiki {
     pub summary_id: Uuid,
-    pub session_key: String,
+    pub waits: Target,
     pub patches: Vec<WikiPatch>,
     pub at: DateTime<Utc>,
 }

@@ -55,6 +55,7 @@ pub(crate) fn ports(store: &PostgresMemory) -> TopicPorts<'_> {
     TopicPorts {
         topics: store,
         pages: store,
+        filing: store,
         lineage: &testkit::wiki_routes::NoParents,
     }
 }

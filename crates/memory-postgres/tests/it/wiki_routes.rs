@@ -1,3 +1,4 @@
+use kernel::transcript::SessionLister;
 use kernel::wiki::builder::ExtractWiki;
 use memory_postgres::{PostgresMemory, PostgresQueue};
 use sqlx::PgPool;
@@ -54,6 +55,10 @@ impl Seeded {
     }
 
     fn stores(&self) -> RouteStores<'_> {
+        self.stores_in(&wiki_routes::NoParents)
+    }
+
+    fn stores_in<'a>(&'a self, lineage: &'a dyn SessionLister) -> RouteStores<'a> {
         RouteStores {
             pages: PageStores {
                 topics: &self.memory,
@@ -63,6 +68,8 @@ impl Seeded {
                 queue: &self.queue,
             },
             wiki: &self.memory,
+            filing: &self.memory,
+            lineage,
         }
     }
 }
@@ -99,6 +106,16 @@ async fn a_second_session_naming_an_entity_gives_it_its_own_page(pool: PgPool) -
 async fn an_unfiled_session_waits_until_it_is_filed(pool: PgPool) -> TestResult {
     let seeded = Seeded::new(pool).await?;
     wiki_routes::an_unfiled_session_waits_until_it_is_filed(seeded.stores(), &seeded.job).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_child_session_waits_for_its_parent(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool).await?;
+    wiki_routes::a_child_session_waits_for_its_parent(
+        seeded.stores_in(&wiki_routes::ChildOfParent),
+        &seeded.job,
+    )
+    .await
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]

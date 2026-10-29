@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use async_trait::async_trait;
+use kernel::filing::FilingStore;
 use kernel::topics::NewTopic;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
@@ -37,6 +38,7 @@ use crate::topics::new_topic;
 use crate::topics::same;
 
 pub const SESSION_KEY: &str = "claude-code:00000000-0000-4000-8000-000000000042";
+pub const PARENT_KEY: &str = "claude-code:00000000-0000-4000-8000-000000000041";
 
 type Found<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -48,6 +50,8 @@ type Found<T> = Result<T, Box<dyn std::error::Error>>;
 pub struct RouteStores<'a> {
     pub pages: PageStores<'a>,
     pub wiki: &'a dyn WikiBuilderStore,
+    pub filing: &'a dyn FilingStore,
+    pub lineage: &'a dyn SessionLister,
 }
 
 #[derive(Debug)]
@@ -103,12 +107,73 @@ impl SessionLister for NoParents {
     }
 }
 
+#[derive(Debug)]
+pub struct ChildOfParent;
+
+#[async_trait]
+impl SessionLister for ChildOfParent {
+    async fn list(&self, harnesses: &[HarnessId], limit: ListLimit) -> Vec<StoreSession> {
+        NoParents.list(harnesses, limit).await
+    }
+
+    async fn describe(
+        &self,
+        harness: HarnessId,
+        native: &str,
+        _parent: Option<&str>,
+    ) -> Result<Option<StoreSession>, TranscriptReaderError> {
+        let mut row = StoreSession::new(harness, native, 0);
+        row.parent_session_id = PARENT_KEY
+            .split_once(':')
+            .map(|(_, parent)| parent.to_owned());
+        Ok(Some(row))
+    }
+
+    async fn store_cwd(
+        &self,
+        harness: HarnessId,
+        native: &str,
+    ) -> Result<Option<String>, TranscriptReaderError> {
+        NoParents.store_cwd(harness, native).await
+    }
+
+    async fn transcript(
+        &self,
+        harness: HarnessId,
+        native: &str,
+    ) -> Result<TranscriptRead, TranscriptReaderError> {
+        NoParents.transcript(harness, native).await
+    }
+
+    async fn rename(
+        &self,
+        harness: HarnessId,
+        native: &str,
+        title: &str,
+    ) -> Result<StoreSession, SessionRenameError> {
+        NoParents.rename(harness, native, title).await
+    }
+
+    async fn tool_output(
+        &self,
+        harness: HarnessId,
+        native: &str,
+        tool_call_id: &str,
+    ) -> Result<ToolOutputRead, TranscriptReaderError> {
+        NoParents.tool_output(harness, native, tool_call_id).await
+    }
+}
+
 impl RouteStores<'_> {
     async fn place(&self, topic: &Topic) -> Outcome {
+        self.place_as(SESSION_KEY, topic).await
+    }
+
+    async fn place_as(&self, key: &str, topic: &Topic) -> Outcome {
         self.pages
             .topics
             .place(Placement {
-                session: SessionId::from_str(SESSION_KEY)?,
+                session: SessionId::from_str(key)?,
                 topic: topic.id,
                 by: PlacementSource::You,
                 at: at(1),
@@ -123,7 +188,8 @@ impl RouteStores<'_> {
             topics: TopicPorts {
                 topics: self.pages.topics,
                 pages: self.pages.pages,
-                lineage: &NoParents,
+                filing: self.filing,
+                lineage: self.lineage,
             },
             now: at(20),
         }
@@ -343,6 +409,36 @@ pub async fn an_unfiled_session_waits_until_it_is_filed(
         "applied once",
         stores.router().apply_deferred().await?,
         Vec::<String>::new(),
+    )?;
+    Ok(())
+}
+
+pub async fn a_child_session_waits_for_its_parent(
+    stores: RouteStores<'_>,
+    job: &ExtractWiki,
+) -> Outcome {
+    let note = "Invoices go out monthly.";
+    stores
+        .route(job, vec![patch("acmekit-billing", "Billing", note)?])
+        .await?;
+    let acmekit = stores
+        .pages
+        .create(new_topic("AcmeKit", &[], None)?)
+        .await?;
+    stores.place_as(PARENT_KEY, &acmekit).await?;
+    stores.router().apply_deferred().await?;
+    let sections: Vec<(String, String)> = stores
+        .pages
+        .page(&acmekit)
+        .await?
+        .sections
+        .into_iter()
+        .map(|section| (section.heading, section.body))
+        .collect();
+    same(
+        "the child's note on its parent's topic",
+        sections,
+        vec![("Billing".to_owned(), note.to_owned())],
     )?;
     Ok(())
 }

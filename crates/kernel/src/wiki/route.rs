@@ -17,8 +17,9 @@ use super::builder::WikiStoreError;
 use super::builder::WikiSummary;
 use super::entity::Catalog;
 use super::entity::Filed;
-use crate::BoxError;
-use crate::topics::Placement;
+use crate::filing::Filable;
+use crate::filing::FilingStore;
+use crate::filing::Target;
 use crate::topics::Topic;
 use crate::topics::TopicId;
 use crate::topics::TopicKey;
@@ -68,6 +69,7 @@ impl TopicTarget {
 pub struct TopicPorts<'a> {
     pub topics: &'a dyn TopicStore,
     pub pages: &'a dyn TopicPageStore,
+    pub filing: &'a dyn FilingStore,
     pub lineage: &'a dyn SessionLister,
 }
 
@@ -96,22 +98,8 @@ impl WikiRouter<'_> {
         &self,
         summary: &WikiSummary,
     ) -> Result<Option<TopicTarget>, TopicPageError> {
-        let ports = self.topics;
-        let Some(session) = session(summary) else {
-            return Ok(None);
-        };
-        let placement = match ports.topics.placement(&session).await? {
-            Some(placement) => Some(placement),
-            None => ports
-                .parent_placement(&session)
-                .await
-                .map_err(TopicPageError::ParentPlacement)?,
-        };
-        let Some(placement) = placement else {
-            return Ok(None);
-        };
-        match ports.topics.find(&TopicKey::Id(placement.topic)).await? {
-            Some(topic) => ports.target(&topic, self.now).await,
+        match self.topics.waits_on(summary).await? {
+            Some(waits) => self.topics.filed_target(&waits, self.now).await,
             None => Ok(None),
         }
     }
@@ -160,13 +148,7 @@ impl WikiRouter<'_> {
     pub async fn apply_deferred(&self) -> Result<Vec<String>, TopicPageError> {
         let mut touched = Vec::new();
         for deferred in self.wiki.filed_deferrals(DEFERRALS_PER_SWEEP).await? {
-            let summary = WikiSummary {
-                id: deferred.summary_id,
-                conversation_id: None,
-                content: String::new(),
-                session_key: Some(deferred.session_key.clone()),
-            };
-            let Some(topic) = self.target(&summary).await? else {
+            let Some(topic) = self.topics.filed_target(&deferred.waits, self.now).await? else {
                 continue;
             };
             for patch in &deferred.patches {
@@ -232,11 +214,13 @@ impl WikiRouter<'_> {
         target: Option<&TopicTarget>,
         mut routed: Routed,
     ) -> Result<Vec<String>, TopicPageError> {
-        if let (false, Some(session_key)) = (routed.waiting.is_empty(), &summary.session_key) {
+        if !routed.waiting.is_empty()
+            && let Some(waits) = self.topics.waits_on(summary).await?
+        {
             self.wiki
                 .defer_wiki(DeferredWiki {
                     summary_id: summary.id,
-                    session_key: session_key.clone(),
+                    waits,
                     patches: routed.waiting,
                     at: self.now,
                 })
@@ -320,9 +304,50 @@ impl WikiRouter<'_> {
 }
 
 impl TopicPorts<'_> {
-    async fn parent_placement(&self, session: &SessionId) -> Result<Option<Placement>, BoxError> {
-        match self.parent(session).await? {
-            Some(parent) => Ok(self.topics.placement(&parent).await?),
+    async fn waits_on(&self, summary: &WikiSummary) -> Result<Option<Target>, TopicPageError> {
+        let filed = match summary.conversation_id {
+            Some(conversation) => self
+                .filing
+                .subject(conversation)
+                .await?
+                .and_then(|subject| Filable::of(&subject.head).target(conversation)),
+            None => session(summary).map(Target::Session),
+        };
+        let Some(Target::Session(session)) = filed else {
+            return Ok(filed);
+        };
+        if self.topics.placement(&session).await?.is_some() {
+            return Ok(Some(Target::Session(session)));
+        }
+        let parent = self
+            .parent(&session)
+            .await
+            .map_err(|error| TopicPageError::ParentPlacement(error.into()))?;
+        Ok(Some(Target::Session(parent.unwrap_or(session))))
+    }
+
+    async fn filed_target(
+        &self,
+        waits: &Target,
+        now: DateTime<Utc>,
+    ) -> Result<Option<TopicTarget>, TopicPageError> {
+        let topic = match waits {
+            Target::Session(session) => self
+                .topics
+                .placement(session)
+                .await?
+                .map(|placement| placement.topic),
+            Target::Conversation(conversation) => self
+                .filing
+                .conversation_placement(*conversation)
+                .await?
+                .map(|placement| placement.topic),
+        };
+        let Some(topic) = topic else {
+            return Ok(None);
+        };
+        match self.topics.find(&TopicKey::Id(topic)).await? {
+            Some(topic) => self.target(&topic, now).await,
             None => Ok(None),
         }
     }

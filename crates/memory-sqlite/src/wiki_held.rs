@@ -1,5 +1,6 @@
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::filing::Target;
 use kernel::topics::Slug;
 use kernel::wiki::builder::DeferredWiki;
 use kernel::wiki::builder::ExtractWiki;
@@ -10,6 +11,7 @@ use rusqlite::Connection;
 use rusqlite::params;
 use uuid::Uuid;
 use wire::gateway::wiki::WikiSlug;
+use wire::session_id::SessionId;
 
 use crate::time;
 use crate::wiki_builder::load_summary;
@@ -75,13 +77,15 @@ pub(crate) fn release(conn: &Connection, key: &Slug) -> Result<(), WikiStoreErro
 
 pub(crate) fn defer(conn: &Connection, deferred: &DeferredWiki) -> Result<(), WikiStoreError> {
     conn.execute(
-        "INSERT INTO rh_wiki_deferred (summary_id, session_key, patches, deferred_at)
-         VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT (summary_id) DO UPDATE SET session_key = excluded.session_key,
+        "INSERT INTO rh_wiki_deferred (summary_id, waits_session, waits_conversation, patches, deferred_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT (summary_id) DO UPDATE SET waits_session = excluded.waits_session,
+            waits_conversation = excluded.waits_conversation,
             patches = excluded.patches, deferred_at = excluded.deferred_at",
         params![
             deferred.summary_id.to_string(),
-            deferred.session_key,
+            deferred.waits.session().map(SessionId::as_str),
+            deferred.waits.conversation().map(|conversation| conversation.to_string()),
             encoded(&deferred.patches)?,
             time::stamp(deferred.at)
         ],
@@ -93,8 +97,11 @@ pub(crate) fn defer(conn: &Connection, deferred: &DeferredWiki) -> Result<(), Wi
 pub(crate) fn filed(conn: &Connection, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
     let rows = conn
         .prepare(
-            "SELECT d.summary_id, d.session_key, d.patches, d.deferred_at FROM rh_wiki_deferred d
-              WHERE EXISTS (SELECT 1 FROM rh_session_placements p WHERE p.session_id = d.session_key)
+            "SELECT d.summary_id, d.waits_session, d.waits_conversation, d.patches, d.deferred_at
+               FROM rh_wiki_deferred d
+              WHERE EXISTS (SELECT 1 FROM rh_session_placements p WHERE p.session_id = d.waits_session)
+                 OR EXISTS (SELECT 1 FROM rh_conversation_placements c
+                             WHERE c.conversation_id = d.waits_conversation)
               ORDER BY d.deferred_at, d.summary_id LIMIT ?1",
         )
         .and_then(|mut statement| {
@@ -102,19 +109,23 @@ pub(crate) fn filed(conn: &Connection, limit: u32) -> Result<Vec<DeferredWiki>, 
                 .query_map(params![limit], |row| {
                     Ok((
                         row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, Option<String>>(2)?,
                         row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
                     ))
                 })?
                 .collect::<Result<Vec<_>, _>>()
         })
         .map_err(query)?;
     rows.into_iter()
-        .map(|(summary_id, session_key, patches, at)| {
+        .map(|(summary_id, session, conversation, patches, at)| {
+            let conversation = conversation.as_deref().map(uuid).transpose()?;
             Ok(DeferredWiki {
                 summary_id: uuid(&summary_id)?,
-                session_key,
+                waits: Target::stored(session.as_deref(), conversation).ok_or_else(|| {
+                    invalid("a deferral waits on neither a session nor a conversation")
+                })?,
                 patches: serde_json::from_str::<Vec<WikiPatch>>(&patches).map_err(invalid)?,
                 at: stamped(&at)?,
             })

@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
+use kernel::filing::Target;
 use kernel::topics::Slug;
 use kernel::wiki::builder::{DeferredWiki, ExtractWiki, HeldEntity, WikiPatch, WikiStoreError};
 use sqlx::PgPool;
 use uuid::Uuid;
 use wire::gateway::wiki::WikiSlug;
+use wire::session_id::SessionId;
 
 use super::{load_summary, query_error, topics};
 
@@ -19,7 +21,8 @@ struct HeldRow {
 #[derive(Debug, sqlx::FromRow)]
 struct DeferredRow {
     summary_id: Uuid,
-    session_key: String,
+    waits_session: Option<String>,
+    waits_conversation: Option<Uuid>,
     patches: String,
     deferred_at: DateTime<Utc>,
 }
@@ -74,13 +77,15 @@ pub(super) async fn release(pool: &PgPool, key: &Slug) -> Result<(), WikiStoreEr
 
 pub(super) async fn defer(pool: &PgPool, deferred: DeferredWiki) -> Result<(), WikiStoreError> {
     sqlx::query(
-        "INSERT INTO rh_wiki_deferred (summary_id, session_key, patches, deferred_at)
-         VALUES ($1, $2, $3::jsonb, $4)
-         ON CONFLICT (summary_id) DO UPDATE SET session_key = EXCLUDED.session_key,
+        "INSERT INTO rh_wiki_deferred (summary_id, waits_session, waits_conversation, patches, deferred_at)
+         VALUES ($1, $2, $3, $4::jsonb, $5)
+         ON CONFLICT (summary_id) DO UPDATE SET waits_session = EXCLUDED.waits_session,
+            waits_conversation = EXCLUDED.waits_conversation,
             patches = EXCLUDED.patches, deferred_at = EXCLUDED.deferred_at",
     )
     .bind(deferred.summary_id)
-    .bind(&deferred.session_key)
+    .bind(deferred.waits.session().map(SessionId::as_str))
+    .bind(deferred.waits.conversation())
     .bind(encoded(&deferred.patches)?)
     .bind(deferred.at)
     .execute(pool)
@@ -91,9 +96,12 @@ pub(super) async fn defer(pool: &PgPool, deferred: DeferredWiki) -> Result<(), W
 
 pub(super) async fn filed(pool: &PgPool, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
     sqlx::query_as::<_, DeferredRow>(
-        "SELECT d.summary_id, d.session_key, d.patches::text AS patches, d.deferred_at
+        "SELECT d.summary_id, d.waits_session, d.waits_conversation, d.patches::text AS patches,
+                d.deferred_at
            FROM rh_wiki_deferred d
-          WHERE EXISTS (SELECT 1 FROM rh_session_placements p WHERE p.session_id = d.session_key)
+          WHERE EXISTS (SELECT 1 FROM rh_session_placements p WHERE p.session_id = d.waits_session)
+             OR EXISTS (SELECT 1 FROM rh_conversation_placements c
+                         WHERE c.conversation_id = d.waits_conversation)
           ORDER BY d.deferred_at, d.summary_id LIMIT $1",
     )
     .bind(i64::from(limit))
@@ -104,7 +112,10 @@ pub(super) async fn filed(pool: &PgPool, limit: u32) -> Result<Vec<DeferredWiki>
     .map(|row| {
         Ok(DeferredWiki {
             summary_id: row.summary_id,
-            session_key: row.session_key,
+            waits: Target::stored(row.waits_session.as_deref(), row.waits_conversation)
+                .ok_or_else(|| {
+                    invalid("a deferral waits on neither a session nor a conversation")
+                })?,
             patches: serde_json::from_str::<Vec<WikiPatch>>(&row.patches).map_err(invalid)?,
             at: row.deferred_at,
         })

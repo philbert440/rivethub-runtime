@@ -24,6 +24,45 @@ pub enum Target {
     Conversation(Uuid),
 }
 
+impl Target {
+    #[must_use]
+    pub fn session(&self) -> Option<&SessionId> {
+        match self {
+            Self::Session(session) => Some(session),
+            Self::Conversation(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub fn conversation(&self) -> Option<Uuid> {
+        match self {
+            Self::Conversation(conversation) => Some(*conversation),
+            Self::Session(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub fn stored(session: Option<&str>, conversation: Option<Uuid>) -> Option<Self> {
+        match (session, conversation) {
+            (Some(session), None) => {
+                #[cfg_attr(
+                    dylint_lib = "rr_lints",
+                    expect(
+                        fallback,
+                        reason = "PATTERNS FALLBACK: a stored session id that no longer parses names no target"
+                    )
+                )]
+                let Ok(session) = SessionId::from_str(session) else {
+                    return None;
+                };
+                Some(Self::Session(session))
+            }
+            (None, Some(conversation)) => Some(Self::Conversation(conversation)),
+            (Some(_), Some(_)) | (None, None) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Filable {
     Session(SessionId),

@@ -34,11 +34,14 @@ BEGIN
 
     CREATE TABLE IF NOT EXISTS rh_wiki_deferred (
         summary_id UUID PRIMARY KEY,
-        session_key TEXT NOT NULL CHECK (session_key <> ''),
+        waits_session TEXT CHECK (waits_session <> ''),
+        waits_conversation UUID,
         patches JSONB NOT NULL,
-        deferred_at TIMESTAMPTZ NOT NULL
+        deferred_at TIMESTAMPTZ NOT NULL,
+        CHECK ((waits_session IS NULL) <> (waits_conversation IS NULL))
     );
-    CREATE INDEX IF NOT EXISTS idx_rh_wiki_deferred_session ON rh_wiki_deferred (session_key);
+    CREATE INDEX IF NOT EXISTS idx_rh_wiki_deferred_session ON rh_wiki_deferred (waits_session);
+    CREATE INDEX IF NOT EXISTS idx_rh_wiki_deferred_conversation ON rh_wiki_deferred (waits_conversation);
 
     UPDATE rh_topics SET kind = 'type'
      WHERE parent_id IS NULL AND slug IN ('people', 'hosts', 'tools') AND kind = 'work';

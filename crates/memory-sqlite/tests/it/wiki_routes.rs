@@ -1,3 +1,4 @@
+use kernel::transcript::SessionLister;
 use kernel::wiki::builder::ExtractWiki;
 use memory_sqlite::SqliteStore;
 use tempfile::TempDir;
@@ -36,6 +37,10 @@ async fn seeded() -> TestResult<(TempDir, SqliteStore, ExtractWiki)> {
 }
 
 fn stores(store: &SqliteStore) -> RouteStores<'_> {
+    stores_in(store, &wiki_routes::NoParents)
+}
+
+fn stores_in<'a>(store: &'a SqliteStore, lineage: &'a dyn SessionLister) -> RouteStores<'a> {
     RouteStores {
         pages: PageStores {
             topics: store,
@@ -45,6 +50,8 @@ fn stores(store: &SqliteStore) -> RouteStores<'_> {
             queue: store,
         },
         wiki: store,
+        filing: store,
+        lineage,
     }
 }
 
@@ -78,6 +85,17 @@ async fn a_second_session_naming_an_entity_gives_it_its_own_page() -> TestResult
 async fn an_unfiled_session_waits_until_it_is_filed() -> TestResult {
     let (_directory, store, job) = seeded().await?;
     wiki_routes::an_unfiled_session_waits_until_it_is_filed(stores(&store), &job).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_child_session_waits_for_its_parent() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    wiki_routes::a_child_session_waits_for_its_parent(
+        stores_in(&store, &wiki_routes::ChildOfParent),
+        &job,
+    )
+    .await?;
     Ok(())
 }
 

@@ -21,11 +21,14 @@ CREATE TABLE IF NOT EXISTS rh_wiki_entity_candidates (
 
 CREATE TABLE IF NOT EXISTS rh_wiki_deferred (
     summary_id TEXT PRIMARY KEY,
-    session_key TEXT NOT NULL CHECK (session_key <> ''),
+    waits_session TEXT CHECK (waits_session <> ''),
+    waits_conversation TEXT,
     patches TEXT NOT NULL,
-    deferred_at TEXT NOT NULL
+    deferred_at TEXT NOT NULL,
+    CHECK ((waits_session IS NULL) <> (waits_conversation IS NULL))
 );
-CREATE INDEX IF NOT EXISTS rh_wiki_deferred_session ON rh_wiki_deferred (session_key);
+CREATE INDEX IF NOT EXISTS rh_wiki_deferred_session ON rh_wiki_deferred (waits_session);
+CREATE INDEX IF NOT EXISTS rh_wiki_deferred_conversation ON rh_wiki_deferred (waits_conversation);
 
 UPDATE rh_topics SET kind = 'type'
  WHERE parent_id IS NULL AND slug IN ('people', 'hosts', 'tools') AND kind = 'work';
