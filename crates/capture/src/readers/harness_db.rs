@@ -76,6 +76,25 @@ LEFT JOIN message ON message.id = part.message_id \
 WHERE part.session_id = ?1 AND part.rowid > ?2 \
 ORDER BY part.created_at ASC, part.rowid ASC";
 
+const OPENCODE_DOCUMENTS: &str =
+    "SELECT COUNT(*) FROM pragma_table_info('part') WHERE name = 'data'";
+
+const OPENCODE_JSON_PARTS: &str = "\
+SELECT part.rowid AS rowid, \
+       part.session_id AS session_id, \
+       part.message_id AS message_id, \
+       json_extract(message.data, '$.role') AS role, \
+       json_extract(part.data, '$.type') AS part_type, \
+       json_extract(part.data, '$.text') AS text, \
+       json_extract(part.data, '$.tool') AS tool_name, \
+       json_extract(part.data, '$.state.input') AS tool_arguments, \
+       COALESCE(json_extract(part.data, '$.state.output'), json_extract(part.data, '$.state.error')) AS tool_result, \
+       part.time_created AS created_at \
+FROM part \
+LEFT JOIN message ON message.id = part.message_id \
+WHERE part.session_id = ?1 AND part.rowid > ?2 \
+ORDER BY part.time_created ASC, part.rowid ASC";
+
 #[derive(Debug, Error)]
 pub(crate) enum HarnessDbError {
     #[error("harness database query failed: {message}")]
@@ -111,6 +130,7 @@ pub(crate) struct HermesMessage {
 pub(crate) enum PartKind {
     Text,
     Tool,
+    Ignored,
     Unrecognized,
 }
 
@@ -125,7 +145,7 @@ pub(crate) struct OpencodePart {
     pub(crate) tool_name: Option<String>,
     pub(crate) tool_arguments: Option<String>,
     pub(crate) tool_result: Option<String>,
-    pub(crate) at: String,
+    pub(crate) at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,6 +172,7 @@ pub(crate) struct OpencodeCursor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OpencodeLayout {
     Parts,
+    JsonParts,
     Events,
 }
 
@@ -229,7 +250,9 @@ pub(crate) fn opencode_session_rows(
             query,
             read,
         ),
-        OpencodeLayout::Parts => part_session_rows(&connection, query, read),
+        OpencodeLayout::Parts | OpencodeLayout::JsonParts => {
+            part_session_rows(&connection, query, read)
+        }
     });
     rows.map(DbRows::Ready)
         .map_err(|error| query_error(&error.to_string(), Box::new(error)))
@@ -265,8 +288,12 @@ fn part_session_rows(
 
 fn opencode_layout(connection: &Connection) -> rusqlite::Result<OpencodeLayout> {
     let tables: i64 = connection.query_row(OPENCODE_LAYOUT, [], |row| row.get(0))?;
-    Ok(if tables > 0 {
-        OpencodeLayout::Events
+    if tables > 0 {
+        return Ok(OpencodeLayout::Events);
+    }
+    let documents: i64 = connection.query_row(OPENCODE_DOCUMENTS, [], |row| row.get(0))?;
+    Ok(if documents > 0 {
+        OpencodeLayout::JsonParts
     } else {
         OpencodeLayout::Parts
     })
@@ -389,7 +416,9 @@ fn read_opencode_ids(path: &Path) -> Result<DbRows<String>, HarnessDbError> {
         return Ok(DbRows::Unreadable);
     };
     let queried = opencode_layout(&connection).and_then(|layout| match layout {
-        OpencodeLayout::Parts => session_ids(&connection, OPENCODE_SESSIONS),
+        OpencodeLayout::Parts | OpencodeLayout::JsonParts => {
+            session_ids(&connection, OPENCODE_SESSIONS)
+        }
         OpencodeLayout::Events => session_ids(&connection, OPENCODE_EVENT_SESSIONS),
     });
     rows_or_unreadable(queried)
@@ -448,8 +477,12 @@ fn read_opencode(
         return Ok(OpencodeTranscript::Unreadable);
     };
     let queried = opencode_layout(&connection).and_then(|layout| match layout {
-        OpencodeLayout::Parts => connection
-            .prepare(OPENCODE_PARTS)?
+        OpencodeLayout::Parts | OpencodeLayout::JsonParts => connection
+            .prepare(if layout == OpencodeLayout::JsonParts {
+                OPENCODE_JSON_PARTS
+            } else {
+                OPENCODE_PARTS
+            })?
             .query_map(
                 rusqlite::params![session_id, cursor.after_row],
                 opencode_row,
@@ -487,7 +520,7 @@ fn opencode_row(row: &Row<'_>) -> rusqlite::Result<OpencodePart> {
         tool_name: row.get("tool_name")?,
         tool_arguments: row.get("tool_arguments")?,
         tool_result: row.get("tool_result")?,
-        at: row.get("created_at")?,
+        at: instant(&row.get("created_at")?),
     })
 }
 
@@ -505,6 +538,7 @@ fn part_kind(text: &str) -> PartKind {
     match text {
         "text" => PartKind::Text,
         "tool" => PartKind::Tool,
+        "reasoning" | "step-start" | "step-finish" | "patch" => PartKind::Ignored,
         _ => PartKind::Unrecognized,
     }
 }

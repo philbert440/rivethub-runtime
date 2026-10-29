@@ -392,7 +392,7 @@ fn part_rows() -> [PartRow; 5] {
         PartRow {
             id: "p4",
             message: "m2",
-            kind: "reasoning",
+            kind: "unheard-of",
             text: Some("aside"),
             name: None,
             arguments: None,
@@ -426,6 +426,62 @@ async fn opencode_parts_map_text_tools_and_orphans() -> Result<(), Box<dyn std::
     let rules: Vec<SkipRule> = slice.skipped.iter().map(|record| record.rule).collect();
     if rules != [SkipRule::UnknownRecordType, SkipRule::UnrecognizedSpeaker] {
         return Err(format!("{rules:?}").into());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn opencode_json_parts_read_their_text_and_tools() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempfile::tempdir()?;
+    let connection = rusqlite::Connection::open(dir.path().join("opencode.db"))?;
+    connection.execute_batch(
+        "CREATE TABLE message (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL);\
+         CREATE TABLE part (id TEXT PRIMARY KEY, message_id TEXT NOT NULL, session_id TEXT NOT NULL, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL, data TEXT NOT NULL);",
+    )?;
+    let message = "INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?3, ?4)";
+    connection.execute(
+        message,
+        ("m1", SESSION, 1_791_979_200_000_i64, r#"{"role":"user"}"#),
+    )?;
+    connection.execute(
+        message,
+        (
+            "m2",
+            SESSION,
+            1_791_979_201_000_i64,
+            r#"{"role":"assistant"}"#,
+        ),
+    )?;
+    let part = "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?1, ?2, ?3, ?4, ?4, ?5)";
+    for (id, message, at, data) in [
+        (
+            "p1",
+            "m1",
+            1_791_979_200_000_i64,
+            r#"{"type":"text","text":"list the files"}"#,
+        ),
+        ("p2", "m2", 1_791_979_201_000, r#"{"type":"step-start"}"#),
+        (
+            "p3",
+            "m2",
+            1_791_979_201_000,
+            r#"{"type":"text","text":"Running ls."}"#,
+        ),
+        (
+            "p4",
+            "m2",
+            1_791_979_202_000,
+            r#"{"type":"tool","tool":"bash","callID":"c1","state":{"status":"completed","input":{"command":"ls"},"output":"a.txt"}}"#,
+        ),
+    ] {
+        connection.execute(part, (id, message, SESSION, at, data))?;
+    }
+    let reader = StoreReader::open(HarnessId::Opencode, dir.path().to_path_buf()).expect("reader");
+    let session = session(HarnessId::Opencode);
+    dialogue(&reader.read(&session).await?)?;
+    let slice = reader.messages(&session, 0).await?;
+    if !tool_named(&slice, "bash") || !slice.skipped.is_empty() {
+        return Err(format!("tool or skips {:?}", slice.skipped).into());
     }
     Ok(())
 }
