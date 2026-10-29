@@ -29,6 +29,7 @@ pub(super) fn error(error: TopicError) -> ApiError {
         | TopicError::EmptyAlias
         | TopicError::EmptySlug { .. }
         | TopicError::OwnParent
+        | TopicError::EntityWithoutType
         | TopicError::SelfMerge
         | TopicError::EmptyDecision
         | TopicError::ForeignReplacement => ApiError::BadRequest(error.to_string()),
@@ -36,7 +37,11 @@ pub(super) fn error(error: TopicError) -> ApiError {
         | TopicError::AliasTaken { .. }
         | TopicError::TooDeep { .. }
         | TopicError::IntoOwnSubtree
-        | TopicError::CategoryTopic { .. }
+        | TopicError::WorkMisplaced
+        | TopicError::TypeMisplaced
+        | TopicError::EntityMisplaced
+        | TopicError::MergeAcrossKinds
+        | TopicError::NotWork { .. }
         | TopicError::SubtopicsRemain { .. }
         | TopicError::DecisionSuperseded { .. } => ApiError::Conflict(error.to_string()),
         TopicError::NotFound { .. } | TopicError::UnknownDecision { .. } => {
@@ -93,6 +98,7 @@ const fn placed_by(source: PlacementSource) -> PlacedBy {
 pub(super) fn record(topic: Topic) -> TopicRecord {
     TopicRecord {
         id: topic.id.to_string(),
+        kind: topic.kind,
         slug: topic.slug.to_string(),
         name: topic.name.as_str().to_owned(),
         aliases: topic

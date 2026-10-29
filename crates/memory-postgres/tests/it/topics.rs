@@ -176,7 +176,7 @@ async fn listings_count_sessions_and_take_last_activity_from_conversations(
         .execute(&pool)
         .await?;
     }
-    let listed = store.list().await?;
+    let listed = testkit::topics::work_topics(&store).await?;
     let summary: Vec<(&str, u64, Option<String>)> = listed
         .iter()
         .map(|listing| {

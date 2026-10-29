@@ -1,11 +1,14 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
+use kernel::topics::Slug;
 use kernel::wiki::builder::{
-    ExtractWiki, WikiBuilderStore, WikiPatch, WikiRouting, WikiStoreError, WikiWork,
+    DeferredWiki, ExtractWiki, HeldEntity, WikiBuilderStore, WikiPatch, WikiRouting,
+    WikiStoreError, WikiWork,
 };
 use tokio::sync::Mutex;
 use uuid::Uuid;
+use wire::gateway::wiki::WikiSlug;
 
 #[derive(Default)]
 pub(crate) struct WikiStore {
@@ -71,6 +74,35 @@ impl WikiBuilderStore for WikiStore {
             .lock()
             .await
             .insert(summary_id, error.to_owned());
+        Ok(())
+    }
+
+    async fn hold_entity(&self, held: HeldEntity) -> Result<Vec<HeldEntity>, WikiStoreError> {
+        Ok(vec![held])
+    }
+
+    async fn release_entity(&self, _key: &Slug) -> Result<(), WikiStoreError> {
+        Ok(())
+    }
+
+    async fn defer_wiki(&self, _deferred: DeferredWiki) -> Result<(), WikiStoreError> {
+        Ok(())
+    }
+
+    async fn filed_deferrals(&self, _limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
+        Ok(Vec::new())
+    }
+
+    async fn cite_wiki(
+        &self,
+        _summary_id: Uuid,
+        _slug: &WikiSlug,
+        _now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError> {
+        Ok(())
+    }
+
+    async fn forget_deferral(&self, _summary_id: Uuid) -> Result<(), WikiStoreError> {
         Ok(())
     }
 }

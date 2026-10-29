@@ -550,9 +550,27 @@ fn seed_summary(path: &Path) -> TestResult {
     migrate::sqlite(path)?;
     let conn = rusqlite::Connection::open(path)?;
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let conversation = "00000000-0000-4000-8000-0000000000c7";
+    let session = format!("claude-code:{conversation}");
+    let topic = "00000000-0000-4000-8000-0000000000e7";
     conn.execute(
-        "INSERT INTO ros_summaries (id, content, created_at) VALUES (?1, ?2, ?3)",
-        (SUMMARY_ID, "AcmeKit deploys on Fridays.", now),
+        "INSERT INTO ros_conversations (id, session_key, agent, created_at, updated_at)
+         VALUES (?1, ?2, 'rivet', ?3, ?3)",
+        (conversation, &session, &now),
+    )?;
+    conn.execute(
+        "INSERT INTO ros_summaries (id, conversation_id, content, created_at) VALUES (?1, ?2, ?3, ?4)",
+        (SUMMARY_ID, conversation, "AcmeKit deploys on Fridays.", &now),
+    )?;
+    conn.execute(
+        "INSERT INTO rh_topics (id, kind, slug, name, created_at, updated_at)
+         VALUES (?1, 'work', 'acmekit-deploys', 'AcmeKit deploys', ?2, ?2)",
+        (topic, &now),
+    )?;
+    conn.execute(
+        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at)
+         VALUES (?1, ?2, 'you', ?3)",
+        (&session, topic, &now),
     )?;
     Ok(())
 }

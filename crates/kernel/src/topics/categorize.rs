@@ -3,6 +3,7 @@ use super::Redirect;
 use super::Topic;
 use super::TopicError;
 use super::TopicId;
+use super::TopicKind;
 use super::TopicListing;
 use super::TopicName;
 use super::TopicTree;
@@ -80,6 +81,7 @@ fn named(topics: &[TopicListing], redirects: &[Redirect], texts: &[Option<&str>]
     let hits: Vec<&Topic> = topics
         .iter()
         .map(|listing| &listing.topic)
+        .filter(|topic| topic.kind == TopicKind::Work)
         .filter(|topic| {
             keys(topic, redirects)
                 .any(|key| texts.iter().flatten().any(|text| mentions(text, &key)))

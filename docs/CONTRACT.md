@@ -336,6 +336,27 @@ once per update time.
 (39) Topic startup preview (Phil, 2026-10-29): `GET /api/topics/{topic}/startup` answers the `StartupContext` a session
 started in that topic right now would receive, built by the same code as a real start, without keeping or delivering
 it. An unknown topic is `404`; startup memory not configured is `503`.
+(40) Topic kinds (Phil, 2026-10-29): `TopicRecord` gains `kind`: `work` (the workspace's topics, and the default),
+`type` (an entity type) or `entity` (a person, agent, host, piece of hardware, model, service, software, repo, domain or
+database the wiki knows). `GET /api/topics` answers work topics; `?kind=type|entity|all` answers the others, and
+`/api/topics/search` takes the same `kind`. `POST /api/topics` takes an optional `kind`, `work` when absent. Work topics nest
+only under work topics and types only under types, both within 4 levels; an entity's `parent` is required and must be a
+type, and nothing sits under an entity. A wrong parent is `409` ("Work topics nest only under work topics", "Types nest only
+under types", "An entity sits only under a type"); an entity without a parent is `400` ("An entity needs a type"). Merging
+joins topics of one kind only (`409`, "Only topics of the same kind merge"). Sessions are filed only under work topics:
+placing one under a type or an entity is `409`. Slugs and aliases are unique within a kind, so a work topic and an entity can
+share a name; a slug in a topic path names a work topic, so types and entities are addressed by id. Any topic can be
+deleted, the former People, Hosts and Tools category topics included, and deleting leaves a tombstone so the wiki builder
+never recreates that name. The wiki builder writes only to topic and entity pages: a patch about the session's topic lands
+on its page as before, a patch whose `type` names one of the types goes to that entity's own page (a type has no page), and
+any other patch becomes a note section on the session's topic page. A session that isn't filed yet keeps its notes until it
+is filed, then they land on its topic page and cite its summary; an entity named by one session waits as a candidate until
+a second session names it. `WikiPatch.kind` (person, host or tool) is replaced by `type`, and the extraction input lists
+the type paths as `types`. Postgres migration `0032_entities.sql` and SQLite schema 20 add the kind, the tombstones and the
+candidate and deferred tables; they make People and Hosts types, rename Tools to Software, turn the topics under them into
+entities (dropping the filings that pointed at them and unbinding the type pages), and seed the types Agents, Hardware,
+Models, Services, Repos, Domains and Databases, with Software's CLIs and tools, Apps, Libraries and frameworks, OS and
+platforms, and Plugins and skills.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

@@ -1,6 +1,7 @@
 mod categorize;
 mod decision;
 mod page;
+mod page_sync;
 mod placement;
 mod rules;
 mod search;
@@ -29,13 +30,13 @@ pub use decision::DecisionText;
 pub use decision::render_decisions;
 pub use decision::topic_decision;
 pub use page::PageSection;
-pub use page::SyncTopicPage;
 pub use page::TopicPage;
 pub use page::TopicPageError;
 pub use page::TopicPageStore;
 pub use page::bound_page;
 pub(crate) use page::root_page;
 pub use page::sync_topic_page;
+pub use page_sync::SyncTopicPage;
 pub use placement::HistoryMark;
 pub use placement::PlacedSession;
 pub use placement::Placement;
@@ -63,6 +64,7 @@ pub use startup::render;
 pub use startup::startup_context;
 pub use tree::MAX_DEPTH;
 pub use tree::TopicTree;
+pub use tree::page_owner;
 pub use tree::root_of;
 pub use values::Alias;
 pub use values::Change;
@@ -74,6 +76,7 @@ pub use values::Slug;
 pub use values::Topic;
 pub use values::TopicChanges;
 pub use values::TopicId;
+pub use values::TopicKind;
 pub use values::TopicListing;
 pub use values::TopicName;
 pub use values::distinct_aliases;
@@ -94,6 +97,18 @@ pub enum TopicError {
     NotFound { key: String },
     #[error("a topic cannot be its own parent")]
     OwnParent,
+    #[error("Work topics nest only under work topics")]
+    WorkMisplaced,
+    #[error("Types nest only under types")]
+    TypeMisplaced,
+    #[error("An entity sits only under a type")]
+    EntityMisplaced,
+    #[error("An entity needs a type")]
+    EntityWithoutType,
+    #[error("Only topics of the same kind merge")]
+    MergeAcrossKinds,
+    #[error("\"{slug}\" is not a work topic; sessions are filed only under work topics")]
+    NotWork { slug: Slug },
     #[error("Topics nest at most {max} levels deep")]
     TooDeep { max: usize },
     #[error("A topic can't move under its own subtopic")]
@@ -108,8 +123,6 @@ pub enum TopicError {
     DecisionSuperseded { id: DecisionId },
     #[error("a decision is superseded only by another decision of its topic")]
     ForeignReplacement,
-    #[error("\"{slug}\" is a category topic and cannot be deleted")]
-    CategoryTopic { slug: Slug },
     #[error("topic \"{slug}\" has sub-topics; delete or move them first")]
     SubtopicsRemain { slug: Slug },
     #[error("topic store is unavailable")]
@@ -168,6 +181,8 @@ pub trait TopicStore: Send + Sync {
     async fn suggestion(&self, session: &SessionId) -> Result<Option<Suggestion>, TopicError>;
 
     async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError>;
+
+    async fn tombstoned(&self, kind: TopicKind, slug: &Slug) -> Result<bool, TopicError>;
 
     async fn search(
         &self,

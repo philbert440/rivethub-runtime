@@ -13,6 +13,7 @@ use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
 use kernel::topics::PlacementOutcome;
 use kernel::topics::Redirect;
+use kernel::topics::Slug;
 use kernel::topics::Suggestion;
 use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
@@ -20,6 +21,7 @@ use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicStore;
 use kernel::topics::by_activity;
@@ -63,7 +65,7 @@ impl TopicStore for SqliteStore {
         self.topics("topic create", move |conn| {
             if let Some(parent) = topic.parent {
                 let parent = rows::by_id(conn, parent)?.ok_or_else(|| not_found(parent))?;
-                check_parent(topic.id, &parent, &rows::tree(conn)?)?;
+                check_parent(&topic, &parent, &rows::tree(conn)?)?;
             }
             write::claim_names(conn, &topic)?;
             write::insert(conn, &topic)?;
@@ -87,7 +89,7 @@ impl TopicStore for SqliteStore {
             let updated = current.apply(changes, now)?;
             if let Some(parent) = updated.parent {
                 let parent = rows::by_id(conn, parent)?.ok_or_else(|| not_found(parent))?;
-                check_parent(id, &parent, &rows::tree(conn)?)?;
+                check_parent(&updated, &parent, &rows::tree(conn)?)?;
             }
             write::claim_names(conn, &updated)?;
             write::row(conn, &updated)?;
@@ -126,7 +128,7 @@ impl TopicStore for SqliteStore {
         self.topics("topic delete", move |conn| {
             let topic = rows::by_id(conn, id)?.ok_or_else(|| not_found(id))?;
             topic.check_delete(!rows::subtopics(conn, id)?.is_empty())?;
-            write::remove(conn, id)?;
+            write::remove(conn, &topic)?;
             write::enqueue_syncs(conn, SyncTopicPage::after_delete(&topic))
         })
         .await
@@ -153,7 +155,7 @@ impl TopicStore for SqliteStore {
         let key = key.clone();
         self.topics("topic read", move |conn| match &key {
             TopicKey::Id(id) => rows::by_id(conn, *id),
-            TopicKey::Slug(slug) => rows::by_slug(conn, slug),
+            TopicKey::Slug(kind, slug) => rows::by_slug(conn, *kind, slug),
         })
         .await
     }
@@ -170,9 +172,9 @@ impl TopicStore for SqliteStore {
 
     async fn place(&self, placement: Placement) -> Result<PlacementOutcome, TopicError> {
         self.topics("session placement", move |conn| {
-            if rows::by_id(conn, placement.topic)?.is_none() {
-                return Err(not_found(placement.topic));
-            }
+            rows::by_id(conn, placement.topic)?
+                .ok_or_else(|| not_found(placement.topic))?
+                .accepts_sessions()?;
             let existing = rows::placement_of(conn, &placement.session)?;
             match placement.admit(existing) {
                 PlacementOutcome::Placed(placed) => {
@@ -254,5 +256,18 @@ impl TopicStore for SqliteStore {
     async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError> {
         self.topics("topic page", move |conn| write::page_of(conn, topic))
             .await
+    }
+
+    async fn tombstoned(&self, kind: TopicKind, slug: &Slug) -> Result<bool, TopicError> {
+        let slug = slug.clone();
+        self.topics("topic tombstone read", move |conn| {
+            conn.query_row(
+                "SELECT EXISTS (SELECT 1 FROM rh_topic_tombstones WHERE kind = ?1 AND slug = ?2)",
+                params![kind.to_string(), slug.as_str()],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(failed("topic tombstone read"))
+        })
+        .await
     }
 }

@@ -9,19 +9,39 @@ use super::Redirect;
 use super::Topic;
 use super::TopicError;
 use super::TopicId;
+use super::TopicKind;
 use super::TopicTree;
 
-pub fn check_parent(child: TopicId, parent: &Topic, tree: &TopicTree) -> Result<(), TopicError> {
-    if parent.id == child {
+pub fn check_parent(child: &Topic, parent: &Topic, tree: &TopicTree) -> Result<(), TopicError> {
+    if parent.id == child.id {
         return Err(TopicError::OwnParent);
     }
-    if tree.within(parent.id, child) {
+    if !nests_under(child.kind, parent.kind) {
+        return Err(misplaced(child.kind));
+    }
+    if tree.within(parent.id, child.id) {
         return Err(TopicError::IntoOwnSubtree);
     }
-    if tree.depth(parent.id) + tree.height(child) > MAX_DEPTH {
+    if child.kind != TopicKind::Entity && tree.depth(parent.id) + tree.height(child.id) > MAX_DEPTH
+    {
         return Err(TopicError::TooDeep { max: MAX_DEPTH });
     }
     Ok(())
+}
+
+const fn misplaced(kind: TopicKind) -> TopicError {
+    match kind {
+        TopicKind::Work => TopicError::WorkMisplaced,
+        TopicKind::Type => TopicError::TypeMisplaced,
+        TopicKind::Entity => TopicError::EntityMisplaced,
+    }
+}
+
+const fn nests_under(child: TopicKind, parent: TopicKind) -> bool {
+    matches!(
+        (child, parent),
+        (TopicKind::Work, TopicKind::Work) | (TopicKind::Type | TopicKind::Entity, TopicKind::Type)
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +59,9 @@ impl MergePlan {
         if source.id == into.id {
             return Err(TopicError::SelfMerge);
         }
+        if source.kind != into.kind {
+            return Err(TopicError::MergeAcrossKinds);
+        }
         let direct = into.parent == Some(source.id);
         if !direct && tree.within(into.id, source.id) {
             return Err(TopicError::IntoOwnSubtree);
@@ -53,7 +76,9 @@ impl MergePlan {
             tree.clone().without(source.id).moved(into.id, into_parent),
             |after, subtopic| after.moved(*subtopic, Some(into.id)),
         );
-        if after.depth(into.id) + after.height(into.id) > MAX_DEPTH + 1 {
+        if into.kind != TopicKind::Entity
+            && after.depth(into.id) + after.height(into.id) > MAX_DEPTH + 1
+        {
             return Err(TopicError::TooDeep { max: MAX_DEPTH });
         }
         let taken: BTreeSet<String> = into.aliases.iter().map(Alias::key).collect();

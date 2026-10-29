@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, parent_id FROM rh_topics ORDER BY id FOR UPDATE",
+  "query": "SELECT id, parent_id, kind FROM rh_topics ORDER BY id FOR UPDATE",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,17 @@
             "name": "parent_id"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "kind"
+          }
+        }
       }
     ],
     "parameters": {
@@ -31,8 +42,9 @@
     },
     "nullable": [
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "fc04cc99219a863972169c504cf13fca905fa603f106aa0daddd6e1d1e7b1962"
+  "hash": "fd2b34fc5970b01dcd68d032a75103efc692e1a7540721c4f6d0f8f267743c5c"
 }

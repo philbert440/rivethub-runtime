@@ -1,12 +1,21 @@
 #![cfg(test)]
 
+use std::str::FromStr;
+
 use chrono::{DateTime, Utc};
+use kernel::topics::{
+    NewTopic, Placement, PlacementSource, Slug, Topic, TopicId, TopicKey, TopicKind, TopicName,
+    TopicStore,
+};
 use kernel::wiki::builder::{ExtractWiki, WikiAction, WikiPatch};
+use kernel::wiki::route::TopicPorts;
+use memory_postgres::PostgresMemory;
 use serde::Deserialize;
 use sqlx::PgPool;
 use testkit::fakes::{FakeProvider, Script};
 use uuid::Uuid;
 use wire::gateway::wiki::{WikiHistoryEntry, WikiSlug};
+use wire::session_id::SessionId;
 use wire::stream::openai::FinishReason;
 use wire::stream::{LlmResponse, LlmResponseKind};
 
@@ -38,8 +47,50 @@ pub(crate) fn patch() -> WikiPatch {
             title: "Blue-green adopted".to_owned(),
             body: "Decided to deploy blue-green.".to_owned(),
         }),
-        kind: None,
+        entity_type: None,
     }
+}
+
+pub(crate) fn ports(store: &PostgresMemory) -> TopicPorts<'_> {
+    TopicPorts {
+        topics: store,
+        pages: store,
+        lineage: &testkit::wiki_routes::NoParents,
+    }
+}
+
+pub(crate) async fn filed(store: &PostgresMemory, job: &ExtractWiki) -> TestResult {
+    let key = TopicKey::Slug(TopicKind::Work, Slug::fold("AcmeKit deploys")?);
+    let topic = match store.find(&key).await? {
+        Some(topic) => topic,
+        None => {
+            store
+                .create(Topic::create(
+                    TopicId::random(),
+                    NewTopic {
+                        kind: TopicKind::Work,
+                        name: TopicName::new("AcmeKit deploys")?,
+                        aliases: Vec::new(),
+                        parent: None,
+                        directory: None,
+                    },
+                    now(),
+                )?)
+                .await?
+        }
+    };
+    let conversation = job
+        .conversation_id
+        .ok_or("a seeded summary has a conversation")?;
+    store
+        .place(Placement {
+            session: SessionId::from_str(&format!("claude-code:{conversation}"))?,
+            topic: topic.id,
+            by: PlacementSource::You,
+            at: now(),
+        })
+        .await?;
+    Ok(())
 }
 
 pub(crate) fn provider(patches: &[WikiPatch]) -> FakeProvider {
@@ -68,7 +119,7 @@ pub(crate) async fn seed(pool: &PgPool) -> Result<ExtractWiki, sqlx::Error> {
     let summary_id = Uuid::new_v4();
     sqlx::query("INSERT INTO rh_conversations (id, session_key, agent) VALUES ($1, $2, 'rivet')")
         .bind(conversation_id)
-        .bind(format!("cli:{conversation_id}"))
+        .bind(format!("claude-code:{conversation_id}"))
         .execute(&mut *tx)
         .await?;
     sqlx::query("INSERT INTO rh_summaries (id, conversation_id, content, kind) VALUES ($1, $2, 'Deploy with a health gate.', 'leaf')")
@@ -127,7 +178,7 @@ pub(crate) async fn seed_recording(pool: &PgPool, row: &Summary) -> Result<(), s
         .execute(&mut *tx)
         .await?;
     sqlx::query("INSERT INTO rh_conversations (id, session_key, agent) VALUES ($1, $2, 'rivet') ON CONFLICT DO NOTHING")
-        .bind(row.conversation_id).bind(format!("cli:{}", row.conversation_id)).execute(&mut *tx).await?;
+        .bind(row.conversation_id).bind(format!("claude-code:{}", row.conversation_id)).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO rh_summaries (id, conversation_id, content, kind, depth, message_count, earliest_at, latest_at, created_at, model, pipeline_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
         .bind(row.id).bind(row.conversation_id).bind(&row.content).bind(&row.kind).bind(row.depth).bind(row.message_count)
         .bind(row.earliest_at).bind(row.latest_at).bind(row.created_at).bind(&row.model).bind(row.pipeline_version)

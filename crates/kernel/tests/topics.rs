@@ -20,6 +20,7 @@ use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
@@ -43,6 +44,7 @@ fn topic(name: &str, aliases: &[&str]) -> Result<Topic, TopicError> {
     Topic::create(
         TopicId::random(),
         NewTopic {
+            kind: TopicKind::Work,
             name: TopicName::new(name)?,
             aliases: aliases
                 .iter()
@@ -217,13 +219,14 @@ fn topics_nest_four_levels_deep_and_never_under_themselves() -> TestResult {
     let merge = under("Merge", Some(&topics))?;
     let desktop = under("Desktop", None)?;
     let memory = under("Memory", Some(&desktop))?;
+    let fresh = under("Fresh", None)?;
     let tree = TopicTree::of([&runtime, &topics, &merge, &desktop, &memory]);
     for (child, parent, want) in [
-        (TopicId::random(), &merge, "ok"),
-        (desktop.id, &topics, "ok"),
-        (desktop.id, &merge, "too deep"),
-        (runtime.id, &merge, "own subtree"),
-        (runtime.id, &runtime, "own parent"),
+        (&fresh, &merge, "ok"),
+        (&desktop, &topics, "ok"),
+        (&desktop, &merge, "too deep"),
+        (&runtime, &merge, "own subtree"),
+        (&runtime, &runtime, "own parent"),
     ] {
         assert_eq!(
             refusal(&check_parent(child, parent, &tree)),
@@ -305,7 +308,7 @@ fn keys_are_ids_or_folded_slugs() -> TestResult {
     assert_eq!(TopicKey::parse(&id.to_string())?, TopicKey::Id(id));
     assert_eq!(
         TopicKey::parse("RivetHub Desktop")?,
-        TopicKey::Slug(Slug::fold("rivethub-desktop")?)
+        TopicKey::Slug(TopicKind::Work, Slug::fold("rivethub-desktop")?)
     );
     assert!(TopicKey::parse("--").is_err());
     Ok(())
@@ -475,5 +478,68 @@ fn unclear_sessions_get_a_suggestion_from_their_title() -> TestResult {
         first_leaf(None, "  ").categorize(&topics, &[])?,
         Verdict::Untitled
     );
+    Ok(())
+}
+
+fn kinded(kind: TopicKind, name: &str, parent: Option<&Topic>) -> Result<Topic, TopicError> {
+    Topic::create(
+        TopicId::random(),
+        NewTopic {
+            kind,
+            name: TopicName::new(name)?,
+            aliases: Vec::new(),
+            parent: parent.map(|parent| parent.id),
+            directory: None,
+        },
+        at(0),
+    )
+}
+
+#[test]
+fn each_kind_nests_only_where_it_belongs() -> TestResult {
+    let software = kinded(TopicKind::Type, "Software", None)?;
+    let apps = kinded(TopicKind::Type, "Apps", Some(&software))?;
+    let rust = kinded(TopicKind::Type, "Rust", Some(&apps))?;
+    let crates = kinded(TopicKind::Type, "Crates", Some(&rust))?;
+    let tokio = kinded(TopicKind::Entity, "tokio", Some(&crates))?;
+    let project = kinded(TopicKind::Work, "RivetOS", None)?;
+    let tree = TopicTree::of([&software, &apps, &rust, &crates, &tokio, &project]);
+    let refused = |child: &Topic, parent: &Topic| match check_parent(child, parent, &tree) {
+        Ok(()) => None,
+        Err(error) => Some(error.to_string()),
+    };
+    assert_eq!(refused(&tokio, &crates), None);
+    assert_eq!(
+        refused(&project, &software).as_deref(),
+        Some("Work topics nest only under work topics")
+    );
+    assert_eq!(
+        refused(&apps, &project).as_deref(),
+        Some("Types nest only under types")
+    );
+    assert_eq!(
+        refused(&tokio, &tokio).as_deref(),
+        Some("a topic cannot be its own parent")
+    );
+    let other = kinded(TopicKind::Entity, "serde", Some(&crates))?;
+    assert_eq!(
+        refused(&other, &tokio).as_deref(),
+        Some("An entity sits only under a type")
+    );
+    let depth = TopicTree::of([&apps, &rust, &crates, &tokio]);
+    assert_eq!(depth.height(apps.id), 3);
+    assert!(matches!(
+        kinded(TopicKind::Entity, "loose", None),
+        Err(TopicError::EntityWithoutType)
+    ));
+    assert!(matches!(
+        MergePlan::new(&tokio, &crates, &tree),
+        Err(TopicError::MergeAcrossKinds)
+    ));
+    assert!(matches!(
+        software.accepts_sessions(),
+        Err(TopicError::NotWork { .. })
+    ));
+    assert!(project.accepts_sessions().is_ok());
     Ok(())
 }

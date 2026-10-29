@@ -21,6 +21,7 @@ use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicStore;
 use kernel::topics::by_activity;
@@ -45,7 +46,7 @@ impl TopicStore for PostgresMemory {
             let parent = rows::by_id(&mut tx, parent)
                 .await?
                 .ok_or_else(|| not_found(parent))?;
-            check_parent(topic.id, &parent, &write::tree(&mut tx).await?)?;
+            check_parent(&topic, &parent, &write::tree(&mut tx).await?)?;
         }
         write::claim_names(&mut tx, &topic).await?;
         write::insert(&mut tx, &topic).await?;
@@ -74,7 +75,7 @@ impl TopicStore for PostgresMemory {
             let parent = rows::by_id(&mut tx, parent)
                 .await?
                 .ok_or_else(|| not_found(parent))?;
-            check_parent(id, &parent, &write::tree(&mut tx).await?)?;
+            check_parent(&updated, &parent, &write::tree(&mut tx).await?)?;
         }
         write::claim_names(&mut tx, &updated).await?;
         write::row(&mut tx, &updated).await?;
@@ -122,7 +123,7 @@ impl TopicStore for PostgresMemory {
             .await?
             .ok_or_else(|| not_found(id))?;
         topic.check_delete(!write::subtopics(&mut tx, id).await?.is_empty())?;
-        write::remove(&mut tx, id).await?;
+        write::remove(&mut tx, &topic).await?;
         write::enqueue_syncs(&mut tx, SyncTopicPage::after_delete(&topic)).await?;
         tx.commit().await.map_err(failed("topic delete"))
     }
@@ -150,13 +151,13 @@ impl TopicStore for PostgresMemory {
         let mut conn = self.pool.acquire().await.map_err(failed("topic read"))?;
         match key {
             TopicKey::Id(id) => rows::by_id(&mut conn, *id).await,
-            TopicKey::Slug(slug) => rows::by_slug(&mut conn, slug).await,
+            TopicKey::Slug(kind, slug) => rows::by_slug(&mut conn, *kind, slug).await,
         }
     }
 
     async fn list(&self) -> Result<Vec<TopicListing>, TopicError> {
         let topics = sqlx::query!(
-            r#"SELECT t.id, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
+            r#"SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
                       t.directory_path, t.created_at, t.updated_at, t.closed_at,
                       (SELECT count(*) FROM rh_session_placements p WHERE p.topic_id = t.id)
                         AS "session_count!",
@@ -184,6 +185,7 @@ impl TopicStore for PostgresMemory {
                 let topic = rows::topic(
                     TopicRow {
                         id: row.id,
+                        kind: row.kind,
                         slug: row.slug,
                         name: row.name,
                         parent_id: row.parent_id,
@@ -231,9 +233,10 @@ impl TopicStore for PostgresMemory {
             .await
             .map_err(failed("session placement"))?;
         write::lock_session(&mut tx, &placement.session).await?;
-        if !write::topic_exists(&mut tx, placement.topic).await? {
-            return Err(not_found(placement.topic));
-        }
+        rows::by_id(&mut tx, placement.topic)
+            .await?
+            .ok_or_else(|| not_found(placement.topic))?
+            .accepts_sessions()?;
         let existing = rows::placement_of(&mut tx, &placement.session).await?;
         let outcome = match placement.admit(existing) {
             PlacementOutcome::Placed(placed) => {
@@ -339,5 +342,16 @@ impl TopicStore for PostgresMemory {
     async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError> {
         let mut conn = self.pool.acquire().await.map_err(failed("topic page"))?;
         write::page_of(&mut conn, topic).await
+    }
+
+    async fn tombstoned(&self, kind: TopicKind, slug: &Slug) -> Result<bool, TopicError> {
+        sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM rh_topic_tombstones WHERE kind = $1 AND slug = $2) AS "gone!""#,
+            kind.to_string(),
+            slug.as_str()
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(failed("topic tombstone read"))
     }
 }

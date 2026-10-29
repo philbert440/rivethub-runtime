@@ -6,6 +6,7 @@ use uuid::Uuid;
 use wire::gateway::wiki::WikiSlug;
 
 use crate::BoxError;
+use crate::topics::Slug;
 
 pub const WIKI_PIPELINE_VERSION: i32 = 4;
 
@@ -17,7 +18,7 @@ pub struct ExtractWiki {
     pub conversation_id: Option<Uuid>,
 }
 
-pub use wire::wiki::{EntityKind, WikiAction, WikiPatch};
+pub use wire::wiki::{WikiAction, WikiPatch};
 
 #[must_use]
 pub fn extraction_schema() -> schemars::Schema {
@@ -37,6 +38,23 @@ pub struct WikiSummary {
 pub struct WikiRouting {
     pub topic_page: Option<WikiSlug>,
     pub cited: Vec<WikiSlug>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldEntity {
+    pub key: Slug,
+    pub source: String,
+    pub summary_id: Uuid,
+    pub patch: WikiPatch,
+    pub at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeferredWiki {
+    pub summary_id: Uuid,
+    pub session_key: String,
+    pub patches: Vec<WikiPatch>,
+    pub at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,6 +103,23 @@ pub trait WikiBuilderStore: Send + Sync {
         error: &str,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError>;
+
+    async fn hold_entity(&self, held: HeldEntity) -> Result<Vec<HeldEntity>, WikiStoreError>;
+
+    async fn release_entity(&self, key: &Slug) -> Result<(), WikiStoreError>;
+
+    async fn defer_wiki(&self, deferred: DeferredWiki) -> Result<(), WikiStoreError>;
+
+    async fn filed_deferrals(&self, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError>;
+
+    async fn cite_wiki(
+        &self,
+        summary_id: Uuid,
+        slug: &WikiSlug,
+        now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError>;
+
+    async fn forget_deferral(&self, summary_id: Uuid) -> Result<(), WikiStoreError>;
 }
 
 #[derive(Debug, Error)]

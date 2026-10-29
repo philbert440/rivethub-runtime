@@ -1,10 +1,7 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
-use serde::Deserialize;
-use serde::Serialize;
 use thiserror::Error;
-use wire::JsonObject;
 use wire::gateway::wiki::WikiPageResponse;
 use wire::gateway::wiki::WikiSlug;
 use wire::wiki::FoldMark;
@@ -13,21 +10,19 @@ use wire::wiki::normalize_slug;
 use super::DECISIONS_HEADING;
 use super::DecisionStore;
 use super::Slug;
+use super::SyncTopicPage;
 use super::Topic;
 use super::TopicError;
 use super::TopicId;
 use super::TopicKey;
+use super::TopicKind;
 use super::TopicStore;
 use super::TopicTree;
+use super::page_owner;
 use super::render_decisions;
-use super::root_of;
 use crate::BoxError;
 use crate::memory::MemoryStore;
 use crate::memory::MemoryStoreError;
-use crate::queue::FixedJob;
-use crate::queue::Job;
-use crate::queue::JobKeyMode;
-use crate::queue::JobName;
 use crate::wiki::WikiLookup;
 use crate::wiki::builder::WikiStoreError;
 use crate::wiki::builder::WikiWriteError;
@@ -87,6 +82,22 @@ impl TopicPage {
         append(&mut section.body, body);
         self.sections.push(section);
     }
+
+    pub(crate) fn add_note(&mut self, heading: &str, body: &str) {
+        if let Some(section) = self.sections.iter_mut().find(|section| {
+            section.topic.is_none() && section.heading.eq_ignore_ascii_case(heading)
+        }) {
+            append(&mut section.body, body);
+            return;
+        }
+        let mut section = PageSection {
+            topic: None,
+            heading: heading.to_owned(),
+            body: String::new(),
+        };
+        append(&mut section.body, body);
+        self.sections.push(section);
+    }
 }
 
 #[async_trait]
@@ -132,95 +143,15 @@ pub enum TopicPageError {
     Payload(#[source] BoxError),
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SyncTopicPage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub topic_id: Option<TopicId>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub fold: Vec<WikiSlug>,
-}
-
-impl SyncTopicPage {
-    #[must_use]
-    pub fn topic(id: TopicId) -> Self {
-        Self {
-            topic_id: Some(id),
-            fold: Vec::new(),
-        }
-    }
-
-    #[must_use]
-    pub fn every_topic() -> Self {
-        Self::default()
-    }
-
-    #[must_use]
-    pub fn after_create(topic: &Topic) -> Vec<Self> {
-        vec![Self::topic(topic.id)]
-    }
-
-    #[must_use]
-    pub fn after_update(before: &Topic, after: &Topic) -> Vec<Self> {
-        let mut syncs = vec![Self::topic(after.id)];
-        if let Some(left) = before.parent.filter(|left| after.parent != Some(*left)) {
-            syncs.push(Self::topic(left));
-        }
-        syncs
-    }
-
-    #[must_use]
-    pub fn after_merge(source: &Topic, into: &Topic, page: Option<WikiSlug>) -> Vec<Self> {
-        let mut syncs = vec![Self {
-            topic_id: Some(into.id),
-            fold: page.into_iter().collect(),
-        }];
-        if let Some(left) = source
-            .parent
-            .filter(|left| *left != into.id && into.parent != Some(*left))
-        {
-            syncs.push(Self::topic(left));
-        }
-        syncs
-    }
-
-    #[must_use]
-    pub fn after_delete(topic: &Topic) -> Vec<Self> {
-        topic.parent.map(Self::topic).into_iter().collect()
-    }
-
-    pub fn job(&self) -> Result<Job, TopicPageError> {
-        let key = match (self.topic_id, self.fold.is_empty()) {
-            (Some(id), true) => Some(format!("sync-topic-page:{id}")),
-            (Some(_), false) => None,
-            (None, _) => Some("sync-topic-page:all".to_owned()),
-        };
-        Ok(Job {
-            name: JobName::Fixed(FixedJob::SyncTopicPage),
-            payload: JsonObject::from_serialize(self)
-                .map_err(|source| TopicPageError::Payload(Box::new(source)))?,
-            key,
-            key_mode: JobKeyMode::Replace,
-            priority: 0,
-            run_at: None,
-            max_attempts: None,
-        })
-    }
-
-    pub fn from_payload(payload: &JsonObject) -> Result<Self, TopicPageError> {
-        payload
-            .deserialize()
-            .map_err(|source| TopicPageError::Payload(Box::new(source)))
-    }
-}
-
 pub async fn bound_page(
     topics: &dyn TopicStore,
     memory: &dyn MemoryStore,
     topic: &Topic,
 ) -> Result<Option<WikiPageResponse>, TopicPageError> {
-    let root = root_of(topics, topic).await?;
-    let Some(slug) = topics.page_slug(root.id).await? else {
+    let Some(owner) = page_owner(topics, topic).await? else {
+        return Ok(None);
+    };
+    let Some(slug) = topics.page_slug(owner.id).await? else {
         return Ok(None);
     };
     Ok(match memory.wiki_page(&slug).await? {
@@ -251,7 +182,14 @@ pub async fn sync_topic_page(
     }
     for listing in topics.list().await? {
         let topic = listing.topic;
-        if topic.parent.is_none() || topics.page_slug(topic.id).await?.is_some() {
+        let owns_page = match topic.kind {
+            TopicKind::Type => false,
+            TopicKind::Entity => true,
+            TopicKind::Work => {
+                topic.parent.is_none() || topics.page_slug(topic.id).await?.is_some()
+            }
+        };
+        if owns_page {
             sync.topic(topic.id, &[], decisions).await?;
         }
     }
@@ -281,9 +219,11 @@ impl PageSync<'_> {
         let Some(topic) = self.topics.find(&TopicKey::Id(id)).await? else {
             return Ok(());
         };
-        let root = self.owner(&topic).await?;
+        let Some(root) = page_owner(self.topics, &topic).await? else {
+            return Ok(());
+        };
         let home = self.ensure(&root).await?;
-        if topic.parent.is_some()
+        if root.id != topic.id
             && let Some(own) = self.topics.page_slug(topic.id).await?
             && own != home
         {
@@ -295,10 +235,6 @@ impl PageSync<'_> {
                 .await?;
         }
         self.reconcile(&root, &home, decisions).await
-    }
-
-    async fn owner(&self, topic: &Topic) -> Result<Topic, TopicError> {
-        root_of(self.topics, topic).await
     }
 
     async fn ensure(&self, root: &Topic) -> Result<WikiSlug, TopicPageError> {
@@ -472,7 +408,11 @@ impl PageSync<'_> {
         let target = match found {
             Some(topic) => Some(topic),
             None => match Slug::of_heading(&section.heading) {
-                Some(slug) => self.topics.find(&TopicKey::Slug(slug)).await?,
+                Some(slug) => {
+                    self.topics
+                        .find(&TopicKey::Slug(TopicKind::Work, slug))
+                        .await?
+                }
                 None => None,
             },
         };
@@ -490,14 +430,16 @@ impl PageSync<'_> {
         if body.trim().is_empty() {
             return Ok(());
         }
-        let owner = self.owner(target).await?;
+        let Some(owner) = page_owner(self.topics, target).await? else {
+            return Ok(());
+        };
         let slug = self.ensure(&owner).await?;
         let before = self.read(&slug).await?;
         let mut after = before.clone();
-        if target.parent.is_some() {
-            after.add_to_section(target.id, target.name.as_str(), body);
-        } else {
+        if owner.id == target.id {
             append(&mut after.article, body);
+        } else {
+            after.add_to_section(target.id, target.name.as_str(), body);
         }
         self.save(owner.id, &before, &after).await
     }

@@ -13,6 +13,7 @@ use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::topics::TopicTree;
@@ -25,7 +26,7 @@ use crate::error::SqliteError;
 use crate::time;
 
 const TOPIC_COLUMNS: &str = "t.id, t.slug, t.name, t.parent_id, t.directory_kind, \
-     t.directory_node, t.directory_path, t.created_at, t.updated_at, t.closed_at";
+     t.directory_node, t.directory_path, t.created_at, t.updated_at, t.closed_at, t.kind";
 
 const PLACEMENT_COLUMNS: &str = "p.session_id, p.topic_id, p.placed_by, p.placed_at";
 
@@ -40,6 +41,7 @@ pub(super) struct TopicRow {
     created_at: String,
     updated_at: String,
     closed_at: Option<String>,
+    kind: String,
 }
 
 pub(super) struct PlacementRow {
@@ -84,6 +86,7 @@ fn read_topic(row: &rusqlite::Row<'_>) -> rusqlite::Result<TopicRow> {
         created_at: row.get(7)?,
         updated_at: row.get(8)?,
         closed_at: row.get(9)?,
+        kind: row.get(10)?,
     })
 }
 
@@ -114,6 +117,7 @@ fn topic(row: TopicRow, aliases: Vec<Alias>) -> Result<Topic, TopicError> {
     };
     Ok(Topic {
         id: topic_id(&row.id)?,
+        kind: TopicKind::from_str(&row.kind).map_err(|error| stored("kind")(Box::new(error)))?,
         slug: Slug::fold(&row.slug)?,
         name: TopicName::new(&row.name)?,
         aliases,
@@ -152,11 +156,15 @@ fn aliases_of(conn: &Connection, id: &str) -> Result<Vec<Alias>, TopicError> {
     texts.iter().map(|text| Alias::new(text)).collect()
 }
 
-fn one(conn: &Connection, filter: &str, key: &str) -> Result<Option<Topic>, TopicError> {
+fn one(
+    conn: &Connection,
+    filter: &str,
+    keys: &[&dyn rusqlite::ToSql],
+) -> Result<Option<Topic>, TopicError> {
     let found = conn
         .query_row(
             &format!("SELECT {TOPIC_COLUMNS} FROM rh_topics t WHERE {filter} LIMIT 1"),
-            params![key],
+            keys,
             read_topic,
         )
         .optional()
@@ -171,15 +179,20 @@ fn one(conn: &Connection, filter: &str, key: &str) -> Result<Option<Topic>, Topi
 }
 
 pub(super) fn by_id(conn: &Connection, id: TopicId) -> Result<Option<Topic>, TopicError> {
-    one(conn, "t.id = ?1", &id.to_string())
+    one(conn, "t.id = ?1", params![id.to_string()])
 }
 
-pub(super) fn by_slug(conn: &Connection, slug: &Slug) -> Result<Option<Topic>, TopicError> {
+pub(super) fn by_slug(
+    conn: &Connection,
+    kind: TopicKind,
+    slug: &Slug,
+) -> Result<Option<Topic>, TopicError> {
     one(
         conn,
-        "t.slug = ?1 OR t.id = (SELECT r.topic_id FROM rh_topic_redirects r WHERE r.slug = ?1) \
+        "t.kind = ?2 AND (t.slug = ?1 \
+         OR t.id = (SELECT r.topic_id FROM rh_topic_redirects r WHERE r.slug = ?1)) \
          ORDER BY (t.slug = ?1) DESC",
-        slug.as_str(),
+        params![slug.as_str(), kind.to_string()],
     )
 }
 
@@ -199,8 +212,8 @@ pub(super) fn listings(conn: &Connection) -> Result<Vec<TopicListing>, TopicErro
                 .query_map([], |row| {
                     Ok((
                         read_topic(row)?,
-                        row.get::<_, i64>(10)?,
-                        row.get::<_, Option<String>>(11)?,
+                        row.get::<_, i64>(11)?,
+                        row.get::<_, Option<String>>(12)?,
                     ))
                 })?
                 .collect::<Result<Vec<_>, _>>()
@@ -335,18 +348,26 @@ pub(super) fn placed_in(conn: &Connection, id: TopicId) -> Result<Vec<PlacedSess
 
 pub(super) fn tree(conn: &Connection) -> Result<TopicTree, TopicError> {
     let edges = conn
-        .prepare("SELECT id, parent_id FROM rh_topics ORDER BY id")
+        .prepare("SELECT id, parent_id, kind FROM rh_topics ORDER BY id")
         .and_then(|mut statement| {
             statement
                 .query_map([], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
                 })?
                 .collect::<Result<Vec<_>, _>>()
         })
         .map_err(failed("topic tree read"))?;
     let mut parents = Vec::with_capacity(edges.len());
-    for (id, parent) in &edges {
-        parents.push((topic_id(id)?, parent.as_deref().map(topic_id).transpose()?));
+    for (id, parent, kind) in &edges {
+        parents.push((
+            topic_id(id)?,
+            parent.as_deref().map(topic_id).transpose()?,
+            TopicKind::from_str(kind).map_err(|error| stored("kind")(Box::new(error)))?,
+        ));
     }
     Ok(TopicTree::new(parents))
 }

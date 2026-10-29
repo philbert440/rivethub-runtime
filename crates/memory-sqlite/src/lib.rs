@@ -36,6 +36,7 @@ mod unembedded;
 mod vector;
 mod wiki_builder;
 mod wiki_consolidate;
+mod wiki_held;
 mod wiki_read;
 mod wiki_topics;
 
@@ -90,7 +91,7 @@ impl SharedClock {
     }
 }
 
-pub const SCHEMA_VERSION: i64 = 19;
+pub const SCHEMA_VERSION: i64 = 20;
 
 const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
@@ -351,7 +352,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(state, (crate::SCHEMA_VERSION, 53));
+        assert_eq!(state, (crate::SCHEMA_VERSION, 56));
     }
 
     #[tokio::test]

@@ -343,10 +343,15 @@ pub async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(
     let shown = stores.shown("desktop-smoke").await?;
     same("unbound", shown.topic_id, None)?;
     same("kept", shown.current_state.as_str(), "Smoke notes.")?;
-    let category = stores.create(new_topic("Hosts", &[], None)?).await?;
-    let refused = stores.topics.delete(category.id).await;
-    if !matches!(refused, Err(TopicError::CategoryTopic { .. })) {
-        return Err(format!("a category topic must stay: {refused:?}").into());
-    }
+    let hosts = stores.create(new_topic("Hosts", &[], None)?).await?;
+    stores.topics.delete(hosts.id).await?;
+    same(
+        "tombstone",
+        stores
+            .topics
+            .tombstoned(kernel::topics::TopicKind::Work, &hosts.slug)
+            .await?,
+        true,
+    )?;
     Ok(())
 }

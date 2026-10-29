@@ -25,6 +25,8 @@ use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
+use kernel::topics::TopicKind;
+use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
 use kernel::topics::TopicStore;
@@ -73,6 +75,7 @@ pub fn new_topic(
     Topic::create(
         TopicId::random(),
         NewTopic {
+            kind: TopicKind::Work,
             name: TopicName::new(name)?,
             aliases: aliases
                 .iter()
@@ -83,6 +86,15 @@ pub fn new_topic(
         },
         at(0),
     )
+}
+
+pub async fn work_topics(store: &dyn TopicStore) -> Result<Vec<TopicListing>, TopicError> {
+    Ok(store
+        .list()
+        .await?
+        .into_iter()
+        .filter(|listing| listing.topic.kind == TopicKind::Work)
+        .collect())
 }
 
 fn alias_texts(topic: &Topic) -> Vec<&str> {
@@ -149,7 +161,7 @@ pub async fn topics_are_created_found_and_renamed(store: &dyn TopicStore) -> Out
     )?;
     let missing = store.find(&TopicKey::parse("no-such-topic")?).await?;
     same("missing", missing, None)?;
-    let listed = store.list().await?;
+    let listed = work_topics(store).await?;
     same("listed", listed.len(), 1)?;
     Ok(())
 }
@@ -180,7 +192,7 @@ pub async fn slugs_and_aliases_are_unique_across_topics(store: &dyn TopicStore) 
     if !matches!(renamed, Err(TopicError::SlugTaken { .. })) {
         return Err(format!("a rename onto a taken slug must be refused: {renamed:?}").into());
     }
-    same("first kept", store.list().await?.len(), 2)?;
+    same("first kept", work_topics(store).await?.len(), 2)?;
     same(
         "first still owns its alias",
         store

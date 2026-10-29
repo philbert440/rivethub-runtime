@@ -67,9 +67,24 @@ async fn the_topic_page_is_cited_without_a_proposal() -> TestResult {
 }
 
 #[tokio::test]
-async fn a_host_is_filed_as_a_section_under_hosts() -> TestResult {
+async fn a_second_session_naming_an_entity_gives_it_its_own_page() -> TestResult {
     let (_directory, store, job) = seeded().await?;
-    wiki_routes::a_host_is_filed_as_a_section_under_hosts(stores(&store), &job).await?;
+    wiki_routes::a_second_session_naming_an_entity_gives_it_its_own_page(stores(&store), &job)
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_unfiled_session_waits_until_it_is_filed() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    wiki_routes::an_unfiled_session_waits_until_it_is_filed(stores(&store), &job).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_deleted_entity_is_not_recreated() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    wiki_routes::a_deleted_entity_is_not_recreated(stores(&store), &job).await?;
     Ok(())
 }
 

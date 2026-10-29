@@ -7812,6 +7812,14 @@
         }
       ]
     },
+    "TopicKind": {
+      "type": "string",
+      "enum": [
+        "work",
+        "type",
+        "entity"
+      ]
+    },
     "PlacedBy": {
       "type": "string",
       "enum": [
@@ -7824,6 +7832,10 @@
       "properties": {
         "id": {
           "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/TopicKind",
+          "default": "work"
         },
         "slug": {
           "type": "string"
@@ -7883,6 +7895,10 @@
       "properties": {
         "id": {
           "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/TopicKind",
+          "default": "work"
         },
         "slug": {
           "type": "string"
@@ -7967,6 +7983,10 @@
     "TopicCreateRequest": {
       "type": "object",
       "properties": {
+        "kind": {
+          "$ref": "#/$defs/TopicKind",
+          "default": "work"
+        },
         "name": {
           "type": "string"
         },

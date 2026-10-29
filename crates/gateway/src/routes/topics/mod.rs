@@ -21,6 +21,7 @@ use kernel::topics::Topic;
 use kernel::topics::TopicChanges;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
 use kernel::topics::TopicStore;
@@ -153,10 +154,45 @@ fn canonical(segment: &str) -> Result<SessionId, ApiError> {
     }
 }
 
-async fn list(State(gateway): State<Arc<Gateway>>) -> Result<Json<TopicList>, ApiError> {
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Shown {
+    #[default]
+    Work,
+    Type,
+    Entity,
+    All,
+}
+
+impl Shown {
+    fn shows(self, listing: &kernel::topics::TopicListing) -> bool {
+        let kind = listing.topic.kind;
+        match self {
+            Self::All => true,
+            Self::Work => kind == TopicKind::Work,
+            Self::Type => kind == TopicKind::Type,
+            Self::Entity => kind == TopicKind::Entity,
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct ListParams {
+    kind: Shown,
+}
+
+async fn list(
+    State(gateway): State<Arc<Gateway>>,
+    Query(params): Query<ListParams>,
+) -> Result<Json<TopicList>, ApiError> {
     let listings = gateway.topics()?.list().await.map_err(map::error)?;
     Ok(Json(TopicList {
-        topics: listings.into_iter().map(map::summary).collect(),
+        topics: listings
+            .into_iter()
+            .filter(|listing| params.kind.shows(listing))
+            .map(map::summary)
+            .collect(),
     }))
 }
 
@@ -165,6 +201,7 @@ async fn list(State(gateway): State<Arc<Gateway>>) -> Result<Json<TopicList>, Ap
 struct SearchParams {
     q: String,
     limit: Option<usize>,
+    kind: Shown,
 }
 
 async fn search(
@@ -175,11 +212,14 @@ async fn search(
         Some(limit) => limit.clamp(1, SEARCH_LIMIT_MAX),
         None => SEARCH_LIMIT_DEFAULT,
     };
-    let hits = gateway
-        .topics()?
-        .search(&TopicQuery::new(&params.q), limit)
-        .await
-        .map_err(map::error)?;
+    let store = gateway.topics()?;
+    let listings = store.list().await.map_err(map::error)?;
+    let redirects = store.redirects().await.map_err(map::error)?;
+    let shown = listings
+        .into_iter()
+        .filter(|listing| params.kind.shows(listing))
+        .collect();
+    let hits = kernel::topics::rank(shown, &redirects, &TopicQuery::new(&params.q), limit);
     Ok(Json(TopicList {
         topics: hits.into_iter().map(map::summary).collect(),
     }))
@@ -203,6 +243,7 @@ async fn create(
         None => None,
     };
     let new = NewTopic {
+        kind: request.kind,
         name: TopicName::new(&request.name).map_err(map::error)?,
         aliases: map::aliases(&request.aliases)?,
         parent,

@@ -67,12 +67,13 @@ async fn wiki_replays_every_recorded_summary_shape(pool: PgPool) -> TestResult {
                 model: "fake-chat",
                 now: row.created_at,
                 cancel: &cancel,
-                topics: None,
+                topics: Some(wiki_support::ports(&store)),
             };
             let job = ExtractWiki {
                 summary_id: row.id,
                 conversation_id: Some(row.conversation_id),
             };
+            wiki_support::filed(&store, &job).await?;
             let work = store.wiki_work(&job).await?;
             let WikiWork::Pending(summary) = work else {
                 panic!("fresh extraction");
@@ -94,10 +95,10 @@ async fn wiki_replays_every_recorded_summary_shape(pool: PgPool) -> TestResult {
             else {
                 panic!("text");
             };
-            assert_eq!(
-                serde_json::from_str::<wire::JsonObject>(user)?,
-                wire::JsonObject::from_serialize(&summary)?,
-            );
+            let sent: wire::JsonObject = serde_json::from_str(user)?;
+            for (field, value) in wire::JsonObject::from_serialize(&summary)?.as_map() {
+                assert_eq!(sent.get(field), Some(value), "{field}");
+            }
             let state: (String, i32, Vec<String>) = sqlx::query_as("SELECT status, pipeline_version, topics_touched FROM rh_wiki_extractions WHERE summary_id = $1")
                 .bind(row.id).fetch_one(&pool).await?;
             assert_eq!(state, ("done".to_owned(), WIKI_PIPELINE_VERSION, topics));
@@ -136,6 +137,7 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
         .await?
         .expect("wiki job");
     assert_eq!(claimed.name, JobName::Fixed(FixedJob::ExtractWiki));
+    wiki_support::filed(&store, &job).await?;
     let env = WikiBuilderEnv {
         store: &store,
         provider: &model,
@@ -143,7 +145,7 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     let topics = handle_extract_wiki(&env, &claimed.payload).await?;
     assert_eq!(topics, vec!["acmekit-deploys"]);
@@ -252,7 +254,7 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     assert_eq!(handle_wiki_backfill(&env).await?, expected.len());
     assert_eq!(handle_wiki_backfill(&env).await?, expected.len());

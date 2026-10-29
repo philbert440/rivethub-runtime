@@ -4,13 +4,14 @@ use super::Redirect;
 use super::Slug;
 use super::TopicError;
 use super::TopicId;
+use super::TopicKind;
 use super::TopicListing;
 use super::values::fold;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TopicKey {
     Id(TopicId),
-    Slug(Slug),
+    Slug(TopicKind, Slug),
 }
 
 impl TopicKey {
@@ -24,7 +25,7 @@ impl TopicKey {
         )]
         let key = match text.trim().parse::<TopicId>() {
             Ok(id) => Self::Id(id),
-            Err(_) => Self::Slug(Slug::fold(text)?),
+            Err(_) => Self::Slug(TopicKind::Work, Slug::fold(text)?),
         };
         Ok(key)
     }

@@ -241,6 +241,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::gateway::wiki::WikiTopic>,
     SchemaGenerator::subschema_for::<crate::gateway::wiki::WikiTopicList>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicDirectory>,
+    SchemaGenerator::subschema_for::<crate::gateway::topics::TopicKind>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::PlacedBy>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicRecord>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicSummary>,

@@ -27,6 +27,7 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
         Arc::new(PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf()));
     let model = Arc::new(provider(&[patch()]));
     let source = seed(&pool).await?;
+    wiki_support::filed(&store, &source).await?;
     queue
         .enqueue(Job {
             name: JobName::Fixed(FixedJob::RecompileWiki),
@@ -63,9 +64,14 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
         },
     )
     .with_wiki_builder(WikiBuilderDeps {
-        store,
+        store: store.clone(),
         consolidate: None,
         model: "fake-chat".to_owned(),
+    })
+    .with_topic_pages(store.clone(), store.clone(), store.clone())
+    .with_session_topics(workers::SessionTopics {
+        store,
+        lineage: Arc::new(testkit::wiki_routes::NoParents),
     });
     let mut idle = runner.idle();
     let cancel = CancellationToken::new();
@@ -110,6 +116,7 @@ async fn wiki_queue_failure_retries_delivery_without_reextracting(pool: PgPool) 
     let model = provider(&[patch()]);
     let cancel = CancellationToken::new();
     let source = seed(&pool).await?;
+    wiki_support::filed(&store, &source).await?;
     let payload = extract_wiki_job(&source)?.payload;
     testkit::install_graphile_worker(&pool).await?;
     let absent = PostgresQueue::connect(pool.clone()).await?;
@@ -123,7 +130,7 @@ async fn wiki_queue_failure_retries_delivery_without_reextracting(pool: PgPool) 
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     assert!(matches!(
         handle_extract_wiki(&env, &payload).await,
@@ -169,7 +176,7 @@ async fn wiki_cancels_an_inflight_provider_request(pool: PgPool) -> TestResult {
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     let payload = extract_wiki_job(&job)?.payload;
     let (result, ()) = tokio::time::timeout(Duration::from_secs(5), async {

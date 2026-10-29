@@ -152,7 +152,7 @@ async fn wiki_rejects_wrong_conversation_before_model_or_writes(pool: PgPool) ->
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     assert!(matches!(
         handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload).await,
@@ -188,7 +188,7 @@ async fn wiki_bad_model_output_is_failed_and_retryable(pool: PgPool) -> TestResu
             model: "fake-chat",
             now: now(),
             cancel: &cancel,
-            topics: None,
+            topics: Some(wiki_support::ports(&store)),
         };
         assert!(
             handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload)
@@ -258,7 +258,7 @@ async fn wiki_cancellation_leaves_no_extraction(pool: PgPool) -> TestResult {
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     assert!(matches!(
         handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload).await,
@@ -325,6 +325,7 @@ async fn wiki_file_failure_marks_extraction_failed_and_retry_reconciles(
     tokio::fs::symlink(outside.path(), wiki.path().join("topics")).await?;
     let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let job = seed(&pool).await?;
+    wiki_support::filed(&store, &job).await?;
     let model = provider(&[patch()]);
     let queue = FakeJobQueue::default();
     let cancel = CancellationToken::new();
@@ -335,7 +336,7 @@ async fn wiki_file_failure_marks_extraction_failed_and_retry_reconciles(
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     assert!(
         handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload)

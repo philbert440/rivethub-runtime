@@ -86,9 +86,25 @@ async fn the_topic_page_is_cited_without_a_proposal(pool: PgPool) -> TestResult 
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn a_host_is_filed_as_a_section_under_hosts(pool: PgPool) -> TestResult {
+async fn a_second_session_naming_an_entity_gives_it_its_own_page(pool: PgPool) -> TestResult {
     let seeded = Seeded::new(pool).await?;
-    wiki_routes::a_host_is_filed_as_a_section_under_hosts(seeded.stores(), &seeded.job).await
+    wiki_routes::a_second_session_naming_an_entity_gives_it_its_own_page(
+        seeded.stores(),
+        &seeded.job,
+    )
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn an_unfiled_session_waits_until_it_is_filed(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool).await?;
+    wiki_routes::an_unfiled_session_waits_until_it_is_filed(seeded.stores(), &seeded.job).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_deleted_entity_is_not_recreated(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool).await?;
+    wiki_routes::a_deleted_entity_is_not_recreated(seeded.stores(), &seeded.job).await
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]

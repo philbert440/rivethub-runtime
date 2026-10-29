@@ -13,6 +13,29 @@ pub enum TopicDirectory {
     Shared { path: String },
 }
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    strum::Display,
+    strum::EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "lowercase")]
+pub enum TopicKind {
+    #[default]
+    Work,
+    Type,
+    Entity,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum PlacedBy {
@@ -26,6 +49,8 @@ pub enum PlacedBy {
 #[serde(rename_all = "camelCase")]
 pub struct TopicRecord {
     pub id: String,
+    #[serde(default)]
+    pub kind: TopicKind,
     pub slug: String,
     pub name: String,
     pub aliases: Vec<String>,
@@ -65,6 +90,8 @@ pub struct TopicList {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct TopicCreateRequest {
+    #[serde(default)]
+    pub kind: TopicKind,
     pub name: String,
     #[serde(default)]
     pub aliases: Vec<String>,

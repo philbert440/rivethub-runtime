@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT alias FROM rh_topic_aliases\n          WHERE alias_key = ANY($1::text[]) AND topic_id <> $2\n          ORDER BY alias_key LIMIT 1",
+  "query": "SELECT alias FROM rh_topic_aliases\n          WHERE kind = $3 AND alias_key = ANY($1::text[]) AND topic_id <> $2\n          ORDER BY alias_key LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -18,12 +18,13 @@
     "parameters": {
       "Left": [
         "TextArray",
-        "Uuid"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "273f29b6927048ecc9e5658e14fe2c34468600275dde62b885e61495defca98a"
+  "hash": "e4479cc946a19b71ff77825114297188319231d28041a026e3c229d5c0dcdb96"
 }

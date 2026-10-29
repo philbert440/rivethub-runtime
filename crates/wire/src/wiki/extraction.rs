@@ -11,15 +11,6 @@ pub enum WikiAction {
     Update,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, strum::Display)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-pub enum EntityKind {
-    Person,
-    Host,
-    Tool,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct WikiPatch {
@@ -33,5 +24,6 @@ pub struct WikiPatch {
     pub article: Option<String>,
     pub related: Option<Vec<WikiSlug>>,
     pub history_entry: Option<WikiHistoryEntry>,
-    pub kind: Option<EntityKind>,
+    #[serde(rename = "type")]
+    pub entity_type: Option<String>,
 }

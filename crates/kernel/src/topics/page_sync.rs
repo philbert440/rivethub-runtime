@@ -1,0 +1,94 @@
+use serde::Deserialize;
+use serde::Serialize;
+use wire::JsonObject;
+use wire::gateway::wiki::WikiSlug;
+
+use super::Topic;
+use super::TopicId;
+use super::TopicPageError;
+use crate::queue::FixedJob;
+use crate::queue::Job;
+use crate::queue::JobKeyMode;
+use crate::queue::JobName;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SyncTopicPage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub topic_id: Option<TopicId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fold: Vec<WikiSlug>,
+}
+
+impl SyncTopicPage {
+    #[must_use]
+    pub fn topic(id: TopicId) -> Self {
+        Self {
+            topic_id: Some(id),
+            fold: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn every_topic() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
+    pub fn after_create(topic: &Topic) -> Vec<Self> {
+        vec![Self::topic(topic.id)]
+    }
+
+    #[must_use]
+    pub fn after_update(before: &Topic, after: &Topic) -> Vec<Self> {
+        let mut syncs = vec![Self::topic(after.id)];
+        if let Some(left) = before.parent.filter(|left| after.parent != Some(*left)) {
+            syncs.push(Self::topic(left));
+        }
+        syncs
+    }
+
+    #[must_use]
+    pub fn after_merge(source: &Topic, into: &Topic, page: Option<WikiSlug>) -> Vec<Self> {
+        let mut syncs = vec![Self {
+            topic_id: Some(into.id),
+            fold: page.into_iter().collect(),
+        }];
+        if let Some(left) = source
+            .parent
+            .filter(|left| *left != into.id && into.parent != Some(*left))
+        {
+            syncs.push(Self::topic(left));
+        }
+        syncs
+    }
+
+    #[must_use]
+    pub fn after_delete(topic: &Topic) -> Vec<Self> {
+        topic.parent.map(Self::topic).into_iter().collect()
+    }
+
+    pub fn job(&self) -> Result<Job, TopicPageError> {
+        let key = match (self.topic_id, self.fold.is_empty()) {
+            (Some(id), true) => Some(format!("sync-topic-page:{id}")),
+            (Some(_), false) => None,
+            (None, _) => Some("sync-topic-page:all".to_owned()),
+        };
+        Ok(Job {
+            name: JobName::Fixed(FixedJob::SyncTopicPage),
+            payload: JsonObject::from_serialize(self)
+                .map_err(|source| TopicPageError::Payload(Box::new(source)))?,
+            key,
+            key_mode: JobKeyMode::Replace,
+            priority: 0,
+            run_at: None,
+            max_attempts: None,
+        })
+    }
+
+    pub fn from_payload(payload: &JsonObject) -> Result<Self, TopicPageError> {
+        payload
+            .deserialize()
+            .map_err(|source| TopicPageError::Payload(Box::new(source)))
+    }
+}

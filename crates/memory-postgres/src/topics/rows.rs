@@ -14,6 +14,7 @@ use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicName;
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -23,6 +24,7 @@ use crate::error::Error;
 
 pub(super) struct TopicRow {
     pub(super) id: Uuid,
+    pub(super) kind: String,
     pub(super) slug: String,
     pub(super) name: String,
     pub(super) parent_id: Option<Uuid>,
@@ -88,6 +90,7 @@ pub(super) fn topic(row: TopicRow, aliases: Vec<Alias>) -> Result<Topic, TopicEr
     };
     Ok(Topic {
         id: TopicId::from_uuid(row.id),
+        kind: TopicKind::from_str(&row.kind).map_err(|error| stored("kind")(Box::new(error)))?,
         slug: Slug::fold(&row.slug)?,
         name: TopicName::new(&row.name)?,
         aliases,
@@ -163,7 +166,7 @@ pub(super) async fn by_id(
 ) -> Result<Option<Topic>, TopicError> {
     let row = sqlx::query_as!(
         TopicRow,
-        "SELECT id, slug, name, parent_id, directory_kind, directory_node, directory_path,
+        "SELECT id, kind, slug, name, parent_id, directory_kind, directory_node, directory_path,
                 created_at, updated_at, closed_at
            FROM rh_topics WHERE id = $1 FOR UPDATE",
         id.uuid()
@@ -182,18 +185,21 @@ pub(super) async fn by_id(
 
 pub(super) async fn by_slug(
     conn: &mut PgConnection,
+    kind: TopicKind,
     slug: &Slug,
 ) -> Result<Option<Topic>, TopicError> {
     let row = sqlx::query_as!(
         TopicRow,
-        "SELECT t.id, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
+        "SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
                 t.directory_path, t.created_at, t.updated_at, t.closed_at
            FROM rh_topics t
-          WHERE t.slug = $1
-             OR t.id = (SELECT r.topic_id FROM rh_topic_redirects r WHERE r.slug = $1)
+          WHERE t.kind = $2
+            AND (t.slug = $1
+                 OR t.id = (SELECT r.topic_id FROM rh_topic_redirects r WHERE r.slug = $1))
           ORDER BY (t.slug = $1) DESC
           LIMIT 1",
-        slug.as_str()
+        slug.as_str(),
+        kind.to_string()
     )
     .fetch_optional(&mut *conn)
     .await
