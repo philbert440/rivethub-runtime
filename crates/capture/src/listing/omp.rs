@@ -83,18 +83,29 @@ pub(crate) fn list(root: &Path, limit: usize) -> Result<Vec<StoreSession>, Trans
         |file| file.id.clone(),
         |file| file.times.mtime,
     );
-    kept.retain(prompted);
     kept.sort_by_key(|item| std::cmp::Reverse(item.times.mtime));
-    Ok(kept.iter().take(limit).map(omp_row).collect())
+    Ok(kept
+        .iter()
+        .filter_map(|file| {
+            let opening = opening(file);
+            prompted(file, opening.as_deref())
+                .then(|| omp_row(file, opening.as_deref().unwrap_or_default()))
+        })
+        .take(limit)
+        .collect())
 }
 
-fn prompted(file: &OmpFile) -> bool {
+fn parsed(text: &str) -> Vec<OmpLine> {
+    text.lines().filter_map(object_line::<OmpLine>).collect()
+}
+
+fn opening(file: &OmpFile) -> Option<Vec<OmpLine>> {
+    head(&file.path, HEAD_WINDOW).map(|text| parsed(&text))
+}
+
+fn prompted(file: &OmpFile, opening: Option<&[OmpLine]>) -> bool {
     let long = std::fs::metadata(&file.path).is_ok_and(|meta| meta.len() > HEAD_WINDOW);
-    long || head(&file.path, HEAD_WINDOW).is_none_or(|text| {
-        text.lines()
-            .filter_map(object_line::<OmpLine>)
-            .any(|line| user_turn(&line).is_some())
-    })
+    long || opening.is_none_or(|lines| lines.iter().any(|line| user_turn(line).is_some()))
 }
 
 pub(crate) fn describe(
@@ -113,21 +124,17 @@ pub(crate) fn describe(
                 .cmp(&right.times.mtime)
                 .then_with(|| left.prefix.cmp(&right.prefix))
         });
-    Ok(newest.as_ref().map(omp_row))
+    Ok(newest
+        .as_ref()
+        .map(|file| omp_row(file, &opening(file).unwrap_or_default())))
 }
 
-fn omp_row(file: &OmpFile) -> StoreSession {
+fn omp_row(file: &OmpFile, opening: &[OmpLine]) -> StoreSession {
     let mut row = StoreSession::new(HarnessId::Omp, &file.id, file.times.mtime);
     row.created_at = Some(file.times.birth);
-    let parsed = |text: String| {
-        text.lines()
-            .filter_map(object_line::<OmpLine>)
-            .collect::<Vec<_>>()
-    };
-    let opening = head(&file.path, HEAD_WINDOW)
-        .map(parsed)
+    let lines = tail_window(&file.path)
+        .map(|text| parsed(&text))
         .unwrap_or_default();
-    let lines = tail_window(&file.path).map(parsed).unwrap_or_default();
     let title = opening
         .first()
         .and_then(titled)
