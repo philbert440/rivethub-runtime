@@ -8,6 +8,7 @@ use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
+use kernel::topics::TopicTree;
 use sqlx::PgConnection;
 use uuid::Uuid;
 use wire::gateway::wiki::WikiSlug;
@@ -158,6 +159,19 @@ pub(super) async fn aliases(conn: &mut PgConnection, topic: &Topic) -> Result<()
     .await
     .map_err(written("topic aliases", topic))?;
     Ok(())
+}
+
+pub(super) async fn tree(conn: &mut PgConnection) -> Result<TopicTree, TopicError> {
+    let edges = sqlx::query!("SELECT id, parent_id FROM rh_topics ORDER BY id FOR UPDATE")
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(failed("topic tree read"))?;
+    Ok(TopicTree::new(edges.into_iter().map(|edge| {
+        (
+            TopicId::from_uuid(edge.id),
+            edge.parent_id.map(TopicId::from_uuid),
+        )
+    })))
 }
 
 pub(super) async fn subtopics(

@@ -192,14 +192,21 @@ pub async fn slugs_and_aliases_are_unique_across_topics(store: &dyn TopicStore) 
     Ok(())
 }
 
-pub async fn sub_topics_stay_one_level_deep(store: &dyn TopicStore) -> Outcome {
-    let parent = store.create(new_topic("Runtime", &[], None)?).await?;
-    let child = store
-        .create(new_topic("Topics", &[], Some(parent.id))?)
+pub async fn topics_nest_up_to_four_levels(store: &dyn TopicStore) -> Outcome {
+    let runtime = store.create(new_topic("Runtime", &[], None)?).await?;
+    let topics = store
+        .create(new_topic("Topics", &[], Some(runtime.id))?)
         .await?;
-    let grandchild = store.create(new_topic("Merge", &[], Some(child.id))?).await;
-    if !matches!(grandchild, Err(TopicError::ParentIsSubtopic { .. })) {
-        return Err(format!("a third level must be refused: {grandchild:?}").into());
+    let merge = store
+        .create(new_topic("Merge", &[], Some(topics.id))?)
+        .await?;
+    let plan = store
+        .create(new_topic("Plan", &[], Some(merge.id))?)
+        .await?;
+    same("fourth level kept", plan.parent, Some(merge.id))?;
+    let fifth = store.create(new_topic("Steps", &[], Some(plan.id))?).await;
+    if !matches!(fifth, Err(TopicError::TooDeep { max: 4 })) {
+        return Err(format!("a fifth level must be refused: {fifth:?}").into());
     }
     let orphan = store
         .create(new_topic("Orphan", &[], Some(TopicId::random()))?)
@@ -207,23 +214,22 @@ pub async fn sub_topics_stay_one_level_deep(store: &dyn TopicStore) -> Outcome {
     if !matches!(orphan, Err(TopicError::NotFound { .. })) {
         return Err(format!("an unknown parent must be refused: {orphan:?}").into());
     }
-    let other = store.create(new_topic("Gateway", &[], None)?).await?;
-    let nested = store
+    let looped = store
         .update(
-            parent.id,
+            runtime.id,
             TopicChanges {
-                parent: Change::Set(other.id),
+                parent: Change::Set(merge.id),
                 ..TopicChanges::default()
             },
             at(1),
         )
         .await;
-    if !matches!(nested, Err(TopicError::HasSubtopics)) {
-        return Err(format!("a parent cannot become a sub-topic: {nested:?}").into());
+    if !matches!(looped, Err(TopicError::IntoOwnSubtree)) {
+        return Err(format!("a topic cannot move under its own subtopic: {looped:?}").into());
     }
     let cleared = store
         .update(
-            child.id,
+            topics.id,
             TopicChanges {
                 parent: Change::Clear,
                 ..TopicChanges::default()

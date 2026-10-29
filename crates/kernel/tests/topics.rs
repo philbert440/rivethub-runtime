@@ -5,6 +5,7 @@ use kernel::topics::Alias;
 use kernel::topics::Change;
 use kernel::topics::FirstLeaf;
 use kernel::topics::Lineage;
+use kernel::topics::MAX_DEPTH;
 use kernel::topics::MergePlan;
 use kernel::topics::NewTopic;
 use kernel::topics::Placement;
@@ -22,6 +23,7 @@ use kernel::topics::TopicKey;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
+use kernel::topics::TopicTree;
 use kernel::topics::Verdict;
 use kernel::topics::check_parent;
 use kernel::topics::rank;
@@ -188,25 +190,50 @@ fn placements_replace_one_another_otherwise() -> TestResult {
     Ok(())
 }
 
+fn refusal(result: &Result<(), TopicError>) -> &'static str {
+    if result.is_ok() {
+        "ok"
+    } else if matches!(result, Err(TopicError::TooDeep { max: MAX_DEPTH })) {
+        "too deep"
+    } else if matches!(result, Err(TopicError::IntoOwnSubtree)) {
+        "own subtree"
+    } else if matches!(result, Err(TopicError::OwnParent)) {
+        "own parent"
+    } else {
+        "other"
+    }
+}
+
+fn under(name: &str, parent: Option<&Topic>) -> Result<Topic, Box<dyn std::error::Error>> {
+    let mut made = topic(name, &[])?;
+    made.parent = parent.map(|parent| parent.id);
+    Ok(made)
+}
+
 #[test]
-fn sub_topics_are_one_level_deep_and_never_their_own_parent() -> TestResult {
-    let parent = topic("Runtime", &[])?;
-    let child = topic("Topics", &[])?;
-    assert!(check_parent(child.id, false, &parent).is_ok());
-    assert!(matches!(
-        check_parent(parent.id, false, &parent),
-        Err(TopicError::OwnParent)
-    ));
-    assert!(matches!(
-        check_parent(child.id, true, &parent),
-        Err(TopicError::HasSubtopics)
-    ));
-    let mut nested = topic("Nested", &[])?;
-    nested.parent = Some(parent.id);
-    assert!(matches!(
-        check_parent(child.id, false, &nested),
-        Err(TopicError::ParentIsSubtopic { .. })
-    ));
+fn topics_nest_four_levels_deep_and_never_under_themselves() -> TestResult {
+    let runtime = under("Runtime", None)?;
+    let topics = under("Topics", Some(&runtime))?;
+    let merge = under("Merge", Some(&topics))?;
+    let desktop = under("Desktop", None)?;
+    let memory = under("Memory", Some(&desktop))?;
+    let tree = TopicTree::of([&runtime, &topics, &merge, &desktop, &memory]);
+    for (child, parent, want) in [
+        (TopicId::random(), &merge, "ok"),
+        (desktop.id, &topics, "ok"),
+        (desktop.id, &merge, "too deep"),
+        (runtime.id, &merge, "own subtree"),
+        (runtime.id, &runtime, "own parent"),
+    ] {
+        assert_eq!(
+            refusal(&check_parent(child, parent, &tree)),
+            want,
+            "under {}",
+            parent.name.as_str()
+        );
+    }
+    assert_eq!((tree.depth(merge.id), tree.height(runtime.id)), (3, 3));
+    assert_eq!(tree.root(merge.id), runtime.id);
     Ok(())
 }
 
@@ -214,7 +241,8 @@ fn sub_topics_are_one_level_deep_and_never_their_own_parent() -> TestResult {
 fn merging_redirects_the_slug_and_moves_aliases_that_do_not_clash() -> TestResult {
     let source = topic("Desktop App", &["electron", "Tauri"])?;
     let into = topic("RivetHub Desktop", &["tauri"])?;
-    let plan = MergePlan::new(&source, &into, &[])?;
+    let tree = TopicTree::of([&source, &into]);
+    let plan = MergePlan::new(&source, &into, &tree)?;
     assert_eq!(
         plan.redirect,
         Redirect {
@@ -229,7 +257,7 @@ fn merging_redirects_the_slug_and_moves_aliases_that_do_not_clash() -> TestResul
     assert_eq!(aliases, ["electron", "tauri"]);
     assert_eq!(merged.updated_at, at(9));
     assert!(matches!(
-        MergePlan::new(&source, &source, &[]),
+        MergePlan::new(&source, &source, &tree),
         Err(TopicError::SelfMerge)
     ));
     Ok(())
@@ -237,26 +265,37 @@ fn merging_redirects_the_slug_and_moves_aliases_that_do_not_clash() -> TestResul
 
 #[test]
 fn merging_a_parent_into_its_child_lifts_the_child_and_adopts_its_siblings() -> TestResult {
-    let parent = topic("Runtime", &[])?;
-    let mut child = topic("Topics", &[])?;
-    child.parent = Some(parent.id);
-    let sibling = TopicId::random();
-    let plan = MergePlan::new(&parent, &child, &[child.id, sibling])?;
+    let parent = under("Runtime", None)?;
+    let child = under("Topics", Some(&parent))?;
+    let sibling = under("Gateway", Some(&parent))?;
+    let plan = MergePlan::new(&parent, &child, &TopicTree::of([&parent, &child, &sibling]))?;
     assert_eq!(plan.into_parent, None);
-    assert_eq!(plan.subtopics, [sibling]);
+    assert_eq!(plan.subtopics, [sibling.id]);
     Ok(())
 }
 
 #[test]
-fn a_sub_topic_cannot_take_over_sub_topics() -> TestResult {
-    let parent = topic("Runtime", &[])?;
-    let mut target = topic("Elsewhere", &[])?;
-    target.parent = Some(TopicId::random());
+fn merging_keeps_to_four_levels_and_never_into_a_deeper_descendant() -> TestResult {
+    let runtime = under("Runtime", None)?;
+    let topics = under("Topics", Some(&runtime))?;
+    let merge = under("Merge", Some(&topics))?;
+    let shallow = under("Shallow", None)?;
+    let leaf = under("Leaf", Some(&shallow))?;
+    let deep = under("Deep", None)?;
+    let middle = under("Middle", Some(&deep))?;
+    let bottom = under("Bottom", Some(&middle))?;
+    let tree = TopicTree::of([
+        &runtime, &topics, &merge, &shallow, &leaf, &deep, &middle, &bottom,
+    ]);
+    assert!(MergePlan::new(&shallow, &merge, &tree).is_ok());
     assert!(matches!(
-        MergePlan::new(&parent, &target, &[TopicId::random()]),
-        Err(TopicError::MergeWouldNest { .. })
+        MergePlan::new(&deep, &merge, &tree),
+        Err(TopicError::TooDeep { max: MAX_DEPTH })
     ));
-    assert!(MergePlan::new(&parent, &target, &[]).is_ok());
+    assert!(matches!(
+        MergePlan::new(&runtime, &merge, &tree),
+        Err(TopicError::IntoOwnSubtree)
+    ));
     Ok(())
 }
 

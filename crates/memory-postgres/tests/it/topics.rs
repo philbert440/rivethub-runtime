@@ -102,8 +102,8 @@ async fn slugs_and_aliases_are_unique_across_topics(pool: PgPool) -> TestResult 
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn sub_topics_stay_one_level_deep(pool: PgPool) -> TestResult {
-    topics::sub_topics_stay_one_level_deep(&PostgresMemory::new(pool)).await
+async fn topics_nest_up_to_four_levels(pool: PgPool) -> TestResult {
+    topics::topics_nest_up_to_four_levels(&PostgresMemory::new(pool)).await
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]

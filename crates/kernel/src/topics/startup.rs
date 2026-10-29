@@ -20,6 +20,7 @@ use super::TopicId;
 use super::TopicPageError;
 use super::TopicPageStore;
 use super::TopicStore;
+use super::root_of;
 use crate::memory::Limit;
 use crate::memory::MemoryStore;
 use crate::memory::SearchMode;
@@ -234,7 +235,8 @@ async fn page_part(
         title: topic.name.as_str().to_owned(),
         entries: Vec::new(),
     };
-    let Some(slug) = topics.page_slug(topic.root()).await? else {
+    let root = root_of(topics, topic).await?;
+    let Some(slug) = topics.page_slug(root.id).await? else {
         return Ok(part);
     };
     let Some(page) = pages.topic_page(&slug).await? else {

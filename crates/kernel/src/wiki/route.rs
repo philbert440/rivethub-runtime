@@ -26,6 +26,7 @@ use crate::topics::TopicName;
 use crate::topics::TopicPageError;
 use crate::topics::TopicPageStore;
 use crate::topics::TopicStore;
+use crate::topics::root_of;
 use crate::topics::root_page;
 use crate::transcript::SessionLister;
 use crate::transcript::TranscriptReaderError;
@@ -232,16 +233,7 @@ impl TopicPorts<'_> {
         topic: &Topic,
         now: DateTime<Utc>,
     ) -> Result<TopicTarget, TopicPageError> {
-        let root = match topic.parent {
-            None => topic.clone(),
-            Some(parent) => self
-                .topics
-                .find(&TopicKey::Id(parent))
-                .await?
-                .ok_or_else(|| TopicError::NotFound {
-                    key: parent.to_string(),
-                })?,
-        };
+        let root = root_of(self.topics, topic).await?;
         let page_slug = root_page(self.topics, self.pages, &root, now).await?;
         Ok(TopicTarget {
             topic: topic.id,

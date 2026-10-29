@@ -5,6 +5,7 @@ use super::TopicError;
 use super::TopicId;
 use super::TopicListing;
 use super::TopicName;
+use super::TopicTree;
 use super::values::fold;
 use crate::memory::summary_title;
 
@@ -84,8 +85,13 @@ fn named(topics: &[TopicListing], redirects: &[Redirect], texts: &[Option<&str>]
                 .any(|key| texts.iter().flatten().any(|text| mentions(text, &key)))
         })
         .collect();
+    let tree = TopicTree::of(topics.iter().map(|listing| &listing.topic));
     hits.iter()
-        .filter(|topic| !hits.iter().any(|other| other.parent == Some(topic.id)))
+        .filter(|topic| {
+            !hits
+                .iter()
+                .any(|other| other.id != topic.id && tree.within(other.id, topic.id))
+        })
         .map(|topic| topic.id)
         .collect()
 }

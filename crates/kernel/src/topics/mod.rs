@@ -5,6 +5,7 @@ mod placement;
 mod rules;
 mod search;
 mod startup;
+mod tree;
 mod values;
 
 use async_trait::async_trait;
@@ -60,6 +61,9 @@ pub use startup::StartupStore;
 pub use startup::assemble;
 pub use startup::render;
 pub use startup::startup_context;
+pub use tree::MAX_DEPTH;
+pub use tree::TopicTree;
+pub use tree::root_of;
 pub use values::Alias;
 pub use values::Change;
 pub use values::NewTopic;
@@ -90,14 +94,12 @@ pub enum TopicError {
     NotFound { key: String },
     #[error("a topic cannot be its own parent")]
     OwnParent,
-    #[error("topic \"{parent}\" is a sub-topic and cannot have sub-topics")]
-    ParentIsSubtopic { parent: Slug },
-    #[error("a topic with sub-topics cannot become a sub-topic")]
-    HasSubtopics,
+    #[error("Topics nest at most {max} levels deep")]
+    TooDeep { max: usize },
+    #[error("A topic can't move under its own subtopic")]
+    IntoOwnSubtree,
     #[error("a topic cannot be merged into itself")]
     SelfMerge,
-    #[error("topic \"{into}\" is a sub-topic and cannot take over sub-topics")]
-    MergeWouldNest { into: Slug },
     #[error("a decision must not be empty")]
     EmptyDecision,
     #[error("unknown decision {key}")]

@@ -34,11 +34,10 @@ pub(super) fn error(error: TopicError) -> ApiError {
         | TopicError::ForeignReplacement => ApiError::BadRequest(error.to_string()),
         TopicError::SlugTaken { .. }
         | TopicError::AliasTaken { .. }
-        | TopicError::ParentIsSubtopic { .. }
-        | TopicError::HasSubtopics
+        | TopicError::TooDeep { .. }
+        | TopicError::IntoOwnSubtree
         | TopicError::CategoryTopic { .. }
         | TopicError::SubtopicsRemain { .. }
-        | TopicError::MergeWouldNest { .. }
         | TopicError::DecisionSuperseded { .. } => ApiError::Conflict(error.to_string()),
         TopicError::NotFound { .. } | TopicError::UnknownDecision { .. } => {
             ApiError::Missing(error.to_string())

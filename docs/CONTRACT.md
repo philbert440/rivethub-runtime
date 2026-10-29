@@ -303,7 +303,8 @@ TypeScript arms expect.
 optional `closedAt` (epoch milliseconds, like its other times; absent while the topic is open) wherever it appears:
 list, show, search, create and merge replies. `POST /api/topics/{topic}/close` sets the closed time to now (closing a
 closed topic moves it to now) and `POST /api/topics/{topic}/reopen` clears it; both answer the `TopicRecord`, take any
-topic, category topics included, and answer `404` for an unknown one. `GET /api/sessions/history` answers
+topic, category topics included, and answer `404` for an unknown one. Both set the topic's `updatedAt` to now, so a
+client that orders topics by their latest change brings a reopened one back to the front. `GET /api/sessions/history` answers
 `{ "sessions": [{ "sessionId", "markedAt" }] }`, every marked session, newest mark first.
 `PUT /api/sessions/{session}/history` marks the session at now and answers `{ "sessionId", "markedAt" }`;
 `DELETE /api/sessions/{session}/history` removes the mark, is idempotent and answers `204`. The session segment is the
@@ -313,6 +314,15 @@ closed topic as open again once one of its sessions is active after `closedAt`, 
 once it is active after `markedAt`. Postgres migration `0031_done_state.sql` adds `rh_topics.closed_at` and
 `rh_session_history`; SQLite schema 19 does the same. Bodies are `wire::gateway::topics::SessionHistoryMark` and
 `SessionHistoryList` in `contract/*.schema.json`. The routes are new, with no TypeScript recording.
+(37) Deeper topics (Phil, 2026-10-29): topics nest up to 4 levels (a root is level 1), replacing the one-level rule of
+B1. Setting a parent, at create or update, is refused when the parent's level plus the height of the moved topic's subtree
+would pass 4 (`409`, "Topics nest at most 4 levels deep") and when the parent is the topic itself (`400`, "a topic cannot be
+its own parent") or anything under it (`409`, "A topic can't move under its own subtopic"). Merging A into B moves A's
+subtopics under B, so it is refused when that would pass 4 levels (`409`, the same message) and when B sits below a
+subtopic of A (`409`, the same subtree message); merging A into its own direct subtopic still lifts that subtopic into A's
+place. A root topic's wiki page keeps a section for every topic under it at any depth, and startup memory, page binding
+and routing find a topic's root by walking its parents. Deleting a topic that has subtopics is still refused. The
+categorizer drops a named topic when one of its descendants is also named, not only its direct subtopic.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

@@ -45,7 +45,7 @@ impl TopicStore for PostgresMemory {
             let parent = rows::by_id(&mut tx, parent)
                 .await?
                 .ok_or_else(|| not_found(parent))?;
-            check_parent(topic.id, false, &parent)?;
+            check_parent(topic.id, &parent, &write::tree(&mut tx).await?)?;
         }
         write::claim_names(&mut tx, &topic).await?;
         write::insert(&mut tx, &topic).await?;
@@ -74,8 +74,7 @@ impl TopicStore for PostgresMemory {
             let parent = rows::by_id(&mut tx, parent)
                 .await?
                 .ok_or_else(|| not_found(parent))?;
-            let subtopics = write::subtopics(&mut tx, id).await?;
-            check_parent(id, !subtopics.is_empty(), &parent)?;
+            check_parent(id, &parent, &write::tree(&mut tx).await?)?;
         }
         write::claim_names(&mut tx, &updated).await?;
         write::row(&mut tx, &updated).await?;
@@ -104,8 +103,7 @@ impl TopicStore for PostgresMemory {
         let target = rows::by_id(&mut tx, into)
             .await?
             .ok_or_else(|| not_found(into))?;
-        let subtopics = write::subtopics(&mut tx, source).await?;
-        let plan = MergePlan::new(&from, &target, &subtopics)?;
+        let plan = MergePlan::new(&from, &target, &write::tree(&mut tx).await?)?;
         let page = write::page_of(&mut tx, source).await?;
         let syncs = SyncTopicPage::after_merge(&from, &target, page);
         let merged = plan.merged(target, now);

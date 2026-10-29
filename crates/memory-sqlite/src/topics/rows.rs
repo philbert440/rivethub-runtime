@@ -15,6 +15,7 @@ use kernel::topics::TopicError;
 use kernel::topics::TopicId;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
+use kernel::topics::TopicTree;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
@@ -330,6 +331,24 @@ pub(super) fn placed_in(conn: &Connection, id: TopicId) -> Result<Vec<PlacedSess
             })
         })
         .collect()
+}
+
+pub(super) fn tree(conn: &Connection) -> Result<TopicTree, TopicError> {
+    let edges = conn
+        .prepare("SELECT id, parent_id FROM rh_topics ORDER BY id")
+        .and_then(|mut statement| {
+            statement
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .map_err(failed("topic tree read"))?;
+    let mut parents = Vec::with_capacity(edges.len());
+    for (id, parent) in &edges {
+        parents.push((topic_id(id)?, parent.as_deref().map(topic_id).transpose()?));
+    }
+    Ok(TopicTree::new(parents))
 }
 
 pub(super) fn subtopics(conn: &Connection, id: TopicId) -> Result<Vec<TopicId>, TopicError> {

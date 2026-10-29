@@ -268,11 +268,6 @@ impl Topic {
     }
 
     #[must_use]
-    pub fn root(&self) -> TopicId {
-        self.parent.unwrap_or(self.id)
-    }
-
-    #[must_use]
     pub fn is_category(&self) -> bool {
         self.parent.is_none()
             && Category::iter().any(|category| fold(&category.to_string()) == self.slug.as_str())

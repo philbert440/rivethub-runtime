@@ -63,7 +63,7 @@ impl TopicStore for SqliteStore {
         self.topics("topic create", move |conn| {
             if let Some(parent) = topic.parent {
                 let parent = rows::by_id(conn, parent)?.ok_or_else(|| not_found(parent))?;
-                check_parent(topic.id, false, &parent)?;
+                check_parent(topic.id, &parent, &rows::tree(conn)?)?;
             }
             write::claim_names(conn, &topic)?;
             write::insert(conn, &topic)?;
@@ -87,7 +87,7 @@ impl TopicStore for SqliteStore {
             let updated = current.apply(changes, now)?;
             if let Some(parent) = updated.parent {
                 let parent = rows::by_id(conn, parent)?.ok_or_else(|| not_found(parent))?;
-                check_parent(id, !rows::subtopics(conn, id)?.is_empty(), &parent)?;
+                check_parent(id, &parent, &rows::tree(conn)?)?;
             }
             write::claim_names(conn, &updated)?;
             write::row(conn, &updated)?;
@@ -111,7 +111,7 @@ impl TopicStore for SqliteStore {
         self.topics("topic merge", move |conn| {
             let from = rows::by_id(conn, source)?.ok_or_else(|| not_found(source))?;
             let target = rows::by_id(conn, into)?.ok_or_else(|| not_found(into))?;
-            let plan = MergePlan::new(&from, &target, &rows::subtopics(conn, source)?)?;
+            let plan = MergePlan::new(&from, &target, &rows::tree(conn)?)?;
             let syncs = SyncTopicPage::after_merge(&from, &target, write::page_of(conn, source)?);
             let merged = plan.merged(target, now);
             write::fold_into(conn, &plan, &merged)?;

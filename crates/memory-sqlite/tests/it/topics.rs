@@ -77,9 +77,9 @@ async fn slugs_and_aliases_are_unique_across_topics() -> TestResult {
 }
 
 #[tokio::test]
-async fn sub_topics_stay_one_level_deep() -> TestResult {
+async fn topics_nest_up_to_four_levels() -> TestResult {
     let (_directory, store) = store()?;
-    topics::sub_topics_stay_one_level_deep(&store).await?;
+    topics::topics_nest_up_to_four_levels(&store).await?;
     Ok(())
 }
 

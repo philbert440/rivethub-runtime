@@ -18,7 +18,9 @@ use super::TopicError;
 use super::TopicId;
 use super::TopicKey;
 use super::TopicStore;
+use super::TopicTree;
 use super::render_decisions;
+use super::root_of;
 use crate::BoxError;
 use crate::memory::MemoryStore;
 use crate::memory::MemoryStoreError;
@@ -161,8 +163,8 @@ impl SyncTopicPage {
     #[must_use]
     pub fn after_update(before: &Topic, after: &Topic) -> Vec<Self> {
         let mut syncs = vec![Self::topic(after.id)];
-        if before.root() != after.root() && before.root() != after.id {
-            syncs.push(Self::topic(before.root()));
+        if let Some(left) = before.parent.filter(|left| after.parent != Some(*left)) {
+            syncs.push(Self::topic(left));
         }
         syncs
     }
@@ -173,8 +175,11 @@ impl SyncTopicPage {
             topic_id: Some(into.id),
             fold: page.into_iter().collect(),
         }];
-        if source.root() != source.id && source.root() != into.root() {
-            syncs.push(Self::topic(source.root()));
+        if let Some(left) = source
+            .parent
+            .filter(|left| *left != into.id && into.parent != Some(*left))
+        {
+            syncs.push(Self::topic(left));
         }
         syncs
     }
@@ -214,7 +219,8 @@ pub async fn bound_page(
     memory: &dyn MemoryStore,
     topic: &Topic,
 ) -> Result<Option<WikiPageResponse>, TopicPageError> {
-    let Some(slug) = topics.page_slug(topic.root()).await? else {
+    let root = root_of(topics, topic).await?;
+    let Some(slug) = topics.page_slug(root.id).await? else {
         return Ok(None);
     };
     Ok(match memory.wiki_page(&slug).await? {
@@ -292,16 +298,7 @@ impl PageSync<'_> {
     }
 
     async fn owner(&self, topic: &Topic) -> Result<Topic, TopicError> {
-        match topic.parent {
-            None => Ok(topic.clone()),
-            Some(parent) => self
-                .topics
-                .find(&TopicKey::Id(parent))
-                .await?
-                .ok_or_else(|| TopicError::NotFound {
-                    key: parent.to_string(),
-                }),
-        }
+        root_of(self.topics, topic).await
     }
 
     async fn ensure(&self, root: &Topic) -> Result<WikiSlug, TopicPageError> {
@@ -400,7 +397,7 @@ impl PageSync<'_> {
                         None => owned.push(section.clone()),
                     }
                 }
-                Some(_) => match self.landing(root, section).await? {
+                Some(_) => match self.landing(root, &subtopics, section).await? {
                     Landing::Article => into_article.push(section.body.clone()),
                     Landing::Section(id) => into_sections.push((id, section.body.clone())),
                     Landing::Elsewhere(target) => moved.push((target, section.body.clone())),
@@ -442,13 +439,17 @@ impl PageSync<'_> {
     }
 
     async fn subtopics(&self, root: TopicId) -> Result<Vec<Topic>, TopicError> {
-        let mut subtopics: Vec<Topic> = self
+        let topics: Vec<Topic> = self
             .topics
             .list()
             .await?
             .into_iter()
             .map(|listing| listing.topic)
-            .filter(|topic| topic.parent == Some(root))
+            .collect();
+        let tree = TopicTree::of(&topics);
+        let mut subtopics: Vec<Topic> = topics
+            .into_iter()
+            .filter(|topic| topic.id != root && tree.within(topic.id, root))
             .collect();
         subtopics.sort_by(|left, right| {
             left.created_at
@@ -458,7 +459,12 @@ impl PageSync<'_> {
         Ok(subtopics)
     }
 
-    async fn landing(&self, root: &Topic, section: &PageSection) -> Result<Landing, TopicError> {
+    async fn landing(
+        &self,
+        root: &Topic,
+        subtopics: &[Topic],
+        section: &PageSection,
+    ) -> Result<Landing, TopicError> {
         let found = match section.topic {
             Some(id) => self.topics.find(&TopicKey::Id(id)).await?,
             None => None,
@@ -473,7 +479,9 @@ impl PageSync<'_> {
         Ok(match target {
             None => Landing::Plain,
             Some(topic) if topic.id == root.id => Landing::Article,
-            Some(topic) if topic.parent == Some(root.id) => Landing::Section(topic.id),
+            Some(topic) if subtopics.iter().any(|sub| sub.id == topic.id) => {
+                Landing::Section(topic.id)
+            }
             Some(topic) => Landing::Elsewhere(topic),
         })
     }
