@@ -472,6 +472,7 @@ pub async fn suggestions_hold_until_the_session_is_placed(store: &dyn TopicStore
         session: session.clone(),
         name: TopicName::new("Mesh retries")?,
         topic: Some(mesh.id),
+        parent: Some(mesh.id),
     };
     store.suggest(unsure.clone()).await?;
     same(
@@ -481,16 +482,17 @@ pub async fn suggestions_hold_until_the_session_is_placed(store: &dyn TopicStore
     )?;
     store.merge(mesh.id, gateway.id, at(2)).await?;
     same(
-        "a merge moves the unsure topic",
+        "a merge moves the unsure topic and the parent",
         store
             .suggestion(&session)
             .await?
-            .and_then(|suggestion| suggestion.topic),
-        Some(gateway.id),
+            .map(|suggestion| (suggestion.topic, suggestion.parent)),
+        Some((Some(gateway.id), Some(gateway.id))),
     )?;
     let renamed = Suggestion {
         name: TopicName::new("Retry budget")?,
         topic: None,
+        parent: None,
         ..unsure
     };
     store.suggest(renamed.clone()).await?;

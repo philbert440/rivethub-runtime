@@ -1,4 +1,5 @@
 mod decisions;
+mod filing;
 mod history;
 mod rows;
 mod startup;
@@ -326,7 +327,8 @@ impl TopicStore for PostgresMemory {
     async fn suggestion(&self, session: &SessionId) -> Result<Option<Suggestion>, TopicError> {
         sqlx::query_as!(
             SuggestionRow,
-            "SELECT session_id, name, topic_id FROM rh_session_suggestions WHERE session_id = $1",
+            "SELECT session_id, name, topic_id, parent_id
+               FROM rh_session_suggestions WHERE session_id = $1",
             session.as_str()
         )
         .fetch_optional(&self.pool)

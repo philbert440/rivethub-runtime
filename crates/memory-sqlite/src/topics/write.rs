@@ -144,6 +144,7 @@ pub(super) fn fold_into(
         params![source, into],
     )
     .map_err(failed("topic merge suggestions"))?;
+    super::filing::fold_into(conn, &source, &into)?;
     conn.execute(
         "UPDATE rh_topic_decisions SET topic_id = ?2 WHERE topic_id = ?1",
         params![source, into],
@@ -255,14 +256,16 @@ pub(super) fn placement(conn: &Connection, placement: &Placement) -> Result<(), 
 
 pub(super) fn suggestion(conn: &Connection, suggestion: &Suggestion) -> Result<(), TopicError> {
     conn.execute(
-        "INSERT INTO rh_session_suggestions (session_id, name, topic_id)
-         VALUES (?1, ?2, ?3)
+        "INSERT INTO rh_session_suggestions (session_id, name, topic_id, parent_id)
+         VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT (session_id) DO UPDATE SET name = excluded.name,
-                                                topic_id = excluded.topic_id",
+                                                topic_id = excluded.topic_id,
+                                                parent_id = excluded.parent_id",
         params![
             suggestion.session.as_str(),
             suggestion.name.as_str(),
             suggestion.topic.map(|topic| topic.to_string()),
+            suggestion.parent.map(|topic| topic.to_string()),
         ],
     )
     .map_err(failed("session suggestion write"))?;

@@ -27,7 +27,7 @@ use crate::time;
 const TOPIC_COLUMNS: &str = "t.id, t.slug, t.name, t.parent_id, t.directory_kind, \
      t.directory_node, t.directory_path, t.created_at, t.updated_at, t.closed_at";
 
-const PLACEMENT_COLUMNS: &str = "p.session_id, p.topic_id, p.placed_by, p.placed_at";
+pub(super) const PLACEMENT_COLUMNS: &str = "p.session_id, p.topic_id, p.placed_by, p.placed_at";
 
 pub(super) struct TopicRow {
     id: String,
@@ -87,7 +87,7 @@ fn read_topic(row: &rusqlite::Row<'_>) -> rusqlite::Result<TopicRow> {
     })
 }
 
-fn read_placement(row: &rusqlite::Row<'_>) -> rusqlite::Result<PlacementRow> {
+pub(super) fn read_placement(row: &rusqlite::Row<'_>) -> rusqlite::Result<PlacementRow> {
     Ok(PlacementRow {
         session_id: row.get(0)?,
         topic_id: row.get(1)?,
@@ -279,24 +279,27 @@ pub(super) fn suggestion_of(
 ) -> Result<Option<Suggestion>, TopicError> {
     let row = conn
         .query_row(
-            "SELECT session_id, name, topic_id FROM rh_session_suggestions WHERE session_id = ?1",
+            "SELECT session_id, name, topic_id, parent_id
+               FROM rh_session_suggestions WHERE session_id = ?1",
             params![session.as_str()],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
                 ))
             },
         )
         .optional()
         .map_err(failed("session suggestion read"))?;
-    row.map(|(session_id, name, topic)| {
+    row.map(|(session_id, name, topic, parent)| {
         Ok(Suggestion {
             session: SessionId::try_from(session_id)
                 .map_err(|error| stored("session_id")(Box::new(error)))?,
             name: TopicName::new(&name)?,
             topic: topic.as_deref().map(topic_id).transpose()?,
+            parent: parent.as_deref().map(topic_id).transpose()?,
         })
     })
     .transpose()

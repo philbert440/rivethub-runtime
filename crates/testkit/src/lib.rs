@@ -3,6 +3,7 @@ pub mod capture_pg;
 pub mod cases;
 pub mod decisions;
 pub mod fakes;
+pub mod filing;
 pub mod graphile_schema;
 pub mod http;
 pub mod json;

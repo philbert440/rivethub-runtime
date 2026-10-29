@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO rh_session_suggestions (session_id, name, topic_id, parent_id)\n         VALUES ($1, $2, $3, $4)\n         ON CONFLICT (session_id) DO UPDATE SET name = EXCLUDED.name,\n                                                topic_id = EXCLUDED.topic_id,\n                                                parent_id = EXCLUDED.parent_id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ebfec88e01b2d020ecfeb71a4c78692958d3fc42ee97d1218a7e6c81877a204a"
+}

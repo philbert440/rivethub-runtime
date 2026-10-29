@@ -12,6 +12,13 @@ pub enum PlacementSource {
     Categorizer,
 }
 
+impl PlacementSource {
+    #[must_use]
+    pub fn keeps(self, incoming: Self) -> bool {
+        self == Self::You && incoming == Self::Categorizer
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Placement {
     pub session: SessionId,
@@ -30,12 +37,7 @@ impl Placement {
     #[must_use]
     pub fn admit(self, existing: Option<Self>) -> PlacementOutcome {
         match existing {
-            Some(current)
-                if current.by == PlacementSource::You
-                    && self.by == PlacementSource::Categorizer =>
-            {
-                PlacementOutcome::Kept(current)
-            }
+            Some(current) if current.by.keeps(self.by) => PlacementOutcome::Kept(current),
             Some(_) | None => PlacementOutcome::Placed(self),
         }
     }
@@ -74,4 +76,5 @@ pub struct Suggestion {
     pub session: SessionId,
     pub name: TopicName,
     pub topic: Option<TopicId>,
+    pub parent: Option<TopicId>,
 }

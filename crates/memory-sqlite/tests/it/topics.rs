@@ -221,3 +221,10 @@ async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound() -> T
         .await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn conversations_file_with_titles_and_corrections() -> TestResult {
+    let (_directory, store) = store()?;
+    testkit::filing::conversations_file_with_titles_and_corrections(&store).await?;
+    Ok(())
+}

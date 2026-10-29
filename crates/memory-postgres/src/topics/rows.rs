@@ -50,6 +50,7 @@ pub(super) struct SuggestionRow {
     pub(super) session_id: String,
     pub(super) name: String,
     pub(super) topic_id: Option<Uuid>,
+    pub(super) parent_id: Option<Uuid>,
 }
 
 pub(super) struct PlacedRow {
@@ -116,6 +117,7 @@ pub(super) fn suggestion(row: SuggestionRow) -> Result<Suggestion, TopicError> {
             .map_err(|error| stored("session_id")(Box::new(error)))?,
         name: TopicName::new(&row.name)?,
         topic: row.topic_id.map(TopicId::from_uuid),
+        parent: row.parent_id.map(TopicId::from_uuid),
     })
 }
 

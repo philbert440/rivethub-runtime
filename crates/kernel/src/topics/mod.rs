@@ -17,9 +17,7 @@ use wire::session_id::SessionId;
 
 use crate::BoxError;
 
-pub use categorize::FirstLeaf;
-pub use categorize::Lineage;
-pub use categorize::Verdict;
+pub use categorize::mentioned;
 pub use decision::DECISIONS_HEADING;
 pub use decision::Decision;
 pub use decision::DecisionId;
@@ -77,6 +75,7 @@ pub use values::TopicId;
 pub use values::TopicListing;
 pub use values::TopicName;
 pub use values::distinct_aliases;
+pub(crate) use values::fold;
 
 #[derive(Debug, Error)]
 pub enum TopicError {

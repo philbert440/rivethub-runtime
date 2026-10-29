@@ -219,6 +219,7 @@ pub(super) async fn fold_into(
     .execute(&mut *conn)
     .await
     .map_err(failed("topic merge suggestions"))?;
+    super::filing::fold_into(conn, source, into).await?;
     sqlx::query!(
         "UPDATE rh_topic_decisions SET topic_id = $2 WHERE topic_id = $1",
         source,
@@ -370,13 +371,15 @@ pub(super) async fn suggestion(
     suggestion: &Suggestion,
 ) -> Result<(), TopicError> {
     sqlx::query!(
-        "INSERT INTO rh_session_suggestions (session_id, name, topic_id)
-         VALUES ($1, $2, $3)
+        "INSERT INTO rh_session_suggestions (session_id, name, topic_id, parent_id)
+         VALUES ($1, $2, $3, $4)
          ON CONFLICT (session_id) DO UPDATE SET name = EXCLUDED.name,
-                                                topic_id = EXCLUDED.topic_id",
+                                                topic_id = EXCLUDED.topic_id,
+                                                parent_id = EXCLUDED.parent_id",
         suggestion.session.as_str(),
         suggestion.name.as_str(),
-        suggestion.topic.map(TopicId::uuid)
+        suggestion.topic.map(TopicId::uuid),
+        suggestion.parent.map(TopicId::uuid)
     )
     .execute(&mut *conn)
     .await

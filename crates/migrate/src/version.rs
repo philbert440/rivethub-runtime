@@ -21,6 +21,7 @@ pub enum SchemaVersion {
     V17 = 17,
     V18 = 18,
     V19 = 19,
+    V21 = 21,
 }
 
 impl SchemaVersion {
@@ -50,7 +51,8 @@ impl SchemaVersion {
             Self::V16 => Some(Self::V17),
             Self::V17 => Some(Self::V18),
             Self::V18 => Some(Self::V19),
-            Self::V19 => None,
+            Self::V19 => Some(Self::V21),
+            Self::V21 => None,
         }
     }
 }
@@ -79,6 +81,7 @@ impl TryFrom<i64> for SchemaVersion {
             17 => Ok(Self::V17),
             18 => Ok(Self::V18),
             19 => Ok(Self::V19),
+            21 => Ok(Self::V21),
             other => Err(Error::Unsupported { found: other }),
         }
     }
@@ -89,9 +92,13 @@ mod tests {
     use super::SchemaVersion;
     use crate::error::Error;
 
+    const LADDER: [i64; 20] = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21,
+    ];
+
     #[test]
     fn every_recorded_user_version_maps_to_a_schema_version() {
-        for found in 1..=19 {
+        for found in LADDER {
             let version = SchemaVersion::try_from(found).unwrap_or_else(|error| {
                 panic!("user_version {found} must map to a schema version: {error}")
             });
@@ -101,7 +108,7 @@ mod tests {
 
     #[test]
     fn versions_outside_the_ladder_are_typed_errors() {
-        for found in [-3, 0, 20, 99] {
+        for found in [-3, 0, 20, 22, 99] {
             match SchemaVersion::try_from(found) {
                 Err(Error::Unsupported { found: reported }) => {
                     assert_eq!(reported, found);
@@ -112,15 +119,15 @@ mod tests {
     }
 
     #[test]
-    fn the_ladder_runs_from_any_version_to_the_nineteenth() {
-        for from in 1..=19 {
+    fn the_ladder_runs_from_any_version_to_the_newest() {
+        for (index, from) in LADDER.into_iter().enumerate() {
             let mut current = SchemaVersion::try_from(from).unwrap();
             let mut visited = Vec::new();
             while let Some(next) = current.next() {
                 visited.push(next.number());
                 current = next;
             }
-            let expected: Vec<i64> = (from + 1..=19).collect();
+            let expected: Vec<i64> = LADDER.get(index + 1..).unwrap_or_default().to_vec();
             assert_eq!(visited, expected, "ladder from user_version {from}");
         }
     }

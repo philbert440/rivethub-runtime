@@ -53,6 +53,7 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         }),
         SchemaVersion::V18 => in_transaction(conn, to, unbind_topic_pages_on_delete),
         SchemaVersion::V19 => in_transaction(conn, to, add_done_state),
+        SchemaVersion::V21 => in_transaction(conn, to, add_conversation_filing),
     }
 }
 
@@ -145,6 +146,14 @@ fn add_done_state(tx: &Transaction<'_>) -> rusqlite::Result<()> {
         tx.execute_batch(include_str!("schema/topic_closed_v19.sql"))?;
     }
     tx.execute_batch(include_str!("schema/session_history_v19.sql"))
+}
+
+fn add_conversation_filing(tx: &Transaction<'_>) -> rusqlite::Result<()> {
+    tx.execute_batch(include_str!("schema/conversation_filing_v21.sql"))?;
+    if column_present(tx, "rh_session_suggestions", "parent_id")? {
+        return Ok(());
+    }
+    tx.execute_batch(include_str!("schema/suggestion_parent_v21.sql"))
 }
 
 fn unbind_topic_pages_on_delete(tx: &Transaction<'_>) -> rusqlite::Result<()> {
