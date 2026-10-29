@@ -463,6 +463,7 @@ async fn omp_reader_reads_a_refused_reply_as_its_error() -> TestResult {
             format!(r#"{{"type":"session","id":"{U1}","timestamp":"2026-10-29T06:31:21.000Z"}}"#),
             said(r#"{"role":"user","content":[{"type":"text","text":"hi"}]}"#),
             said(r#"{"role":"assistant","content":[],"stopReason":"error","errorMessage":"403 out of credits"}"#),
+            said(r#"{"role":"assistant","content":[{"type":"text","text":"half"}],"stopReason":"error","errorMessage":"reset"}"#),
         ]
         .join("\n"),
     )?;
@@ -478,8 +479,32 @@ async fn omp_reader_reads_a_refused_reply_as_its_error() -> TestResult {
             .iter()
             .map(|turn| turn.content.as_str())
             .collect::<Vec<_>>(),
-        ["hi", "403 out of credits"]
+        ["hi", "403 out of credits", "half\n\nreset"]
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn omp_lists_a_session_opened_with_a_long_prompt_and_keeps_its_early_model() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let long = "x".repeat(70_000);
+    write(
+        dir.path(),
+        &format!("sessions/-work/p_{U1}.jsonl"),
+        &[
+            omp_title(""),
+            r#"{"type":"model_change","model":"acme/early"}"#.to_owned(),
+            omp_user(&long),
+            omp_user("short"),
+        ]
+        .join("\n"),
+    )?;
+    let rows = only(&omp_lister(dir.path()), HarnessId::Omp).await;
+    let brief: Vec<_> = rows
+        .iter()
+        .map(|row| (row.id.as_str(), row.model.as_deref()))
+        .collect();
+    assert_eq!(brief, vec![(U1, Some("acme/early"))]);
     Ok(())
 }
 
