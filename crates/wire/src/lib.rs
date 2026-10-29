@@ -10,6 +10,7 @@ pub mod memory;
 pub mod mesh;
 pub mod mesh_channel;
 pub mod message;
+pub mod plugin;
 pub mod session_id;
 pub mod stream;
 pub mod task;

@@ -13664,6 +13664,3738 @@
         "relevanceScore",
         "createdAt"
       ]
+    },
+    "PluginId": {
+      "type": "string",
+      "pattern": "^[a-z](-?[a-z0-9])+$",
+      "maxLength": 24
+    },
+    "ToolName": {
+      "type": "string",
+      "pattern": "^[a-z](_?[a-z0-9])*$",
+      "maxLength": 24
+    },
+    "RouteName": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "maxLength": 64
+    },
+    "PluginManifest": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manifest": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "id": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run": {
+          "$ref": "#/$defs/PluginRun"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Permission"
+          }
+        },
+        "settings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewField"
+          }
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginTool"
+          }
+        },
+        "contributes": {
+          "$ref": "#/$defs/PluginContributions",
+          "default": {}
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginJob"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginEventKind"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "manifest",
+        "id",
+        "name",
+        "version",
+        "description",
+        "run"
+      ]
+    },
+    "PluginRun": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "readyTimeoutMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ]
+    },
+    "Permission": {
+      "type": "string",
+      "enum": [
+        "memory.read",
+        "memory.write",
+        "sessions.read",
+        "sessions.control",
+        "topics.read",
+        "topics.write",
+        "tasks.read",
+        "tasks.delegate",
+        "agents.read",
+        "notifications.send",
+        "host.files.read",
+        "host.files.write",
+        "host.network",
+        "host.exec"
+      ]
+    },
+    "ViewField": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "input": {
+          "$ref": "#/$defs/ViewInput"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "help": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "placeholder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "label",
+        "input"
+      ]
+    },
+    "ViewInput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "text"
+            },
+            "multiline": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "secret"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "number"
+            },
+            "min": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "max": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "step": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "toggle"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "select"
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewOption"
+              }
+            },
+            "multiple": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "options"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "multiple": {
+              "type": "boolean"
+            },
+            "accept": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "ViewOption": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "label"
+      ]
+    },
+    "ViewValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewFile"
+          }
+        }
+      ]
+    },
+    "ViewFile": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "mimeType": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "mimeType",
+        "data"
+      ]
+    },
+    "PluginTool": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/ToolName"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "hints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginToolHint"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description",
+        "inputSchema"
+      ]
+    },
+    "PluginToolHint": {
+      "type": "string",
+      "enum": [
+        "readOnly",
+        "destructive",
+        "idempotent",
+        "openWorld"
+      ]
+    },
+    "PluginContributions": {
+      "type": "object",
+      "properties": {
+        "pages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginPage"
+          }
+        },
+        "topicCards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginTopicCard"
+          }
+        },
+        "sessionActions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginSessionAction"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "PluginPage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "title": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "view": {
+          "$ref": "#/$defs/RouteName"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "view"
+      ]
+    },
+    "PluginTopicCard": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "title": {
+          "type": "string"
+        },
+        "view": {
+          "$ref": "#/$defs/RouteName"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "view"
+      ]
+    },
+    "PluginSessionAction": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "title": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "action": {
+          "$ref": "#/$defs/ViewAction"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "action"
+      ]
+    },
+    "ViewAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "call"
+            },
+            "action": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "params": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "action"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "navigate"
+            },
+            "view": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "params": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "replace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "view"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "dialog"
+            },
+            "view": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "params": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "view"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "back"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "refresh"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "toast"
+            },
+            "text": {
+              "type": "string"
+            },
+            "tone": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewTone"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "copy"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "openSession"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "openTopic"
+            },
+            "topicId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "topicId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "openUrl"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "url"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "download"
+            },
+            "path": {
+              "type": "string"
+            },
+            "filename": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "path"
+          ]
+        }
+      ]
+    },
+    "ViewTone": {
+      "type": "string",
+      "enum": [
+        "neutral",
+        "info",
+        "success",
+        "warning",
+        "danger"
+      ]
+    },
+    "PluginJob": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "title": {
+          "type": "string"
+        },
+        "schedule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeoutMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title"
+      ]
+    },
+    "PluginEventKind": {
+      "type": "string",
+      "enum": [
+        "session.started",
+        "session.idle",
+        "session.ended",
+        "session.placed",
+        "summary.written",
+        "task.done"
+      ]
+    },
+    "View": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "toolbar": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewButton"
+          }
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewBlock"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "blocks"
+      ]
+    },
+    "ViewButton": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "style": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewButtonStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action": {
+          "$ref": "#/$defs/ViewAction"
+        },
+        "confirm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewConfirm"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disabled": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "action"
+      ]
+    },
+    "ViewButtonStyle": {
+      "type": "string",
+      "enum": [
+        "primary",
+        "secondary",
+        "danger"
+      ]
+    },
+    "ViewConfirm": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "confirmLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "text"
+      ]
+    },
+    "ViewBlock": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "section"
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "subtitle": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "actions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewButton"
+              }
+            },
+            "blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewBlock"
+              }
+            },
+            "collapsed": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "blocks"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "split"
+            },
+            "primary": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewBlock"
+              }
+            },
+            "secondary": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewBlock"
+              }
+            },
+            "ratio": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "primary",
+            "secondary"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tabs"
+            },
+            "tabs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewTab"
+              }
+            },
+            "selected": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RouteName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "tabs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "text"
+            },
+            "text": {
+              "type": "string"
+            },
+            "tone": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewTone"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "monospace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "markdown"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "code"
+            },
+            "text": {
+              "type": "string"
+            },
+            "language": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "follow": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "image"
+            },
+            "path": {
+              "type": "string"
+            },
+            "alt": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "path",
+            "alt"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "properties"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewProperty"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "progress"
+            },
+            "value": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "notice"
+            },
+            "tone": {
+              "$ref": "#/$defs/ViewTone"
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "actions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewButton"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "tone",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "list"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewListItem"
+              }
+            },
+            "empty": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewEmpty"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "table"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewColumn"
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewRow"
+              }
+            },
+            "empty": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewEmpty"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "columns",
+            "rows"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "breadcrumbs"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewCrumb"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "actions"
+            },
+            "buttons": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewButton"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "buttons"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "form"
+            },
+            "id": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewField"
+              }
+            },
+            "buttons": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewButton"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "fields",
+            "buttons"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "canvas"
+            },
+            "id": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "scene": {
+              "$ref": "#/$defs/CanvasScene"
+            },
+            "height": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "readOnly": {
+              "type": "boolean"
+            },
+            "menu": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasMenuItem"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "scene"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "webPanel"
+            },
+            "id": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "entry": {
+              "type": "string"
+            },
+            "height": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "params": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "entry"
+          ]
+        }
+      ]
+    },
+    "ViewTab": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "title": {
+          "type": "string"
+        },
+        "badge": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewBlock"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "blocks"
+      ]
+    },
+    "ViewProperty": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/ViewInline"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "value"
+      ]
+    },
+    "ViewInline": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "text"
+            },
+            "text": {
+              "type": "string"
+            },
+            "tone": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewTone"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "icon": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "monospace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "badge"
+            },
+            "text": {
+              "type": "string"
+            },
+            "tone": {
+              "$ref": "#/$defs/ViewTone"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text",
+            "tone"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "time"
+            },
+            "at": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "style": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewTimeStyle"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "duration"
+            },
+            "ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "ms"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "bytes"
+            },
+            "value": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ]
+        }
+      ]
+    },
+    "ViewTimeStyle": {
+      "type": "string",
+      "enum": [
+        "relative",
+        "absolute"
+      ]
+    },
+    "ViewListItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trailing": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewInline"
+          }
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "menu": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewButton"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title"
+      ]
+    },
+    "ViewEmpty": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "button": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewButton"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "ViewColumn": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "align": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAlign"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sortable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "ViewAlign": {
+      "type": "string",
+      "enum": [
+        "start",
+        "center",
+        "end"
+      ]
+    },
+    "ViewRow": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewInline"
+          }
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "menu": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewButton"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "cells"
+      ]
+    },
+    "ViewCrumb": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ]
+    },
+    "CanvasScene": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CanvasItem"
+          }
+        },
+        "grid": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanvasGrid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "viewport": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanvasViewport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ]
+    },
+    "CanvasItem": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "node"
+            },
+            "id": {
+              "type": "string"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "width": {
+              "type": "number",
+              "format": "double"
+            },
+            "height": {
+              "type": "number",
+              "format": "double"
+            },
+            "shapes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasShape"
+              }
+            },
+            "anchors": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasAnchor"
+              }
+            },
+            "tooltip": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "menu": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasMenuItem"
+              }
+            },
+            "locked": {
+              "type": "boolean"
+            },
+            "decorative": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "x",
+            "y",
+            "width",
+            "height",
+            "shapes"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "connector"
+            },
+            "id": {
+              "type": "string"
+            },
+            "from": {
+              "$ref": "#/$defs/CanvasEnd"
+            },
+            "to": {
+              "$ref": "#/$defs/CanvasEnd"
+            },
+            "route": {
+              "$ref": "#/$defs/CanvasRoute"
+            },
+            "stroke": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "strokeWidth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "dashed": {
+              "type": "boolean"
+            },
+            "arrow": {
+              "$ref": "#/$defs/CanvasArrow"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tooltip": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "menu": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasMenuItem"
+              }
+            },
+            "decorative": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "from",
+            "to",
+            "route",
+            "arrow"
+          ]
+        }
+      ]
+    },
+    "CanvasShape": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "rect"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "width": {
+              "type": "number",
+              "format": "double"
+            },
+            "height": {
+              "type": "number",
+              "format": "double"
+            },
+            "radius": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "fill": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stroke": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "strokeWidth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "x",
+            "y",
+            "width",
+            "height"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ellipse"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "width": {
+              "type": "number",
+              "format": "double"
+            },
+            "height": {
+              "type": "number",
+              "format": "double"
+            },
+            "fill": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stroke": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "strokeWidth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "x",
+            "y",
+            "width",
+            "height"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "text"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "text": {
+              "type": "string"
+            },
+            "size": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "weight": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CanvasWeight"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "color": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "align": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewAlign"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxWidth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "monospace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "x",
+            "y",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "path"
+            },
+            "d": {
+              "type": "string"
+            },
+            "fill": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stroke": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "strokeWidth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "dashed": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "d"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "icon"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "name": {
+              "type": "string"
+            },
+            "size": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "color": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "x",
+            "y",
+            "name"
+          ]
+        }
+      ]
+    },
+    "ColorRole": {
+      "type": "string",
+      "enum": [
+        "surface",
+        "surfaceContainer",
+        "surfaceContainerHigh",
+        "primary",
+        "primaryContainer",
+        "onPrimary",
+        "onPrimaryContainer",
+        "secondaryContainer",
+        "onSurface",
+        "onSurfaceVariant",
+        "outline",
+        "outlineVariant",
+        "info",
+        "success",
+        "warning",
+        "danger",
+        "category1",
+        "category2",
+        "category3",
+        "category4",
+        "category5",
+        "category6"
+      ]
+    },
+    "CanvasWeight": {
+      "type": "string",
+      "enum": [
+        "regular",
+        "medium",
+        "bold"
+      ]
+    },
+    "CanvasAnchor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "side": {
+          "$ref": "#/$defs/CanvasSide"
+        },
+        "direction": {
+          "$ref": "#/$defs/CanvasDirection"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "x",
+        "y",
+        "side",
+        "direction"
+      ]
+    },
+    "CanvasSide": {
+      "type": "string",
+      "enum": [
+        "top",
+        "right",
+        "bottom",
+        "left"
+      ]
+    },
+    "CanvasDirection": {
+      "type": "string",
+      "enum": [
+        "in",
+        "out",
+        "both"
+      ]
+    },
+    "CanvasMenuItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "danger": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label"
+      ]
+    },
+    "CanvasEnd": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "anchor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "node"
+      ]
+    },
+    "CanvasRoute": {
+      "type": "string",
+      "enum": [
+        "straight",
+        "curved",
+        "orthogonal"
+      ]
+    },
+    "CanvasArrow": {
+      "type": "string",
+      "enum": [
+        "none",
+        "end",
+        "start",
+        "both"
+      ]
+    },
+    "CanvasGrid": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "type": "number",
+          "format": "double"
+        },
+        "snap": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "size"
+      ]
+    },
+    "CanvasViewport": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "zoom": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "zoom"
+      ]
+    },
+    "ViewRequest": {
+      "type": "object",
+      "properties": {
+        "params": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "context": {
+          "$ref": "#/$defs/ViewContext",
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "ViewContext": {
+      "type": "object",
+      "properties": {
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ViewActionRequest": {
+      "type": "object",
+      "properties": {
+        "params": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ViewValue"
+          }
+        },
+        "context": {
+          "$ref": "#/$defs/ViewContext",
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "ViewActionResult": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewAction"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "ViewActionRefusal": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message"
+      ]
+    },
+    "CanvasEventRequest": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/CanvasEvent"
+        },
+        "params": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "context": {
+          "$ref": "#/$defs/ViewContext",
+          "default": {}
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "event"
+      ]
+    },
+    "CanvasEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "selected"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moved"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasPosition"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "connected"
+            },
+            "from": {
+              "$ref": "#/$defs/CanvasEnd"
+            },
+            "to": {
+              "$ref": "#/$defs/CanvasEnd"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "deleted"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "activated"
+            },
+            "item": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "item"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "menu"
+            },
+            "item": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "choice": {
+              "type": "string"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "choice",
+            "x",
+            "y"
+          ]
+        }
+      ]
+    },
+    "CanvasPosition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "x",
+        "y"
+      ]
+    },
+    "CanvasResponse": {
+      "type": "object",
+      "properties": {
+        "ops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CanvasOp"
+          },
+          "default": []
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewAction"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "CanvasOp": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "upsert"
+            },
+            "item": {
+              "$ref": "#/$defs/CanvasItem"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "item"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "remove"
+            },
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "ids"
+          ]
+        }
+      ]
+    },
+    "PanelTheme": {
+      "type": "object",
+      "properties": {
+        "scheme": {
+          "$ref": "#/$defs/PanelScheme"
+        },
+        "colors": {
+          "type": "object",
+          "properties": {
+            "category1": {
+              "type": "string"
+            },
+            "category2": {
+              "type": "string"
+            },
+            "category3": {
+              "type": "string"
+            },
+            "category4": {
+              "type": "string"
+            },
+            "category5": {
+              "type": "string"
+            },
+            "category6": {
+              "type": "string"
+            },
+            "danger": {
+              "type": "string"
+            },
+            "info": {
+              "type": "string"
+            },
+            "onPrimary": {
+              "type": "string"
+            },
+            "onPrimaryContainer": {
+              "type": "string"
+            },
+            "onSurface": {
+              "type": "string"
+            },
+            "onSurfaceVariant": {
+              "type": "string"
+            },
+            "outline": {
+              "type": "string"
+            },
+            "outlineVariant": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "string"
+            },
+            "primaryContainer": {
+              "type": "string"
+            },
+            "secondaryContainer": {
+              "type": "string"
+            },
+            "success": {
+              "type": "string"
+            },
+            "surface": {
+              "type": "string"
+            },
+            "surfaceContainer": {
+              "type": "string"
+            },
+            "surfaceContainerHigh": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "fontMono": {
+          "type": "string"
+        },
+        "fontSize": {
+          "type": "number",
+          "format": "double"
+        },
+        "radius": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scheme",
+        "colors",
+        "fontFamily",
+        "fontMono",
+        "fontSize",
+        "radius"
+      ]
+    },
+    "PanelScheme": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark"
+      ]
+    },
+    "PanelHostMessage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "init"
+            },
+            "theme": {
+              "$ref": "#/$defs/PanelTheme"
+            },
+            "params": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "context": {
+              "$ref": "#/$defs/ViewContext"
+            },
+            "plugin": {
+              "$ref": "#/$defs/PluginId"
+            },
+            "node": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "theme",
+            "context",
+            "plugin",
+            "node"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "theme"
+            },
+            "theme": {
+              "$ref": "#/$defs/PanelTheme"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "theme"
+          ]
+        }
+      ]
+    },
+    "PanelMessage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ready"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "resize"
+            },
+            "height": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "height"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "action"
+            },
+            "action": {
+              "$ref": "#/$defs/ViewAction"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "action"
+          ]
+        }
+      ]
+    },
+    "PluginList": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginRecord"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "plugins"
+      ]
+    },
+    "PluginRecord": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "node": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "manifest": {
+          "$ref": "#/$defs/PluginManifest"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "state": {
+          "$ref": "#/$defs/PluginState"
+        },
+        "granted": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Permission"
+          }
+        },
+        "pending": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Permission"
+          }
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lastExit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginExit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restarts": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "startedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "installedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginJobStatus"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "node",
+        "path",
+        "manifest",
+        "enabled",
+        "state",
+        "granted",
+        "pending",
+        "restarts",
+        "installedAt",
+        "jobs"
+      ]
+    },
+    "PluginState": {
+      "type": "string",
+      "enum": [
+        "disabled",
+        "awaitingApproval",
+        "starting",
+        "running",
+        "backoff",
+        "invalid"
+      ]
+    },
+    "PluginExit": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "code": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "signal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "at"
+      ]
+    },
+    "PluginJobStatus": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "lastRun": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginJobRun"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    },
+    "PluginJobRun": {
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/PluginJobTrigger"
+        },
+        "startedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "finishedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginJobOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "trigger",
+        "startedAt"
+      ]
+    },
+    "PluginJobTrigger": {
+      "type": "string",
+      "enum": [
+        "schedule",
+        "manual"
+      ]
+    },
+    "PluginJobOutcome": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed"
+      ]
+    },
+    "PluginInstallRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "PluginEnableRequest": {
+      "type": "object",
+      "properties": {
+        "approve": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Permission"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "PluginLogs": {
+      "type": "object",
+      "properties": {
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginLogLine"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "lines"
+      ]
+    },
+    "PluginLogLine": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "stream": {
+          "$ref": "#/$defs/PluginLogStream"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "at",
+        "stream",
+        "text"
+      ]
+    },
+    "PluginLogStream": {
+      "type": "string",
+      "enum": [
+        "stdout",
+        "stderr",
+        "host"
+      ]
+    },
+    "PluginSettings": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ViewValue"
+          }
+        },
+        "secretsSet": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "values"
+      ]
+    },
+    "PluginSettingsUpdate": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ViewValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "values"
+      ]
+    },
+    "plugin.changed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "plugin": {
+          "$ref": "#/$defs/PluginId"
+        }
+      },
+      "required": [
+        "v",
+        "plugin"
+      ]
+    },
+    "plugin.views": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "plugin": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RouteName"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "plugin",
+        "views"
+      ]
+    },
+    "PluginEventDelivery": {
+      "type": "object",
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "missed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "event": {
+          "$ref": "#/$defs/PluginEvent"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "at",
+        "missed",
+        "event"
+      ]
+    },
+    "PluginEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "session.started"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "topicId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "session.idle"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "session.ended"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "session.placed"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "topicId": {
+              "type": "string"
+            },
+            "by": {
+              "$ref": "#/$defs/PlacedBy"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sessionId",
+            "topicId",
+            "by"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "summary.written"
+            },
+            "summaryId": {
+              "type": "string"
+            },
+            "sessionId": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SessionId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "$ref": "#/$defs/SummaryKind"
+            },
+            "level": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "summaryId",
+            "kind",
+            "level"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "task.done"
+            },
+            "taskId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/TaskStatus"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "taskId",
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "settings.changed"
+            },
+            "values": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/ViewValue"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "values"
+          ]
+        }
+      ]
+    },
+    "PluginJobRequest": {
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/PluginJobTrigger"
+        },
+        "scheduledAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "trigger"
+      ]
+    },
+    "PluginJobResult": {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "$ref": "#/$defs/PluginJobOutcome"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ]
+    },
+    "PluginToolCall": {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "arguments"
+      ]
+    },
+    "PluginToolResult": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "isError": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ]
+    },
+    "PluginSelf": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "node": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Permission"
+          }
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ViewValue"
+          }
+        },
+        "dataDir": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "node",
+        "version",
+        "permissions",
+        "settings",
+        "dataDir"
+      ]
+    },
+    "PluginViewsChanged": {
+      "type": "object",
+      "properties": {
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RouteName"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "views"
+      ]
+    },
+    "PluginNotify": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewTone"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "plugin.notification": {
+      "type": "object",
+      "properties": {
+        "plugin": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "node": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewTone"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "plugin",
+        "node",
+        "title",
+        "ts"
+      ]
     }
   }
 }

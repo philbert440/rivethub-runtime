@@ -1,0 +1,481 @@
+{
+  "lists": [
+    {
+      "node": "node-1",
+      "plugins": [
+        {
+          "id": "workflows",
+          "node": "node-1",
+          "path": "/home/user/plugins/workflows",
+          "manifest": {
+            "manifest": 1,
+            "id": "workflows",
+            "name": "Workflows",
+            "version": "0.1.0",
+            "description": "Multi-step agent workflows.",
+            "run": {
+              "command": [
+                "node",
+                "dist/main.js"
+              ]
+            },
+            "permissions": [
+              "sessions.read",
+              "sessions.control"
+            ],
+            "contributes": {
+              "pages": [
+                {
+                  "id": "workflows",
+                  "title": "Workflows",
+                  "view": "workflows"
+                }
+              ]
+            },
+            "jobs": [
+              {
+                "id": "prune-runs",
+                "title": "Prune old runs",
+                "schedule": "0 3 * * *"
+              }
+            ]
+          },
+          "enabled": true,
+          "state": "running",
+          "granted": [
+            "sessions.read",
+            "sessions.control"
+          ],
+          "pending": [],
+          "lastExit": {
+            "at": 1792999400000,
+            "code": 1
+          },
+          "restarts": 1,
+          "startedAt": 1792999410000,
+          "installedAt": 1792913600000,
+          "jobs": [
+            {
+              "id": "prune-runs",
+              "lastRun": {
+                "runId": "job-7",
+                "trigger": "schedule",
+                "startedAt": 1792996400000,
+                "finishedAt": 1792996410000,
+                "outcome": "succeeded",
+                "message": "Pruned 12 runs"
+              }
+            }
+          ]
+        },
+        {
+          "id": "workflows",
+          "node": "node-1",
+          "path": "/home/user/plugins/workflows",
+          "manifest": {
+            "manifest": 1,
+            "id": "workflows",
+            "name": "Workflows",
+            "version": "0.1.0",
+            "description": "Multi-step agent workflows.",
+            "run": {
+              "command": [
+                "node",
+                "dist/main.js"
+              ]
+            },
+            "permissions": [
+              "sessions.read",
+              "sessions.control"
+            ],
+            "contributes": {
+              "pages": [
+                {
+                  "id": "workflows",
+                  "title": "Workflows",
+                  "view": "workflows"
+                }
+              ]
+            },
+            "jobs": [
+              {
+                "id": "prune-runs",
+                "title": "Prune old runs",
+                "schedule": "0 3 * * *"
+              }
+            ]
+          },
+          "enabled": true,
+          "state": "awaitingApproval",
+          "granted": [
+            "sessions.read",
+            "sessions.control"
+          ],
+          "pending": [
+            "notifications.send"
+          ],
+          "restarts": 0,
+          "installedAt": 1792913600000,
+          "jobs": [
+            {
+              "id": "prune-runs"
+            }
+          ],
+          "error": "permissions changed; approve to restart"
+        },
+        {
+          "id": "files",
+          "node": "node-1",
+          "path": "/home/user/plugins/files",
+          "manifest": {
+            "manifest": 1,
+            "id": "files",
+            "name": "Files",
+            "version": "0.1.0",
+            "description": "Browse, preview and manage the node's files.",
+            "icon": "folder",
+            "run": {
+              "command": [
+                "./target/release/rivethub-files"
+              ]
+            },
+            "permissions": [
+              "host.files.read",
+              "host.files.write"
+            ],
+            "settings": [
+              {
+                "key": "root",
+                "label": "Root folder",
+                "input": {
+                  "type": "text"
+                },
+                "value": "/home/user",
+                "required": true
+              },
+              {
+                "key": "showHidden",
+                "label": "Show hidden files",
+                "input": {
+                  "type": "toggle"
+                }
+              }
+            ],
+            "contributes": {
+              "pages": [
+                {
+                  "id": "files",
+                  "title": "Files",
+                  "icon": "folder",
+                  "view": "browse"
+                }
+              ],
+              "sessionActions": [
+                {
+                  "id": "open-cwd",
+                  "title": "Browse this session's folder",
+                  "icon": "folder_open",
+                  "action": {
+                    "type": "call",
+                    "action": "open-session-folder"
+                  }
+                }
+              ]
+            }
+          },
+          "enabled": false,
+          "state": "disabled",
+          "granted": [],
+          "pending": [
+            "host.files.read",
+            "host.files.write"
+          ],
+          "restarts": 0,
+          "installedAt": 1793000000000,
+          "jobs": []
+        },
+        {
+          "id": "files",
+          "node": "node-1",
+          "path": "/home/user/plugins/files",
+          "manifest": {
+            "manifest": 1,
+            "id": "files",
+            "name": "Files",
+            "version": "0.1.0",
+            "description": "Browse, preview and manage the node's files.",
+            "icon": "folder",
+            "run": {
+              "command": [
+                "./target/release/rivethub-files"
+              ]
+            },
+            "permissions": [
+              "host.files.read",
+              "host.files.write"
+            ],
+            "settings": [
+              {
+                "key": "root",
+                "label": "Root folder",
+                "input": {
+                  "type": "text"
+                },
+                "value": "/home/user",
+                "required": true
+              },
+              {
+                "key": "showHidden",
+                "label": "Show hidden files",
+                "input": {
+                  "type": "toggle"
+                }
+              }
+            ],
+            "contributes": {
+              "pages": [
+                {
+                  "id": "files",
+                  "title": "Files",
+                  "icon": "folder",
+                  "view": "browse"
+                }
+              ],
+              "sessionActions": [
+                {
+                  "id": "open-cwd",
+                  "title": "Browse this session's folder",
+                  "icon": "folder_open",
+                  "action": {
+                    "type": "call",
+                    "action": "open-session-folder"
+                  }
+                }
+              ]
+            }
+          },
+          "enabled": true,
+          "state": "backoff",
+          "granted": [
+            "host.files.read",
+            "host.files.write"
+          ],
+          "pending": [],
+          "restarts": 3,
+          "installedAt": 1793000000000,
+          "jobs": [],
+          "lastExit": {
+            "at": 1793000000000,
+            "signal": "SIGSEGV"
+          },
+          "error": "exited on SIGSEGV; restarting in 8 s"
+        }
+      ]
+    },
+    {
+      "node": "node-2",
+      "plugins": []
+    }
+  ],
+  "installRequests": [
+    {
+      "path": "/home/user/plugins/workflows"
+    }
+  ],
+  "enableRequests": [
+    {
+      "approve": [
+        "host.files.read",
+        "host.files.write"
+      ]
+    },
+    {}
+  ],
+  "logs": [
+    {
+      "lines": [
+        {
+          "at": 1793000000000,
+          "stream": "host",
+          "text": "started: node dist/main.js"
+        },
+        {
+          "at": 1793000000000,
+          "stream": "stdout",
+          "text": "listening on the plug-in socket"
+        },
+        {
+          "at": 1793000000000,
+          "stream": "stderr",
+          "text": "warning: no workflows saved yet"
+        },
+        {
+          "at": 1793000000000,
+          "stream": "host",
+          "text": "refused /views/runs answer: blocks[0].rows[1].cells: invalid type"
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "values": {
+        "maxParallelRuns": 2,
+        "notifyOnFinish": true
+      },
+      "secretsSet": [
+        "webhookSecret"
+      ]
+    }
+  ],
+  "settingsUpdates": [
+    {
+      "values": {
+        "maxParallelRuns": 3,
+        "webhookSecret": null
+      }
+    }
+  ],
+  "changedNotices": [
+    {
+      "type": "plugin.changed",
+      "v": 1,
+      "plugin": "workflows"
+    }
+  ],
+  "viewsNotices": [
+    {
+      "type": "plugin.views",
+      "v": 1,
+      "plugin": "workflows",
+      "views": [
+        "run",
+        "runs"
+      ]
+    }
+  ],
+  "selves": [
+    {
+      "id": "workflows",
+      "node": "node-1",
+      "version": "0.1.0",
+      "permissions": [
+        "sessions.read",
+        "sessions.control"
+      ],
+      "settings": {
+        "maxParallelRuns": 2,
+        "webhookSecret": "example-secret"
+      },
+      "dataDir": "/home/user/.rivethub/plugins/workflows/data"
+    }
+  ],
+  "viewsChanged": [
+    {
+      "views": [
+        "run"
+      ]
+    }
+  ],
+  "notifies": [
+    {
+      "title": "Run #43 finished",
+      "text": "Release notes succeeded in 4 min.",
+      "tone": "success",
+      "action": {
+        "type": "navigate",
+        "view": "run",
+        "params": {
+          "run": "run-43"
+        }
+      }
+    },
+    {
+      "title": "Nightly review is waiting for approval"
+    }
+  ],
+  "notifications": [
+    {
+      "kind": "plugin.notification",
+      "plugin": "workflows",
+      "node": "node-1",
+      "title": "Run #43 finished",
+      "tone": "success",
+      "action": {
+        "type": "navigate",
+        "view": "run",
+        "params": {
+          "run": "run-43"
+        }
+      },
+      "ts": 1793000000000
+    }
+  ],
+  "panelHostMessages": [
+    {
+      "type": "init",
+      "theme": {
+        "scheme": "dark",
+        "colors": {
+          "surface": "#141218",
+          "onSurface": "#e6e0e9",
+          "primary": "#d0bcff",
+          "outlineVariant": "#49454f",
+          "category1": "#8ab4f8"
+        },
+        "fontFamily": "Inter",
+        "fontMono": "JetBrains Mono",
+        "fontSize": 14,
+        "radius": 12
+      },
+      "params": {
+        "run": "run-42"
+      },
+      "context": {
+        "topicId": "00000000-0000-4000-8000-000000000002"
+      },
+      "plugin": "workflows",
+      "node": "node-1"
+    },
+    {
+      "type": "theme",
+      "theme": {
+        "scheme": "light",
+        "colors": {
+          "surface": "#141218",
+          "onSurface": "#e6e0e9",
+          "primary": "#d0bcff",
+          "outlineVariant": "#49454f",
+          "category1": "#8ab4f8"
+        },
+        "fontFamily": "Inter",
+        "fontMono": "JetBrains Mono",
+        "fontSize": 14,
+        "radius": 12
+      }
+    }
+  ],
+  "panelMessages": [
+    {
+      "type": "ready"
+    },
+    {
+      "type": "resize",
+      "height": 520
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "openSession",
+        "sessionId": "claude-code:00000000-0000-4000-8000-000000000001"
+      }
+    },
+    {
+      "type": "action",
+      "action": {
+        "type": "copy",
+        "text": "run-42"
+      }
+    }
+  ]
+}
