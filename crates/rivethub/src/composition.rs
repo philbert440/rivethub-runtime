@@ -2,6 +2,7 @@ mod devices;
 mod identities;
 mod mesh;
 mod models;
+pub(crate) mod plugins;
 mod stores;
 mod terminals;
 
@@ -70,6 +71,8 @@ pub enum ComposeError {
     Pki(#[from] pki::Error),
     #[error(transparent)]
     Tasks(#[from] crate::agent::AgentError),
+    #[error(transparent)]
+    Plugins(#[from] gateway::plugins::HostError),
     #[error(transparent)]
     Memory(#[from] memory_postgres::Error),
 }
@@ -379,7 +382,7 @@ impl Composition {
             });
         }
         Ok(Self {
-            gateway: Arc::new(gateway),
+            gateway: plugins::started(gateway, env).await?,
             v1,
             audit_tasks,
             audit_cancel,

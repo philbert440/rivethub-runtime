@@ -30,7 +30,7 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 | B14 | Mesh registry, re-registration, heartbeat and agent channel; `/ca/v1/sign`, `/ca/v1/chain`, `/ca/v1/crl`; SPIFFE URI SAN identity, holder-generated P-256 keys, 7-day node/agent and 30-day device leaves, one-time enrollment through step-ca, verified-principal renewal by minting a fresh token, step-ca's X.509 CRL; the existing intermediate is bootstrapped into step-ca outside this runtime | peer nodes, holders, operators and legacy CRL readers during cutover | PKI-DESIGN addenda 2026-10-15/15b; mesh inventory unchanged | `crates/testkit/tests/fixtures/stepca/` and `crates/pki/tests` | recorded sign refusals, step-ca chain and CRL through the port, shared `rh ca token` minting, `CaError::Unavailable` when step-ca is unreachable; holder mTLS renew/revoke and local SAN-policy cases listed with reasons |
 | B15 | Hook events (names and context fields) seen by skills and the safety fence / audit log | skills, the audit log, operators | core-domain.md §1.6 | existing TypeScript test fixtures | the same hook sequence and fields for the same turn (the workflow journal belongs to the `rivethub-workflows` package, not the runtime) |
 | B16 | Logs operators read, health endpoint, `doctor` output | operators, monitoring | config-and-boot.md §3.10–§3.11; cli.md §2.5 | documented lines | same lines for the documented events |
-| B17 | Plug-in contract: the manifest `rivethub-plugin.json` (note 51); the plug-in process routes, its socket and environment (note 52); the plug-in API socket and its token (note 53); the permissions (note 54); the management routes `GET`/`POST /api/plugins`, `GET`/`DELETE /api/plugins/{id}`, `POST /api/plugins/{id}/enable`, `/disable` and `/reload`, `GET /api/plugins/{id}/logs`, `GET`/`PUT /api/plugins/{id}/settings` and `POST /api/plugins/{id}/jobs/{job}/run`, and the proxy `/api/plugins/{id}/{views,actions,canvas,tools,panel,http}/…` (note 55); event delivery and jobs (note 56); plug-in tools in `rh mcp` (note 57); views, canvases and web panels (notes 58–60); the `plugin.changed` and `plugin.views` notices on `/api/events/ws` and `plugin.notification` on `/api/notifications/ws` | plug-in processes and their TypeScript and Rust SDKs, RivetHub desktop / Android / web, `rh mcp` | notes 50–60 | none: new, with no TypeScript recording; bodies are the `wire::plugin` types in `contract/*.schema.json`, and `crates/wire/tests/fixtures/plugin/` holds a workflows and a file-browser plug-in's bodies | every fixture body parses as its `wire::plugin` type and writes back unchanged; the host's route behaviour is pinned by the gateway's tests against a fixture plug-in process |
+| B17 | Plug-in contract: the manifest `rivethub-plugin.json` (note 51); the plug-in process routes, its socket and environment (note 52); the plug-in API socket and its token (note 53); the permissions (note 54); the management routes `GET`/`POST /api/plugins`, `GET`/`DELETE /api/plugins/{id}`, `POST /api/plugins/{id}/enable`, `/disable` and `/reload`, `GET /api/plugins/{id}/logs`, `GET`/`PUT /api/plugins/{id}/settings` and `POST /api/plugins/{id}/jobs/{job}/run`, and the proxy `/api/plugins/{id}/{views,actions,canvas,tools,panel,http}/…` (note 55); event delivery and jobs (note 56); plug-in tools in `rh mcp` and the node-local tools socket `<state>/plugins/tools.sock` (note 57); views, canvases and web panels (notes 58–60); the `plugin.changed` and `plugin.views` notices on `/api/events/ws` and `plugin.notification` on `/api/notifications/ws` | plug-in processes and their TypeScript and Rust SDKs, RivetHub desktop / Android / web, `rh mcp` | notes 50–60 | none: new, with no TypeScript recording; bodies are the `wire::plugin` types in `contract/*.schema.json`, and `crates/wire/tests/fixtures/plugin/` holds a workflows and a file-browser plug-in's bodies | every fixture body parses as its `wire::plugin` type and writes back unchanged; the host's route behaviour is pinned by the gateway's tests against a fixture plug-in process |
 
 ## 2. What is explicitly NOT part of the contract
 
@@ -347,11 +347,13 @@ only that node's plug-ins, each carrying the node's name, so a client connected 
 plug-ins labelled by node and reaches each through its own node; a mesh-wide plug-in is not part of this contract. Each
 plug-in owns `<state>/plugins/<id>/` (B11): `data/` for its own files and databases (kept across reloads and disables;
 what is worth remembering goes into memory through `memory.write`), `run/` for its socket and `logs/`. The registry is
-`<state>/plugins/registry.json`, mode 0600, holding each plug-in's path, enabled flag, granted permissions, settings and
-install time. The `plugins:` key of `config.yaml` stays accepted and ignored (decision 10): plug-ins are managed only
-through B17. Trust: a plug-in runs as the node's user. Its token and permissions bound what it can do through rh; they
-are not a sandbox, and the `host.*` permissions (note 54) record what the person consented to without being enforced.
-Bodies are the `wire::plugin` types in `contract/*.schema.json`. The routes are new, with no TypeScript recording.
+`<state>/plugins/registry.json`, mode 0600, holding each plug-in's path, last valid manifest, enabled flag, granted
+permissions and install time. The `plugins:` key of `config.yaml` stays accepted and ignored (decision 10): plug-ins are
+managed only through B17. Trust: a plug-in runs as the node's user. Its token and permissions bound what it can do
+through rh; they are not a sandbox, and the `host.*` permissions (note 54) record what the person consented to without
+being enforced. Every plug-in process is started by one launch function in the gateway's `plugins` module, the place OS
+confinement will wrap. Bodies are the `wire::plugin` types in `contract/*.schema.json`. The routes are new, with no
+TypeScript recording.
 (51) Plug-in manifest (proposed 2026-10-29): a plug-in is a directory holding `rivethub-plugin.json`, a
 `wire::plugin::manifest::PluginManifest`. `manifest` is 1. `id` is 2 to 24 characters of `a-z`, `0-9` and single
 hyphens, starting with a letter and not ending with a hyphen, unique on the node; it names the plug-in's routes, folder
@@ -386,20 +388,23 @@ stopping rh sends `SIGTERM` to the process group and `SIGKILL` 5 s later. A proc
 ready in time, goes to `backoff` and is started again after 1 s, doubling to 60 s; ten minutes running resets the delay.
 Its stdout and stderr lines are kept, with rh's own lines about it (start, ready, exit status, refused answers) as
 stream `host`, in `logs/plugin.log`, rotated at 5 MiB with one previous file kept.
-(53) Plug-in API (proposed 2026-10-29): rh mints a token of 32 random bytes (base64url) at every start of a plug-in's
-process and keeps only its hash; the token stops working when the process stops. It is accepted only on the plug-in API
-socket `RIVETHUB_API_SOCKET` (`<state>/plugins/api.sock`, HTTP/1.1, one per node), never on the gateway's own listeners,
-and every request there carries `Authorization: Bearer <token>`: a missing or unknown token is `401`, and the loopback
-rule that makes a local caller the owner does not apply on this socket. The token names one plug-in; each request is
-checked against that plug-in's granted permissions when it arrives, so disabling or narrowing takes effect at once, and
-a route outside them is `403` with code `permission_required` and the permission as `detail`. The socket serves the B1
-routes each permission names (note 54) with their B1 bodies, acting as the node's owner, and three routes of its own:
+(53) Plug-in API (proposed 2026-10-29): rh mints a token of 32 random bytes (64 hex characters) at every start of a
+plug-in's process and keeps only its hash; the token stops working when the process stops. It is accepted only on the
+plug-in API socket `RIVETHUB_API_SOCKET` (`<state>/plugins/api.sock`, HTTP/1.1, one per node), never on the gateway's
+own listeners, and every request there carries `Authorization: Bearer <token>`: a missing or unknown token is `401`, and
+the loopback rule that makes a local caller the owner does not apply on this socket. The token names one plug-in; each
+request is checked against that plug-in's granted permissions when it arrives, so disabling or narrowing takes effect at
+once, and a route outside them is `403` with code `permission_required` and the permission as `detail`; a route no
+permission names (the management routes among them) is `403` with the same code and no `detail`. The socket serves the
+B1 routes each permission names (note 54) with their B1 bodies, acting as the node's owner, and three routes of its own:
 `GET /api/plugin/self` answers `PluginSelf` (id, node, version, granted permissions, settings values including secrets,
 and the data folder); `POST /api/plugin/views/changed` takes `{views}` and publishes `{type: "plugin.views", v: 1,
 plugin, views}` on every `/api/events/ws` socket, so a client showing one of those views fetches it again (clients poll
 nothing); and `POST /api/plugin/notify` (`notifications.send`) takes `{title, text?, tone?, action?}` and sends `{kind:
 "plugin.notification", plugin, node, title, text?, tone?, action?, ts}` on every `/api/notifications/ws` socket, a
-client running `action` when the person opens it. Memory a plug-in writes is attributed to agent `plugin:<id>`.
+client running `action` when the person opens it. Memory a plug-in writes through `POST /api/capture` and the
+`memory_append` tool route is attributed to agent `plugin:<id>`: rh rewrites the body's `agent` before the route sees
+it.
 (54) Plug-in permissions (proposed 2026-10-29): a plug-in asks for permissions in its manifest; a person approves them
 at enable (note 55), and any later increase is approved again before the process runs with it. rh checks the B1
 permissions on every plug-in API call: `memory.read` (`GET /api/memory/*`, `POST /api/memory/tool/memory_search`,
@@ -415,63 +420,73 @@ recorded, and not checked: the process runs as the node's user (note 50). The to
 declares need no permission; clients show them beside the permissions when asking for approval. The approval is the
 owner's `enable` call, and rh cannot tell a person from an agent using the owner's credentials, so an agent that builds
 a plug-in installs it and a client asks the person to enable it.
-(55) Plug-in routes (proposed 2026-10-29): the management routes answer only the node's owner (`403` for any other
-user); every authenticated user of the node can use a plug-in's views, actions, canvases, panels and tools, and rh names
-the caller to the plug-in in `x-rivethub-user`. `GET /api/plugins` answers `PluginList` `{node, plugins}`, and `GET
-/api/plugins/{id}` one `PluginRecord`: `{id, node, path, manifest, enabled, state, granted, pending, error?, lastExit?
-{at, code?, signal?}, restarts, startedAt?, installedAt, jobs: [{id, lastRun?}]}`, `state` one of `disabled`,
-`awaitingApproval`, `starting`, `running`, `backoff` and `invalid` (the manifest at `path` is gone or no longer valid;
-`error` says why, and `manifest` is the last valid one). `POST /api/plugins` takes `{path}`, an absolute directory on
-the node, reads and checks its manifest (note 51) and registers the plug-in in place, disabled, with every permission it
-asks for `pending`, answering `201` with the record; it runs and copies nothing, so an agent building a plug-in edits
-that directory and reloads. An invalid manifest is `400` naming the field, and an id already installed from another
-directory `409`. `POST /api/plugins/{id}/enable` takes `{approve}`, which must name exactly the `pending` permissions
-(`409` `permissions_unapproved` listing them, `400` for one not pending); it grants them, starts the process and answers
-the record. `POST …/disable` stops it and keeps its grants, settings and data. `POST …/reload` reads the manifest again:
-an invalid one is `400` and changes nothing; fewer permissions narrow the grant at once; more stop the process in
-`awaitingApproval` with the new ones `pending` until enable approves them; otherwise an enabled plug-in restarts.
-`DELETE /api/plugins/{id}` stops and unregisters it, removes its folder unless `?keepData=true`, never touches the
-source directory, and answers `204`. `GET …/logs?tail=<n>` (default 200, at most 2000) answers `{lines: [{at, stream,
-text}]}`, oldest first, `stream` one of `stdout`, `stderr` and `host`. `GET …/settings` answers `{values, secretsSet}`,
-a secret's value left out and its key in `secretsSet`; `PUT` takes `{values}`, where `null` clears a key, checks them
-against the manifest's fields (`400` naming the key), keeps them and delivers `settings.changed`. `POST
-…/jobs/{job}/run` is note 56. Every change to a record publishes `{type: "plugin.changed", v: 1, plugin}` on
-`/api/events/ws`. The proxy forwards `/api/plugins/{id}/{views,actions,canvas,tools,panel,http}/…` to the plug-in socket
-with the `/api/plugins/{id}` prefix removed, adds `x-rivethub-user`, `x-rivethub-node` and `x-rivethub-request-id`, and
-drops the caller's `Authorization` and cookies. On `views`, `actions`, `canvas` and `tools` rh parses the request and
-the answer as their `wire::plugin` types and sends the client the answer as it parsed it: an answer that does not parse
-is `502` `plugin_invalid_response` with the field path as `detail` and a `host` log line; an action's `422` reaches the
-client as it is, and any other status but `200` is `502` `plugin_error`. `panel` and `http` pass status, headers (less
-hop-by-hop headers and `Set-Cookie`) and body through, streamed. An unknown plug-in is `404`, one not running `503`
-`plugin_unavailable` (retryable), and no answer in time `504` `plugin_timeout` (30 s; 120 s for tools; 60 s to the first
-byte on `http`). Request bodies are capped at 16 MiB and parsed answers at 4 MiB.
+(55) Plug-in routes (proposed 2026-10-29): every route but listing and showing answers only the node's owner (`403`
+`owner_required` for any other user); every authenticated user of the node can list plug-ins and use their views,
+actions, canvases, panels and tools, and rh names the caller to the plug-in in `x-rivethub-user`. `GET /api/plugins`
+answers `PluginList` `{node, plugins}`, and `GET /api/plugins/{id}` one `PluginRecord`: `{id, node, path, manifest,
+enabled, state, granted, pending, error?, lastExit? {at, code?, signal?}, restarts, startedAt?, installedAt, jobs: [{id,
+lastRun?}]}`, `state` one of `disabled`, `awaitingApproval`, `starting`, `running`, `backoff` and `invalid` (the
+manifest at `path` is gone or no longer valid; `error` says why, and `manifest` is the last valid one). `POST
+/api/plugins` takes `{path}`, an absolute directory on the node, reads and checks its manifest (note 51) and registers
+the plug-in in place, disabled, with every permission it asks for `pending`, answering `201` with the record; it runs
+and copies nothing, so an agent building a plug-in edits that directory and reloads. An invalid manifest is `400` naming
+the field, and an id already installed is `409` (from the same directory the message says to reload it). `POST
+/api/plugins/{id}/enable` takes `{approve}` (`{}` when nothing is pending), which must name exactly the `pending`
+permissions (`409` `permissions_unapproved` listing them, `400` `not_pending` for one not pending); it grants them,
+starts the process and answers the record. While anything is pending, only a caller presenting a paired device
+certificate (a device certificate the node maps to its owner) can enable: a node or agent certificate, a bearer token or
+a loopback caller is `403` `device_certificate_required`. This one check sits apart from the owner check
+(`routes/plugins/approval.rs`) until the approval identity is decided. `POST …/disable` stops it and keeps its grants,
+settings and data. `POST …/reload` reads the manifest again: an invalid one is `400` and changes nothing; fewer
+permissions narrow the grant at once; more stop the process in `awaitingApproval` with the new ones `pending` until
+enable approves them; otherwise an enabled plug-in restarts. `DELETE /api/plugins/{id}` stops and unregisters it,
+removes its folder unless `?keepData=true`, never touches the source directory, and answers `204`. `GET …/logs?tail=<n>`
+(default 200, at most 2000) answers `{lines: [{at, stream, text}]}`, oldest first, `stream` one of `stdout`, `stderr`
+and `host`. `GET …/settings` answers `{values, secretsSet}`, a secret's value left out and its key in `secretsSet`;
+`PUT` takes `{values}`, where `null` clears a key, checks them against the manifest's fields (`400` naming the key),
+keeps them and delivers `settings.changed`. The settings routes are not served yet: until they are,
+`PluginSelf.settings` holds the manifest's field values. `POST …/jobs/{job}/run` is note 56. Every change to a record
+publishes `{type: "plugin.changed", v: 1, plugin}` on `/api/events/ws`. The proxy forwards
+`/api/plugins/{id}/{views,actions,canvas,tools,panel,http}/…` to the plug-in socket with the `/api/plugins/{id}` prefix
+removed, adds `x-rivethub-user`, `x-rivethub-node` and `x-rivethub-request-id`, and drops the caller's `Authorization`
+and cookies. On `views`, `actions`, `canvas` and `tools` rh parses the request and the answer as their `wire::plugin`
+types and sends the client the answer as it parsed it: an answer that does not parse is `502` `plugin_invalid_response`
+with the field path as `detail` and a `host` log line; an action's `422` reaches the client as it is, and any other
+status but `200` is `502` `plugin_error`. `panel` and `http` pass status, headers (less hop-by-hop headers and
+`Set-Cookie`) and body through, streamed. An unknown plug-in is `404`, one not running `503` `plugin_unavailable`
+(retryable), and no answer in time `504` `plugin_timeout` (30 s; 120 s for tools; 60 s to the first byte on `http`).
+Request bodies are capped at 16 MiB and parsed answers at 4 MiB.
 (56) Plug-in events and jobs (proposed 2026-10-29): a plug-in receives the event kinds its manifest lists as `POST
 /events` with a `PluginEventDelivery` `{seq, at, missed, event}`, one at a time and in order; `seq` grows by one per
 delivery to that plug-in, so a repeat can be dropped. The kinds (`event.type`) are `session.started` (`sessionId`,
-`topicId?`), `session.idle` (a turn ended and the session waits for input), `session.ended` and `session.placed`
-(`sessionId`, `topicId`, `by`), which need `sessions.read`; `summary.written` (`summaryId`, `sessionId?`, `kind`,
-`level`), which needs `memory.read`; and `task.done` (`taskId`, `status`), which needs `tasks.read`. `settings.changed`
-(`values`) goes to every plug-in whether or not it lists it. A 2xx answer acknowledges a delivery; anything else, or no
-answer in 10 s, is tried again after 1 s, doubling to 30 s, five tries in all. Each plug-in has a queue of at most 1000
-events, kept while it is starting or in backoff and dropped when it is disabled; events lost to overflow or after the
-last try are counted in the next delivery's `missed`. Delivery is at least once within one gateway process; events
-queued when rh stops are lost, so a plug-in that sees `missed` reconciles through the API. A job with a `schedule`
-(five-field cron, the node's local time) runs at each tick, and any job runs on `POST /api/plugins/{id}/jobs/{job}/run`
-(`202` with the run, `409` while one runs). A run is `POST /jobs/{job}` with `{runId, trigger, scheduledAt?}` (`trigger`
-`schedule` or `manual`), answered by `{outcome, message?}` (`succeeded` or `failed`) within `timeoutMs` (default 600000;
-else the run failed, "timed out"). A job runs once at a time, so a tick while it runs is skipped, and ticks missed while
-rh was down are not made up. Each job's last run is on the plug-in record.
+`topicId?`, absent for now), `session.idle` (a turn ended and the session waits for input), `session.ended` and
+`session.placed` (`sessionId`, `topicId`, `by`), which need `sessions.read`; `summary.written` (`summaryId`,
+`sessionId?`, `kind`, `level`), which needs `memory.read` and is not produced yet (summaries are written by the worker
+processes, which the gateway does not observe); and `task.done` (`taskId`, `status`), which needs `tasks.read`.
+`settings.changed` (`values`) goes to every plug-in whether or not it lists it. A 2xx answer acknowledges a delivery;
+anything else, or no answer in 10 s, is tried again after 1 s, doubling to 30 s, five tries in all. Each plug-in has a
+queue of at most 1000 events, kept while it is starting or in backoff and dropped when it is disabled; events lost to
+overflow or after the last try are counted in the next delivery's `missed`. Delivery is at least once within one gateway
+process; events queued when rh stops are lost, so a plug-in that sees `missed` reconciles through the API. A job with a
+`schedule` (five-field cron, the node's local time) runs at each tick, and any job runs on `POST
+/api/plugins/{id}/jobs/{job}/run` (`202` with the run, `409` while one runs). A run is `POST /jobs/{job}` with `{runId,
+trigger, scheduledAt?}` (`trigger` `schedule` or `manual`), answered by `{outcome, message?}` (`succeeded` or `failed`)
+within `timeoutMs` (default 600000; else the run failed, "timed out"). A job runs once at a time, so a tick while it
+runs is skipped, and ticks missed while rh was down are not made up. Each job's last run is on the plug-in record.
 (57) Plug-in tools in MCP (proposed 2026-10-29): `rh mcp` lists, after B7's nine and in manifest order, the tools of
 every running plug-in on its node, named `<id>__<tool>` (neither part can hold a double underscore, and the name is at
 most 50 characters so harness prefixes stay inside 64), with the manifest's `title`, `description` and `inputSchema`,
 and the `hints` as MCP `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, each `true`
-when listed and `false` otherwise). B7's nine tools are unchanged. The sidecar learns the set from `GET /api/plugins`
-and the `plugin.changed` notices and sends `notifications/tools/list_changed` when it changes. A call goes to the
-gateway as `POST /api/plugins/{id}/tools/{tool}` with `{arguments, sessionId?}` (the calling harness session when the
-sidecar knows it), and on to the plug-in as `POST /tools/{tool}`, answered by `{text, isError}` within 120 s; the MCP
-result is one text content with that `isError`. A plug-in that is not running, a timeout or a refused answer is an MCP
-result with `isError: true` naming the cause. Every harness whose MCP server is the node's `rh mcp` thus gets a
-plug-in's tools as it gets the memory tools.
+when listed and `false` otherwise). B7's nine tools are unchanged. `rh local` serves MCP in the gateway process and
+reads the set from the host directly; a separate `rh mcp` reaches the node's gateway on the local socket
+`<state>/plugins/tools.sock` (mode 0600): `GET /tools?after=<version>` answers `PluginToolList` `{version, tools}`,
+waiting up to 60 s while the version still equals `after`, and `POST /tools/<id>__<tool>` takes a call. Either way the
+server sends `notifications/tools/list_changed` when the version moves. A call carries `{arguments, sessionId?}` (the
+calling harness session when the server knows it; not yet) and goes on to the plug-in as `POST /tools/{tool}`; clients
+call the same tool through the proxy as `POST /api/plugins/{id}/tools/{tool}`, answered by `{text, isError}` within 120
+s; the MCP result is one text content with that `isError`. A plug-in that is not running, a timeout or a refused answer
+is an MCP result with `isError: true` naming the cause. Every harness whose MCP server is the node's `rh mcp` thus gets
+a plug-in's tools as it gets the memory tools.
 (58) Plug-in views (proposed 2026-10-29): a plug-in's UI is views it answers and each client draws with its own native
 widgets and theme, so a plug-in keeps the app's style on desktop, Android and web. A client asks for one with `POST
 /api/plugins/{id}/views/{view}` `{params?, context}` (`context` is `{topicId?, sessionId?}`, filled from the

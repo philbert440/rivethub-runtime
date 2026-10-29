@@ -241,7 +241,12 @@ pub(crate) async fn guard(
         return response;
     }
     let anonymous_tls = state.secure && !state.gateway.client_certificate_required();
-    let authenticated = caller_loopback
+    let plugin = request
+        .extensions()
+        .get::<crate::plugins::PluginCaller>()
+        .is_some();
+    let authenticated = plugin
+        || caller_loopback
         || anonymous_tls
         || (state.secure && request.extensions().get::<PeerCertificate>().is_some());
     let open = admits_without_client_auth(
@@ -249,7 +254,7 @@ pub(crate) async fn guard(
         &path,
         state.gateway.devices().enrollment_on(),
     );
-    let identified = open || anonymous_tls || !state.gateway.identity_required || {
+    let identified = plugin || open || anonymous_tls || !state.gateway.identity_required || {
         let (parts, body) = request.into_parts();
         let resolved = state.gateway.tenancy.resolve(&parts).is_ok();
         request = Request::from_parts(parts, body);

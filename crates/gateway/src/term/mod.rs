@@ -122,6 +122,7 @@ pub struct TerminalService {
     injecting: tokio::sync::Mutex<()>,
     claude_trust: Option<ClaudeTrust>,
     session_lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
+    plugins: std::sync::OnceLock<Arc<crate::plugins::PluginHost>>,
 }
 
 impl TerminalService {
@@ -156,6 +157,7 @@ impl TerminalService {
             injecting: tokio::sync::Mutex::new(()),
             claude_trust: None,
             session_lister: None,
+            plugins: std::sync::OnceLock::new(),
         })
     }
 

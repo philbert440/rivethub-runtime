@@ -229,5 +229,7 @@ pub enum SessionBroadcast {
     Snapshot(Snapshot),
     Removed(SessionRemoved),
     HubState(crate::gateway::hub_state::HubStateChanged),
+    PluginChanged(crate::plugin::host::PluginChangedNotice),
+    PluginViews(crate::plugin::host::PluginViewsNotice),
     Event(AgentEvent),
 }

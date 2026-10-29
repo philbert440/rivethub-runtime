@@ -8,6 +8,7 @@ use wire::harness::{
 
 use kernel::harness::ToolCallUpdate;
 use kernel::preview::{LiveActivity, Preview};
+use wire::plugin::process::PluginEvent;
 use wire::session_id::SessionId;
 
 use super::{LaunchCommand, TerminalService};
@@ -110,7 +111,46 @@ impl TerminalService {
             .and_then(LiveActivity::preview)
     }
 
+    pub(crate) fn attach_plugins(&self, host: std::sync::Arc<crate::plugins::PluginHost>) {
+        if self.plugins.set(host).is_err() {
+            tracing::debug!("plug-in host already attached to the terminal service");
+        }
+    }
+
+    fn tell_plugins(&self, event: &HarnessEvent) {
+        let Some(host) = self.plugins.get() else {
+            return;
+        };
+        let lifecycle = match event {
+            HarnessEvent::TurnComplete { session_id, .. } => PluginEvent::SessionIdle {
+                session_id: session_id.clone(),
+            },
+            HarnessEvent::SessionUpdated {
+                session_id,
+                status: HarnessSessionStatus::Ended,
+                ..
+            } => PluginEvent::SessionEnded {
+                session_id: session_id.clone(),
+            },
+            HarnessEvent::SessionUpdated { .. }
+            | HarnessEvent::AssistantDelta { .. }
+            | HarnessEvent::ReasoningDelta { .. }
+            | HarnessEvent::ToolUse { .. }
+            | HarnessEvent::ToolResult { .. }
+            | HarnessEvent::ApprovalRequest { .. }
+            | HarnessEvent::ApprovalResolved { .. }
+            | HarnessEvent::SessionCreated { .. }
+            | HarnessEvent::Plan { .. }
+            | HarnessEvent::Error { .. }
+            | HarnessEvent::Transcript { .. }
+            | HarnessEvent::Status(_)
+            | HarnessEvent::Prompt { .. } => return,
+        };
+        host.publish(&lifecycle);
+    }
+
     fn follow(&self, key: &str, event: &HarnessEvent) {
+        self.tell_plugins(event);
         let now = chrono::Utc::now();
         let mut activity = self.activity.write();
         match event {
@@ -170,6 +210,14 @@ impl TerminalService {
     }
 
     pub(crate) fn publish_registry(&self, key: String, event: HarnessEvent) {
+        if let (Some(host), HarnessEvent::SessionCreated { session_id, .. }) =
+            (self.plugins.get(), &event)
+        {
+            host.publish(&PluginEvent::SessionStarted {
+                session_id: session_id.clone(),
+                topic_id: None,
+            });
+        }
         if self
             .registry_events
             .send(RegistryEvent { key, event })

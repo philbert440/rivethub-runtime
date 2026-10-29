@@ -261,6 +261,13 @@ impl SessionRegistry {
         }
     }
 
+    pub(crate) fn announce(&self, notice: &SessionBroadcast) {
+        let tenants: Vec<Arc<Tenant>> = self.tenants.read().values().cloned().collect();
+        for tenant in tenants {
+            tenant.publish(notice.clone());
+        }
+    }
+
     fn tenant(&self, user: &UserId) -> Arc<Tenant> {
         if let Some(tenant) = self.tenants.read().get(user) {
             return tenant.clone();

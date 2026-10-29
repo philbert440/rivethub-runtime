@@ -6,6 +6,7 @@ pub mod hub_state;
 pub mod memory;
 pub mod memory_core;
 pub mod model;
+pub mod plugins;
 pub mod preview;
 pub mod queue;
 pub mod shutdown;

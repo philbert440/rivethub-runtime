@@ -16,6 +16,7 @@ axum = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 config = { workspace = true }
+croner = { workspace = true }
 getrandom = { workspace = true }
 hex = { workspace = true }
 http-body = { workspace = true }
@@ -32,12 +33,13 @@ reqwest = { workspace = true, features = ["multipart"] }
 rustls = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_path_to_error = { workspace = true }
 sha2 = { workspace = true }
 strum = { workspace = true }
 subtle = { workspace = true }
 serde_urlencoded = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs", "io-util", "net", "rt", "sync", "time"] }
+tokio = { workspace = true, features = ["fs", "io-util", "net", "process", "rt", "sync", "time"] }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["io"] }
 tower = { workspace = true }
@@ -57,6 +59,10 @@ testkit = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "rt-multi-thread", "macros", "test-util"] }
 tokio-tungstenite = { workspace = true }
 serde_yaml_ng = { workspace = true }
+
+[[bin]]
+name = "fixture-plugin"
+path = "tests/fixture-plugin/plugin.rs"
 
 [[test]]
 name = "replay"

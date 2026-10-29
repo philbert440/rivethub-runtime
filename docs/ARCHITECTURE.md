@@ -32,6 +32,7 @@ The gate (`cargo xtask check`) fails any Cargo.toml that breaks this.
 | `Tool` | definition() → `rmcp::Tool` · call(args, ctx) → `rmcp::CallToolResult` (the MCP tool shape, no translation) | RivetHub's own capabilities (memory, wiki, delegation, skills) in mcp; remote MCP servers' tools via the mcp client | agent-loop, mcp server |
 | `TranscriptReader` | sessions(store) · read(session) → turns · tail(session, since) | capture's store readers (one per harness) | capture (incremental + backfill), gateway (transcript route) via the binary's wiring |
 | `HubStateStore` | load(user) · replace(user, base version, state) → saved or conflict (compare-and-set on `version`) | memory-postgres (`rh_hub_state` on the memory database, so every node on one datahub shares a user's document); gateway's file store under `<state>/hub-state/` when the node has no Postgres or the table is not migrated yet | gateway `GET`/`PUT /api/hub/state` |
+| `PluginTools` | tools() → the running plug-ins' tools and a version · call(plugin, tool, call) · changed(seen version) → the next version | gateway's plug-in host in-process (`rh local`); mcp's `SocketTools` over the node's `<state>/plugins/tools.sock` (`rh mcp`) | mcp server (lists plug-in tools after its own and sends `tools/list_changed`) |
 | `CertificateAuthority` | issue_token(principal) · sign(CSR, token or verified renewal principal) · chain · crl · revoke(principal) | pki over the stepca HTTP client: one `step ca token` minter shared with `rh ca token`, roster SANs, step-ca chain and CRL, revoke by principal via `step ca revoke`; no local signer | gateway `/ca/v1/`, cli `rh ca` and `rh cert renew` |
 
 A port exists only where several implementations exist or where it is the boundary to an external system. Dropped:
@@ -92,7 +93,7 @@ it is the survivor of its identity group.
 ## Process shape (Phil 2026-10-12)
 
 One process per service, each with one tokio multi-thread runtime built in its own composition root:
-`rh gateway` (gateway with its session registry, terminal, devices, and the certificate authority),
+`rh gateway` (gateway with its session registry, terminal, devices, the certificate authority and the plug-in host),
 `rh agent` (the task engine), `rh worker --role <embedder|summarizer|categorizer|wiki-builder|all>`, and `rh mcp` (sidecar).
 In this checkout `rh start` supervises those roots as children of the same binary and stays hidden from help.
 `rh stop` signals that supervisor. `rh agent` is a composition root. `rh local` composes the gateway, the SQLite worker roles, and network MCP in one process on one SQLite store.
@@ -149,7 +150,8 @@ keeping the binary in the composition crate avoids an adapter-to-adapter depende
 The `migrate` library still owns all schema creation, upgrade ladders and version
 checks. Its existing 1,000-line crate budget is unchanged; every file stays under
 the 600-line file cap.
-No runtime plugin loading: extension points are adapter crates behind ports, the public API, and MCP. `plugins:` and
+No runtime plugin loading: extension points are adapter crates behind ports, the public API, MCP and out-of-process
+plug-ins (B17, the gateway's `plugins` module; launches go through its one `launch` function). `plugins:` and
 `channels.*` are accepted-and-ignored compatibility keys.
 
 

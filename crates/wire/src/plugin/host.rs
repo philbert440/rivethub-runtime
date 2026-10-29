@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
 use crate::events::ProtocolVersion;
-use crate::plugin::manifest::{Permission, PluginManifest};
+use crate::plugin::manifest::{Permission, PluginManifest, PluginTool};
 use crate::plugin::view::ViewValue;
 use crate::plugin::{PluginId, RouteName};
 
@@ -162,4 +162,18 @@ pub struct PluginViewsNotice {
     pub v: ProtocolVersion,
     pub plugin: PluginId,
     pub views: Vec<RouteName>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct PluginToolList {
+    pub version: u64,
+    pub tools: Vec<PluginToolEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct PluginToolEntry {
+    pub plugin: PluginId,
+    pub tool: PluginTool,
 }

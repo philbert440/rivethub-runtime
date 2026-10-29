@@ -57,35 +57,50 @@ pub struct PluginRun {
     Serialize,
     Deserialize,
     schemars::JsonSchema,
+    strum::Display,
 )]
 pub enum Permission {
     #[serde(rename = "memory.read")]
+    #[strum(serialize = "memory.read")]
     MemoryRead,
     #[serde(rename = "memory.write")]
+    #[strum(serialize = "memory.write")]
     MemoryWrite,
     #[serde(rename = "sessions.read")]
+    #[strum(serialize = "sessions.read")]
     SessionsRead,
     #[serde(rename = "sessions.control")]
+    #[strum(serialize = "sessions.control")]
     SessionsControl,
     #[serde(rename = "topics.read")]
+    #[strum(serialize = "topics.read")]
     TopicsRead,
     #[serde(rename = "topics.write")]
+    #[strum(serialize = "topics.write")]
     TopicsWrite,
     #[serde(rename = "tasks.read")]
+    #[strum(serialize = "tasks.read")]
     TasksRead,
     #[serde(rename = "tasks.delegate")]
+    #[strum(serialize = "tasks.delegate")]
     TasksDelegate,
     #[serde(rename = "agents.read")]
+    #[strum(serialize = "agents.read")]
     AgentsRead,
     #[serde(rename = "notifications.send")]
+    #[strum(serialize = "notifications.send")]
     NotificationsSend,
     #[serde(rename = "host.files.read")]
+    #[strum(serialize = "host.files.read")]
     HostFilesRead,
     #[serde(rename = "host.files.write")]
+    #[strum(serialize = "host.files.write")]
     HostFilesWrite,
     #[serde(rename = "host.network")]
+    #[strum(serialize = "host.network")]
     HostNetwork,
     #[serde(rename = "host.exec")]
+    #[strum(serialize = "host.exec")]
     HostExec,
 }
 

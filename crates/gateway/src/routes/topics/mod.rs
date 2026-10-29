@@ -334,8 +334,16 @@ async fn place(
         })
         .await
         .map_err(map::error)?;
+    let placement = map::placement(outcome.into_placement());
+    if let Some(host) = gateway.plugins() {
+        host.publish(&wire::plugin::process::PluginEvent::SessionPlaced {
+            session_id: placement.session_id.clone(),
+            topic_id: placement.topic_id.clone(),
+            by: placement.by,
+        });
+    }
     Ok(Json(PlacementReply {
-        placement: Some(map::placement(outcome.into_placement())),
+        placement: Some(placement),
         suggestion: None,
     }))
 }

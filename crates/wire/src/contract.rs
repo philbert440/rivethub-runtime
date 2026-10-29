@@ -468,6 +468,8 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::plugin::host::PluginSettingsUpdate>,
     SchemaGenerator::subschema_for::<crate::plugin::host::PluginChangedNotice>,
     SchemaGenerator::subschema_for::<crate::plugin::host::PluginViewsNotice>,
+    SchemaGenerator::subschema_for::<crate::plugin::host::PluginToolList>,
+    SchemaGenerator::subschema_for::<crate::plugin::host::PluginToolEntry>,
     SchemaGenerator::subschema_for::<crate::plugin::process::PluginEventDelivery>,
     SchemaGenerator::subschema_for::<crate::plugin::process::PluginEvent>,
     SchemaGenerator::subschema_for::<crate::plugin::process::PluginJobRequest>,
