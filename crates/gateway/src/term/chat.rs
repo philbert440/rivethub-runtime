@@ -104,12 +104,7 @@ impl TerminalService {
         let home = self.chat_home(harness_id)?;
         let (directory, model, effort, agent_name) = match agent {
             Some(agent) => agent.chat_defaults(model, effort)?,
-            None => (
-                self.chat_directory(cwd, &home).await?,
-                model,
-                effort,
-                None,
-            ),
+            None => (self.chat_directory(cwd, &home).await?, model, effort, None),
         };
         let spec = SessionSpec {
             session: SessionId::new(harness_id, &uuid::Uuid::new_v4().to_string()),
@@ -168,9 +163,12 @@ impl TerminalService {
             .find(|command| command.harness == Some(harness))
         {
             Some(command) => Ok(command.cwd.clone()),
-            None if wire::gateway::roster::session_flags(harness).is_none() => {
-                Ok(self.options.root.clone())
-            }
+            None if wire::gateway::roster::session_flags(harness).is_none() => Ok(self
+                .options
+                .commands
+                .iter()
+                .find(|command| command.id == self.options.default)
+                .map_or_else(|| self.options.root.clone(), |command| command.cwd.clone())),
             None => Err(ApiError::BadRequest(
                 "harness is not allowed on this node".into(),
             )),
