@@ -11,7 +11,7 @@ use wire::message::Role;
 const HERMES_SESSIONS: &str = "SELECT DISTINCT session_id FROM messages ORDER BY session_id";
 
 const HERMES_MESSAGES: &str = "\
-SELECT rowid, session_id, role, content, timestamp \
+SELECT rowid AS rowid, session_id, role, content, timestamp \
 FROM messages \
 WHERE session_id = ?1 AND rowid > ?2 \
 ORDER BY timestamp ASC, rowid ASC";

@@ -18,6 +18,7 @@ const SESSION: &str = "33333333-3333-3333-3333-333333333333";
 
 const HERMES_SCHEMA: &str = "\
 CREATE TABLE messages (\
+    id INTEGER PRIMARY KEY AUTOINCREMENT,\
     session_id TEXT NOT NULL,\
     role TEXT NOT NULL,\
     content TEXT NOT NULL,\
