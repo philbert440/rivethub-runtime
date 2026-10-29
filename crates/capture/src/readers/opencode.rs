@@ -157,11 +157,21 @@ fn map_part(
     position: u64,
     row: &OpencodePart,
 ) -> Result<Mapped, TranscriptReaderError> {
+    if row.kind == PartKind::Ignored {
+        return Ok(Mapped::None);
+    }
     if row.kind == PartKind::Unrecognized {
         return Ok(Mapped::Skip(unknown(position, "unknown opencode part")));
     }
     let Speaker::Known(role) = &row.speaker else {
         return Ok(Mapped::Skip(unrecognized(position, &row.speaker)));
+    };
+    let Some(at) = row.at.as_deref() else {
+        return Ok(Mapped::Skip(SkippedRecord {
+            position,
+            rule: SkipRule::UnparseableTimestamp,
+            detail: "part time is not an instant".to_owned(),
+        }));
     };
     if row.kind == PartKind::Text {
         let content = row.text.as_deref().unwrap_or_default();
@@ -170,7 +180,7 @@ fn map_part(
             position,
             role: *role,
             content,
-            at: &row.at,
+            at,
             format: FORMAT,
         });
     }
@@ -190,7 +200,7 @@ fn map_part(
             position,
             role: Role::Tool,
             content: &content,
-            at: &row.at,
+            at,
             format: FORMAT,
         },
         ToolFields {
