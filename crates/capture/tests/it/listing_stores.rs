@@ -449,6 +449,41 @@ async fn omp_title_line_wins_over_the_user_message_and_the_last_model_is_kept() 
 }
 
 #[tokio::test]
+async fn omp_reader_reads_a_refused_reply_as_its_error() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let said = |message: &str| {
+        format!(
+            r#"{{"type":"message","timestamp":"2026-10-29T06:31:22.000Z","message":{message}}}"#
+        )
+    };
+    write(
+        dir.path(),
+        &format!("sessions/-work/p_{U1}.jsonl"),
+        &[
+            format!(r#"{{"type":"session","id":"{U1}","timestamp":"2026-10-29T06:31:21.000Z"}}"#),
+            said(r#"{"role":"user","content":[{"type":"text","text":"hi"}]}"#),
+            said(r#"{"role":"assistant","content":[],"stopReason":"error","errorMessage":"403 out of credits"}"#),
+        ]
+        .join("\n"),
+    )?;
+    let reader = capture::readers::StoreReader::open(HarnessId::Omp, dir.path().to_path_buf())
+        .ok_or("reader")?;
+    let turns = kernel::transcript::TranscriptReader::read(
+        &reader,
+        &wire::session_id::SessionId::new(HarnessId::Omp, U1),
+    )
+    .await?;
+    assert_eq!(
+        turns
+            .iter()
+            .map(|turn| turn.content.as_str())
+            .collect::<Vec<_>>(),
+        ["hi", "403 out of credits"]
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn omp_reader_reads_a_flat_session_file() -> TestResult {
     let dir = tempfile::tempdir()?;
     write(
