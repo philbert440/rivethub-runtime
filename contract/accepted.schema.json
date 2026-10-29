@@ -5691,6 +5691,53 @@
         "contextSource"
       ]
     },
+    "SessionPreviewKind": {
+      "type": "string",
+      "enum": [
+        "running",
+        "asking",
+        "approval",
+        "said"
+      ]
+    },
+    "SessionPreview": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "kind": {
+          "$ref": "#/$defs/SessionPreviewKind"
+        },
+        "text": {
+          "type": "string"
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "sessionId",
+        "kind",
+        "text",
+        "at"
+      ]
+    },
+    "SessionPreviewList": {
+      "type": "object",
+      "properties": {
+        "previews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionPreview"
+          }
+        }
+      },
+      "required": [
+        "previews"
+      ]
+    },
     "HarnessTurnAccepted": {
       "type": "object",
       "properties": {

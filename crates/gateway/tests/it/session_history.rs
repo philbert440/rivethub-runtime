@@ -8,6 +8,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures::{SinkExt as _, StreamExt as _};
 use gateway::sessions::{SessionRegistry, owners_file};
+use kernel::harness::{SessionEvent, ToolCallInfo};
 use kernel::transcript::{
     ListLimit, SessionLister, SessionRenameError, StoreSession, StoreTranscript, ToolOutputRead,
     TranscriptRead, TranscriptReaderError,
@@ -22,7 +23,8 @@ use wire::gateway::GatewayError;
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTranscriptResponse, HarnessSocketRefusal,
     HarnessSocketRefusalCode, HarnessTranscriptTurn, MessageUsage, SessionMessageRole,
-    SessionPostRequest, SessionSteerResponse, TranscriptAttachment,
+    SessionPostRequest, SessionPreviewKind, SessionPreviewList, SessionSteerResponse,
+    TranscriptAttachment,
 };
 use wire::harness::{
     HarnessEvent, HarnessId, HarnessOfferingList, HarnessSessionList, HarnessSessionStatus,
@@ -1388,4 +1390,110 @@ fn harness_codes_map_to_their_statuses() {
     for code in wire::harness::HarnessCode::iter() {
         assert_eq!(gateway::error::harness_status(code).as_u16(), code.status());
     }
+}
+
+fn previewed(body: &[u8]) -> Vec<(SessionId, SessionPreviewKind, String)> {
+    parsed::<SessionPreviewList>(body)
+        .previews
+        .into_iter()
+        .map(|preview| (preview.session_id, preview.kind, preview.text))
+        .collect()
+}
+
+#[tokio::test]
+async fn previews_show_the_last_line_of_the_last_reply_and_refuse_bad_requests() {
+    let stores = Stores {
+        rows: vec![
+            row(HarnessId::ClaudeCode, U1, 1),
+            row(HarnessId::ClaudeCode, U2, 1),
+        ],
+        transcripts: BTreeMap::from([(
+            (HarnessId::ClaudeCode, U1.to_owned()),
+            vec![
+                turn(SessionMessageRole::User, "check it"),
+                turn(
+                    SessionMessageRole::Assistant,
+                    "Done.\nAll four checks pass.",
+                ),
+            ],
+        )]),
+        ..Stores::default()
+    };
+    let setup = setup("{}", stores).await;
+    let path =
+        format!("/api/harness-sessions/previews?session=claude-code:{U1}&session=claude-code:{U2}");
+    let (status, body) = get(&setup, &path, None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        previewed(&body),
+        [(
+            claude(U1),
+            SessionPreviewKind::Said,
+            "All four checks pass.".to_owned()
+        )]
+    );
+    let (status, _) = get(
+        &setup,
+        &format!("/api/harness-sessions/previews?session={U1}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 400, "a bare id is not a canonical session");
+    let many: Vec<String> = (0..51)
+        .map(|index| format!("session=claude-code:00000000-0000-4000-8000-{index:012}"))
+        .collect();
+    let (status, _) = get(
+        &setup,
+        &format!("/api/harness-sessions/previews?{}", many.join("&")),
+        None,
+    )
+    .await;
+    assert_eq!(status, 400, "more than 50 sessions is refused");
+}
+
+#[tokio::test]
+async fn a_live_session_previews_the_tool_it_is_running() {
+    let setup = setup("{}", Stores::default()).await;
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        "/api/harness-sessions",
+        r#"{"harness":"claude-code"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    let live = parsed::<wire::harness::HarnessSessionSummary>(&body).session_id;
+    let (mut socket, stop) = socket(&setup, &encode_segment(&live), None).await;
+    silent(&mut socket).await;
+    let input = serde_json::from_str(r#"{"command":"cargo clippy --workspace"}"#).expect("input");
+    let call = ToolCallInfo {
+        tool_call_id: "t1".to_owned(),
+        name: "Bash".to_owned(),
+        input,
+    };
+    setup
+        .harness
+        .emit(&live, SessionEvent::ToolCall(call))
+        .await;
+    tokio::time::timeout(WAIT, async {
+        while !matches!(event(&mut socket).await, HarnessEvent::ToolUse { .. }) {}
+    })
+    .await
+    .expect("tool use");
+    let (_, body) = get(
+        &setup,
+        &format!("/api/harness-sessions/previews?session={live}"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        previewed(&body),
+        [(
+            live.clone(),
+            SessionPreviewKind::Running,
+            "Bash: cargo clippy --workspace".to_owned()
+        )]
+    );
+    stop.cancel();
 }

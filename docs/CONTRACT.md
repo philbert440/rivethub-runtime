@@ -323,6 +323,17 @@ subtopic of A (`409`, the same subtree message); merging A into its own direct s
 place. A root topic's wiki page keeps a section for every topic under it at any depth, and startup memory, page binding
 and routing find a topic's root by walking its parents. Deleting a topic that has subtopics is still refused. The
 categorizer drops a named topic when one of its descendants is also named, not only its direct subtopic.
+(38) Session previews (Phil, 2026-10-29): `GET /api/harness-sessions/previews?session=<canonical id>&session=…` (at
+most 50, else `400`; a non-canonical id is `400` "canonical session required") answers `{ "previews": [ { "sessionId",
+"kind", "text", "at" } ] }`, one entry per session with something to show, in no promised order; sessions the caller
+can't see, or that have nothing to show, are left out rather than failing the call. `kind` is `running` (the tool in
+progress and the gist of its input, as "Bash: cargo clippy --workspace", or the last line being written), `asking` (the
+question an ask tool put to the person), `approval` (the tool waiting on a permission and its gist), or `said` (the last
+line of the last assistant reply). `text` is one line of at most 200 characters; `at` is epoch milliseconds. A session
+rh is driving shows its live state; any other session shows `said` from its transcript, read once per update time.
+(39) Topic startup preview (Phil, 2026-10-29): `GET /api/topics/{topic}/startup` answers the `StartupContext` a session
+started in that topic right now would receive, built by the same code as a real start, without keeping or delivering
+it. An unknown topic is `404`; startup memory not configured is `503`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

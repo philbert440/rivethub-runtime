@@ -1,3 +1,4 @@
+mod previews;
 mod registry;
 mod socket;
 
@@ -31,6 +32,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route("/api/harnesses/{harness}/sessions", get(plane))
         .route("/api/harnesses/ws", get(registry::upgrade))
         .route("/api/harness-sessions/ws", get(socket::upgrade))
+        .route(
+            "/api/harness-sessions/previews",
+            get(previews::previews).fallback(super::method_not_allowed),
+        )
         .route(
             "/api/harness-sessions/{session}",
             get(summary).fallback(super::method_not_allowed),

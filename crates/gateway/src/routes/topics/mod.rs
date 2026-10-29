@@ -104,6 +104,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::get(sessions).fallback(super::method_not_allowed),
         )
         .route(
+            "/api/topics/{topic}/startup",
+            routing::get(startup::preview).fallback(super::method_not_allowed),
+        )
+        .route(
             "/api/harness-sessions/{session}/startup-context",
             routing::get(startup::kept).fallback(super::method_not_allowed),
         )

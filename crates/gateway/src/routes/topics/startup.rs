@@ -104,6 +104,17 @@ pub(crate) async fn begin(
     }
 }
 
+pub(super) async fn preview(
+    State(gateway): State<Arc<Gateway>>,
+    Path(key): Path<String>,
+) -> Result<Json<StartupBody>, ApiError> {
+    let topic = super::resolve(gateway.topics()?.as_ref(), &key).await?;
+    let context = build(&gateway, &topic, None).await.map_err(|error| {
+        ApiError::Unavailable(format!("startup context for {}: {error}", topic.slug))
+    })?;
+    Ok(Json((&context).into()))
+}
+
 pub(super) async fn kept(
     State(gateway): State<Arc<Gateway>>,
     Path(segment): Path<String>,

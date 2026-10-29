@@ -1,4 +1,5 @@
 mod context;
+mod preview;
 
 use std::collections::HashMap;
 
@@ -20,6 +21,7 @@ use crate::tenancy::UserId;
 pub(crate) struct History {
     bare: RwLock<HashMap<String, HarnessId>>,
     stamps: Stamps,
+    previews: preview::Previews,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

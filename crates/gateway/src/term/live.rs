@@ -6,6 +6,7 @@ use wire::harness::{
     HarnessEvent, HarnessId, HarnessSessionStatus, HarnessSessionSummary, RosterCommand,
 };
 
+use kernel::preview::{LiveActivity, Preview};
 use wire::session_id::SessionId;
 
 use super::{LaunchCommand, TerminalService};
@@ -82,11 +83,74 @@ impl TerminalService {
     }
 
     pub(crate) fn publish_harness(&self, key: &str, event: HarnessEvent) {
+        self.follow(key, &event);
         let sender = self.harness_events.read().get(key).cloned();
         if let Some(sender) = sender
             && sender.send(event).is_err()
         {
             tracing::trace!("harness event has no live session socket");
+        }
+    }
+
+    pub(crate) fn live_preview(&self, key: &str) -> Option<Preview> {
+        self.activity
+            .read()
+            .get(key)
+            .and_then(LiveActivity::preview)
+    }
+
+    fn follow(&self, key: &str, event: &HarnessEvent) {
+        let now = chrono::Utc::now();
+        let mut activity = self.activity.write();
+        match event {
+            HarnessEvent::AssistantDelta { text, .. } => {
+                activity.entry(key.to_owned()).or_default().wrote(text, now);
+            }
+            HarnessEvent::ToolUse {
+                tool_call_id,
+                name,
+                input,
+                ..
+            } => activity.entry(key.to_owned()).or_default().tool_started(
+                tool_call_id,
+                name,
+                input,
+                now,
+            ),
+            HarnessEvent::ApprovalRequest {
+                request_id,
+                name,
+                input,
+                ..
+            } => activity
+                .entry(key.to_owned())
+                .or_default()
+                .approval_requested(request_id, name, input, now),
+            HarnessEvent::ToolResult { tool_call_id, .. } => {
+                if let Some(live) = activity.get_mut(key) {
+                    live.tool_finished(tool_call_id);
+                }
+            }
+            HarnessEvent::ApprovalResolved { request_id, .. } => {
+                if let Some(live) = activity.get_mut(key) {
+                    live.approval_resolved(request_id);
+                }
+            }
+            HarnessEvent::TurnComplete { .. } | HarnessEvent::Error { .. } => {
+                activity.remove(key);
+            }
+            HarnessEvent::SessionUpdated { status, .. }
+                if *status != HarnessSessionStatus::Active =>
+            {
+                activity.remove(key);
+            }
+            HarnessEvent::SessionUpdated { .. }
+            | HarnessEvent::ReasoningDelta { .. }
+            | HarnessEvent::SessionCreated { .. }
+            | HarnessEvent::Plan { .. }
+            | HarnessEvent::Transcript { .. }
+            | HarnessEvent::Status(_)
+            | HarnessEvent::Prompt { .. } => {}
         }
     }
 
