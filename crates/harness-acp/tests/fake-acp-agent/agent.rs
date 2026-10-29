@@ -43,6 +43,8 @@ struct FakeArgs {
     record_meta: Option<std::path::PathBuf>,
     #[arg(long)]
     record_new: Option<std::path::PathBuf>,
+    #[arg(long)]
+    steering: bool,
 }
 
 const REPLAYED_CHUNKS: usize = 300;
@@ -68,6 +70,8 @@ enum UsageMode {
     Meta,
 }
 
+const META_STEERING: &str = r#"{"steering":{"supported":true}}"#;
+
 const META_USAGE: &str = r#"{"usage":{"inputTokens":20185,"outputTokens":44,"totalTokens":20229,"cachedReadTokens":2176,"cacheCreationTokens":0,"reasoningTokens":43}}"#;
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -88,6 +92,8 @@ struct AgentState {
     usage: UsageMode,
     record_meta: Option<std::path::PathBuf>,
     record_new: Option<std::path::PathBuf>,
+    steering: bool,
+    running: AtomicBool,
     cancelled: AtomicBool,
     cancel_notify: Notify,
     crashed: Notify,
@@ -124,6 +130,8 @@ fn prepare(args: FakeArgs) -> Option<AgentState> {
         usage: args.usage,
         record_meta: args.record_meta,
         record_new: args.record_new,
+        steering: args.steering,
+        running: AtomicBool::new(false),
         cancelled: AtomicBool::new(false),
         cancel_notify: Notify::new(),
         crashed: Notify::new(),
@@ -144,18 +152,29 @@ fn on_initialize(
     request: &acp::InitializeRequest,
     responder: Responder<acp::InitializeResponse>,
 ) -> Result<(), acp::Error> {
+    let meta: Option<acp::Meta> = if state.steering {
+        Some(
+            serde_json::from_str(META_STEERING)
+                .map_err(|error| acp::Error::internal_error().data(error.to_string()))?,
+        )
+    } else {
+        None
+    };
     responder.respond(
-        acp::InitializeResponse::new(request.protocol_version).agent_capabilities(
-            acp::AgentCapabilities::new()
-                .load_session(!matches!(state.on_load, OnLoad::None))
-                .prompt_capabilities(
-                    acp::PromptCapabilities::new().image(state.prompt == PromptMode::EchoImages),
-                )
-                .session_capabilities(
-                    acp::SessionCapabilities::new()
-                        .list(state.list_sessions.then(acp::SessionListCapabilities::new)),
-                ),
-        ),
+        acp::InitializeResponse::new(request.protocol_version)
+            .meta(meta)
+            .agent_capabilities(
+                acp::AgentCapabilities::new()
+                    .load_session(!matches!(state.on_load, OnLoad::None))
+                    .prompt_capabilities(
+                        acp::PromptCapabilities::new()
+                            .image(state.prompt == PromptMode::EchoImages),
+                    )
+                    .session_capabilities(
+                        acp::SessionCapabilities::new()
+                            .list(state.list_sessions.then(acp::SessionListCapabilities::new)),
+                    ),
+            ),
     )
 }
 
@@ -241,6 +260,7 @@ fn spawn_prompt(
 ) -> Result<(), acp::Error> {
     let task_connection = connection.clone();
     connection.spawn(async move {
+        state.running.store(true, Ordering::SeqCst);
         let session_id = request.session_id;
         if state.prompt != PromptMode::Plain {
             for block in &request.prompt {
@@ -252,10 +272,71 @@ fn spawn_prompt(
                 )?;
             }
         }
-        match execute_prompt(&state, &task_connection, &session_id).await {
+        let executed = execute_prompt(&state, &task_connection, &session_id).await;
+        state.running.store(false, Ordering::SeqCst);
+        match executed {
             Ok(stop) => responder.respond(ended(stop, state.usage)?),
             Err(error) => responder.respond_with_error(error),
         }
+    })
+}
+
+#[derive(
+    Debug, Clone, serde::Serialize, serde::Deserialize, agent_client_protocol::JsonRpcRequest,
+)]
+#[request(method = "_session/steering", response = SteerAnswer)]
+#[serde(rename_all = "camelCase")]
+struct Steer {
+    session_id: acp::SessionId,
+    prompt: Vec<acp::ContentBlock>,
+    #[serde(rename = "_meta")]
+    meta: Option<SteerMeta>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct SteerMeta {
+    steering: SteerOptions,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SteerOptions {
+    idle_behavior: String,
+}
+
+#[derive(
+    Debug, Clone, serde::Serialize, serde::Deserialize, agent_client_protocol::JsonRpcResponse,
+)]
+struct SteerAnswer {
+    outcome: String,
+}
+
+fn on_steer(
+    state: &AgentState,
+    request: Steer,
+    responder: Responder<SteerAnswer>,
+    connection: &ConnectionTo<Client>,
+) -> Result<(), acp::Error> {
+    let outcome = if state.running.load(Ordering::SeqCst) {
+        for block in &request.prompt {
+            script::emit_text(
+                connection,
+                &request.session_id,
+                &format!("steered:{}", described(block)),
+                Chunk::Agent,
+            )?;
+        }
+        "injected"
+    } else if request
+        .meta
+        .is_some_and(|meta| meta.steering.idle_behavior == "promptRequired")
+    {
+        "promptRequired"
+    } else {
+        "startedNewTurn"
+    };
+    responder.respond(SteerAnswer {
+        outcome: outcome.to_owned(),
     })
 }
 
@@ -339,6 +420,7 @@ async fn serve(state: Arc<AgentState>) -> Result<(), acp::Error> {
     let config_state = Arc::clone(&state);
     let prompt_state = Arc::clone(&state);
     let cancel_state = Arc::clone(&state);
+    let steer_state = Arc::clone(&state);
     Agent
         .builder()
         .name("fake-acp-agent")
@@ -372,6 +454,12 @@ async fn serve(state: Arc<AgentState>) -> Result<(), acp::Error> {
         .on_receive_request(
             async move |request: acp::PromptRequest, responder, connection| {
                 spawn_prompt(Arc::clone(&prompt_state), request, responder, &connection)
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
+            async move |request: Steer, responder, connection| {
+                on_steer(&steer_state, request, responder, &connection)
             },
             agent_client_protocol::on_receive_request!(),
         )

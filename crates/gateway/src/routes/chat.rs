@@ -19,9 +19,11 @@ use uuid::Uuid;
 use wire::gateway::agents::UserTurnAttachment;
 use wire::gateway::sessions::{
     MessageUsage, SessionMessage, SessionMessageRole, SessionPostAccepted, SessionPostReply,
-    SessionPostRequest,
+    SessionPostRequest, SessionSteerRequest, SessionSteerResponse,
 };
-use wire::harness::{ApprovalDecision, HarnessSessionCreateRequest, HarnessSessionSummary};
+use wire::harness::{
+    ApprovalDecision, HarnessSessionCreateRequest, HarnessSessionSummary, SteerOutcome,
+};
 use wire::hooks::HookContextBase;
 use wire::message::{Message, MessageContent, Role};
 
@@ -47,6 +49,7 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             get(transcript),
         )
         .route("/api/harness-sessions/{session}/turn", post(prompt))
+        .route("/api/harness-sessions/{session}/steer", post(steer))
         .route("/api/harness-sessions/{session}/stop", post(stop))
         .route(
             "/api/harness-sessions/{session}/approvals/{request}",
@@ -198,18 +201,11 @@ async fn accept(
         admit(&gateway, &session, &options)?;
     }
     if !attachments.is_empty() {
-        let canonical = session
-            .parse::<wire::session_id::SessionId>()
-            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
         let sent = crate::sessions::control::with_system_prompt(
             request.system_prompt.as_deref(),
             request.text.clone(),
         );
-        super::harnesses::open_store(&gateway)
-            .await?
-            .record_turn(&canonical, AttachedTurn::new(&sent, &attachments))
-            .await
-            .map_err(super::harnesses::upload_error)?;
+        journal(&gateway, &session, &sent, &attachments).await?;
     }
     chat.prompt(request.text, request.system_prompt, attachments, options)
         .await?;
@@ -218,6 +214,39 @@ async fn accept(
         session,
     })
     .into_response())
+}
+
+async fn journal(
+    gateway: &Gateway,
+    session: &str,
+    text: &str,
+    attachments: &[TurnAttachment],
+) -> Result<(), ApiError> {
+    let canonical = session
+        .parse::<wire::session_id::SessionId>()
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    super::harnesses::open_store(gateway)
+        .await?
+        .record_turn(&canonical, AttachedTurn::new(text, attachments))
+        .await
+        .map_err(super::harnesses::upload_error)
+}
+
+async fn steer(
+    State(gateway): State<Arc<Gateway>>,
+    user: UserId,
+    Path(session): Path<String>,
+    Body(request): Body<SessionSteerRequest>,
+) -> Result<Json<SessionSteerResponse>, ApiError> {
+    let attachments = staged(&gateway, &user, request.attachments).await?;
+    let chat = service(&gateway)?.chat(&user, &session)?;
+    let outcome = chat
+        .steer(request.text.clone(), attachments.clone())
+        .await?;
+    if outcome != SteerOutcome::PromptRequired && !attachments.is_empty() {
+        journal(&gateway, &session, &request.text, &attachments).await?;
+    }
+    Ok(Json(SessionSteerResponse { outcome }))
 }
 
 fn admit(gateway: &Gateway, session: &str, options: &[SessionOption]) -> Result<(), ApiError> {

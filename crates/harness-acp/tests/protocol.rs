@@ -19,6 +19,7 @@ use tempfile::tempdir;
 use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
 use wire::harness::PlanStatus;
+use wire::harness::SteerOutcome;
 use wire::json::JsonObject;
 use wire::session_id::SessionId;
 use wire::stream::LlmUsage;
@@ -360,6 +361,71 @@ fn cancel_ends_a_hanging_turn() {
             .await
             .expect("events before turn end");
         assert_eq!(rest, vec![SessionEvent::TurnEnded]);
+    });
+}
+
+#[test]
+fn a_steer_joins_the_running_turn_and_an_idle_one_asks_for_a_prompt() {
+    let adapter = Arc::new(AcpHarnessAdapter::with_launch_table(launch(
+        &["text:partial"],
+        &["--hang-until-cancel", "--steering"],
+    )));
+    run(async {
+        let cwd = tempdir().expect("cwd");
+        let session = adapter
+            .new_session(spec(cwd.path()))
+            .await
+            .expect("new session");
+        let mut events = adapter.events(&session).await.expect("events");
+        let prompt_task = tokio::spawn({
+            let adapter = adapter.clone();
+            let session = session.clone();
+            async move {
+                adapter
+                    .prompt(&session, TurnInput::Text("go".to_owned()))
+                    .await
+            }
+        });
+        assert_eq!(
+            events.recv().await,
+            Some(SessionEvent::AgentMessageChunk {
+                text: "partial".to_owned()
+            })
+        );
+        let steered = adapter
+            .steer(&session, TurnInput::Text("also this".to_owned()))
+            .await
+            .expect("steer");
+        assert_eq!(steered, SteerOutcome::Steered);
+        assert_eq!(
+            events.recv().await,
+            Some(SessionEvent::AgentMessageChunk {
+                text: "steered:text:also this".to_owned()
+            })
+        );
+        adapter.cancel(&session).await.expect("cancel");
+        prompt_task.await.expect("prompt task").expect("prompt ok");
+        collect_until_turn_end(&mut events)
+            .await
+            .expect("events before turn end");
+        let idle = adapter
+            .steer(&session, TurnInput::Text("later".to_owned()))
+            .await
+            .expect("idle steer");
+        assert_eq!(idle, SteerOutcome::PromptRequired);
+        let plain = AcpHarnessAdapter::with_launch_table(launch(&[], &[]));
+        let other = plain
+            .new_session(spec(cwd.path()))
+            .await
+            .expect("new session");
+        let refused = plain
+            .steer(&other, TurnInput::Text("hi".to_owned()))
+            .await
+            .expect_err("no steering advertised");
+        assert!(matches!(
+            refused,
+            kernel::harness::HarnessAdapterError::SteeringUnsupported
+        ));
     });
 }
 

@@ -65,6 +65,7 @@ fn offering(harness_id: HarnessId, model: &str) -> HarnessOffering {
                 interrupt: true,
                 resume: true,
                 approvals: true,
+                steering: None,
             },
             observation: HarnessObservationCapabilities {
                 live_stream: true,

@@ -5223,6 +5223,45 @@
         "message"
       ]
     },
+    "SessionSteerRequest": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "attachments": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/UserTurnAttachment"
+          }
+        }
+      },
+      "required": [
+        "text"
+      ]
+    },
+    "SessionSteerResponse": {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "$ref": "#/$defs/SteerOutcome"
+        }
+      },
+      "required": [
+        "outcome"
+      ]
+    },
+    "SteerOutcome": {
+      "type": "string",
+      "enum": [
+        "steered",
+        "startedNewTurn",
+        "promptRequired"
+      ]
+    },
     "SessionWsClientMessage": {
       "type": "object",
       "properties": {
@@ -11759,6 +11798,12 @@
         "approvals": {
           "type": "boolean"
         },
+        "steering": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "liveStream": {
           "type": "boolean"
         },
@@ -11918,6 +11963,12 @@
         },
         "approvals": {
           "type": "boolean"
+        },
+        "steering": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [

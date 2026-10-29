@@ -278,6 +278,22 @@ and `completed`. A harness session's event stream carries it, whole, each time a
 fails, such as a provider refusing the request, the harness session stream carries an `error` event with code
 `turn_failed` and the failure as its message, then `turn-complete`, and the session goes idle and takes the next turn;
 before, the failure ended the chat. Bodies are `wire::harness::HarnessCode` in `contract/*.schema.json`.
+(34) Steering (Phil, 2026-10-29): `POST /api/harness-sessions/{session}/steer` takes `{ "text", "attachments"? }` (the
+`/turn` text and uploads, without model, effort or system prompt) and is authorised like `/turn`. While a chat turn is
+running it hands the message to that turn instead of queuing a new one and answers `200` with `{ "outcome" }`:
+`steered` (the running turn took it) or `startedNewTurn` (the agent began a turn of its own with it); either way the text
+is published on the session stream as the user's message, as a turn's is, and its uploads are journalled like a turn's.
+With no turn running nothing is sent and it answers `200` with `{ "outcome": "promptRequired" }`: send the message with
+`POST …/turn`. A harness that cannot steer answers `501` with code `capability_unsupported`, empty text without
+attachments is `400`, and a steer the agent refuses or fails is `503`. Over ACP the gateway sends the agent's
+`_session/steering` request (`{ sessionId, prompt, _meta: { steering: { idleBehavior: "promptRequired" } } }`, the
+prompt as `session/prompt` content blocks) and reads its `outcome`: `injected` is `steered`, `startedNewTurn` and
+`promptRequired` pass through, and omp's `failed` is the `503` with its `reason`. A harness offers steering when its
+ACP `initialize` reply carries `_meta.steering.supported: true` (claude-code through claude-agent-acp, and omp):
+`HarnessControlCapabilities` gains optional `steering`, `true` for such a harness once discovered, `false` for one
+whose agent does not advertise it, and absent where no agent has answered. Bodies are
+`wire::gateway::sessions::SessionSteerRequest` and `SessionSteerResponse` and `wire::harness::SteerOutcome` in
+`contract/*.schema.json`. The route is new, with no TypeScript recording.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

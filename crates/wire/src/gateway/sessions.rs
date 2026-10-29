@@ -228,6 +228,20 @@ pub struct SessionPostAccepted {
     pub session: String,
 }
 
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSteerRequest {
+    pub text: String,
+    pub attachments: Option<Vec<super::agents::UserTurnAttachment>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSteerResponse {
+    pub outcome: crate::harness::SteerOutcome,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionPostReply {

@@ -210,6 +210,14 @@ impl HarnessCode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SteerOutcome {
+    Steered,
+    StartedNewTurn,
+    PromptRequired,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ApprovalDecision {
     Allow,
@@ -465,12 +473,14 @@ pub struct HarnessCapabilities {
     pub effort_flag: Option<String>,
 }
 
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct HarnessControlCapabilities {
     pub interrupt: bool,
     pub resume: bool,
     pub approvals: bool,
+    pub steering: Option<bool>,
 }
 
 #[serde_with::skip_serializing_none]

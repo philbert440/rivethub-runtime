@@ -16,6 +16,7 @@ use crate::options::SessionOptions;
 #[derive(Debug, Clone)]
 pub(crate) struct Advertisement {
     capabilities: acp::AgentCapabilities,
+    steering: bool,
     options: Arc<SessionOptions>,
     commands: Vec<Command>,
 }
@@ -24,6 +25,7 @@ impl Advertisement {
     pub(crate) fn from_agent(agent: &AgentConnection) -> Self {
         Self {
             capabilities: agent.capabilities.clone(),
+            steering: agent.steering,
             options: Arc::clone(&agent.options),
             commands: Vec::new(),
         }
@@ -46,6 +48,7 @@ impl Advertisement {
         offering.capabilities.control.resume = self.capabilities.load_session;
         offering.capabilities.control.interrupt = true;
         offering.capabilities.control.approvals = true;
+        offering.capabilities.control.steering = Some(self.steering);
         offering.capabilities.observation.live_stream = true;
         offering.capabilities.observation.drive = Some(true);
         offering.capabilities.observation.list_sessions =
@@ -162,6 +165,7 @@ mod tests {
         ]);
         let advertisement = Advertisement {
             capabilities: acp::AgentCapabilities::new(),
+            steering: false,
             options,
             commands: Vec::new(),
         };

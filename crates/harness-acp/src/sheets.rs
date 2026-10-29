@@ -266,6 +266,7 @@ fn capabilities(chat: bool, sheet: &StaticSheet, resolved: &Resolved) -> Harness
             interrupt: chat,
             resume: chat,
             approvals: chat,
+            steering: None,
         },
         observation: HarnessObservationCapabilities {
             live_stream: chat,
