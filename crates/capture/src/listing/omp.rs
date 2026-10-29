@@ -83,8 +83,17 @@ pub(crate) fn list(root: &Path, limit: usize) -> Result<Vec<StoreSession>, Trans
         |file| file.id.clone(),
         |file| file.times.mtime,
     );
+    kept.retain(prompted);
     kept.sort_by_key(|item| std::cmp::Reverse(item.times.mtime));
     Ok(kept.iter().take(limit).map(omp_row).collect())
+}
+
+fn prompted(file: &OmpFile) -> bool {
+    head(&file.path, HEAD_WINDOW).is_none_or(|text| {
+        text.lines()
+            .filter_map(object_line::<OmpLine>)
+            .any(|line| user_turn(&line).is_some())
+    })
 }
 
 pub(crate) fn describe(

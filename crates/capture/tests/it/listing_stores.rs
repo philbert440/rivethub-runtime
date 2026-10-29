@@ -374,7 +374,7 @@ fn omp_title(title: &str) -> String {
 }
 
 #[tokio::test]
-async fn omp_lists_flat_files_and_keeps_the_newest_copy() -> TestResult {
+async fn omp_lists_prompted_flat_files_and_keeps_the_newest_copy() -> TestResult {
     let dir = tempfile::tempdir()?;
     let flat = write(
         dir.path(),
@@ -391,13 +391,24 @@ async fn omp_lists_flat_files_and_keeps_the_newest_copy() -> TestResult {
         &format!("sessions/.hidden/x_{U2}.jsonl"),
         &omp_user("hidden"),
     )?;
+    write(
+        dir.path(),
+        &format!("sessions/-.rivethub-discovery/p_{U2}.jsonl"),
+        &[
+            omp_title(""),
+            r#"{"type":"model_change","model":"acme/probe"}"#.to_owned(),
+        ]
+        .join("\n"),
+    )?;
     set_mtime(&flat, 2_000_000)?;
     set_mtime(&bucketed, 1_000_000)?;
-    let rows = only(&omp_lister(dir.path()), HarnessId::Omp).await;
+    let lister = omp_lister(dir.path());
+    let rows = only(&lister, HarnessId::Omp).await;
     assert_eq!(
         rows.iter().map(summary).collect::<Vec<_>>(),
         vec![(U1, "flat", 2_000_000)]
     );
+    assert!(lister.describe(HarnessId::Omp, U2, None).await?.is_some());
     Ok(())
 }
 
