@@ -850,6 +850,57 @@ async fn a_live_turn_streams_deltas_then_a_committed_snapshot() {
 }
 
 #[tokio::test]
+async fn a_failed_turn_reports_its_error_and_the_chat_takes_the_next() {
+    let setup = setup("{}", Stores::default()).await;
+    let session = created_chat(&setup).await;
+    let (mut socket, stop) = socket(&setup, &encode_segment(&session), None).await;
+    silent(&mut socket).await;
+    *setup.harness.refusal.lock() = Some("out of credits".to_owned());
+    for text in ["first", "second"] {
+        let (status, body) = http(
+            &setup.fixture.gateway,
+            "POST",
+            &format!("/api/harness-sessions/{session}/turn"),
+            format!(r#"{{"text":"{text}"}}"#),
+            None,
+        )
+        .await;
+        assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+        setup.harness.traced(&format!("prompt:{text}")).await;
+        setup.harness.finish.add_permits(1);
+        let mut kinds = Vec::new();
+        tokio::time::timeout(WAIT, async {
+            loop {
+                let next = event(&mut socket).await;
+                let done = matches!(
+                    next,
+                    HarnessEvent::SessionUpdated {
+                        status: HarnessSessionStatus::Idle,
+                        ..
+                    }
+                );
+                kinds.push(if let HarnessEvent::Error { code, message, .. } = &next {
+                    format!("error:{code}:{message}")
+                } else {
+                    kind(&next)
+                });
+                if done {
+                    return;
+                }
+            }
+        })
+        .await
+        .expect("turn events");
+        let failed = kinds
+            .iter()
+            .any(|kind| kind.starts_with("error:turn_failed:") && kind.contains("out of credits"));
+        assert_eq!(failed, text == "first", "{kinds:?}");
+        assert!(kinds.contains(&"complete".to_owned()), "{kinds:?}");
+    }
+    stop.cancel();
+}
+
+#[tokio::test]
 async fn a_live_turn_with_no_transcript_source_streams_without_a_snapshot() {
     let setup = setup_with("{}", Stores::default(), &[HarnessId::Dsh]).await;
     let (status, body) = http(

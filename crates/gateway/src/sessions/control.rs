@@ -5,7 +5,7 @@ use kernel::harness::{HarnessAdapter, SessionEvent, SessionOption, TurnAttachmen
 use tokio::sync::{mpsc, oneshot};
 use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::gateway::term::TermSpawnResponse;
-use wire::harness::HarnessSessionStatus;
+use wire::harness::{HarnessCode, HarnessEvent, HarnessSessionStatus};
 use wire::session_id::SessionId;
 
 use super::fanout::ToolNames;
@@ -295,7 +295,9 @@ impl ChatActor {
                     else { return Err(ApiError::Unavailable("harness event stream closed".into())); }
                 }
                 completed = turn.join_next(), if !turn.is_empty() => {
-                    completed.ok_or_else(closed)?.map_err(ApiError::Task)??;
+                    if let Err(error) = completed.ok_or_else(closed)?.map_err(ApiError::Task)? {
+                        self.turn_failed(&error)?;
+                    }
                 }
             }
         }
@@ -363,6 +365,22 @@ impl ChatActor {
             });
         }
         Ok(())
+    }
+
+    fn turn_failed(&mut self, error: &ApiError) -> Result<(), ApiError> {
+        tracing::warn!(%error, "session turn failed");
+        self.service.publish_harness(
+            &self.key,
+            HarnessEvent::Error {
+                session_id: self.session.clone(),
+                code: HarnessCode::TurnFailed.to_string(),
+                delivery_id: None,
+                message: error.to_string(),
+                retryable: Some(HarnessCode::TurnFailed.retryable()),
+            },
+        );
+        self.turn_ended = true;
+        self.publish(SessionEvent::TurnEnded)
     }
 
     fn fan_out(&mut self, event: &SessionEvent) {

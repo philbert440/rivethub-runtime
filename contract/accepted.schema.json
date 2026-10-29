@@ -11936,7 +11936,8 @@
         "turn_in_flight",
         "capability_unsupported",
         "unknown_approval",
-        "unknown_prompt"
+        "unknown_prompt",
+        "turn_failed"
       ]
     },
     "HarnessStoreSession": {

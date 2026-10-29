@@ -266,6 +266,10 @@ under `tasks.harnesses` is now an unknown harness id. Bodies are `wire::harness:
 and `completed`. A harness session's event stream carries it, whole, each time an ACP agent replaces its plan with a
 `session/update` `plan`; it is not stored, so a transcript does not replay it. Bodies are `wire::harness::HarnessEvent`,
 `PlanEntry` and `PlanStatus` in `contract/*.schema.json`.
+(33) Failed turns (Phil, 2026-10-29): `HarnessCode` gains `turn_failed` (HTTP 502, not retryable). When a chat turn
+fails, such as a provider refusing the request, the harness session stream carries an `error` event with code
+`turn_failed` and the failure as its message, then `turn-complete`, and the session goes idle and takes the next turn;
+before, the failure ended the chat. Bodies are `wire::harness::HarnessCode` in `contract/*.schema.json`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice
