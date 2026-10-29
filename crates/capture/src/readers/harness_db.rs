@@ -538,7 +538,7 @@ fn part_kind(text: &str) -> PartKind {
     match text {
         "text" => PartKind::Text,
         "tool" => PartKind::Tool,
-        "reasoning" | "step-start" | "step-finish" | "patch" => PartKind::Ignored,
+        "reasoning" | "step-start" | "step-finish" | "patch" | "compaction" => PartKind::Ignored,
         _ => PartKind::Unrecognized,
     }
 }
