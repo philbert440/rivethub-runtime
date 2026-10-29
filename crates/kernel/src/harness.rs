@@ -6,6 +6,7 @@ use tokio::sync::mpsc::Receiver;
 use wire::gateway::sessions::SessionSwitches;
 use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
+use wire::harness::PlanStatus;
 use wire::json::JsonObject;
 use wire::session_id::SessionId;
 use wire::stream::ThinkingLevel;
@@ -147,6 +148,7 @@ pub struct ToolCallUpdate {
 pub struct PlanEntry {
     pub content: String,
     pub priority: PlanPriority,
+    pub status: PlanStatus,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

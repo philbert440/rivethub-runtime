@@ -263,10 +263,17 @@ terminal command `omp` (label `omp`) resumes with `--resume <id>`, has no pin fl
 `--append-system-prompt <text>`. Its store is the omp agent directory (`PI_CODING_AGENT_DIR`, else `~/.omp/agent`):
 `sessions/<encoded-cwd>/<stamp>_<uuid>.jsonl`, listed with the leading `title` line as the title when it is not blank,
 else the first user message, and the last `model_change` as the model. dsh chats natively over ACP (`dsh acp`) and is
-offered when `dsh` is installed; it has no terminal command, no session store and no transcript source, so its harness
-session list holds only the chats live in this gateway and their transcript reads empty. A `qwen-code` or `pi` entry
+offered when `dsh` is installed; it has no terminal command and no session store, so its harness session list holds only
+the chats live in this gateway. Its transcript has no source (`capability_unsupported`), so the history socket sends no
+transcript for a dsh chat and the client keeps what it streamed; a dsh chat starts in the directory of the node's default
+terminal command. A `qwen-code` or `pi` entry
 under `tasks.harnesses` is now an unknown harness id. Bodies are `wire::harness::HarnessId` and `RosterCommand` in
 `contract/*.schema.json`.
+(32) Agent plans (Phil, 2026-10-29): `HarnessEvent` gains `plan`,
+`{ "type": "plan", "sessionId", "entries": [{ "content", "status" }] }` with `status` one of `pending`, `in_progress`
+and `completed`. A harness session's event stream carries it, whole, each time an ACP agent replaces its plan with a
+`session/update` `plan`; it is not stored, so a transcript does not replay it. Bodies are `wire::harness::HarnessEvent`,
+`PlanEntry` and `PlanStatus` in `contract/*.schema.json`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

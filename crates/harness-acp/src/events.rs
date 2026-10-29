@@ -7,6 +7,7 @@ use kernel::harness::ToolCallInfo;
 use kernel::harness::ToolCallStatus;
 use kernel::harness::ToolCallUpdate;
 use serde::Deserialize as _;
+use wire::harness::PlanStatus;
 use wire::json::JsonObject;
 use wire::stream::LlmUsage;
 
@@ -146,6 +147,7 @@ fn plan_event(plan: acp::Plan) -> Result<SessionEvent, AcpError> {
         entries.push(PlanEntry {
             content: entry.content,
             priority: plan_priority(&entry.priority)?,
+            status: plan_status(&entry.status)?,
         });
     }
     Ok(SessionEvent::Plan(entries))
@@ -196,6 +198,15 @@ fn tool_status(status: acp::ToolCallStatus) -> Result<ToolCallStatus, AcpError> 
         acp::ToolCallStatus::Pending | acp::ToolCallStatus::InProgress => {
             Ok(ToolCallStatus::Running)
         }
+        _ => Err(AcpError::UnmappedUpdate),
+    }
+}
+
+fn plan_status(status: &acp::PlanEntryStatus) -> Result<PlanStatus, AcpError> {
+    match status {
+        acp::PlanEntryStatus::Pending => Ok(PlanStatus::Pending),
+        acp::PlanEntryStatus::InProgress => Ok(PlanStatus::InProgress),
+        acp::PlanEntryStatus::Completed => Ok(PlanStatus::Completed),
         _ => Err(AcpError::UnmappedUpdate),
     }
 }

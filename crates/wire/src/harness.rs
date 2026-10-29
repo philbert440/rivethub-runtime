@@ -250,6 +250,20 @@ pub enum StatusSource {
     Protocol,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PlanEntry {
+    pub content: String,
+    pub status: PlanStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanStatus {
+    Pending,
+    InProgress,
+    Completed,
+}
+
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -304,6 +318,11 @@ pub enum HarnessEvent {
         session_id: SessionId,
         summary: Box<HarnessSessionSummary>,
         supersedes: Option<SessionId>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Plan {
+        session_id: SessionId,
+        entries: Vec<PlanEntry>,
     },
     #[serde(rename_all = "camelCase")]
     TurnComplete {
