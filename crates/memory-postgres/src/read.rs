@@ -223,27 +223,29 @@ impl crate::PostgresMemory {
 
     pub async fn memory_stats(&self) -> Result<MemoryStatsResponse, Error> {
         let totals = sqlx::query!(
-            "select
-                (select count(*) from rh_conversations) as \"conversations!\",
-                (select count(*) from rh_messages) as \"messages!\",
-                (select count(*) from rh_messages
-                  where role = 'tool' or tool_name is not null) as \"tool_calls!\",
-                (select count(*) from rh_summaries) as \"summaries!\",
-                (select count(embedding) from rh_messages) as \"embedded_messages!\",
-                (select count(*) from rh_messages
-                  where embedding is null
-                    and embed_status is distinct from 'unembeddable'
-                    and embed_status is distinct from 'failed'
-                    and (length(coalesce(content, '')) > 0
-                         or length(coalesce(tool_result, '')) > 0))
-                  + (select count(*) from rh_summaries
-                      where embedding is null
-                        and embed_status is distinct from 'unembeddable'
-                        and embed_status is distinct from 'failed')
-                  as \"embed_queue_depth!\",
-                (select count(*) from rh_messages where embed_status = 'failed')
-                  + (select count(*) from rh_summaries where embed_status = 'failed')
-                  as \"failed_embeddings!\""
+            "with messages as (
+                select count(*) as total,
+                       count(*) filter (where role = 'tool' or tool_name is not null) as tool_calls,
+                       count(embedding) as embedded,
+                       count(*) filter (where embedding is null and embed_status is distinct from 'unembeddable'
+                           and embed_status is distinct from 'failed'
+                           and (length(coalesce(content, '')) > 0 or length(coalesce(tool_result, '')) > 0)) as queued,
+                       count(*) filter (where embed_status = 'failed') as failed
+                  from rh_messages),
+             summaries as (
+                select count(*) as total,
+                       count(*) filter (where embedding is null and embed_status is distinct from 'unembeddable'
+                           and embed_status is distinct from 'failed') as queued,
+                       count(*) filter (where embed_status = 'failed') as failed
+                  from rh_summaries)
+             select (select count(*) from rh_conversations) as \"conversations!\",
+                messages.total as \"messages!\",
+                messages.tool_calls as \"tool_calls!\",
+                summaries.total as \"summaries!\",
+                messages.embedded as \"embedded_messages!\",
+                messages.queued + summaries.queued as \"embed_queue_depth!\",
+                messages.failed + summaries.failed as \"failed_embeddings!\"
+             from messages, summaries"
         )
         .fetch_one(&self.pool)
         .await
