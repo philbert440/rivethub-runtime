@@ -18,6 +18,7 @@ use serde::Serialize;
 use tempfile::tempdir;
 use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
+use wire::harness::PlanStatus;
 use wire::json::JsonObject;
 use wire::session_id::SessionId;
 use wire::stream::LlmUsage;
@@ -58,6 +59,7 @@ fn expected_events(input: JsonObject) -> Vec<SessionEvent> {
         SessionEvent::Plan(vec![PlanEntry {
             content: "measure the thing".to_owned(),
             priority: PlanPriority::High,
+            status: PlanStatus::InProgress,
         }]),
         SessionEvent::AvailableCommands(vec![Command {
             name: "review".to_owned(),

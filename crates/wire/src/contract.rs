@@ -300,6 +300,8 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::harness::StatusPhase>,
     SchemaGenerator::subschema_for::<crate::harness::StatusSource>,
     SchemaGenerator::subschema_for::<crate::harness::HarnessEvent>,
+    SchemaGenerator::subschema_for::<crate::harness::PlanEntry>,
+    SchemaGenerator::subschema_for::<crate::harness::PlanStatus>,
     SchemaGenerator::subschema_for::<crate::harness::ApprovalOption>,
     SchemaGenerator::subschema_for::<crate::harness::HarnessStatusFrame>,
     SchemaGenerator::subschema_for::<crate::harness::StatusTool>,

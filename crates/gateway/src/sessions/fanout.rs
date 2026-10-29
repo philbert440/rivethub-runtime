@@ -74,13 +74,23 @@ impl ToolNames {
                 stop_reason: None,
                 usage: self.usage.take(),
             },
+            SessionEvent::Plan(entries) => HarnessEvent::Plan {
+                session_id,
+                entries: entries.iter().map(plan_entry).collect(),
+            },
             SessionEvent::UserMessageChunk { .. }
-            | SessionEvent::Plan(_)
             | SessionEvent::AvailableCommands(_)
             | SessionEvent::CurrentMode { .. }
             | SessionEvent::Exited { .. }
             | SessionEvent::TerminalBytes { .. }
             | SessionEvent::TerminalResize { .. } => return None,
         })
+    }
+}
+
+fn plan_entry(entry: &kernel::harness::PlanEntry) -> wire::harness::PlanEntry {
+    wire::harness::PlanEntry {
+        content: entry.content.clone(),
+        status: entry.status,
     }
 }

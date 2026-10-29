@@ -65,6 +65,7 @@ use wire::gateway::memory::TagState;
 use wire::gateway::memory::TagTaxonomyMerge;
 use wire::harness::ApprovalDecision as Decision;
 use wire::harness::HarnessId;
+use wire::harness::PlanStatus;
 use wire::memory::MemoryEntry;
 use wire::message::Role;
 use wire::session_id::SessionId;
@@ -438,6 +439,7 @@ fn harness_delivers_session_events() {
             SessionEvent::Plan(vec![PlanEntry {
                 content: "step".to_string(),
                 priority: PlanPriority::High,
+                status: PlanStatus::Pending,
             }]),
             SessionEvent::AvailableCommands(vec![Command {
                 name: "compact".to_string(),

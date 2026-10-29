@@ -11016,6 +11016,29 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "plan"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PlanEntry"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "sessionId",
+            "entries"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "turn-complete"
             },
             "sessionId": {
@@ -11402,6 +11425,29 @@
         "status"
       ],
       "additionalProperties": true
+    },
+    "PlanEntry": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/PlanStatus"
+        }
+      },
+      "required": [
+        "content",
+        "status"
+      ]
+    },
+    "PlanStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "in_progress",
+        "completed"
+      ]
     },
     "LlmUsage": {
       "type": "object",
