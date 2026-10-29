@@ -45,7 +45,6 @@ async fn missing_channel_refuses_before_any_write_and_supplied_owner_is_preserve
     batch.channel = None;
     let options = CaptureOptions {
         owner_user_id: Some("owner".to_owned()),
-        allow_filesystem: false,
     };
     assert!(matches!(
         store.capture_batch(&batch, &options).await,

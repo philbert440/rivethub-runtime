@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::worker::ComposedRunner;
 use config::{Config, Environment, ServiceSwitch};
 use gateway::server::ServeOptions;
+use kernel::filing::FilingStore;
 use kernel::memory::jobs::UnembeddedStore;
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
@@ -490,10 +491,10 @@ async fn build_runners(
             queue: Arc::clone(store),
             targets: Arc::clone(store) as Arc<dyn EmbeddingStore>,
             summaries: Arc::clone(store) as Arc<dyn SummaryStore>,
-            memory: Arc::clone(store) as Arc<dyn MemoryStore>,
             wiki: Arc::clone(store) as Arc<dyn WikiBuilderStore>,
             consolidate: Some(Arc::clone(store) as Arc<dyn WikiConsolidateStore>),
             topics: Arc::clone(store) as Arc<dyn TopicStore>,
+            filing: Arc::clone(store) as Arc<dyn FilingStore>,
             pages: Arc::clone(store) as Arc<dyn TopicPageStore>,
             decisions: Arc::clone(store) as Arc<dyn DecisionStore>,
             lineage: worker::session_lineage(env),

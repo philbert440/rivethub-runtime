@@ -15,8 +15,6 @@ use uuid::Uuid;
 
 const SESSION: &str = "round-trip-session-key";
 const BODY: &str = "round-trip-body";
-const RULE_CWD: &str = "/no/such/rr-rule-absent";
-const RULE_VALUE: &str = "rr-rule-absent";
 
 fn args(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|part| (*part).to_owned()).collect()
@@ -79,7 +77,7 @@ async fn memory_rejects_unknown_options_and_incomplete_flags() {
     let requeue = run(&["memory", "requeue", "--task", "nope"], &environment).await;
     failure(
         &requeue,
-        "--task nope is not an allowed memory task (extract-wiki, compact-conversation, embed-target, synthesize-tool-call, suggest-tags)",
+        "--task nope is not an allowed memory task (extract-wiki, compact-conversation, embed-target, synthesize-tool-call, file-conversation)",
     );
     failure(
         &run(
@@ -413,70 +411,6 @@ async fn export_output_guards(
     failure(&linked, "output path is a symlink");
 }
 
-#[tokio::test]
-async fn sqlite_project_rules_skip_rejected_and_future_rows() {
-    let directory = tempfile::tempdir().expect("directory");
-    let database = migrated(directory.path());
-    seed_rule(&database, "kept", "rejected");
-    seed_rule(&database, "fresh", "none");
-    let (_home, environment) = env(&[]);
-    let path = database.to_string_lossy().to_string();
-    let future = run(
-        &[
-            "memory",
-            "tags",
-            "backfill-rule",
-            "--sqlite",
-            &path,
-            "--since",
-            "2099-01-01T00:00:00Z",
-        ],
-        &environment,
-    )
-    .await;
-    assert_eq!(future.stdout, "applied 0 project rule tag(s)\n");
-    let applied = run(
-        &["memory", "tags", "backfill-rule", "--sqlite", &path],
-        &environment,
-    )
-    .await;
-    assert_eq!(applied.exit, Exit::Ok, "{}", applied.stderr);
-    assert_eq!(applied.stdout, "applied 1 project rule tag(s)\n");
-    assert_eq!(
-        scalar(
-            &database,
-            "SELECT count(*) FROM ros_tags WHERE state = 'rejected'"
-        ),
-        1
-    );
-    assert_eq!(
-        scalar(
-            &database,
-            "SELECT count(*) FROM ros_tags WHERE state = 'accepted' AND source = 'rule'"
-        ),
-        1
-    );
-}
-
-fn seed_rule(path: &Path, id: &str, state: &str) {
-    let connection = rusqlite::Connection::open(path).expect("sqlite");
-    let settings = format!(r#"{{"cwd":"{RULE_CWD}"}}"#);
-    connection
-        .execute(
-            "INSERT INTO ros_conversations (id, session_key, agent, settings, created_at, updated_at) VALUES (?1, ?1, 'main', ?2, '2020-01-01T00:00:00.000Z', '2020-01-01T00:00:00.000Z')",
-            (id, settings),
-        )
-        .expect("conversation");
-    if state == "rejected" {
-        connection
-            .execute(
-                "INSERT INTO ros_tags (id, entity_type, entity_id, key, value, display, source, state, created_at, updated_at) VALUES (?1, 'conversation', ?2, 'project', ?3, ?3, 'user', 'rejected', '2020-01-01T00:00:00.000Z', '2020-01-01T00:00:00.000Z')",
-                (format!("tag-{id}"), id, RULE_VALUE),
-            )
-            .expect("tag");
-    }
-}
-
 #[derive(Debug, Deserialize)]
 struct ImportSummary {
     rows: std::collections::BTreeMap<String, u64>,
@@ -573,7 +507,7 @@ async fn queue_status_reports_every_task_and_a_dead_job(pool: PgPool) {
          compact-conversation pending=0 running=0 scheduled=0 dead=0 recent_dead=0\n\
          embed-target pending=0 running=0 scheduled=0 dead=0 recent_dead=0\n\
          synthesize-tool-call pending=0 running=0 scheduled=0 dead=0 recent_dead=0\n\
-         suggest-tags pending=0 running=0 scheduled=0 dead=0 recent_dead=0\n"
+         file-conversation pending=0 running=0 scheduled=0 dead=0 recent_dead=0\n"
     );
     dead_job(&pool, "extract-wiki", "dead-wiki", "wiki failed", 25, None).await;
     let json = run(&["memory", "queue-status", "--json"], &environment).await;
@@ -695,7 +629,7 @@ async fn requeue_revives_idle_rows_and_reports_the_cap(pool: PgPool) {
             "memory",
             "requeue",
             "--task",
-            "suggest-tags",
+            "file-conversation",
             "--limit",
             "5000",
             "--dry-run",
@@ -865,59 +799,6 @@ async fn count_conversations(pool: &PgPool) -> i64 {
         .fetch_one(pool)
         .await
         .expect("count")
-}
-
-#[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn project_rules_keep_a_rejected_tag(pool: PgPool) {
-    let fresh = Uuid::new_v4();
-    let kept = Uuid::new_v4();
-    for id in [fresh, kept] {
-        sqlx::query(
-            "INSERT INTO rh_conversations (id, session_key, agent, settings) VALUES ($1, $2, 'main', jsonb_build_object('cwd', $3::text))",
-        )
-        .bind(id)
-        .bind(id.to_string())
-        .bind(RULE_CWD)
-        .execute(&pool)
-        .await
-        .expect("conversation");
-    }
-    sqlx::query(
-        "INSERT INTO rh_tags (entity_type, entity_id, key, value, display, source, state)
-         VALUES ('conversation', $1, 'project', $2, $2, 'user', 'rejected')",
-    )
-    .bind(kept)
-    .bind(RULE_VALUE)
-    .execute(&pool)
-    .await
-    .expect("tag");
-    let (_home, environment) = env(&[("RIVETHUB_PG_URL", &url_of(&pool))]);
-    let future = run(
-        &[
-            "memory",
-            "tags",
-            "backfill-rule",
-            "--since",
-            "2099-01-01T00:00:00Z",
-        ],
-        &environment,
-    )
-    .await;
-    assert_eq!(future.stdout, "applied 0 project rule tag(s)\n");
-    let applied = run(&["memory", "tags", "backfill-rule"], &environment).await;
-    assert_eq!(applied.stdout, "applied 1 project rule tag(s)\n");
-    let rejected: String = sqlx::query_scalar("SELECT state FROM rh_tags WHERE entity_id = $1")
-        .bind(kept)
-        .fetch_one(&pool)
-        .await
-        .expect("rejected");
-    assert_eq!(rejected, "rejected");
-    let accepted: String = sqlx::query_scalar("SELECT source FROM rh_tags WHERE entity_id = $1")
-        .bind(fresh)
-        .fetch_one(&pool)
-        .await
-        .expect("accepted");
-    assert_eq!(accepted, "rule");
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]

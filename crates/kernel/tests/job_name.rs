@@ -23,7 +23,10 @@ const FIXED: [(&str, JobName); 16] = [
         "synthesize-tool-call",
         JobName::Fixed(FixedJob::SynthesizeToolCall),
     ),
-    ("suggest-tags", JobName::Fixed(FixedJob::SuggestTags)),
+    (
+        "file-conversation",
+        JobName::Fixed(FixedJob::FileConversation),
+    ),
     ("enqueue-idle", JobName::Fixed(FixedJob::EnqueueIdle)),
     ("extract-wiki", JobName::Fixed(FixedJob::ExtractWiki)),
     (

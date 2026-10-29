@@ -4,7 +4,6 @@ use crate::capture::ConversationUpsert;
 use crate::capture::MessageRow;
 use crate::capture::prepare_capture_message;
 use crate::error::Error;
-use crate::project;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
@@ -43,24 +42,6 @@ impl crate::PostgresMemory {
         options: &CaptureOptions,
     ) -> Result<CaptureResult, Error> {
         let channel = batch.channel.as_deref().ok_or(Error::MissingChannel)?;
-        let cwd = batch
-            .settings
-            .as_ref()
-            .map(|settings| {
-                CaptureSettings::deserialize(serde::de::value::MapDeserializer::<
-                    _,
-                    serde_json::Error,
-                >::new(
-                    settings
-                        .as_map()
-                        .iter()
-                        .map(|(key, value)| (key.as_str(), value)),
-                ))
-                .map(|settings| settings.cwd)
-            })
-            .transpose()?
-            .flatten();
-        let tag = project::resolve_project_tag_blocking(cwd, options.allow_filesystem).await?;
         let owner = options.owner_user_id.as_deref();
         let mut writer = CaptureWriter::begin(&self.pool, &batch.session_key).await?;
         let conversation_id = writer
@@ -103,9 +84,6 @@ impl crate::PostgresMemory {
                 .await?;
             inserted += 1;
         }
-        if let Some(tag) = &tag {
-            writer.apply_project_tag(conversation_id, tag).await?;
-        }
         if batch.finalize == Some(true) {
             writer.finalize_conversation(conversation_id).await?;
         }
@@ -117,11 +95,6 @@ impl crate::PostgresMemory {
             skipped: u64::try_from(batch.messages.len())? - inserted,
         })
     }
-}
-
-#[derive(serde::Deserialize)]
-struct CaptureSettings {
-    cwd: Option<String>,
 }
 
 struct EntryGroup {

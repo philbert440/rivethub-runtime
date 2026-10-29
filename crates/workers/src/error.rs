@@ -96,19 +96,17 @@ pub enum WorkerError {
     Count,
     #[error("the summary clock overflowed")]
     Clock,
-    #[error("job payload is not a suggest-tags job: {source}")]
-    SuggestPayload {
+    #[error("job payload is not a file-conversation job: {source}")]
+    FilePayload {
         #[source]
         source: serde_json::Error,
     },
-    #[error("summary {id} is not in the memory store")]
-    SummaryMissing { id: Uuid },
-    #[error("suggest-tags conversation {payload} does not own summary {summary}")]
-    ConversationMismatch { payload: Uuid, summary: Uuid },
     #[error("{message}")]
-    TagSuggestions { message: String },
-    #[error("tag settings are invalid: {message}")]
-    TagSettings { message: String },
+    Filing { message: String },
+    #[error("the topic store failed: {0}")]
+    Topics(#[from] kernel::topics::TopicError),
+    #[error("session lineage could not be read: {0}")]
+    Lineage(#[from] kernel::transcript::TranscriptReaderError),
     #[error("the memory store failed: {0}")]
     Memory(#[source] MemoryStoreError),
     #[error("topic page sync failed: {0}")]
@@ -136,8 +134,8 @@ impl WorkerError {
         Self::SummaryPayload { source }
     }
 
-    pub(crate) fn suggest_payload(source: serde_json::Error) -> Self {
-        Self::SuggestPayload { source }
+    pub(crate) fn file_payload(source: serde_json::Error) -> Self {
+        Self::FilePayload { source }
     }
 }
 

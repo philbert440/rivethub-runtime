@@ -376,7 +376,7 @@ impl JobQueue for TaskMemory {
                 JobName::Fixed(FixedJob::EnqueueStaleSummaries),
                 JobName::Fixed(FixedJob::ReapDeadJobs),
             ],
-            WorkerRole::Categorizer => vec![JobName::Fixed(FixedJob::SuggestTags)],
+            WorkerRole::Categorizer => vec![JobName::Fixed(FixedJob::FileConversation)],
             WorkerRole::WikiBuilder => vec![
                 JobName::Fixed(FixedJob::ExtractWiki),
                 JobName::Fixed(FixedJob::EnqueueWikiBackfill),

@@ -59,7 +59,6 @@ fn roles_match_the_kernel_task_lists() {
         vec![
             "compact-conversation".to_owned(),
             "synthesize-tool-call".to_owned(),
-            "suggest-tags".to_owned(),
             "enqueue-idle".to_owned(),
             "enqueue-stale-compaction".to_owned(),
             "reap-dead-jobs".to_owned(),
@@ -68,7 +67,7 @@ fn roles_match_the_kernel_task_lists() {
     );
     assert_eq!(
         names(WorkerRole::Categorizer),
-        vec!["suggest-tags".to_owned()]
+        vec!["file-conversation".to_owned()]
     );
     assert_eq!(
         names(WorkerRole::WikiBuilder),
@@ -457,11 +456,9 @@ fn deps(
     WorkerDeps {
         targets,
         summaries: Arc::new(IdleSummaries),
-        memory: Arc::new(testkit::FakeMemoryStore::default()),
         provider,
         embed: settings(),
         summary: SummarySettings::standard("fake-chat").expect("summary settings"),
-        tags: workers::TagSettings::new("tagger-v1", false).expect("tag settings"),
     }
 }
 
@@ -558,7 +555,7 @@ async fn all_claims_every_role_that_has_a_handler() {
         .await;
     let tags = rig
         .queue
-        .push(fixed(FixedJob::SuggestTags), JsonObject::default(), 2)
+        .push(fixed(FixedJob::FileConversation), JsonObject::default(), 2)
         .await;
     let wiki_job = rig
         .queue
@@ -581,7 +578,7 @@ async fn all_claims_every_role_that_has_a_handler() {
     let tagged = rig.queue.view(tags).await;
     assert_eq!(
         tagged.error.as_deref(),
-        Some("job payload is not a suggest-tags job: missing field `summaryId`")
+        Some("job payload is not a file-conversation job: missing field `conversationId`")
     );
     assert_eq!(rig.queue.claims(), 4);
     finish(cancel, run).await;

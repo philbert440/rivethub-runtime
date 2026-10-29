@@ -285,11 +285,9 @@ fn deps(
     WorkerDeps {
         targets,
         summaries: Arc::new(IdleSummaries),
-        memory: Arc::new(testkit::FakeMemoryStore::default()),
         provider,
         embed: settings(),
         summary: SummarySettings::standard("fake-chat").expect("summary settings"),
-        tags: workers::TagSettings::new("tagger-v1", false).expect("tag settings"),
     }
 }
 

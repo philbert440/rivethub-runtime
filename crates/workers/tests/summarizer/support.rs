@@ -1,36 +1,5 @@
 use super::*;
 
-pub(super) fn tagging_settings() -> SummarySettings {
-    SummarySettings::from_parts(SummaryParts {
-        model: "fake-chat".to_owned(),
-        leaf_batch: 10,
-        branch_batch: 8,
-        root_batch: 5,
-        min_leaves_for_branch: 5,
-        min_branches_for_root: 3,
-        idle_minutes: 15,
-        stale_minutes: 5_760,
-        stale_min_batch: 2,
-        max_leaf_rounds: 10,
-        pipeline_version: 5,
-        session_tagging: true,
-    })
-    .expect("tagging settings")
-}
-
-pub(super) fn assert_tag_payload(job: &Job, summary_id: Uuid, conversation_id: Uuid) {
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Body {
-        summary_id: Uuid,
-        conversation_id: Uuid,
-    }
-    let value = serde_json::to_value(&job.payload).expect("payload");
-    let body: Body = serde_json::from_value(value).expect("suggest payload");
-    assert_eq!(body.summary_id, summary_id);
-    assert_eq!(body.conversation_id, conversation_id);
-}
-
 pub(super) fn bind<'a>(
     store: &'a MemStore,
     script: &'a Scripted,
@@ -46,7 +15,6 @@ pub(super) fn bind<'a>(
         settings,
         now,
         cancel: token,
-        topics: None,
     }
 }
 
@@ -383,8 +351,19 @@ impl Seen {
 
     pub(super) async fn only(&self) -> Job {
         let mut jobs = self.jobs.lock().await;
+        jobs.retain(|seen| seen.job.name != JobName::Fixed(FixedJob::FileConversation));
         assert_eq!(jobs.len(), 1);
         jobs.remove(0).job
+    }
+
+    pub(super) async fn filing(&self) -> Vec<Job> {
+        self.jobs
+            .lock()
+            .await
+            .iter()
+            .filter(|seen| seen.job.name == JobName::Fixed(FixedJob::FileConversation))
+            .map(|seen| seen.job.clone())
+            .collect()
     }
 
     pub(super) async fn dead_count(&self, job: FixedJob) -> usize {
@@ -556,7 +535,7 @@ impl JobQueue for Seen {
 fn default_attempts(name: &JobName) -> u32 {
     match name {
         JobName::Fixed(FixedJob::SummarizeConversation | FixedJob::SynthesizeToolCall) => 3,
-        JobName::Fixed(FixedJob::SuggestTags | FixedJob::ExtractWiki) => 2,
+        JobName::Fixed(FixedJob::FileConversation | FixedJob::ExtractWiki) => 2,
         JobName::Fixed(FixedJob::EmbedTarget) => 5,
         JobName::Fixed(FixedJob::RunTask)
         | JobName::Heartbeat { .. }
