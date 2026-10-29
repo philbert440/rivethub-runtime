@@ -11,7 +11,7 @@ mod history;
 mod kimi;
 mod omp;
 mod text;
-mod time;
+pub(crate) mod time;
 mod title;
 mod transcripts;
 
