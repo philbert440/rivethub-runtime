@@ -112,6 +112,8 @@ pub struct TopicSuggestion {
     pub name: String,
     #[serde(default)]
     pub topic_id: Option<String>,
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -153,6 +155,34 @@ pub struct TopicSession {
     #[serde(flatten)]
     pub placement: TopicPlacement,
     #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub last_active: Option<DateTime<Utc>>,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationPlacement {
+    pub conversation_id: String,
+    pub topic_id: String,
+    pub by: PlacedBy,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub at: DateTime<Utc>,
+}
+
+#[serde_as]
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicConversation {
+    #[serde(flatten)]
+    pub placement: ConversationPlacement,
+    pub channel: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
     #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
     pub last_active: Option<DateTime<Utc>>,
 }
@@ -161,6 +191,16 @@ pub struct TopicSession {
 #[serde(rename_all = "camelCase")]
 pub struct TopicSessionList {
     pub sessions: Vec<TopicSession>,
+    #[serde(default)]
+    pub conversations: Vec<TopicConversation>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationPlacementReply {
+    #[serde(default)]
+    pub placement: Option<ConversationPlacement>,
 }
 
 #[serde_with::skip_serializing_none]

@@ -1,5 +1,6 @@
 mod decisions;
 mod done;
+mod filing;
 mod startup;
 
 use std::collections::BTreeMap;
@@ -87,7 +88,7 @@ impl Api {
         if topics {
             gateway = gateway
                 .with_tenancy(Tenancy::local(UserId::new("owner".to_owned())?))
-                .with_topics(store.clone())
+                .with_topics(store.clone(), store.clone())
                 .with_decisions(store.clone());
         }
         Ok(Self {
@@ -128,7 +129,7 @@ impl Api {
             .with_tenancy(Tenancy::local(UserId::new("owner".to_owned())?))
             .with_sessions(registry)
             .with_terminal(Arc::new(terminal))
-            .with_topics(store.clone())
+            .with_topics(store.clone(), store.clone())
             .with_startup_memory(store.clone(), store.clone());
         Ok(Self {
             router: Arc::new(gateway).router(false),

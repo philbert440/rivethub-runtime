@@ -1,8 +1,9 @@
+use kernel::filing::FiledConversation;
+use kernel::filing::FiledSession;
 use kernel::topics::Alias;
 use kernel::topics::Decision;
 use kernel::topics::DecisionStatus;
 use kernel::topics::HistoryMark;
-use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
 use kernel::topics::Root;
@@ -11,8 +12,10 @@ use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicPageError;
+use wire::gateway::topics::ConversationPlacement;
 use wire::gateway::topics::PlacedBy;
 use wire::gateway::topics::SessionHistoryMark;
+use wire::gateway::topics::TopicConversation;
 use wire::gateway::topics::TopicDecision;
 use wire::gateway::topics::TopicDirectory;
 use wire::gateway::topics::TopicPlacement;
@@ -136,13 +139,35 @@ pub(super) fn suggestion(suggestion: &Suggestion) -> TopicSuggestion {
     TopicSuggestion {
         name: suggestion.name.as_str().to_owned(),
         topic_id: suggestion.topic.map(|topic| topic.to_string()),
+        parent_id: suggestion.parent.map(|topic| topic.to_string()),
     }
 }
 
-pub(super) fn session(placed: PlacedSession) -> TopicSession {
+pub(super) fn filed_session(filed: FiledSession) -> TopicSession {
     TopicSession {
-        placement: placement(placed.placement),
-        last_active: placed.last_active,
+        placement: placement(filed.placement),
+        title: filed.title,
+        last_active: filed.last_active,
+    }
+}
+
+pub(super) fn conversation_placement(
+    placement: &kernel::filing::ConversationPlacement,
+) -> ConversationPlacement {
+    ConversationPlacement {
+        conversation_id: placement.conversation.to_string(),
+        topic_id: placement.topic.to_string(),
+        by: placed_by(placement.by),
+        at: placement.at,
+    }
+}
+
+pub(super) fn filed_conversation(filed: FiledConversation) -> TopicConversation {
+    TopicConversation {
+        placement: conversation_placement(&filed.placement),
+        channel: filed.channel,
+        title: filed.title,
+        last_active: filed.last_active,
     }
 }
 

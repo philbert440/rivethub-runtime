@@ -15,6 +15,7 @@ use config::{Config, Environment};
 use gateway::Gateway;
 use gateway::sessions::SessionRegistry;
 use kernel::agent_presets::AgentPresetStore;
+use kernel::filing::FilingStore;
 use kernel::hub_state::HubStateStore;
 use kernel::memory::MemoryExport;
 use kernel::memory::MemoryStore;
@@ -125,7 +126,7 @@ struct Backing<'tasks> {
     presets: Option<Arc<dyn AgentPresetStore>>,
     hub_state: Option<Arc<dyn HubStateStore>>,
     export: Option<Arc<dyn MemoryExport>>,
-    topics: Option<Arc<dyn TopicStore>>,
+    topics: Option<(Arc<dyn TopicStore>, Arc<dyn FilingStore>)>,
     decisions: Option<Arc<dyn DecisionStore>>,
     startup: Option<(Arc<dyn TopicPageStore>, Arc<dyn StartupStore>)>,
     tasks: Option<&'tasks crate::agent::LocalTasks>,
@@ -162,7 +163,7 @@ fn with_backing(gateway: Gateway, backing: &Backing<'_>) -> Gateway {
         None => gateway,
     };
     let gateway = match backing.topics.clone() {
-        Some(topics) => gateway.with_topics(topics),
+        Some((topics, filing)) => gateway.with_topics(topics, filing),
         None => gateway,
     };
     let gateway = match backing.decisions.clone() {
@@ -257,7 +258,7 @@ impl Composition {
             presets: agent_presets(memory).await?,
             hub_state: hub_state(memory).await?,
             export: Some(Arc::new(MemoryExporter::postgres(Arc::clone(memory), url))),
-            topics: Some(memory.clone()),
+            topics: Some((memory.clone(), memory.clone())),
             decisions: Some(memory.clone()),
             startup: Some((memory.clone(), memory.clone())),
             tasks: None,
@@ -281,7 +282,7 @@ impl Composition {
             presets: None,
             hub_state: None,
             export: Some(Arc::new(MemoryExporter::sqlite(Arc::clone(store)))),
-            topics: Some(store.clone()),
+            topics: Some((store.clone(), store.clone())),
             decisions: Some(store.clone()),
             startup: Some((store.clone(), store.clone())),
             tasks,
