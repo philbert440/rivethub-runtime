@@ -89,7 +89,8 @@ pub(crate) fn list(root: &Path, limit: usize) -> Result<Vec<StoreSession>, Trans
 }
 
 fn prompted(file: &OmpFile) -> bool {
-    head(&file.path, HEAD_WINDOW).is_none_or(|text| {
+    let long = std::fs::metadata(&file.path).is_ok_and(|meta| meta.len() > HEAD_WINDOW);
+    long || head(&file.path, HEAD_WINDOW).is_none_or(|text| {
         text.lines()
             .filter_map(object_line::<OmpLine>)
             .any(|line| user_turn(&line).is_some())
@@ -118,22 +119,27 @@ pub(crate) fn describe(
 fn omp_row(file: &OmpFile) -> StoreSession {
     let mut row = StoreSession::new(HarnessId::Omp, &file.id, file.times.mtime);
     row.created_at = Some(file.times.birth);
-    let lines = tail_window(&file.path)
-        .map(|text| {
-            text.lines()
-                .filter_map(object_line::<OmpLine>)
-                .collect::<Vec<_>>()
-        })
+    let parsed = |text: String| {
+        text.lines()
+            .filter_map(object_line::<OmpLine>)
+            .collect::<Vec<_>>()
+    };
+    let opening = head(&file.path, HEAD_WINDOW)
+        .map(parsed)
         .unwrap_or_default();
-    let title = head(&file.path, HEAD_WINDOW)
-        .and_then(|text| text.lines().next().and_then(object_line::<OmpLine>))
-        .as_ref()
+    let lines = tail_window(&file.path).map(parsed).unwrap_or_default();
+    let title = opening
+        .first()
         .and_then(titled)
-        .or_else(|| lines.iter().find_map(user_turn));
+        .or_else(|| opening.iter().chain(&lines).find_map(user_turn));
     if let Some(title) = title {
         row.title = title;
     }
-    row.model = lines.iter().rev().find_map(model_of);
+    row.model = lines
+        .iter()
+        .rev()
+        .chain(opening.iter().rev())
+        .find_map(model_of);
     row
 }
 

@@ -212,7 +212,8 @@ fn map_message(
             let said = joined(&content);
             let reply = match error_message {
                 Some(error) if said.trim().is_empty() => error,
-                _ => said,
+                Some(error) => format!("{said}\n\n{error}"),
+                None => said,
             };
             text_turn(&turn(Role::Assistant, &reply))
         }
