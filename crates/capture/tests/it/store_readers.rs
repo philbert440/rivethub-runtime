@@ -462,6 +462,12 @@ async fn opencode_json_parts_read_their_text_and_tools() -> Result<(), Box<dyn s
         ),
         ("p2", "m2", 1_791_979_201_000, r#"{"type":"step-start"}"#),
         (
+            "p2c",
+            "m2",
+            1_791_979_201_000,
+            r#"{"type":"compaction","auto":true,"overflow":false}"#,
+        ),
+        (
             "p3",
             "m2",
             1_791_979_201_000,
