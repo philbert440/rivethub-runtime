@@ -137,9 +137,10 @@ impl FilingStore for PostgresMemory {
             .begin()
             .await
             .map_err(failed("conversation placement"))?;
-        if !super::write::topic_exists(&mut tx, placement.topic).await? {
-            return Err(not_found(placement.topic));
-        }
+        super::rows::by_id(&mut tx, placement.topic)
+            .await?
+            .ok_or_else(|| not_found(placement.topic))?
+            .accepts_sessions()?;
         let existing = placement_of(&mut tx, placement.conversation, true).await?;
         let kept = placement.clone().admit(existing);
         if kept == placement {
@@ -259,6 +260,22 @@ impl FilingStore for PostgresMemory {
             sessions,
             conversations,
         })
+    }
+
+    async fn corrected(&self, target: &Target) -> Result<bool, TopicError> {
+        let (session, conversation) = match target {
+            Target::Session(session) => (Some(session.as_str()), None),
+            Target::Conversation(conversation) => (None, Some(*conversation)),
+        };
+        sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM rh_filing_corrections
+                               WHERE session_id = $1 OR conversation_id = $2) AS "corrected!""#,
+            session,
+            conversation
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(failed("filing corrected"))
     }
 
     async fn correct(&self, correction: Correction) -> Result<(), TopicError> {

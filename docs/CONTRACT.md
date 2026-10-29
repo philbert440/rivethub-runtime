@@ -375,7 +375,7 @@ task follows its parent; a working directory inside a topic's own directory (dee
 local directory matches by path, since captured conversations do not record their node) files it there; exactly one
 topic named in the title or first leaf files it there; otherwise the model answers file, suggest a name (with an
 optional parent) or nothing. A suggestion that matches a topic's slug or alias files there; one that repeats the title
-or reads like a sentence, path, file, ticket, PR, version, branch or id is refused; the rest is kept for sessions as the
+or reads like a sentence, path, file, ticket, PR, version, branch or id, or names a deleted topic, is refused; the rest is kept for sessions as the
 placement `suggestion` with an optional `parentId` (the parent a new topic would go under; `topicId` keeps its meaning).
 Conversations keep no suggestion. Filings are `by: "categorizer"` and never replace yours. `GET
 /api/conversations/{id}/placement`, `PUT` (`{topicId}`) and `DELETE` read, set and clear a conversation's placement.

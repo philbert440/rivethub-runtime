@@ -120,9 +120,9 @@ impl FilingStore for SqliteStore {
         placement: ConversationPlacement,
     ) -> Result<ConversationPlacement, TopicError> {
         self.topics("conversation placement", move |conn| {
-            if rows::by_id(conn, placement.topic)?.is_none() {
-                return Err(not_found(placement.topic));
-            }
+            rows::by_id(conn, placement.topic)?
+                .ok_or_else(|| not_found(placement.topic))?
+                .accepts_sessions()?;
             let existing = placement_of(conn, placement.conversation)?;
             let kept = placement.clone().admit(existing);
             if kept == placement {
@@ -170,6 +170,23 @@ impl FilingStore for SqliteStore {
                 sessions,
                 conversations,
             })
+        })
+        .await
+    }
+
+    async fn corrected(&self, target: &Target) -> Result<bool, TopicError> {
+        let (session, conversation) = match target {
+            Target::Session(session) => (Some(session.as_str().to_owned()), None),
+            Target::Conversation(conversation) => (None, Some(conversation.to_string())),
+        };
+        self.topics("filing corrected", move |conn| {
+            conn.query_row(
+                "SELECT EXISTS (SELECT 1 FROM rh_filing_corrections
+                                 WHERE session_id = ?1 OR conversation_id = ?2)",
+                params![session, conversation],
+                |row| row.get(0),
+            )
+            .map_err(failed("filing corrected"))
         })
         .await
     }

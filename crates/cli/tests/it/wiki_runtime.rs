@@ -66,7 +66,8 @@ async fn wiki_runner_claims_cron_extracts_and_shuts_down(pool: PgPool) -> TestRe
     })
     .with_topic_pages(store.clone(), store.clone(), store.clone())
     .with_session_topics(workers::SessionTopics {
-        store,
+        store: store.clone(),
+        filing: store,
         lineage: Arc::new(testkit::wiki_routes::NoParents),
     });
     let mut idle = runner.idle();

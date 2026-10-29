@@ -182,6 +182,7 @@ async fn rows_and_corrections(api: &Api, desktop: &TopicRecord, qwen: Uuid) -> T
             .collect::<Vec<_>>(),
         [("RivetOS", Some("Desktop App"))]
     );
+    assert!(api.store.corrected(&Target::Conversation(qwen)).await?);
     Ok(())
 }
 

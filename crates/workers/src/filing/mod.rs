@@ -25,6 +25,7 @@ use kernel::topics::PlacementSource;
 use kernel::topics::Slug;
 use kernel::topics::Suggestion;
 use kernel::topics::TopicId;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::topics::TopicStore;
@@ -72,6 +73,7 @@ pub struct FilingEnv<'a> {
 pub enum FilingPlan {
     Never,
     Placed(PlacementSource),
+    Corrected,
     Inherits,
     File {
         target: Target,
@@ -120,12 +122,21 @@ pub async fn plan_filing(
         return Ok(FilingPlan::Never);
     };
     let placed = filed_topic(env, &target).await?;
+    let corrected = env.topics.filing.corrected(&target).await?;
     let child = child_session(env, &filable).await?;
     let parent_topic = task_topic(env, &filable, conversation).await?;
-    let listings = env.topics.store.list().await?;
+    let listings: Vec<TopicListing> = env
+        .topics
+        .store
+        .list()
+        .await?
+        .into_iter()
+        .filter(|listing| listing.topic.kind == TopicKind::Work)
+        .collect();
     let redirects = env.topics.store.redirects().await?;
     let evidence = Evidence {
         placed: placed.map(|(by, _)| by),
+        corrected,
         child,
         parent_topic,
         cwd: subject.cwd.as_deref(),
@@ -134,6 +145,7 @@ pub async fn plan_filing(
     };
     match evidence.decide(&listings, &redirects) {
         Step::Placed(by) => Ok(FilingPlan::Placed(by)),
+        Step::Corrected => Ok(FilingPlan::Corrected),
         Step::Inherits => Ok(FilingPlan::Inherits),
         Step::File { topic, rule } => Ok(FilingPlan::File {
             target,
@@ -197,6 +209,7 @@ pub async fn apply_filing(env: &FilingEnv<'_>, plan: &FilingPlan) -> Result<(), 
         }
         | FilingPlan::Never
         | FilingPlan::Placed(_)
+        | FilingPlan::Corrected
         | FilingPlan::Inherits
         | FilingPlan::Refused { .. }
         | FilingPlan::Unfiled => {}
@@ -282,7 +295,7 @@ async fn ask(
                 topic,
                 rule: Rule::Model,
             },
-            None => match Refusal::of(&name, subject.head.title.as_deref()) {
+            None => match refusal(env, &name, subject).await? {
                 Some(refusal) => FilingPlan::Refused { name, refusal },
                 None => FilingPlan::Suggest {
                     target,
@@ -293,6 +306,21 @@ async fn ask(
         },
         Answer::Nothing => FilingPlan::Unfiled,
     })
+}
+
+async fn refusal(
+    env: &FilingEnv<'_>,
+    name: &TopicName,
+    subject: &Subject,
+) -> Result<Option<Refusal>, WorkerError> {
+    if let Some(refusal) = Refusal::of(name, subject.head.title.as_deref()) {
+        return Ok(Some(refusal));
+    }
+    let deleted = match Slug::of_heading(name.as_str()) {
+        Some(slug) => env.topics.store.tombstoned(TopicKind::Work, &slug).await?,
+        None => false,
+    };
+    Ok(deleted.then_some(Refusal::Deleted))
 }
 
 fn existing(name: &TopicName, listings: &[TopicListing]) -> Option<TopicId> {

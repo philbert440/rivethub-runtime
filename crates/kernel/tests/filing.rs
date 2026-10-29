@@ -20,6 +20,7 @@ use kernel::topics::Slug;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use uuid::Uuid;
@@ -49,6 +50,7 @@ fn topic(name: &str, aliases: &[&str], directory: Option<&str>) -> Result<Topic,
     Topic::create(
         TopicId::random(),
         NewTopic {
+            kind: TopicKind::Work,
             name: TopicName::new(name)?,
             aliases: aliases
                 .iter()
@@ -77,6 +79,7 @@ fn listed(topics: &[&Topic]) -> Vec<TopicListing> {
 fn evidence<'a>(title: Option<&'a str>, summary: &'a str) -> Evidence<'a> {
     Evidence {
         placed: None,
+        corrected: false,
         child: false,
         parent_topic: None,
         cwd: None,
@@ -263,6 +266,18 @@ fn suggested_names_that_read_like_junk_are_refused() -> TestResult {
     assert_eq!(refused("Runtime v2", None)?, Some(Refusal::Version));
     assert_eq!(refused("feat-entities", None)?, Some(Refusal::Branch));
     assert_eq!(refused("d39da662", None)?, Some(Refusal::Identifier));
+    Ok(())
+}
+
+#[test]
+fn a_filing_you_corrected_is_left_alone() -> TestResult {
+    let rivetos = topic("RivetOS", &[], None)?;
+    let topics = listed(&[&rivetos]);
+    let corrected = Evidence {
+        corrected: true,
+        ..evidence(Some("RivetOS performance lag"), "RivetOS felt slow.")
+    };
+    assert_eq!(corrected.decide(&topics, &[]), Step::Corrected);
     Ok(())
 }
 

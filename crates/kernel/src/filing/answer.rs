@@ -19,6 +19,7 @@ pub enum Answer {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Refusal {
+    Deleted,
     Title,
     Path,
     Ticket,

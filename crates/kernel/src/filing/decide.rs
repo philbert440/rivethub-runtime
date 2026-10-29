@@ -18,6 +18,7 @@ pub enum Rule {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
     Placed(PlacementSource),
+    Corrected,
     Inherits,
     File { topic: TopicId, rule: Rule },
     Ask,
@@ -26,6 +27,7 @@ pub enum Step {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Evidence<'a> {
     pub placed: Option<PlacementSource>,
+    pub corrected: bool,
     pub child: bool,
     pub parent_topic: Option<TopicId>,
     pub cwd: Option<&'a str>,
@@ -38,6 +40,9 @@ impl Evidence<'_> {
     pub fn decide(&self, topics: &[TopicListing], redirects: &[Redirect]) -> Step {
         if let Some(by) = self.placed {
             return Step::Placed(by);
+        }
+        if self.corrected {
+            return Step::Corrected;
         }
         if let Some(topic) = self.parent_topic {
             return Step::File {

@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use super::Correction;
 use super::CorrectionExample;
+use super::Target;
 use crate::memory::ConversationHead;
 use crate::topics::Placement;
 use crate::topics::PlacementSource;
@@ -109,6 +110,8 @@ pub trait FilingStore: Send + Sync {
     async fn correct(&self, correction: Correction) -> Result<(), TopicError>;
 
     async fn corrections(&self, limit: u32) -> Result<Vec<CorrectionExample>, TopicError>;
+
+    async fn corrected(&self, target: &Target) -> Result<bool, TopicError>;
 
     async fn topic_lines(&self) -> Result<Vec<TopicLine>, TopicError>;
 }
