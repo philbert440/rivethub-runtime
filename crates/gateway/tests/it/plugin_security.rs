@@ -121,3 +121,37 @@ async fn a_reload_queued_ahead_of_enable_cannot_slip_a_permission_past_the_devic
     host.gateway.close().await;
     Ok(())
 }
+
+fn post(path: &str) -> Result<Request<Body>, axum::http::Error> {
+    Request::builder()
+        .method(Method::POST)
+        .uri(path)
+        .header("host", "127.0.0.1:5174")
+        .body(Body::empty())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_proxied_path_cannot_climb_out_of_its_route() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let source = root.path().join("source");
+    write_manifest(&source, &BASE)?;
+    let host = harness(root.path()).await?;
+    host.install_and_enable(&source).await?;
+    for path in [
+        "/api/plugins/fixture/http/../jobs/tick",
+        "/api/plugins/fixture/http/%2e%2e/jobs/tick",
+        "/api/plugins/fixture/http/.%2E/jobs/tick",
+        "/api/plugins/fixture/panel/a/%2E%2E/%2e%2e/jobs/tick",
+        "/api/plugins/fixture/http/..%2Fjobs/tick",
+    ] {
+        let answer = host.send(post(path)?).await?;
+        assert_eq!(
+            answer.status,
+            StatusCode::BAD_REQUEST,
+            "{path}: {}",
+            String::from_utf8_lossy(&answer.body)
+        );
+    }
+    host.gateway.close().await;
+    Ok(())
+}

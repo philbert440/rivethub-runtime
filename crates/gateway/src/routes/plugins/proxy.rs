@@ -76,6 +76,7 @@ async fn route(
         .strip_prefix(prefix.as_str())
         .ok_or_else(|| PluginRouteError::NotFound("no plug-in route".into()))?
         .to_owned();
+    climbs(&suffix)?;
     let query = request
         .uri()
         .query()
@@ -133,6 +134,21 @@ impl Target<'_> {
         );
         PluginRouteError::Invalid(detail)
     }
+}
+
+fn climbs(suffix: &str) -> Result<(), PluginRouteError> {
+    for segment in suffix.split('/') {
+        let decoded = percent_encoding::percent_decode_str(segment).collect::<Vec<u8>>();
+        if matches!(decoded.as_slice(), b"." | b"..")
+            || decoded.contains(&b'/')
+            || decoded.contains(&b'\\')
+        {
+            return Err(PluginRouteError::BadRequest(format!(
+                "path segment {segment} is a dot segment or hides a separator"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn forwarded(gateway: &Gateway, user: &UserId) -> HeaderMap {
