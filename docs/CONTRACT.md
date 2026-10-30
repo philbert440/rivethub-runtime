@@ -401,7 +401,10 @@ answers `{ batches: [{ batchId, proposedBy, proposedAt, proposals }] }`, pending
 each batch in proposal order. `POST /api/tidy/proposals/{proposal}/approve` applies the change through the topic
 operations (a merge leaves its redirect, a new topic files its members `by: "categorizer"`, so your placements stay) and
 answers the proposal approved; `POST …/reject` answers it rejected. A decided proposal is `409`, an unknown one `404`, an
-id that is not a uuid `400`; a change the topic rules refuse answers that topic error and stays pending.
+id that is not a uuid `400`; a change the topic rules refuse answers that topic error and stays pending. Approving again
+continues an approval that stopped part way: a new topic or type that already exists under the proposal's id is not
+created again and the members not yet filed are filed, and a merge whose source is gone and whose survivor holds a
+redirect, or a delete whose topic is gone, is approved as already applied.
 `POST /api/tidy/batches/{batch}/approve` and `…/reject` decide every pending proposal of the batch in order and answer
 `{ decided, failed: [{ proposalId, error }] }`, where a failed proposal stays pending; an unknown batch is `404`. Every
 change has a fingerprint (a merge's unordered pair; a move's topic and parent; a rename's topic and new slug; the topic

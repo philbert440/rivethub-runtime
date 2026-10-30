@@ -260,6 +260,12 @@ async fn proposals_are_decided_and_rejections_remembered(pool: PgPool) -> TestRe
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn an_approval_that_stopped_part_way_finishes_on_retry(pool: PgPool) -> TestResult {
+    testkit::tidy::an_approval_that_stopped_part_way_finishes_on_retry(&PostgresMemory::new(pool))
+        .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn upkeep_counts_filings_entities_and_finished_jobs(pool: PgPool) -> TestResult {
     crate::common::install_graphile(&pool).await?;
     let memory = PostgresMemory::new(pool);

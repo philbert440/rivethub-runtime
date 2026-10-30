@@ -192,6 +192,99 @@ async fn approves_the_rest(
     Ok(())
 }
 
+pub async fn an_approval_that_stopped_part_way_finishes_on_retry<S>(store: &S) -> Outcome
+where
+    S: TidyStore + TopicStore + FilingStore + TopicPageStore,
+{
+    let app = store.create(new_topic("Desktop App", &[], None)?).await?;
+    let client = store
+        .create(new_topic("Desktop Client", &[], None)?)
+        .await?;
+    let spike = store.create(new_topic("Old Spike", &[], None)?).await?;
+    let members = (1..=3)
+        .map(|n| session(&format!("00000000-0000-4000-8000-00000000008{n}")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let created = TopicId::random();
+    let name = TopicName::new("Release Tooling")?;
+    let stored = store
+        .propose(stopped_batch(
+            TreeEdit::CreateTopic {
+                topic: created,
+                name: name.clone(),
+                parent: None,
+                aliases: Vec::new(),
+                members: members.iter().cloned().map(Target::Session).collect(),
+            },
+            TreeEdit::Merge {
+                source: client.id,
+                into: app.id,
+            },
+            TreeEdit::Delete { topic: spike.id },
+        )?)
+        .await?;
+    let new = NewTopic {
+        kind: TopicKind::Work,
+        name,
+        aliases: Vec::new(),
+        parent: None,
+        directory: None,
+    };
+    store.create(Topic::create(created, new, at(2))?).await?;
+    store
+        .place(Placement {
+            session: members.first().ok_or("a member")?.clone(),
+            topic: created,
+            by: PlacementSource::Categorizer,
+            at: at(2),
+        })
+        .await?;
+    store.merge(client.id, app.id, at(2)).await?;
+    store.delete(spike.id).await?;
+    let ports = TidyPorts {
+        tidy: store,
+        topics: store,
+        filing: store,
+        pages: Some(store),
+    };
+    let outcome = kernel::tidy::decide_batch(&ports, stored.id, Decision::Approve, at(3)).await?;
+    same(
+        "nothing fails on the second approval",
+        outcome
+            .failed
+            .iter()
+            .map(|(_, error)| error.to_string())
+            .collect::<Vec<_>>(),
+        Vec::new(),
+    )?;
+    same("every change is approved", outcome.decided.len(), 3)?;
+    let mut filed = Vec::new();
+    for member in &members {
+        filed.push(store.placement(member).await?.map(|placed| placed.topic));
+    }
+    same(
+        "the members left over are filed",
+        filed,
+        vec![Some(created); members.len()],
+    )?;
+    Ok(())
+}
+
+fn stopped_batch(
+    create: TreeEdit,
+    merge: TreeEdit,
+    delete: TreeEdit,
+) -> Result<Batch, kernel::tidy::TidyError> {
+    let mut batch = Batch::new(Proposer::Backfill, at(1));
+    batch.add(
+        create,
+        Reason::new("three sessions suggested it")?,
+        evidence(3),
+    );
+    batch.add(merge, Reason::new("one app under two names")?, evidence(2));
+    batch.add(delete, Reason::new("nothing is filed there")?, evidence(0));
+    Ok(batch)
+}
+
 pub async fn upkeep_counts_filings_entities_and_finished_jobs<S>(
     store: &S,
     queue: &dyn JobQueue,

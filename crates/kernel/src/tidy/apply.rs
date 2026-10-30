@@ -18,6 +18,7 @@ use crate::topics::PlacementSource;
 use crate::topics::Topic;
 use crate::topics::TopicChanges;
 use crate::topics::TopicId;
+use crate::topics::TopicKey;
 use crate::topics::TopicKind;
 use crate::topics::TopicName;
 use crate::topics::TopicPageStore;
@@ -121,7 +122,9 @@ async fn apply(
     let topics = ports.topics;
     match change {
         TreeEdit::Merge { source, into } => {
-            topics.merge(*source, *into, now).await?;
+            if !merged(topics, *source, *into).await? {
+                topics.merge(*source, *into, now).await?;
+            }
         }
         TreeEdit::Move { topic, parent } => {
             let changes = TopicChanges {
@@ -140,7 +143,11 @@ async fn apply(
         TreeEdit::Close { topic } => {
             topics.set_closed(*topic, Some(now), now).await?;
         }
-        TreeEdit::Delete { topic } => topics.delete(*topic).await?,
+        TreeEdit::Delete { topic } => {
+            if exists(topics, *topic).await? {
+                topics.delete(*topic).await?;
+            }
+        }
         TreeEdit::CreateTopic {
             topic,
             name,
@@ -155,7 +162,9 @@ async fn apply(
                 parent: *parent,
                 directory: None,
             };
-            topics.create(Topic::create(*topic, new, now)?).await?;
+            if !exists(topics, *topic).await? {
+                topics.create(Topic::create(*topic, new, now)?).await?;
+            }
             for member in members {
                 file(ports, member, *topic, now).await?;
             }
@@ -188,6 +197,25 @@ async fn apply(
     Ok(())
 }
 
+async fn exists(topics: &dyn TopicStore, id: TopicId) -> Result<bool, TidyError> {
+    Ok(topics.find(&TopicKey::Id(id)).await?.is_some())
+}
+
+async fn merged(
+    topics: &dyn TopicStore,
+    source: TopicId,
+    into: TopicId,
+) -> Result<bool, TidyError> {
+    if exists(topics, source).await? || !exists(topics, into).await? {
+        return Ok(false);
+    }
+    Ok(topics
+        .redirects()
+        .await?
+        .iter()
+        .any(|redirect| redirect.topic == into))
+}
+
 async fn create(
     topics: &dyn TopicStore,
     id: TopicId,
@@ -196,6 +224,9 @@ async fn create(
     parent: Option<TopicId>,
     now: DateTime<Utc>,
 ) -> Result<(), TidyError> {
+    if exists(topics, id).await? {
+        return Ok(());
+    }
     let new = NewTopic {
         kind,
         name: name.clone(),

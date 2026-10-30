@@ -244,6 +244,13 @@ async fn proposals_are_decided_and_rejections_remembered() -> TestResult {
 }
 
 #[tokio::test]
+async fn an_approval_that_stopped_part_way_finishes_on_retry() -> TestResult {
+    let (_directory, store) = store()?;
+    testkit::tidy::an_approval_that_stopped_part_way_finishes_on_retry(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn upkeep_counts_filings_entities_and_finished_jobs() -> TestResult {
     let (_directory, store) = store()?;
     testkit::tidy::upkeep_counts_filings_entities_and_finished_jobs(&store, &store).await?;
