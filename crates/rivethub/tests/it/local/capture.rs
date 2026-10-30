@@ -123,7 +123,7 @@ async fn run_hook(home: &std::path::Path, payload: &str) -> TestResult<std::proc
 }
 
 #[tokio::test]
-async fn the_capture_hook_command_posts_a_prompt_to_the_local_gateway() -> TestResult {
+async fn the_capture_hook_command_posts_a_held_prompt_to_the_local_gateway() -> TestResult {
     let home = tempfile::tempdir()?;
     let port_text = free_port()?.to_string();
     let started = start(
@@ -132,14 +132,18 @@ async fn the_capture_hook_command_posts_a_prompt_to_the_local_gateway() -> TestR
         &["gateway listening on "],
     )
     .await?;
-    let payload = serde_json::to_string(&PromptHook {
-        session_id: HOOK_SESSION,
-        cwd: "/work/demo",
-        hook_event_name: "UserPromptSubmit",
-        prompt: "deploy with Bearer abcdefghijklmnop1234",
-    })?;
-    let output = run_hook(home.path(), &payload).await;
+    let payload = |hook_event_name| {
+        serde_json::to_string(&PromptHook {
+            session_id: HOOK_SESSION,
+            cwd: "/work/demo",
+            hook_event_name,
+            prompt: "deploy with Bearer abcdefghijklmnop1234",
+        })
+    };
+    let held = run_hook(home.path(), &payload("UserPromptSubmit")?).await;
+    let output = run_hook(home.path(), &payload("Stop")?).await;
     stop(started).await?;
+    assert!(held?.status.success());
     let output = output?;
     let stderr = String::from_utf8(output.stderr)?;
     assert!(output.status.success(), "{stderr}");
@@ -153,7 +157,7 @@ async fn the_capture_hook_command_posts_a_prompt_to_the_local_gateway() -> TestR
     )?;
     assert_eq!(content, "deploy with [REDACTED:bearer]");
     let log = std::fs::read_to_string(home.path().join(".rivethub").join("claude-capture.log"))?;
-    assert!(log.contains("UserPromptSubmit"), "{log}");
+    assert!(log.contains("Stop"), "{log}");
     Ok(())
 }
 

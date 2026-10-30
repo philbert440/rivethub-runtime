@@ -4,6 +4,7 @@ use cli::Exit;
 use support::{config, environment, home, run};
 
 const PROMPT: &str = r#"{"session_id":"55555555-5555-5555-5555-555555555555","cwd":"/work/demo","hook_event_name":"UserPromptSubmit","prompt":"list the files"}"#;
+const TOOL: &str = r#"{"session_id":"55555555-5555-5555-5555-555555555555","cwd":"/work/demo","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"ls"},"tool_use_id":"toolu_1"}"#;
 
 fn now() -> Result<chrono::DateTime<chrono::Utc>, chrono::ParseError> {
     "2026-10-10T12:00:00Z".parse()
@@ -38,7 +39,7 @@ async fn an_unreachable_gateway_spools_the_batch() -> Result<(), Box<dyn std::er
         &home,
         &format!("gateway:\n  host: 127.0.0.1\n  port: {port}\n"),
     );
-    let report = cli::capture_hook::hook(&env, PROMPT, now()?).await;
+    let report = cli::capture_hook::hook(&env, TOOL, now()?).await;
     assert_eq!(report.exit, Exit::Ok);
     assert!(
         report.stderr.starts_with("capture request failed"),

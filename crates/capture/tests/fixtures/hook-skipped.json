@@ -1,5 +1,0 @@
-{
-  "hook/3": "The recording rounds a u64 tool argument through floating point and drops the timeout numeric type; Rust preserves the parsed input. Covered by transcript_tool_arguments_preserve_input_values.",
-  "hook/4": "The recording rounds a u64 tool argument through floating point and drops the timeout numeric type; Rust preserves the parsed input. Covered by transcript_tool_arguments_preserve_input_values.",
-  "hook/5": "The recording rounds a u64 tool argument through floating point and drops the timeout numeric type; Rust preserves the parsed input. Covered by transcript_tool_arguments_preserve_input_values."
-}
