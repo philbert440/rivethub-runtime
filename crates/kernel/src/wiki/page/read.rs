@@ -1,11 +1,11 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use super::WikiHistoryEntry;
 use super::limits;
 use super::serialize::{CITATION_COLUMNS, citation_row, history_heading};
 use super::summary::cap_summary;
 use super::{PageCitation, WikiPage, parse_wiki_page};
-use crate::gateway::wiki::WikiHistoryEntry;
 
 pub const READ_LIMIT: usize = 24_000;
 const RAW_PREVIEW: usize = 8_000;

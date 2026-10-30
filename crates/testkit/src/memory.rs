@@ -171,7 +171,7 @@ impl MemoryStore for FakeMemoryStore {
 
     async fn wiki_page(
         &self,
-        slug: &wire::gateway::wiki::WikiSlug,
+        slug: &kernel::wiki::page::WikiSlug,
     ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
         self.record(MemoryRequest::WikiPage(slug.as_ref().to_owned()))
             .await;

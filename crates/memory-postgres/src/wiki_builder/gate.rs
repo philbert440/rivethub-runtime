@@ -1,7 +1,8 @@
-use kernel::wiki::builder::{WikiAction, WikiPatch, WikiStoreError};
+use kernel::wiki::builder::WikiStoreError;
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::{WikiAction, WikiPatch};
+use kernel::wiki::page::{find_stem_match, normalize_slug, topic_identity};
 use sqlx::{Postgres, Transaction};
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::{find_stem_match, normalize_slug, topic_identity};
 
 use super::query_error;
 const RRF_K: f64 = 20.0;

@@ -2,16 +2,16 @@ use std::collections::BTreeSet;
 
 use chrono::DateTime;
 use chrono::Utc;
-use kernel::wiki::builder::WikiAction;
-use kernel::wiki::builder::WikiPatch;
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::builder::WikiSummary;
+use kernel::wiki::page::WikiAction;
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::topic_identity;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
 use thiserror::Error;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::topic_identity;
 
 use crate::time;
 
@@ -393,7 +393,7 @@ fn stored_article(article: Option<&str>, existing: Option<&Existing>) -> String 
 }
 
 fn stored_related(
-    related: Option<&Vec<wire::gateway::wiki::WikiSlug>>,
+    related: Option<&Vec<kernel::wiki::page::WikiSlug>>,
     existing: Option<&Existing>,
 ) -> Result<String, WikiStoreError> {
     match related {

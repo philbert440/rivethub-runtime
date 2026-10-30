@@ -14,10 +14,10 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
-use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use crate::BoxError;
+use crate::wiki::page::WikiSlug;
 
 pub use categorize::GENERIC_SHARE_PERCENT;
 pub use categorize::generic_keys;

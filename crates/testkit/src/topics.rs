@@ -30,7 +30,7 @@ use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
 use kernel::topics::TopicStore;
-use wire::gateway::wiki::WikiSlug;
+use kernel::wiki::page::WikiSlug;
 use wire::session_id::SessionId;
 
 pub type Outcome = Result<(), Box<dyn std::error::Error>>;

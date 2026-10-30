@@ -369,7 +369,7 @@ pub trait MemoryStore: Send + Sync {
 
     async fn wiki_page(
         &self,
-        slug: &wire::gateway::wiki::WikiSlug,
+        slug: &crate::wiki::page::WikiSlug,
     ) -> Result<crate::wiki::WikiLookup, MemoryStoreError>;
 
     async fn wiki_gaps(

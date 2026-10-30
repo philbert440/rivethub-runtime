@@ -10,9 +10,9 @@ use kernel::topics::TopicError;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKind;
 use kernel::topics::TopicTree;
+use kernel::wiki::page::WikiSlug;
 use sqlx::PgConnection;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use super::rows::failed;

@@ -8,12 +8,12 @@ use kernel::topics::TopicId;
 use kernel::wiki::builder::DeferredWiki;
 use kernel::wiki::builder::ExtractWiki;
 use kernel::wiki::builder::HeldEntity;
-use kernel::wiki::builder::WikiPatch;
 use kernel::wiki::builder::WikiStoreError;
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::WikiSlug;
 use rusqlite::Connection;
 use rusqlite::params;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use crate::time;

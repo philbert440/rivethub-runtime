@@ -5,9 +5,9 @@ use axum::extract::Path;
 use axum::extract::State;
 use chrono::Utc;
 use kernel::BoxError;
+use kernel::topics::DeliveredVia;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
-use kernel::topics::DeliveredVia;
 use kernel::topics::StartupContext;
 use kernel::topics::StartupKind;
 use kernel::topics::StartupSection;
@@ -16,6 +16,7 @@ use kernel::topics::Topic;
 use kernel::topics::startup_context;
 use wire::gateway::topics as dto;
 use wire::gateway::topics::StartupContext as StartupBody;
+use wire::gateway::wiki::WikiSlug as WikiSlugBody;
 use wire::session_id::SessionId;
 
 use super::map;
@@ -101,7 +102,7 @@ pub(crate) async fn begin(
         None => return Ok(None),
     };
     match kept {
-        Ok(()) => Ok(Some(body(&context))),
+        Ok(()) => body(&context).map(Some),
         Err(error) => {
             tracing::warn!(%session, "startup context was not kept: {error}");
             Ok(None)
@@ -117,7 +118,7 @@ pub(super) async fn preview(
     let context = build(&gateway, &topic, None).await.map_err(|error| {
         ApiError::Unavailable(format!("startup context for {}: {error}", topic.slug))
     })?;
-    Ok(Json(body(&context)))
+    Ok(Json(body(&context)?))
 }
 
 pub(super) async fn kept(
@@ -133,24 +134,28 @@ pub(super) async fn kept(
         .await
         .map_err(map::error)?
         .ok_or_else(|| ApiError::Missing(format!("no startup context for {session}")))?;
-    Ok(Json(body(&context)))
+    Ok(Json(body(&context)?))
 }
 
-fn body(context: &StartupContext) -> StartupBody {
-    StartupBody {
+fn body(context: &StartupContext) -> Result<StartupBody, ApiError> {
+    Ok(StartupBody {
         topic_id: context.topic.to_string(),
-        sections: context.sections.iter().map(section).collect(),
+        sections: context
+            .sections
+            .iter()
+            .map(section)
+            .collect::<Result<_, _>>()?,
         tokens: context.tokens,
         delivered_via: match context.delivered_via {
             DeliveredVia::MetaAppend => dto::DeliveredVia::MetaAppend,
             DeliveredVia::CliFlag => dto::DeliveredVia::CliFlag,
             DeliveredVia::None => dto::DeliveredVia::None,
         },
-    }
+    })
 }
 
-fn section(section: &StartupSection) -> dto::StartupSection {
-    dto::StartupSection {
+fn section(section: &StartupSection) -> Result<dto::StartupSection, ApiError> {
+    Ok(dto::StartupSection {
         kind: match section.kind {
             StartupKind::Topic => dto::StartupKind::Topic,
             StartupKind::Recent => dto::StartupKind::Recent,
@@ -161,10 +166,19 @@ fn section(section: &StartupSection) -> dto::StartupSection {
         sources: section
             .sources
             .iter()
-            .map(|source| match source {
-                StartupSource::Session(id) => dto::StartupSource::Session(id.clone()),
-                StartupSource::Wiki(slug) => dto::StartupSource::Wiki(slug.clone()),
-            })
-            .collect(),
-    }
+            .map(source)
+            .collect::<Result<_, _>>()?,
+    })
+}
+
+fn source(source: &StartupSource) -> Result<dto::StartupSource, ApiError> {
+    Ok(match source {
+        StartupSource::Session(id) => dto::StartupSource::Session(id.clone()),
+        StartupSource::Wiki(slug) => dto::StartupSource::Wiki(
+            WikiSlugBody::try_from(slug.as_ref().to_owned()).map_err(|error| {
+                tracing::error!("startup source {}: {error}", slug.as_ref());
+                ApiError::Internal
+            })?,
+        ),
+    })
 }

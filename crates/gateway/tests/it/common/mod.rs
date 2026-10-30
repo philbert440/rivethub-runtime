@@ -163,7 +163,7 @@ impl MemoryStore for FailingStore {
 
     async fn wiki_page(
         &self,
-        _slug: &wire::gateway::wiki::WikiSlug,
+        _slug: &kernel::wiki::page::WikiSlug,
     ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
         unavailable()
     }
@@ -374,7 +374,7 @@ impl MemoryStore for GatedStore {
 
     async fn wiki_page(
         &self,
-        slug: &wire::gateway::wiki::WikiSlug,
+        slug: &kernel::wiki::page::WikiSlug,
     ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
         self.inner.wiki_page(slug).await
     }

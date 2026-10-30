@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
-use kernel::wiki::builder::{WikiPatch, WikiStoreError, WikiSummary};
+use kernel::wiki::builder::{WikiStoreError, WikiSummary};
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::{CitationKind, PageCitation, PagePatch, PageSource, WikiPage};
+use kernel::wiki::page::{WikiSlug, WikiSourceKind};
 use sqlx::{Postgres, Transaction};
-use wire::gateway::wiki::{WikiSlug, WikiSourceKind};
-use wire::wiki::{CitationKind, PageCitation, PagePatch, PageSource, WikiPage};
 
 use super::{gate, lock_slug, query_error};
 
@@ -93,7 +94,7 @@ pub(super) async fn store_topic(
 ) -> Result<(), WikiStoreError> {
     let history_count = i32::try_from(page.history.len())
         .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;
-    let search_text = wire::wiki::build_wiki_search_text(page);
+    let search_text = kernel::wiki::page::build_wiki_search_text(page);
     sqlx::query(
         "INSERT INTO rh_wiki_topics (slug, title, aliases, tags, entities, current_state, article, related,
             search_text, history_count, last_verified_at, created_at, updated_at, git_sha)

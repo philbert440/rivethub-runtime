@@ -21,13 +21,13 @@ use kernel::transcript::TranscriptReaderError;
 use kernel::wiki::WikiLookup;
 use kernel::wiki::builder::ExtractWiki;
 use kernel::wiki::builder::HeldEntity;
-use kernel::wiki::builder::WikiAction;
 use kernel::wiki::builder::WikiBuilderStore;
-use kernel::wiki::builder::WikiPatch;
 use kernel::wiki::builder::WikiWork;
+use kernel::wiki::page::WikiAction;
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::WikiSlug;
 use kernel::wiki::route::TopicPorts;
 use kernel::wiki::route::WikiRouter;
-use wire::gateway::wiki::WikiSlug;
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 

@@ -5,8 +5,9 @@ use super::citations::{iso_date, parse_citations, parse_see_also};
 use super::frontmatter::StoredFrontmatter;
 use super::lines::fence_aware;
 use super::slug::normalize_slug;
-use super::{PageCitation, PageDefect, WikiMeta, WikiPage, WikiPageError};
-use crate::gateway::wiki::{WikiHistoryEntry, WikiSlug};
+use super::{
+    PageCitation, PageDefect, WikiHistoryEntry, WikiMeta, WikiPage, WikiPageError, WikiSlug,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter, strum::Display)]
 #[strum(serialize_all = "lowercase")]

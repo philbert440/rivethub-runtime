@@ -2,7 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 use kernel::wiki::consolidate::{
     ConsolidateWiki, WikiFold, WikiTopicStats, consolidation_plan, is_slug_variant,
 };
-use wire::wiki::{FoldMark, topic_identity};
+use kernel::wiki::page::{FoldMark, topic_identity};
 
 fn names(items: &[&str]) -> Vec<String> {
     items.iter().map(|item| (*item).to_owned()).collect()

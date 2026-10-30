@@ -6,8 +6,10 @@ use super::article::{ArticlePatch, apply_article_patches, demote_h2_headings};
 use super::limits;
 use super::slug::{extract_wiki_links, normalize_slug};
 use super::summary::{SUMMARY_LIMIT, cap_summary, merge_summary_text};
-use super::{LastVerified, PageCitation, PageSource, WikiAction, WikiPage};
-use crate::gateway::wiki::{WikiHistoryEntry, WikiSlug, WikiSlugError};
+use super::{
+    LastVerified, PageCitation, PageSource, WikiAction, WikiHistoryEntry, WikiPage, WikiSlug,
+    WikiSlugError,
+};
 
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -15,7 +17,7 @@ use crate::gateway::wiki::{WikiHistoryEntry, WikiSlug, WikiSlugError};
 pub struct PagePatch {
     pub action: WikiAction,
     pub slug: String,
-    #[serde_as(as = "crate::time::Millis")]
+    #[serde_as(as = "wire::time::Millis")]
     pub verified_at: DateTime<Utc>,
     #[serde(default)]
     pub title: Option<String>,

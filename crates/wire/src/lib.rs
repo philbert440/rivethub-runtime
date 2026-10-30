@@ -16,7 +16,6 @@ pub mod stream;
 pub mod task;
 pub mod task_overrides;
 pub mod time;
-pub mod wiki;
 
 pub use json::Extra;
 pub use json::JsonObject;

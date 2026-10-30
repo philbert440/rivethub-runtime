@@ -227,7 +227,7 @@ impl MemoryStore for crate::PostgresMemory {
 
     async fn wiki_page(
         &self,
-        slug: &wire::gateway::wiki::WikiSlug,
+        slug: &kernel::wiki::page::WikiSlug,
     ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
         self.read_wiki_page(slug).await.map_err(Into::into)
     }

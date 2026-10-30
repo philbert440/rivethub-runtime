@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::{LastVerified, PageSource, WikiMeta, WikiSectionRef};
-use crate::Extra;
-use crate::gateway::wiki::WikiSlug;
+use wire::Extra;
+
+use super::WikiSlug;
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub(super) struct StoredFrontmatter {

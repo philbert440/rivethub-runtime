@@ -15,6 +15,7 @@ use crate::topics::TopicListing;
 use crate::topics::TopicName;
 use crate::topics::TopicTree;
 use crate::topics::check_parent;
+use crate::wiki::page::topic_identity;
 
 pub const MIN_SESSIONS: usize = 3;
 
@@ -68,7 +69,7 @@ pub fn duplicates(listings: &[TopicListing]) -> Vec<(TopicId, TopicId)> {
     let mut grouped: BTreeMap<(TopicKind, String), Vec<&TopicListing>> = BTreeMap::new();
     for listing in listings {
         let topic = &listing.topic;
-        let identity = wire::wiki::topic_identity(topic.slug.as_str(), topic.name.as_str());
+        let identity = topic_identity(topic.slug.as_str(), topic.name.as_str());
         grouped
             .entry((topic.kind, identity.key))
             .or_default()

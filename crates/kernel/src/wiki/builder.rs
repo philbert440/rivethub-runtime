@@ -3,8 +3,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiSlug;
 
+use super::page::WikiPageError;
+use super::page::WikiPatch;
+use super::page::WikiSlug;
+use super::page::WikiSlugError;
 use crate::BoxError;
 use crate::filing::Target;
 use crate::topics::Slug;
@@ -19,8 +22,6 @@ pub struct ExtractWiki {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<Uuid>,
 }
-
-pub use wire::wiki::{WikiAction, WikiPatch};
 
 #[must_use]
 pub fn extraction_schema() -> schemars::Schema {
@@ -130,7 +131,7 @@ pub enum WikiWriteError {
     #[error("wiki filesystem: {0}")]
     Io(#[from] std::io::Error),
     #[error("wiki page: {0}")]
-    Page(#[from] wire::wiki::WikiPageError),
+    Page(#[from] WikiPageError),
     #[error("wiki writer lock exhausted 200 attempts")]
     LockTimeout,
     #[error("wiki path escapes its repository: {0}")]
@@ -144,5 +145,5 @@ pub enum WikiWriteError {
     #[error("wiki page slug does not match its file")]
     SlugMismatch,
     #[error("wiki page slug: {0}")]
-    Slug(#[from] wire::gateway::wiki::WikiSlugError),
+    Slug(#[from] WikiSlugError),
 }

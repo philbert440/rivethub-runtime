@@ -7,7 +7,6 @@ use chrono::Utc;
 use uuid::Uuid;
 use wire::gateway::tidy::TidyEvidence;
 use wire::gateway::tidy::TidySample;
-use wire::gateway::wiki::WikiSlug;
 
 use super::Desk;
 use super::Fate;
@@ -27,6 +26,7 @@ use crate::topics::Alias;
 use crate::topics::TopicId;
 use crate::topics::TopicName;
 use crate::topics::fold;
+use crate::wiki::page::WikiSlug;
 
 const SAMPLES: usize = 3;
 

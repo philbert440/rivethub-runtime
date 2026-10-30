@@ -1,6 +1,7 @@
 pub mod builder;
 pub mod consolidate;
 pub mod entity;
+pub mod page;
 pub mod route;
 
 use wire::gateway::wiki::WikiPageResponse;

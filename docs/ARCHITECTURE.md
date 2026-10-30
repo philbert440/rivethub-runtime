@@ -7,7 +7,7 @@ Design artifact (visual, authoritative): https://claude.ai/artifact/L7cAvh16cYEZ
 | Layer | Crates | May depend on |
 |---|---|---|
 | foundation | `wire` (serde types for every boundary payload), `config` (config.yaml + env → `Config`) | external crates only; `config` also uses `wire` for the shared closed sets (`HarnessId`, `ThinkingLevel`, effort) |
-| kernel | `kernel` (ports = traits, domain types; no I/O), `testkit` (dev-only: replayers, fakes, stubs) | wire, config |
+| kernel | `kernel` (ports = traits, domain types; no I/O), `testkit` (dev-only: replayers, fakes, stubs) | wire, config; the kernel owns its domain types and the gateway and adapters translate to and from `wire`, and xtask `KERNELWIRE` counts the kernel's remaining references to `wire`, which may only fall |
 | adapters | `memory-postgres`, `memory-sqlite`, `providers`, `harness-acp`, `terminal`, `mcp`, `capture`, `pki`, `stepca` | kernel, wire, config, externals — NEVER another adapter or a service, except `pki` → `stepca`: `stepca` cannot depend on kernel, so the certificate-authority port is implemented in `pki` |
 | services | `gateway` (with the session registry and mesh), `agent-loop`, `workers`, `tasks` (sessions over the gateway API) | kernel, wire, config — NEVER an adapter |
 | operations | `migrate` (every Postgres and SQLite schema change; `cli` owns the `rivethub-migrate` operator binary) | wire, config, externals (sqlx, rusqlite); depended on only by `cli` as a normal dependency and by tests as a dev-dependency — NEVER directly by a runtime crate (`rivethub` is checked transitively by the xtask MANIFEST rule, except for the direct `cli` → `migrate` edge used for schema verification) |
@@ -71,7 +71,7 @@ clamped to 0..=200, 0 disables it). The stale-wiki sweep runs only with `RIVETHU
 
 ### Wiki topic identity and consolidation
 
-`wire::wiki::topic_identity(slug, title)` is a topic's identity key: the slug's words without the product and project words
+`kernel::wiki::page::topic_identity(slug, title)` is a topic's identity key: the slug's words without the product and project words
 (`rivet`, `rivetos`, `rivethub`, `project`, `projects`) or connector words (`the`, `and`, `of`, `for`, `in`, `on`, `to`,
 `with`, `via`, `by`), each singularized, sorted and deduplicated. A trailing `-2`..`-9` is a dedupe suffix and is dropped
 unless the title carries that number, so `grok-4` stays apart from `grok-3` and `rivet-grok`. Numbers inside words

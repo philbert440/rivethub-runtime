@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::gateway::wiki::{WikiHistoryEntry, WikiSlug};
+use super::{WikiHistoryEntry, WikiSlug};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, strum::Display)]
 #[serde(rename_all = "lowercase")]

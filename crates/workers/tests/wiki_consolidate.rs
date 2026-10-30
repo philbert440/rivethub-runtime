@@ -84,7 +84,7 @@ async fn consolidation_folds_each_planned_cluster_and_reembeds_the_parent() -> T
             cluster: "acmekit-deploys".to_owned(),
             parent: "acmekit-deploys".to_owned(),
             children: vec!["acmekit-deploys-friday".to_owned()],
-            mark: wire::wiki::FoldMark::Merged,
+            mark: kernel::wiki::page::FoldMark::Merged,
         }]
     );
     assert!(embed_queued(&queue).await?);

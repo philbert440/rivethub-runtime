@@ -5,13 +5,13 @@ use gateway::Gateway;
 use kernel::memory::MemoryStore;
 use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::page::WikiSlug;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use wire::gateway::wiki::WikiGapsResponse;
 use wire::gateway::wiki::WikiPageResponse;
-use wire::gateway::wiki::WikiSlug;
 use wire::gateway::wiki::WikiSourceKind;
 use wire::gateway::wiki::WikiTopicList;
 

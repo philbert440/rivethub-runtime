@@ -1,10 +1,5 @@
 use chrono::DateTime;
 use chrono::Utc;
-use wire::gateway::wiki::WikiHistoryEntry;
-use wire::gateway::wiki::WikiSlug;
-use wire::gateway::wiki::WikiSourceKind;
-use wire::wiki::PageSource;
-use wire::wiki::WikiPage;
 
 use super::Topic;
 use super::TopicPageError;
@@ -13,6 +8,11 @@ use super::TopicStore;
 use super::page_owner;
 use super::root_page;
 use crate::wiki::builder::WikiStoreError;
+use crate::wiki::page::PageSource;
+use crate::wiki::page::WikiHistoryEntry;
+use crate::wiki::page::WikiPage;
+use crate::wiki::page::WikiSlug;
+use crate::wiki::page::WikiSourceKind;
 
 const USER_EDIT: &str = "Edited in Memory";
 

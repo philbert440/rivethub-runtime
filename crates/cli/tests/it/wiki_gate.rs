@@ -2,7 +2,8 @@
 
 use crate::wiki_support;
 
-use kernel::wiki::builder::{WikiAction, WikiBuilderStore, WikiPatch, WikiRouting};
+use kernel::wiki::builder::{WikiBuilderStore, WikiRouting};
+use kernel::wiki::page::{WikiAction, WikiPatch};
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use wiki_support::{TestResult, now, patch, seed, slug};

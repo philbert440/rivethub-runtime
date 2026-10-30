@@ -1,25 +1,41 @@
 use std::fmt::Debug;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::skips::{SKIPS, Skip, SkipKind};
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkipKind {
+    Rejected,
+    Differs,
+}
 
-pub(crate) type TestResult = Result<(), Box<dyn std::error::Error>>;
+#[derive(Debug)]
+pub struct Skip {
+    pub function: &'static str,
+    pub kind: SkipKind,
+    pub reason: &'static str,
+    pub lines: &'static [usize],
+}
+
+#[derive(Debug)]
+pub struct Corpus {
+    dir: PathBuf,
+    skips: &'static [Skip],
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub(crate) enum ThrownName {
+pub enum ThrownName {
     WikiParseError,
     #[serde(rename = "YAMLParseError")]
     YamlParseError,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct Thrown {
-    pub(crate) name: ThrownName,
-    pub(crate) message: String,
+pub struct Thrown {
+    pub name: ThrownName,
+    pub message: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -33,13 +49,9 @@ struct Case {
     throws: Option<Thrown>,
 }
 
-pub(crate) enum Expected<O> {
+enum Expected<O> {
     Value(O),
     Thrown(Thrown),
-}
-
-pub(crate) fn corpus_dir() -> PathBuf {
-    PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/wiki"))
 }
 
 fn decode_recording(value: Value) -> Value {
@@ -60,19 +72,48 @@ fn decode_recording(value: Value) -> Value {
     }
 }
 
-fn skip_for(function: &str, line: usize) -> Option<&'static Skip> {
-    SKIPS
-        .iter()
-        .find(|skip| skip.function == function && skip.lines.contains(&line))
-}
-
 #[derive(Debug, Default)]
-pub(crate) struct Tally {
-    pub(crate) passed: usize,
-    pub(crate) skipped: usize,
+pub struct Tally {
+    pub passed: usize,
+    pub skipped: usize,
 }
 
-pub(crate) fn replay<A, O, E, F, M>(
+impl Corpus {
+    #[must_use]
+    pub fn new(dir: PathBuf, skips: &'static [Skip]) -> Self {
+        Self { dir, skips }
+    }
+
+    #[must_use]
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    fn skip_for(&self, function: &str, line: usize) -> Option<&'static Skip> {
+        self.skips
+            .iter()
+            .find(|skip| skip.function == function && skip.lines.contains(&line))
+    }
+
+    pub fn replay<A, O, E, F, M>(
+        &self,
+        function: &str,
+        run: F,
+        matches_thrown: M,
+    ) -> Result<Tally, String>
+    where
+        A: DeserializeOwned,
+        O: DeserializeOwned + PartialEq + Debug,
+        E: Debug,
+        F: Fn(A) -> Result<O, E>,
+        M: Fn(&E, &Thrown) -> bool,
+    {
+        replay(self, function, run, matches_thrown)
+    }
+}
+
+fn replay<A, O, E, F, M>(
+    corpus: &Corpus,
     function: &str,
     run: F,
     matches_thrown: M,
@@ -84,8 +125,9 @@ where
     F: Fn(A) -> Result<O, E>,
     M: Fn(&E, &Thrown) -> bool,
 {
-    let path = corpus_dir().join(format!("{function}.jsonl"));
-    let text = std::fs::read_to_string(&path).map_err(|error| format!("{path:?}: {error}"))?;
+    let path = corpus.dir.join(format!("{function}.jsonl"));
+    let text =
+        std::fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
     let mut tally = Tally::default();
     let mut failures = Vec::new();
     let mut failing_lines = Vec::new();
@@ -94,7 +136,7 @@ where
         let case: Case =
             serde_json::from_str(raw).map_err(|error| format!("line {line}: {error}"))?;
         assert_eq!(case.function, function, "line {line}");
-        let skip = skip_for(function, line);
+        let skip = corpus.skip_for(function, line);
         let outcome = run_case(&case, &run, &matches_thrown);
         match (skip, outcome) {
             (None, Outcome::Pass) => tally.passed += 1,
@@ -185,7 +227,7 @@ where
     }
 }
 
-pub(crate) fn never_thrown<E>(_: &E, _: &Thrown) -> bool {
+pub const fn never_thrown<E>(_: &E, _: &Thrown) -> bool {
     false
 }
 

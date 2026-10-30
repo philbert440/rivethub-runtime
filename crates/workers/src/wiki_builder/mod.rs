@@ -6,9 +6,11 @@ use kernel::model::{ModelProvider, ModelProviderError, ModelRequest};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::topics::TopicPageError;
 use kernel::wiki::builder::{
-    ExtractWiki, WikiBuilderStore, WikiPatch, WikiSummary, WikiWork, extraction_schema,
+    ExtractWiki, WikiBuilderStore, WikiSummary, WikiWork, extraction_schema,
 };
 use kernel::wiki::consolidate::WikiConsolidateStore;
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::normalize_slug;
 use kernel::wiki::route::{TopicPorts, TopicTarget, WikiRouter};
 use serde::Serialize;
 use serde_json::Value;
@@ -16,7 +18,6 @@ use tokio_util::sync::CancellationToken;
 use wire::JsonObject;
 use wire::message::{Message, MessageContent, Role};
 use wire::stream::openai::FinishReason;
-use wire::wiki::normalize_slug;
 
 use crate::{WorkerError, embed_key};
 

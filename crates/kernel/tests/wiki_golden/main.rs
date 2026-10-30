@@ -1,16 +1,26 @@
 #![cfg(test)]
 
-mod harness;
 mod page;
 mod skips;
 mod text;
 
-use harness::TestResult;
+use std::path::PathBuf;
+
+use testkit::wiki_golden::Corpus;
+
+pub(crate) type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+pub(crate) fn corpus() -> Corpus {
+    Corpus::new(
+        PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/golden/wiki")),
+        skips::SKIPS,
+    )
+}
 
 #[test]
 fn every_corpus_file_is_replayed_or_unported() -> TestResult {
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(harness::corpus_dir())? {
+    for entry in std::fs::read_dir(corpus().dir())? {
         let name = entry?
             .file_name()
             .into_string()

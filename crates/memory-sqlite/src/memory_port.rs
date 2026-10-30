@@ -26,6 +26,7 @@ use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
 use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::page::WikiSlug;
 use uuid::Uuid;
 use wire::gateway::memory::MemoryStatsResponse;
 use wire::gateway::memory::PendingTagWire;
@@ -35,7 +36,6 @@ use wire::gateway::memory::TagTaxonomyMerge;
 use wire::gateway::memory::TagTaxonomyMergeResult;
 use wire::gateway::memory::TagWire;
 use wire::gateway::wiki::WikiGapsResponse;
-use wire::gateway::wiki::WikiSlug;
 use wire::gateway::wiki::WikiTopicList;
 use wire::memory::MemoryEntry;
 

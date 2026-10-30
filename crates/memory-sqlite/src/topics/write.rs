@@ -7,10 +7,10 @@ use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
+use kernel::wiki::page::WikiSlug;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
-use wire::gateway::wiki::WikiSlug;
 
 use super::rows::failed;
 use crate::time;

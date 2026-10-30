@@ -8,13 +8,14 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use kernel::topics::Slug;
 use kernel::wiki::builder::{
-    DeferredWiki, ExtractWiki, HeldEntity, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiPatch,
-    WikiRouting, WikiStoreError, WikiSummary, WikiWork, WikiWriteError,
+    DeferredWiki, ExtractWiki, HeldEntity, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiRouting,
+    WikiStoreError, WikiSummary, WikiWork, WikiWriteError,
 };
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::normalize_slug;
 use sqlx::{PgConnection, Postgres, Transaction};
 use uuid::Uuid;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::normalize_slug;
 
 use crate::PostgresMemory;
 

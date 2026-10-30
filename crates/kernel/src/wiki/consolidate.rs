@@ -5,9 +5,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use wire::wiki::{FoldMark, topic_identity};
-
 use super::builder::WikiStoreError;
+use super::page::FoldMark;
+use super::page::topic_identity;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

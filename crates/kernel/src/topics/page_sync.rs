@@ -1,7 +1,6 @@
 use serde::Deserialize;
 use serde::Serialize;
 use wire::JsonObject;
-use wire::gateway::wiki::WikiSlug;
 
 use super::Topic;
 use super::TopicId;
@@ -10,6 +9,7 @@ use crate::queue::FixedJob;
 use crate::queue::Job;
 use crate::queue::JobKeyMode;
 use crate::queue::JobName;
+use crate::wiki::page::WikiSlug;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

@@ -14,14 +14,14 @@ use axum::response::Response;
 use axum::routing::get;
 use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::WikiSlugError;
 use wire::gateway::GatewayError;
 use wire::gateway::wiki::WikiGapsResponse;
 use wire::gateway::wiki::WikiMissBody;
 use wire::gateway::wiki::WikiMissSuggestion;
 use wire::gateway::wiki::WikiPageQuery;
 use wire::gateway::wiki::WikiQuery;
-use wire::gateway::wiki::WikiSlug;
-use wire::gateway::wiki::WikiSlugError;
 use wire::gateway::wiki::WikiTopicList;
 
 use crate::Gateway;
@@ -125,7 +125,7 @@ async fn page_query(
     State(gateway): State<Arc<Gateway>>,
     Query(query): Query<WikiPageQuery>,
 ) -> Result<Response, WikiError> {
-    respond(&gateway, query.slug, Format::Json).await
+    respond(&gateway, requested_slug(query.slug.into())?, Format::Json).await
 }
 
 async fn index(

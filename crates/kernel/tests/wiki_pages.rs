@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use wire::wiki::{
+use kernel::wiki::page::{
     CitationKind, WikiPageError, build_wiki_search_text, extract_wiki_links, parse_wiki_page,
     serialize_wiki_page,
 };
@@ -82,7 +82,7 @@ fn topic_sections_are_typed_frontmatter_and_round_trip() -> TestResult {
     let page = parse_wiki_page(markdown)?;
     assert_eq!(
         page.meta.sections,
-        [wire::wiki::WikiSectionRef {
+        [kernel::wiki::page::WikiSectionRef {
             topic: "00000000-0000-4000-8000-000000000001".to_owned(),
             heading: "Certificates".to_owned(),
         }]

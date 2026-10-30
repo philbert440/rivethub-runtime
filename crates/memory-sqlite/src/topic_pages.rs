@@ -9,13 +9,13 @@ use kernel::topics::TopicPageStore;
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::WikiConsolidateStore;
 use kernel::wiki::consolidate::WikiFold;
+use kernel::wiki::page::FoldMark;
+use kernel::wiki::page::WikiSlug;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
 use serde::Deserialize;
 use serde::Serialize;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::FoldMark;
 
 use crate::SqliteStore;
 use crate::time;

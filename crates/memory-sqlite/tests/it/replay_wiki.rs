@@ -10,12 +10,12 @@ use common::recording;
 use kernel::memory::MemoryStore;
 use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::page::WikiSlug;
 use memory_sqlite::SqliteStore;
 use rusqlite::params;
 use testkit::Json;
 use wire::gateway::wiki::WikiGapsResponse;
 use wire::gateway::wiki::WikiRedLink;
-use wire::gateway::wiki::WikiSlug;
 use wire::gateway::wiki::WikiTopic;
 use wire::gateway::wiki::WikiTopicList;
 

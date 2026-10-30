@@ -68,7 +68,7 @@ count = 1
 check = "KERNELWIRE"
 file = "crates/kernel/src/cleanup/batch.rs"
 text = "wire"
-count = 3
+count = 2
 
 [[entry]]
 check = "KERNELWIRE"
@@ -110,7 +110,7 @@ count = 1
 check = "KERNELWIRE"
 file = "crates/kernel/src/memory/mod.rs"
 text = "wire"
-count = 23
+count = 22
 
 [[entry]]
 check = "KERNELWIRE"
@@ -198,21 +198,9 @@ count = 1
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/tidy/apply.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
 file = "crates/kernel/src/tidy/edit.rs"
 text = "wire"
-count = 3
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/tidy/guard.rs"
-text = "wire"
-count = 1
+count = 2
 
 [[entry]]
 check = "KERNELWIRE"
@@ -236,25 +224,25 @@ count = 1
 check = "KERNELWIRE"
 file = "crates/kernel/src/topics/mod.rs"
 text = "wire"
-count = 2
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"
 file = "crates/kernel/src/topics/page.rs"
 text = "wire"
-count = 4
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"
 file = "crates/kernel/src/topics/page_edit.rs"
 text = "wire"
-count = 6
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"
 file = "crates/kernel/src/topics/page_sync.rs"
 text = "wire"
-count = 2
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"
@@ -266,7 +254,7 @@ count = 1
 check = "KERNELWIRE"
 file = "crates/kernel/src/topics/startup.rs"
 text = "wire"
-count = 6
+count = 5
 
 [[entry]]
 check = "KERNELWIRE"
@@ -282,13 +270,19 @@ count = 2
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/wiki/builder.rs"
+file = "crates/kernel/src/wiki/page/frontmatter.rs"
 text = "wire"
-count = 4
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/wiki/consolidate.rs"
+file = "crates/kernel/src/wiki/page/mod.rs"
+text = "wire"
+count = 1
+
+[[entry]]
+check = "KERNELWIRE"
+file = "crates/kernel/src/wiki/page/patch.rs"
 text = "wire"
 count = 1
 
@@ -296,7 +290,7 @@ count = 1
 check = "KERNELWIRE"
 file = "crates/kernel/src/wiki/route.rs"
 text = "wire"
-count = 3
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"
@@ -342,9 +336,9 @@ count = 1
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/tests/wiki_consolidate.rs"
+file = "crates/kernel/tests/wiki_pages.rs"
 text = "wire"
-count = 1
+count = 2
 
 [[entry]]
 check = "PORTS"

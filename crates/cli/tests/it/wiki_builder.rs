@@ -186,7 +186,7 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
     let head = String::from_utf8(output.stdout)?.trim().to_owned();
     assert_eq!(sha, (Some(head.clone()), Some(head)));
     let markdown = tokio::fs::read_to_string(wiki.path().join("topics/acmekit-deploys.md")).await?;
-    let page = wire::wiki::parse_wiki_page(&markdown)?;
+    let page = kernel::wiki::page::parse_wiki_page(&markdown)?;
     assert_eq!(
         page.citations.first().ok_or("citation")?.note.as_deref(),
         Some("Blue-green adopted")

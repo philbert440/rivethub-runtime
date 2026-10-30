@@ -3,9 +3,6 @@ use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
 use wire::gateway::wiki::WikiPageResponse;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::FoldMark;
-use wire::wiki::normalize_slug;
 
 use super::DECISIONS_HEADING;
 use super::DecisionStore;
@@ -27,6 +24,9 @@ use crate::memory::MemoryStoreError;
 use crate::wiki::WikiLookup;
 use crate::wiki::builder::WikiStoreError;
 use crate::wiki::builder::WikiWriteError;
+use crate::wiki::page::FoldMark;
+use crate::wiki::page::WikiSlug;
+use crate::wiki::page::normalize_slug;
 
 const SLUG_ATTEMPTS: u32 = 1000;
 const UNNAMED_PAGE: &str = "topic";

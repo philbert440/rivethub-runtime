@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use super::builder::HeldEntity;
 use super::builder::WikiBuilderStore;
-use super::builder::WikiPatch;
 use super::builder::WikiSummary;
+use super::page::WikiPatch;
 use crate::topics::NewTopic;
 use crate::topics::Redirect;
 use crate::topics::Slug;

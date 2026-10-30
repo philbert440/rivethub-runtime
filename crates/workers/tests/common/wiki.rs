@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use kernel::topics::Slug;
 use kernel::wiki::builder::{
-    DeferredWiki, ExtractWiki, HeldEntity, WikiBuilderStore, WikiPatch, WikiRouting,
-    WikiStoreError, WikiWork,
+    DeferredWiki, ExtractWiki, HeldEntity, WikiBuilderStore, WikiRouting, WikiStoreError, WikiWork,
 };
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::WikiSlug;
 use tokio::sync::Mutex;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiSlug;
 
 #[derive(Default)]
 pub(crate) struct WikiStore {

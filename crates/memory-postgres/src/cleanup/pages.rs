@@ -9,9 +9,9 @@ use kernel::topics::Root;
 use kernel::topics::RootKind;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKind;
+use kernel::wiki::page::WikiPage;
+use kernel::wiki::page::WikiSlug;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::WikiPage;
 
 use super::rows::AliasRow;
 use super::rows::PageRow;

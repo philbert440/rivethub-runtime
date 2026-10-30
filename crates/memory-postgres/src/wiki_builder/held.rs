@@ -2,10 +2,11 @@ use chrono::{DateTime, Utc};
 use kernel::filing::Target;
 use kernel::topics::Slug;
 use kernel::topics::TopicId;
-use kernel::wiki::builder::{DeferredWiki, ExtractWiki, HeldEntity, WikiPatch, WikiStoreError};
+use kernel::wiki::builder::{DeferredWiki, ExtractWiki, HeldEntity, WikiStoreError};
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::WikiSlug;
 use sqlx::PgPool;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use super::{load_summary, query_error, topics};

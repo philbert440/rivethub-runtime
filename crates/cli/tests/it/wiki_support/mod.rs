@@ -7,14 +7,15 @@ use kernel::topics::{
     NewTopic, Placement, PlacementSource, Slug, Topic, TopicId, TopicKey, TopicKind, TopicName,
     TopicStore,
 };
-use kernel::wiki::builder::{ExtractWiki, WikiAction, WikiPatch};
+use kernel::wiki::builder::ExtractWiki;
+use kernel::wiki::page::{WikiAction, WikiPatch};
+use kernel::wiki::page::{WikiHistoryEntry, WikiSlug};
 use kernel::wiki::route::TopicPorts;
 use memory_postgres::PostgresMemory;
 use serde::Deserialize;
 use sqlx::PgPool;
 use testkit::fakes::{FakeProvider, Script};
 use uuid::Uuid;
-use wire::gateway::wiki::{WikiHistoryEntry, WikiSlug};
 use wire::session_id::SessionId;
 use wire::stream::openai::FinishReason;
 use wire::stream::{LlmResponse, LlmResponseKind};

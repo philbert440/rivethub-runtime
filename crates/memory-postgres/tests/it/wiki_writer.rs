@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use kernel::wiki::builder::WikiWriteError;
-use memory_postgres::wiki_writer::{AppliedPage, WikiRepository};
-use wire::gateway::wiki::{WikiHistoryEntry, WikiSourceKind};
-use wire::wiki::{
+use kernel::wiki::page::{
     CitationKind, PageCitation, PagePatch, PageSource, WikiAction, normalize_slug, parse_wiki_page,
 };
+use kernel::wiki::page::{WikiHistoryEntry, WikiSourceKind};
+use memory_postgres::wiki_writer::{AppliedPage, WikiRepository};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

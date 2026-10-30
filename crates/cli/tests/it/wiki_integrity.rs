@@ -2,7 +2,8 @@
 
 use crate::wiki_support;
 
-use kernel::wiki::builder::{WikiAction, WikiBuilderStore, WikiRouting, WikiStoreError};
+use kernel::wiki::builder::{WikiBuilderStore, WikiRouting, WikiStoreError};
+use kernel::wiki::page::WikiAction;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use testkit::fakes::{FakeJobQueue, FakeProvider};
@@ -54,7 +55,7 @@ async fn wiki_alias_updates_and_new_sources_commit_provenance(pool: PgPool) -> T
     assert_eq!(row.0, format!("{}\n\n{}", patch().summary, update.summary));
     assert_eq!(
         row.1,
-        wire::wiki::demote_h2_headings(&patch().article.expect("article"))
+        kernel::wiki::page::demote_h2_headings(&patch().article.expect("article"))
     );
     assert_eq!(row.2, 1);
     assert_eq!(row.3, None);
@@ -275,17 +276,17 @@ async fn wiki_cancellation_leaves_no_extraction(pool: PgPool) -> TestResult {
 #[test]
 fn wiki_model_types_reject_bad_slugs_and_wrong_types() -> TestResult {
     for slug in ["../escape", "/absolute", "a/b", "a\\b", ""] {
-        assert!(wire::gateway::wiki::WikiSlug::try_from(slug.to_owned()).is_err());
+        assert!(kernel::wiki::page::WikiSlug::try_from(slug.to_owned()).is_err());
     }
     for slug in ["acmekit-rollout", "developer's-notes", "release-v2"] {
-        assert!(wire::gateway::wiki::WikiSlug::try_from(slug.to_owned()).is_ok());
+        assert!(kernel::wiki::page::WikiSlug::try_from(slug.to_owned()).is_ok());
     }
     assert!(
         serde_json::from_str::<kernel::wiki::builder::ExtractWiki>(r#"{"summaryId":3}"#).is_err()
     );
     let encoded = serde_json::to_string(&vec![patch()])?;
     assert_eq!(
-        serde_json::from_str::<Vec<kernel::wiki::builder::WikiPatch>>(&encoded)?,
+        serde_json::from_str::<Vec<kernel::wiki::page::WikiPatch>>(&encoded)?,
         vec![patch()]
     );
     Ok(())

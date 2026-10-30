@@ -28,9 +28,9 @@ use kernel::topics::TopicListing;
 use kernel::topics::TopicStore;
 use kernel::topics::by_activity;
 use kernel::topics::check_parent;
+use kernel::wiki::page::WikiSlug;
 use rusqlite::Connection;
 use rusqlite::params;
-use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use crate::SqliteStore;

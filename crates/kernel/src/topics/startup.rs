@@ -3,12 +3,11 @@ use std::collections::HashSet;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use serde::Deserialize;
+use serde::Serialize;
 use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryScope;
 use wire::gateway::memory::SummaryKind;
-use serde::Deserialize;
-use serde::Serialize;
-use wire::gateway::wiki::WikiSlug;
 use wire::memory::MemorySearchResult;
 use wire::session_id::SessionId;
 
@@ -29,6 +28,7 @@ use crate::memory::budget::char_prefix;
 use crate::memory::budget::estimate_tokens;
 use crate::memory::budget::relative_when;
 use crate::memory::summary_title;
+use crate::wiki::page::WikiSlug;
 
 pub const STARTUP_BUDGET: usize = 4_000;
 const TOPIC_SHARE: usize = 1_600;

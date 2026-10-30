@@ -2,7 +2,6 @@ use std::str::FromStr;
 
 use uuid::Uuid;
 use wire::gateway::tidy::TidyChange as WireChange;
-use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use super::Fingerprint;
@@ -12,6 +11,7 @@ use crate::topics::Alias;
 use crate::topics::Slug;
 use crate::topics::TopicId;
 use crate::topics::TopicName;
+use crate::wiki::page::WikiSlug;
 
 const ROOT: &str = "root";
 

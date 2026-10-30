@@ -3,11 +3,11 @@ mod lock;
 use std::path::{Component, Path, PathBuf};
 
 use kernel::wiki::builder::WikiWriteError;
-use tokio::process::Command;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::{
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::{
     PagePatch, WikiPage, apply_patch, normalize_slug, parse_wiki_page, serialize_wiki_page,
 };
+use tokio::process::Command;
 
 use lock::WriterLock;
 

@@ -1,16 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SkipKind {
-    Rejected,
-    Differs,
-}
-
-#[derive(Debug)]
-pub(crate) struct Skip {
-    pub(crate) function: &'static str,
-    pub(crate) kind: SkipKind,
-    pub(crate) reason: &'static str,
-    pub(crate) lines: &'static [usize],
-}
+use testkit::wiki_golden::{Skip, SkipKind};
 
 pub(crate) const UNPORTED: &[(&str, &str)] = &[
     (

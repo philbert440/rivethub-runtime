@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::{WikiConsolidateStore, WikiFold, WikiTopicStats};
+use kernel::wiki::page::{FoldMark, FoldedTopic, WikiPage, fold_page, fold_text};
 use sqlx::{Postgres, Transaction};
-use wire::wiki::{FoldMark, FoldedTopic, WikiPage, fold_page, fold_text};
 
 use super::{lock_slug, query_error, settle, topics};
 use crate::PostgresMemory;

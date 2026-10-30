@@ -3,8 +3,8 @@ use chrono::{DateTime, Utc};
 use kernel::topics::{PageEdit, PageSection, TopicId, TopicPage, TopicPageStore};
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::{WikiConsolidateStore, WikiFold};
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::{ArticleSection, FoldMark, WikiPage, WikiSectionRef};
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::{ArticleSection, FoldMark, WikiPage, WikiSectionRef};
 
 use super::{lock_slug, query_error, settle, topics};
 use crate::PostgresMemory;

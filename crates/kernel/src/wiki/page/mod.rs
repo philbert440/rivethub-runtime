@@ -18,8 +18,7 @@ mod yaml;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::Extra;
-use crate::gateway::wiki::{WikiHistoryEntry, WikiSlug, WikiSourceKind};
+use wire::Extra;
 
 pub use article::{
     ArticlePatch, ArticlePatchMode, ArticleSection, ArticleSections, apply_article_patches,
@@ -34,7 +33,7 @@ pub use patch::{PagePatch, apply_patch};
 pub use read::{FullPageRefused, READ_LIMIT, ReadSection, format_wiki_read};
 pub use search::build_wiki_search_text;
 pub use serialize::serialize_wiki_page;
-pub use slug::{extract_wiki_links, normalize_slug};
+pub use slug::{WikiSlug, WikiSlugError, extract_wiki_links, normalize_slug};
 pub use summary::{CappedSummary, SUMMARY_LIMIT, cap_summary, merge_summary_text};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -139,6 +138,45 @@ impl AsRef<str> for LastVerified {
     fn as_ref(&self) -> &str {
         &self.0
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WikiHistoryEntry {
+    #[schemars(with = "String")]
+    pub date: NaiveDate,
+    pub title: String,
+    pub body: String,
+}
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns a page's source kinds; wire::gateway::wiki::WikiSourceKind is the contract's copy, translated where a page becomes a response"
+    )
+)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    strum::EnumString,
+)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
+pub enum WikiSourceKind {
+    Summary,
+    Message,
+    Conversation,
+    Task,
+    Leaf,
+    ExtractWiki,
+    User,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

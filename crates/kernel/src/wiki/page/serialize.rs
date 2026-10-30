@@ -1,9 +1,9 @@
+use super::WikiHistoryEntry;
 use super::article::demote_h2_headings;
 use super::frontmatter::WrittenFrontmatter;
 use super::limits;
 use super::yaml::to_block_yaml;
 use super::{CitationKind, PageCitation, WikiPage, WikiPageError};
-use crate::gateway::wiki::WikiHistoryEntry;
 
 pub(super) const CITATION_COLUMNS: &str =
     "| Date | Kind | Summary | Note |\n|------|------|---------|------|";

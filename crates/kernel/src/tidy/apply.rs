@@ -22,7 +22,7 @@ use crate::topics::TopicKind;
 use crate::topics::TopicName;
 use crate::topics::TopicPageStore;
 use crate::topics::TopicStore;
-use wire::wiki::FoldMark;
+use crate::wiki::page::FoldMark;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Decision {
