@@ -32,6 +32,7 @@ pub(super) struct Contract<'a> {
     pub(super) api: &'a Path,
     pub(super) token: &'a str,
     pub(super) confine: Option<&'a [Permission]>,
+    pub(super) node_ports: &'a [u16],
 }
 
 #[derive(Debug)]
@@ -94,6 +95,7 @@ pub(super) fn plan(
         },
         program: program.clone(),
         search,
+        node_ports: contract.node_ports.to_vec(),
     });
     Some(LaunchPlan {
         program,

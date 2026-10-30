@@ -62,6 +62,7 @@ pub struct HostSettings {
     pub root: PathBuf,
     pub node: String,
     pub inherited: Vec<(OsString, OsString)>,
+    pub node_ports: Vec<u16>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -338,6 +339,7 @@ impl PluginHost {
             api: &api,
             token: &token,
             confine: (self.confinement != sandbox::Support::Missing).then_some(granted.as_slice()),
+            node_ports: &self.settings.node_ports,
         };
         let plan = launch::plan(&run, &directory, &self.settings.inherited, &contract)
             .ok_or_else(|| "run.command is empty".to_owned())?;

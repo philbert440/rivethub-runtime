@@ -38,6 +38,11 @@ struct FileProbe {
     path: PathBuf,
 }
 
+#[derive(Deserialize)]
+struct PortProbe {
+    port: u16,
+}
+
 fn main() {
     let environment = config::Environment::from_process();
     let (Some(socket), Some(api), Some(token), Some(data)) = (
@@ -231,6 +236,12 @@ async fn tool(
         "pid" => Ok(std::process::id().to_string()),
         "read" => match call.arguments.deserialize::<FileProbe>() {
             Ok(asked) => std::fs::read_to_string(&asked.path).map_err(|error| error.to_string()),
+            Err(error) => Err(error.to_string()),
+        },
+        "connect" => match call.arguments.deserialize::<PortProbe>() {
+            Ok(asked) => std::net::TcpStream::connect(("127.0.0.1", asked.port))
+                .map(|_| "connected".to_owned())
+                .map_err(|error| error.to_string()),
             Err(error) => Err(error.to_string()),
         },
         "api" => match call.arguments.deserialize::<ApiProbe>() {

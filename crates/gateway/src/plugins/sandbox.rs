@@ -68,6 +68,7 @@ pub(super) struct Request {
     pub(super) folders: Folders,
     pub(super) program: PathBuf,
     pub(super) search: Option<std::ffi::OsString>,
+    pub(super) node_ports: Vec<u16>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -77,6 +78,7 @@ pub(super) struct Policy {
     pub(super) own: Vec<PathBuf>,
     pub(super) connect: Vec<PathBuf>,
     pub(super) network: bool,
+    pub(super) node_ports: Vec<u16>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,6 +140,7 @@ pub(super) fn policy(
     folders: &Folders,
     program: Option<&Path>,
     resolver: Option<&Path>,
+    node_ports: &[u16],
 ) -> Policy {
     let granted = |permission| permissions.contains(&permission);
     let network = granted(Permission::HostNetwork);
@@ -170,6 +173,11 @@ pub(super) fn policy(
         own: vec![folders.data.clone(), folders.run.clone()],
         connect: vec![folders.api.clone()],
         network,
+        node_ports: if network {
+            node_ports.to_vec()
+        } else {
+            Vec::new()
+        },
     }
 }
 
@@ -221,14 +229,16 @@ pub(super) fn resolve(request: &Request) -> Result<Policy, String> {
         &request.folders,
         Some(&program),
         resolver.as_deref(),
+        &request.node_ports,
     ))
 }
 
 #[cfg(target_os = "linux")]
 mod landlock_rules {
     use landlock::{
-        ABI, Access, AccessFs, AccessNet, CompatLevel, Compatible as _, Ruleset, RulesetAttr as _,
-        RulesetCreatedAttr as _, RulesetError, RulesetStatus, Scope, path_beneath_rules,
+        ABI, Access, AccessFs, AccessNet, CompatLevel, Compatible as _, NetPort, Ruleset,
+        RulesetAttr as _, RulesetCreatedAttr as _, RulesetError, RulesetStatus, Scope,
+        path_beneath_rules,
     };
 
     use super::{Confinement, Policy, Support};
@@ -264,7 +274,14 @@ mod landlock_rules {
         let mut ruleset = Ruleset::default().handle_access(AccessFs::from_all(abi))?;
         if !policy.network {
             ruleset = ruleset.handle_access(AccessNet::from_all(abi))?;
+        } else if !policy.node_ports.is_empty() {
+            ruleset = ruleset.handle_access(AccessNet::ConnectTcp)?;
         }
+        let open = (1..=u16::MAX)
+            .filter(|port| {
+                policy.network && !policy.node_ports.is_empty() && !policy.node_ports.contains(port)
+            })
+            .map(|port| Ok::<_, RulesetError>(NetPort::new(port, AccessNet::ConnectTcp)));
         let scope = if policy.network {
             Scope::Signal.into()
         } else {
@@ -277,6 +294,7 @@ mod landlock_rules {
             .add_rules(path_beneath_rules(&policy.write, AccessFs::from_write(abi)))?
             .add_rules(path_beneath_rules(&policy.own, AccessFs::from_all(abi)))?
             .add_rules(path_beneath_rules(&policy.connect, AccessFs::ResolveUnix))?
+            .add_rules(open)?
             .restrict_self()?;
         Ok(match status.ruleset {
             RulesetStatus::FullyEnforced => Confinement::Full,
@@ -319,8 +337,9 @@ mod tests {
     #[test]
     fn a_program_in_a_bin_folder_reads_only_the_lib_beside_it() {
         let install = Path::new("/srv/plugin");
-        let read =
-            |program: &str| policy(&[], &folders(install), Some(Path::new(program)), None).read;
+        let read = |program: &str| {
+            policy(&[], &folders(install), Some(Path::new(program)), None, &[]).read
+        };
         let cargo = read("/home/someone/.cargo/bin/cargo");
         assert!(cargo.contains(&PathBuf::from("/home/someone/.cargo/lib")));
         assert!(!cargo.contains(&PathBuf::from("/home/someone/.cargo")));
@@ -339,8 +358,25 @@ mod tests {
             folders: folders(&install),
             program: install.join("escape"),
             search: None,
+            node_ports: Vec::new(),
         };
         assert!(resolve(&request).unwrap_err().contains("outside"));
+    }
+
+    #[test]
+    fn a_networked_plugin_is_kept_off_the_nodes_own_ports() {
+        let install = Path::new("/srv/plugin");
+        let networked = policy(
+            &[Permission::HostNetwork],
+            &folders(install),
+            None,
+            None,
+            &[5174, 5175],
+        );
+        assert!(networked.network);
+        assert_eq!(networked.node_ports, [5174, 5175]);
+        let offline = policy(&[], &folders(install), None, None, &[5174]);
+        assert!(!offline.network && offline.node_ports.is_empty());
     }
 
     #[test]

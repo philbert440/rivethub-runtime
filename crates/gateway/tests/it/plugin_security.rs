@@ -6,14 +6,14 @@ use wire::JsonObject;
 use wire::capture::{CaptureBatchRequest, CaptureMessage};
 use wire::gateway::memory::MemoryAppendToolArgs;
 use wire::message::Role;
-use wire::plugin::host::{PluginLogs, PluginState};
+use wire::plugin::host::{PluginInstallRequest, PluginLogs, PluginState};
 use wire::plugin::manifest::{Permission, PluginManifest};
 
 use gateway::tenancy::{PeerCertificate, Tenancy, UserId};
 
 use crate::plugin_support::{
     Failure, Harness, OWNER_DEVICE, POLL, TestResult, enable, harness, harness_with, owner,
-    refused, write_manifest, write_manifest_with,
+    refused, tenancy, write_manifest, write_manifest_with,
 };
 
 const BASE: [Permission; 2] = [Permission::SessionsRead, Permission::TasksRead];
@@ -187,7 +187,7 @@ async fn a_caller_cannot_forge_the_headers_rh_names_it_with() -> TestResult {
     let tenancy = Tenancy::local(owner.clone())
         .with_device(OWNER_DEVICE, owner)?
         .with_device("phone", UserId::new("zoë".to_owned())?)?;
-    let host = harness_with(root.path(), tenancy).await?;
+    let host = harness_with(root.path(), tenancy, Vec::new()).await?;
     host.install_and_enable(&source).await?;
     let answer = host.send(forged(OWNER_DEVICE)?).await?;
     let seen = String::from_utf8_lossy(&answer.body);
@@ -273,6 +273,62 @@ async fn a_plugin_writes_memory_only_under_its_own_session_keys() -> TestResult 
         keys, ["plugin:fixture:claude:the-owners-session"; 2],
         "{keys:?}"
     );
+    host.gateway.close().await;
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct PortProbe {
+    port: u16,
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_networked_plugin_cannot_reach_the_nodes_own_listeners() -> TestResult {
+    let gateway = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let elsewhere = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let root = tempfile::tempdir()?;
+    let source = root.path().join("source");
+    let asked = [BASE[0], BASE[1], Permission::HostNetwork];
+    write_manifest(&source, &asked)?;
+    let host = harness_with(root.path(), tenancy()?, vec![gateway.local_addr()?.port()]).await?;
+    let install = serde_json::to_string(&PluginInstallRequest {
+        path: source.display().to_string(),
+    })?;
+    host.call(Method::POST, "/api/plugins", Some(install), false)
+        .await?;
+    let (status, bytes) = host
+        .call(
+            Method::POST,
+            "/api/plugins/fixture/enable",
+            enable(&asked)?,
+            true,
+        )
+        .await?;
+    if status == StatusCode::CONFLICT {
+        assert_eq!(
+            refused(&bytes)?.code.as_deref(),
+            Some("sandbox_unavailable")
+        );
+        host.gateway.close().await;
+        return Ok(());
+    }
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&bytes)
+    );
+    host.until("running", |record| record.state == PluginState::Running)
+        .await?;
+    let connect = |port: u16| JsonObject::from_serialize(&PortProbe { port });
+    let refused_port = host
+        .tool("connect", connect(gateway.local_addr()?.port())?)
+        .await?;
+    assert!(refused_port.is_error, "{}", refused_port.text);
+    let open = host
+        .tool("connect", connect(elsewhere.local_addr()?.port())?)
+        .await?;
+    assert_eq!(open.text, "connected");
     host.gateway.close().await;
     Ok(())
 }

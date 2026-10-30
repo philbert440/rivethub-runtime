@@ -404,7 +404,7 @@ impl Composition {
             });
         }
         Ok(Self {
-            gateway: plugins::started(gateway, env).await?,
+            gateway: plugins::started(gateway, env, plugins::node_ports(config, bind.port)).await?,
             v1,
             audit_tasks,
             audit_cancel,

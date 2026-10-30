@@ -565,7 +565,8 @@ folder it sits in, if it does), `/usr`, `/bin`, `/sbin`, `/lib`, `/lib32`, `/lib
 opens no TCP connection or listener, reaches no abstract unix socket and signals no process outside its own. The host
 permissions widen that: `host.files.read` reads every file and `host.files.write` writes every file (files outside the
 plug-in's own folder, still within the node user's rights), and `host.network` allows TCP, abstract unix sockets and
-reading the resolver configuration. `host.exec` (running other programs) is shown for consent and recorded; a program
+reading the resolver configuration, but no TCP connection to the node's own rh listeners (the gateway's port and the
+mesh agent channel's), where a loopback caller counts as the owner. `host.exec` (running other programs) is shown for consent and recorded; a program
 the plug-in runs inherits its confinement, so it is not checked apart. Landlock does not confine UDP, and confines
 connecting to pathname unix sockets only from its ABI 9. The tools and contributions a manifest
 declares need no permission; clients show them beside the permissions when asking for approval. The approval is the

@@ -39,7 +39,8 @@ const MANIFEST: &str = r#"{
     { "name": "events", "description": "List received events.", "inputSchema": { "type": "object" } },
     { "name": "pid", "description": "Answer the process id.", "inputSchema": { "type": "object" } },
     { "name": "api", "description": "Call the plug-in API.", "inputSchema": { "type": "object" } },
-    { "name": "read", "description": "Read a file.", "inputSchema": { "type": "object" } }
+    { "name": "read", "description": "Read a file.", "inputSchema": { "type": "object" } },
+    { "name": "connect", "description": "Open a TCP connection.", "inputSchema": { "type": "object" } }
   ],
   "settings": [
     { "key": "runs", "label": "Runs at once", "input": { "type": "number", "min": 1, "max": 8 }, "value": 2, "required": true },
@@ -252,22 +253,27 @@ pub(crate) fn owner() -> Result<UserId, Failure> {
     Ok(UserId::new("owner".to_owned())?)
 }
 
-pub(crate) async fn harness(root: &Path) -> Result<Harness, Failure> {
+pub(crate) fn tenancy() -> Result<Tenancy, Failure> {
     let owner = owner()?;
-    harness_with(
-        root,
-        Tenancy::local(owner.clone()).with_device(OWNER_DEVICE, owner)?,
-    )
-    .await
+    Ok(Tenancy::local(owner.clone()).with_device(OWNER_DEVICE, owner)?)
 }
 
-pub(crate) async fn harness_with(root: &Path, tenancy: Tenancy) -> Result<Harness, Failure> {
+pub(crate) async fn harness(root: &Path) -> Result<Harness, Failure> {
+    harness_with(root, tenancy()?, Vec::new()).await
+}
+
+pub(crate) async fn harness_with(
+    root: &Path,
+    tenancy: Tenancy,
+    node_ports: Vec<u16>,
+) -> Result<Harness, Failure> {
     let mut settings = common::settings();
     settings.state_dir = root.join("state");
     let host = PluginHost::open(HostSettings {
         root: root.join("state").join("plugins"),
         node: "node-a".to_owned(),
         inherited: Vec::new(),
+        node_ports,
     })
     .await?;
     let store = Arc::new(testkit::FakeMemoryStore::default());
