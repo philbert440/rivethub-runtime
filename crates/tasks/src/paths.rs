@@ -28,6 +28,13 @@ pub(crate) async fn contained(root: &Path, working: &Path) -> Result<PathBuf, Er
     }
 }
 
+pub(crate) async fn configured(root: Option<&Path>, working: &Path) -> Result<PathBuf, Error> {
+    if working.is_absolute() {
+        return lookup(working.to_path_buf()).await;
+    }
+    contained(root.ok_or(Error::FilesRootRequired)?, working).await
+}
+
 async fn lookup(path: PathBuf) -> Result<PathBuf, Error> {
     let found = tokio::task::spawn_blocking(move || std::fs::canonicalize(path))
         .await

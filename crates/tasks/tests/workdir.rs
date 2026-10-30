@@ -205,3 +205,50 @@ async fn a_harness_session_posts_the_recorded_message_channel() {
     quiet(&mut rx);
     stub.close().await.expect("stub shuts down");
 }
+
+#[tokio::test]
+async fn an_agent_directory_outside_the_files_root_is_used_as_configured() {
+    let root = tempfile::tempdir().expect("root");
+    let home = tempfile::tempdir().expect("agent home");
+    let (stub, mut rx) = common::chat_stub(chat()).await;
+    let mut directory = common::directory(common::base_url(stub.addr));
+    directory.local_agent(
+        "worker",
+        LocalAgent {
+            harness: Some(HarnessId::ClaudeCode),
+            working_dir: Some(home.path().to_str().expect("utf8").to_owned()),
+            ..common::plain_agent()
+        },
+    );
+    let (engine, _) = engine_with(
+        directory,
+        settings(Some(root.path().to_path_buf()), BTreeMap::new()),
+    );
+    let id = engine.submit(harness_task()).await.expect("submit");
+    engine.run_one().await.expect("run");
+    let posted = posted(&next_body(&mut rx).body);
+    let canonical = std::fs::canonicalize(home.path()).expect("canonical home");
+    assert_eq!(posted.working_dir.as_deref(), canonical.to_str());
+    assert_eq!(
+        engine.load(id).await.expect("load").status,
+        TaskStatus::Completed
+    );
+    let mut requested = request("ship it");
+    requested.executor = Some(TaskExecutorKind::HarnessSession);
+    requested.spec = Some(spec("sess-2", None, home.path().to_str()));
+    let id = engine
+        .submit(tasks::NewTask {
+            request: requested,
+            origin: TaskOrigin::Chat,
+        })
+        .await
+        .expect("submit");
+    let error = engine.run_one().await.expect_err("escape");
+    assert!(matches!(error, Error::PathEscape));
+    assert_eq!(
+        engine.load(id).await.expect("load").status,
+        TaskStatus::Failed
+    );
+    quiet(&mut rx);
+    stub.close().await.expect("stub shuts down");
+}

@@ -24,6 +24,7 @@ pub use directory::LocalAgent;
 pub use directory::Prepared;
 pub use directory::ResolvedTarget;
 pub use directory::TargetInput;
+pub use directory::WorkingDir;
 pub use engine::Engine;
 pub use engine::Settings;
 pub use error::Error;

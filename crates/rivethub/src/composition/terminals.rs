@@ -141,6 +141,12 @@ fn delegates(config: &Config) -> Result<BTreeMap<String, Delegate>, ComposeError
             Delegate {
                 harness,
                 model,
+                cwd: body.cwd.clone().or_else(|| {
+                    config
+                        .runtime
+                        .as_ref()
+                        .and_then(|runtime| runtime.workspace.clone())
+                }),
                 permission_mode: body.permission_mode.clone(),
             },
         );

@@ -31,9 +31,11 @@ use crate::client::GatewayClient;
 use crate::client::check_segment;
 use crate::directory::ResolvedTarget;
 use crate::directory::TargetInput;
+use crate::directory::WorkingDir;
 use crate::directory::apply_spec;
 use crate::engine::Engine;
 use crate::error::Error;
+use crate::paths::configured;
 use crate::paths::contained;
 use crate::price::cost;
 
@@ -156,18 +158,29 @@ where
     }
 
     async fn working_dir(&self, target: &ResolvedTarget) -> Result<Option<String>, Error> {
-        if let Some(working) = target.working_dir.as_deref() {
-            let Some(root) = self.settings.files_root.as_deref() else {
-                return Err(Error::FilesRootRequired);
-            };
-            return contained_string(root, std::path::Path::new(working))
-                .await
-                .map(Some);
-        }
-        if target.harness.is_some() || target.executor == TaskExecutorKind::HarnessSession {
-            return self.files_root_cwd().await;
-        }
-        Ok(None)
+        let root = self.settings.files_root.as_deref();
+        let path = match &target.working_dir {
+            Some(WorkingDir::Configured(working)) => {
+                configured(root, std::path::Path::new(working)).await?
+            }
+            Some(WorkingDir::Requested(working)) => {
+                contained(
+                    root.ok_or(Error::FilesRootRequired)?,
+                    std::path::Path::new(working),
+                )
+                .await?
+            }
+            None if target.harness.is_some()
+                || target.executor == TaskExecutorKind::HarnessSession =>
+            {
+                return self.files_root_cwd().await;
+            }
+            None => return Ok(None),
+        };
+        path.into_os_string()
+            .into_string()
+            .map(Some)
+            .map_err(|_| Error::PathEscape)
     }
 
     async fn files_root_cwd(&self) -> Result<Option<String>, Error> {
@@ -451,7 +464,10 @@ fn harnessed(
         .filter(|model| !model.trim().is_empty());
     body.thinking = target.effort.map(thinking);
     body.working_dir = if target.remote {
-        target.working_dir.clone()
+        target
+            .working_dir
+            .as_ref()
+            .map(|working| working.path().to_owned())
     } else {
         working_dir
     };
@@ -512,16 +528,6 @@ fn empty_usage(wall: u64) -> TaskUsage {
         turns: 0,
         wall_clock_ms: wall,
     }
-}
-
-async fn contained_string(
-    root: &std::path::Path,
-    working: &std::path::Path,
-) -> Result<String, Error> {
-    let path = contained(root, working).await?;
-    path.into_os_string()
-        .into_string()
-        .map_err(|_| Error::PathEscape)
 }
 
 fn wall_ms(started: DateTime<Utc>, ended: DateTime<Utc>) -> Result<u64, Error> {
