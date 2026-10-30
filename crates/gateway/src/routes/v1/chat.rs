@@ -7,14 +7,15 @@ use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
 use chrono::Utc;
 use kernel::ToolContext;
-use kernel::agent::{StopReason, Turn, TurnLimits, TurnResult, TurnRunner, excluded_names};
+use kernel::agent::{
+    StopReason, Turn, TurnContext, TurnLimits, TurnResult, TurnRunner, excluded_names,
+};
 use kernel::model::{ModelChunk, ModelRequest};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::DropGuard;
 use uuid::Uuid;
 use wire::JsonObject;
 use wire::gateway::v1::{ChatRequest, Completion, CompletionChoice};
-use wire::hooks::HookContextBase;
 use wire::message::{Message, MessageContent, Role};
 use wire::stream::openai::{self, FinishReason, Usage};
 
@@ -234,7 +235,7 @@ fn turn(
             thinking: None,
             max_tokens,
         },
-        context: HookContextBase {
+        context: TurnContext {
             agent_id: Some(agent_id.clone()),
             session_id: Some(conversation),
             timestamp: Utc::now(),

@@ -48,12 +48,6 @@ count = 1
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/agent.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
 file = "crates/kernel/src/agent_presets.rs"
 text = "wire"
 count = 3

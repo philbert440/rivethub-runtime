@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use kernel::agent::{StopReason, Turn, TurnError, TurnResult, TurnRunner};
+use kernel::agent::{StopReason, Turn, TurnError, TurnResult, TurnRunner, TurnUsage};
 use kernel::model::{ModelChunk, ModelProvider, ModelProviderError, ModelRequest};
 use parking_lot::Mutex;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use wire::hooks::HookUsage;
 use wire::message::{Message, MessageContent, Role};
 
 pub(super) struct FakeRunner {
@@ -50,7 +49,7 @@ impl FakeRunner {
                 ModelChunk::Text { delta } => response.push_str(delta),
                 ModelChunk::Reasoning { delta } => reasoning.push_str(delta),
                 ModelChunk::Usage { usage: value } => {
-                    usage = Some(HookUsage {
+                    usage = Some(TurnUsage {
                         prompt_tokens: value.prompt_tokens,
                         completion_tokens: value.completion_tokens,
                     });
