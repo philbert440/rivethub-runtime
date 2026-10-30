@@ -3,7 +3,8 @@ use crate::session_support;
 
 use std::sync::Arc;
 
-use kernel::harness::SessionSpec;
+use gateway::term::Delegate;
+use kernel::harness::{PermissionRequest, SessionEvent, SessionSpec};
 use session_support::harness::Harness;
 use session_support::{Fixture, http, user};
 use wire::gateway::GatewayError;
@@ -198,6 +199,85 @@ async fn the_usage_a_harness_reports_for_the_turn_is_on_the_reply() {
             completion_tokens: 4,
             cached_tokens: 10_470,
         })
+    );
+    fixture.gateway.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_waited_turn_for_a_cli_agent_runs_its_harness_and_answers_approvals_by_its_mode() {
+    let harness = Arc::new(Harness::default());
+    let delegates = std::collections::BTreeMap::from([(
+        "worker".to_owned(),
+        Delegate {
+            harness: HarnessId::ClaudeCode,
+            model: Some("opus".to_owned()),
+            permission_mode: Some("bypassPermissions".to_owned()),
+        },
+    )]);
+    let fixture = Fixture::with_delegates(
+        Some(harness.clone()),
+        gateway::sessions::SessionRegistry::new(std::time::Duration::from_secs(1)),
+        None,
+        &[],
+        delegates,
+    )
+    .await;
+    let body = SessionPostRequest {
+        harness: None,
+        model: None,
+        thinking: None,
+        system_prompt: None,
+        ..delegated(HarnessId::ClaudeCode, None)
+    };
+    let posting = tokio::spawn({
+        let gateway = fixture.gateway.clone();
+        async move {
+            http(
+                &gateway,
+                "POST",
+                "/api/sessions/task:abc/messages?wait=1",
+                serde_json::to_vec(&body).expect("body"),
+                None,
+            )
+            .await
+        }
+    });
+    harness.traced("prompt:ship it").await;
+    let session = harness
+        .specs
+        .lock()
+        .first()
+        .expect("session")
+        .session
+        .clone();
+    harness
+        .emit(
+            &session,
+            SessionEvent::Permission(PermissionRequest {
+                request_id: "ask-1".into(),
+                tool_call_id: None,
+                name: "Bash".into(),
+                input: wire::JsonObject::default(),
+                reason: None,
+            }),
+        )
+        .await;
+    harness.traced("answer:ask-1:Allow").await;
+    harness.finish.add_permits(1);
+    let (status, reply) = posting.await.expect("post");
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&reply));
+    let reply: SessionPostReply = serde_json::from_slice(&reply).expect("reply");
+    assert_eq!(reply.message.text, "answer");
+    let spec = harness.specs.lock().first().cloned().expect("spec");
+    assert_eq!(
+        (spec.harness, spec.model.as_deref()),
+        (HarnessId::ClaudeCode, Some("opus"))
+    );
+    assert!(
+        harness
+            .trace
+            .borrow()
+            .contains(&"mode:Mode(\"bypassPermissions\")".to_owned())
     );
     fixture.gateway.close().await;
 }

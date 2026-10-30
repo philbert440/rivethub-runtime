@@ -1,10 +1,11 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use kernel::harness::TurnAttachment;
+use kernel::harness::{HarnessAdapterError, SessionOption, TurnAttachment};
 use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
-use wire::harness::{HarnessEvent, HarnessSessionStatus};
+use wire::harness::{ApprovalDecision, HarnessEvent, HarnessId, HarnessSessionStatus};
 use wire::session_id::SessionId;
 use wire::stream::LlmUsage;
 
@@ -22,6 +23,33 @@ pub(crate) struct DelegatedTurn {
     pub(crate) system_prompt: Option<String>,
     pub(crate) attachments: Vec<TurnAttachment>,
     pub(crate) journal: Option<Arc<Uploads>>,
+    pub(crate) delegate: Option<Delegate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Delegate {
+    pub harness: HarnessId,
+    pub model: Option<String>,
+    pub permission_mode: Option<String>,
+}
+
+impl Delegate {
+    fn decision(&self) -> ApprovalDecision {
+        if self.permission_mode.as_deref() == Some(BYPASS_PERMISSIONS) {
+            ApprovalDecision::Allow
+        } else {
+            ApprovalDecision::Deny
+        }
+    }
+}
+
+const BYPASS_PERMISSIONS: &str = "bypassPermissions";
+
+struct Answering<'a> {
+    service: &'a TerminalService,
+    user: &'a UserId,
+    session: &'a SessionId,
+    decision: ApprovalDecision,
 }
 
 #[derive(Debug, Default)]
@@ -31,6 +59,27 @@ pub(crate) struct DelegatedReply {
 }
 
 impl TerminalService {
+    #[must_use]
+    pub fn with_delegates(mut self, delegates: BTreeMap<String, Delegate>) -> Self {
+        self.delegates = delegates;
+        self
+    }
+
+    pub(crate) fn delegate(&self, agent: &str) -> Option<&Delegate> {
+        self.delegates.get(agent)
+    }
+
+    async fn delegate_mode(&self, session: &SessionId, mode: String) -> Result<(), ApiError> {
+        let harness = self
+            .harness
+            .clone()
+            .ok_or_else(|| ApiError::Unavailable("chat harness unavailable".into()))?;
+        match harness.set_option(session, SessionOption::Mode(mode)).await {
+            Ok(()) | Err(HarnessAdapterError::OptionUnavailable { .. }) => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     pub(crate) async fn delegated_turn(
         self: &Arc<Self>,
         user: &UserId,
@@ -42,6 +91,7 @@ impl TerminalService {
             system_prompt,
             attachments,
             journal,
+            delegate,
         } = turn;
         start.cwd = start.cwd.map(|directory| self.options.root.join(directory));
         let summary = self.start_chat(user, start).await?;
@@ -54,11 +104,24 @@ impl TerminalService {
         let _abandon_on_drop = abandoned.clone().drop_guard();
         let (reply, answer) = oneshot::channel();
         let service = Arc::clone(self);
+        let owner = user.clone();
         self.track(async move {
             let sending = async {
                 let prompt = system_prompt.as_deref();
                 journaled(journal.as_deref(), &canonical, &text, prompt, &attachments).await?;
-                exchange(&chat, events, text, system_prompt, attachments).await
+                if let Some(mode) = delegate
+                    .as_ref()
+                    .and_then(|agent| agent.permission_mode.clone())
+                {
+                    service.delegate_mode(&canonical, mode).await?;
+                }
+                let answering = delegate.as_ref().map(|agent| Answering {
+                    service: &service,
+                    user: &owner,
+                    session: &canonical,
+                    decision: agent.decision(),
+                });
+                exchange(&chat, events, text, system_prompt, attachments, answering).await
             };
             let outcome = tokio::select! {
                 outcome = sending => outcome,
@@ -108,6 +171,7 @@ async fn exchange(
     text: String,
     system_prompt: Option<String>,
     attachments: Vec<TurnAttachment>,
+    answering: Option<Answering<'_>>,
 ) -> Result<DelegatedReply, ApiError> {
     chat.prompt(text, system_prompt, attachments, Vec::new())
         .await?;
@@ -124,6 +188,20 @@ async fn exchange(
                 return Err(ApiError::Unavailable("harness event stream closed".into()));
             }
         };
+        if let (Some(answering), HarnessEvent::ApprovalRequest { request_id, .. }) =
+            (&answering, &event)
+        {
+            answering
+                .service
+                .answer_approval(
+                    answering.user,
+                    answering.session,
+                    request_id,
+                    answering.decision,
+                )
+                .await?;
+            continue;
+        }
         if observe(&mut reply, event)? {
             return Ok(reply);
         }
