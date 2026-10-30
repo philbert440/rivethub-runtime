@@ -8,13 +8,12 @@ use wire::plugin::view::ViewValue;
 
 use super::{HostError, PluginHost, registry};
 
+mod values;
+
 impl PluginHost {
     pub(crate) fn plugin_settings(&self, plugin: &PluginId) -> Result<PluginSettings, HostError> {
         self.read(plugin, |entry| {
-            kernel::plugins::settings::shown(
-                &entry.stored.manifest.settings,
-                &entry.stored.settings,
-            )
+            values::shown(&entry.stored.manifest.settings, &entry.stored.settings)
         })
     }
 
@@ -26,7 +25,7 @@ impl PluginHost {
         let _operation = self.operations.lock().await;
         let kept = self
             .read(plugin, |entry| {
-                kernel::plugins::settings::apply(
+                values::apply(
                     &entry.stored.manifest.settings,
                     &entry.stored.settings,
                     &update.values,
@@ -54,5 +53,5 @@ impl PluginHost {
 }
 
 pub(super) fn effective(stored: &registry::Stored) -> BTreeMap<String, ViewValue> {
-    kernel::plugins::settings::effective(&stored.manifest.settings, &stored.settings)
+    values::effective(&stored.manifest.settings, &stored.settings)
 }

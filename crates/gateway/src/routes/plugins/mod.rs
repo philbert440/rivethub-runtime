@@ -135,7 +135,7 @@ impl IntoResponse for PluginRouteError {
     }
 }
 
-fn names(permissions: &[wire::plugin::manifest::Permission]) -> String {
+fn names(permissions: &[kernel::plugins::Permission]) -> String {
     permissions
         .iter()
         .map(ToString::to_string)

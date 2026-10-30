@@ -88,7 +88,7 @@ async fn authorize(
     let path = request.uri().path().to_owned();
     match kernel::plugins::access(read, &path) {
         PluginAccess::Own => {}
-        PluginAccess::Needs(permission) if granted.contains(&permission) => {}
+        PluginAccess::Needs(permission) if granted.contains(&super::rules::body(permission)) => {}
         PluginAccess::Needs(permission) => {
             return refusal(
                 StatusCode::FORBIDDEN,

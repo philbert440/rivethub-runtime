@@ -152,12 +152,6 @@ count = 5
 check = "KERNELWIRE"
 file = "crates/kernel/src/plugins/mod.rs"
 text = "wire"
-count = 5
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/plugins/settings.rs"
-text = "wire"
 count = 3
 
 [[entry]]
@@ -291,12 +285,6 @@ check = "KERNELWIRE"
 file = "crates/kernel/tests/memory_requests.rs"
 text = "wire"
 count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/tests/plugins.rs"
-text = "wire"
-count = 2
 
 [[entry]]
 check = "KERNELWIRE"

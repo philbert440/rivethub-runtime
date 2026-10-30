@@ -204,7 +204,7 @@ impl PluginHost {
         let requested = self.read(plugin, |entry| entry.stored.manifest.permissions.clone())?;
         self.refuse_unconfinable(&requested)?;
         let granted = self.read(plugin, |entry| {
-            kernel::plugins::approve(
+            super::rules::approve(
                 &entry.stored.manifest.permissions,
                 &entry.stored.granted,
                 approved,
@@ -247,7 +247,7 @@ impl PluginHost {
         self.stop_supervisor(plugin).await;
         self.touch(plugin, |entry| {
             entry.stored.granted =
-                kernel::plugins::narrowed(&manifest.permissions, &entry.stored.granted);
+                super::rules::narrowed(&manifest.permissions, &entry.stored.granted);
             entry.stored.manifest = manifest;
         });
         self.persist().await?;
@@ -281,7 +281,7 @@ impl PluginHost {
             Ok(manifest) if &manifest.id == plugin => {
                 self.touch(plugin, |entry| {
                     entry.stored.granted =
-                        kernel::plugins::narrowed(&manifest.permissions, &entry.stored.granted);
+                        super::rules::narrowed(&manifest.permissions, &entry.stored.granted);
                     entry.stored.manifest = manifest;
                 });
                 if let Err(error) = self.persist().await {
@@ -305,11 +305,8 @@ impl PluginHost {
         let Some((enabled, waiting)) = self.peek(plugin, |entry| {
             (
                 entry.stored.enabled,
-                !kernel::plugins::pending(
-                    &entry.stored.manifest.permissions,
-                    &entry.stored.granted,
-                )
-                .is_empty(),
+                !super::rules::pending(&entry.stored.manifest.permissions, &entry.stored.granted)
+                    .is_empty(),
             )
         }) else {
             return;

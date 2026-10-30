@@ -5,9 +5,9 @@ use wire::plugin::view::{ViewField, ViewInput, ViewValue};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{key}: {message}")]
-pub struct SettingProblem {
-    pub key: String,
-    pub message: String,
+pub(super) struct SettingProblem {
+    pub(super) key: String,
+    pub(super) message: String,
 }
 
 fn refused(key: &str, message: impl Into<String>) -> SettingProblem {
@@ -17,8 +17,7 @@ fn refused(key: &str, message: impl Into<String>) -> SettingProblem {
     }
 }
 
-#[must_use]
-pub fn effective(
+pub(super) fn effective(
     fields: &[ViewField],
     kept: &BTreeMap<String, ViewValue>,
 ) -> BTreeMap<String, ViewValue> {
@@ -32,8 +31,7 @@ pub fn effective(
         .collect()
 }
 
-#[must_use]
-pub fn shown(fields: &[ViewField], kept: &BTreeMap<String, ViewValue>) -> PluginSettings {
+pub(super) fn shown(fields: &[ViewField], kept: &BTreeMap<String, ViewValue>) -> PluginSettings {
     let mut values = effective(fields, kept);
     let secrets_set = fields
         .iter()
@@ -46,7 +44,7 @@ pub fn shown(fields: &[ViewField], kept: &BTreeMap<String, ViewValue>) -> Plugin
     }
 }
 
-pub fn apply(
+pub(super) fn apply(
     fields: &[ViewField],
     kept: &BTreeMap<String, ViewValue>,
     update: &BTreeMap<String, Option<ViewValue>>,
@@ -138,5 +136,66 @@ fn offered(options: &[wire::plugin::view::ViewOption], chosen: &str) -> Result<(
         Ok(())
     } else {
         Err(format!("{chosen} is not one of its options"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use wire::plugin::view::{ViewField, ViewValue};
+
+    use super::{apply, effective, shown};
+
+    #[test]
+    fn settings_are_checked_against_their_fields() -> Result<(), serde_json::Error> {
+        let fields: Vec<ViewField> = serde_json::from_str(
+            r#"[{"key": "runs", "label": "Runs", "input": {"type": "number", "min": 1, "max": 8}, "value": 2, "required": true},
+                {"key": "mode", "label": "Mode", "input": {"type": "select", "options": [{"value": "fast", "label": "Fast"}]}},
+                {"key": "token", "label": "Token", "input": {"type": "secret"}}]"#,
+        )?;
+        let none = BTreeMap::new();
+        let update = |pairs: &[(&str, Option<ViewValue>)]| -> BTreeMap<String, Option<ViewValue>> {
+            pairs
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), value.clone()))
+                .collect()
+        };
+        let refused = |pairs: &[(&str, Option<ViewValue>)]| {
+            apply(&fields, &none, &update(pairs)).map_err(|problem| problem.key)
+        };
+        assert_eq!(
+            refused(&[("runs", Some(ViewValue::Number(9.0)))]),
+            Err("runs".to_owned())
+        );
+        assert_eq!(
+            refused(&[("runs", Some(ViewValue::Bool(true)))]),
+            Err("runs".to_owned())
+        );
+        assert_eq!(
+            refused(&[("mode", Some(ViewValue::Text("slow".into())))]),
+            Err("mode".to_owned())
+        );
+        assert_eq!(
+            refused(&[("colour", Some(ViewValue::Text("red".into())))]),
+            Err("colour".to_owned())
+        );
+        let kept = apply(
+            &fields,
+            &none,
+            &update(&[
+                ("runs", None),
+                ("token", Some(ViewValue::Text("s3cret".into()))),
+            ]),
+        )
+        .map_err(|problem| serde::de::Error::custom(problem.to_string()))?;
+        assert_eq!(
+            effective(&fields, &kept).get("runs"),
+            Some(&ViewValue::Number(2.0))
+        );
+        let visible = shown(&fields, &kept);
+        assert_eq!(visible.secrets_set, ["token"]);
+        assert!(!visible.values.contains_key("token"));
+        Ok(())
     }
 }

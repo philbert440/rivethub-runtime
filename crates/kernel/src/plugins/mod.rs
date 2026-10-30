@@ -1,19 +1,70 @@
-pub mod settings;
-
 use std::collections::BTreeSet;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use wire::plugin::host::PluginToolList;
-use wire::plugin::manifest::{Permission, PluginEventKind, PluginManifest};
-use wire::plugin::process::{PluginEvent, PluginToolCall, PluginToolResult};
-use wire::plugin::view::ViewInput;
+use wire::plugin::process::{PluginToolCall, PluginToolResult};
 use wire::plugin::{PluginId, PluginNameError, ToolName};
 
 const TOOL_SEPARATOR: &str = "__";
-const RESERVED_ENV_PREFIX: &str = "RIVETHUB_";
 const FIRST_RESTART: Duration = Duration::from_secs(1);
 const LAST_RESTART: Duration = Duration::from_secs(60);
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns what a plug-in may do; wire::plugin::manifest::Permission is the manifest's copy, translated by the gateway's plug-in host"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::Display)]
+pub enum Permission {
+    #[strum(serialize = "memory.read")]
+    MemoryRead,
+    #[strum(serialize = "memory.write")]
+    MemoryWrite,
+    #[strum(serialize = "sessions.read")]
+    SessionsRead,
+    #[strum(serialize = "sessions.control")]
+    SessionsControl,
+    #[strum(serialize = "topics.read")]
+    TopicsRead,
+    #[strum(serialize = "topics.write")]
+    TopicsWrite,
+    #[strum(serialize = "tasks.read")]
+    TasksRead,
+    #[strum(serialize = "tasks.delegate")]
+    TasksDelegate,
+    #[strum(serialize = "agents.read")]
+    AgentsRead,
+    #[strum(serialize = "notifications.send")]
+    NotificationsSend,
+    #[strum(serialize = "host.files.read")]
+    HostFilesRead,
+    #[strum(serialize = "host.files.write")]
+    HostFilesWrite,
+    #[strum(serialize = "host.network")]
+    HostNetwork,
+    #[strum(serialize = "host.exec")]
+    HostExec,
+}
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns the events a plug-in subscribes to; wire::plugin::manifest::PluginEventKind is the manifest's copy, translated by the gateway's plug-in host"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventKind {
+    SessionStarted,
+    SessionIdle,
+    SessionEnded,
+    SessionPlaced,
+    SummaryWritten,
+    TaskDone,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum PluginToolError {
@@ -116,33 +167,15 @@ pub fn access(read: bool, path: &str) -> PluginAccess {
 }
 
 #[must_use]
-pub const fn event_permission(kind: PluginEventKind) -> Permission {
+pub const fn event_permission(kind: EventKind) -> Permission {
     match kind {
-        PluginEventKind::SessionStarted
-        | PluginEventKind::SessionIdle
-        | PluginEventKind::SessionEnded
-        | PluginEventKind::SessionPlaced => Permission::SessionsRead,
-        PluginEventKind::SummaryWritten => Permission::MemoryRead,
-        PluginEventKind::TaskDone => Permission::TasksRead,
+        EventKind::SessionStarted
+        | EventKind::SessionIdle
+        | EventKind::SessionEnded
+        | EventKind::SessionPlaced => Permission::SessionsRead,
+        EventKind::SummaryWritten => Permission::MemoryRead,
+        EventKind::TaskDone => Permission::TasksRead,
     }
-}
-
-#[must_use]
-pub const fn event_kind(event: &PluginEvent) -> Option<PluginEventKind> {
-    match event {
-        PluginEvent::SessionStarted { .. } => Some(PluginEventKind::SessionStarted),
-        PluginEvent::SessionIdle { .. } => Some(PluginEventKind::SessionIdle),
-        PluginEvent::SessionEnded { .. } => Some(PluginEventKind::SessionEnded),
-        PluginEvent::SessionPlaced { .. } => Some(PluginEventKind::SessionPlaced),
-        PluginEvent::SummaryWritten { .. } => Some(PluginEventKind::SummaryWritten),
-        PluginEvent::TaskDone { .. } => Some(PluginEventKind::TaskDone),
-        PluginEvent::SettingsChanged { .. } => None,
-    }
-}
-
-#[must_use]
-pub fn wants(manifest: &PluginManifest, event: &PluginEvent) -> bool {
-    event_kind(event).is_none_or(|kind| manifest.events.contains(&kind))
 }
 
 #[must_use]
@@ -209,96 +242,6 @@ pub fn approve(
     }
     let all: BTreeSet<_> = requested.iter().copied().collect();
     Ok(all.into_iter().collect())
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{path}: {message}")]
-pub struct ManifestProblem {
-    pub path: String,
-    pub message: String,
-}
-
-fn problem(path: String, message: &str) -> ManifestProblem {
-    ManifestProblem {
-        path,
-        message: message.to_owned(),
-    }
-}
-
-fn first_repeat<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
-    let mut seen = BTreeSet::new();
-    names.into_iter().find(|name| !seen.insert(*name))
-}
-
-pub fn check_manifest(manifest: &PluginManifest) -> Result<(), ManifestProblem> {
-    if manifest.run.command.first().is_none_or(String::is_empty) {
-        return Err(problem("run.command".into(), "is empty"));
-    }
-    if let Some(name) = manifest
-        .run
-        .env
-        .keys()
-        .find(|name| name.starts_with(RESERVED_ENV_PREFIX))
-    {
-        return Err(problem(
-            format!("run.env.{name}"),
-            "RIVETHUB_ names are reserved",
-        ));
-    }
-    for (index, field) in manifest.settings.iter().enumerate() {
-        if matches!(field.input, ViewInput::File { .. }) {
-            return Err(problem(
-                format!("settings[{index}].input"),
-                "a setting cannot be a file",
-            ));
-        }
-    }
-    let contributes = &manifest.contributes;
-    let repeats = [
-        (
-            "settings",
-            first_repeat(manifest.settings.iter().map(|field| field.key.as_str())),
-        ),
-        (
-            "tools",
-            first_repeat(manifest.tools.iter().map(|tool| tool.name.as_ref())),
-        ),
-        (
-            "jobs",
-            first_repeat(manifest.jobs.iter().map(|job| job.id.as_ref())),
-        ),
-        (
-            "contributes",
-            first_repeat(
-                contributes
-                    .pages
-                    .iter()
-                    .map(|page| page.id.as_ref())
-                    .chain(contributes.topic_cards.iter().map(|card| card.id.as_ref()))
-                    .chain(
-                        contributes
-                            .session_actions
-                            .iter()
-                            .map(|action| action.id.as_ref()),
-                    ),
-            ),
-        ),
-    ];
-    for (path, repeat) in repeats {
-        if let Some(name) = repeat {
-            return Err(problem(path.into(), &format!("{name} is declared twice")));
-        }
-    }
-    for (index, kind) in manifest.events.iter().enumerate() {
-        let needed = event_permission(*kind);
-        if !manifest.permissions.contains(&needed) {
-            return Err(problem(
-                format!("events[{index}]"),
-                &format!("needs the {needed} permission"),
-            ));
-        }
-    }
-    Ok(())
 }
 
 #[must_use]

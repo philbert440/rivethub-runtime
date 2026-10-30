@@ -4,7 +4,9 @@ mod jobs;
 mod launch;
 mod logs;
 mod manage;
+mod manifest;
 mod registry;
+mod rules;
 mod sandbox;
 mod settings;
 mod supervisor;
@@ -421,12 +423,12 @@ impl PluginHost {
             .lock()
             .values()
             .filter(|entry| {
-                kernel::plugins::wants(&entry.stored.manifest, event)
-                    && kernel::plugins::event_kind(event).is_none_or(|kind| {
+                rules::wants(&entry.stored.manifest, event)
+                    && rules::event_kind(event).is_none_or(|kind| {
                         entry
                             .stored
                             .granted
-                            .contains(&kernel::plugins::event_permission(kind))
+                            .contains(&rules::event_permission(kind))
                     })
             })
             .filter_map(|entry| {
@@ -536,7 +538,7 @@ impl PluginHost {
             enabled: entry.stored.enabled,
             state: entry.live.state,
             granted: entry.stored.granted.clone(),
-            pending: kernel::plugins::pending(&manifest.permissions, &entry.stored.granted),
+            pending: rules::pending(&manifest.permissions, &entry.stored.granted),
             error: entry.live.error.clone(),
             last_exit: entry.live.last_exit.clone(),
             restarts: entry.live.restarts,

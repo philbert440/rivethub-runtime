@@ -63,7 +63,7 @@ pub(super) async fn read_manifest(dir: &Path) -> Result<PluginManifest, HostErro
     let mut decoder = serde_json::Deserializer::from_slice(&bytes);
     let manifest: PluginManifest = serde_path_to_error::deserialize(&mut decoder)
         .map_err(|error| HostError::Invalid(format!("{}: {error}", error.path())))?;
-    kernel::plugins::check_manifest(&manifest)
+    super::manifest::check_manifest(&manifest)
         .map_err(|problem| HostError::Invalid(problem.to_string()))?;
     super::jobs::check_schedules(&manifest)?;
     Ok(manifest)
