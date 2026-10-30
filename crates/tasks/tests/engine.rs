@@ -360,6 +360,54 @@ async fn serve_finishes_a_queued_task_and_returns_when_cancelled() {
 }
 
 #[tokio::test]
+async fn a_long_turn_keeps_its_task_alive_until_it_ends() {
+    let release = Arc::new(tokio::sync::Notify::new());
+    let (stub, mut rx) = common::chat_stub(Script {
+        hold: Some(Arc::clone(&release)),
+        ..script("done")
+    })
+    .await;
+    let engine =
+        Arc::new(engine(common::base_url(stub.addr)).with_heartbeat(Duration::from_millis(20)));
+    let id = engine.submit(task("ship it")).await.expect("submit");
+    let worker = {
+        let engine = Arc::clone(&engine);
+        tokio::spawn(async move { engine.run_one().await })
+    };
+    tokio::time::timeout(deadline(), rx.recv())
+        .await
+        .expect("recorded")
+        .expect("request");
+    let started = engine
+        .load(id)
+        .await
+        .expect("load")
+        .started_at
+        .expect("started");
+    tokio::time::timeout(deadline(), async {
+        while engine
+            .load(id)
+            .await
+            .expect("load")
+            .last_heartbeat_at
+            .is_none_or(|beat| beat <= started)
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the running task heartbeats");
+    release.notify_one();
+    let outcome = tokio::time::timeout(deadline(), worker)
+        .await
+        .expect("joined")
+        .expect("spawn")
+        .expect("run");
+    assert_eq!(outcome, RunOutcome::Completed(id));
+    stub.close().await.expect("stub shuts down");
+}
+
+#[tokio::test]
 async fn a_kill_during_the_turn_stays_killed_after_the_reply() {
     let release = std::sync::Arc::new(tokio::sync::Notify::new());
     let (stub, mut rx) = common::chat_stub(Script {

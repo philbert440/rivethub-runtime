@@ -160,6 +160,21 @@ pub(crate) fn sweep_tasks(
     Ok(())
 }
 
+pub(crate) fn heartbeat(
+    conn: &Connection,
+    id: Uuid,
+    worker: &str,
+    now: DateTime<Utc>,
+) -> Result<(), TaskError> {
+    conn.execute(
+        "UPDATE rh_tasks SET last_heartbeat_at = ?3
+         WHERE id = ?1 AND claimed_by = ?2 AND status IN ('running', 'awaiting-input')",
+        params![id.to_string(), worker, stamp(now)],
+    )
+    .map_err(|source| sql_error("task heartbeat", source))?;
+    Ok(())
+}
+
 pub(crate) fn kill_queued(
     conn: &mut Connection,
     session_key: &str,

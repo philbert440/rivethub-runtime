@@ -46,6 +46,10 @@ impl TaskStore for NotifyStore {
         self.inner.sweep(worker, now).await
     }
 
+    async fn heartbeat(&self, id: Uuid, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError> {
+        self.inner.heartbeat(id, worker, now).await
+    }
+
     async fn kill_queued_by_session(
         &self,
         session_key: &str,

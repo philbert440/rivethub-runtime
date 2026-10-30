@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use parking_lot::Mutex;
 use tokio::sync::Notify;
@@ -61,7 +62,10 @@ pub struct Engine<S, J> {
     pub(crate) tracker: TaskTracker,
     inflight: Arc<Mutex<HashMap<Uuid, CancellationToken>>>,
     pub(crate) activities: Activities,
+    pub(crate) heartbeat: Duration,
 }
+
+pub const TASK_HEARTBEAT: Duration = Duration::from_secs(30);
 
 impl<S, J> Engine<S, J>
 where
@@ -90,12 +94,19 @@ where
             tracker: TaskTracker::new(),
             inflight: Arc::new(Mutex::new(HashMap::new())),
             activities: Activities::new(),
+            heartbeat: TASK_HEARTBEAT,
         })
     }
 
     #[must_use]
     pub fn with_activities(mut self, activities: Activities) -> Self {
         self.activities = activities;
+        self
+    }
+
+    #[must_use]
+    pub fn with_heartbeat(mut self, heartbeat: Duration) -> Self {
+        self.heartbeat = heartbeat;
         self
     }
 

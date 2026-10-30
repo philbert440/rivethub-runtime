@@ -224,6 +224,18 @@ impl TaskStore for TaskMemory {
         Ok(true)
     }
 
+    async fn heartbeat(&self, id: Uuid, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError> {
+        let mut inner = self.inner.lock();
+        if let Some(task) = inner.tasks.get_mut(&id).filter(|task| {
+            matches!(task.status, TaskStatus::Running | TaskStatus::AwaitingInput)
+                && task.claimed_by.as_deref() == Some(worker)
+        }) {
+            task.last_heartbeat_at = Some(now);
+        }
+        drop(inner);
+        Ok(())
+    }
+
     async fn sweep(&self, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError> {
         let stale_before = now
             .checked_sub_signed(chrono::Duration::milliseconds(90_000))
