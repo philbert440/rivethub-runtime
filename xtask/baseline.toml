@@ -108,12 +108,6 @@ count = 2
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/model.rs"
-text = "wire"
-count = 2
-
-[[entry]]
-check = "KERNELWIRE"
 file = "crates/kernel/src/plugins/mod.rs"
 text = "wire"
 count = 3

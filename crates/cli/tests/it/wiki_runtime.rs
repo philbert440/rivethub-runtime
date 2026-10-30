@@ -201,7 +201,7 @@ impl kernel::model::ModelProvider for WaitingProvider {
     async fn chat(
         &self,
         _request: kernel::model::ModelRequest,
-    ) -> Result<wire::stream::LlmResponse, kernel::model::ModelProviderError> {
+    ) -> Result<kernel::model::LlmResponse, kernel::model::ModelProviderError> {
         self.entered.notify_one();
         std::future::pending().await
     }

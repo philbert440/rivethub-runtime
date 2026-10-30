@@ -9,12 +9,12 @@ use kernel::harness::{
     HarnessAdapter, HarnessAdapterError, HarnessCommands, SessionEvent, SessionOption, SessionSpec,
     SystemPromptSupport, TurnInput,
 };
+use kernel::model::ProviderRecovery;
 use kernel::model::{Degradation, ProviderHealth, ProviderStatus};
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use wire::gateway::ProviderRecovery;
 use wire::gateway::sessions::SessionSwitches;
 use wire::harness::{ApprovalDecision, HarnessId, HarnessOffering, SteerOutcome};
 use wire::session_id::SessionId;

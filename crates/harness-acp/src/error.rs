@@ -1,7 +1,7 @@
 use std::fmt;
 
+use kernel::model::ProviderRecovery;
 use thiserror::Error;
-use wire::gateway::ProviderRecovery;
 use wire::harness::{ApprovalDecision, HarnessId};
 
 use crate::identity::IdentityError;

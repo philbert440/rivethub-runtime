@@ -187,8 +187,8 @@ async fn runtime_embedding_failure_reaches_the_port_with_results(pool: PgPool) -
 async fn synthesis_uses_the_injected_provider_and_honours_cancellation(pool: PgPool) -> TestResult {
     seed(&pool).await?;
     let provider = Arc::new(FakeProvider::new(vec![Script::Chat(
-        wire::stream::LlmResponse {
-            r#type: wire::stream::LlmResponseKind::Text,
+        kernel::model::LlmResponse {
+            r#type: kernel::model::LlmResponseKind::Text,
             content: Some("Deployment is ready.".into()),
             tool_calls: None,
             usage: None,
@@ -327,8 +327,8 @@ async fn chunk_only_parents_respect_time_bounds(pool: PgPool) -> TestResult {
 async fn synthesis_without_text_is_an_error_not_a_silent_default(pool: PgPool) -> TestResult {
     seed(&pool).await?;
     let provider = Arc::new(FakeProvider::new(vec![Script::Chat(
-        wire::stream::LlmResponse {
-            r#type: wire::stream::LlmResponseKind::Text,
+        kernel::model::LlmResponse {
+            r#type: kernel::model::LlmResponseKind::Text,
             content: None,
             tool_calls: None,
             usage: None,

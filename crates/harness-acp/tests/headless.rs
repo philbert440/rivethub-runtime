@@ -5,10 +5,10 @@ use std::time::Duration;
 use config::provider::CliProvider;
 use harness_acp::{AcpError, HeadlessHarness, HeadlessLaunch, Retry, Supervisor, UnverifiedReason};
 use kernel::harness::{HarnessAdapter, SessionEvent, SessionSpec, TurnInput};
+use kernel::model::ProviderRecovery;
 use kernel::model::{Degradation, ProviderStatus};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use wire::gateway::ProviderRecovery;
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 

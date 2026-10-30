@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::model::Embedding;
+use kernel::model::LlmResponse;
 use kernel::model::ModelProvider;
 use kernel::model::ModelProviderError;
 use kernel::model::ModelRequest;
@@ -27,7 +28,6 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use wire::JsonObject;
-use wire::stream::LlmResponse;
 mod store;
 
 pub use store::Store;

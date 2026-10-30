@@ -2,6 +2,7 @@
 
 use crate::wiki_support;
 
+use kernel::model::FinishReason;
 use kernel::wiki::builder::{WikiBuilderStore, WikiRouting, WikiStoreError};
 use kernel::wiki::page::WikiAction;
 use memory_postgres::PostgresMemory;
@@ -9,7 +10,6 @@ use sqlx::PgPool;
 use testkit::fakes::{FakeJobQueue, FakeProvider};
 use tokio_util::sync::CancellationToken;
 use wiki_support::{TestResult, now, patch, provider, raw_provider, seed, slug};
-use wire::stream::openai::FinishReason;
 use workers::WorkerError;
 use workers::wiki_builder::{WikiBuilderEnv, extract_wiki_job, handle_extract_wiki};
 
