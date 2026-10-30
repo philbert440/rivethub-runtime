@@ -46,6 +46,7 @@ pub use agent_presets::PostgresPresets;
 pub use cleanup::DatabaseIdentity;
 pub use hub_state::PostgresHubState;
 pub use task_db::PostgresTasks;
+pub use title::Untitled;
 
 use std::cmp::Ordering;
 use std::time::Duration;

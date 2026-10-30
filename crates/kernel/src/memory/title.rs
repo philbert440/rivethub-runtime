@@ -1,6 +1,12 @@
+use std::sync::LazyLock;
+
+use regex::Regex;
+
 pub const SUMMARY_TITLE_MAX_CHARS: usize = 80;
 
+const CUT_MARK: char = '\u{2026}';
 const SESSION_SUFFIX: &str = " session";
+const KEYED_PREFIX: &str = "session";
 const IMPORTED_SUFFIX: &str = " session (imported)";
 const AGENTS_HEADER: &str = "# AGENTS.md instructions";
 
@@ -33,19 +39,52 @@ enum DefaultTitle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
 #[strum(serialize_all = "kebab-case", ascii_case_insensitive)]
 enum FramingWord {
+    Activity,
     And,
     Batch,
+    Bootstrap,
     Context,
     Conversation,
     Covered,
+    Initial,
     Initialization,
+    Interaction,
+    Lifecycle,
     Metadata,
     Overview,
+    Resumption,
     Session,
     Start,
     Startup,
+    Termination,
     Topics,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
+#[strum(serialize_all = "kebab-case", ascii_case_insensitive)]
+enum HarnessWord {
+    Claude,
+    Code,
+    Codex,
+    Grok,
+    Build,
+    Kimi,
+    Dsh,
+    Opencode,
+    Pi,
+    Qwen,
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "the stamp pattern is a constant; the title tests match it"
+)]
+static STAMP: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}",
+    )
+    .expect("the stamp pattern is a constant")
+});
 
 enum Lead<'a> {
     Words,
@@ -57,6 +96,17 @@ enum Lead<'a> {
 pub fn names_session(title: &str) -> bool {
     let title = title.trim();
     !title.is_empty() && !placeholder(title) && matches!(lead(title), Lead::Words)
+}
+
+#[must_use]
+pub fn weak_title(title: &str) -> bool {
+    let title = title.trim();
+    title.ends_with(CUT_MARK) || STAMP.is_match(title) || keyed(title) || framing(title)
+}
+
+#[must_use]
+pub fn needs_title(title: Option<&str>) -> bool {
+    title.is_none_or(|title| !names_session(title) || weak_title(title))
 }
 
 #[must_use]
@@ -161,8 +211,15 @@ fn framing(heading: &str) -> bool {
         || folded.contains("agents.md")
         || folded
             .split(|c: char| !c.is_alphanumeric())
-            .filter(|word| !word.is_empty())
-            .all(|word| word.parse::<FramingWord>().is_ok())
+            .filter(|word| !word.is_empty() && !word.chars().all(|c| c.is_ascii_digit()))
+            .all(|word| word.parse::<FramingWord>().is_ok() || word.parse::<HarnessWord>().is_ok())
+}
+
+fn keyed(title: &str) -> bool {
+    let words: Vec<&str> = title.split_whitespace().collect();
+    matches!(words.as_slice(), [first, key]
+        if first.eq_ignore_ascii_case(KEYED_PREFIX)
+            && key.contains(|c: char| c.is_ascii_digit() || c == ':'))
 }
 
 fn titles(text: &str) -> bool {
@@ -216,7 +273,7 @@ fn capped(sentence: &str) -> String {
         word
     };
     format!(
-        "{}\u{2026}",
+        "{}{CUT_MARK}",
         cut.trim_end_matches(['.', ',', ';', ':', ' '])
     )
 }
@@ -225,8 +282,52 @@ fn capped(sentence: &str) -> String {
 mod tests {
     use super::SUMMARY_TITLE_MAX_CHARS;
     use super::names_session;
+    use super::needs_title;
     use super::spoken_title;
     use super::summary_title;
+    use super::weak_title;
+
+    #[test]
+    fn titles_that_describe_the_session_instead_of_the_work_are_weak() {
+        for title in [
+            "In this batch, the user first set the AcmeKit defaults and then\u{2026}",
+            "Session 00000000-0000-4000-8000-000000000001 on channel\u{2026}",
+            "PR 42 review kickoff (2026-01-02T03:04Z)",
+            "Deploy check (2026-01-02 03:04Z)",
+            "Session task:00000000-0000-4000-8000-000000000001",
+            "Session acme:20260102_030405_a1b2c3",
+            "Session 1234567890:987654321",
+            "Kimi Code session start",
+            "Grok Build Session Initialization",
+            "Session Lifecycle",
+            "Claude Code session \u{2014} 2026-01-02",
+            "Session start (Grok Build)",
+            "Initial interaction",
+            "/.",
+        ] {
+            assert!(weak_title(title), "{title:?}");
+            assert!(needs_title(Some(title)), "{title:?}");
+        }
+    }
+
+    #[test]
+    fn titles_that_name_the_work_are_not_weak() {
+        for title in [
+            "Rotate the AcmeKit signing keys",
+            "Session persistence for the queue",
+            "Session restore",
+            "Fix the Claude Code session importer",
+            "Daily config backup (2026-01-02)",
+            "acme-den-2-0-upgrade",
+            "Phase 2 rollout",
+            "Session store v2 migration",
+        ] {
+            assert!(!weak_title(title), "{title:?}");
+            assert!(!needs_title(Some(title)), "{title:?}");
+        }
+        assert!(needs_title(None));
+        assert!(needs_title(Some("Grok Build session")));
+    }
 
     #[test]
     fn placeholders_blanks_and_injected_blocks_do_not_name_a_session() {
@@ -313,6 +414,11 @@ mod tests {
             None
         );
         assert_eq!(summary_title("**Grok Build Session**\n- Started."), None);
+        assert_eq!(
+            summary_title("**Kimi Code session start**\n- Began.\n\n**Queue retry fix**\n")
+                .as_deref(),
+            Some("Queue retry fix")
+        );
     }
 
     #[test]

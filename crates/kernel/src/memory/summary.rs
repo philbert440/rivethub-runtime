@@ -123,4 +123,6 @@ pub trait SummaryStore: Send + Sync {
     async fn pending(&self) -> Result<Vec<PendingConversation>, SummaryStoreError>;
 
     async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError>;
+
+    async fn retitle(&self, id: Uuid, title: &str) -> Result<bool, SummaryStoreError>;
 }

@@ -53,6 +53,7 @@ pub(super) async fn write_leaves(
         let stored = env.store.write_summary(summary).await?;
         if stored == SummaryWrite::FirstLeaf {
             enqueue_filing(env, conversation_id).await?;
+            super::title::title_first_leaf(env, &window.conversation, &node.content).await?;
         }
         window.leaves.push(node);
         written = written.checked_add(1).ok_or(WorkerError::Count)?;
