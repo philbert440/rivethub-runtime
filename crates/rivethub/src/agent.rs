@@ -102,7 +102,7 @@ pub(crate) async fn attach(
         }
         Err(error) => return Err(AgentError::Invalid(error.to_string())),
     }
-    let connected = assemble::connect(config, env).await?;
+    let connected = assemble::connect_deferred(config, env).await?;
     let directory = connected.roster.directory(&connected.plan)?;
     let harness = gateway.terminal().and_then(|terminal| terminal.adapter());
     let catalog = Arc::new(

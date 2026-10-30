@@ -288,6 +288,29 @@ fn install_local(directory: &mut tasks::Directory, config: &Config) -> Result<()
 }
 
 pub(super) async fn connect(config: &Config, env: &Environment) -> Result<Connected, AgentError> {
+    let (plan, roster) = prepared(config, env).await?;
+    let tasks = PostgresTasks::connect(&plan.postgres).await?;
+    Ok(Connected {
+        tasks,
+        roster,
+        plan,
+    })
+}
+
+pub(super) async fn connect_deferred(
+    config: &Config,
+    env: &Environment,
+) -> Result<Connected, AgentError> {
+    let (plan, roster) = prepared(config, env).await?;
+    let tasks = PostgresTasks::connect_lazy(&plan.postgres)?;
+    Ok(Connected {
+        tasks,
+        roster,
+        plan,
+    })
+}
+
+async fn prepared(config: &Config, env: &Environment) -> Result<(Plan, Arc<Roster>), AgentError> {
     let mut plan = plan(config, env).await?;
     plan.mesh_identity = load_mesh_identity(config, env).await?;
     drop(load_presets(plan.state_dir.clone()).await?);
@@ -299,12 +322,7 @@ pub(super) async fn connect(config: &Config, env: &Environment) -> Result<Connec
         presets: Arc::new(PresetFile::new(plan.state_dir.clone())),
         nodes,
     });
-    let tasks = PostgresTasks::connect(&plan.postgres).await?;
-    Ok(Connected {
-        tasks,
-        roster,
-        plan,
-    })
+    Ok((plan, roster))
 }
 
 fn require_postgres(config: &Config, env: &Environment) -> Result<String, AgentError> {
