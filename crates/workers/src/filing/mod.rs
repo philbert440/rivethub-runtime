@@ -1,3 +1,4 @@
+mod batch;
 mod job;
 mod parse;
 mod prompt;
@@ -37,8 +38,11 @@ use wire::message::Message;
 use wire::message::MessageContent;
 use wire::message::Role;
 
+pub use batch::BatchItem;
+pub use batch::file_batch;
 pub use job::file_conversation_job;
 pub use prompt::FILING_SYSTEM_PROMPT;
+pub(crate) use prompt::Tree;
 pub(crate) use prompt::correction_line;
 
 use crate::error::WorkerError;
@@ -284,7 +288,31 @@ async fn ask(
     let corrections = env.topics.filing.corrections(CORRECTION_EXAMPLES).await?;
     let tree = prompt::Tree::of(listings, &lines);
     let reply = chat(env, &prompt::user_prompt(&tree, &corrections, subject)).await?;
-    Ok(match parse::answer(&reply, &tree)? {
+    let answer = parse::answer(&reply, &tree)?;
+    let deleted = match &answer {
+        Answer::Suggest { name, .. } => match Slug::of_heading(name.as_str()) {
+            Some(slug) => env.topics.store.tombstoned(TopicKind::Work, &slug).await?,
+            None => false,
+        },
+        Answer::File(_) | Answer::Nothing => false,
+    };
+    Ok(settle(
+        answer,
+        target,
+        listings,
+        subject.head.title.as_deref(),
+        deleted,
+    ))
+}
+
+fn settle(
+    answer: Answer,
+    target: Target,
+    listings: &[TopicListing],
+    title: Option<&str>,
+    deleted: bool,
+) -> FilingPlan {
+    match answer {
         Answer::File(topic) => FilingPlan::File {
             target,
             topic,
@@ -296,7 +324,8 @@ async fn ask(
                 topic,
                 rule: Rule::Model,
             },
-            None => match refusal(env, &name, subject).await? {
+            None => match Refusal::of(&name, title).or_else(|| deleted.then_some(Refusal::Deleted))
+            {
                 Some(refusal) => FilingPlan::Refused { name, refusal },
                 None => FilingPlan::Suggest {
                     target,
@@ -306,22 +335,7 @@ async fn ask(
             },
         },
         Answer::Nothing => FilingPlan::Unfiled,
-    })
-}
-
-async fn refusal(
-    env: &FilingEnv<'_>,
-    name: &TopicName,
-    subject: &Subject,
-) -> Result<Option<Refusal>, WorkerError> {
-    if let Some(refusal) = Refusal::of(name, subject.head.title.as_deref()) {
-        return Ok(Some(refusal));
     }
-    let deleted = match Slug::of_heading(name.as_str()) {
-        Some(slug) => env.topics.store.tombstoned(TopicKind::Work, &slug).await?,
-        None => false,
-    };
-    Ok(deleted.then_some(Refusal::Deleted))
 }
 
 fn existing(name: &TopicName, listings: &[TopicListing]) -> Option<TopicId> {

@@ -27,6 +27,11 @@ impl WikiRepository {
         Self { root }
     }
 
+    pub async fn read_unlocked(&self, slug: &WikiSlug) -> Result<Option<WikiPage>, WikiWriteError> {
+        let root = tokio::fs::canonicalize(&self.root).await?;
+        read_page(&root, slug).await
+    }
+
     pub async fn lock(&self) -> Result<LockedRepository, WikiWriteError> {
         let root = prepare_root(&self.root).await?;
         let lock = WriterLock::acquire(&root).await?;

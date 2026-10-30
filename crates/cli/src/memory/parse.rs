@@ -61,6 +61,7 @@ pub(super) enum MemoryCommand {
         dry_run: bool,
         json: bool,
     },
+    Cleanup(super::cleanup::CleanupArgs),
 }
 
 enum Verb {
@@ -73,6 +74,7 @@ enum Verb {
     Titles,
     Reembed,
     ConsolidateWiki,
+    Cleanup,
 }
 
 fn verb(text: &str) -> Option<Verb> {
@@ -86,6 +88,7 @@ fn verb(text: &str) -> Option<Verb> {
         "backfill-titles" => Some(Verb::Titles),
         "reembed" => Some(Verb::Reembed),
         "consolidate-wiki" => Some(Verb::ConsolidateWiki),
+        "cleanup" => Some(Verb::Cleanup),
         _ => None,
     }
 }
@@ -113,6 +116,9 @@ pub(super) fn parse(args: &[String]) -> Result<Option<MemoryCommand>, Error> {
         Verb::Titles => titles(rest).map(Some),
         Verb::Reembed => reembed(rest).map(Some),
         Verb::ConsolidateWiki => consolidate_wiki(rest).map(Some),
+        Verb::Cleanup => super::cleanup::parse(rest)
+            .map(MemoryCommand::Cleanup)
+            .map(Some),
     }
 }
 

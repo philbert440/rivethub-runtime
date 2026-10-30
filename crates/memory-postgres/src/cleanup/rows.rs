@@ -1,0 +1,106 @@
+use chrono::DateTime;
+use chrono::Utc;
+use kernel::cleanup::SnapshotConversation;
+use kernel::cleanup::SnapshotCorrection;
+use kernel::cleanup::SnapshotHead;
+use uuid::Uuid;
+
+#[derive(Debug, sqlx::FromRow)]
+pub(super) struct ConversationRow {
+    id: Uuid,
+    session_key: String,
+    agent: String,
+    channel: String,
+    title: Option<String>,
+    cwd: Option<String>,
+    summary: Option<String>,
+    last_active: DateTime<Utc>,
+}
+
+impl ConversationRow {
+    pub(super) fn conversation(self) -> SnapshotConversation {
+        SnapshotConversation {
+            head: SnapshotHead {
+                id: self.id,
+                session_key: self.session_key,
+                agent: self.agent,
+                channel: self.channel,
+                title: self.title,
+            },
+            cwd: self.cwd.filter(|cwd| !cwd.trim().is_empty()),
+            summary: self.summary,
+            last_active: self.last_active,
+            task_parent: None,
+        }
+    }
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub(super) struct TopicRow {
+    pub(super) id: Uuid,
+    pub(super) kind: String,
+    pub(super) name: String,
+    pub(super) parent_id: Option<Uuid>,
+    pub(super) directory_kind: Option<String>,
+    pub(super) directory_node: Option<String>,
+    pub(super) directory_path: Option<String>,
+    pub(super) created_at: DateTime<Utc>,
+    pub(super) updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub(super) struct AliasRow {
+    pub(super) topic_id: Uuid,
+    pub(super) alias: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub(super) struct RedirectRow {
+    pub(super) slug: String,
+    pub(super) topic_id: Uuid,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub(super) struct PlacementRow {
+    pub(super) session_id: Option<String>,
+    pub(super) conversation_id: Option<Uuid>,
+    pub(super) topic_id: Uuid,
+    pub(super) placed_by: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub(super) struct CorrectionRow {
+    session_id: Option<String>,
+    conversation_id: Option<Uuid>,
+    from_name: String,
+    to_name: Option<String>,
+    title: Option<String>,
+}
+
+impl CorrectionRow {
+    pub(super) fn correction(self) -> SnapshotCorrection {
+        SnapshotCorrection {
+            session: self.session_id,
+            conversation: self.conversation_id,
+            from: self.from_name,
+            to: self.to_name,
+            title: self.title,
+        }
+    }
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub(super) struct TaxonomyRow {
+    pub(super) value: String,
+    pub(super) aliases: Vec<String>,
+    pub(super) state: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub(super) struct PageRow {
+    pub(super) slug: String,
+    pub(super) title: String,
+    pub(super) current_state: String,
+    pub(super) entities: Vec<String>,
+    pub(super) cited: Vec<Uuid>,
+}

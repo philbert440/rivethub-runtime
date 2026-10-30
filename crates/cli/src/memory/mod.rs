@@ -1,3 +1,4 @@
+mod cleanup;
 mod export;
 mod io;
 mod parse;
@@ -49,6 +50,7 @@ Commands:\n\
   backfill-titles [--dry-run] [--json] [--sqlite <file>]\n\
   reembed [--dry-run] [--sqlite <file>]\n\
   consolidate-wiki [--limit <n>] [--dry-run] [--json]\n\
-Postgres commands read RIVETHUB_PG_URL. export, import and backfill-titles use --sqlite or memory.sqlite.path when no Postgres URL is set. reembed runs on a SQLite memory file only.\n"
+  cleanup --dry-run --out <dir> --model-url <url> --model <name> [--batch <n>] [--concurrency <n>] [--timeout <seconds>]\n\
+Postgres commands read RIVETHUB_PG_URL. export, import and backfill-titles use --sqlite or memory.sqlite.path when no Postgres URL is set. reembed runs on a SQLite memory file only. cleanup reads memory read-only, plans the topic tree, filings and wiki folds with the model, checkpoints every stage in --out and writes report.md there; rerun it to resume.\n"
         .to_owned()
 }

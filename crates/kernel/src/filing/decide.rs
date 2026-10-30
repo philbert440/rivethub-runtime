@@ -6,7 +6,10 @@ use crate::topics::TopicId;
 use crate::topics::TopicListing;
 use crate::topics::mentioned;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, strum::Display, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum Rule {
     Parent,

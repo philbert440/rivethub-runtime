@@ -103,6 +103,10 @@ pub enum WorkerError {
     },
     #[error("{message}")]
     Filing { message: String },
+    #[error("{message}")]
+    Cleanup { message: String },
+    #[error("the model gave no answer within {seconds} s")]
+    ModelTimeout { seconds: u64 },
     #[error("the topic store failed: {0}")]
     Topics(#[from] kernel::topics::TopicError),
     #[error("session lineage could not be read: {0}")]

@@ -1,8 +1,11 @@
+use std::collections::BTreeMap;
+
 use kernel::filing::Answer;
 use kernel::topics::TopicName;
 use serde::Deserialize;
 
 use super::prompt::Tree;
+use super::prompt::batch_ref;
 use crate::error::WorkerError;
 
 #[derive(Debug, Deserialize)]
@@ -26,6 +29,33 @@ pub(super) fn answer(reply: &str, tree: &Tree) -> Result<Answer, WorkerError> {
     let parsed: Reply = serde_json::from_str(object).map_err(|source| WorkerError::Filing {
         message: format!("the filing answer is not a filing object: {source}"),
     })?;
+    settled(parsed, tree)
+}
+
+pub(super) fn batch(
+    reply: &str,
+    tree: &Tree,
+    count: usize,
+) -> Result<Vec<Result<Answer, WorkerError>>, WorkerError> {
+    let object = json_object(reply)?;
+    let mut parsed: BTreeMap<String, Reply> =
+        serde_json::from_str(object).map_err(|source| WorkerError::Filing {
+            message: format!("the batch filing answer is not a map of filing objects: {source}"),
+        })?;
+    Ok((0..count)
+        .map(|index| {
+            let reference = batch_ref(index);
+            match parsed.remove(&reference) {
+                Some(reply) => settled(reply, tree),
+                None => Err(WorkerError::Filing {
+                    message: format!("the batch filing answer has nothing for {reference}"),
+                }),
+            }
+        })
+        .collect())
+}
+
+fn settled(parsed: Reply, tree: &Tree) -> Result<Answer, WorkerError> {
     match parsed {
         Reply::File { file } => Ok(Answer::File(known(tree, &file)?)),
         Reply::Suggest { suggest, under } => Ok(Answer::Suggest {

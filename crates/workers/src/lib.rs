@@ -1,3 +1,4 @@
+pub mod cleanup;
 mod dispatch;
 mod embed;
 pub mod embedding_sweep;
@@ -36,11 +37,13 @@ pub use embed::mean_pool;
 pub use embed::read_target;
 pub use embed::split_embed_text;
 pub use error::WorkerError;
+pub use filing::BatchItem;
 pub use filing::FILING_SYSTEM_PROMPT;
 pub use filing::FilingEnv;
 pub use filing::FilingPlan;
 pub use filing::SessionTopics;
 pub use filing::apply_filing;
+pub use filing::file_batch;
 pub use filing::file_conversation_job;
 pub use filing::file_target;
 pub use filing::handle_file;
