@@ -1,5 +1,4 @@
 pub mod agents;
-pub mod audio;
 pub mod ca;
 pub mod capture;
 pub mod capture_schema;
@@ -21,6 +20,7 @@ pub mod terminal;
 mod tidy;
 pub(crate) mod topics;
 pub mod v1;
+pub(crate) mod voice;
 pub mod wiki;
 
 mod surface;
@@ -46,7 +46,8 @@ pub(crate) use surface::plain_get;
 pub(crate) use surface::rewrite_request;
 
 pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
-    audio::mount(harnesses::mount(files::mount(wiki::router())))
+    harnesses::mount(files::mount(wiki::router()))
+        .merge(voice::router())
         .nest("/api/agents", agents::router())
         .merge(devices::router())
         .merge(ca::router())

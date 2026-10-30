@@ -212,23 +212,14 @@ pub fn compose(
     let node = crate::identity::announce_resolved("gateway", config, env)?;
     let settings = Settings::from_config_in(config, env, node.hostname, node.name)?;
     let gateway = Gateway::new(store, settings).with_uploads(uploads(env)?);
-    let gateway = with_voice_and_audio(gateway, config, env)?;
+    let gateway = with_voice(gateway, env)?;
     Ok(Arc::new(gateway))
 }
 
-pub(crate) fn with_voice_and_audio(
-    mut gateway: Gateway,
-    config: &Config,
+pub(crate) fn with_voice(
+    gateway: Gateway,
     env: &Environment,
 ) -> Result<Gateway, crate::composition::ComposeError> {
-    let audio = env.audio_switch();
-    if let Some(ignored) = &audio.ignored {
-        tracing::warn!("{ignored}");
-    }
-    if config.terminal_enabled() || audio.enabled {
-        let directory = config::Paths::new(env)?.state_dir().join("audio");
-        gateway = gateway.with_audio(gateway::AudioConfig::new(directory));
-    }
     let voice = env.voice_endpoints();
     Ok(gateway.with_voice(gateway::VoiceSettings::new(
         voice.stt_url,

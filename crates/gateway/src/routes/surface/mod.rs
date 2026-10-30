@@ -1,5 +1,4 @@
 mod assets;
-mod layout;
 mod mesh;
 
 use std::sync::Arc;
@@ -35,19 +34,8 @@ pub(super) fn mount(router: Router<Arc<Gateway>>) -> Router<Arc<Gateway>> {
                 .fallback(super::not_found),
         )
         .route(
-            "/layout",
-            routing::get(layout::get)
-                .post(layout::post)
-                .fallback(super::not_found)
-                .layer(axum::extract::DefaultBodyLimit::max(super::BODY_LIMIT)),
-        )
-        .route(
             "/mesh.json",
             routing::get(mesh::overview).fallback(super::not_found),
-        )
-        .route(
-            "/api/capabilities",
-            routing::get(mesh::capabilities).fallback(super::not_found),
         )
         .fallback(fallback)
 }
