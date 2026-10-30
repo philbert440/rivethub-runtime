@@ -10,6 +10,7 @@ use kernel::harness::HarnessAdapter;
 use kernel::harness::HarnessCommands;
 use kernel::tasks::TaskAgents;
 use kernel::tasks::TaskError;
+use kernel::tasks::TaskRoute;
 use memory_postgres::PostgresTasks;
 use sqlx::PgPool;
 use tower::ServiceExt as _;
@@ -26,8 +27,12 @@ struct NoAgents;
 
 #[async_trait]
 impl TaskAgents for NoAgents {
-    async fn contains(&self, _agent_id: &str) -> Result<bool, TaskError> {
-        Ok(false)
+    async fn route(
+        &self,
+        _agent_id: &str,
+        _node: Option<&str>,
+    ) -> Result<Option<TaskRoute>, TaskError> {
+        Ok(None)
     }
 }
 

@@ -4,7 +4,7 @@
       "name": "runtime-local",
       "arguments": {"to_agent":"worker@local","task":"ship it","timeout_ms":300000},
       "expected": {"executor":"chat-loop","agent_id":"worker","origin":"tool","requested_by":"mcp-sidecar","node_affinity":"local","budget":{"maxWallClockMs":300000},"spec":{"delegation":true,"meshFrom":"local","excludeTools":["delegate_task"]}},
-      "job": "run-task"
+      "job": "run-task:local"
     },
     {
       "name": "runtime-remote",
@@ -16,7 +16,7 @@
       "name": "runtime-local-model",
       "arguments": {"to_agent":"worker@local","task":"ship it","timeout_ms":300000,"model":"chosen-model"},
       "expected": {"executor":"chat-loop","agent_id":"worker","origin":"tool","requested_by":"mcp-sidecar","node_affinity":"local","budget":{"maxWallClockMs":300000},"spec":{"delegation":true,"meshFrom":"local","excludeTools":["delegate_task"],"model":"chosen-model"}},
-      "job": "run-task"
+      "job": "run-task:local"
     },
     {
       "name": "runtime-remote-model",
@@ -28,7 +28,7 @@
       "name": "preset-local",
       "arguments": {"to_agent":"preset-id","task":"ship it","timeout_ms":300000},
       "expected": {"executor":"harness-session","agent_id":"preset","origin":"tool","requested_by":"mcp-sidecar","node_affinity":null,"budget":{"maxWallClockMs":300000},"spec":{"presetId":"preset-id","presetName":"preset","excludeTools":["delegate_task"]}},
-      "job": "run-task"
+      "job": "run-task:local"
     },
     {
       "name": "preset-remote-model",

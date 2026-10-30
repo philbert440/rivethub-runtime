@@ -491,9 +491,9 @@ fn criterion(id: &str, description: &str) -> AcceptanceCriterion {
 
 #[tokio::test]
 async fn node_affinity_picks_the_job_name() {
-    assert_eq!(job_name(None).await, "run-task");
-    assert_eq!(job_name(Some("")).await, "run-task");
-    assert_eq!(job_name(Some("local")).await, "run-task");
+    assert_eq!(job_name(None).await, "run-task:local");
+    assert_eq!(job_name(Some("")).await, "run-task:local");
+    assert_eq!(job_name(Some("local")).await, "run-task:local");
     assert_eq!(job_name(Some("east")).await, "run-task:east");
 }
 
@@ -503,7 +503,7 @@ async fn job_name(affinity: Option<&str>) -> String {
     body.node_affinity = affinity.map(str::to_owned);
     let (status, bytes) = send(&setup, "/api/tasks", &render(&body)).await;
     assert_eq!(status, 201, "{}", String::from_utf8_lossy(&bytes));
-    claim(&setup.memory, "run-task")
+    claim(&setup.memory, "run-task:local")
         .await
         .or(claim(&setup.memory, "run-task:east").await)
         .expect("job")

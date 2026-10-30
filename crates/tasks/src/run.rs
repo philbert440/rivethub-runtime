@@ -60,12 +60,9 @@ where
 
     pub(crate) fn selector(&self) -> ClaimSelector {
         ClaimSelector {
-            names: vec![
-                JobName::Fixed(kernel::queue::FixedJob::RunTask),
-                JobName::RunTaskOn {
-                    node: self.settings.node.clone(),
-                },
-            ],
+            names: vec![JobName::RunTaskOn {
+                node: self.settings.node.clone(),
+            }],
             only_id: None,
         }
     }

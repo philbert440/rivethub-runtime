@@ -347,9 +347,19 @@ pub trait CatalogSource: Debug + Send + Sync {
     async fn commands(&self, executor: &str) -> Result<Vec<CatalogCommand>, TaskError>;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskRoute {
+    pub agent_id: String,
+    pub node: String,
+}
+
 #[async_trait]
 pub trait TaskAgents: Debug + Send + Sync {
-    async fn contains(&self, agent_id: &str) -> Result<bool, TaskError>;
+    async fn route(
+        &self,
+        agent_id: &str,
+        node: Option<&str>,
+    ) -> Result<Option<TaskRoute>, TaskError>;
 }
 
 #[async_trait]

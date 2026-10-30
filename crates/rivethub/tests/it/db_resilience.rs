@@ -308,15 +308,24 @@ async fn agent_stays_up_and_picks_up_a_job_after_recovery(pool: PgPool) -> TestR
     install_queue(&pool).await?;
     let (proxy, url) = front(&pool).await?;
     let home = tempfile::tempdir()?;
-    write_state(home.path(), &provider_config(home.path(), &url, ""))?;
+    write_state(
+        home.path(),
+        &provider_config(home.path(), &url, "mesh:\n  node_name: agent-node\n"),
+    )?;
     let mut running = spawn_rh(home.path(), &["agent"], "agent running").await?;
     proxy.pause().await;
     running.logs.wait_for(JOB_DOWN).await?;
     alive(&mut running.child)?;
-    enqueue(&pool, JobName::Fixed(FixedJob::RunTask)).await?;
+    enqueue(
+        &pool,
+        JobName::RunTaskOn {
+            node: "agent-node".to_owned(),
+        },
+    )
+    .await?;
     proxy.resume();
     running.logs.wait_for(JOB_UP).await?;
-    wait_rows(&pool, &mut running.child, "run-task", true).await?;
+    wait_rows(&pool, &mut running.child, "run-task:agent-node", true).await?;
     once(&running.logs, JOB_DOWN, JOB_UP).await?;
     stop(running, "agent stopped").await?;
     drop(proxy);

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use kernel::queue::FixedJob;
 use kernel::queue::JobName;
 use kernel::queue::JobQueue;
 use kernel::tasks::ApprovalDecision;
@@ -197,7 +196,9 @@ async fn steer_requires_a_message_and_rejects_a_terminal_task() {
 async fn steer_sets_pending_and_enqueues_another_job() {
     let setup = Setup::new();
     let created = created(&setup).await.task;
-    let first = claim(&setup.memory, "run-task").await.expect("first job");
+    let first = claim(&setup.memory, "run-task:local")
+        .await
+        .expect("first job");
     setup.memory.complete(first.id).await.expect("complete");
     let (status, bytes) = send(
         &setup,
@@ -208,8 +209,15 @@ async fn steer_sets_pending_and_enqueues_another_job() {
     .await;
     assert_eq!(status, 202, "{}", String::from_utf8_lossy(&bytes));
     assert!(parse::<TaskSteerAccepted>(&bytes).ok);
-    let second = claim(&setup.memory, "run-task").await.expect("second job");
-    assert_eq!(second.name, JobName::Fixed(FixedJob::RunTask));
+    let second = claim(&setup.memory, "run-task:local")
+        .await
+        .expect("second job");
+    assert_eq!(
+        second.name,
+        JobName::RunTaskOn {
+            node: "local".to_owned()
+        }
+    );
     let stored = setup
         .memory
         .load(Uuid::parse_str(&created.id).expect("id"))
