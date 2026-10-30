@@ -486,6 +486,14 @@ impl kernel::memory::SummaryStore for IdleSummaries {
     ) -> Result<kernel::memory::SummaryWrite, kernel::memory::SummaryStoreError> {
         Err(kernel::memory::SummaryStoreError::Closed)
     }
+
+    async fn retitle(
+        &self,
+        _id: uuid::Uuid,
+        _title: &str,
+    ) -> Result<bool, kernel::memory::SummaryStoreError> {
+        Err(kernel::memory::SummaryStoreError::Closed)
+    }
 }
 
 fn fnv_provider() -> Arc<dyn ModelProvider> {

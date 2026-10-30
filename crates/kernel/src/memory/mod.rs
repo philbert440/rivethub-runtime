@@ -35,6 +35,7 @@ pub mod budget;
 mod deletion;
 mod embed;
 mod export;
+mod model_title;
 mod origin;
 mod search;
 mod suggest;
@@ -64,6 +65,11 @@ pub use embed::StoredChunk;
 pub use embed::StoredEmbedding;
 pub use embed::Unembeddable;
 pub use export::MemoryExport;
+pub use model_title::MAX_TITLE_WORDS;
+pub use model_title::TitleAnswer;
+pub use model_title::fit_title;
+pub use model_title::title_schema;
+pub use model_title::wants_model_title;
 pub use origin::DumpOrigin;
 pub use origin::DumpSource;
 pub use search::SearchOutcome;
@@ -92,8 +98,10 @@ pub use summary::WindowMessage;
 pub use summary::WrittenSummary;
 pub use title::SUMMARY_TITLE_MAX_CHARS;
 pub use title::names_session;
+pub use title::needs_title;
 pub use title::spoken_title;
 pub use title::summary_title;
+pub use title::weak_title;
 
 #[derive(Debug, Error)]
 pub enum MemoryStoreError {

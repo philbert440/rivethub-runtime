@@ -66,7 +66,19 @@ pub(super) async fn run(
             dry_run,
             json,
             sqlite,
+            model: None,
         } => titles(dry_run, json, sqlite, env).await,
+        MemoryCommand::Titles {
+            dry_run,
+            json,
+            sqlite,
+            model: Some(model),
+        } => match resolve(env, sqlite, Kind::Either)? {
+            Target::Postgres(url) => {
+                super::titles::backfill(&url, &model, dry_run, json, shutdown).await
+            }
+            Target::Sqlite(_) => Err(Error::TitlesSqlite),
+        },
         MemoryCommand::Reembed { dry_run, sqlite } => reembed(dry_run, sqlite, env).await,
         MemoryCommand::ConsolidateWiki {
             limit,

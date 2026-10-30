@@ -60,6 +60,7 @@ use workers::SummaryHealth;
 use workers::SummaryParts;
 use workers::SummarySettings;
 use workers::SummaryTrigger;
+use workers::TITLE_SYSTEM_PROMPT;
 use workers::handle_enqueue_idle;
 use workers::handle_enqueue_stale;
 use workers::handle_reap;
@@ -68,6 +69,7 @@ use workers::summary_health;
 
 const LEAF_TEXT: &str = "The team decided to deploy the AcmeKit service with a blue-green rollout. The release branch is cut on Mondays, the deploy script runs from the release branch, and a health check on staging.example.com gates the traffic switch. Rollback is a traffic switch back to the previous colour.";
 const BRANCH_TEXT: &str = "Branch summary: several deploy sessions for AcmeKit settled on blue-green releases with a health-check gate.";
+const TITLE_ANSWER: &str = r#"{"title": "Plan blue-green AcmeKit deploys"}"#;
 const ROOT_TEXT: &str = "Root summary: the whole AcmeKit deploy conversation, from the first release plan to the documented rollback.";
 
 const REPLAYED: &[&str] = &[
@@ -224,6 +226,7 @@ struct Scripted {
 struct MemStore {
     windows: Mutex<Vec<ConversationWindow>>,
     written: Mutex<Vec<NewSummary>>,
+    retitled: Mutex<Vec<(Uuid, String)>>,
 }
 
 #[derive(Debug)]

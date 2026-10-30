@@ -90,6 +90,10 @@ pub enum WorkerError {
     EmptySummary,
     #[error("the model truncated the summary")]
     Truncated,
+    #[error("the model returned no title")]
+    EmptyTitle,
+    #[error("the title answer is not the title JSON: {0}")]
+    TitleJson(#[source] serde_json::Error),
     #[error("summary settings are invalid: {message}")]
     SummarySettings { message: String },
     #[error("a summary count does not fit")]

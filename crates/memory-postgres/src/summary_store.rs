@@ -72,12 +72,24 @@ const PARENT_SQL: &str = "update rh_summaries
     where id = $2 and conversation_id = $3";
 
 #[derive(Debug, sqlx::FromRow)]
-struct HeadRow {
+pub(crate) struct HeadRow {
     id: Uuid,
     session_key: String,
     agent: String,
     channel: String,
     title: Option<String>,
+}
+
+impl From<HeadRow> for ConversationHead {
+    fn from(row: HeadRow) -> Self {
+        Self {
+            id: row.id,
+            session_key: row.session_key,
+            agent: row.agent,
+            channel: row.channel,
+            title: row.title,
+        }
+    }
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -209,6 +221,20 @@ impl SummaryStore for PostgresMemory {
             .map_err(|source| query_err("commit summary write", source))?;
         Ok(written)
     }
+
+    async fn retitle(&self, id: Uuid, title: &str) -> Result<bool, SummaryStoreError> {
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|source| query_err("acquire for retitle", source))?;
+        crate::title::name_conversation(&mut conn, id, title)
+            .await
+            .map_err(|error| SummaryStoreError::Query {
+                message: error.to_string(),
+                source: Box::new(error),
+            })
+    }
 }
 
 async fn load_window(
@@ -232,13 +258,7 @@ async fn load_window(
     let leaves = load_nodes(pool, id, SummaryKind::Leaf).await?;
     let branches = load_nodes(pool, id, SummaryKind::Branch).await?;
     Ok(Some(ConversationWindow {
-        conversation: ConversationHead {
-            id: head.id,
-            session_key: head.session_key,
-            agent: head.agent,
-            channel: head.channel,
-            title: head.title,
-        },
+        conversation: head.into(),
         messages,
         leaves,
         branches,

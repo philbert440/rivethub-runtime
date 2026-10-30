@@ -255,6 +255,12 @@ pub enum Error {
     CleanupOut,
     #[error("rh memory cleanup needs --model-url <url> and --model <name>")]
     CleanupModel,
+    #[error(
+        "rh memory backfill-titles names titles with both --model <name> and --model-url <url>"
+    )]
+    TitlesModel,
+    #[error("rh memory backfill-titles --model runs on Postgres memory only")]
+    TitlesSqlite,
     #[error("{0} requires a value")]
     CleanupValue(&'static str),
     #[error("{0} requires a positive integer")]
