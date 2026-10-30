@@ -21,16 +21,7 @@ pub(super) async fn build(
     let gateway = config.gateway.as_ref().ok_or_else(|| {
         ComposeError::Invalid("gateway settings are required for terminals".into())
     })?;
-    let root = gateway
-        .files_root
-        .clone()
-        .or_else(|| {
-            config
-                .runtime
-                .as_ref()
-                .and_then(|runtime| runtime.workspace.clone())
-        })
-        .ok_or_else(|| ComposeError::Invalid("terminal filesystem root is required".into()))?;
+    let root = terminal_root(config, gateway)?;
     let paths = config::Paths::new(env)?;
     let state_dir = paths.state_dir();
     let roster_path =
@@ -91,6 +82,7 @@ pub(super) async fn build(
     .with_session_lister(Arc::new(capture::listing::StoreSessionLister::new(
         super::store_roots(env),
     )))
+    .with_startup_dir(state_dir.join("terminal-startup"))
     .with_delegates(delegates(config)?);
     let service = Arc::new(with_claude_trust(built, config, env));
     claim_adopted(&service, &mux, owner, &mut adopted)?;
@@ -123,6 +115,22 @@ fn with_claude_trust(
         }),
         _ => service,
     }
+}
+
+fn terminal_root(
+    config: &Config,
+    gateway: &config::model::GatewaySection,
+) -> Result<std::path::PathBuf, ComposeError> {
+    gateway
+        .files_root
+        .clone()
+        .or_else(|| {
+            config
+                .runtime
+                .as_ref()
+                .and_then(|runtime| runtime.workspace.clone())
+        })
+        .ok_or_else(|| ComposeError::Invalid("terminal filesystem root is required".into()))
 }
 
 fn delegates(config: &Config) -> Result<BTreeMap<String, Delegate>, ComposeError> {

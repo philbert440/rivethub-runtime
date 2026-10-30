@@ -143,7 +143,7 @@ impl TerminalActor {
                             state.exit_code = Some(code);
                         }
                     });
-                    if current { self.permit.take(); }
+                    if current { self.permit.take(); self.service.forget_startup(&self.session).await; }
                 }
             }
         }
@@ -156,6 +156,7 @@ impl TerminalActor {
             self.kill().await?;
         }
         exits.abort_all();
+        self.service.forget_startup(&self.session).await;
         while let Some(outcome) = exits.join_next().await {
             match outcome {
                 Ok(Ok(_)) => {}
@@ -256,7 +257,17 @@ impl TerminalActor {
         let fresh = resume.is_none();
         let mut argv = launch.command.argv.clone();
         argv.extend(session_args(harness, &self.session, resume));
-        let startup = startup_args(harness, launch.startup.as_deref(), fresh);
+        let startup = match (
+            startup_args(harness, launch.startup.as_deref(), fresh),
+            harness,
+        ) {
+            (Some(inline), Some(harness)) => Some(
+                self.service
+                    .startup_file(harness, &self.session, inline)
+                    .await?,
+            ),
+            (startup, _) => startup,
+        };
         let delivered = match &startup {
             Some(_) => DeliveredVia::CliFlag,
             None => DeliveredVia::None,

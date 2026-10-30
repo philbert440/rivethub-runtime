@@ -191,9 +191,11 @@ impl TerminalService {
         match cwd {
             Some(directory) => {
                 let root = self.options.root.clone();
-                tokio::task::spawn_blocking(move || super::contained_directory(&root, &directory))
-                    .await
-                    .map_err(ApiError::Task)?
+                tokio::task::spawn_blocking(move || {
+                    super::options::contained_directory(&root, &directory)
+                })
+                .await
+                .map_err(ApiError::Task)?
             }
             None => Ok(fallback.to_path_buf()),
         }
