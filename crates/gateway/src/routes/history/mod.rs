@@ -234,7 +234,13 @@ fn switches(gateway: &Gateway, session: &wire::session_id::SessionId) -> Option<
         .terminal
         .as_ref()
         .and_then(|service| service.adapter())
-        .map(|adapter| adapter.switches(session))
+        .map(|adapter| {
+            let switches = adapter.switches(session);
+            SessionSwitches {
+                model: switches.model,
+                effort: switches.effort,
+            }
+        })
 }
 
 async fn transcript(

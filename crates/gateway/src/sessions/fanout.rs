@@ -181,7 +181,15 @@ impl ToolNames {
 fn plan_entry(entry: &kernel::harness::PlanEntry) -> wire::harness::PlanEntry {
     wire::harness::PlanEntry {
         content: entry.content.clone(),
-        status: entry.status,
+        status: plan_status(entry.status),
+    }
+}
+
+const fn plan_status(status: kernel::harness::PlanStatus) -> wire::harness::PlanStatus {
+    match status {
+        kernel::harness::PlanStatus::Pending => wire::harness::PlanStatus::Pending,
+        kernel::harness::PlanStatus::InProgress => wire::harness::PlanStatus::InProgress,
+        kernel::harness::PlanStatus::Completed => wire::harness::PlanStatus::Completed,
     }
 }
 

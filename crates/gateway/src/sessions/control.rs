@@ -472,7 +472,11 @@ impl ChatActor {
         let text = message.text.clone();
         let input = message.input();
         self.steering.spawn(async move {
-            let outcome = harness.steer(&session, input).await.map_err(ApiError::from);
+            let outcome = harness
+                .steer(&session, input)
+                .await
+                .map(steer_body)
+                .map_err(ApiError::from);
             Steered {
                 text,
                 outcome,
@@ -524,5 +528,13 @@ async fn next_event(events: &mut Option<mpsc::Receiver<SessionEvent>>) -> Option
 fn respond<T>(reply: oneshot::Sender<Result<T, ApiError>>, result: Result<T, ApiError>) {
     if reply.send(result).is_err() {
         tracing::debug!("session request caller disconnected");
+    }
+}
+
+const fn steer_body(outcome: kernel::harness::SteerOutcome) -> SteerOutcome {
+    match outcome {
+        kernel::harness::SteerOutcome::Steered => SteerOutcome::Steered,
+        kernel::harness::SteerOutcome::StartedNewTurn => SteerOutcome::StartedNewTurn,
+        kernel::harness::SteerOutcome::PromptRequired => SteerOutcome::PromptRequired,
     }
 }

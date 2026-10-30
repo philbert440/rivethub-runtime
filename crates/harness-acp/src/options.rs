@@ -1,8 +1,8 @@
 use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::SessionOption;
+use kernel::harness::SessionSwitches;
 use parking_lot::Mutex;
 use wire::gateway::agents::model_id;
-use wire::gateway::sessions::SessionSwitches;
 
 use crate::error::AcpError;
 
@@ -24,7 +24,7 @@ impl SessionOptions {
 
     pub(crate) fn models(
         &self,
-    ) -> Result<Option<Vec<wire::harness::HarnessModelOption>>, AcpError> {
+    ) -> Result<Option<Vec<kernel::harness::HarnessModelOption>>, AcpError> {
         let options = self.options.lock();
         let Some(model) = options.iter().find(|option| {
             option.category.as_ref() == Some(&acp::SessionConfigOptionCategory::Model)
@@ -43,7 +43,7 @@ impl SessionOptions {
         }
         let models = items
             .into_iter()
-            .map(|item| wire::harness::HarnessModelOption {
+            .map(|item| kernel::harness::HarnessModelOption {
                 id: model_id(&item.value.0).into_owned(),
                 label: item.name.clone(),
                 is_default: Some(item.value == select.current_value),

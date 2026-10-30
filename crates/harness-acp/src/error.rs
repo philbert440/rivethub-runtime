@@ -1,8 +1,9 @@
 use std::fmt;
 
+use kernel::harness::ApprovalDecision;
 use kernel::model::ProviderRecovery;
 use thiserror::Error;
-use wire::harness::{ApprovalDecision, HarnessId};
+use wire::harness::HarnessId;
 
 use crate::identity::IdentityError;
 

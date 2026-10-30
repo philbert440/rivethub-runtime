@@ -60,12 +60,6 @@ count = 2
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/harness.rs"
-text = "wire"
-count = 5
-
-[[entry]]
-check = "KERNELWIRE"
 file = "crates/kernel/src/memory/mod.rs"
 text = "wire"
 count = 21

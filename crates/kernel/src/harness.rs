@@ -7,10 +7,61 @@ use values::HarnessId;
 use values::JsonObject;
 use values::SessionId;
 use values::ThinkingLevel;
-use wire::gateway::sessions::SessionSwitches;
-use wire::harness::ApprovalDecision;
-use wire::harness::PlanStatus;
-use wire::harness::SteerOutcome;
+
+mod offering;
+
+pub use offering::{
+    EffortOption, HarnessCapabilities, HarnessControlCapabilities, HarnessModelOption,
+    HarnessModelsSource, HarnessObservationCapabilities, HarnessOffering,
+};
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SessionSwitches {
+    pub model: bool,
+    pub effort: bool,
+}
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns how a permission request is answered; wire::harness::ApprovalDecision is the contract's copy, translated by the gateway"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalDecision {
+    Allow,
+    Deny,
+    AllowSession,
+}
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns what steering a running turn did; wire::harness::SteerOutcome is the contract's copy, translated by the gateway"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SteerOutcome {
+    Steered,
+    StartedNewTurn,
+    PromptRequired,
+}
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns a plan entry's progress; wire::harness::PlanStatus is the contract's copy, translated by the gateway"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanStatus {
+    Pending,
+    InProgress,
+    Completed,
+}
 
 #[derive(Debug, Error)]
 pub enum HarnessAdapterError {
@@ -315,7 +366,7 @@ pub trait HarnessAdapter: Send + Sync {
         session: &SessionId,
     ) -> Result<Receiver<SessionEvent>, HarnessAdapterError>;
 
-    async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError>;
+    async fn offerings(&self) -> Result<Vec<HarnessOffering>, HarnessAdapterError>;
 
     async fn commands(&self) -> Result<Vec<HarnessCommands>, HarnessAdapterError>;
 }

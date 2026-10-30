@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 
 use async_trait::async_trait;
 use kernel::ToolContext;
+use kernel::harness::ApprovalDecision;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::HarnessAdapterError;
 use kernel::harness::HarnessCommands;
@@ -29,7 +30,6 @@ use kernel::tool::Tool;
 use kernel::tool::ToolError;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::Receiver;
-use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 
@@ -43,7 +43,7 @@ struct SessionStream {
 pub struct FakeHarness {
     queued: Mutex<Vec<SessionEvent>>,
     sessions: Mutex<BTreeMap<SessionId, SessionStream>>,
-    offerings: parking_lot::Mutex<Vec<wire::harness::HarnessOffering>>,
+    offerings: parking_lot::Mutex<Vec<kernel::harness::HarnessOffering>>,
     commands: parking_lot::Mutex<Vec<HarnessCommands>>,
 }
 
@@ -57,7 +57,7 @@ impl FakeHarness {
         }
     }
 
-    pub fn set_offerings(&self, offerings: Vec<wire::harness::HarnessOffering>) {
+    pub fn set_offerings(&self, offerings: Vec<kernel::harness::HarnessOffering>) {
         *self.offerings.lock() = offerings;
     }
 
@@ -150,7 +150,9 @@ impl HarnessAdapter for FakeHarness {
         taken.ok_or_else(|| HarnessAdapterError::EventStreamTaken(session.clone()))
     }
 
-    async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError> {
+    async fn offerings(
+        &self,
+    ) -> Result<Vec<kernel::harness::HarnessOffering>, HarnessAdapterError> {
         Ok(self.offerings.lock().clone())
     }
 

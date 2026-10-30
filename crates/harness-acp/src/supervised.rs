@@ -5,6 +5,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use config::Config;
 use config::provider::CliProvider;
+use kernel::harness::SessionSwitches;
+use kernel::harness::{ApprovalDecision, HarnessOffering, SteerOutcome};
 use kernel::harness::{
     HarnessAdapter, HarnessAdapterError, HarnessCommands, SessionEvent, SessionOption, SessionSpec,
     SystemPromptSupport, TurnInput,
@@ -15,8 +17,7 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use wire::gateway::sessions::SessionSwitches;
-use wire::harness::{ApprovalDecision, HarnessId, HarnessOffering, SteerOutcome};
+use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 
 use crate::error::port;

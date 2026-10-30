@@ -296,7 +296,7 @@ impl TerminalService {
             .clone()
             .ok_or_else(|| ApiError::Unavailable("chat harness unavailable".into()))?;
         harness
-            .answer_permission(session, request_id, decision)
+            .answer_permission(session, request_id, approval(decision))
             .await?;
         self.publish_harness(
             &key,
@@ -390,5 +390,13 @@ async fn existing_directory(directory: std::path::PathBuf) -> Result<std::path::
         Ok(_) | Err(_) => Err(ApiError::BadRequest(
             "the session's working directory is gone".into(),
         )),
+    }
+}
+
+const fn approval(decision: ApprovalDecision) -> kernel::harness::ApprovalDecision {
+    match decision {
+        ApprovalDecision::Allow => kernel::harness::ApprovalDecision::Allow,
+        ApprovalDecision::Deny => kernel::harness::ApprovalDecision::Deny,
+        ApprovalDecision::AllowSession => kernel::harness::ApprovalDecision::AllowSession,
     }
 }

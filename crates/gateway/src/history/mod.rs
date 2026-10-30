@@ -1,4 +1,5 @@
 mod context;
+mod offering;
 mod preview;
 mod rows;
 
@@ -62,7 +63,12 @@ pub(crate) async fn offered(gateway: &Gateway) -> Result<Vec<HarnessOffering>, A
     let Some(adapter) = gateway.terminal().and_then(|terminal| terminal.adapter()) else {
         return Ok(Vec::new());
     };
-    let mut harnesses = adapter.offerings().await?;
+    let mut harnesses: Vec<HarnessOffering> = adapter
+        .offerings()
+        .await?
+        .into_iter()
+        .map(offering::harness_offering_body)
+        .collect();
     let images = gateway.uploads().is_some();
     let listed = gateway.session_lister().is_some();
     for offering in &mut harnesses {

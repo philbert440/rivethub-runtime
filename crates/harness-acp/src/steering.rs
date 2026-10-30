@@ -1,8 +1,8 @@
 use agent_client_protocol::schema::v1 as acp;
+use kernel::harness::SteerOutcome;
 use serde::Deserialize;
 use serde::Serialize;
 use serde::de::IntoDeserializer as _;
-use wire::harness::SteerOutcome;
 
 use crate::error::AcpError;
 

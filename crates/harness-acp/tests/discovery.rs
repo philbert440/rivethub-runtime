@@ -3,7 +3,8 @@ use std::time::Duration;
 
 use harness_acp::{AcpCommand, AcpHarnessAdapter, AcpLaunch, LaunchTable};
 use kernel::harness::{HarnessAdapter, SessionOption, SessionSpec};
-use wire::harness::{HarnessId, HarnessModelsSource, HarnessOffering};
+use kernel::harness::{HarnessModelsSource, HarnessOffering};
+use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 
 fn adapter(cwd: Option<&Path>, listing: bool) -> AcpHarnessAdapter {
