@@ -27,6 +27,7 @@ const TYPED_TIMEOUT: Duration = Duration::from_secs(30);
 const HTTP_FIRST_BYTE: Duration = Duration::from_secs(60);
 const SCENE_LIMIT: usize = 5000;
 const DETAIL_LIMIT: usize = 1024;
+const PAGE_POLICY: &str = "sandbox allow-scripts allow-forms allow-popups allow-downloads";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
@@ -355,11 +356,13 @@ async fn passthrough(target: &Target<'_>, request: Request) -> Result<Response, 
         .map_err(|error| PluginRouteError::Failed(error.to_string()))?;
     let mut answer = Response::builder().status(response.status());
     for (name, value) in response.headers() {
-        if kept(name) {
+        if kept(name) && name != header::X_CONTENT_TYPE_OPTIONS {
             answer = answer.header(name, value);
         }
     }
     answer
+        .header(header::CONTENT_SECURITY_POLICY, PAGE_POLICY)
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .body(axum::body::Body::from_stream(response.bytes_stream()))
         .map_err(|error| PluginRouteError::Failed(error.to_string()))
 }

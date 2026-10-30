@@ -1,214 +1,26 @@
-use crate::common;
-
-use std::net::SocketAddr;
 use std::path::Path;
-use std::sync::Arc;
-use std::time::Duration;
 
-use axum::Router;
-use axum::body::{Body, Bytes};
-use axum::extract::ConnectInfo;
-use axum::http::{Method, Request, StatusCode};
-use gateway::Gateway;
-use gateway::plugins::{HostSettings, PluginHost};
-use gateway::tenancy::{PeerCertificate, Tenancy, UserId};
+use axum::http::{Method, StatusCode};
 use serde::Serialize;
-use tower::ServiceExt as _;
 use wire::JsonObject;
-use wire::gateway::GatewayError;
 use wire::harness::HarnessId;
 use wire::plugin::action::{ViewActionRefusal, ViewActionResult};
 use wire::plugin::host::{
-    PluginEnableRequest, PluginInstallRequest, PluginJobOutcome, PluginLogStream, PluginLogs,
-    PluginRecord, PluginSettings, PluginState,
+    PluginInstallRequest, PluginJobOutcome, PluginLogStream, PluginLogs, PluginRecord,
+    PluginSettings, PluginState,
 };
-use wire::plugin::manifest::{Permission, PluginManifest};
-use wire::plugin::process::{PluginEvent, PluginToolCall, PluginToolResult};
+use wire::plugin::manifest::Permission;
+use wire::plugin::process::PluginEvent;
 use wire::plugin::view::{View, ViewValue};
 use wire::session_id::SessionId;
 
-type Failure = Box<dyn std::error::Error + Send + Sync>;
-type TestResult = Result<(), Failure>;
-
-const POLL: Duration = Duration::from_millis(50);
-
-const MANIFEST: &str = r#"{
-  "manifest": 1,
-  "id": "fixture",
-  "name": "Fixture",
-  "version": "0.1.0",
-  "description": "A plug-in for the host tests.",
-  "run": { "command": ["COMMAND"], "readyTimeoutMs": 5000 },
-  "permissions": ["sessions.read", "tasks.read"],
-  "tools": [
-    { "name": "echo", "description": "Echo the arguments.", "inputSchema": { "type": "object" } },
-    { "name": "events", "description": "List received events.", "inputSchema": { "type": "object" } },
-    { "name": "pid", "description": "Answer the process id.", "inputSchema": { "type": "object" } },
-    { "name": "api", "description": "Call the plug-in API.", "inputSchema": { "type": "object" } },
-    { "name": "read", "description": "Read a file.", "inputSchema": { "type": "object" } }
-  ],
-  "settings": [
-    { "key": "runs", "label": "Runs at once", "input": { "type": "number", "min": 1, "max": 8 }, "value": 2, "required": true },
-    { "key": "token", "label": "Token", "input": { "type": "secret" } }
-  ],
-  "contributes": { "pages": [{ "id": "fixture", "title": "Fixture", "view": "status" }] },
-  "jobs": [{ "id": "tick", "title": "Tick" }],
-  "events": ["session.idle", "task.done"]
-}"#;
-
-#[derive(Serialize)]
-struct Probe<'a> {
-    method: &'a str,
-    path: &'a str,
-}
+use crate::plugin_support::{
+    Failure, Harness, POLL, TestResult, enable, harness, invalid_manifest, refused, write_manifest,
+};
 
 #[derive(Serialize)]
 struct FileProbe<'a> {
     path: &'a Path,
-}
-
-struct Harness {
-    app: Router,
-    gateway: Arc<Gateway>,
-}
-
-impl Harness {
-    async fn call(
-        &self,
-        method: Method,
-        path: &str,
-        body: Option<String>,
-        device: bool,
-    ) -> Result<(StatusCode, Bytes), Failure> {
-        let mut request = Request::builder()
-            .method(method)
-            .uri(path)
-            .header("host", "127.0.0.1:5174")
-            .header("content-type", "application/json")
-            .body(body.map_or_else(Body::empty, Body::from))?;
-        request
-            .extensions_mut()
-            .insert(ConnectInfo("127.0.0.1:41000".parse::<SocketAddr>()?));
-        if device {
-            request.extensions_mut().insert(PeerCertificate::Device {
-                user: Some("owner".to_owned()),
-                device: "laptop".to_owned(),
-            });
-        }
-        let response =
-            tokio::time::timeout(Duration::from_secs(20), self.app.clone().oneshot(request))
-                .await??;
-        let status = response.status();
-        let bytes = axum::body::to_bytes(response.into_body(), 4 * 1024 * 1024).await?;
-        Ok((status, bytes))
-    }
-
-    async fn record(&self) -> Result<PluginRecord, Failure> {
-        let (_, bytes) = self
-            .call(Method::GET, "/api/plugins/fixture", None, false)
-            .await?;
-        Ok(serde_json::from_slice(&bytes)?)
-    }
-
-    async fn until(
-        &self,
-        what: &str,
-        mut ready: impl FnMut(&PluginRecord) -> bool,
-    ) -> Result<PluginRecord, Failure> {
-        let mut poll = tokio::time::interval(POLL);
-        for _ in 0..400 {
-            poll.tick().await;
-            let record = self.record().await?;
-            if ready(&record) {
-                return Ok(record);
-            }
-        }
-        Err(format!("the plug-in never reached {what}").into())
-    }
-
-    async fn tool(&self, name: &str, arguments: JsonObject) -> Result<PluginToolResult, Failure> {
-        let call = PluginToolCall {
-            arguments,
-            session_id: None,
-        };
-        let (status, bytes) = self
-            .call(
-                Method::POST,
-                &format!("/api/plugins/fixture/tools/{name}"),
-                Some(serde_json::to_string(&call)?),
-                false,
-            )
-            .await?;
-        assert_eq!(
-            status,
-            StatusCode::OK,
-            "{}",
-            String::from_utf8_lossy(&bytes)
-        );
-        Ok(serde_json::from_slice(&bytes)?)
-    }
-
-    async fn probe(&self, method: &str, path: &str) -> Result<String, Failure> {
-        let answer = self
-            .tool("api", JsonObject::from_serialize(&Probe { method, path })?)
-            .await?
-            .text;
-        Ok(answer
-            .split_once(' ')
-            .map_or_else(|| answer.clone(), |(status, _)| status.to_owned()))
-    }
-
-    async fn probe_body(&self, method: &str, path: &str) -> Result<String, Failure> {
-        Ok(self
-            .tool("api", JsonObject::from_serialize(&Probe { method, path })?)
-            .await?
-            .text)
-    }
-}
-
-fn write_manifest(source: &Path, permissions: &[Permission]) -> Result<(), Failure> {
-    let text = MANIFEST.replace("COMMAND", env!("CARGO_BIN_EXE_fixture-plugin"));
-    let mut manifest: PluginManifest = serde_json::from_str(&text)?;
-    manifest.permissions = permissions.to_vec();
-    std::fs::create_dir_all(source)?;
-    std::fs::write(
-        source.join("rivethub-plugin.json"),
-        serde_json::to_vec_pretty(&manifest)?,
-    )?;
-    Ok(())
-}
-
-async fn harness(root: &Path) -> Result<Harness, Failure> {
-    let mut settings = common::settings();
-    settings.state_dir = root.join("state");
-    let owner = UserId::new("owner".to_owned())?;
-    let tenancy = Tenancy::local(owner.clone()).with_device("laptop", owner)?;
-    let host = PluginHost::open(HostSettings {
-        root: root.join("state").join("plugins"),
-        node: "node-a".to_owned(),
-        inherited: Vec::new(),
-    })
-    .await?;
-    let gateway = Arc::new(
-        Gateway::new(Arc::new(testkit::FakeMemoryStore::default()), settings)
-            .with_tenancy(tenancy)
-            .with_plugins(host),
-    );
-    gateway::plugins::start(&gateway).await?;
-    Ok(Harness {
-        app: gateway.router(false),
-        gateway,
-    })
-}
-
-fn refused(bytes: &Bytes) -> Result<GatewayError, Failure> {
-    Ok(serde_json::from_slice(bytes)?)
-}
-
-fn enable(approve: &[Permission]) -> Result<Option<String>, Failure> {
-    Ok(Some(serde_json::to_string(&PluginEnableRequest {
-        approve: approve.to_vec(),
-    })?))
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -558,10 +370,7 @@ async fn an_invalid_manifest_is_refused_with_its_field_path() -> TestResult {
     let root = tempfile::tempdir()?;
     let source = root.path().join("source");
     std::fs::create_dir_all(&source)?;
-    std::fs::write(
-        source.join("rivethub-plugin.json"),
-        MANIFEST.replace(r#""tasks.read"]"#, r#""tasks.read"], "colour": "red""#),
-    )?;
+    std::fs::write(source.join("rivethub-plugin.json"), invalid_manifest())?;
     let host = harness(root.path()).await?;
     let install = |path: &Path| -> Result<Option<String>, Failure> {
         Ok(Some(serde_json::to_string(&PluginInstallRequest {
