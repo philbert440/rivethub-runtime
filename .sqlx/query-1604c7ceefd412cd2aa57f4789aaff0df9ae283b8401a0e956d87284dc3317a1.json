@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.session_id, s.name, s.topic_id, s.parent_id\n           FROM rh_session_suggestions s\n          WHERE NOT EXISTS (SELECT 1 FROM rh_session_placements p WHERE p.session_id = s.session_id)\n          ORDER BY s.session_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_session_suggestions",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_session_suggestions",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "topic_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rh_session_suggestions",
+            "name": "topic_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "parent_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rh_session_suggestions",
+            "name": "parent_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "1604c7ceefd412cd2aa57f4789aaff0df9ae283b8401a0e956d87284dc3317a1"
+}

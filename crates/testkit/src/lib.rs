@@ -4,6 +4,7 @@ pub mod cases;
 pub mod decisions;
 pub mod fakes;
 pub mod filing;
+pub mod filing_bulk;
 pub mod graphile_schema;
 pub mod http;
 pub mod json;

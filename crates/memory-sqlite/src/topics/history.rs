@@ -9,7 +9,7 @@ use super::rows::stored;
 use super::rows::timestamp;
 use crate::time;
 
-fn mark(session_id: String, marked_at: &str) -> Result<HistoryMark, TopicError> {
+pub(super) fn mark(session_id: String, marked_at: &str) -> Result<HistoryMark, TopicError> {
     Ok(HistoryMark {
         session: SessionId::try_from(session_id)
             .map_err(|error| stored("session_id")(Box::new(error)))?,

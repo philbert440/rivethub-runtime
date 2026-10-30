@@ -5,6 +5,7 @@ use std::str::FromStr;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::filing::AllFiled;
 use kernel::filing::ConversationPlacement;
 use kernel::filing::Correction;
 use kernel::filing::CorrectionExample;
@@ -245,6 +246,10 @@ impl FilingStore for PostgresMemory {
             sessions,
             conversations,
         })
+    }
+
+    async fn all_filed(&self) -> Result<AllFiled, TopicError> {
+        super::bulk::all_filed(&self.pool).await
     }
 
     async fn mentions(&self, topics: &[TopicId], limit: u32) -> Result<Vec<Mention>, TopicError> {

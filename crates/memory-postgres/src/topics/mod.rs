@@ -1,3 +1,4 @@
+mod bulk;
 mod decisions;
 mod filing;
 mod history;
@@ -340,6 +341,10 @@ impl TopicStore for PostgresMemory {
         .map_err(failed("session suggestion read"))?
         .map(rows::suggestion)
         .transpose()
+    }
+
+    async fn suggestions(&self) -> Result<Vec<Suggestion>, TopicError> {
+        bulk::suggestions(&self.pool).await
     }
 
     async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError> {

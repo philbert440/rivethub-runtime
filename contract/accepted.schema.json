@@ -8936,6 +8936,75 @@
         "channel"
       ]
     },
+    "TopicFiling": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicSession"
+          }
+        },
+        "conversations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicConversation"
+          }
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionHistoryMark"
+          }
+        }
+      },
+      "required": [
+        "sessions",
+        "conversations",
+        "history"
+      ]
+    },
+    "SessionSuggestion": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sessionId",
+        "name"
+      ]
+    },
+    "SessionSuggestionList": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionSuggestion"
+          }
+        }
+      },
+      "required": [
+        "sessions"
+      ]
+    },
     "ConversationPlacement": {
       "type": "object",
       "properties": {

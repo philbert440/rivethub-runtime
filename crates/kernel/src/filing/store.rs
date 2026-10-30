@@ -7,6 +7,7 @@ use super::Correction;
 use super::CorrectionExample;
 use super::Target;
 use crate::memory::ConversationHead;
+use crate::topics::HistoryMark;
 use crate::topics::Placement;
 use crate::topics::PlacementSource;
 use crate::topics::TopicError;
@@ -69,6 +70,13 @@ pub struct Filed {
     pub conversations: Vec<FiledConversation>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AllFiled {
+    pub sessions: Vec<FiledSession>,
+    pub conversations: Vec<FiledConversation>,
+    pub history: Vec<HistoryMark>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TopicLine {
     pub topic: TopicId,
@@ -115,6 +123,8 @@ pub trait FilingStore: Send + Sync {
     ) -> Result<Option<ConversationPlacement>, TopicError>;
 
     async fn filed(&self, topic: TopicId) -> Result<Filed, TopicError>;
+
+    async fn all_filed(&self) -> Result<AllFiled, TopicError>;
 
     async fn mentions(&self, topics: &[TopicId], limit: u32) -> Result<Vec<Mention>, TopicError>;
 
