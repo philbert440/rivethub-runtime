@@ -10,6 +10,8 @@ const SOURCE: &str = "use wire::session_id::SessionId;\nuse std::fmt;\n\n#[serde
 fn repository(files: &[(&str, &str)]) -> Result<TempDir> {
     let repo = tempfile::tempdir()?;
     git::git(repo.path(), &["init", "-q"])?;
+    git::git(repo.path(), &["config", "user.name", "Rivet Philbot"])?;
+    git::git(repo.path(), &["config", "user.email", "rivetphilbot@gmail.com"])?;
     write(repo.path(), files)?;
     Ok(repo)
 }
