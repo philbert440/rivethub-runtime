@@ -130,7 +130,18 @@ async fn an_unfiled_session_waits_until_it_is_filed() -> TestResult {
 async fn a_child_session_waits_for_its_parent() -> TestResult {
     let (_directory, store, job) = seeded().await?;
     wiki_routes::a_child_session_waits_for_its_parent(
-        stores_in(&store, &wiki_routes::ChildOfParent),
+        stores_in(&store, &testkit::wiki_lineage::CHILD),
+        &job,
+    )
+    .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    testkit::wiki_lineage::a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic(
+        stores_in(&store, &testkit::wiki_lineage::GRANDCHILD),
         &job,
     )
     .await?;

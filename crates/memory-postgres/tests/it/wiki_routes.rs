@@ -140,7 +140,17 @@ async fn an_unfiled_session_waits_until_it_is_filed(pool: PgPool) -> TestResult 
 async fn a_child_session_waits_for_its_parent(pool: PgPool) -> TestResult {
     let seeded = Seeded::new(pool).await?;
     wiki_routes::a_child_session_waits_for_its_parent(
-        seeded.stores_in(&wiki_routes::ChildOfParent),
+        seeded.stores_in(&testkit::wiki_lineage::CHILD),
+        &seeded.job,
+    )
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool).await?;
+    testkit::wiki_lineage::a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic(
+        seeded.stores_in(&testkit::wiki_lineage::GRANDCHILD),
         &seeded.job,
     )
     .await

@@ -38,6 +38,7 @@ use crate::transcript::TranscriptReaderError;
 use crate::transcript::linked_parent;
 
 const DEFERRALS_PER_SWEEP: u32 = 50;
+const LINEAGE_DEPTH: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -343,17 +344,23 @@ impl TopicPorts<'_> {
             },
             None => session(summary).map(Target::Session),
         };
-        let Some(Target::Session(session)) = filed else {
+        let Some(Target::Session(mut session)) = filed else {
             return Ok(filed);
         };
-        if self.topics.placement(&session).await?.is_some() {
-            return Ok(Some(Target::Session(session)));
+        for _ in 0..LINEAGE_DEPTH {
+            if self.topics.placement(&session).await?.is_some() {
+                break;
+            }
+            match self
+                .parent(&session)
+                .await
+                .map_err(|error| TopicPageError::ParentPlacement(error.into()))?
+            {
+                Some(parent) => session = parent,
+                None => break,
+            }
         }
-        let parent = self
-            .parent(&session)
-            .await
-            .map_err(|error| TopicPageError::ParentPlacement(error.into()))?;
-        Ok(Some(Target::Session(parent.unwrap_or(session))))
+        Ok(Some(Target::Session(session)))
     }
 
     async fn followed(

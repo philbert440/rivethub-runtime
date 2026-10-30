@@ -351,7 +351,9 @@ deleted, the former People, Hosts and Tools category topics included, and deleti
 never recreates that name. The wiki builder writes only to topic and entity pages: a patch about the session's topic lands
 on its page as before, a patch whose `type` names one of the types goes to that entity's own page (a type has no page), and
 any other patch becomes a note section on the session's topic page. A session that isn't filed yet keeps its notes until it
-is filed (a child session until its parent is, a conversation or delegated task until that conversation is), then
+is filed (a child session until the nearest session above it is, walking up at most 8 parents, so a subagent of a
+subagent waits on the filed root and not on its unfiled parent; a conversation or delegated task until that conversation
+is), then
 they land on its topic page and cite its summary. A session's notes follow it: moved to another topic, by you or
 the categorizer, they leave the old topic's page for the new one (and so does the summary's citation, unless the summary
 also patched the old page itself), and taken out of a topic they wait until it is
