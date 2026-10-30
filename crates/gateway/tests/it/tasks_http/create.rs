@@ -531,25 +531,25 @@ async fn wait_query_is_exact_and_timeout_is_clamped() {
     let (status, bytes) = send(&setup, "/api/tasks?wait=1&timeoutMs=0", &goal("ship")).await;
     assert_eq!(status, 504, "{}", String::from_utf8_lossy(&bytes));
     let timed: TaskWaitTimeoutResponse = parse(&bytes);
-    assert_eq!(timed.error, "wait deadline exceeded — task killed");
-    assert_eq!(timed.task.expect("killed task").status, TaskStatus::Killed);
+    assert_eq!(timed.error, "wait deadline exceeded");
+    assert_eq!(timed.task.expect("running task").status, TaskStatus::Queued);
 }
 
 #[tokio::test]
-async fn post_wait_kills_when_the_deadline_passes() {
+async fn post_wait_leaves_the_task_running_when_the_deadline_passes() {
     let setup = Setup::new();
     let (status, bytes) = send(&setup, "/api/tasks?wait=1&timeoutMs=1", &goal("ship")).await;
     assert_eq!(status, 504, "{}", String::from_utf8_lossy(&bytes));
     let timed: TaskWaitTimeoutResponse = parse(&bytes);
-    assert_eq!(timed.error, "wait deadline exceeded — task killed");
-    let task = timed.task.expect("killed task");
-    assert_eq!(task.status, TaskStatus::Killed);
+    assert_eq!(timed.error, "wait deadline exceeded");
+    let task = timed.task.expect("running task");
+    assert_eq!(task.status, TaskStatus::Queued);
     let stored = setup
         .memory
         .load(only_id(&setup.memory).await)
         .await
         .expect("load");
-    assert_eq!(stored.status, TaskStatus::Killed);
+    assert_eq!(stored.status, TaskStatus::Queued);
     assert_eq!(stored.id.to_string(), task.id);
 }
 

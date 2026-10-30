@@ -390,11 +390,11 @@ async fn respond(
         let task = to_wire(&record, &[])?;
         return Ok((StatusCode::CREATED, Json(TaskResponse { task })).into_response());
     }
-    match wait_until(api, record.id, timeout, false, OnTimeout::Kill).await? {
+    match wait_until(api, record.id, timeout, false, OnTimeout::Report).await? {
         WaitHit::Task(task) => Ok((StatusCode::OK, Json(TaskResponse { task })).into_response()),
         WaitHit::Approval(_) => Err(TaskHttpError::Failed(
             "approval was not requested".to_owned(),
         )),
-        WaitHit::Deadline(task) => Err(TaskHttpError::wait_killed(task)),
+        WaitHit::Deadline(task) => Err(TaskHttpError::wait_running(task)),
     }
 }
