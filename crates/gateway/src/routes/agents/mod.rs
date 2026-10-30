@@ -88,6 +88,15 @@ pub(crate) enum Failure {
     Agent(AgentError),
 }
 
+impl std::fmt::Display for Failure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Api(error) => error.fmt(formatter),
+            Self::Agent(error) => error.fmt(formatter),
+        }
+    }
+}
+
 impl From<ApiError> for Failure {
     fn from(error: ApiError) -> Self {
         Self::Api(error)

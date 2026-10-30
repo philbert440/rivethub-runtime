@@ -1,12 +1,12 @@
 use crate::Error;
-use kernel::tasks::{AgentDirectory, DelegateOutcome};
+use kernel::tasks::{AgentDirectory, DelegateOutcome, TaskStatus};
 use std::fmt::Write as _;
 
 pub(crate) fn agents(directory: &AgentDirectory) -> Result<String, Error> {
     let mut lines = Vec::new();
     for preset in &directory.presets {
         let mut line = format!("- {} (agent:", preset.name);
-        if let Some(harness) = preset.harness {
+        if let Some(harness) = &preset.harness {
             write!(line, " {harness}")?;
         }
         if let Some(node) = &preset.node {
@@ -39,49 +39,39 @@ pub(crate) fn agents(directory: &AgentDirectory) -> Result<String, Error> {
 
 pub(crate) fn task(outcome: &DelegateOutcome, elapsed: std::time::Duration) -> String {
     let status = if outcome.timed_out {
-        "timeout".to_owned()
+        "still running".to_owned()
     } else {
         outcome.status.to_string()
     };
     let mut meta = vec![format!("{}ms", elapsed.as_millis())];
-    if let Some(total) = outcome
-        .result
-        .as_ref()
-        .and_then(|result| result.usage.total_tokens)
-    {
+    if let Some(total) = outcome.tokens {
         meta.push(format!("tokens: {total}"));
     }
-    let meta_line = format!("\n\n---\n_Delegation [{status}]: {}_", meta.join(" | "));
-    if outcome.status == wire::task::TaskStatus::Completed && !outcome.timed_out {
-        let response = outcome
-            .result
-            .as_ref()
-            .and_then(|result| {
-                result
-                    .output
-                    .clone()
-                    .filter(|output| !output.is_empty())
-                    .or_else(|| Some(result.summary.clone()).filter(|summary| !summary.is_empty()))
-            })
-            .unwrap_or_else(|| "[no response from remote agent]".to_owned());
-        return format!("{response}{meta_line}");
-    }
+    let session = outcome.child.as_deref().unwrap_or("not started");
+    let footer = format!(
+        "\n\n---\n_Delegation [{status}]: {}_\ntask {} · session {session} · node {}",
+        meta.join(" | "),
+        outcome.id,
+        outcome.node
+    );
     if outcome.timed_out {
         return format!(
-            "[timeout] task {} is still {} and keeps running{meta_line}",
+            "[still running] task {} is {} and keeps running; its result comes back to this session when it finishes{footer}",
             outcome.id, outcome.status
         );
+    }
+    if outcome.status == TaskStatus::Completed {
+        let response = outcome
+            .summary
+            .clone()
+            .filter(|summary| !summary.is_empty())
+            .unwrap_or_else(|| "[no response from the delegate]".to_owned());
+        return format!("{response}{footer}");
     }
     let reason = outcome
         .error
         .clone()
-        .or_else(|| {
-            outcome
-                .result
-                .as_ref()
-                .and_then(|result| result.error.clone())
-        })
-        .or_else(|| outcome.result.as_ref().map(|result| result.summary.clone()))
+        .or_else(|| outcome.summary.clone())
         .unwrap_or_default();
-    format!("[{status}] {reason}{meta_line}")
+    format!("[{status}] {reason}{footer}")
 }

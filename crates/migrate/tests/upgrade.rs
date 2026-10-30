@@ -114,3 +114,54 @@ fn a_failed_open_reports_the_path() -> TestResult<()> {
     }
     Ok(())
 }
+
+#[test]
+fn schema_25_archives_the_tasks_the_adapter_kept() -> TestResult<()> {
+    let directory = tempdir()?;
+    let path = directory.path().join("memory.sqlite");
+    migrate::sqlite(&path)?;
+    {
+        let conn = rusqlite::Connection::open(&path)?;
+        conn.execute_batch(
+            "DROP TABLE rh_tasks;
+             CREATE TABLE rh_tasks (id TEXT PRIMARY KEY, goal TEXT NOT NULL, executor TEXT NOT NULL,
+                 status TEXT NOT NULL, error TEXT, completed_at TEXT);
+             INSERT INTO rh_tasks VALUES ('a', 'beat', 'chat-loop', 'queued', NULL, NULL),
+                 ('b', 'done', 'harness-session', 'completed', NULL, '2026-10-01T00:00:00.000Z');
+             PRAGMA user_version = 24;",
+        )?;
+    }
+    migrate::sqlite(&path)?;
+    let conn = rusqlite::Connection::open(&path)?;
+    let mut statement =
+        conn.prepare("SELECT id, status, error FROM rh_tasks_archive ORDER BY id")?;
+    let archived = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(
+        archived,
+        vec![
+            (
+                "a".to_owned(),
+                "killed".to_owned(),
+                Some("archived with the tasks refactor".to_owned())
+            ),
+            ("b".to_owned(), "completed".to_owned(), None),
+        ]
+    );
+    let fresh: i64 = conn.query_row("SELECT count(*) FROM rh_tasks", [], |row| row.get(0))?;
+    assert_eq!(fresh, 0);
+    let shaped: i64 = conn.query_row(
+        "SELECT count(*) FROM pragma_table_info('rh_tasks') WHERE name = 'child_session_id'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(shaped, 1);
+    Ok(())
+}

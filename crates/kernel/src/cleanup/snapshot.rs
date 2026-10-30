@@ -8,7 +8,6 @@ use crate::filing::CorrectionExample;
 use crate::filing::Subject;
 use crate::filing::Target;
 use crate::memory::ConversationHead;
-use crate::tasks::TaskOrigin;
 use crate::topics::PlacementSource;
 use crate::topics::Root;
 use crate::topics::RootKind;
@@ -65,6 +64,20 @@ impl From<ConversationHead> for SnapshotHead {
             title: head.title,
         }
     }
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
+)]
+#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
+pub enum TaskOrigin {
+    Heartbeat,
+    Chat,
+    Tool,
+    Mesh,
+    Api,
+    Eval,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

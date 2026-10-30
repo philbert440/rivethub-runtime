@@ -3087,7 +3087,6 @@ dependencies = [
  "serde_json",
  "serde_yaml_ng",
  "sqlx",
- "tasks",
  "tempfile",
  "terminal",
  "testkit",
@@ -4052,34 +4051,6 @@ checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
 dependencies = [
  "filetime",
  "libc",
-]
-
-[[package]]
-name = "tasks"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "axum",
- "chrono",
- "hyper",
- "hyper-util",
- "kernel",
- "parking_lot",
- "rcgen",
- "reqwest",
- "rustls",
- "serde",
- "serde_json",
- "tempfile",
- "testkit",
- "thiserror 2.0.21",
- "tokio",
- "tokio-rustls",
- "tokio-util",
- "tracing",
- "url",
- "uuid",
- "wire",
 ]
 
 [[package]]

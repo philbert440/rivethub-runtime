@@ -5,7 +5,7 @@ use chrono::Utc;
 use kernel::cleanup::SnapshotConversation;
 use kernel::cleanup::SnapshotCorrection;
 use kernel::cleanup::SnapshotHead;
-use kernel::tasks::TaskOrigin;
+use kernel::cleanup::TaskOrigin;
 use uuid::Uuid;
 
 use crate::Error;

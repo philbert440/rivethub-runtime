@@ -52,6 +52,7 @@ pub use snapshot::SnapshotPlacement;
 pub use snapshot::SnapshotRedirect;
 pub use snapshot::SnapshotRoot;
 pub use snapshot::SnapshotTopic;
+pub use snapshot::TaskOrigin;
 pub use tree::DraftTopic;
 pub use tree::Lift;
 pub use tree::MIN_SESSIONS;

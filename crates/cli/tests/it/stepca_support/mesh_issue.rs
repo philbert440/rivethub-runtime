@@ -396,7 +396,6 @@ async fn run(env: &Environment, args: &[&str], shutdown: &CancellationToken) -> 
         Dispatch::Gateway { .. }
         | Dispatch::Worker { .. }
         | Dispatch::Mcp { .. }
-        | Dispatch::Agent { .. }
         | Dispatch::Local(_) => Report {
             stdout: String::new(),
             stderr: "unexpected service launch\n".to_owned(),

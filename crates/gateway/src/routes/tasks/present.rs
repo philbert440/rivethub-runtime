@@ -1,67 +1,107 @@
-use kernel::tasks::TaskRecord;
-use uuid::Uuid;
-use wire::task::TaskApprovalRequest;
+use kernel::tasks::Task;
+use kernel::tasks::TaskStatus;
+use kernel::tasks::Verdict;
+use wire::task::AcceptanceCriterion;
+use wire::task::CriterionKind;
+use wire::task::TaskBudget;
+use wire::task::TaskResult;
+use wire::task::TaskStatus as WireStatus;
+use wire::task::TaskUsage;
+use wire::task::TaskVerdict;
 use wire::task::TaskWire;
 
 use super::error::TaskHttpError;
 
-pub(super) fn to_wire(
-    task: &TaskRecord,
-    pending: &[TaskApprovalRequest],
-) -> Result<TaskWire, TaskHttpError> {
-    let pending_approvals = if pending.is_empty() {
-        None
-    } else {
-        Some(pending.to_vec())
+pub(super) fn to_wire(task: &Task) -> Result<TaskWire, TaskHttpError> {
+    let usage = task.usage.map(|usage| TaskUsage {
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        total_tokens: usage
+            .input_tokens
+            .zip(usage.output_tokens)
+            .and_then(|(input, output)| input.checked_add(output)),
+        turns: usage.turns,
+        wall_clock_ms: usage.wall_clock_ms,
+    });
+    let result = match (&task.result, usage) {
+        (Some(outcome), Some(usage)) => Some(TaskResult {
+            verdict: verdict_out(outcome.verdict),
+            summary: outcome.summary.clone(),
+            usage,
+            error: task.error.clone(),
+        }),
+        (Some(_) | None, _) => None,
     };
     Ok(TaskWire {
         id: task.id.to_string(),
         goal: task.goal.clone(),
-        context_refs: task.context_refs.clone(),
-        acceptance_criteria: task.acceptance_criteria.clone(),
-        spec: task.spec.clone(),
-        executor: task.executor,
-        executor_target: task.executor_target.clone(),
-        agent_id: task.agent_id.clone(),
+        acceptance_criteria: task
+            .criteria
+            .iter()
+            .map(|criterion| AcceptanceCriterion {
+                id: criterion.id.clone(),
+                description: criterion.description.clone(),
+                kind: CriterionKind::Manual,
+                check: None,
+            })
+            .collect(),
+        agent_id: task.target.agent.clone(),
+        node: task.target.node.clone(),
+        harness: task.target.harness.map(crate::tasks::harness_out),
+        model: task.target.model.clone(),
+        effort: task.target.effort.clone(),
         requested_by: task.requested_by.clone(),
-        origin: task.origin.to_string(),
-        parent_task_id: text_id(task.parent_task_id),
-        chain_depth: task.chain_depth,
-        node_affinity: task.node_affinity.clone(),
-        claimed_by: task.claimed_by.clone(),
-        budget: task.budget,
-        usage: task.usage,
-        status: task.status,
-        attempt: task.attempt,
-        max_attempts: task.max_attempts,
-        pending_message: task.pending_message.clone(),
+        parent_session_id: task.parent.session.clone(),
+        parent_task_id: task.parent.task.map(|id| id.to_string()),
+        depth: task.parent.depth,
+        child_session_id: task.child.clone(),
+        budget: TaskBudget {
+            max_turns: task.budget.max_turns,
+            max_wall_clock_ms: task
+                .budget
+                .wall_clock
+                .map(|wall| u64::try_from(wall.as_millis()))
+                .transpose()
+                .map_err(|_| TaskHttpError::Failed("stored budget".to_owned()))?,
+        },
+        usage,
+        status: status_out(task.status),
         error: task.error.clone(),
-        result: task.result.clone(),
-        conversation_id: text_id(task.conversation_id),
-        session_key: task.session_key.clone(),
-        harness_session_ids: task.harness_session_ids.clone(),
-        eval: task.eval.clone(),
-        eval_attempt: task.eval_attempt,
+        result,
         created_at: task.created_at,
         started_at: task.started_at,
-        last_heartbeat_at: task.last_heartbeat_at,
         completed_at: task.completed_at,
-        duration_ms: widen_duration(task.duration_ms)?,
-        pending_approvals,
+        duration_ms: task
+            .started_at
+            .zip(task.completed_at)
+            .map(|(started, ended)| {
+                ended
+                    .signed_duration_since(started)
+                    .num_milliseconds()
+                    .max(0)
+                    .unsigned_abs()
+            }),
     })
 }
 
-fn text_id(id: Option<Uuid>) -> Option<String> {
-    id.map(|value| value.to_string())
+pub(crate) const fn status_out(status: TaskStatus) -> WireStatus {
+    match status {
+        TaskStatus::Queued => WireStatus::Queued,
+        TaskStatus::Running => WireStatus::Running,
+        TaskStatus::AwaitingInput => WireStatus::AwaitingInput,
+        TaskStatus::Completed => WireStatus::Completed,
+        TaskStatus::Failed => WireStatus::Failed,
+        TaskStatus::Killed => WireStatus::Killed,
+        TaskStatus::Timeout => WireStatus::Timeout,
+    }
 }
 
-fn widen_duration(value: Option<i32>) -> Result<Option<u64>, TaskHttpError> {
-    match value {
-        None => Ok(None),
-        Some(ms) => {
-            let widened = u64::try_from(ms)
-                .map_err(|_| TaskHttpError::Failed("stored duration is negative".to_owned()))?;
-            Ok(Some(widened))
-        }
+const fn verdict_out(verdict: Verdict) -> TaskVerdict {
+    match verdict {
+        Verdict::Completed => TaskVerdict::Completed,
+        Verdict::Failed => TaskVerdict::Failed,
+        Verdict::Killed => TaskVerdict::Killed,
+        Verdict::Timeout => TaskVerdict::Timeout,
+        Verdict::BudgetExceeded => TaskVerdict::BudgetExceeded,
     }
 }

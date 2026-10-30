@@ -19,7 +19,7 @@ pub mod tags;
 pub mod tasks;
 pub mod terminal;
 mod tidy;
-mod topics;
+pub(crate) mod topics;
 pub mod v1;
 pub mod wiki;
 

@@ -282,6 +282,10 @@ pub trait HarnessAdapter: Send + Sync {
         SessionSwitches::default()
     }
 
+    fn mode(&self, _session: &SessionId) -> Option<String> {
+        None
+    }
+
     fn admit(
         &self,
         _session: &SessionId,

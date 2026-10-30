@@ -14,8 +14,8 @@ use wire::gateway::notifications::TaskDoneNotification;
 use wire::plugin::process::PluginNotification;
 
 use super::sessions::{SocketError, send};
-use super::tasks::TasksApi;
 use crate::Gateway;
+use crate::tasks::Tasks;
 use crate::tenancy::UserId;
 
 const HEARTBEAT: Duration = Duration::from_secs(30);
@@ -31,7 +31,7 @@ async fn upgrade(
     upgrade: WebSocketUpgrade,
 ) -> Response {
     let tasks = gateway.tasks().cloned();
-    let finished = tasks.as_ref().map(|api| api.watch.finished());
+    let finished = tasks.as_ref().map(|tasks| tasks.watch.changed());
     let plugins = gateway.plugins().map(|host| host.notifications());
     upgrade
         .max_write_buffer_size(SEND_BUFFER)
@@ -68,7 +68,7 @@ async fn next_finished(
 struct Listener<'a> {
     socket: WebSocket,
     gateway: &'a Gateway,
-    tasks: Option<Arc<TasksApi>>,
+    tasks: Option<Arc<Tasks>>,
 }
 
 impl Listener<'_> {
@@ -125,14 +125,16 @@ impl Listener<'_> {
                 return Ok(());
             }
         };
-        if !kernel::tasks::terminal(task.status) {
+        if !task.status.terminal() {
             return Ok(());
         }
         send(
             &mut self.socket,
             &TaskDoneNotification {
                 task_id: id.to_string(),
-                status: task.status,
+                status: super::tasks::status_out(task.status),
+                parent_session_id: task.parent.session,
+                child_session_id: task.child,
                 ts: Utc::now(),
             },
         )

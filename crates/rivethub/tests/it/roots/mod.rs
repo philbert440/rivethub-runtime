@@ -1,4 +1,3 @@
-mod agent;
 mod checks;
 mod gateway;
 mod mcp;

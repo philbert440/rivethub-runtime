@@ -1,3 +1,6 @@
+mod delegation;
+pub(crate) mod dial;
+
 use std::os::unix::fs::FileTypeExt;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -23,7 +26,7 @@ pub(crate) enum SidecarError {
     #[error("{0}")]
     Invalid(String),
     #[error(transparent)]
-    Agent(#[from] crate::agent::AgentError),
+    Dial(#[from] dial::DialError),
     #[error(transparent)]
     Compose(#[from] crate::composition::ComposeError),
 }
@@ -33,8 +36,7 @@ impl SidecarError {
         match self {
             Self::Startup(error) => error.exit(),
             Self::Mcp(error) => mcp_exit(error),
-            Self::Join(_) | Self::Invalid(_) | Self::Compose(_) => Exit::Failure,
-            Self::Agent(error) => error.exit(),
+            Self::Join(_) | Self::Invalid(_) | Self::Compose(_) | Self::Dial(_) => Exit::Failure,
         }
     }
 }
@@ -123,7 +125,7 @@ pub(crate) fn report_error(error: &SidecarError) {
         SidecarError::Mcp(_)
         | SidecarError::Join(_)
         | SidecarError::Invalid(_)
-        | SidecarError::Agent(_)
+        | SidecarError::Dial(_)
         | SidecarError::Compose(_) => {
             tracing::error!("{error}");
         }
@@ -148,15 +150,7 @@ async fn run(
     crate::identity::announce_resolved("mcp", &config, env).map_err(StartupError::from)?;
     let memory =
         Arc::new(postgres(&config, env, &shutdown, activities).await?) as Arc<dyn MemoryStore>;
-    let result = run_server(
-        &config,
-        env,
-        Arc::clone(&memory),
-        selected,
-        &shutdown,
-        activities,
-    )
-    .await;
+    let result = run_server(&config, env, Arc::clone(&memory), selected, &shutdown).await;
     shutdown.cancel();
     let closed = memory.close().await.map_err(StartupError::from);
     closed?;
@@ -171,24 +165,34 @@ async fn run_server(
     memory: Arc<dyn MemoryStore>,
     selected: Selected,
     shutdown: &CancellationToken,
-    activities: &kernel::shutdown::Activities,
 ) -> Result<(), SidecarError> {
-    let delegation = crate::agent::open_delegation(config, env, shutdown, activities).await?;
+    let delegation: Arc<dyn kernel::tasks::Delegation> = Arc::new(
+        delegation::GatewayDelegation::open(
+            config,
+            env,
+            delegation::GatewayDelegation::session_parent(env),
+        )
+        .await?,
+    );
     let folder = crate::composition::plugins::tools_folder(config, env)?;
     let plugins =
         mcp::plugins::SocketTools::new(folder.join("tools.sock"), folder.join("tools.token"))?;
-    let ran = async {
-        let server = mcp::Server::builder(memory, false, shutdown.child_token())
-            .display_zone(display_zone(env))
-            .delegation(Arc::clone(&delegation.port), surface(&selected))
-            .plugins(Arc::new(plugins))
-            .build()?;
-        serve(server, selected, shutdown.clone()).await
-    }
-    .await;
-    let stopped = delegation.shutdown().await;
-    stopped?;
-    ran
+    let server = mcp::Server::builder(memory, false, shutdown.child_token())
+        .display_zone(display_zone(env))
+        .delegation(delegation, surface(&selected))
+        .plugins(Arc::new(plugins))
+        .build()?;
+    serve(server, selected, shutdown.clone()).await
+}
+
+pub(crate) async fn local_delegation(
+    config: &Config,
+    env: &Environment,
+    gateway: url::Url,
+) -> Result<Arc<dyn kernel::tasks::Delegation>, dial::DialError> {
+    Ok(Arc::new(
+        delegation::GatewayDelegation::local(config, env, gateway).await?,
+    ))
 }
 
 pub(crate) fn memory_future(

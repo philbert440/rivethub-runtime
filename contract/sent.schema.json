@@ -844,171 +844,6 @@
         }
       ]
     },
-    "CatalogCommand": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
-        "argHint": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "description",
-        "source"
-      ]
-    },
-    "CatalogExecutorEntry": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string"
-        },
-        "capabilities": {
-          "$ref": "#/$defs/HarnessExecutorCapabilities"
-        },
-        "commands": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CatalogCommand"
-          }
-        },
-        "harnessId": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/HarnessId"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "implemented": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "key",
-        "capabilities",
-        "commands"
-      ]
-    },
-    "HarnessExecutorCapabilities": {
-      "type": "object",
-      "properties": {
-        "steerable": {
-          "type": "boolean"
-        },
-        "multiTurn": {
-          "type": "boolean"
-        },
-        "structuredStream": {
-          "type": "boolean"
-        },
-        "usageInResult": {
-          "type": "boolean"
-        },
-        "sessionIdCapture": {
-          "type": "boolean"
-        },
-        "slashCommands": {
-          "type": "boolean"
-        },
-        "effortSelection": {
-          "type": "boolean"
-        },
-        "mcpInjection": {
-          "$ref": "#/$defs/McpInjection"
-        }
-      },
-      "required": [
-        "steerable",
-        "multiTurn",
-        "structuredStream",
-        "usageInResult",
-        "sessionIdCapture",
-        "slashCommands",
-        "effortSelection",
-        "mcpInjection"
-      ]
-    },
-    "McpInjection": {
-      "type": "string",
-      "enum": [
-        "flag",
-        "cwdFile",
-        "persistentConfig",
-        "none"
-      ]
-    },
-    "CatalogSkillEntry": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "description"
-      ]
-    },
-    "CatalogSheet": {
-      "type": "object",
-      "properties": {
-        "node": {
-          "type": "string"
-        },
-        "agents": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CatalogAgent"
-          }
-        },
-        "executors": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CatalogExecutorEntry"
-          }
-        },
-        "tools": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "skills": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CatalogSkillEntry"
-          }
-        }
-      },
-      "required": [
-        "node",
-        "agents",
-        "executors",
-        "tools",
-        "skills"
-      ]
-    },
     "CatalogAgentsResponse": {
       "type": "object",
       "properties": {
@@ -1021,142 +856,6 @@
       },
       "required": [
         "agents"
-      ]
-    },
-    "OutcomeBucket": {
-      "type": "object",
-      "properties": {
-        "tasks": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "completed": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "failed": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "verified": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "refuted": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "escalated": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "diverged": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "divergenceRate": {
-          "type": "number",
-          "format": "double"
-        },
-        "totalCostUsd": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double"
-        },
-        "avgDurationMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "tasks",
-        "completed",
-        "failed",
-        "verified",
-        "refuted",
-        "escalated",
-        "diverged",
-        "divergenceRate"
-      ]
-    },
-    "OutcomesFilter": {
-      "type": "object",
-      "properties": {
-        "since": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
-        },
-        "until": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
-        },
-        "agentId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "origin": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "OutcomesResponse": {
-      "type": "object",
-      "properties": {
-        "filter": {
-          "$ref": "#/$defs/OutcomesFilter"
-        },
-        "totals": {
-          "$ref": "#/$defs/OutcomeBucket"
-        },
-        "byAgent": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/OutcomeBucket"
-          }
-        },
-        "byExecutor": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/OutcomeBucket"
-          }
-        },
-        "byDay": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/OutcomeBucket"
-          }
-        }
-      },
-      "required": [
-        "filter",
-        "totals",
-        "byAgent",
-        "byExecutor",
-        "byDay"
       ]
     },
     "MeshOverview": {
@@ -13379,14 +13078,6 @@
         "sessions"
       ]
     },
-    "TaskExecutorKind": {
-      "type": "string",
-      "enum": [
-        "chat-loop",
-        "harness-session",
-        "mesh"
-      ]
-    },
     "task.done": {
       "type": "object",
       "properties": {
@@ -13395,6 +13086,18 @@
         },
         "status": {
           "$ref": "#/$defs/TaskStatus"
+        },
+        "parentSessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "childSessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "ts": {
           "type": "integer",
@@ -13415,38 +13118,6 @@
         "killed",
         "timeout",
         "budget-exceeded"
-      ]
-    },
-    "ContextRefKind": {
-      "type": "string",
-      "enum": [
-        "conversation",
-        "message",
-        "task",
-        "file",
-        "url",
-        "wiki"
-      ]
-    },
-    "ContextRef": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "$ref": "#/$defs/ContextRefKind"
-        },
-        "ref": {
-          "type": "string"
-        },
-        "note": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "ref"
       ]
     },
     "CriterionKind": {
@@ -13484,21 +13155,6 @@
     "TaskBudget": {
       "type": "object",
       "properties": {
-        "maxUsd": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double"
-        },
-        "maxTokens": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        },
         "maxTurns": {
           "type": [
             "integer",
@@ -13544,13 +13200,6 @@
           "format": "uint64",
           "minimum": 0
         },
-        "costUsd": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double"
-        },
         "turns": {
           "type": "integer",
           "format": "uint32",
@@ -13575,262 +13224,6 @@
         "high"
       ]
     },
-    "TaskIsolation": {
-      "type": "string",
-      "enum": [
-        "inherit",
-        "isolated"
-      ]
-    },
-    "TaskPromptMode": {
-      "type": "string",
-      "enum": [
-        "task",
-        "heartbeat"
-      ]
-    },
-    "TaskSpec": {
-      "type": "object",
-      "properties": {
-        "delegation": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "meshFrom": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "taskId": {
-          "type": "string"
-        },
-        "agentId": {
-          "type": "string"
-        },
-        "goal": {
-          "type": "string"
-        },
-        "resolvedContext": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ContextRef"
-          }
-        },
-        "acceptanceCriteria": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/AcceptanceCriterion"
-          }
-        },
-        "budget": {
-          "$ref": "#/$defs/TaskBudget",
-          "default": {}
-        },
-        "tools": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "workingDir": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "model": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "effort": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Effort"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "systemPromptAppend": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "isolation": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskIsolation"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "promptMode": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskPromptMode"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "excludeTools": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "resumeMessage": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "session": {
-          "type": "string"
-        },
-        "permissionDecisions": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/TaskPermissionDecision"
-          }
-        },
-        "presetId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "presetName": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "auditOnly": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "taskId",
-        "agentId",
-        "goal",
-        "resolvedContext",
-        "acceptanceCriteria",
-        "budget",
-        "session"
-      ],
-      "additionalProperties": true
-    },
-    "TaskPermissionDecision": {
-      "type": "object",
-      "properties": {
-        "requestId": {
-          "type": "string"
-        },
-        "tool": {
-          "type": "string"
-        },
-        "decision": {
-          "$ref": "#/$defs/TaskPermissionOutcome"
-        },
-        "at": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "message": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "requestId",
-        "tool",
-        "decision",
-        "at"
-      ]
-    },
-    "TaskPermissionOutcome": {
-      "type": "string",
-      "enum": [
-        "allow",
-        "deny",
-        "timeout"
-      ]
-    },
-    "ArtifactKind": {
-      "type": "string",
-      "enum": [
-        "file",
-        "url",
-        "commit",
-        "message"
-      ]
-    },
-    "TaskArtifact": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "$ref": "#/$defs/ArtifactKind"
-        },
-        "ref": {
-          "type": "string"
-        },
-        "note": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "ref"
-      ]
-    },
-    "CriterionReport": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "met": {
-          "type": "boolean"
-        },
-        "evidence": {
-          "type": "string",
-          "default": ""
-        }
-      },
-      "required": [
-        "id",
-        "met",
-        "evidence"
-      ]
-    },
     "TaskResult": {
       "type": "object",
       "properties": {
@@ -13839,27 +13232,6 @@
         },
         "summary": {
           "type": "string"
-        },
-        "output": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "artifacts": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/TaskArtifact"
-          }
-        },
-        "criteriaSelfReport": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/CriterionReport"
-          }
         },
         "usage": {
           "$ref": "#/$defs/TaskUsage"
@@ -13874,370 +13246,7 @@
       "required": [
         "verdict",
         "summary",
-        "artifacts",
         "usage"
-      ]
-    },
-    "EvalVerdict": {
-      "type": "string",
-      "enum": [
-        "verified",
-        "refuted",
-        "escalated"
-      ]
-    },
-    "EvalOutcome": {
-      "type": "object",
-      "properties": {
-        "verdict": {
-          "$ref": "#/$defs/EvalVerdict"
-        },
-        "attempts": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "verifierTaskIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "criteriaReport": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CriterionReport"
-          }
-        },
-        "diverged": {
-          "type": "boolean"
-        },
-        "escalatedAt": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "verdict",
-        "attempts",
-        "verifierTaskIds",
-        "criteriaReport",
-        "diverged"
-      ]
-    },
-    "ExecutorTurnCapabilities": {
-      "type": "object",
-      "properties": {
-        "steerable": {
-          "type": "boolean"
-        },
-        "multiTurn": {
-          "type": "boolean"
-        },
-        "structuredStream": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "steerable",
-        "multiTurn",
-        "structuredStream"
-      ]
-    },
-    "ExecutorResultCapabilities": {
-      "type": "object",
-      "properties": {
-        "usageInResult": {
-          "type": "boolean"
-        },
-        "sessionIdCapture": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "usageInResult",
-        "sessionIdCapture"
-      ]
-    },
-    "ExecutorInteractionCapabilities": {
-      "type": "object",
-      "properties": {
-        "slashCommands": {
-          "type": "boolean"
-        },
-        "effortSelection": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "slashCommands",
-        "effortSelection"
-      ]
-    },
-    "TaskApprovalRequest": {
-      "type": "object",
-      "properties": {
-        "taskId": {
-          "type": "string"
-        },
-        "requestId": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "input": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "toolCallId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "taskId",
-        "requestId",
-        "name",
-        "input"
-      ]
-    },
-    "TaskEvent": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "den"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "event": {
-              "$ref": "#/$defs/AgentEvent"
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "event"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "turn.start"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "turn": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "turn"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "turn.end"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "turn": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "usage": {
-              "$ref": "#/$defs/TaskUsage"
-            },
-            "harnessSessionId": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/SessionId"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "turn",
-            "usage"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "session.spawned"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "nativeSessionId": {
-              "type": "string"
-            },
-            "model": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "nativeSessionId"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "cost"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "deltaUsd": {
-              "type": "number",
-              "format": "double"
-            },
-            "totalUsd": {
-              "type": "number",
-              "format": "double"
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "deltaUsd",
-            "totalUsd"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "log"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "level": {
-              "$ref": "#/$defs/LogLevel"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "level",
-            "message"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "approval-request"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "taskId": {
-              "type": "string"
-            },
-            "requestId": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
-            "input": {
-              "type": "object",
-              "additionalProperties": true
-            },
-            "toolCallId": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "taskId",
-            "requestId",
-            "name",
-            "input"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "approval-resolved"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "taskId": {
-              "type": "string"
-            },
-            "requestId": {
-              "type": "string"
-            },
-            "decision": {
-              "$ref": "#/$defs/TaskPermissionOutcome"
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "taskId",
-            "requestId",
-            "decision"
-          ]
-        }
       ]
     },
     "LogLevel": {
@@ -14258,32 +13267,39 @@
         "goal": {
           "type": "string"
         },
-        "contextRefs": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ContextRef"
-          }
-        },
         "acceptanceCriteria": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/AcceptanceCriterion"
           }
         },
-        "spec": {
-          "$ref": "#/$defs/TaskSpec"
+        "agentId": {
+          "type": "string"
         },
-        "executor": {
-          "$ref": "#/$defs/TaskExecutorKind"
+        "node": {
+          "type": "string"
         },
-        "executorTarget": {
+        "harness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HarnessId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
           "type": [
             "string",
             "null"
           ]
         },
-        "agentId": {
-          "type": "string"
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "requestedBy": {
           "type": [
@@ -14291,8 +13307,11 @@
             "null"
           ]
         },
-        "origin": {
-          "type": "string"
+        "parentSessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "parentTaskId": {
           "type": [
@@ -14300,18 +13319,13 @@
             "null"
           ]
         },
-        "chainDepth": {
+        "depth": {
           "type": "integer",
-          "format": "uint32",
-          "minimum": 0
+          "format": "uint8",
+          "minimum": 0,
+          "maximum": 255
         },
-        "nodeAffinity": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "claimedBy": {
+        "childSessionId": {
           "type": [
             "string",
             "null"
@@ -14333,22 +13347,6 @@
         "status": {
           "$ref": "#/$defs/TaskStatus"
         },
-        "attempt": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "maxAttempts": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "pendingMessage": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "error": {
           "type": [
             "string",
@@ -14365,51 +13363,11 @@
             }
           ]
         },
-        "conversationId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sessionKey": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "harnessSessionIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "eval": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/EvalOutcome"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "evalAttempt": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
         "createdAt": {
           "type": "integer",
           "format": "int64"
         },
         "startedAt": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "int64"
-        },
-        "lastHeartbeatAt": {
           "type": [
             "integer",
             "null"
@@ -14430,33 +13388,17 @@
           ],
           "format": "uint64",
           "minimum": 0
-        },
-        "pendingApprovals": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/TaskApprovalRequest"
-          }
         }
       },
       "required": [
         "id",
         "goal",
-        "contextRefs",
         "acceptanceCriteria",
-        "spec",
-        "executor",
         "agentId",
-        "origin",
-        "chainDepth",
+        "node",
+        "depth",
         "budget",
         "status",
-        "attempt",
-        "maxAttempts",
-        "harnessSessionIds",
-        "evalAttempt",
         "createdAt"
       ]
     },
@@ -14464,46 +13406,16 @@
       "type": "object",
       "properties": {
         "goal": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "agentId": {
-          "type": "string"
-        },
-        "executor": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskExecutorKind"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "executorTarget": {
           "type": [
             "string",
             "null"
           ]
-        },
-        "requestedBy": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "parentTaskId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "chainDepth": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
         },
         "nodeAffinity": {
           "type": [
@@ -14511,15 +13423,14 @@
             "null"
           ]
         },
-        "spec": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskSpec"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "acceptanceCriteria": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/AcceptanceCriterion"
+          }
         },
         "budget": {
           "anyOf": [
@@ -14531,29 +13442,42 @@
             }
           ]
         },
-        "contextRefs": {
+        "parentSessionId": {
           "type": [
-            "array",
+            "string",
             "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/ContextRef"
-          }
+          ]
         },
-        "acceptanceCriteria": {
+        "model": {
           "type": [
-            "array",
+            "string",
             "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/AcceptanceCriterion"
-          }
+          ]
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThinkingLevel"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workingDir": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestedBy": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": [
-        "goal",
-        "agentId"
-      ]
+      "additionalProperties": true
     },
     "TaskResponse": {
       "type": "object",
@@ -14580,17 +13504,6 @@
         "tasks"
       ]
     },
-    "TaskSteerAccepted": {
-      "type": "object",
-      "properties": {
-        "ok": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "ok"
-      ]
-    },
     "TaskKillResponse": {
       "type": "object",
       "properties": {
@@ -14610,28 +13523,6 @@
       },
       "required": [
         "ok"
-      ]
-    },
-    "TaskApprovalAccepted": {
-      "type": "object",
-      "properties": {
-        "ok": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "ok"
-      ]
-    },
-    "TaskApprovalWaitResponse": {
-      "type": "object",
-      "properties": {
-        "approval": {
-          "$ref": "#/$defs/TaskApprovalRequest"
-        }
-      },
-      "required": [
-        "approval"
       ]
     },
     "TaskWaitTimeoutResponse": {
@@ -14654,114 +13545,6 @@
       "required": [
         "error"
       ]
-    },
-    "TaskOverrides": {
-      "type": "object",
-      "properties": {
-        "delegation": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "meshFrom": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "presetId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "presetName": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "permissionDecisions": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/TaskPermissionDecision"
-          }
-        },
-        "auditOnly": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "workingDir": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "model": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "effort": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Effort"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "systemPromptAppend": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "isolation": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskIsolation"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "promptMode": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskPromptMode"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "excludeTools": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "resumeMessage": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": true
     },
     "MemorySearchResult": {
       "type": "object",

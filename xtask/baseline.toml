@@ -162,18 +162,6 @@ count = 1
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/task_spec.rs"
-text = "wire"
-count = 6
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/tasks.rs"
-text = "wire"
-count = 17
-
-[[entry]]
-check = "KERNELWIRE"
 file = "crates/kernel/src/terminal.rs"
 text = "wire"
 count = 1

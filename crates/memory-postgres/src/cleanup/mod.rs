@@ -109,7 +109,7 @@ impl PostgresMemory {
                                    ORDER BY m.created_at LIMIT 1) opening ON true
                LEFT JOIN LATERAL (SELECT count(*) AS count FROM rh_messages m
                                    WHERE m.conversation_id = c.id AND m.role = 'user') turns ON true
-               LEFT JOIN rh_tasks t ON c.session_key = 'task:' || t.id::text
+               LEFT JOIN rh_tasks_archive t ON c.session_key = 'task:' || t.id::text
               ORDER BY c.updated_at, c.id",
         )
         .fetch_all(&self.pool)

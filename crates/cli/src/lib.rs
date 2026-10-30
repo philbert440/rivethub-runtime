@@ -80,10 +80,6 @@ pub enum Dispatch {
         check: bool,
         config: Option<std::path::PathBuf>,
     },
-    Agent {
-        check: bool,
-        config: Option<std::path::PathBuf>,
-    },
     Local(Box<Prepared>),
     Complete(Report),
 }
@@ -160,7 +156,6 @@ async fn command_dispatch(
             });
         }
         Command::Mcp { check, config } => return Ok(Dispatch::Mcp { check, config }),
-        Command::Agent { check, config } => return Ok(Dispatch::Agent { check, config }),
         Command::Version => Ok(Report::success(version())),
         Command::Config { command } => configuration::run(command, env).await,
         Command::Doctor { json } => doctor::run(env, json).await,

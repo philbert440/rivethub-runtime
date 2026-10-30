@@ -1,8 +1,4 @@
-use async_trait::async_trait;
 use kernel::tasks::TaskError;
-use kernel::tasks::TaskListFilter;
-use kernel::tasks::TaskQuery;
-use kernel::tasks::TaskRecord;
 use kernel::tasks::TaskWatch;
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
@@ -12,7 +8,6 @@ use uuid::Uuid;
 use crate::listen::Listener;
 use crate::listen::Stopped;
 use crate::task_db::PostgresTasks;
-use crate::task_query::list_tasks;
 
 impl PostgresTasks {
     pub async fn spawn_watch(
@@ -21,7 +16,7 @@ impl PostgresTasks {
     ) -> Result<JoinHandle<Result<(), TaskError>>, TaskError> {
         let mut listener = Listener::connect_resilient(
             self.pool().clone(),
-            &["ros_task_done"],
+            &["rh_task_changed"],
             "task watch",
             cancel.clone(),
         )
@@ -73,14 +68,7 @@ impl TaskWatch for PostgresTasks {
         self.events.subscribe()
     }
 
-    fn finished(&self) -> broadcast::Receiver<Uuid> {
+    fn changed(&self) -> broadcast::Receiver<Uuid> {
         self.finished.subscribe()
-    }
-}
-
-#[async_trait]
-impl TaskQuery for PostgresTasks {
-    async fn list(&self, filter: &TaskListFilter) -> Result<Vec<TaskRecord>, TaskError> {
-        list_tasks(self.pool(), filter).await
     }
 }

@@ -167,7 +167,7 @@ fn locate(env: &Environment) -> Result<Located, Error> {
     let state = config::Paths::new(env)?.state_dir();
     let claim = config::claim_node(&state, std::process::id())?;
     Ok(Located {
-        services: roots::roots_from(&loaded.config.service_switches(env)),
+        services: roots::roots_from(&loaded.config.service_switches()),
         config_path: location.path().to_owned(),
         claim,
     })
@@ -337,7 +337,6 @@ fn arguments_for(root: &ServiceRoot, config: &Path) -> Vec<OsString> {
     let config = config.as_os_str().to_owned();
     match root {
         ServiceRoot::Gateway => vec!["gateway".into(), "--config".into(), config],
-        ServiceRoot::Agent => vec!["agent".into(), "--config".into(), config],
         ServiceRoot::Worker(role) => vec![
             "worker".into(),
             "--role".into(),

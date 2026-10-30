@@ -42,7 +42,6 @@ deny = [
   { crate = "gateway", wrappers = ["cli", "rivethub"], reason = "services are wired only in the composition root (never a service on a service)" },
   { crate = "agent-loop", wrappers = ["cli", "rivethub"], reason = "services are wired only in the composition root (never a service on a service)" },
   { crate = "workers", wrappers = ["cli", "rivethub"], reason = "services are wired only in the composition root (never a service on a service)" },
-  { crate = "tasks", wrappers = ["cli", "rivethub"], reason = "services are wired only in the composition root (never a service on a service)" },
   { crate = "cli", wrappers = ["rivethub"], reason = "the CLI is composition; only the binary links it" },
 ]
 

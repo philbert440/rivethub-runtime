@@ -24,6 +24,13 @@ pub(crate) struct ChatStart {
     pub(crate) agent: Option<AgentLaunch>,
     pub(crate) startup_context: Option<String>,
     pub(crate) topic: Option<String>,
+    pub(crate) lineage: Option<Lineage>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct Lineage {
+    pub(crate) parent: Option<SessionId>,
+    pub(crate) task: String,
 }
 
 type ChatDefaults = (
@@ -83,6 +90,7 @@ impl TerminalService {
                 agent: None,
                 startup_context: None,
                 topic: None,
+                lineage: None,
             },
         )
         .await
@@ -102,6 +110,7 @@ impl TerminalService {
             agent,
             startup_context,
             topic,
+            lineage,
         } = start;
         let harness = self
             .harness
@@ -113,8 +122,9 @@ impl TerminalService {
             (None, Some(directory)) => (existing_directory(directory).await?, model, effort, None),
             (None, None) => (self.chat_directory(cwd, &home).await?, model, effort, None),
         };
+        let requested = SessionId::new(harness_id, &uuid::Uuid::new_v4().to_string());
         let spec = SessionSpec {
-            session: SessionId::new(harness_id, &uuid::Uuid::new_v4().to_string()),
+            session: requested.clone(),
             harness: harness_id,
             model: model.clone(),
             effort,
@@ -122,6 +132,7 @@ impl TerminalService {
             startup_context: startup_context.clone(),
         };
         let session = harness.new_session(spec).await?;
+        self.remember_requested(&requested, &session);
         let initialized = self
             .register_chat(user, &harness, &session, harness_id, startup_context)
             .await;
@@ -141,9 +152,9 @@ impl TerminalService {
             blocked: None,
             supersedes: None,
             model,
-            parent_session_id: None,
+            parent_session_id: lineage.as_ref().and_then(|lineage| lineage.parent.clone()),
             agent_name,
-            task_id: None,
+            task_id: lineage.map(|lineage| lineage.task),
             effort: effort.map(|level| level.to_string()),
             transport: Some(Transport::Protocol),
             startup_context: None,
@@ -264,7 +275,7 @@ impl TerminalService {
         Ok(chat)
     }
 
-    fn live_chat(&self, key: &str) -> Option<ChatHandle> {
+    pub(crate) fn live_chat(&self, key: &str) -> Option<ChatHandle> {
         self.chats
             .read()
             .get(key)

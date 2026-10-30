@@ -1,588 +1,267 @@
 #![cfg(test)]
 
-mod catalog;
-mod create;
-mod lifecycle;
-mod notifications;
-mod outcomes;
-mod skips;
-
+use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use async_trait::async_trait;
+use axum::Router;
 use chrono::DateTime;
-use chrono::TimeZone;
-use chrono::Utc;
+use gateway::Gateway;
+use gateway::tasks::Tasks;
+use gateway::tenancy::{Tenancy, UserId};
+use kernel::memory::MemoryStore;
 use kernel::queue::ClaimSelector;
-use kernel::queue::ClaimedJob;
 use kernel::queue::JobName;
 use kernel::queue::JobQueue;
-use kernel::tasks::ApprovalBroker;
-use kernel::tasks::ApprovalDecision;
-use kernel::tasks::ApprovalError;
-use kernel::tasks::CatalogSource;
-use kernel::tasks::Finish;
-use kernel::tasks::TaskAgents;
-use kernel::tasks::TaskError;
-use kernel::tasks::TaskListFilter;
-use kernel::tasks::TaskOrigin;
-use kernel::tasks::TaskQuery;
-use kernel::tasks::TaskRecord;
-use kernel::tasks::TaskRoute;
-use parking_lot::Mutex;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-use std::str::FromStr;
+use kernel::tasks::TaskStore;
+use testkit::FakeMemoryStore;
+use testkit::Request;
 use testkit::TaskMemory;
 use uuid::Uuid;
 use wire::gateway::GatewayError;
-use wire::gateway::catalog::CatalogAgent;
-use wire::gateway::catalog::CatalogCommand;
-use wire::gateway::catalog::CatalogExecutorEntry;
-use wire::gateway::catalog::CatalogNode;
-use wire::gateway::catalog::CatalogSkillEntry;
+use wire::gateway::agents::AgentPreset;
+use wire::gateway::agents::AgentsFile;
 use wire::harness::HarnessId;
-use wire::json::JsonObject;
 use wire::task::AcceptanceCriterion;
-use wire::task::ContextRef;
-use wire::task::ExecutorInteractionCapabilities;
-use wire::task::ExecutorResultCapabilities;
-use wire::task::ExecutorTurnCapabilities;
-use wire::task::HarnessExecutorCapabilities;
-use wire::task::McpInjection;
-use wire::task::TaskApprovalRequest;
+use wire::task::CriterionKind;
 use wire::task::TaskBudget;
-use wire::task::TaskExecutorKind;
-use wire::task::TaskPromptMode;
-use wire::task::TaskSpec;
-use wire::task::TaskStatus;
+use wire::task::TaskCreateRequest;
+use wire::task::TaskKillResponse;
+use wire::task::TaskResponse;
+use wire::task::TaskStatus as WireStatus;
+use wire::task::TaskWaitTimeoutResponse;
 
-use gateway::routes::tasks::COMMAND_LIST_TIMEOUT;
-use gateway::routes::tasks::TasksApi;
-use gateway::routes::tasks::router;
+use crate::common;
 
-struct Setup {
+struct Node {
+    app: Router,
     memory: TaskMemory,
-    catalog: Arc<Catalog>,
-    agents: Vec<String>,
-    broker: Option<Arc<Broker>>,
-    mesh: bool,
-    allowed: Option<Vec<HarnessId>>,
-    timeout: Duration,
+    _root: tempfile::TempDir,
 }
 
-impl Setup {
-    fn new() -> Self {
-        Self {
-            memory: TaskMemory::new(),
-            catalog: Arc::new(Catalog::steady()),
-            agents: vec!["alpha".to_owned(), "beta".to_owned()],
-            broker: None,
-            mesh: false,
-            allowed: None,
-            timeout: COMMAND_LIST_TIMEOUT,
-        }
+fn node() -> Node {
+    let root = tempfile::tempdir().expect("sandbox");
+    seed_presets(root.path());
+    let memory = TaskMemory::new();
+    let mut settings = common::settings();
+    settings.state_dir = root.path().join("state");
+    settings.directory_root = root.path().join("agents");
+    let store: Arc<dyn MemoryStore> = Arc::new(FakeMemoryStore::default());
+    let tasks = Tasks::new(
+        Arc::new(memory.clone()),
+        Arc::new(memory.clone()),
+        Arc::new(memory.clone()),
+        settings.node.clone(),
+    );
+    let gateway = Arc::new(
+        Gateway::new(store, settings)
+            .with_tenancy(Tenancy::local(
+                UserId::new("owner".to_owned()).expect("owner"),
+            ))
+            .with_tasks(Arc::new(tasks)),
+    );
+    Node {
+        app: gateway.router(false),
+        memory,
+        _root: root,
     }
+}
 
-    fn router(&self) -> axum::Router {
-        router(self.api())
-    }
-
-    fn api(&self) -> Arc<TasksApi> {
-        let memory = self.memory.clone();
-        Arc::new(TasksApi {
-            store: Arc::new(memory.clone()),
-            jobs: Arc::new(memory.clone()),
-            query: Arc::new(memory.clone()),
-            watch: Arc::new(memory),
-            catalog: self.catalog.clone(),
-            agents: Arc::new(Agents {
-                ids: self.agents.clone(),
-            }),
-            approvals: self
-                .broker
-                .clone()
-                .map(|broker| broker as Arc<dyn ApprovalBroker>),
-            node: "local".to_owned(),
-            mesh: self.mesh,
-            allowed_harnesses: self.allowed.clone(),
-            command_timeout: self.timeout,
+fn seed_presets(root: &Path) {
+    let preset = AgentPreset {
+        id: "coder-id".to_owned(),
+        name: "coder".to_owned(),
+        color: "#336699".to_owned(),
+        harness_id: Some(HarnessId::ClaudeCode),
+        model: "default".to_owned(),
+        effort: String::new(),
+        system_prompt: String::new(),
+        node: Some("node-b".to_owned()),
+        directory: Some("/srv/coder".to_owned()),
+        shared_link: None,
+        node_base_url: None,
+        sort_order: None,
+        created_at: DateTime::UNIX_EPOCH,
+        updated_at: DateTime::UNIX_EPOCH,
+        extra: wire::Extra::default(),
+    };
+    std::fs::create_dir_all(root.join("state")).expect("state");
+    std::fs::write(
+        root.join("state").join("agents.json"),
+        serde_json::to_vec(&AgentsFile {
+            agents: vec![preset],
         })
-    }
+        .expect("agents json"),
+    )
+    .expect("agents file");
 }
 
-#[derive(Debug)]
-struct Agents {
-    ids: Vec<String>,
-}
-
-#[async_trait]
-impl TaskAgents for Agents {
-    async fn route(
-        &self,
-        agent_id: &str,
-        node: Option<&str>,
-    ) -> Result<Option<TaskRoute>, TaskError> {
-        Ok(self.ids.iter().any(|id| id == agent_id).then(|| TaskRoute {
-            agent_id: agent_id.to_owned(),
-            node: node
-                .filter(|node| !node.is_empty())
-                .unwrap_or("local")
-                .to_owned(),
-        }))
-    }
-}
-
-#[derive(Debug)]
-struct Catalog {
-    agents: Vec<CatalogAgent>,
-    executors: Vec<CatalogExecutorEntry>,
-    tools: Vec<String>,
-    skills: Vec<CatalogSkillEntry>,
-    commands: Vec<CatalogCommand>,
-    hang: AtomicBool,
-    fail: AtomicBool,
-    seen: Mutex<Vec<String>>,
-}
-
-impl Catalog {
-    fn steady() -> Self {
-        Self {
-            agents: vec![CatalogAgent::Node(CatalogNode {
-                id: "alpha".to_owned(),
-                node: "local".to_owned(),
-                local: true,
-                provider: None,
-                model: None,
-            })],
-            executors: vec![CatalogExecutorEntry {
-                key: "chat-loop".to_owned(),
-                capabilities: caps(),
-                commands: vec![command("stale")],
-                harness_id: None,
-                implemented: Some(true),
-            }],
-            tools: vec!["bash".to_owned()],
-            skills: vec![CatalogSkillEntry {
-                name: "review".to_owned(),
-                description: "look".to_owned(),
-            }],
-            commands: vec![command("real")],
-            hang: AtomicBool::new(false),
-            fail: AtomicBool::new(false),
-            seen: Mutex::new(Vec::new()),
-        }
-    }
-
-    fn empty() -> Self {
-        Self {
-            agents: Vec::new(),
-            executors: Vec::new(),
-            tools: Vec::new(),
-            skills: Vec::new(),
-            commands: Vec::new(),
-            hang: AtomicBool::new(false),
-            fail: AtomicBool::new(false),
-            seen: Mutex::new(Vec::new()),
-        }
-    }
-}
-
-#[async_trait]
-impl CatalogSource for Catalog {
-    async fn agents(&self) -> Result<Vec<CatalogAgent>, TaskError> {
-        Ok(self.agents.clone())
-    }
-
-    async fn executors(&self) -> Result<Vec<CatalogExecutorEntry>, TaskError> {
-        Ok(self.executors.clone())
-    }
-
-    async fn tools(&self) -> Result<Vec<String>, TaskError> {
-        Ok(self.tools.clone())
-    }
-
-    async fn skills(&self) -> Result<Vec<CatalogSkillEntry>, TaskError> {
-        Ok(self.skills.clone())
-    }
-
-    async fn commands(&self, executor: &str) -> Result<Vec<CatalogCommand>, TaskError> {
-        self.seen.lock().push(executor.to_owned());
-        if self.fail.swap(false, Ordering::SeqCst) {
-            return Err(TaskError::QueueAbsent);
-        }
-        if self.hang.load(Ordering::SeqCst) {
-            std::future::pending::<()>().await;
-        }
-        Ok(self.commands.clone())
-    }
-}
-
-#[derive(Debug, Default)]
-struct Broker {
-    pending: Mutex<Vec<TaskApprovalRequest>>,
-    denied: Mutex<Vec<(Uuid, String)>>,
-    resolved: Mutex<Vec<(String, ApprovalDecision)>>,
-    deny_fails: AtomicBool,
-}
-
-#[async_trait]
-impl ApprovalBroker for Broker {
-    async fn pending(&self, task: Uuid) -> Result<Vec<TaskApprovalRequest>, ApprovalError> {
-        let task_id = task.to_string();
-        let pending = self.pending.lock().clone();
-        Ok(pending
-            .into_iter()
-            .filter(|item| item.task_id == task_id)
-            .collect())
-    }
-
-    async fn resolve(
-        &self,
-        task: Uuid,
-        request_id: &str,
-        decision: ApprovalDecision,
-    ) -> Result<(), ApprovalError> {
-        let task_id = task.to_string();
-        let mut pending = self.pending.lock();
-        let Some(index) = pending
-            .iter()
-            .position(|item| item.task_id == task_id && item.request_id == request_id)
-        else {
-            return Err(ApprovalError::Unknown);
-        };
-        pending.remove(index);
-        drop(pending);
-        self.resolved.lock().push((request_id.to_owned(), decision));
-        Ok(())
-    }
-
-    async fn deny_pending(&self, task: Uuid, reason: &str) -> Result<(), ApprovalError> {
-        if self.deny_fails.load(Ordering::SeqCst) {
-            return Err(ApprovalError::Unknown);
-        }
-        self.denied.lock().push((task, reason.to_owned()));
-        Ok(())
-    }
-}
-
-fn caps() -> HarnessExecutorCapabilities {
-    HarnessExecutorCapabilities {
-        turn: ExecutorTurnCapabilities {
-            steerable: true,
-            multi_turn: true,
-            structured_stream: false,
-        },
-        result: ExecutorResultCapabilities {
-            usage_in_result: true,
-            session_id_capture: false,
-        },
-        interaction: ExecutorInteractionCapabilities {
-            slash_commands: false,
-            effort_selection: false,
-        },
-        mcp_injection: McpInjection::None,
-    }
-}
-
-fn command(name: &str) -> CatalogCommand {
-    CatalogCommand {
-        name: name.to_owned(),
-        description: "d".to_owned(),
-        arg_hint: None,
-        source: "disk".to_owned(),
-    }
-}
-
-fn approval(task: Uuid, request_id: &str) -> TaskApprovalRequest {
-    TaskApprovalRequest {
-        task_id: task.to_string(),
-        request_id: request_id.to_owned(),
-        name: "bash".to_owned(),
-        input: JsonObject::default(),
-        tool_call_id: Some("call-1".to_owned()),
-    }
-}
-
-fn record(id: Uuid, agent: &str, at: DateTime<Utc>) -> TaskRecord {
-    TaskRecord {
-        id,
-        goal: "goal".to_owned(),
-        context_refs: Vec::new(),
-        acceptance_criteria: Vec::new(),
-        spec: TaskSpec {
-            delegation: None,
-            mesh_from: None,
-            task_id: id.to_string(),
-            agent_id: agent.to_owned(),
-            goal: "goal".to_owned(),
-            resolved_context: Vec::new(),
-            acceptance_criteria: Vec::new(),
-            budget: wire::task::TaskBudget::default(),
-            tools: None,
-            working_dir: None,
-            model: None,
-            effort: None,
-            system_prompt_append: None,
-            isolation: None,
-            prompt_mode: Some(TaskPromptMode::Task),
-            exclude_tools: None,
-            resume_message: None,
-            session: format!("task:{id}"),
-            permission_decisions: None,
-            preset_id: None,
-            preset_name: None,
-            audit_only: None,
-            extra: wire::Extra::default(),
-        },
-        executor: TaskExecutorKind::ChatLoop,
-        executor_target: None,
-        requested_by: Some("gateway".to_owned()),
-        agent_id: agent.to_owned(),
-        origin: TaskOrigin::Api,
-        parent_task_id: None,
-        chain_depth: 0,
-        budget: wire::task::TaskBudget::default(),
-        node_affinity: None,
-        usage: None,
-        status: TaskStatus::Queued,
-        attempt: 0,
-        max_attempts: 1,
-        result: None,
-        error: None,
-        conversation_id: None,
-        session_key: Some(format!("task:{id}")),
-        pending_message: None,
-        claimed_by: None,
-        harness_session_ids: Vec::new(),
-        created_at: at,
-        started_at: None,
-        last_heartbeat_at: None,
-        completed_at: None,
-        duration_ms: None,
-        eval: None,
-        eval_attempt: 0,
-    }
-}
-
-fn finished(status: TaskStatus) -> Finish {
-    Finish {
-        status,
-        result: None,
-        error: None,
-        usage: None,
-        completed_at: Utc::now(),
-        duration_ms: None,
-    }
-}
-
-async fn call(
-    app: &axum::Router,
+async fn send(
+    app: &Router,
     method: &str,
     target: &str,
-    body: Option<&str>,
-) -> (u16, Vec<u8>) {
-    let mut builder = axum::http::Request::builder().method(method).uri(target);
-    let payload = match body {
-        Some(text) => {
-            builder = builder.header(axum::http::header::CONTENT_TYPE, "application/json");
-            text.to_owned()
-        }
-        None => String::new(),
+    body: &impl serde::Serialize,
+) -> testkit::Response {
+    let request = Request {
+        method: method.to_owned(),
+        target: target.to_owned(),
+        headers: vec![("Host".to_owned(), "127.0.0.1:5174".to_owned())],
+        body: serde_json::to_vec(body).expect("body"),
+        recipe: None,
+        via: None,
     };
-    let request = builder
-        .body(axum::body::Body::from(payload))
-        .expect("request");
-    let response = tokio::time::timeout(
-        Duration::from_secs(2),
-        tower::ServiceExt::oneshot(app.clone(), request),
+    tokio::time::timeout(Duration::from_secs(5), common::answer(app.clone(), request))
+        .await
+        .expect("task route timed out")
+        .expect("task route request")
+}
+
+fn body<T: serde::de::DeserializeOwned>(response: &testkit::Response) -> T {
+    serde_json::from_slice(&response.body)
+        .unwrap_or_else(|error| panic!("{error}: {}", String::from_utf8_lossy(&response.body)))
+}
+
+fn retired_fields() -> TaskCreateRequest {
+    let extra: wire::Extra =
+        serde_json::from_str(r#"{"executor": "chat-loop", "chainDepth": 0}"#).expect("extra");
+    TaskCreateRequest {
+        goal: Some("write the ledger".to_owned()),
+        agent_id: Some("coder".to_owned()),
+        acceptance_criteria: Some(vec![AcceptanceCriterion {
+            id: "1".to_owned(),
+            description: "it balances".to_owned(),
+            kind: CriterionKind::Manual,
+            check: None,
+        }]),
+        budget: Some(TaskBudget {
+            max_turns: Some(4),
+            max_wall_clock_ms: None,
+        }),
+        requested_by: Some("tests".to_owned()),
+        extra,
+        ..TaskCreateRequest::default()
+    }
+}
+
+#[tokio::test]
+async fn a_task_is_queued_for_its_agents_node_and_outlives_its_callers_wait() {
+    let node = node();
+    let created = send(
+        &node.app,
+        "POST",
+        "/api/tasks?wait=1&timeoutMs=50",
+        &retired_fields(),
     )
-    .await
-    .expect("deadline")
-    .expect("response");
-    let status = response.status().as_u16();
-    let bytes = axum::body::to_bytes(response.into_body(), 2 * 1024 * 1024)
-        .await
-        .expect("body")
-        .to_vec();
-    (status, bytes)
+    .await;
+    assert_eq!(
+        created.status,
+        504,
+        "{}",
+        String::from_utf8_lossy(&created.body)
+    );
+    let left: TaskWaitTimeoutResponse = body(&created);
+    let task = left.task.expect("the task as it stands");
+    assert_eq!(task.status, WireStatus::Queued);
+    assert_eq!(task.node, "node-b");
+    assert_eq!(task.harness, Some(HarnessId::ClaudeCode));
+    assert_eq!(task.model, None);
+    assert_eq!(task.budget.max_turns, Some(4));
+    assert_eq!(task.acceptance_criteria.len(), 1);
+    let id = Uuid::parse_str(&task.id).expect("task id");
+    claimed_only_on_its_node(&node).await;
+    killed(&node, id).await;
 }
 
-fn json<T: DeserializeOwned>(bytes: &[u8]) -> T {
-    serde_json::from_slice(bytes)
-        .unwrap_or_else(|error| panic!("{error}: {}", String::from_utf8_lossy(bytes)))
+async fn claimed_only_on_its_node(node: &Node) {
+    let elsewhere = ClaimSelector {
+        names: vec![JobName::RunTaskOn {
+            node: "golden-node".to_owned(),
+        }],
+        only_id: None,
+    };
+    assert!(
+        node.memory
+            .claim(&elsewhere)
+            .await
+            .expect("claim")
+            .is_none()
+    );
+    let home = ClaimSelector {
+        names: vec![JobName::RunTaskOn {
+            node: "node-b".to_owned(),
+        }],
+        only_id: None,
+    };
+    assert!(node.memory.claim(&home).await.expect("claim").is_some());
 }
 
-fn message(bytes: &[u8]) -> String {
-    json::<GatewayError>(bytes).error
+async fn killed(node: &Node, id: Uuid) {
+    let waited = send(
+        &node.app,
+        "GET",
+        &format!("/api/tasks/{id}/wait?timeoutMs=20"),
+        &(),
+    )
+    .await;
+    assert_eq!(waited.status, 504);
+    assert_eq!(
+        node.memory.load(id).await.expect("load").status,
+        kernel::tasks::TaskStatus::Queued
+    );
+    let killed = send(
+        &node.app,
+        "POST",
+        &format!("/api/tasks/{id}/kill"),
+        &wire::JsonObject::default(),
+    )
+    .await;
+    assert_eq!(killed.status, 200);
+    let killed: TaskKillResponse = body(&killed);
+    assert_eq!(killed.prior, Some(WireStatus::Queued));
+    let after = send(&node.app, "GET", &format!("/api/tasks/{id}/wait"), &()).await;
+    let after: TaskResponse = body(&after);
+    assert_eq!(after.task.status, WireStatus::Killed);
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TaskPost<'a> {
-    goal: &'a str,
-    agent_id: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    executor: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    executor_target: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    requested_by: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    parent_task_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    chain_depth: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    node_affinity: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    context_refs: Option<Vec<ContextRef>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    acceptance_criteria: Option<Vec<AcceptanceCriterion>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    budget: Option<TaskBudget>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    spec: Option<TaskSpec>,
-}
-
-fn task_post(goal: &str) -> TaskPost<'_> {
-    TaskPost {
-        goal,
-        agent_id: "alpha",
-        executor: None,
-        executor_target: None,
-        requested_by: None,
-        parent_task_id: None,
-        chain_depth: None,
-        node_affinity: None,
-        context_refs: None,
-        acceptance_criteria: None,
-        budget: None,
-        spec: None,
-    }
-}
-
-fn render(value: &impl Serialize) -> String {
-    serde_json::to_string(value).expect("json")
-}
-
-fn goal(text: &str) -> String {
-    render(&task_post(text))
-}
-
-fn mode_of(mode: &str) -> TaskPromptMode {
-    match mode {
-        "heartbeat" => TaskPromptMode::Heartbeat,
-        "task" => TaskPromptMode::Task,
-        other => panic!("prompt mode {other}"),
-    }
-}
-
-fn spec_for(
-    agent_id: &str,
-    session: &str,
-    mode: TaskPromptMode,
-    working_dir: Option<&str>,
-    resolved_context: Vec<ContextRef>,
-    acceptance_criteria: Vec<AcceptanceCriterion>,
-) -> TaskSpec {
-    TaskSpec {
-        delegation: None,
-        mesh_from: None,
-        task_id: "old".to_owned(),
-        agent_id: agent_id.to_owned(),
-        goal: "spec-goal".to_owned(),
-        resolved_context,
-        acceptance_criteria,
-        budget: TaskBudget {
-            max_turns: Some(9),
-            ..TaskBudget::default()
+#[tokio::test]
+async fn unknown_agents_and_retired_routes_are_refused() {
+    let node = node();
+    let unknown = send(
+        &node.app,
+        "POST",
+        "/api/tasks",
+        &TaskCreateRequest {
+            goal: Some("x".to_owned()),
+            agent_id: Some("nobody".to_owned()),
+            ..TaskCreateRequest::default()
         },
-        tools: None,
-        working_dir: working_dir.map(str::to_owned),
-        model: None,
-        effort: None,
-        system_prompt_append: None,
-        isolation: None,
-        prompt_mode: Some(mode),
-        exclude_tools: None,
-        resume_message: None,
-        session: session.to_owned(),
-        permission_decisions: None,
-        preset_id: None,
-        preset_name: None,
-        audit_only: None,
-        extra: wire::Extra::default(),
+    )
+    .await;
+    assert_eq!(unknown.status, 404);
+    let refused: GatewayError = body(&unknown);
+    assert!(refused.error.contains("nobody"), "{refused:?}");
+    let missing = send(
+        &node.app,
+        "POST",
+        "/api/tasks",
+        &TaskCreateRequest {
+            agent_id: Some("coder".to_owned()),
+            ..TaskCreateRequest::default()
+        },
+    )
+    .await;
+    assert_eq!(missing.status, 400);
+    for (method, path) in [
+        (
+            "POST",
+            "/api/tasks/0199e2a0-7b3c-7a00-8000-000000000001/steer",
+        ),
+        (
+            "POST",
+            "/api/tasks/0199e2a0-7b3c-7a00-8000-000000000001/approvals/r1",
+        ),
+    ] {
+        let gone = send(&node.app, method, path, &wire::JsonObject::default()).await;
+        assert_eq!(gone.status, 404, "{path}");
     }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct IgnoredDelegation<'a> {
-    from: &'a str,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct DefaultsPost<'a> {
-    goal: &'a str,
-    agent_id: &'a str,
-    max_attempts: u32,
-    preset_id: &'a str,
-    preset_name: &'a str,
-    shared_link: &'a str,
-    delegation: IgnoredDelegation<'a>,
-    mesh_from: &'a str,
-}
-
-fn ignored_fields_body() -> String {
-    render(&DefaultsPost {
-        goal: "ship",
-        agent_id: "alpha",
-        max_attempts: 9,
-        preset_id: "preset",
-        preset_name: "named",
-        shared_link: "https://example.invalid/s",
-        delegation: IgnoredDelegation { from: "other" },
-        mesh_from: "east",
-    })
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct NullRequester<'a> {
-    goal: &'a str,
-    agent_id: &'a str,
-    requested_by: (),
-}
-
-fn null_requested_by() -> String {
-    render(&NullRequester {
-        goal: "ship",
-        agent_id: "alpha",
-        requested_by: (),
-    })
-}
-
-async fn only_id(memory: &TaskMemory) -> Uuid {
-    let tasks = memory.list(&TaskListFilter::default()).await.expect("list");
-    tasks.first().expect("one task").id
-}
-
-async fn claim(memory: &TaskMemory, name: &str) -> Option<ClaimedJob> {
-    memory
-        .claim(&ClaimSelector {
-            names: vec![JobName::from_str(name).expect("job name")],
-            only_id: None,
-        })
-        .await
-        .expect("claim")
-}
-
-fn stamp(day: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(2026, 10, day, 0, 0, 0)
-        .single()
-        .expect("stamp")
 }

@@ -8,8 +8,6 @@ use tokio::process::Command;
 use wire::gateway::agents::AgentListResponse;
 use wire::gateway::agents::AgentStoreBackend;
 use wire::gateway::catalog::CatalogAgentsResponse;
-use wire::gateway::catalog::CatalogSheet;
-use wire::gateway::catalog::OutcomesResponse;
 use wire::gateway::devices::PhonePairingAvailability;
 use wire::task::TasksListResponse;
 
@@ -140,14 +138,6 @@ async fn phone_pairing_without_an_authority_stays_unavailable_and_agents_come_fr
         .json::<AgentListResponse>()
         .await?;
     assert_eq!(agents.backend, Some(AgentStoreBackend::Postgres));
-    let catalog = client
-        .get(format!("{base}/api/catalog"))
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<CatalogSheet>()
-        .await?;
-    assert!(catalog.skills.is_empty(), "{catalog:?}");
     let agents = client
         .get(format!("{base}/api/catalog/agents"))
         .send()
@@ -170,14 +160,6 @@ async fn phone_pairing_without_an_authority_stays_unavailable_and_agents_come_fr
         .json::<TasksListResponse>()
         .await?;
     assert!(tasks.tasks.is_empty(), "{tasks:?}");
-    let outcomes = client
-        .get(format!("{base}/api/outcomes"))
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<OutcomesResponse>()
-        .await?;
-    assert_eq!(outcomes.totals.tasks, 0);
     let pid = child.id().ok_or("gateway already stopped")?;
     terminate(pid)?;
     let status = tokio::time::timeout(Duration::from_secs(30), child.wait()).await??;

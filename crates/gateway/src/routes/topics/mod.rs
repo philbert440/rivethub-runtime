@@ -47,7 +47,7 @@ use crate::extract::Query;
 pub(super) use map::error as topic_error;
 pub(super) use startup::Started;
 pub(super) use startup::begin;
-pub(super) use startup::prepare;
+pub(crate) use startup::prepare;
 
 const SEARCH_LIMIT_DEFAULT: usize = 10;
 const SEARCH_LIMIT_MAX: usize = 50;

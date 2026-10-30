@@ -64,7 +64,29 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         SchemaVersion::V24 => in_transaction(conn, to, |tx| {
             tx.execute_batch(include_str!("schema/session_tombstones_v24.sql"))
         }),
+        SchemaVersion::V25 => in_transaction(conn, to, archive_tasks),
     }
+}
+
+const ARCHIVE_TASKS: &str = "
+ALTER TABLE rh_tasks RENAME TO rh_tasks_archive;
+UPDATE rh_tasks_archive
+   SET status = 'killed',
+       completed_at = COALESCE(completed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+       error = COALESCE(error, 'archived with the tasks refactor')
+ WHERE status IN ('queued', 'running', 'awaiting-input');
+";
+
+fn archive_tasks(tx: &rusqlite::Transaction<'_>) -> rusqlite::Result<()> {
+    let legacy: bool = tx.query_row(
+        "SELECT EXISTS (SELECT 1 FROM pragma_table_info('rh_tasks') WHERE name = 'executor')",
+        [],
+        |row| row.get(0),
+    )?;
+    if legacy {
+        tx.execute_batch(ARCHIVE_TASKS)?;
+    }
+    tx.execute_batch(include_str!("schema/tasks_v25.sql"))
 }
 
 const LEGACY_KIND_REWRITE: &str = "

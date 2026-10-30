@@ -69,8 +69,8 @@ pub async fn start(gateway: &Arc<Gateway>) -> Result<(), HostError> {
     Ok(())
 }
 
-async fn forward_task_events(host: Arc<PluginHost>, tasks: Arc<crate::routes::tasks::TasksApi>) {
-    let mut finished = tasks.watch.finished();
+async fn forward_task_events(host: Arc<PluginHost>, tasks: Arc<crate::tasks::Tasks>) {
+    let mut finished = tasks.watch.changed();
     loop {
         let id = tokio::select! {
             () = host.shutdown.cancelled() => return,
@@ -78,10 +78,10 @@ async fn forward_task_events(host: Arc<PluginHost>, tasks: Arc<crate::routes::ta
         };
         match id {
             Ok(id) => match tasks.store.load(id).await {
-                Ok(task) if kernel::tasks::terminal(task.status) => {
+                Ok(task) if task.status.terminal() => {
                     host.publish(&PluginEvent::TaskDone {
                         task_id: id.to_string(),
-                        status: task.status,
+                        status: crate::routes::tasks::status_out(task.status),
                     });
                 }
                 Ok(_) => {}

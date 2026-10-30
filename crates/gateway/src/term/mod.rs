@@ -7,6 +7,7 @@ mod options;
 pub mod socket;
 mod startup;
 mod stored;
+mod tasks;
 mod trust;
 
 use std::collections::BTreeMap;
@@ -29,10 +30,10 @@ use crate::error::ApiError;
 use crate::sessions::SessionRegistry;
 use crate::tenancy::UserId;
 use actor::{Command, Handle};
-pub(crate) use chat::ChatStart;
+pub(crate) use chat::{ChatStart, Lineage};
 pub use delegated::Delegate;
-pub(crate) use delegated::DelegatedTurn;
 use options::validate_options;
+pub(crate) use tasks::BYPASS_PERMISSIONS;
 pub use trust::ClaudeTrust;
 
 #[derive(Debug, Clone)]
@@ -135,6 +136,7 @@ pub struct TerminalService {
     startup_dir: Option<PathBuf>,
     plugins: std::sync::OnceLock<Arc<crate::plugins::PluginHost>>,
     delegates: BTreeMap<String, Delegate>,
+    requested: RwLock<BTreeMap<String, SessionId>>,
 }
 
 impl TerminalService {
@@ -173,6 +175,7 @@ impl TerminalService {
             startup_dir: None,
             plugins: std::sync::OnceLock::new(),
             delegates: BTreeMap::new(),
+            requested: RwLock::new(BTreeMap::new()),
         })
     }
 

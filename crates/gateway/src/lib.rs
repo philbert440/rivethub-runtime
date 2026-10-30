@@ -8,6 +8,7 @@ pub mod plugins;
 pub mod routes;
 pub mod server;
 pub mod sessions;
+pub mod tasks;
 pub mod tenancy;
 pub mod term;
 pub mod tls;
@@ -21,7 +22,7 @@ use std::time::Duration;
 use axum::Router;
 use axum::middleware;
 use axum::routing;
-use kernel::agent::TurnRunner;
+
 use kernel::memory::MemoryStore;
 use tower::ServiceBuilder;
 use tower::util::MapRequestLayer;
@@ -230,7 +231,6 @@ fn configured_files_root(root: Option<PathBuf>) -> Option<PathBuf> {
 )]
 pub struct Gateway {
     store: Arc<dyn MemoryStore>,
-    turn_runner: Option<Arc<dyn TurnRunner>>,
     settings: Settings,
     embed_provider: bool,
     policy: auth::OriginPolicy,
@@ -251,7 +251,7 @@ pub struct Gateway {
     mesh_cache: routes::MeshCache,
     audio: Option<AudioBridge>,
     voice: VoiceProxy,
-    tasks: Option<Arc<routes::tasks::TasksApi>>,
+    tasks: Option<Arc<tasks::Tasks>>,
     providers: Vec<kernel::model::ProviderHealth>,
     memory_export: Option<Arc<dyn kernel::memory::MemoryExport>>,
     topics: Option<Arc<dyn kernel::topics::TopicStore>>,
@@ -281,7 +281,6 @@ impl Gateway {
         let hub_state = routes::hub_state::open(&settings);
         Self {
             store,
-            turn_runner: None,
             settings,
             embed_provider: false,
             policy,
@@ -351,14 +350,8 @@ impl Gateway {
     }
 
     #[must_use]
-    pub fn with_tasks(mut self, api: Arc<routes::tasks::TasksApi>) -> Self {
-        self.tasks = Some(api);
-        self
-    }
-
-    #[must_use]
-    pub fn with_turn_runner(mut self, runner: Arc<dyn TurnRunner>) -> Self {
-        self.turn_runner = Some(runner);
+    pub fn with_tasks(mut self, tasks: Arc<tasks::Tasks>) -> Self {
+        self.tasks = Some(tasks);
         self
     }
 
@@ -455,8 +448,13 @@ impl Gateway {
         self
     }
 
-    pub(crate) fn tasks(&self) -> Option<&Arc<routes::tasks::TasksApi>> {
+    pub(crate) fn tasks(&self) -> Option<&Arc<tasks::Tasks>> {
         self.tasks.as_ref()
+    }
+
+    #[must_use]
+    pub fn has_tasks(&self) -> bool {
+        self.tasks.is_some()
     }
 
     pub(crate) fn uploads(&self) -> Option<&uploads::UploadService> {
@@ -576,8 +574,8 @@ impl Gateway {
             .layer(MapRequestLayer::new(routes::rewrite_request))
             .service(mounted);
         let mut served = Router::new();
-        if let Some(api) = &self.tasks {
-            served = served.merge(routes::tasks::router(Arc::clone(api)));
+        if self.tasks.is_some() {
+            served = served.merge(routes::tasks::router().with_state(Arc::clone(self)));
         }
         served
             .fallback_service(rewritten)

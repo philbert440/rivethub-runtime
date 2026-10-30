@@ -104,22 +104,8 @@ fn every_provider_recording_is_replayed_or_explicitly_skipped() -> TestResult {
     Ok(())
 }
 
-fn say_hi() -> wire::gateway::sessions::SessionPostRequest {
-    wire::gateway::sessions::SessionPostRequest {
-        text: "Say hi.".into(),
-        system_prompt: None,
-        user_id: None,
-        exclude_tools: None,
-        agent: None,
-        thinking: None,
-        attachments: None,
-        harness: None,
-        model: None,
-        working_dir: None,
-    }
-}
 #[tokio::test]
-async fn each_cli_provider_starts_gateway_and_replays_chat_and_task_turn() -> TestResult {
+async fn each_cli_provider_starts_gateway_and_replays_a_chat_turn() -> TestResult {
     for &kind in KINDS {
         let home = tempfile::tempdir()?;
         let (config, env) = configured(home.path(), kind, "")?;
@@ -163,21 +149,8 @@ async fn each_cli_provider_starts_gateway_and_replays_chat_and_task_turn() -> Te
             Some(expected.as_str()),
             "{kind}"
         );
-        let request = say_hi();
-        let reply: wire::gateway::sessions::SessionPostReply = client
-            .post(format!(
-                "http://{}/api/sessions/task-test/messages?wait=1",
-                server.addr
-            ))
-            .json(&request)
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-        assert_eq!(reply.message.text, expected);
         let requests = harness.requests.lock().await;
-        assert_eq!(requests.len(), 2);
+        assert_eq!(requests.len(), 1);
         for request in requests.iter() {
             assert_eq!(request.harness, providers::cli::harness_id(kind)?);
             assert_eq!(request.model.as_deref(), Some("agent-model"));
@@ -187,7 +160,7 @@ async fn each_cli_provider_starts_gateway_and_replays_chat_and_task_turn() -> Te
         drop(requests);
         assert_eq!(
             *harness.options.lock().await,
-            vec![kernel::harness::SessionOption::Mode("plan".into()); 2]
+            vec![kernel::harness::SessionOption::Mode("plan".into())]
         );
         server.close().await?;
         tokio::time::timeout(Duration::from_secs(5), composition.close()).await??;

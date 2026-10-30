@@ -13,7 +13,6 @@ pub mod plugins;
 pub mod preview;
 pub mod queue;
 pub mod shutdown;
-pub mod task_spec;
 pub mod tasks;
 pub mod terminal;
 pub mod tidy;

@@ -26,6 +26,7 @@ pub enum SchemaVersion {
     V22 = 22,
     V23 = 23,
     V24 = 24,
+    V25 = 25,
 }
 
 impl SchemaVersion {
@@ -60,7 +61,8 @@ impl SchemaVersion {
             Self::V21 => Some(Self::V22),
             Self::V22 => Some(Self::V23),
             Self::V23 => Some(Self::V24),
-            Self::V24 => None,
+            Self::V24 => Some(Self::V25),
+            Self::V25 => None,
         }
     }
 }
@@ -94,6 +96,7 @@ impl TryFrom<i64> for SchemaVersion {
             22 => Ok(Self::V22),
             23 => Ok(Self::V23),
             24 => Ok(Self::V24),
+            25 => Ok(Self::V25),
             other => Err(Error::Unsupported { found: other }),
         }
     }
@@ -104,8 +107,8 @@ mod tests {
     use super::SchemaVersion;
     use crate::error::Error;
 
-    const LADDER: [i64; 24] = [
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+    const LADDER: [i64; 25] = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
     ];
 
     #[test]
@@ -120,7 +123,7 @@ mod tests {
 
     #[test]
     fn versions_outside_the_ladder_are_typed_errors() {
-        for found in [-3, 0, 25, 99] {
+        for found in [-3, 0, 26, 99] {
             match SchemaVersion::try_from(found) {
                 Err(Error::Unsupported { found: reported }) => {
                     assert_eq!(reported, found);

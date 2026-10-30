@@ -55,6 +55,7 @@ pub(super) async fn fork(
         agent: None,
         startup_context: Some(kernel::fork::render(kept, &from)),
         topic: None,
+        lineage: None,
     };
     Ok(Json(service.start_chat(&user, start).await?))
 }

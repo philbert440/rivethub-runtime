@@ -10,15 +10,16 @@ use kernel::queue::JobQueue;
 use kernel::queue::JobQueueError;
 use kernel::queue::WorkerRole;
 use kernel::tasks::Finish;
+use kernel::tasks::Task;
 use kernel::tasks::TaskError;
-use kernel::tasks::TaskRecord;
+use kernel::tasks::TaskFilter;
+use kernel::tasks::TaskStatus;
 use kernel::tasks::TaskStore;
 use sqlx::PgConnection;
 use sqlx::PgPool;
 use tokio::sync::broadcast;
 use tokio::sync::watch;
 use uuid::Uuid;
-use wire::task::TaskStatus;
 
 use crate::task_jobs::claim_job;
 use crate::task_jobs::complete_job;
@@ -27,17 +28,7 @@ use crate::task_jobs::fail_job;
 use crate::task_jobs::map_sql;
 use crate::task_jobs::read_job;
 use crate::task_jobs::release_job;
-use crate::task_rows::add_harness_session;
-use crate::task_rows::append_permission;
-use crate::task_rows::finish_task;
-use crate::task_rows::insert_task;
-use crate::task_rows::kill_queued_session;
-use crate::task_rows::kill_task;
-use crate::task_rows::load_task;
-use crate::task_rows::mark_running;
-use crate::task_rows::set_pending;
-use crate::task_rows::sweep_tasks;
-
+use crate::task_rows as rows;
 const FINISHED_BUFFER: usize = 256;
 
 #[derive(Clone, Debug)]
@@ -121,81 +112,77 @@ async fn set_timeouts(conn: &mut PgConnection) -> Result<(), TaskError> {
 
 #[async_trait]
 impl TaskStore for PostgresTasks {
-    async fn insert(&self, task: &TaskRecord) -> Result<(), TaskError> {
-        in_transaction(&self.pool, async |conn| insert_task(conn, task).await).await
+    async fn insert(&self, task: &Task) -> Result<(), TaskError> {
+        in_transaction(&self.pool, async |conn| rows::insert(conn, task).await).await
     }
 
-    async fn load(&self, id: Uuid) -> Result<TaskRecord, TaskError> {
-        in_transaction(&self.pool, async |conn| load_task(conn, id).await).await
+    async fn load(&self, id: Uuid) -> Result<Task, TaskError> {
+        in_transaction(&self.pool, async |conn| rows::load(conn, id).await).await
     }
 
-    async fn mark_running(
+    async fn list(&self, filter: &TaskFilter) -> Result<Vec<Task>, TaskError> {
+        in_transaction(&self.pool, async |conn| rows::list(conn, filter).await).await
+    }
+
+    async fn by_child(&self, session: &str) -> Result<Option<Task>, TaskError> {
+        in_transaction(&self.pool, async |conn| rows::by_child(conn, session).await).await
+    }
+
+    async fn begin(&self, id: Uuid, node: &str, now: DateTime<Utc>) -> Result<bool, TaskError> {
+        in_transaction(&self.pool, async |conn| {
+            rows::begin(conn, id, node, now).await
+        })
+        .await
+    }
+
+    async fn attach(
         &self,
         id: Uuid,
-        claimed_by: &str,
-        node: &str,
-        now: DateTime<Utc>,
-    ) -> Result<TaskRecord, TaskError> {
+        child: &str,
+        harness: kernel::tasks::Harness,
+    ) -> Result<(), TaskError> {
         in_transaction(&self.pool, async |conn| {
-            mark_running(conn, id, claimed_by, node, now).await
+            rows::attach(conn, id, child, harness).await
         })
         .await
     }
 
-    async fn release_running(&self, id: Uuid) -> Result<(), TaskError> {
-        in_transaction(&self.pool, async |conn| {
-            crate::task_rows::release_running(conn, id).await
-        })
-        .await
+    async fn flip(&self, id: Uuid, status: TaskStatus) -> Result<bool, TaskError> {
+        in_transaction(&self.pool, async |conn| rows::flip(conn, id, status).await).await
+    }
+
+    async fn alive(&self, ids: &[Uuid], now: DateTime<Utc>) -> Result<(), TaskError> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        in_transaction(&self.pool, async |conn| rows::alive(conn, ids, now).await).await
     }
 
     async fn finish(&self, id: Uuid, finish: &Finish) -> Result<bool, TaskError> {
-        in_transaction(&self.pool, async |conn| finish_task(conn, id, finish).await).await
-    }
-
-    async fn sweep(&self, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError> {
         in_transaction(&self.pool, async |conn| {
-            sweep_tasks(conn, worker, now).await
-        })
-        .await
-    }
-
-    async fn kill_queued_by_session(
-        &self,
-        session_key: &str,
-        now: DateTime<Utc>,
-    ) -> Result<(), TaskError> {
-        in_transaction(&self.pool, async |conn| {
-            kill_queued_session(conn, session_key, now).await
+            rows::finish(conn, id, finish).await
         })
         .await
     }
 
     async fn kill(&self, id: Uuid, now: DateTime<Utc>) -> Result<TaskStatus, TaskError> {
-        in_transaction(&self.pool, async |conn| kill_task(conn, id, now).await).await
+        in_transaction(&self.pool, async |conn| rows::kill(conn, id, now).await).await
     }
 
-    async fn set_pending(&self, id: Uuid, message: &str) -> Result<(), TaskError> {
+    async fn orphans(&self, node: &str, now: DateTime<Utc>) -> Result<Vec<Uuid>, TaskError> {
         in_transaction(&self.pool, async |conn| {
-            set_pending(conn, id, message).await
+            rows::orphans(conn, node, now).await
         })
         .await
     }
 
-    async fn add_harness_session(&self, id: Uuid, session: &str) -> Result<(), TaskError> {
-        in_transaction(&self.pool, async |conn| {
-            add_harness_session(conn, id, session).await
-        })
-        .await
-    }
-
-    async fn append_permission(
+    async fn reap(
         &self,
-        id: Uuid,
-        decision: &wire::task::TaskPermissionDecision,
-    ) -> Result<(), TaskError> {
+        stale_before: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<Uuid>, TaskError> {
         in_transaction(&self.pool, async |conn| {
-            append_permission(conn, id, decision).await
+            rows::reap(conn, stale_before, now).await
         })
         .await
     }

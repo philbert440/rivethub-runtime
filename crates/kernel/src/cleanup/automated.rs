@@ -6,7 +6,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use super::SnapshotConversation;
-use crate::tasks::TaskOrigin;
+use super::TaskOrigin;
 use crate::topics::fold;
 
 pub const TEMPLATE_RUNS: usize = 20;

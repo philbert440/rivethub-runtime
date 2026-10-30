@@ -3,6 +3,7 @@ mod identities;
 mod mesh;
 mod models;
 pub(crate) mod plugins;
+mod tasks;
 mod terminals;
 
 pub use capture::listing::store_roots;
@@ -72,7 +73,7 @@ pub enum ComposeError {
     #[error(transparent)]
     Pki(#[from] pki::Error),
     #[error(transparent)]
-    Tasks(#[from] crate::agent::AgentError),
+    Tasks(#[from] kernel::tasks::TaskError),
     #[error(transparent)]
     Plugins(#[from] gateway::plugins::HostError),
     #[error(transparent)]
@@ -126,7 +127,7 @@ fn gateway_settings(config: &Config, env: &Environment) -> Result<gateway::Setti
 }
 
 #[derive(Default)]
-struct Backing<'tasks> {
+struct Backing {
     presets: Option<Arc<dyn AgentPresetStore>>,
     hub_state: Option<Arc<dyn HubStateStore>>,
     export: Option<Arc<dyn MemoryExport>>,
@@ -136,27 +137,10 @@ struct Backing<'tasks> {
     tidy: Option<(Arc<dyn TidyStore>, Arc<dyn UpkeepStore>)>,
     summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
     deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
-    tasks: Option<&'tasks crate::agent::LocalTasks>,
+    tasks: Option<tasks::TaskPorts>,
 }
 
-async fn attach_tasks(
-    gateway: Gateway,
-    config: &Config,
-    env: &Environment,
-    shutdown: &CancellationToken,
-    tools: Vec<String>,
-    local: Option<&crate::agent::LocalTasks>,
-) -> Result<crate::agent::Attached, crate::agent::AgentError> {
-    match local {
-        Some(local) => Ok(crate::agent::Attached {
-            gateway: local.mount(gateway, tools),
-            watch: None,
-        }),
-        None => Box::pin(crate::agent::attach(gateway, config, env, shutdown, tools)).await,
-    }
-}
-
-fn with_backing(gateway: Gateway, backing: &Backing<'_>) -> Gateway {
+fn with_backing(gateway: Gateway, backing: &Backing) -> Gateway {
     let gateway = match backing.presets.clone() {
         Some(presets) => gateway.with_agent_presets(presets),
         None => gateway,
@@ -273,6 +257,7 @@ impl Composition {
         let url = config.memory_postgres_url(env).ok_or_else(|| {
             ComposeError::Invalid("no Postgres URL for the memory database".into())
         })?;
+        let (ports, watching) = tasks::postgres(&url, shutdown).await?;
         let backing = Backing {
             presets: agent_presets(memory).await?,
             hub_state: hub_state(memory).await?,
@@ -283,7 +268,7 @@ impl Composition {
             tidy: Some((memory.clone(), memory.clone())),
             deletions: Some(memory.clone()),
             summaries: Some(memory.clone()),
-            tasks: None,
+            tasks: Some(ports),
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
@@ -295,6 +280,7 @@ impl Composition {
         composition
             .tasks
             .spawn(async move { summaries.await.map_err(ComposeError::Task) });
+        composition.tasks.spawn(async move { Ok(watching.await??) });
         Ok(composition)
     }
 
@@ -302,7 +288,6 @@ impl Composition {
         config: &Config,
         env: &Environment,
         store: &Arc<SqliteStore>,
-        tasks: Option<&crate::agent::LocalTasks>,
         shutdown: &CancellationToken,
         activities: &kernel::shutdown::Activities,
     ) -> Result<Self, ComposeError> {
@@ -316,7 +301,7 @@ impl Composition {
             tidy: Some((store.clone(), store.clone())),
             deletions: Some(store.clone()),
             summaries: Some(store.clone()),
-            tasks,
+            tasks: Some(tasks::TaskPorts::of(store.as_ref())),
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
@@ -339,7 +324,7 @@ impl Composition {
         config: &Config,
         env: &Environment,
         store: Arc<dyn MemoryStore>,
-        backing: Backing<'_>,
+        backing: Backing,
         shutdown: &CancellationToken,
         factory: &crate::models::ModelFactory,
     ) -> Result<Self, ComposeError> {
@@ -376,13 +361,13 @@ impl Composition {
         gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
         gateway = with_backing(with_session_stores(gateway, env), &backing);
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
-        let background = tokio_util::task::TaskTracker::new();
+        let tracker = tokio_util::task::TaskTracker::new();
         if config.terminal_enabled() {
             let owner = identity.tenancy.local_user().cloned().ok_or_else(|| {
                 ComposeError::Invalid("a local user is required for terminals".into())
             })?;
             gateway = gateway.with_terminal(
-                terminals::build(config, env, sessions, &owner, shutdown, &background).await?,
+                terminals::build(config, env, sessions, &owner, shutdown, &tracker).await?,
             );
         }
         let audit_cancel = shutdown.child_token();
@@ -390,33 +375,30 @@ impl Composition {
         let configured =
             models::build(config, env, factory, &audit_cancel, &mut audit_tasks).await?;
         let mut agents = std::collections::BTreeMap::new();
-        let mut tool_names = Vec::new();
         let v1 = if let Some(configured) = configured {
-            tool_names = configured.tools;
             agents = configured.agents;
-            gateway = gateway.with_turn_runner(configured.runner);
             Some(configured.service)
         } else {
             None
         };
-        let mut tasks = mesh::start(config, env, agents, identity.tenancy, shutdown).await?;
-        let crate::agent::Attached { gateway, watch } =
-            attach_tasks(gateway, config, env, shutdown, tool_names, backing.tasks).await?;
-        if let Some(watch) = watch {
-            tasks.spawn(async move {
-                match watch.await {
-                    Ok(result) => result.map_err(ComposeError::from),
-                    Err(error) => Err(ComposeError::Task(error)),
-                }
-            });
+        let mut background = mesh::start(config, env, agents, identity.tenancy, shutdown).await?;
+        let delegating = backing.tasks.is_some();
+        if let Some(ports) = backing.tasks {
+            let files_root = gateway.settings().files_root.clone();
+            gateway = tasks::attach(gateway, ports, config, env, files_root).await?;
+        }
+        let gateway =
+            plugins::started(gateway, env, plugins::node_ports(config, bind.port)).await?;
+        if delegating && gateway.has_tasks() {
+            tasks::serve(&gateway, shutdown, &mut background);
         }
         Ok(Self {
-            gateway: plugins::started(gateway, env, plugins::node_ports(config, bind.port)).await?,
+            gateway,
             v1,
             audit_tasks,
             audit_cancel,
-            tasks,
-            background,
+            tasks: background,
+            background: tracker,
             model_tasks: factory.tasks(),
             cancel: shutdown.clone(),
         })

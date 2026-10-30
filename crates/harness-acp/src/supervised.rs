@@ -291,6 +291,13 @@ impl HarnessAdapter for HeadlessHarness {
         }
     }
 
+    fn mode(&self, session: &SessionId) -> Option<String> {
+        match &*self.discovery.borrow() {
+            Discovery::Ready(adapter) => adapter.mode(session),
+            Discovery::Degraded(_) => None,
+        }
+    }
+
     fn admit(
         &self,
         session: &SessionId,

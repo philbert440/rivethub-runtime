@@ -222,6 +222,18 @@ impl AcpHarnessAdapter {
         self.located(command)
     }
 
+    fn session_command(
+        &self,
+        harness: HarnessId,
+        session: &SessionId,
+    ) -> Result<AcpCommand, HarnessAdapterError> {
+        let mut command = self.launch_command(harness)?;
+        command
+            .env
+            .push((SESSION_KEY.to_owned(), session.as_str().to_owned()));
+        Ok(command)
+    }
+
     fn located(&self, mut command: AcpCommand) -> Result<AcpCommand, HarnessAdapterError> {
         if self.search_paths.is_empty() {
             return Ok(command);
@@ -273,6 +285,8 @@ impl AcpHarnessAdapter {
     }
 }
 
+const SESSION_KEY: &str = "RIVETHUB_SESSION_KEY";
+
 #[async_trait]
 impl HarnessAdapter for AcpHarnessAdapter {
     async fn release(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
@@ -305,7 +319,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
 
     async fn new_session(&self, spec: SessionSpec) -> Result<SessionId, HarnessAdapterError> {
         Self::requested_session(&spec)?;
-        let command = self.launch_command(spec.harness)?;
+        let command = self.session_command(spec.harness, &spec.session)?;
         let working_dir = self.working_dir(&spec, &command)?;
         let meta = match spec.startup_context.as_deref() {
             Some(text) => crate::launch::startup_meta(spec.harness, text).map_err(port)?,
@@ -357,7 +371,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
 
     async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
         let native = identity::from_canonical(session).map_err(port)?;
-        let command = self.launch_command(native.harness())?;
+        let command = self.session_command(native.harness(), session)?;
         {
             let sessions = self.sessions.lock();
             if sessions.contains_key(session) {
@@ -494,6 +508,10 @@ impl HarnessAdapter for AcpHarnessAdapter {
 
     fn switches(&self, session: &SessionId) -> SessionSwitches {
         self.session_options(session).switches()
+    }
+
+    fn mode(&self, session: &SessionId) -> Option<String> {
+        self.session_options(session).mode()
     }
 
     fn admit(
