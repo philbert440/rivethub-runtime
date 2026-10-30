@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -104,6 +104,7 @@ async fn serve(fixture: Arc<Fixture>, socket: String) -> std::io::Result<()> {
         .route("/tools/{tool}", post(tool))
         .route("/events", post(event))
         .route("/jobs/{job}", post(job))
+        .route("/http/headers", get(forwarded))
         .route(
             "/http/{*rest}",
             get(|| async { "hello from the fixture plug-in" }),
@@ -133,6 +134,15 @@ async fn probe(fixture: &Fixture, method: &str, path: &str) -> String {
         }
         Err(error) => format!("unreachable: {error}"),
     }
+}
+
+async fn forwarded(headers: HeaderMap) -> String {
+    headers
+        .iter()
+        .filter(|(name, _)| name.as_str().starts_with("x-rivethub-"))
+        .map(|(name, value)| format!("{name}={}", String::from_utf8_lossy(value.as_bytes())))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn raw_json(body: &'static str) -> Response {

@@ -27,6 +27,7 @@ const TYPED_TIMEOUT: Duration = Duration::from_secs(30);
 const HTTP_FIRST_BYTE: Duration = Duration::from_secs(60);
 const SCENE_LIMIT: usize = 5000;
 const DETAIL_LIMIT: usize = 1024;
+const RESERVED_PREFIX: &str = "x-rivethub-";
 const PAGE_POLICY: &str = "sandbox allow-scripts allow-forms allow-popups allow-downloads";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
@@ -87,7 +88,7 @@ async fn route(
         plugin: &plugin,
         client: &client,
         url: format!("http://plugin{suffix}{query}"),
-        headers: forwarded(gateway, user),
+        headers: forwarded(gateway, user)?,
     };
     match kind {
         Kind::Views => {
@@ -151,7 +152,7 @@ fn climbs(suffix: &str) -> Result<(), PluginRouteError> {
     Ok(())
 }
 
-fn forwarded(gateway: &Gateway, user: &UserId) -> HeaderMap {
+fn forwarded(gateway: &Gateway, user: &UserId) -> Result<HeaderMap, PluginRouteError> {
     let mut headers = HeaderMap::new();
     let pairs = [
         ("x-rivethub-user", user.as_str().to_owned()),
@@ -159,14 +160,11 @@ fn forwarded(gateway: &Gateway, user: &UserId) -> HeaderMap {
         ("x-rivethub-request-id", uuid::Uuid::new_v4().to_string()),
     ];
     for (name, value) in pairs {
-        match HeaderValue::from_str(&value) {
-            Ok(value) => {
-                headers.insert(HeaderName::from_static(name), value);
-            }
-            Err(error) => tracing::debug!(%error, name, "plug-in proxy header left out"),
-        }
+        let value = HeaderValue::from_str(&value)
+            .map_err(|error| PluginRouteError::Unnamed(format!("{name}: {error}")))?;
+        headers.insert(HeaderName::from_static(name), value);
     }
-    headers
+    Ok(headers)
 }
 
 async fn read_request<T: DeserializeOwned>(request: Request) -> Result<T, PluginRouteError> {
@@ -351,7 +349,7 @@ async fn passthrough(target: &Target<'_>, request: Request) -> Result<Response, 
     let mut headers: HeaderMap = parts
         .headers
         .iter()
-        .filter(|(name, _)| kept(name))
+        .filter(|(name, _)| kept(name) && !name.as_str().starts_with(RESERVED_PREFIX))
         .map(|(name, value)| (name.clone(), value.clone()))
         .collect();
     headers.extend(target.headers.clone());

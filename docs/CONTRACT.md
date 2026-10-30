@@ -601,8 +601,9 @@ starts later reads them from `PluginSelf.settings`, which holds the same values 
 publishes `{type: "plugin.changed", v: 1, plugin}` on `/api/events/ws`. The proxy forwards
 `/api/plugins/{id}/{views,actions,canvas,tools,panel,http}/…` to the plug-in socket with the `/api/plugins/{id}` prefix
 removed (a path with a `.` or `..` segment, plain or percent-encoded, or a segment hiding an encoded `/` or `\` is
-`400`, so no path climbs out of its route), adds `x-rivethub-user`, `x-rivethub-node` and `x-rivethub-request-id`, and drops the caller's `Authorization`
-and cookies. On `views`, `actions`, `canvas` and `tools` rh parses the request and the answer as their `wire::plugin`
+`400`, so no path climbs out of its route), adds `x-rivethub-user`, `x-rivethub-node` and `x-rivethub-request-id`,
+and drops the caller's `Authorization`, cookies and every `x-rivethub-*` header it sent (a name rh cannot put in a
+header fails the call with `500` rather than reach the plug-in without it). On `views`, `actions`, `canvas` and `tools` rh parses the request and the answer as their `wire::plugin`
 types and sends the client the answer as it parsed it: an answer that does not parse is `502` `plugin_invalid_response`
 with the field path as `detail` and a `host` log line; an action's `422` reaches the client as it is, and any other
 status but `200` is `502` `plugin_error`. `panel` and `http` pass status, headers (less hop-by-hop headers and

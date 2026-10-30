@@ -5,8 +5,11 @@ use axum::http::{Method, Request, StatusCode};
 use wire::plugin::host::{PluginLogs, PluginState};
 use wire::plugin::manifest::{Permission, PluginManifest};
 
+use gateway::tenancy::{PeerCertificate, Tenancy, UserId};
+
 use crate::plugin_support::{
-    Harness, POLL, TestResult, enable, harness, refused, write_manifest, write_manifest_with,
+    Failure, Harness, OWNER_DEVICE, POLL, TestResult, enable, harness, harness_with, owner,
+    refused, write_manifest, write_manifest_with,
 };
 
 const BASE: [Permission; 2] = [Permission::SessionsRead, Permission::TasksRead];
@@ -152,6 +155,49 @@ async fn a_proxied_path_cannot_climb_out_of_its_route() -> TestResult {
             String::from_utf8_lossy(&answer.body)
         );
     }
+    host.gateway.close().await;
+    Ok(())
+}
+
+fn forged(device: &str) -> Result<Request<Body>, Failure> {
+    let mut request = Request::builder()
+        .method(Method::GET)
+        .uri("/api/plugins/fixture/http/headers")
+        .header("host", "127.0.0.1:5174")
+        .header("x-rivethub-user", "owner")
+        .header("x-rivethub-forged", "yes")
+        .body(Body::empty())?;
+    request.extensions_mut().insert(PeerCertificate::Device {
+        user: None,
+        device: device.to_owned(),
+    });
+    Ok(request)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_caller_cannot_forge_the_headers_rh_names_it_with() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let source = root.path().join("source");
+    write_manifest(&source, &BASE)?;
+    let owner = owner()?;
+    let tenancy = Tenancy::local(owner.clone())
+        .with_device(OWNER_DEVICE, owner)?
+        .with_device("phone", UserId::new("zoë".to_owned())?)?;
+    let host = harness_with(root.path(), tenancy).await?;
+    host.install_and_enable(&source).await?;
+    let answer = host.send(forged(OWNER_DEVICE)?).await?;
+    let seen = String::from_utf8_lossy(&answer.body);
+    assert_eq!(answer.status, StatusCode::OK, "{seen}");
+    assert!(seen.contains("x-rivethub-user=owner"), "{seen}");
+    assert!(!seen.contains("x-rivethub-forged"), "{seen}");
+    let answer = host.send(forged("phone")?).await?;
+    let seen = String::from_utf8_lossy(&answer.body);
+    assert_eq!(answer.status, StatusCode::OK, "{seen}");
+    assert!(seen.contains("x-rivethub-user=zoë"), "{seen}");
+    assert!(
+        !seen.contains("=owner") && !seen.contains("forged"),
+        "{seen}"
+    );
     host.gateway.close().await;
     Ok(())
 }

@@ -80,6 +80,8 @@ pub(crate) enum PluginRouteError {
     Failed(String),
     #[error("{0}")]
     Timeout(String),
+    #[error("rh cannot name this caller to the plug-in")]
+    Unnamed(String),
 }
 
 impl IntoResponse for PluginRouteError {
@@ -123,6 +125,11 @@ impl IntoResponse for PluginRouteError {
             ),
             Self::Failed(_) => (StatusCode::BAD_GATEWAY, "plugin_error", None),
             Self::Timeout(_) => (StatusCode::GATEWAY_TIMEOUT, "plugin_timeout", None),
+            Self::Unnamed(detail) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal",
+                Some(detail.clone()),
+            ),
         };
         let mut body = GatewayError::new(self.to_string()).code(code);
         if let Some(detail) = detail {
