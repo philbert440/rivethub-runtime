@@ -124,12 +124,18 @@ impl TerminalManager {
         };
         let namespace = crate::herdr::namespace::namespace_id(&setup.config_home)?;
         let owner = self.inner.owner.lock().clone().ok_or(Error::OwnerUnset)?;
+        let mut env = spec.entry_env.clone();
+        env.extend(
+            self.inner
+                .settings
+                .rivethub_env(Some(session), &spec.roster_key),
+        );
         let herdr_session = HerdrSession::ensure(
             setup,
             session,
             &spec.argv,
             &spec.cwd,
-            &spec.entry_env,
+            &env,
             spec.roster_key.as_str(),
         )
         .await?;

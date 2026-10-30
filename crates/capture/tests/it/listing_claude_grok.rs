@@ -398,6 +398,34 @@ async fn claude_store_cwd_is_the_first_cwd_line_of_a_uuid_session() -> TestResul
 }
 
 #[tokio::test]
+async fn claude_permission_mode_is_the_latest_one_the_transcript_records() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    write(
+        dir.path(),
+        &format!("projects/-home-a/{U1}.jsonl"),
+        &[
+            r#"{"type":"user","permissionMode":"bypassPermissions"}"#,
+            r#"{"type":"permission-mode","permissionMode":"plan"}"#,
+            r#"{"type":"user","message":{"content":"\"permissionMode\":\"auto\""}}"#,
+        ]
+        .join("\n"),
+    )?;
+    write(
+        dir.path(),
+        &format!("projects/-home-a/{P1}.jsonl"),
+        &user(r#""hi""#),
+    )?;
+    let lister = claude_lister(dir.path());
+    let mode = lister.permission_mode(HarnessId::ClaudeCode, U1).await?;
+    assert_eq!(mode.as_deref(), Some("plan"));
+    assert_eq!(
+        lister.permission_mode(HarnessId::ClaudeCode, P1).await?,
+        None
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn claude_describe_finds_top_level_and_refuses_unknown_uuids() -> TestResult {
     let dir = tempfile::tempdir()?;
     write(

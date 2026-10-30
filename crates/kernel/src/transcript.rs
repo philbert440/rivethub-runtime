@@ -231,6 +231,14 @@ pub trait SessionLister: Send + Sync {
         native: &str,
     ) -> Result<Option<String>, TranscriptReaderError>;
 
+    async fn permission_mode(
+        &self,
+        _harness: HarnessId,
+        _native: &str,
+    ) -> Result<Option<String>, TranscriptReaderError> {
+        Ok(None)
+    }
+
     async fn transcript(
         &self,
         harness: HarnessId,
