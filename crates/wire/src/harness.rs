@@ -299,6 +299,13 @@ pub enum HarnessEvent {
         turn_id: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
+    ToolUpdate {
+        session_id: SessionId,
+        tool_call_id: String,
+        input: JsonObject,
+        turn_id: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
     ToolResult {
         session_id: SessionId,
         tool_call_id: String,

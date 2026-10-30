@@ -71,6 +71,7 @@ fn session_of(event: &HarnessEvent) -> Option<&SessionId> {
         HarnessEvent::AssistantDelta { .. }
         | HarnessEvent::ReasoningDelta { .. }
         | HarnessEvent::ToolUse { .. }
+        | HarnessEvent::ToolUpdate { .. }
         | HarnessEvent::ToolResult { .. }
         | HarnessEvent::ApprovalRequest { .. }
         | HarnessEvent::ApprovalResolved { .. }

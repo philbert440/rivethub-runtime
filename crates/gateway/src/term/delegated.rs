@@ -150,6 +150,7 @@ fn observe(reply: &mut DelegatedReply, event: HarnessEvent) -> Result<bool, ApiE
         HarnessEvent::SessionUpdated { .. }
         | HarnessEvent::ReasoningDelta { .. }
         | HarnessEvent::ToolUse { .. }
+        | HarnessEvent::ToolUpdate { .. }
         | HarnessEvent::ToolResult { .. }
         | HarnessEvent::ApprovalRequest { .. }
         | HarnessEvent::ApprovalResolved { .. }

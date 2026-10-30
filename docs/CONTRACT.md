@@ -387,6 +387,15 @@ shown to the model as examples. `GET /api/topics/{topic}/sessions` answers `sess
 `lastActive` across the session's conversation keys, so rows need no harness list) and `conversations`
 (`conversationId`, `topicId`, `by`, `at`, `channel`, optional `title` and `lastActive`). Merges move conversation
 placements and suggestion parents; deleting a topic drops its conversation placements and the corrections that name it.
+(45) Live tool input (Phil, 2026-10-29): `HarnessEvent` gains `tool-update`,
+`{ "type": "tool-update", "sessionId", "toolCallId", "input", "turnId"? }`. A harness session's event stream carries it
+while a tool call runs, each time the agent names the call's input in an ACP `tool_call_update`, as claude-agent-acp
+does once a streamed call's input is known; `input` is the call's whole input as it stands and replaces the one its
+`tool-use` gave. A `tool-use` `name` is the ACP tool call's `name` when the agent sends one, else its `title`, so a
+claude-agent-acp call is `Bash` or `Read`, as in its transcript, rather than "Terminal" or "Read src/main.rs". Claude
+chats run claude-agent-acp with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`, so Claude keeps its task list with `TaskCreate` and
+`TaskUpdate` and the stream carries the list as `plan` (32). Bodies are `wire::harness::HarnessEvent` in
+`contract/*.schema.json`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

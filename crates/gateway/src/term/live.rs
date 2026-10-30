@@ -157,6 +157,7 @@ impl TerminalService {
             }
             HarnessEvent::SessionUpdated { .. }
             | HarnessEvent::ReasoningDelta { .. }
+            | HarnessEvent::ToolUpdate { .. }
             | HarnessEvent::SessionCreated { .. }
             | HarnessEvent::Plan { .. }
             | HarnessEvent::Transcript { .. }

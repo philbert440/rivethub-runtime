@@ -11222,6 +11222,37 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "tool-update"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "toolCallId": {
+              "type": "string"
+            },
+            "input": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "turnId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "sessionId",
+            "toolCallId",
+            "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "tool-result"
             },
             "sessionId": {
