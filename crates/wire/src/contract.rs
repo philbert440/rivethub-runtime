@@ -278,6 +278,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicConversation>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::ConversationPlacementReply>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicPage>,
+    SchemaGenerator::subschema_for::<crate::gateway::topics::TopicMention>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::DecisionStatus>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicDecision>,
     SchemaGenerator::subschema_for::<crate::gateway::topics::TopicDecisionList>,

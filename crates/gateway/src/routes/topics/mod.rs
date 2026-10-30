@@ -84,12 +84,6 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::post(done::reopen).fallback(super::method_not_allowed),
         )
         .route(
-            "/api/topics/{topic}/page",
-            routing::get(page::page)
-                .put(page::edit)
-                .fallback(super::method_not_allowed),
-        )
-        .route(
             "/api/topics/{topic}/decisions",
             routing::get(decisions::list)
                 .post(decisions::add)
@@ -133,6 +127,7 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
                 .fallback(super::method_not_allowed),
         )
         .merge(filing::router())
+        .merge(page::router())
         .layer(DefaultBodyLimit::max(super::BODY_LIMIT))
 }
 

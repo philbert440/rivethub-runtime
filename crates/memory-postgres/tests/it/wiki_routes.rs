@@ -106,7 +106,11 @@ async fn a_second_session_naming_an_entity_gives_it_its_own_page(pool: PgPool) -
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn an_entity_page_names_the_sessions_that_cite_it(pool: PgPool) -> TestResult {
     let seeded = Seeded::new(pool).await?;
-    wiki_routes::an_entity_page_names_the_sessions_that_cite_it(seeded.stores(), &seeded.job).await
+    testkit::wiki_mentions::an_entity_page_names_the_sessions_that_cite_it(
+        seeded.stores(),
+        &seeded.job,
+    )
+    .await
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]

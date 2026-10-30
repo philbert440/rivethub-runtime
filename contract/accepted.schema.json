@@ -8898,10 +8898,32 @@
               "type": "null"
             }
           ]
+        },
+        "mentions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicMention"
+          },
+          "default": []
         }
       },
       "required": [
         "topic"
+      ]
+    },
+    "TopicMention": {
+      "type": "object",
+      "properties": {
+        "topicId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "topicId",
+        "name"
       ]
     },
     "DecisionStatus": {

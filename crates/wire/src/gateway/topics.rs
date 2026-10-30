@@ -243,6 +243,15 @@ pub struct TopicPage {
     pub topic: TopicRecord,
     #[serde(default)]
     pub page: Option<WikiPageResponse>,
+    #[serde(default)]
+    pub mentions: Vec<TopicMention>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicMention {
+    pub topic_id: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

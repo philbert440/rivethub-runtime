@@ -12,6 +12,7 @@ use kernel::filing::Filed;
 use kernel::filing::FiledConversation;
 use kernel::filing::FiledSession;
 use kernel::filing::FilingStore;
+use kernel::filing::Mention;
 use kernel::filing::Subject;
 use kernel::filing::Target;
 use kernel::filing::TopicLine;
@@ -240,6 +241,10 @@ impl FilingStore for PostgresMemory {
             sessions,
             conversations,
         })
+    }
+
+    async fn mentions(&self, topics: &[TopicId], limit: u32) -> Result<Vec<Mention>, TopicError> {
+        super::mentions::read(&self.pool, topics, limit).await
     }
 
     async fn corrected(&self, target: &Target) -> Result<bool, TopicError> {

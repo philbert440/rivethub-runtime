@@ -10,6 +10,7 @@ use kernel::filing::Filed;
 use kernel::filing::FiledConversation;
 use kernel::filing::FiledSession;
 use kernel::filing::FilingStore;
+use kernel::filing::Mention;
 use kernel::filing::Subject;
 use kernel::filing::Target;
 use kernel::filing::TopicLine;
@@ -171,6 +172,14 @@ impl FilingStore for SqliteStore {
                 sessions,
                 conversations,
             })
+        })
+        .await
+    }
+
+    async fn mentions(&self, topics: &[TopicId], limit: u32) -> Result<Vec<Mention>, TopicError> {
+        let topics = topics.to_vec();
+        self.topics("topic mentions", move |conn| {
+            super::mentions::read(conn, &topics, limit)
         })
         .await
     }

@@ -449,6 +449,9 @@ Postgres migration `0037_conversation_node.sql` adds the nullable `rh_conversati
 `rh_conversation_nodes` so the legacy `ros_conversations` table is unchanged. `TopicSession` (the newest node across the
 session's conversation keys) and `TopicConversation` on `GET /api/topics/{topic}/sessions` carry an optional `node`.
 Conversations captured before 0037, appended through `memory_append`, or imported, have none.
+(65) Topic mentions (Phil, 2026-10-29): `TopicPage` (`GET` and `PUT /api/topics/{topic}/page`) gains `mentions`, the
+entities whose pages cite summaries of the sessions and conversations filed in the topic or anywhere under it, as
+`TopicMention` (`topicId`, `name`), most mentioned first and at most 24. A type or an entity answers none.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

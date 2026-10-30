@@ -16,6 +16,7 @@ pub use store::Filed;
 pub use store::FiledConversation;
 pub use store::FiledSession;
 pub use store::FilingStore;
+pub use store::Mention;
 pub use store::Subject;
 pub use store::TopicLine;
 pub use target::Filable;

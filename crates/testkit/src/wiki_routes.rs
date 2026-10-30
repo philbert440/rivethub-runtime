@@ -18,7 +18,6 @@ use kernel::transcript::StoreSession;
 use kernel::transcript::ToolOutputRead;
 use kernel::transcript::TranscriptRead;
 use kernel::transcript::TranscriptReaderError;
-use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
 use kernel::wiki::builder::ExtractWiki;
 use kernel::wiki::builder::HeldEntity;
@@ -167,7 +166,7 @@ impl SessionLister for ChildOfParent {
 }
 
 impl RouteStores<'_> {
-    async fn place(&self, topic: &Topic) -> Outcome {
+    pub(crate) async fn place(&self, topic: &Topic) -> Outcome {
         self.place_as(SESSION_KEY, topic).await
     }
 
@@ -197,7 +196,7 @@ impl RouteStores<'_> {
         }
     }
 
-    async fn route(&self, job: &ExtractWiki, patches: Vec<WikiPatch>) -> Outcome {
+    pub(crate) async fn route(&self, job: &ExtractWiki, patches: Vec<WikiPatch>) -> Outcome {
         let router = self.router();
         let WikiWork::Pending(summary) = self.wiki.wiki_work(job).await? else {
             return Err("the summary was already extracted".into());
@@ -231,7 +230,7 @@ impl RouteStores<'_> {
             .collect())
     }
 
-    async fn named(&self, kind: TopicKind, name: &str) -> Found<Option<Topic>> {
+    pub(crate) async fn named(&self, kind: TopicKind, name: &str) -> Found<Option<Topic>> {
         Ok(self
             .pages
             .topics
@@ -239,7 +238,11 @@ impl RouteStores<'_> {
             .await?)
     }
 
-    async fn mentioned_elsewhere(&self, job: &ExtractWiki, patch: &WikiPatch) -> Outcome {
+    pub(crate) async fn mentioned_elsewhere(
+        &self,
+        job: &ExtractWiki,
+        patch: &WikiPatch,
+    ) -> Outcome {
         self.wiki
             .hold_entity(HeldEntity {
                 key: Slug::fold(&patch.title)?,
@@ -269,7 +272,7 @@ fn patch(slug: &str, title: &str, summary: &str) -> Found<WikiPatch> {
     })
 }
 
-fn host(text: &str) -> Found<WikiPatch> {
+pub(crate) fn host(text: &str) -> Found<WikiPatch> {
     let mut host = patch("acmekit-build-box", "AcmeKit build box", text)?;
     host.entity_type = Some("Hosts".to_owned());
     Ok(host)
@@ -376,77 +379,6 @@ pub async fn a_second_session_naming_an_entity_gives_it_its_own_page(
         "type page",
         stores.pages.topics.page_slug(hosts.id).await?,
         None,
-    )?;
-    Ok(())
-}
-
-pub async fn an_entity_page_names_the_sessions_that_cite_it(
-    stores: RouteStores<'_>,
-    job: &ExtractWiki,
-) -> Outcome {
-    let acmekit = stores
-        .pages
-        .create(new_topic("AcmeKit", &[], None)?)
-        .await?;
-    stores.place(&acmekit).await?;
-    let host = host("The build box runs the nightly AcmeKit builds.")?;
-    stores.mentioned_elsewhere(job, &host).await?;
-    stores.route(job, vec![host]).await?;
-    let entity = stores
-        .named(TopicKind::Entity, "AcmeKit build box")
-        .await?
-        .ok_or("the second mention creates the entity")?;
-    let slug = stores.pages.slug(&entity).await?;
-    let cited: Vec<_> = stores
-        .pages
-        .shown(slug.as_ref())
-        .await?
-        .citations
-        .into_iter()
-        .map(|citation| {
-            (
-                citation.conversation_id,
-                citation
-                    .session_id
-                    .map(|session| session.as_str().to_owned()),
-                citation.title,
-                citation.topic_id,
-            )
-        })
-        .collect();
-    same(
-        "cited by",
-        cited,
-        vec![(
-            job.conversation_id.map(|id| id.to_string()),
-            Some(SESSION_KEY.to_owned()),
-            Some(SESSION_TITLE.to_owned()),
-            Some(acmekit.id.to_string()),
-        )],
-    )?;
-    let listed = stores
-        .pages
-        .wiki
-        .wiki_topics(WikiFilter {
-            query: None,
-            tag: None,
-            limit: 50,
-            offset: 0,
-        })
-        .await?;
-    let mut owners: Vec<(String, Option<String>)> = listed
-        .topics
-        .into_iter()
-        .map(|topic| (topic.slug, topic.topic_id))
-        .collect();
-    owners.sort();
-    same(
-        "owners",
-        owners,
-        vec![
-            ("acmekit".to_owned(), Some(acmekit.id.to_string())),
-            (slug.as_ref().to_owned(), Some(entity.id.to_string())),
-        ],
     )?;
     Ok(())
 }

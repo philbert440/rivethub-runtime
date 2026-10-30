@@ -85,7 +85,8 @@ async fn a_second_session_naming_an_entity_gives_it_its_own_page() -> TestResult
 #[tokio::test]
 async fn an_entity_page_names_the_sessions_that_cite_it() -> TestResult {
     let (_directory, store, job) = seeded().await?;
-    wiki_routes::an_entity_page_names_the_sessions_that_cite_it(stores(&store), &job).await?;
+    testkit::wiki_mentions::an_entity_page_names_the_sessions_that_cite_it(stores(&store), &job)
+        .await?;
     Ok(())
 }
 
