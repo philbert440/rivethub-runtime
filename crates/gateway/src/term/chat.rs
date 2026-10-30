@@ -171,12 +171,15 @@ impl TerminalService {
             .find(|command| command.harness == Some(harness))
         {
             Some(command) => Ok(command.cwd.clone()),
-            None if wire::gateway::roster::session_flags(harness).is_none() => Ok(self
+            None if wire::gateway::roster::session_flags(harness).is_none() => self
                 .options
                 .commands
                 .iter()
                 .find(|command| command.id == self.options.default)
-                .map_or_else(|| self.options.root.clone(), |command| command.cwd.clone())),
+                .map(|command| &command.cwd)
+                .or_else(|| self.options.roots.first())
+                .cloned()
+                .ok_or_else(|| ApiError::BadRequest("no terminal root exists".into())),
             None => Err(ApiError::BadRequest(
                 "harness is not allowed on this node".into(),
             )),
@@ -190,9 +193,9 @@ impl TerminalService {
     ) -> Result<std::path::PathBuf, ApiError> {
         match cwd {
             Some(directory) => {
-                let root = self.options.root.clone();
+                let roots = self.options.roots.clone();
                 tokio::task::spawn_blocking(move || {
-                    super::options::contained_directory(&root, &directory)
+                    super::options::contained_directory(&roots, &directory)
                 })
                 .await
                 .map_err(ApiError::Task)?

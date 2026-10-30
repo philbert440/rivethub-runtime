@@ -61,7 +61,7 @@ impl Lab {
             mux.clone(),
             registry.clone(),
             TerminalOptions {
-                root: root.path().to_path_buf(),
+                roots: vec![root.path().to_path_buf()],
                 default: "shell".into(),
                 commands,
                 max_ptys: 8,

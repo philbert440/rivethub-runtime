@@ -94,7 +94,9 @@ impl TerminalService {
             journal,
             delegate,
         } = turn;
-        start.cwd = start.cwd.map(|directory| self.options.root.join(directory));
+        if let (Some(directory), Some(root)) = (start.cwd.as_mut(), self.options.roots.first()) {
+            *directory = root.join(&*directory);
+        }
         let summary = self.start_chat(user, start).await?;
         let session = summary.session_id.as_str();
         let key = self.registry.authorize(user, session)?;

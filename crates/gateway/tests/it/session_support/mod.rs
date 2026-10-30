@@ -349,7 +349,7 @@ impl Fixture {
             mux.clone(),
             registry.clone(),
             TerminalOptions {
-                root,
+                roots: vec![root],
                 default: "echo".into(),
                 commands,
                 max_ptys: 64,

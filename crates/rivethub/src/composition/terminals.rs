@@ -21,7 +21,7 @@ pub(super) async fn build(
     let gateway = config.gateway.as_ref().ok_or_else(|| {
         ComposeError::Invalid("gateway settings are required for terminals".into())
     })?;
-    let root = terminal_root(config, gateway)?;
+    let roots = config.terminal_roots(env);
     let paths = config::Paths::new(env)?;
     let state_dir = paths.state_dir();
     let roster_path =
@@ -66,7 +66,7 @@ pub(super) async fn build(
         Arc::clone(&mux) as Arc<dyn TerminalMux>,
         sessions,
         TerminalOptions {
-            root,
+            roots,
             default: roster.default_id,
             commands,
             max_ptys,
@@ -115,22 +115,6 @@ fn with_claude_trust(
         }),
         _ => service,
     }
-}
-
-fn terminal_root(
-    config: &Config,
-    gateway: &config::model::GatewaySection,
-) -> Result<std::path::PathBuf, ComposeError> {
-    gateway
-        .files_root
-        .clone()
-        .or_else(|| {
-            config
-                .runtime
-                .as_ref()
-                .and_then(|runtime| runtime.workspace.clone())
-        })
-        .ok_or_else(|| ComposeError::Invalid("terminal filesystem root is required".into()))
 }
 
 fn delegates(config: &Config) -> Result<BTreeMap<String, Delegate>, ComposeError> {

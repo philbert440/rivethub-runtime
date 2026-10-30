@@ -55,7 +55,7 @@ pub struct RememberedSession {
 
 #[derive(Debug, Clone)]
 pub struct TerminalOptions {
-    pub root: PathBuf,
+    pub roots: Vec<PathBuf>,
     pub default: String,
     pub commands: Vec<LaunchCommand>,
     pub max_ptys: usize,
@@ -194,7 +194,7 @@ impl TerminalService {
     ) -> Result<(), ApiError> {
         match &self.claude_trust {
             Some(trust) if command.harness == Some(HarnessId::ClaudeCode) => {
-                trust.apply(&self.options.root, &command.cwd).await
+                trust.apply(&self.options.roots, &command.cwd).await
             }
             _ => Ok(()),
         }
