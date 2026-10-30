@@ -38,7 +38,8 @@ pub(super) async fn apply(
     }
     lock_slug(tx, &gated.slug).await?;
     let slug = gated.slug;
-    if slug != patch.slug.as_ref() {
+    let resolved = slug != patch.slug.as_ref();
+    if resolved {
         patch.aliases.push(patch.slug);
     }
     let note = patch.history_entry.as_ref().map(|entry| entry.body.clone());
@@ -51,7 +52,7 @@ pub(super) async fn apply(
         action: gated.action,
         slug: slug.clone(),
         verified_at: now,
-        title: Some(patch.title),
+        title: (!resolved).then_some(patch.title),
         add_aliases: patch.aliases.into_iter().map(String::from).collect(),
         add_tags: patch.tags,
         add_entities: patch.entities,
