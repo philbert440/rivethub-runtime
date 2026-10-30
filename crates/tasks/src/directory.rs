@@ -321,7 +321,7 @@ fn fields_from_local(agent: &LocalAgent) -> AgentFields {
 fn fields_from_preset(preset: &AgentPreset) -> Result<AgentFields, Error> {
     Ok(AgentFields {
         harness: preset.harness_id,
-        model: preset.launch_model().map(str::to_owned),
+        model: preset.launch_model().map(std::borrow::Cow::into_owned),
         effort: preset_effort(&preset.effort)?,
         system_prompt: Some(preset.system_prompt.clone()),
         working_dir: preset.directory.clone().map(WorkingDir::Configured),

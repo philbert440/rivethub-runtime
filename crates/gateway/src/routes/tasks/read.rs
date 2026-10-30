@@ -22,7 +22,6 @@ use super::TasksApi;
 use super::body::store_error;
 use super::error::TaskHttpError;
 use super::present::to_wire;
-use super::wait::OnTimeout;
 use super::wait::WaitHit;
 use super::wait::wait_limit;
 use super::wait::wait_until;
@@ -84,12 +83,12 @@ pub(super) async fn wait(
     let id = task_id(&id)?;
     let on_approval = on_approval(query.on_approval.as_deref())?;
     let timeout = wait_limit(query.timeout_ms.as_deref())?;
-    match wait_until(&api, id, timeout, on_approval, OnTimeout::Leave).await? {
+    match wait_until(&api, id, timeout, on_approval).await? {
         WaitHit::Task(task) => Ok(Json(TaskResponse { task }).into_response()),
         WaitHit::Approval(approval) => {
             Ok(Json(TaskApprovalWaitResponse { approval }).into_response())
         }
-        WaitHit::Deadline(_) => Err(TaskHttpError::wait_left()),
+        WaitHit::Deadline(task) => Err(TaskHttpError::wait_left(task)),
     }
 }
 

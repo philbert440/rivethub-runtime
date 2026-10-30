@@ -27,6 +27,8 @@ fn recording_adapter(
     if let Some(record) = record {
         args.push("--record-new".to_owned());
         args.push(record.display().to_string());
+        args.push("--record-delete".to_owned());
+        args.push(record.with_extension("deleted").display().to_string());
     }
     AcpHarnessAdapter::with_launch_table(LaunchTable::from_entries([(
         HarnessId::Opencode,
@@ -102,6 +104,11 @@ async fn concurrent_offerings_discover_once_in_the_discovery_dir() {
         assert_eq!(
             recorded.lines().collect::<Vec<_>>(),
             vec![discovery.display().to_string()]
+        );
+        let deleted = std::fs::read_to_string(record.with_extension("deleted")).expect("deleted");
+        assert_eq!(
+            deleted.lines().collect::<Vec<_>>(),
+            vec!["ses_fake0123456789abcdefgh"]
         );
     })
     .await

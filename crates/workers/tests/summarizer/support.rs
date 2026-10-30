@@ -24,7 +24,6 @@ pub(super) fn assert_calls(calls: &[Captured], expected: &[ChatCall]) {
         assert_eq!(call.kind, recorded.prompt);
         assert_eq!(call.user, recorded.user);
         assert_eq!(call.model, recorded.model.as_deref().unwrap_or("fake-chat"));
-        assert_eq!(call.thinking, Some(false));
         if let Some(tokens) = recorded.max_tokens {
             assert_eq!(call.max_tokens, Some(tokens));
         }
@@ -232,7 +231,6 @@ impl ModelProvider for Scripted {
             user: user.to_owned(),
             max_tokens: request.max_tokens,
             model: request.model.clone(),
-            thinking: request.options.enable_thinking,
         });
         let status = {
             let mut failures = self.failures.lock().await;

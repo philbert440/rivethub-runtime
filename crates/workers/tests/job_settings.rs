@@ -90,7 +90,7 @@ fn summary_caps_and_embed_timeout_follow_the_environment() -> Result<(), WorkerE
             unset.branch_max_tokens,
             unset.root_max_tokens
         ),
-        (7_000, 14_000, 20_000)
+        (16_384, 24_576, 32_768)
     );
     let tuned = workers::tuned_summary(
         standard.clone(),

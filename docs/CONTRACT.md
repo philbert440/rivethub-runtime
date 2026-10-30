@@ -771,6 +771,13 @@ recording.
 again every `approval-request` of that chat still waiting for an answer, so a client that opens the session after the
 request went out, as from a needs-you notice, can still answer it. A request leaves the set when it is resolved, the
 turn completes or fails, or the session stops being active.
+(69) Waiting on a task (Phil, 2026-10-30): a caller that stops waiting never ends the task. When `POST /api/tasks?wait=1`
+or `GET /api/tasks/{id}/wait` reaches its `timeoutMs` (default 30 s, clamped to 1 ms–120 s), the task keeps running and
+the answer is `504` with `{ "error": "wait deadline exceeded", "task" }`, the task as it stands, so the caller has its
+`id` and `status`; before, the `POST` killed the task (`killed`, "Killed by parent") and the `GET` sent no task. MCP
+`delegate_task` likewise leaves the task running when its wait ends or the call is aborted, its timeout reply names the
+task's id and status, and the wait is no longer the task's wall-clock budget. Only `POST /api/tasks/{id}/kill` ends a
+task. Bodies are `wire::task::TaskWaitTimeoutResponse`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

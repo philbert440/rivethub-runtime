@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::str::FromStr;
 
 use crate::harness::HarnessId;
@@ -43,9 +44,19 @@ pub const HARNESS_DEFAULT_MODEL: &str = "default";
 
 impl AgentPreset {
     #[must_use]
-    pub fn launch_model(&self) -> Option<&str> {
+    pub fn launch_model(&self) -> Option<Cow<'_, str>> {
         let model = self.model.trim();
-        (!model.is_empty() && model != HARNESS_DEFAULT_MODEL).then_some(model)
+        (!model.is_empty() && model != HARNESS_DEFAULT_MODEL).then(|| model_id(model))
+    }
+}
+
+#[must_use]
+pub fn model_id(value: &str) -> Cow<'_, str> {
+    match serde_json::from_str::<Vec<String>>(value) {
+        Ok(parts) if !parts.is_empty() && parts.iter().all(|part| !part.is_empty()) => {
+            Cow::Owned(parts.join("/"))
+        }
+        _ => Cow::Borrowed(value),
     }
 }
 

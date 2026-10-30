@@ -66,6 +66,12 @@ pub(crate) fn task(outcome: &DelegateOutcome, elapsed: std::time::Duration) -> S
             .unwrap_or_else(|| "[no response from remote agent]".to_owned());
         return format!("{response}{meta_line}");
     }
+    if outcome.timed_out {
+        return format!(
+            "[timeout] task {} is still {} and keeps running{meta_line}",
+            outcome.id, outcome.status
+        );
+    }
     let reason = outcome
         .error
         .clone()

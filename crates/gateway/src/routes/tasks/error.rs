@@ -8,7 +8,6 @@ use wire::task::TaskWaitTimeoutResponse;
 use wire::task::TaskWire;
 
 pub(super) const WAIT_LEFT: &str = "wait deadline exceeded";
-pub(super) const WAIT_KILLED: &str = "wait deadline exceeded — task killed";
 
 #[derive(Debug, thiserror::Error)]
 pub(super) enum TaskHttpError {
@@ -30,26 +29,13 @@ pub(super) enum TaskHttpError {
     MethodNotAllowed,
     #[error("body too large")]
     PayloadTooLarge,
-    #[error("{message}")]
-    WaitExceeded {
-        task: Option<Box<TaskWire>>,
-        message: &'static str,
-    },
+    #[error("wait deadline exceeded")]
+    WaitExceeded(Box<TaskWire>),
 }
 
 impl TaskHttpError {
-    pub(super) fn wait_left() -> Self {
-        Self::WaitExceeded {
-            task: None,
-            message: WAIT_LEFT,
-        }
-    }
-
-    pub(super) fn wait_killed(task: Option<TaskWire>) -> Self {
-        Self::WaitExceeded {
-            task: task.map(Box::new),
-            message: WAIT_KILLED,
-        }
+    pub(super) fn wait_left(task: TaskWire) -> Self {
+        Self::WaitExceeded(Box::new(task))
     }
 }
 
@@ -86,12 +72,12 @@ impl IntoResponse for TaskHttpError {
                 StatusCode::PAYLOAD_TOO_LARGE,
                 GatewayError::new("body too large"),
             ),
-            Self::WaitExceeded { message, task } => {
+            Self::WaitExceeded(task) => {
                 return (
                     StatusCode::GATEWAY_TIMEOUT,
                     Json(TaskWaitTimeoutResponse {
-                        error: message.to_owned(),
-                        task: task.map(|boxed| *boxed),
+                        error: WAIT_LEFT.to_owned(),
+                        task: Some(*task),
                     }),
                 )
                     .into_response();

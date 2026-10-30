@@ -44,6 +44,8 @@ struct FakeArgs {
     #[arg(long)]
     record_new: Option<std::path::PathBuf>,
     #[arg(long)]
+    record_delete: Option<std::path::PathBuf>,
+    #[arg(long)]
     steering: bool,
     #[arg(long, default_value = "offered")]
     effort_option: EffortOption,
@@ -100,6 +102,7 @@ struct AgentState {
     usage: UsageMode,
     record_meta: Option<std::path::PathBuf>,
     record_new: Option<std::path::PathBuf>,
+    record_delete: Option<std::path::PathBuf>,
     steering: bool,
     effort_option: EffortOption,
     running: AtomicBool,
@@ -139,6 +142,7 @@ fn prepare(args: FakeArgs) -> Option<AgentState> {
         usage: args.usage,
         record_meta: args.record_meta,
         record_new: args.record_new,
+        record_delete: args.record_delete,
         steering: args.steering,
         effort_option: args.effort_option,
         running: AtomicBool::new(false),
@@ -188,10 +192,26 @@ fn on_initialize(
                     )
                     .session_capabilities(
                         acp::SessionCapabilities::new()
-                            .list(state.list_sessions.then(acp::SessionListCapabilities::new)),
+                            .list(state.list_sessions.then(acp::SessionListCapabilities::new))
+                            .delete(
+                                state
+                                    .record_delete
+                                    .is_some()
+                                    .then(acp::SessionDeleteCapabilities::new),
+                            ),
                     ),
             ),
     )
+}
+
+fn record(path: &std::path::Path, line: &str) -> Result<(), acp::Error> {
+    use std::io::Write as _;
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .and_then(|mut file| writeln!(file, "{line}"))
+        .map_err(|error| acp::Error::internal_error().data(error.to_string()))
 }
 
 fn on_new_session(
@@ -200,13 +220,7 @@ fn on_new_session(
     responder: Responder<acp::NewSessionResponse>,
 ) -> Result<(), acp::Error> {
     if let Some(path) = &state.record_new {
-        use std::io::Write as _;
-        std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .and_then(|mut file| writeln!(file, "{}", request.cwd.display()))
-            .map_err(|error| acp::Error::internal_error().data(error.to_string()))?;
+        record(path, &request.cwd.display().to_string())?;
     }
     if let Some(path) = &state.record_meta {
         let recorded = serde_json::to_string(&request.meta)
@@ -437,6 +451,7 @@ async fn serve(state: Arc<AgentState>) -> Result<(), acp::Error> {
     let prompt_state = Arc::clone(&state);
     let cancel_state = Arc::clone(&state);
     let steer_state = Arc::clone(&state);
+    let delete_state = Arc::clone(&state);
     Agent
         .builder()
         .name("fake-acp-agent")
@@ -476,6 +491,15 @@ async fn serve(state: Arc<AgentState>) -> Result<(), acp::Error> {
         .on_receive_request(
             async move |request: Steer, responder, connection| {
                 on_steer(&steer_state, request, responder, &connection)
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
+            async move |request: acp::DeleteSessionRequest, responder, _connection| {
+                if let Some(path) = &delete_state.record_delete {
+                    record(path, &request.session_id.0)?;
+                }
+                responder.respond(acp::DeleteSessionResponse::new())
             },
             agent_client_protocol::on_receive_request!(),
         )

@@ -64,6 +64,11 @@ pub(crate) enum SessionCommand {
         value: acp::SessionConfigOptionValue,
         reply: oneshot::Sender<Result<acp::SetSessionConfigOptionResponse, acp::Error>>,
     },
+    Delete {
+        acp_session: acp::SessionId,
+        deletion: crate::discovery::Deletion,
+        reply: oneshot::Sender<Result<(), acp::Error>>,
+    },
 }
 
 #[derive(Debug)]
@@ -439,6 +444,14 @@ async fn command_loop(
                     } => deliver(
                         reply,
                         set_config(&connection, acp_session, config_id, value).await,
+                    ),
+                    SessionCommand::Delete {
+                        acp_session,
+                        deletion,
+                        reply,
+                    } => deliver(
+                        reply,
+                        crate::discovery::delete(&connection, acp_session, deletion).await,
                     ),
                 }
             }

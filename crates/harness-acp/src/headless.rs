@@ -19,7 +19,7 @@ pub(crate) struct Prepared {
 
 impl Prepared {
     pub(crate) async fn discover(&self) -> Result<Advertisement, AcpError> {
-        crate::discovery::discover(&self.command, &self.cwd, self.timeout).await
+        crate::discovery::discover(self.harness, &self.command, &self.cwd, self.timeout).await
     }
 
     pub(crate) fn discover_in(&mut self, directory: PathBuf) {
