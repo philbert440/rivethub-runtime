@@ -90,7 +90,6 @@ where
                 .settle_budget(
                     &task,
                     claimed.id,
-                    None,
                     "maxTurns (0) reached".to_string(),
                     Utc::now(),
                 )
@@ -201,11 +200,6 @@ where
             Ok(usage) => usage,
             Err(error) => return self.settle_call_error(task, job_id, error, started).await,
         };
-        if let Some(reason) = budget_reason(&task.budget, &usage) {
-            return self
-                .settle_budget(task, job_id, Some(usage), reason, ended)
-                .await;
-        }
         let result = TaskResult {
             verdict: TaskVerdict::Completed,
             summary: reply.message.text.clone(),
@@ -222,7 +216,6 @@ where
         &self,
         task: &TaskRecord,
         job_id: JobId,
-        usage: Option<TaskUsage>,
         reason: String,
         ended: DateTime<Utc>,
     ) -> Result<RunOutcome, Error> {
@@ -232,10 +225,7 @@ where
             output: None,
             artifacts: Vec::new(),
             criteria_self_report: None,
-            usage: match usage {
-                Some(usage) => usage,
-                None => empty_usage(0),
-            },
+            usage: empty_usage(0),
             error: Some(reason),
         };
         self.record_failure(RecordedFailure {
@@ -511,34 +501,6 @@ fn usage_of(
         turns: 1,
         wall_clock_ms: wall,
     })
-}
-
-fn budget_reason(budget: &TaskBudget, usage: &TaskUsage) -> Option<String> {
-    if let Some(max) = budget.max_turns
-        && usage.turns >= max
-    {
-        return Some(format!("maxTurns ({max}) reached"));
-    }
-    if let Some(max) = budget.max_tokens
-        && usage.total_tokens.is_some_and(|total| total >= max)
-    {
-        return Some(format!("maxTokens ({max}) reached"));
-    }
-    if let Some(max) = budget.max_usd {
-        let over = match usage.cost_usd {
-            Some(cost) => cost >= max,
-            None => true,
-        };
-        if over {
-            return Some(format!("maxUsd ({max}) reached"));
-        }
-    }
-    if let Some(max) = budget.max_wall_clock_ms
-        && usage.wall_clock_ms >= max
-    {
-        return Some(format!("maxWallClockMs ({max}) reached"));
-    }
-    None
 }
 
 fn empty_usage(wall: u64) -> TaskUsage {

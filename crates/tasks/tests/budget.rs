@@ -90,7 +90,7 @@ async fn zero_turns_fail_before_the_gateway_is_called() {
 }
 
 #[tokio::test]
-async fn token_and_missing_price_limits_fail_closed() {
+async fn a_finished_reply_completes_whatever_its_token_turn_and_price_limits() {
     let (stub, _rx) = common::chat_stub(Script {
         prompt_tokens: Some(20),
         completion_tokens: Some(0),
@@ -98,58 +98,30 @@ async fn token_and_missing_price_limits_fail_closed() {
     })
     .await;
     let engine = common::engine(common::base_url(stub.addr));
-    let over = engine
-        .submit(with_budget(
-            "ship it",
-            TaskBudget {
-                max_tokens: Some(1),
-                ..TaskBudget::default()
-            },
-        ))
-        .await
-        .expect("submit");
-    assert!(matches!(
-        engine.run_one().await.expect_err("tokens"),
-        Error::Budget
-    ));
-    let over_loaded = engine.load(over).await.expect("load");
-    assert_eq!(over_loaded.status, TaskStatus::Killed);
-    assert_eq!(over_loaded.error.as_deref(), Some("maxTokens (1) reached"));
-    let unknown = engine
-        .submit(with_budget(
-            "ship it",
-            TaskBudget {
-                max_usd: Some(1.0),
-                ..TaskBudget::default()
-            },
-        ))
-        .await
-        .expect("submit");
-    assert!(matches!(
-        engine.run_one().await.expect_err("unknown cost"),
-        Error::Budget
-    ));
-    let unknown_loaded = engine.load(unknown).await.expect("load");
-    assert_eq!(unknown_loaded.status, TaskStatus::Killed);
-    assert_eq!(unknown_loaded.error.as_deref(), Some("maxUsd (1) reached"));
-    let exact = engine
-        .submit(with_budget(
-            "ship it",
-            TaskBudget {
-                max_tokens: Some(20),
-                ..TaskBudget::default()
-            },
-        ))
-        .await
-        .expect("exact");
-    assert!(matches!(
-        engine.run_one().await.expect_err("exact cap"),
-        Error::Budget
-    ));
-    assert_eq!(
-        engine.load(exact).await.expect("load").error.as_deref(),
-        Some("maxTokens (20) reached")
-    );
+    for budget in [
+        TaskBudget {
+            max_tokens: Some(1),
+            ..TaskBudget::default()
+        },
+        TaskBudget {
+            max_usd: Some(1.0),
+            ..TaskBudget::default()
+        },
+        TaskBudget {
+            max_turns: Some(1),
+            ..TaskBudget::default()
+        },
+    ] {
+        let id = engine
+            .submit(with_budget("ship it", budget))
+            .await
+            .expect("submit");
+        engine.run_one().await.expect("run");
+        let loaded = engine.load(id).await.expect("load");
+        assert_eq!(loaded.status, TaskStatus::Completed, "{budget:?}");
+        assert_eq!(loaded.error, None);
+        assert_eq!(loaded.result.expect("result").summary, "done");
+    }
     stub.close().await.expect("stub shuts down");
 }
 
