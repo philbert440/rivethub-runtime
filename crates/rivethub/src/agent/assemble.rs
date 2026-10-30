@@ -290,8 +290,17 @@ fn install_local(directory: &mut tasks::Directory, config: &Config) -> Result<()
 }
 
 pub(super) async fn connect(config: &Config, env: &Environment) -> Result<Connected, AgentError> {
-    let (plan, roster) = prepared(config, env).await?;
+    let plan = planned(config, env).await?;
     let tasks = PostgresTasks::connect(&plan.postgres).await?;
+    let presets: Arc<dyn TaskPresets> = match tasks
+        .agent_presets()
+        .await
+        .map_err(|error| AgentError::Invalid(error.to_string()))?
+    {
+        Some(store) => Arc::new(StoredPresets(store)),
+        None => Arc::new(PresetFile::new(plan.state_dir.clone())),
+    };
+    let roster = assembled_roster(config, env, &plan, presets).await?;
     Ok(Connected {
         tasks,
         roster,
@@ -303,8 +312,10 @@ pub(super) async fn connect_deferred(
     config: &Config,
     env: &Environment,
 ) -> Result<Connected, AgentError> {
-    let (plan, roster) = prepared(config, env).await?;
+    let plan = planned(config, env).await?;
     let tasks = PostgresTasks::connect_lazy(&plan.postgres)?;
+    let presets = Arc::new(PresetFile::new(plan.state_dir.clone()));
+    let roster = assembled_roster(config, env, &plan, presets).await?;
     Ok(Connected {
         tasks,
         roster,
@@ -312,32 +323,27 @@ pub(super) async fn connect_deferred(
     })
 }
 
-async fn prepared(config: &Config, env: &Environment) -> Result<(Plan, Arc<Roster>), AgentError> {
+async fn planned(config: &Config, env: &Environment) -> Result<Plan, AgentError> {
     let mut plan = plan(config, env).await?;
     plan.mesh_identity = load_mesh_identity(config, env).await?;
     drop(load_presets(plan.state_dir.clone()).await?);
+    Ok(plan)
+}
+
+async fn assembled_roster(
+    config: &Config,
+    env: &Environment,
+    plan: &Plan,
+    presets: Arc<dyn TaskPresets>,
+) -> Result<Arc<Roster>, AgentError> {
     let nodes = load_nodes(config, env).await?;
-    let tasks = PostgresTasks::connect(&plan.postgres).await?;
-    let presets: Arc<dyn TaskPresets> = match tasks
-        .agent_presets()
-        .await
-        .map_err(|error| AgentError::Invalid(error.to_string()))?
-    {
-        Some(store) => Arc::new(StoredPresets(store)),
-        None => Arc::new(PresetFile::new(plan.state_dir.clone())),
-    };
-    let roster = Arc::new(Roster {
+    Ok(Arc::new(Roster {
         node: plan.node.clone(),
         mesh: plan.mesh,
         local: local_agents(config)?,
         presets,
         nodes,
-    });
-    Ok(Connected {
-        tasks,
-        roster,
-        plan,
-    })
+    }))
 }
 
 fn require_postgres(config: &Config, env: &Environment) -> Result<String, AgentError> {

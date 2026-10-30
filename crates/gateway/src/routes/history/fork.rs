@@ -54,6 +54,7 @@ pub(super) async fn fork(
         inherited_cwd: source.cwd.map(PathBuf::from),
         agent: None,
         startup_context: Some(kernel::fork::render(kept, &from)),
+        topic: None,
     };
     Ok(Json(service.start_chat(&user, start).await?))
 }

@@ -192,6 +192,7 @@ impl TerminalService {
             | HarnessEvent::AssistantDelta { .. }
             | HarnessEvent::ReasoningDelta { .. }
             | HarnessEvent::ToolUse { .. }
+            | HarnessEvent::ToolUpdate { .. }
             | HarnessEvent::ToolResult { .. }
             | HarnessEvent::ApprovalRequest { .. }
             | HarnessEvent::ApprovalResolved { .. }
