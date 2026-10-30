@@ -70,7 +70,7 @@ fn frontmatter_extras_preamble_sections_and_markdown_fences_survive() -> TestRes
             .collect::<Vec<_>>(),
         ["Troubleshooting"]
     );
-    let expected: wire::Extra = serde_json::from_str(r#"{"custom":{"owner":"team","count":3}}"#)?;
+    let expected: values::Extra = serde_json::from_str(r#"{"custom":{"owner":"team","count":3}}"#)?;
     assert_eq!(page.meta.extra, expected);
     assert_eq!(parse_wiki_page(&serialize_wiki_page(&page)?)?, page);
     Ok(())
@@ -87,7 +87,7 @@ fn topic_sections_are_typed_frontmatter_and_round_trip() -> TestResult {
             heading: "Certificates".to_owned(),
         }]
     );
-    assert_eq!(page.meta.extra, wire::Extra::default());
+    assert_eq!(page.meta.extra, values::Extra::default());
     assert_eq!(serialize_wiki_page(&page)?, markdown);
     let plain = markdown.replace(
         "sections:\n  - topic: 00000000-0000-4000-8000-000000000001\n    heading: Certificates\n",

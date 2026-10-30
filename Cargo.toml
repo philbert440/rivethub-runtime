@@ -102,6 +102,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 url = "2"
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
+values = { path = "crates/values", version = "0.7.0" }
 webpki = { package = "rustls-webpki", version = "0.103", default-features = false, features = ["aws-lc-rs", "std"] }
 wire = { path = "crates/wire", version = "0.7.0" }
 workers = { path = "crates/workers", version = "0.7.0" }

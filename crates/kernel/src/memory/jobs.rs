@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
-use wire::JsonObject;
+use values::JsonObject;
 
 use super::{EmbedTable, EmbedTarget, StoredChunk};
 use crate::BoxError;

@@ -17,7 +17,7 @@ use super::{
 pub struct PagePatch {
     pub action: WikiAction,
     pub slug: String,
-    #[serde_as(as = "wire::time::Millis")]
+    #[serde_as(as = "values::Millis")]
     pub verified_at: DateTime<Utc>,
     #[serde(default)]
     pub title: Option<String>,

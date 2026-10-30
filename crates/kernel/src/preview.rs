@@ -1,9 +1,9 @@
 use chrono::DateTime;
 use chrono::Utc;
 use strum::IntoEnumIterator as _;
+use values::JsonObject;
 use wire::gateway::sessions::HarnessTranscriptTurn;
 use wire::gateway::sessions::SessionMessageRole;
-use wire::json::JsonObject;
 
 pub const PREVIEW_CHARS: usize = 200;
 const WRITING_CHARS: usize = 600;

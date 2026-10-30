@@ -3,11 +3,11 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
+use values::HarnessId;
+use values::SessionId;
 use wire::gateway::sessions::HarnessToolOutput;
 use wire::gateway::sessions::HarnessTranscriptTurn;
-use wire::harness::HarnessId;
 use wire::message::Role;
-use wire::session_id::SessionId;
 
 const SUBAGENTS: &str = "/subagents/";
 

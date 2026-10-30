@@ -22,7 +22,7 @@ pub mod transcript;
 pub mod wiki;
 
 use std::path::PathBuf;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 

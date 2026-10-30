@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use strum::IntoEnumIterator;
 use uuid::Uuid;
-use wire::harness::HarnessId;
-use wire::session_id::SessionId;
+use values::HarnessId;
+use values::SessionId;
 
 use crate::memory::ConversationHead;
 

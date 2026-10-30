@@ -10,11 +10,11 @@ mod startup;
 mod tree;
 mod values;
 
+use ::values::SessionId;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
-use wire::session_id::SessionId;
 
 use crate::BoxError;
 use crate::wiki::page::WikiSlug;

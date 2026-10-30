@@ -23,6 +23,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 tokio-util.workspace = true
 uuid = { workspace = true }
+values = { workspace = true }
 wire.workspace = true
 
 [dev-dependencies]

@@ -27,7 +27,7 @@ use kernel::topics::check_parent;
 use kernel::topics::rank;
 use std::str::FromStr;
 
-use wire::session_id::SessionId;
+use values::SessionId;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

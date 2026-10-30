@@ -3,13 +3,13 @@ use crate::topics::DeliveredVia;
 use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
+use values::HarnessId;
+use values::JsonObject;
+use values::SessionId;
 use wire::gateway::sessions::SessionSwitches;
 use wire::harness::ApprovalDecision;
-use wire::harness::HarnessId;
 use wire::harness::PlanStatus;
 use wire::harness::SteerOutcome;
-use wire::json::JsonObject;
-use wire::session_id::SessionId;
 use wire::stream::ThinkingLevel;
 
 #[derive(Debug, Error)]

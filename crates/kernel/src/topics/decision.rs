@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use uuid::Uuid;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 use super::Topic;
 use super::TopicError;

@@ -27,7 +27,8 @@ deny = [
   { crate = "async-std", reason = "one async runtime: tokio" },
   { crate = "tmux_interface", reason = "herdr is the only multiplexer" },
 
-  { crate = "wire", wrappers = ["config", "kernel", "testkit", "pki", "migrate", "memory-postgres", "memory-sqlite", "providers", "harness-acp", "terminal", "mcp", "capture", "gateway", "agent-loop", "workers", "tasks", "cli", "rivethub"], reason = "wire depends on external crates only" },
+  { crate = "values", wrappers = ["wire", "kernel"], reason = "values is the vocabulary under kernel and wire; it depends on external crates only, and every other crate reaches it through them" },
+  { crate = "wire", wrappers = ["config", "kernel", "testkit", "pki", "migrate", "memory-postgres", "memory-sqlite", "providers", "harness-acp", "terminal", "mcp", "capture", "gateway", "agent-loop", "workers", "tasks", "cli", "rivethub"], reason = "wire depends on values and external crates only" },
   { crate = "config", wrappers = ["kernel", "testkit", "migrate", "memory-postgres", "memory-sqlite", "providers", "harness-acp", "terminal", "mcp", "capture", "gateway", "agent-loop", "workers", "tasks", "cli", "rivethub"], reason = "config is foundation; it uses wire, nothing depends upward on it from wire" },
   { crate = "kernel", wrappers = ["testkit", "pki", "memory-postgres", "memory-sqlite", "providers", "harness-acp", "terminal", "mcp", "capture", "gateway", "agent-loop", "workers", "tasks", "cli", "rivethub"], reason = "kernel is below the adapters" },
   { crate = "testkit", wrappers = ["pki", "wire", "config", "kernel", "migrate", "memory-postgres", "memory-sqlite", "providers", "harness-acp", "terminal", "mcp", "capture", "gateway", "agent-loop", "workers", "tasks", "cli", "rivethub"], reason = "testkit is the dev-only replayer layer" },

@@ -1,5 +1,5 @@
 use crate::queue::{FixedJob, Job, JobKeyMode, JobName, MAINTENANCE_PRIORITY, WorkerRole};
-use wire::JsonObject;
+use values::JsonObject;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CronEntry {

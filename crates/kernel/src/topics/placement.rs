@@ -1,6 +1,6 @@
 use chrono::DateTime;
 use chrono::Utc;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 use super::TopicId;
 use super::TopicName;

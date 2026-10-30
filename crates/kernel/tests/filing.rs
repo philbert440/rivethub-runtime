@@ -26,7 +26,7 @@ use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use uuid::Uuid;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

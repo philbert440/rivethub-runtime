@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 #[derive(Debug, Error)]
 pub enum TerminalMuxError {

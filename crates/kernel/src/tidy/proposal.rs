@@ -6,7 +6,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
 use uuid::Uuid;
-use wire::session_id::SessionId;
+use values::SessionId;
 
 use super::TidyError;
 use super::TreeEdit;

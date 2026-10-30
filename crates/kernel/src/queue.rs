@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
-use wire::JsonObject;
+use values::JsonObject;
 
 #[derive(Debug, Error)]
 pub enum JobQueueError {

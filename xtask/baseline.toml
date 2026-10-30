@@ -60,12 +60,6 @@ count = 3
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/filing/target.rs"
-text = "wire"
-count = 2
-
-[[entry]]
-check = "KERNELWIRE"
 file = "crates/kernel/src/fork.rs"
 text = "wire"
 count = 2
@@ -74,7 +68,7 @@ count = 2
 check = "KERNELWIRE"
 file = "crates/kernel/src/harness.rs"
 text = "wire"
-count = 10
+count = 7
 
 [[entry]]
 check = "KERNELWIRE"
@@ -84,27 +78,9 @@ count = 2
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/lib.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/memory/jobs.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
 file = "crates/kernel/src/memory/mod.rs"
 text = "wire"
 count = 22
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/memory/schedule.rs"
-text = "wire"
-count = 1
 
 [[entry]]
 check = "KERNELWIRE"
@@ -152,43 +128,7 @@ count = 3
 check = "KERNELWIRE"
 file = "crates/kernel/src/preview.rs"
 text = "wire"
-count = 3
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/queue.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/terminal.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/tidy/edit.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/tidy/proposal.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/topics/decision.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/topics/mod.rs"
-text = "wire"
-count = 1
+count = 2
 
 [[entry]]
 check = "KERNELWIRE"
@@ -198,67 +138,19 @@ count = 1
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/topics/page_edit.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/topics/page_sync.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/topics/placement.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
 file = "crates/kernel/src/topics/startup.rs"
 text = "wire"
-count = 5
+count = 4
 
 [[entry]]
 check = "KERNELWIRE"
 file = "crates/kernel/src/transcript.rs"
 text = "wire"
-count = 5
+count = 3
 
 [[entry]]
 check = "KERNELWIRE"
 file = "crates/kernel/src/wiki.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/wiki/page/frontmatter.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/wiki/page/mod.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/wiki/page/patch.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/wiki/route.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/tests/filing.rs"
 text = "wire"
 count = 1
 
@@ -273,24 +165,6 @@ check = "KERNELWIRE"
 file = "crates/kernel/tests/search_window.rs"
 text = "wire"
 count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/tests/tidy.rs"
-text = "wire"
-count = 3
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/tests/topics.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/tests/wiki_pages.rs"
-text = "wire"
-count = 2
 
 [[entry]]
 check = "PORTS"

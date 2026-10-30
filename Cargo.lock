@@ -2107,6 +2107,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uuid",
+ "values",
  "wire",
 ]
 
@@ -4605,6 +4606,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
+name = "values"
+version = "0.7.0"
+dependencies = [
+ "chrono",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "strum 0.27.2",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5016,6 +5030,7 @@ dependencies = [
  "testkit",
  "thiserror 2.0.21",
  "url",
+ "values",
 ]
 
 [[package]]

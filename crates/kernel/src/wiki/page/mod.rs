@@ -18,7 +18,7 @@ mod yaml;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
-use wire::Extra;
+use values::Extra;
 
 pub use article::{
     ArticlePatch, ArticlePatchMode, ArticleSection, ArticleSections, apply_article_patches,

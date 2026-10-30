@@ -5,11 +5,11 @@ use chrono::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
+use values::SessionId;
 use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryScope;
 use wire::gateway::memory::SummaryKind;
 use wire::memory::MemorySearchResult;
-use wire::session_id::SessionId;
 
 use super::PlacedSession;
 use super::Topic;
