@@ -2,7 +2,7 @@ use chrono::Utc;
 use config::Environment;
 use kernel::cleanup::BackfillBatch;
 use kernel::tidy::TidyStore as _;
-use memory_postgres::PostgresMemory;
+use memory_postgres::{DatabaseIdentity, PostgresMemory};
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -21,13 +21,23 @@ struct Proposed {
     database: String,
 }
 
-pub(super) fn refuse_live(target: &str, env: &Environment) -> Result<String, Error> {
+pub(super) async fn refuse_live(
+    target: &str,
+    env: &Environment,
+) -> Result<DatabaseIdentity, Error> {
     let live = super::super::run::postgres_url(env).map_err(|_| Error::CleanupLiveUnknown)?;
-    let live = database_name(&live)?;
-    if database_name(target)? == live {
+    let live = identity_at(&live).await?;
+    if identity_at(target).await? == live {
         return Err(Error::CleanupLive);
     }
     Ok(live)
+}
+
+async fn identity_at(url: &str) -> Result<DatabaseIdentity, Error> {
+    let memory = PostgresMemory::connect_read_only(url).await?;
+    let identity = memory.identity().await;
+    memory.pool().close().await;
+    Ok(identity?)
 }
 
 pub(super) async fn write(
@@ -35,7 +45,7 @@ pub(super) async fn write(
     filed: &Filed,
     folds: &Folds,
     target: &str,
-    live: &str,
+    live: &DatabaseIdentity,
 ) -> Result<String, Error> {
     if let Some(done) = stage.book.read::<Proposed>(PROPOSED).await? {
         return Ok(format!(
@@ -44,8 +54,8 @@ pub(super) async fn write(
         ));
     }
     let memory = PostgresMemory::connect(target).await?;
-    let database = memory.database().await?;
-    if database == live {
+    let identity = memory.identity().await?;
+    if identity == *live {
         memory.pool().close().await;
         return Err(Error::CleanupLive);
     }
@@ -63,20 +73,11 @@ pub(super) async fn write(
     let proposed = Proposed {
         batch: stored.id.to_string(),
         proposals: stored.proposals.len(),
-        database,
+        database: identity.name,
     };
     stage.book.write(PROPOSED, &proposed).await?;
     Ok(format!(
         "proposed batch {} with {} proposals in {}\n",
         proposed.batch, proposed.proposals, proposed.database
     ))
-}
-
-fn database_name(url: &str) -> Result<String, Error> {
-    let parsed = url::Url::parse(url).map_err(Error::MemoryUrl)?;
-    let name = parsed.path().trim_start_matches('/');
-    if name.is_empty() {
-        return Err(Error::CleanupDatabase);
-    }
-    Ok(name.to_owned())
 }

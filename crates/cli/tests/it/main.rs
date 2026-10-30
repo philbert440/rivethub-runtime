@@ -7,6 +7,7 @@ mod ca;
 mod capture_hook;
 mod cert;
 mod cert_files;
+mod cleanup_guard;
 mod cli_docs;
 mod contract;
 mod db;

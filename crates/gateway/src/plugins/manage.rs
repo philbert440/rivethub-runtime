@@ -8,7 +8,10 @@ use wire::plugin::host::{PluginLogStream, PluginRecord, PluginState};
 use wire::plugin::manifest::Permission;
 use wire::plugin::process::PluginEvent;
 
-use super::{Entry, HostError, Live, PluginHost, Supervisor, events, jobs, registry, supervisor};
+use super::{
+    Entry, HostError, Live, PairedDevice, PluginHost, Supervisor, events, jobs, registry,
+    supervisor,
+};
 use crate::Gateway;
 
 pub async fn start(gateway: &Arc<Gateway>) -> Result<(), HostError> {
@@ -25,7 +28,13 @@ pub async fn start(gateway: &Arc<Gateway>) -> Result<(), HostError> {
     {
         tracing::debug!("plug-in host already knows the terminal service");
     }
-    tokio::fs::create_dir_all(&host.settings.root).await?;
+    registry::private_folder(&host.settings.root).await?;
+    let key = super::tools::issue(&host.tools_token()).await?;
+    if host.tools_key.set(key).is_err() {
+        return Err(HostError::Conflict(
+            "the plug-in host is already started".into(),
+        ));
+    }
     let api = super::api::bind(&host.api_socket()).await?;
     let tools = super::api::bind(&host.tools_socket()).await?;
     let inner = gateway.router(false);
@@ -145,10 +154,6 @@ impl PluginHost {
         registry::save(&self.settings.root, snapshot).await
     }
 
-    pub(crate) fn pending(&self, plugin: &PluginId) -> Result<Vec<Permission>, HostError> {
-        Ok(self.record(plugin)?.pending)
-    }
-
     pub(crate) async fn install(&self, path: &Path) -> Result<PluginRecord, HostError> {
         let _operation = self.operations.lock().await;
         if !path.is_absolute() {
@@ -199,17 +204,27 @@ impl PluginHost {
         self: &Arc<Self>,
         plugin: &PluginId,
         approved: &[Permission],
+        device: Result<PairedDevice, HostError>,
     ) -> Result<PluginRecord, HostError> {
         let _operation = self.operations.lock().await;
         let requested = self.read(plugin, |entry| entry.stored.manifest.permissions.clone())?;
         self.refuse_unconfinable(&requested)?;
-        let granted = self.read(plugin, |entry| {
+        let (granted, widened) = self.read(plugin, |entry| {
             super::rules::approve(
                 &entry.stored.manifest.permissions,
                 &entry.stored.granted,
                 approved,
             )
+            .map(|granted| {
+                let widened = granted
+                    .iter()
+                    .any(|permission| !entry.stored.granted.contains(permission));
+                (granted, widened)
+            })
         })??;
+        if widened {
+            device?;
+        }
         let running = self.update(plugin, |entry| {
             entry.stored.granted = granted;
             entry.stored.enabled = true;

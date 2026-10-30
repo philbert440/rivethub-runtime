@@ -68,8 +68,6 @@ pub(crate) enum PluginRouteError {
     NoHost,
     #[error("only the node's owner manages plug-ins")]
     NotOwner,
-    #[error("approving permissions needs a paired device certificate")]
-    DeviceRequired,
     #[error("{0}")]
     NotFound(String),
     #[error("{0}")]
@@ -82,6 +80,8 @@ pub(crate) enum PluginRouteError {
     Failed(String),
     #[error("{0}")]
     Timeout(String),
+    #[error("rh cannot name this caller to the plug-in")]
+    Unnamed(String),
 }
 
 impl IntoResponse for PluginRouteError {
@@ -96,6 +96,9 @@ impl IntoResponse for PluginRouteError {
             Self::Host(HostError::Conflict(_)) => (StatusCode::CONFLICT, "conflict", None),
             Self::Host(HostError::Unconfinable(_)) => {
                 (StatusCode::CONFLICT, "sandbox_unavailable", None)
+            }
+            Self::Host(HostError::DeviceRequired) => {
+                (StatusCode::FORBIDDEN, "device_certificate_required", None)
             }
             Self::Host(HostError::Unavailable(_)) => {
                 (StatusCode::SERVICE_UNAVAILABLE, "plugin_unavailable", None)
@@ -114,7 +117,6 @@ impl IntoResponse for PluginRouteError {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal", None)
             }
             Self::NotOwner => (StatusCode::FORBIDDEN, "owner_required", None),
-            Self::DeviceRequired => (StatusCode::FORBIDDEN, "device_certificate_required", None),
             Self::TooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "body_too_large", None),
             Self::Invalid(detail) => (
                 StatusCode::BAD_GATEWAY,
@@ -123,6 +125,11 @@ impl IntoResponse for PluginRouteError {
             ),
             Self::Failed(_) => (StatusCode::BAD_GATEWAY, "plugin_error", None),
             Self::Timeout(_) => (StatusCode::GATEWAY_TIMEOUT, "plugin_timeout", None),
+            Self::Unnamed(detail) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal",
+                Some(detail.clone()),
+            ),
         };
         let mut body = GatewayError::new(self.to_string()).code(code);
         if let Some(detail) = detail {
@@ -194,12 +201,12 @@ async fn enable(
     Body(request): Body<PluginEnableRequest>,
 ) -> Result<Json<PluginRecord>, PluginRouteError> {
     owner(&gateway, &user)?;
+    let device = approval::paired_device(&gateway, peer.as_ref().map(|Extension(peer)| peer));
     let host = host(&gateway)?;
-    let id = plugin_id(id)?;
-    if !host.pending(&id)?.is_empty() {
-        approval::paired_device(&gateway, peer.as_ref().map(|Extension(peer)| peer))?;
-    }
-    Ok(Json(host.enable(&id, &request.approve).await?))
+    Ok(Json(
+        host.enable(&plugin_id(id)?, &request.approve, device)
+            .await?,
+    ))
 }
 
 async fn disable(

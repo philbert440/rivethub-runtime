@@ -119,6 +119,14 @@ impl Tenancy {
         self
     }
 
+    pub(crate) fn owner(&self, user: &UserId) -> Result<(), ApiError> {
+        if self.local.as_ref() == Some(user) {
+            Ok(())
+        } else {
+            Err(ApiError::OwnerRequired)
+        }
+    }
+
     pub(crate) fn device_user(&self, peer: &PeerCertificate) -> Result<UserId, ApiError> {
         let (user, device) = match peer {
             PeerCertificate::Device { user, device } => (user, device),

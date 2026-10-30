@@ -62,7 +62,11 @@ pub struct HostSettings {
     pub root: PathBuf,
     pub node: String,
     pub inherited: Vec<(OsString, OsString)>,
+    pub node_ports: Vec<u16>,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PairedDevice;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HostError {
@@ -76,6 +80,8 @@ pub enum HostError {
     Unavailable(String),
     #[error("{0}")]
     Unconfinable(String),
+    #[error("approving permissions needs a paired device certificate")]
+    DeviceRequired,
     #[error(transparent)]
     Approval(#[from] kernel::plugins::ApprovalError),
     #[error(transparent)]
@@ -142,9 +148,10 @@ pub struct PluginHost {
     logs: logs::LogSink,
     notifications: broadcast::Sender<PluginNotification>,
     tools: watch::Sender<u64>,
-    confinable: bool,
+    confinement: sandbox::Support,
     sessions: OnceLock<Arc<SessionRegistry>>,
     terminal: OnceLock<std::sync::Weak<crate::term::TerminalService>>,
+    tools_key: OnceLock<[u8; 32]>,
     shutdown: CancellationToken,
     tasks: TaskTracker,
 }
@@ -173,9 +180,10 @@ impl PluginHost {
             operations: tokio::sync::Mutex::new(()),
             notifications: broadcast::channel(NOTIFICATION_BUFFER).0,
             tools: watch::channel(0).0,
-            confinable: sandbox::available(),
+            confinement: sandbox::support(),
             sessions: OnceLock::new(),
             terminal: OnceLock::new(),
+            tools_key: OnceLock::new(),
             shutdown,
             tasks,
         }))
@@ -217,6 +225,10 @@ impl PluginHost {
 
     fn tools_socket(&self) -> PathBuf {
         self.settings.root.join("tools.sock")
+    }
+
+    fn tools_token(&self) -> PathBuf {
+        self.settings.root.join("tools.token")
     }
 
     pub(crate) fn log(&self, plugin: &PluginId, stream: PluginLogStream, text: String) {
@@ -295,12 +307,8 @@ impl PluginHost {
     }
 
     fn refuse_unconfinable(&self, requested: &[Permission]) -> Result<(), HostError> {
-        match sandbox::asks_host(requested) {
-            Some(permission) if !self.confinable => {
-                Err(HostError::Unconfinable(sandbox::unavailable(permission)))
-            }
-            _ => Ok(()),
-        }
+        sandbox::refusal(requested, self.confinement)
+            .map_or(Ok(()), |refused| Err(HostError::Unconfinable(refused)))
     }
 
     async fn prepare(&self, plugin: &PluginId) -> Result<Prepared, String> {
@@ -336,7 +344,8 @@ impl PluginHost {
             socket: &socket,
             api: &api,
             token: &token,
-            confine: self.confinable.then_some(granted.as_slice()),
+            confine: (self.confinement != sandbox::Support::Missing).then_some(granted.as_slice()),
+            node_ports: &self.settings.node_ports,
         };
         let plan = launch::plan(&run, &directory, &self.settings.inherited, &contract)
             .ok_or_else(|| "run.command is empty".to_owned())?;

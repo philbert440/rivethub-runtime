@@ -30,6 +30,8 @@ pub enum ApiError {
     Task(#[from] tokio::task::JoinError),
     #[error("session is owned by another user")]
     SessionForbidden,
+    #[error("only the node's owner can do this")]
+    OwnerRequired,
     #[error("{0}")]
     Forbidden(String),
     #[error("{0}")]
@@ -103,6 +105,10 @@ impl ApiError {
                 GatewayError::new("session is owned by another user"),
             ),
             Self::Forbidden(message) => (StatusCode::FORBIDDEN, GatewayError::new(message)),
+            Self::OwnerRequired => (
+                StatusCode::FORBIDDEN,
+                GatewayError::new("only the node's owner can do this").code("owner_required"),
+            ),
             Self::Conflict(message) => (StatusCode::CONFLICT, GatewayError::new(message)),
             Self::Unavailable(message) => {
                 (StatusCode::SERVICE_UNAVAILABLE, GatewayError::new(message))

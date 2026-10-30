@@ -43,6 +43,7 @@ pub mod wiki_writer;
 mod resilience;
 
 pub use agent_presets::PostgresPresets;
+pub use cleanup::DatabaseIdentity;
 pub use hub_state::PostgresHubState;
 pub use task_db::PostgresTasks;
 

@@ -87,15 +87,25 @@ pub(crate) async fn call(
 #[derive(Debug, Clone)]
 pub struct SocketTools {
     http: reqwest::Client,
+    token: PathBuf,
 }
 
 impl SocketTools {
-    pub fn new(socket: PathBuf) -> Result<Self, crate::Error> {
+    pub fn new(socket: PathBuf, token: PathBuf) -> Result<Self, crate::Error> {
         let http = reqwest::Client::builder()
             .unix_socket(socket)
             .build()
             .map_err(|error| crate::Error::Invalid(format!("plug-in tools socket: {error}")))?;
-        Ok(Self { http })
+        Ok(Self { http, token })
+    }
+
+    async fn bearer(&self) -> Result<String, PluginToolError> {
+        tokio::fs::read_to_string(&self.token)
+            .await
+            .map(|token| token.trim().to_owned())
+            .map_err(|error| {
+                PluginToolError::Unreachable(format!("{}: {error}", self.token.display()))
+            })
     }
 
     async fn list(
@@ -110,6 +120,7 @@ impl SocketTools {
         let response = self
             .http
             .get(url)
+            .bearer_auth(self.bearer().await?)
             .timeout(wait)
             .send()
             .await
@@ -144,6 +155,7 @@ impl PluginTools for SocketTools {
         let request = self
             .http
             .post(format!("http://plugins/tools/{name}"))
+            .bearer_auth(self.bearer().await?)
             .timeout(CALL_TIMEOUT)
             .json(&call);
         let request = match tool_use {

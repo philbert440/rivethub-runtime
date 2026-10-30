@@ -174,8 +174,9 @@ async fn run_server(
     activities: &kernel::shutdown::Activities,
 ) -> Result<(), SidecarError> {
     let delegation = crate::agent::open_delegation(config, env, shutdown, activities).await?;
+    let folder = crate::composition::plugins::tools_folder(config, env)?;
     let plugins =
-        mcp::plugins::SocketTools::new(crate::composition::plugins::tools_socket(config, env)?)?;
+        mcp::plugins::SocketTools::new(folder.join("tools.sock"), folder.join("tools.token"))?;
     let ran = async {
         let server = mcp::Server::builder(memory, false, shutdown.child_token())
             .display_zone(display_zone(env))

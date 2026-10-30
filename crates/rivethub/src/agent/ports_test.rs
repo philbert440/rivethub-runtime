@@ -154,7 +154,12 @@ async fn rig() -> Rig {
     );
     let api = super::api(roster, catalog, None, &memory);
     let store: Arc<dyn MemoryStore> = Arc::new(testkit::FakeMemoryStore::default());
-    let gateway = Arc::new(Gateway::new(store, settings(root.path())).with_tasks(api));
+    let owner = gateway::tenancy::UserId::new("owner".to_owned()).expect("owner id");
+    let gateway = Arc::new(
+        Gateway::new(store, settings(root.path()))
+            .with_tasks(api)
+            .with_tenancy(gateway::tenancy::Tenancy::local(owner)),
+    );
     Rig {
         router: gateway.router(false),
         engine: Arc::new(engine),

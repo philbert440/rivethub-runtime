@@ -24,10 +24,26 @@ fn first_repeat<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<&'a str>
     names.into_iter().find(|name| !seen.insert(*name))
 }
 
-pub(super) fn check_manifest(manifest: &PluginManifest) -> Result<(), ManifestProblem> {
-    if manifest.run.command.first().is_none_or(String::is_empty) {
+fn check_program(program: Option<&String>) -> Result<(), ManifestProblem> {
+    let Some(program) = program.filter(|first| !first.is_empty()) else {
         return Err(problem("run.command".into(), "is empty"));
+    };
+    let path = std::path::Path::new(program);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|part| matches!(part, std::path::Component::ParentDir))
+    {
+        return Err(problem(
+            "run.command[0]".into(),
+            "must be a program on PATH or a path inside the plug-in's folder",
+        ));
     }
+    Ok(())
+}
+
+pub(super) fn check_manifest(manifest: &PluginManifest) -> Result<(), ManifestProblem> {
+    check_program(manifest.run.command.first())?;
     if let Some(name) = manifest
         .run
         .env
@@ -117,6 +133,14 @@ mod tests {
         let problems = [
             (format!(r#"{RUN}, "events": ["task.done"]"#), "events[0]"),
             (r#""run": {"command": []}"#.to_owned(), "run.command"),
+            (
+                r#""run": {"command": ["/usr/bin/node"]}"#.to_owned(),
+                "run.command[0]",
+            ),
+            (
+                r#""run": {"command": ["bin/../../.cargo/bin/cargo"]}"#.to_owned(),
+                "run.command[0]",
+            ),
             (
                 r#""run": {"command": ["x"], "env": {"RIVETHUB_PLUGIN_TOKEN": "x"}}"#.to_owned(),
                 "run.env.RIVETHUB_PLUGIN_TOKEN",

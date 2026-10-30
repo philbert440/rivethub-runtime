@@ -143,7 +143,7 @@ pub(in crate::memory) async fn run(
         None => super::run::postgres_url(env)?,
     };
     let live = match args.mode {
-        Mode::Propose => Some(propose::refuse_live(&target, env)?),
+        Mode::Propose => Some(propose::refuse_live(&target, env).await?),
         Mode::DryRun => None,
     };
     let book = Book::open(args.out.clone()).await?;

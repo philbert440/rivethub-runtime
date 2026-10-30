@@ -429,7 +429,8 @@ completion transaction. `pendingProposals` counts pending proposals. Without the
 (45) Topic cleanup (Phil, 2026-10-29): `rh memory cleanup --dry-run --out DIR --model-url URL --model NAME` plans the
 cleanup and changes nothing; `--propose --database URL` runs the same stages against the database it names and then
 writes them as one tidy batch (`proposed_by: backfill`, note 43) for Phil to approve, refusing the node's live memory
-database (`RIVETHUB_PG_URL`, by database name before and after connecting). Optional `--database` (dry run: default
+database (`RIVETHUB_PG_URL`): before any stage and again before writing it connects to both and compares the server's
+cluster `system_identifier` and the database's oid, so another URL for the same database is refused too. Optional `--database` (dry run: default
 `RIVETHUB_PG_URL`), `--batch N` (20), `--concurrency N` (2), `--timeout SECONDS` (900). Memory is read over connections
 that set `default_transaction_read_only=on` (checked before reading), on the deployed schema and on 0032/0033 (before
 0032 the People, Hosts and Tools roots count as types and the topics under them as entities); the People, Hosts and Tools
@@ -487,9 +488,11 @@ permissions and install time. The `plugins:` key of `config.yaml` stays accepted
 managed only through B17. Trust: a plug-in runs as the node's user. Its token and permissions bound what it can do
 through rh, and on Linux its process is confined with Landlock to what note 54 lists. Every plug-in process is started
 by one launch function in the gateway's `plugins` module, from a thread of its own that confines itself first, so the
-process inherits the confinement and rh does not. Where the kernel has no Landlock, a plug-in that asks for a `host.*`
-permission cannot be enabled (`409` `sandbox_unavailable`, saying so) and any other runs unconfined; each start's `host`
-log line says whether the process is confined. Bodies are the `wire::plugin` types in `contract/*.schema.json`. The routes are new, with no
+process inherits the confinement and rh does not. Where the kernel lacks any Landlock rule rh uses (it needs ABI 9 for
+all of them), a plug-in that asks for a `host.*` permission cannot be enabled (`409` `sandbox_unavailable`, saying
+whether Landlock is missing or partial), and a start that comes out less than fully confined is stopped before the
+process runs; any other plug-in runs as confined as the kernel allows, or unconfined without Landlock. Each start's
+`host` log line says whether the process is confined. Bodies are the `wire::plugin` types in `contract/*.schema.json`. The routes are new, with no
 TypeScript recording.
 (51) Plug-in manifest (proposed 2026-10-29): a plug-in is a directory holding `rivethub-plugin.json`, a
 `wire::plugin::manifest::PluginManifest`. `manifest` is 1. `id` is 2 to 24 characters of `a-z`, `0-9` and single
@@ -497,7 +500,8 @@ hyphens, starting with a letter and not ending with a hyphen, unique on the node
 and tools. `name`, `version` and `description` are text; `icon` (optional) is a Material Symbols name, as is every icon
 in B17, and a client draws its generic plug-in glyph for a name it lacks; `$schema` (optional) is ignored, for editors.
 `run` is `command` (an argv, never a shell line: a first element without a slash is looked up on `PATH`, one with a
-slash is relative to the plug-in directory, which is also the working directory), `env` (extra variables; a `RIVETHUB_`
+slash is relative to the plug-in directory, which is also the working directory; an absolute path or one with a `..`
+is refused, and a confined start refuses a path that resolves outside the directory through a link), `env` (extra variables; a `RIVETHUB_`
 name is refused) and `readyTimeoutMs` (default 10000). `permissions` lists what it asks for (note 54). `settings` is a
 list of fields (note 58) other than `file`, keys unique; rh keeps the values and each client draws them as a native form
 on the plug-in's entry in Settings. `tools` are agent tools (note 57): `name` (1 to 24 characters of `a-z`, `0-9` and
@@ -540,25 +544,30 @@ plugin, views}` on every `/api/events/ws` socket, so a client showing one of tho
 nothing); and `POST /api/plugin/notify` (`notifications.send`) takes `{title, text?, tone?, action?}` and sends `{kind:
 "plugin.notification", plugin, node, title, text?, tone?, action?, ts}` on every `/api/notifications/ws` socket, a
 client running `action` when the person opens it. Memory a plug-in writes through `POST /api/capture` and the
-`memory_append` tool route is attributed to agent `plugin:<id>`: rh rewrites the body's `agent` before the route sees
-it.
+`memory_append` tool route is attributed to agent `plugin:<id>` and kept under session keys that start
+`plugin:<id>:`: rh rewrites the body's `agent` and puts that prefix on its `session_key` (`session_id` for the tool)
+before the route sees it, so a plug-in cannot write into another conversation.
 (54) Plug-in permissions (proposed 2026-10-29): a plug-in asks for permissions in its manifest; a person approves them
 at enable (note 55), and any later increase is approved again before the process runs with it. rh checks the B1
 permissions on every plug-in API call: `memory.read` (`GET /api/memory/*`, `POST /api/memory/tool/memory_search`,
 `memory_browse`, `memory_stats` and `memory_get_full`, `GET /api/wiki*`), `memory.write` (`POST
 /api/memory/tool/memory_append`, `POST /api/capture`), `sessions.read` (`GET` on `/api/harness-sessions*`,
 `/api/harnesses/*` and `/api/catalog`), `sessions.control` (`POST`, `PATCH` and `DELETE` on `/api/harness-sessions*`:
-create, turn, steer, cancel, answer an approval, retitle, delete), `topics.read` (`GET /api/topics*` and `GET
-/api/sessions/*`), `topics.write` (the other methods on those), `tasks.read` (`GET /api/tasks*`), `tasks.delegate`
+create, turn, steer, cancel, answer an approval, retitle, delete; and `POST /api/sessions/{session}/messages`, which
+sends a turn and can start a session), `topics.read` (`GET /api/topics*`, `GET /api/sessions/history` and `GET
+/api/sessions/{session}/placement`), `topics.write` (the other methods on `/api/topics*`, and `PUT` and `DELETE` on
+`/api/sessions/{session}/placement` and `/api/sessions/{session}/history`; no other `/api/sessions` route is open to
+a plug-in), `tasks.read` (`GET /api/tasks*`), `tasks.delegate`
 (`POST /api/tasks`), `agents.read` (`GET /api/agents*`) and `notifications.send` (`POST /api/plugin/notify`). Events
 need the permission of what they reveal (note 56). On Linux the process is confined (note 50): it reads and writes its
-own `data/` and `run/` folders; reads its install directory, the program it runs (and the installation around it when
-that program sits in a `bin` folder), `/usr`, `/bin`, `/sbin`, `/lib`, `/lib32`, `/lib64`, `/etc`, `/proc`, `/sys`,
+own `data/` and `run/` folders; reads its install directory, the program it runs (and the `lib` folder beside the `bin`
+folder it sits in, if it does), `/usr`, `/bin`, `/sbin`, `/lib`, `/lib32`, `/lib64`, `/etc`, `/proc`, `/sys`,
 `/dev/null`, `/dev/zero`, `/dev/random` and `/dev/urandom`; writes `/dev/null`; connects to the plug-in API socket; and
 opens no TCP connection or listener, reaches no abstract unix socket and signals no process outside its own. The host
 permissions widen that: `host.files.read` reads every file and `host.files.write` writes every file (files outside the
 plug-in's own folder, still within the node user's rights), and `host.network` allows TCP, abstract unix sockets and
-reading the resolver configuration. `host.exec` (running other programs) is shown for consent and recorded; a program
+reading the resolver configuration, but no TCP connection to the node's own rh listeners (the gateway's port and the
+mesh agent channel's), where a loopback caller counts as the owner. `host.exec` (running other programs) is shown for consent and recorded; a program
 the plug-in runs inherits its confinement, so it is not checked apart. Landlock does not confine UDP, and confines
 connecting to pathname unix sockets only from its ABI 9. The tools and contributions a manifest
 declares need no permission; clients show them beside the permissions when asking for approval. The approval is the
@@ -577,10 +586,12 @@ and copies nothing, so an agent building a plug-in edits that directory and relo
 the field, and an id already installed is `409` (from the same directory the message says to reload it). `POST
 /api/plugins/{id}/enable` takes `{approve}` (`{}` when nothing is pending), which must name exactly the `pending`
 permissions (`409` `permissions_unapproved` listing them, `400` `not_pending` for one not pending, `409`
-`sandbox_unavailable` for a `host.*` permission on a kernel without Landlock, note 50); it grants them, starts the
-process and answers the record. While anything is pending, only a caller presenting a paired device
-certificate (a device certificate the node maps to its owner) can enable: a node or agent certificate, a bearer token or
-a loopback caller is `403` `device_certificate_required`. This one check sits apart from the owner check
+`sandbox_unavailable` for a `host.*` permission on a kernel without full Landlock, note 50); it grants them, starts the
+process and answers the record. An enable that grants a permission the plug-in does not hold yet needs a caller
+presenting a paired device certificate (a device certificate the node maps to its owner): a node or agent certificate, a
+bearer token or a loopback caller is `403` `device_certificate_required`. rh checks it under the lock that orders
+enable, reload and the other changes, against exactly the permissions that call grants, so a reload queued ahead of it
+cannot swap in permissions the check never saw. The device is read apart from the owner check
 (`routes/plugins/approval.rs`) until the approval identity is decided. `POST …/disable` stops it and keeps its grants,
 settings and data. `POST …/reload` reads the manifest again: an invalid one is `400` and changes nothing; fewer
 permissions narrow the grant at once; more stop the process in `awaitingApproval` with the new ones `pending` until
@@ -595,8 +606,10 @@ keeps them in the registry, answers as `GET` does and delivers `settings.changed
 starts later reads them from `PluginSelf.settings`, which holds the same values with secrets). `POST …/jobs/{job}/run` is note 56. Every change to a record
 publishes `{type: "plugin.changed", v: 1, plugin}` on `/api/events/ws`. The proxy forwards
 `/api/plugins/{id}/{views,actions,canvas,tools,panel,http}/…` to the plug-in socket with the `/api/plugins/{id}` prefix
-removed, adds `x-rivethub-user`, `x-rivethub-node` and `x-rivethub-request-id`, and drops the caller's `Authorization`
-and cookies. On `views`, `actions`, `canvas` and `tools` rh parses the request and the answer as their `wire::plugin`
+removed (a path with a `.` or `..` segment, plain or percent-encoded, or a segment hiding an encoded `/` or `\` is
+`400`, so no path climbs out of its route), adds `x-rivethub-user`, `x-rivethub-node` and `x-rivethub-request-id`,
+and drops the caller's `Authorization`, cookies and every `x-rivethub-*` header it sent (a name rh cannot put in a
+header fails the call with `500` rather than reach the plug-in without it). On `views`, `actions`, `canvas` and `tools` rh parses the request and the answer as their `wire::plugin`
 types and sends the client the answer as it parsed it: an answer that does not parse is `502` `plugin_invalid_response`
 with the field path as `detail` and a `host` log line; an action's `422` reaches the client as it is, and any other
 status but `200` is `502` `plugin_error`. `panel` and `http` pass status, headers (less hop-by-hop headers and
@@ -628,7 +641,9 @@ most 50 characters so harness prefixes stay inside 64), with the manifest's `tit
 and the `hints` as MCP `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, each `true`
 when listed and `false` otherwise). B7's nine tools are unchanged. `rh local` serves MCP in the gateway process and
 reads the set from the host directly; a separate `rh mcp` reaches the node's gateway on the local socket
-`<state>/plugins/tools.sock` (mode 0600): `GET /tools?after=<version>` answers `PluginToolList` `{version, tools}`,
+`<state>/plugins/tools.sock` (mode 0600, in the mode 0700 `<state>/plugins` folder). Each request carries `Authorization:
+Bearer` the token rh writes to `<state>/plugins/tools.token` (mode 0600) at each start, which a confined plug-in cannot
+read; any other request is `401`. `GET /tools?after=<version>` answers `PluginToolList` `{version, tools}`,
 waiting up to 60 s while the version still equals `after`, and `POST /tools/<id>__<tool>` takes a call. Either way the
 server sends `notifications/tools/list_changed` when the version moves. A call carries `{arguments, sessionId?}` (the
 calling harness session when rh can tell it: a `tools/call` whose

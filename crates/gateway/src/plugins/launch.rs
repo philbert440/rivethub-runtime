@@ -32,6 +32,7 @@ pub(super) struct Contract<'a> {
     pub(super) api: &'a Path,
     pub(super) token: &'a str,
     pub(super) confine: Option<&'a [Permission]>,
+    pub(super) node_ports: &'a [u16],
 }
 
 #[derive(Debug)]
@@ -94,6 +95,7 @@ pub(super) fn plan(
         },
         program: program.clone(),
         search,
+        node_ports: contract.node_ports.to_vec(),
     });
     Some(LaunchPlan {
         program,
@@ -140,6 +142,7 @@ pub(super) async fn spawn(plan: &LaunchPlan) -> Result<Launched, String> {
                     sandbox::restrict(&policy)
                         .map_err(|error| format!("confinement failed: {error}"))
                 })
+                .and_then(|confinement| sandbox::admit(&request, confinement))
                 .and_then(|confinement| {
                     command
                         .spawn()

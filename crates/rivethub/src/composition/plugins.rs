@@ -11,11 +11,20 @@ pub(crate) fn root(state_dir: &Path) -> PathBuf {
     state_dir.join("plugins")
 }
 
+pub(super) fn node_ports(config: &config::Config, gateway: u16) -> Vec<u16> {
+    let channel = config
+        .mesh
+        .as_ref()
+        .and_then(|mesh| mesh.agent_channel_port);
+    std::iter::once(gateway).chain(channel).collect()
+}
+
 pub(super) async fn started(
     gateway: gateway::Gateway,
     env: &Environment,
+    node_ports: Vec<u16>,
 ) -> Result<Arc<gateway::Gateway>, ComposeError> {
-    let host = host(gateway.settings(), env).await?;
+    let host = host(gateway.settings(), env, node_ports).await?;
     let gateway = Arc::new(gateway.with_plugins(host));
     gateway::plugins::start(&gateway).await?;
     Ok(gateway)
@@ -24,6 +33,7 @@ pub(super) async fn started(
 async fn host(
     settings: &gateway::Settings,
     env: &Environment,
+    node_ports: Vec<u16>,
 ) -> Result<Arc<PluginHost>, ComposeError> {
     let inherited = ["PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ"]
         .into_iter()
@@ -36,15 +46,16 @@ async fn host(
         root: root(&settings.state_dir),
         node: settings.node.clone(),
         inherited,
+        node_ports,
     })
     .await?)
 }
 
-pub(crate) fn tools_socket(
+pub(crate) fn tools_folder(
     config: &config::Config,
     env: &Environment,
 ) -> Result<PathBuf, ComposeError> {
     let node = crate::identity::resolve(config, env)?;
     let settings = gateway::Settings::from_config_in(config, env, node.hostname, node.name)?;
-    Ok(root(&settings.state_dir).join("tools.sock"))
+    Ok(root(&settings.state_dir))
 }

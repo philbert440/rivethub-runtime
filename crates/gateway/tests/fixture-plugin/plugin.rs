@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -30,11 +30,17 @@ struct Fixture {
 struct ApiProbe {
     method: String,
     path: String,
+    body: Option<wire::JsonObject>,
 }
 
 #[derive(Deserialize)]
 struct FileProbe {
     path: PathBuf,
+}
+
+#[derive(Deserialize)]
+struct PortProbe {
+    port: u16,
 }
 
 fn main() {
@@ -48,6 +54,22 @@ fn main() {
         say("the plug-in contract variables are missing");
         return;
     };
+    if environment.text("FIXTURE_IGNORE_SIGTERM") == Some("1") {
+        let mut stubborn = nix::sys::signal::SigSet::empty();
+        stubborn.add(nix::sys::signal::Signal::SIGTERM);
+        if let Err(error) = nix::sys::signal::sigprocmask(
+            nix::sys::signal::SigmaskHow::SIG_BLOCK,
+            Some(&stubborn),
+            None,
+        ) {
+            say(&format!("SIGTERM not blocked: {error}"));
+        }
+        std::thread::spawn(move || {
+            while let Ok(signal) = stubborn.wait() {
+                say(&format!("ignored {signal}"));
+            }
+        });
+    }
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -78,7 +100,7 @@ fn say(line: &str) {
 }
 
 async fn serve(fixture: Arc<Fixture>, socket: String) -> std::io::Result<()> {
-    let own = probe(&fixture, "GET", "/api/plugin/self").await;
+    let own = probe(&fixture, "GET", "/api/plugin/self", None).await;
     say(&format!("started; /api/plugin/self answered {own}"));
     let listener = tokio::net::UnixListener::bind(socket)?;
     let router = Router::new()
@@ -88,6 +110,7 @@ async fn serve(fixture: Arc<Fixture>, socket: String) -> std::io::Result<()> {
         .route("/tools/{tool}", post(tool))
         .route("/events", post(event))
         .route("/jobs/{job}", post(job))
+        .route("/http/headers", get(forwarded))
         .route(
             "/http/{*rest}",
             get(|| async { "hello from the fixture plug-in" }),
@@ -96,9 +119,16 @@ async fn serve(fixture: Arc<Fixture>, socket: String) -> std::io::Result<()> {
     axum::serve(listener, router).await
 }
 
-async fn probe(fixture: &Fixture, method: &str, path: &str) -> String {
+async fn probe(
+    fixture: &Fixture,
+    method: &str,
+    path: &str,
+    body: Option<&wire::JsonObject>,
+) -> String {
     let url = format!("http://rivethub{path}");
-    let request = if method == "POST" {
+    let request = if let Some(body) = body {
+        fixture.api.post(url).json(body)
+    } else if method == "POST" {
         let views = match RouteName::try_from("status".to_owned()) {
             Ok(view) => vec![view],
             Err(error) => return error.to_string(),
@@ -117,6 +147,15 @@ async fn probe(fixture: &Fixture, method: &str, path: &str) -> String {
         }
         Err(error) => format!("unreachable: {error}"),
     }
+}
+
+async fn forwarded(headers: HeaderMap) -> String {
+    headers
+        .iter()
+        .filter(|(name, _)| name.as_str().starts_with("x-rivethub-"))
+        .map(|(name, value)| format!("{name}={}", String::from_utf8_lossy(value.as_bytes())))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn raw_json(body: &'static str) -> Response {
@@ -199,8 +238,14 @@ async fn tool(
             Ok(asked) => std::fs::read_to_string(&asked.path).map_err(|error| error.to_string()),
             Err(error) => Err(error.to_string()),
         },
+        "connect" => match call.arguments.deserialize::<PortProbe>() {
+            Ok(asked) => std::net::TcpStream::connect(("127.0.0.1", asked.port))
+                .map(|_| "connected".to_owned())
+                .map_err(|error| error.to_string()),
+            Err(error) => Err(error.to_string()),
+        },
         "api" => match call.arguments.deserialize::<ApiProbe>() {
-            Ok(asked) => Ok(probe(&fixture, &asked.method, &asked.path).await),
+            Ok(asked) => Ok(probe(&fixture, &asked.method, &asked.path, asked.body.as_ref()).await),
             Err(error) => Err(error.to_string()),
         },
         other => Err(format!("no tool {other}")),
