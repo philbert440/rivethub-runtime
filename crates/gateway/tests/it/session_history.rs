@@ -1514,7 +1514,8 @@ async fn while_the_terminal_drives_the_socket_follows_its_transcript() {
     terminal_session(&setup).await;
     let (mut socket, stop) = socket(&setup, &enc(&format!("claude-code:{U1}")), None).await;
     assert_eq!(next_transcript(&mut socket).await, ["from the terminal"]);
-    let HarnessEvent::Driver { driver, busy, .. } = driver_until(&mut socket, |_| true).await else {
+    let HarnessEvent::Driver { driver, busy, .. } = driver_until(&mut socket, |_| true).await
+    else {
         unreachable!("a driver event");
     };
     assert_eq!(
@@ -1555,7 +1556,10 @@ async fn a_hook_reported_terminal_approval_shows_until_the_turn_ends() {
     else {
         unreachable!("a driver event");
     };
-    assert_eq!(approval.map(|approval| approval.tool).as_deref(), Some("Write"));
+    assert_eq!(
+        approval.map(|approval| approval.tool).as_deref(),
+        Some("Write")
+    );
     let (status, _) = http(
         &setup.fixture.gateway,
         "POST",

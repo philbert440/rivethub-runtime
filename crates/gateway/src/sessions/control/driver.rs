@@ -65,7 +65,11 @@ impl ChatActor {
             session_id: self.session.clone(),
             driver,
             busy,
-            queued: self.queued.iter().map(|queued| queued.text.clone()).collect(),
+            queued: self
+                .queued
+                .iter()
+                .map(|queued| queued.text.clone())
+                .collect(),
             approval: self.approval.clone(),
         };
         if self.announced.as_ref() == Some(&event) {

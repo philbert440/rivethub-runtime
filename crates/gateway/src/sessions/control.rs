@@ -116,8 +116,14 @@ impl ChatHandle {
     }
 
     pub(crate) fn try_signal(&self, signal: TerminalSignal) {
-        if self.commands.try_send(Request::Signal(signal)).is_err() {
-            tracing::warn!("session actor missed a terminal signal");
+        match self.commands.try_send(Request::Signal(signal)) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                tracing::warn!("session actor missed a terminal signal");
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                tracing::debug!("a terminal signal arrived after its session actor stopped");
+            }
         }
     }
 
