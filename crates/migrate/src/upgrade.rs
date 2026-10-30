@@ -55,6 +55,9 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         SchemaVersion::V19 => in_transaction(conn, to, add_done_state),
         SchemaVersion::V20 => in_transaction(conn, to, add_topic_kinds),
         SchemaVersion::V21 => in_transaction(conn, to, add_conversation_filing),
+        SchemaVersion::V22 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/tidy_v22.sql"))
+        }),
     }
 }
 

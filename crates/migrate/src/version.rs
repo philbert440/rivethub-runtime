@@ -23,6 +23,7 @@ pub enum SchemaVersion {
     V19 = 19,
     V20 = 20,
     V21 = 21,
+    V22 = 22,
 }
 
 impl SchemaVersion {
@@ -54,7 +55,8 @@ impl SchemaVersion {
             Self::V18 => Some(Self::V19),
             Self::V19 => Some(Self::V20),
             Self::V20 => Some(Self::V21),
-            Self::V21 => None,
+            Self::V21 => Some(Self::V22),
+            Self::V22 => None,
         }
     }
 }
@@ -85,6 +87,7 @@ impl TryFrom<i64> for SchemaVersion {
             19 => Ok(Self::V19),
             20 => Ok(Self::V20),
             21 => Ok(Self::V21),
+            22 => Ok(Self::V22),
             other => Err(Error::Unsupported { found: other }),
         }
     }
@@ -97,7 +100,7 @@ mod tests {
 
     #[test]
     fn every_recorded_user_version_maps_to_a_schema_version() {
-        for found in 1..=21 {
+        for found in 1..=22 {
             let version = SchemaVersion::try_from(found).unwrap_or_else(|error| {
                 panic!("user_version {found} must map to a schema version: {error}")
             });
@@ -107,7 +110,7 @@ mod tests {
 
     #[test]
     fn versions_outside_the_ladder_are_typed_errors() {
-        for found in [-3, 0, 22, 99] {
+        for found in [-3, 0, 23, 99] {
             match SchemaVersion::try_from(found) {
                 Err(Error::Unsupported { found: reported }) => {
                     assert_eq!(reported, found);
@@ -119,14 +122,14 @@ mod tests {
 
     #[test]
     fn the_ladder_runs_from_any_version_to_the_newest() {
-        for from in 1..=21 {
+        for from in 1..=22 {
             let mut current = SchemaVersion::try_from(from).unwrap();
             let mut visited = Vec::new();
             while let Some(next) = current.next() {
                 visited.push(next.number());
                 current = next;
             }
-            let expected: Vec<i64> = (from + 1..=21).collect();
+            let expected: Vec<i64> = (from + 1..=22).collect();
             assert_eq!(visited, expected, "ladder from user_version {from}");
         }
     }

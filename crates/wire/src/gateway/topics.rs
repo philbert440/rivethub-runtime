@@ -20,6 +20,8 @@ pub enum TopicDirectory {
     Default,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     Hash,
     Serialize,
     Deserialize,

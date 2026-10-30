@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id, t.name,\n                      (SELECT count(*) FROM rh_topics e\n                        WHERE e.parent_id = t.id AND e.kind = 'entity') AS \"entities!\"\n                 FROM rh_topics t\n                WHERE t.kind = 'type'\n                ORDER BY t.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "entities!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "9e57cfd8fdd45845714eb4b18d7e3d117034cf9797bc994ff9e12406c2deb148"
+}

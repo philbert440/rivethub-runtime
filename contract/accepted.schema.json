@@ -7773,6 +7773,498 @@
         "total"
       ]
     },
+    "ProposalState": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected"
+      ]
+    },
+    "Proposer": {
+      "type": "string",
+      "enum": [
+        "categorizer",
+        "backfill"
+      ]
+    },
+    "TidyChange": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "merge"
+            },
+            "source": {
+              "type": "string"
+            },
+            "into": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "source",
+            "into"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "move"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "parent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "topic"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "rename"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "topic",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "close"
+            },
+            "topic": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "topic"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "delete"
+            },
+            "topic": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "topic"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "createTopic"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sessions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SessionId"
+              },
+              "default": []
+            },
+            "conversations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "kind",
+            "topic",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "addType"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "topic",
+            "name"
+          ]
+        }
+      ]
+    },
+    "TidySample": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "TidyEvidence": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidySample"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "sessions"
+      ]
+    },
+    "TidyProposal": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "batchId": {
+          "type": "string"
+        },
+        "change": {
+          "$ref": "#/$defs/TidyChange"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/TidyEvidence"
+        },
+        "proposedBy": {
+          "$ref": "#/$defs/Proposer"
+        },
+        "proposedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "state": {
+          "$ref": "#/$defs/ProposalState"
+        },
+        "decidedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "required": [
+        "id",
+        "batchId",
+        "change",
+        "reason",
+        "evidence",
+        "proposedBy",
+        "proposedAt",
+        "state"
+      ]
+    },
+    "TidyBatch": {
+      "type": "object",
+      "properties": {
+        "batchId": {
+          "type": "string"
+        },
+        "proposedBy": {
+          "$ref": "#/$defs/Proposer"
+        },
+        "proposedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "proposals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidyProposal"
+          }
+        }
+      },
+      "required": [
+        "batchId",
+        "proposedBy",
+        "proposedAt",
+        "proposals"
+      ]
+    },
+    "TidyPending": {
+      "type": "object",
+      "properties": {
+        "batches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidyBatch"
+          }
+        }
+      },
+      "required": [
+        "batches"
+      ]
+    },
+    "TidyFailure": {
+      "type": "object",
+      "properties": {
+        "proposalId": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposalId",
+        "error"
+      ]
+    },
+    "TidyBatchDecision": {
+      "type": "object",
+      "properties": {
+        "decided": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidyProposal"
+          }
+        },
+        "failed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidyFailure"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "decided"
+      ]
+    },
+    "FilingUpkeep": {
+      "type": "object",
+      "properties": {
+        "categorizer": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "you": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "uncategorized": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "leftOut": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "correctionsLastWeek": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "categorizer",
+        "you",
+        "uncategorized",
+        "leftOut",
+        "correctionsLastWeek"
+      ]
+    },
+    "EntityTypeCount": {
+      "type": "object",
+      "properties": {
+        "typeId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "entities": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "typeId",
+        "name",
+        "entities"
+      ]
+    },
+    "WikiUpkeep": {
+      "type": "object",
+      "properties": {
+        "topicPages": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "entityTypes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntityTypeCount"
+          }
+        },
+        "loosePages": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "topicPages",
+        "entityTypes",
+        "loosePages"
+      ]
+    },
+    "WorkerActivity": {
+      "type": "object",
+      "properties": {
+        "lastFinishedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "failing": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "failing"
+      ]
+    },
+    "WorkerUpkeep": {
+      "type": "object",
+      "properties": {
+        "embedder": {
+          "$ref": "#/$defs/WorkerActivity"
+        },
+        "summarizer": {
+          "$ref": "#/$defs/WorkerActivity"
+        },
+        "categorizer": {
+          "$ref": "#/$defs/WorkerActivity"
+        },
+        "wikiBuilder": {
+          "$ref": "#/$defs/WorkerActivity"
+        }
+      },
+      "required": [
+        "embedder",
+        "summarizer",
+        "categorizer",
+        "wikiBuilder"
+      ]
+    },
+    "MemoryUpkeep": {
+      "type": "object",
+      "properties": {
+        "filing": {
+          "$ref": "#/$defs/FilingUpkeep"
+        },
+        "wiki": {
+          "$ref": "#/$defs/WikiUpkeep"
+        },
+        "workers": {
+          "$ref": "#/$defs/WorkerUpkeep"
+        },
+        "pendingProposals": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "filing",
+        "wiki",
+        "workers",
+        "pendingProposals"
+      ]
+    },
     "TopicDirectory": {
       "oneOf": [
         {

@@ -240,3 +240,16 @@ async fn conversations_file_with_titles_and_corrections(pool: PgPool) -> TestRes
     testkit::filing::conversations_file_with_titles_and_corrections(&PostgresMemory::new(pool))
         .await
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn proposals_are_decided_and_rejections_remembered(pool: PgPool) -> TestResult {
+    testkit::tidy::proposals_are_decided_and_rejections_remembered(&PostgresMemory::new(pool)).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn upkeep_counts_filings_entities_and_finished_jobs(pool: PgPool) -> TestResult {
+    crate::common::install_graphile(&pool).await?;
+    let memory = PostgresMemory::new(pool);
+    let queue = memory.queue().await?;
+    testkit::tidy::upkeep_counts_filings_entities_and_finished_jobs(&memory, &queue).await
+}

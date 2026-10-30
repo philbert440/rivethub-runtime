@@ -44,7 +44,7 @@ impl WorkerRole {
                 cron("reap-dead-jobs", FixedJob::ReapDeadJobs, 60),
                 cron("topic-page-sweep", FixedJob::SyncTopicPage, 60),
             ],
-            Self::Categorizer => vec![],
+            Self::Categorizer => vec![cron("tidy-sweep", FixedJob::ProposeTidy, 60)],
             Self::WikiBuilder => {
                 let mut entries = vec![cron("wiki-backfill", FixedJob::EnqueueWikiBackfill, 10)];
                 if wiki_enabled {

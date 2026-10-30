@@ -13,6 +13,7 @@ mod role;
 mod runner;
 pub mod schedule;
 mod summarize;
+mod tidy;
 pub mod tool_synthesis;
 mod topic_page;
 
@@ -68,5 +69,9 @@ pub use summarize::handle_enqueue_stale;
 pub use summarize::handle_reap;
 pub use summarize::handle_summarize;
 pub use summarize::summary_health;
+pub use tidy::TIDY_SYSTEM_PROMPT;
+pub use tidy::TidyEnv;
+pub use tidy::TidyRun;
+pub use tidy::handle_tidy;
 
 pub mod wiki_builder;

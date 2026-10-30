@@ -385,6 +385,43 @@ shown to the model as examples. `GET /api/topics/{topic}/sessions` answers `sess
 `lastActive` across the session's conversation keys, so rows need no harness list) and `conversations`
 (`conversationId`, `topicId`, `by`, `at`, `channel`, optional `title` and `lastActive`). Merges move conversation
 placements and suggestion parents; deleting a topic drops its conversation placements and the corrections that name it.
+(43) Tidy proposals (Phil, 2026-10-29): changes to topics, entities and types that someone has to approve wait as proposals.
+A change (`wire::gateway::tidy::TidyChange`, tagged by `kind`) is `merge` (`source` into `into`, two topics of one kind),
+`move` (`topic` under `parent`, top level when absent), `rename` (`topic` to `name`), `close`, `delete`, `createTopic`
+(the new work topic's chosen `topic` id, `name`, optional `parent`, and the `sessions` and `conversations` to file under
+it) or `addType` (the new type's `topic` id, `name`, optional parent type). A proposal (`TidyProposal`) carries `id`,
+`batchId`, `change`, a `reason`, `evidence` (`{ sessions, samples: [{ id, title? }] }`), `proposedBy` (`categorizer` or
+`backfill`), `proposedAt`, `state` (`pending`, `approved`, `rejected`) and `decidedAt`. `GET /api/tidy/proposals`
+answers `{ batches: [{ batchId, proposedBy, proposedAt, proposals }] }`, pending proposals only, newest batch first and
+each batch in proposal order. `POST /api/tidy/proposals/{proposal}/approve` applies the change through the topic
+operations (a merge leaves its redirect, a new topic files its members `by: "categorizer"`, so your placements stay) and
+answers the proposal approved; `POST …/reject` answers it rejected. A decided proposal is `409`, an unknown one `404`, an
+id that is not a uuid `400`; a change the topic rules refuse answers that topic error and stays pending.
+`POST /api/tidy/batches/{batch}/approve` and `…/reject` decide every pending proposal of the batch in order and answer
+`{ decided, failed: [{ proposalId, error }] }`, where a failed proposal stays pending; an unknown batch is `404`. Every
+change has a fingerprint (a merge's unordered pair; a move's topic and parent; a rename's topic and new slug; the topic
+of a close or delete; the folded name of a new topic or type), and a proposal whose fingerprint is pending or rejected is
+dropped when a batch is stored, so a rejected change is never proposed again; approvals are not remembered. The
+categorizer role claims `propose-tidy` (cron `tidy-sweep`, hourly; `rh local` also queues it at start), which does
+nothing until a week has passed since the categorizer's last batch. It reads the work tree and the types with session
+counts and the filings of the last 7 days, the clusters of pending session suggestions that share a folded name (3
+sessions or more), the pairs of same-kind topics that share a topic identity key, and the newest eight corrections; asks
+the model filing uses for one JSON object per line; drops lines that name nothing listed; and keeps a change only when it
+passes the guard: a new topic needs at least 3 sessions, a new or renamed name passes note 42's name rule and is neither
+tombstoned nor taken, merges and moves pass the topic rules, a close takes an open work topic, a delete only a topic with
+no sessions and no subtopics, and nothing pending or rejected is proposed. Each run stores its batch, empty or not.
+Postgres migration `0034_tidy.sql` and SQLite schema 22 add `rh_tidy_batches`, `rh_tidy_proposals` and `rh_worker_runs`
+(note 44). The routes and the job are new, with no TypeScript recording.
+(44) Memory upkeep (Phil, 2026-10-29): `GET /api/memory/upkeep` answers `wire::gateway::tidy::MemoryUpkeep` for the
+Memory Stats tab. `filing` counts every conversation once: `categorizer` and `you` by the placement that files it (its
+session's, a bare Claude uuid through its `claude-code:` session, or its own), `leftOut` for note 42's never-filed keys
+and channels, `uncategorized` for the rest, so the four add up to `/api/memory/stats` `conversations`; and
+`correctionsLastWeek`. `wiki` has `topicPages` (pages bound to work topics), `entityTypes` (`[{ typeId, name, entities }]`,
+every type with the entities directly under it) and `loosePages` (pages bound to no topic). `workers` has `embedder`,
+`summarizer`, `categorizer` and `wikiBuilder`, each `{ lastFinishedAt?, failing }`: the newest finish of a job in the
+role's task list, and how many of its jobs have failed at least once without succeeding since, dead ones included.
+Completing a job records its task's finish in `rh_worker_runs`, in the graphile completion statement or the SQLite
+completion transaction. `pendingProposals` counts pending proposals. Without the stores the route is `503`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice
