@@ -31,6 +31,7 @@ use memory_sqlite::SqliteStore;
 use thiserror::Error;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+use wire::gateway::hub_state::HubState;
 
 #[derive(Debug, Error)]
 pub enum ComposeError {
@@ -91,14 +92,14 @@ pub async fn agent_presets(
 
 pub async fn hub_state(
     memory: &PostgresMemory,
-) -> Result<Option<Arc<dyn HubStateStore>>, ComposeError> {
+) -> Result<Option<Arc<dyn HubStateStore<HubState>>>, ComposeError> {
     let store = memory.hub_state().await?;
     if store.is_none() {
         tracing::warn!(
             "rh_hub_state is missing on the memory database; hub state stays on this node until `rh db migrate` runs"
         );
     }
-    Ok(store.map(|store| Arc::new(store) as Arc<dyn HubStateStore>))
+    Ok(store.map(|store| Arc::new(store) as Arc<dyn HubStateStore<HubState>>))
 }
 
 #[expect(
@@ -129,7 +130,7 @@ fn gateway_settings(config: &Config, env: &Environment) -> Result<gateway::Setti
 #[derive(Default)]
 struct Backing {
     presets: Option<Arc<dyn AgentPresetStore>>,
-    hub_state: Option<Arc<dyn HubStateStore>>,
+    hub_state: Option<Arc<dyn HubStateStore<HubState>>>,
     export: Option<Arc<dyn MemoryExport>>,
     topics: Option<(Arc<dyn TopicStore>, Arc<dyn FilingStore>)>,
     decisions: Option<Arc<dyn DecisionStore>>,
