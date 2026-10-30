@@ -76,6 +76,8 @@ pub use summary::SummaryWrite;
 pub use summary::WindowMessage;
 pub use summary::WrittenSummary;
 pub use title::SUMMARY_TITLE_MAX_CHARS;
+pub use title::names_session;
+pub use title::spoken_title;
 pub use title::summary_title;
 
 #[derive(Debug, Error)]
