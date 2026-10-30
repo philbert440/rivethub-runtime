@@ -124,8 +124,8 @@ impl SummaryStore for MemStore {
             .cloned())
     }
 
-    async fn pending(&self) -> Result<Vec<ConversationWindow>, SummaryStoreError> {
-        Ok(self
+    async fn pending(&self) -> Result<Vec<PendingConversation>, SummaryStoreError> {
+        let mut pending = self
             .windows
             .lock()
             .await
@@ -137,8 +137,14 @@ impl SummaryStore for MemStore {
                         .session_key
                         .starts_with(kernel::memory::HEARTBEAT_SESSION_PREFIX)
             })
-            .cloned()
-            .collect())
+            .map(|window| PendingConversation {
+                id: window.conversation.id,
+                unsummarized: u32::try_from(window.messages.len()).expect("message count"),
+                latest_message_at: window.latest_message_at,
+            })
+            .collect::<Vec<_>>();
+        pending.sort_by_key(|conversation| std::cmp::Reverse(conversation.latest_message_at));
+        Ok(pending)
     }
 
     async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError> {

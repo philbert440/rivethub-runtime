@@ -110,7 +110,7 @@ async fn reenqueue(
     if written == 0 || !sweep::unfinished(window, trigger, env)? {
         return Ok(false);
     }
-    sweep::enqueue_again(env, window.conversation.id, trigger).await?;
+    sweep::enqueue_again(env, window, trigger).await?;
     Ok(true)
 }
 

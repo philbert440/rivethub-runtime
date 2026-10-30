@@ -71,7 +71,7 @@ fn take_count(
     if available >= batch {
         return Some(batch);
     }
-    if super::sweep::partial_allowed(trigger, window, available, batch, env) {
+    if super::sweep::partial_allowed(trigger, window.latest_message_at, available, batch, env) {
         Some(available)
     } else {
         None

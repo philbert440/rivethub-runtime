@@ -62,8 +62,8 @@ async fn summary_writes_link_children_and_let_the_embed_trigger_fire(pool: PgPoo
     let pending = memory.pending().await?;
     assert_eq!(pending.len(), 1);
     let head = pending.first().expect("pending conversation");
-    assert_eq!(head.conversation.id, conversation);
-    assert_eq!(head.messages.len(), 2);
+    assert_eq!(head.id, conversation);
+    assert_eq!(head.unsummarized, 2);
     assert_eq!(head.latest_message_at, Some(at("2026-10-10T12:01:00Z")));
 
     let leaf_id = Uuid::new_v4();
@@ -165,6 +165,41 @@ async fn summary_writes_link_children_and_let_the_embed_trigger_fire(pool: PgPoo
     let payload: EmbedPayload = serde_json::from_str(&job.payload)?;
     assert_eq!(payload.target_table, "ros_summaries");
     assert_eq!(payload.target_id, leaf_id.to_string());
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn pending_lists_the_most_recent_activity_first(pool: PgPool) -> TestResult {
+    let memory = PostgresMemory::new(pool.clone());
+    let mut seeded = Vec::new();
+    for (session, latest) in [
+        ("cli:old", "2026-10-11T09:00:00Z"),
+        ("cli:recent", "2026-10-30T17:00:00Z"),
+        ("cli:week", "2026-10-24T12:00:00Z"),
+    ] {
+        let id = seed_conversation(&pool, session, session).await?;
+        seed_message(&pool, id, "earlier", at("2026-10-01T08:00:00Z")).await?;
+        seed_message(&pool, id, "latest", at(latest)).await?;
+        seeded.push((id, at(latest)));
+    }
+    seeded.sort_by_key(|(_, latest)| std::cmp::Reverse(*latest));
+    let pending: Vec<_> = memory
+        .pending()
+        .await?
+        .into_iter()
+        .map(|conversation| {
+            (
+                conversation.id,
+                conversation.latest_message_at,
+                conversation.unsummarized,
+            )
+        })
+        .collect();
+    let expected: Vec<_> = seeded
+        .into_iter()
+        .map(|(id, latest)| (id, Some(latest), 2))
+        .collect();
+    assert_eq!(pending, expected);
     Ok(())
 }
 

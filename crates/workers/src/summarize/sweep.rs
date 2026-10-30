@@ -2,6 +2,7 @@ use chrono::DateTime;
 use chrono::TimeDelta;
 use chrono::Utc;
 use kernel::memory::ConversationWindow;
+use kernel::memory::PendingConversation;
 use kernel::queue::FixedJob;
 use kernel::queue::Job;
 use kernel::queue::JobKeyMode;
@@ -18,8 +19,11 @@ use super::settings::DEAD_REST;
 use super::settings::SummaryTrigger;
 use crate::error::WorkerError;
 
+const RECENT_IDLE_PRIORITY: i16 = -20;
+const RECENT_STALE_PRIORITY: i16 = -10;
 const IDLE_PRIORITY: i16 = 0;
 const STALE_PRIORITY: i16 = 10;
+const RECENT: TimeDelta = TimeDelta::hours(24);
 const SUMMARIZE_ATTEMPTS: i32 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,7 +53,7 @@ pub(super) fn read_summarize(payload: &JsonObject) -> Result<SummarizePayload, W
 }
 
 pub fn summary_health(
-    windows: &[ConversationWindow],
+    pending: &[PendingConversation],
     settings: &super::SummarySettings,
 ) -> Result<SummaryHealth, WorkerError> {
     let batch = u64::from(settings.leaf_batch);
@@ -64,8 +68,8 @@ pub fn summary_health(
         active_tail: 0,
         below_floor: 0,
     };
-    for window in windows {
-        let count = u64::try_from(window.messages.len()).map_err(|_| WorkerError::Count)?;
+    for conversation in pending {
+        let count = u64::from(conversation.unsummarized);
         let full = count / batch * batch;
         let rest = count % batch;
         health.eligible = health
@@ -88,27 +92,30 @@ pub fn summary_health(
 }
 
 pub async fn handle_enqueue_idle(env: &SummarizeEnv<'_>) -> Result<u64, WorkerError> {
-    cancelled(env)?;
-    let windows = env.store.pending().await?;
-    let mut enqueued = 0u64;
-    for window in windows {
-        if let Some(trigger) = idle_trigger(&window, env)? {
-            enqueue(env, window.conversation.id, trigger).await?;
-            enqueued = enqueued.checked_add(1).ok_or(WorkerError::Count)?;
-        }
-    }
-    Ok(enqueued)
+    sweep(env, SummaryTrigger::SessionIdle, idle_due).await
 }
 
 pub async fn handle_enqueue_stale(env: &SummarizeEnv<'_>) -> Result<u64, WorkerError> {
+    sweep(env, SummaryTrigger::SessionStale, stale_due).await
+}
+
+async fn sweep(
+    env: &SummarizeEnv<'_>,
+    trigger: SummaryTrigger,
+    due: fn(&PendingConversation, &SummarizeEnv<'_>) -> bool,
+) -> Result<u64, WorkerError> {
     cancelled(env)?;
-    let windows = env.store.pending().await?;
+    let pending = env.store.pending().await?;
     let mut enqueued = 0u64;
-    for window in windows {
-        if stale_due(&window, env)? {
-            enqueue(env, window.conversation.id, SummaryTrigger::SessionStale).await?;
-            enqueued = enqueued.checked_add(1).ok_or(WorkerError::Count)?;
-        }
+    for conversation in pending.iter().filter(|conversation| due(conversation, env)) {
+        enqueue(
+            env,
+            conversation.id,
+            trigger,
+            conversation.latest_message_at,
+        )
+        .await?;
+        enqueued = enqueued.checked_add(1).ok_or(WorkerError::Count)?;
     }
     Ok(enqueued)
 }
@@ -127,10 +134,16 @@ pub async fn handle_reap(env: &SummarizeEnv<'_>) -> Result<u64, WorkerError> {
 
 pub(super) async fn enqueue_again(
     env: &SummarizeEnv<'_>,
-    id: Uuid,
+    window: &ConversationWindow,
     trigger: SummaryTrigger,
 ) -> Result<(), WorkerError> {
-    enqueue(env, id, trigger).await
+    enqueue(
+        env,
+        window.conversation.id,
+        trigger,
+        window.latest_message_at,
+    )
+    .await
 }
 
 pub(super) fn unfinished(
@@ -142,7 +155,13 @@ pub(super) fn unfinished(
     let leaves = count_of(window.leaves.len())?;
     let branches = count_of(window.branches.len())?;
     let full = available >= env.settings.leaf_batch;
-    let partial = partial_allowed(trigger, window, available, env.settings.leaf_batch, env);
+    let partial = partial_allowed(
+        trigger,
+        window.latest_message_at,
+        available,
+        env.settings.leaf_batch,
+        env,
+    );
     let more_leaves = leaves >= env.settings.min_leaves_for_branch;
     let more_branches = branches >= env.settings.min_branches_for_root;
     Ok(full || partial || more_leaves || more_branches)
@@ -150,7 +169,7 @@ pub(super) fn unfinished(
 
 pub(super) fn partial_allowed(
     trigger: SummaryTrigger,
-    window: &ConversationWindow,
+    latest: Option<DateTime<Utc>>,
     count: u32,
     batch: u32,
     env: &SummarizeEnv<'_>,
@@ -162,47 +181,45 @@ pub(super) fn partial_allowed(
         SummaryTrigger::Threshold => false,
         SummaryTrigger::Explicit => true,
         SummaryTrigger::SessionIdle => {
-            aged(window, env.now, env.settings.idle) && count >= env.settings.idle_floor()
+            aged(latest, env.now, env.settings.idle) && count >= env.settings.idle_floor()
         }
         SummaryTrigger::SessionStale => {
-            aged(window, env.now, env.settings.stale) && count >= env.settings.stale_min_batch
+            aged(latest, env.now, env.settings.stale) && count >= env.settings.stale_min_batch
         }
     }
 }
 
-fn idle_trigger(
-    window: &ConversationWindow,
-    env: &SummarizeEnv<'_>,
-) -> Result<Option<SummaryTrigger>, WorkerError> {
-    let count = count_of(window.messages.len())?;
+fn idle_due(conversation: &PendingConversation, env: &SummarizeEnv<'_>) -> bool {
+    let count = conversation.unsummarized;
     let batch = env.settings.leaf_batch;
-    let full = count >= batch;
-    let partial = partial_allowed(SummaryTrigger::SessionIdle, window, count, batch, env);
-    if full || partial {
-        Ok(Some(SummaryTrigger::SessionIdle))
-    } else {
-        Ok(None)
-    }
+    count >= batch
+        || partial_allowed(
+            SummaryTrigger::SessionIdle,
+            conversation.latest_message_at,
+            count,
+            batch,
+            env,
+        )
 }
 
-fn stale_due(window: &ConversationWindow, env: &SummarizeEnv<'_>) -> Result<bool, WorkerError> {
-    let count = count_of(window.messages.len())?;
-    if count < env.settings.stale_min_batch {
-        return Ok(false);
-    }
-    let Some(age) = message_age(window.latest_message_at, env.now) else {
-        return Ok(false);
-    };
-    Ok(age >= env.settings.stale)
+fn stale_due(conversation: &PendingConversation, env: &SummarizeEnv<'_>) -> bool {
+    conversation.unsummarized >= env.settings.stale_min_batch
+        && aged(conversation.latest_message_at, env.now, env.settings.stale)
 }
 
 async fn enqueue(
     env: &SummarizeEnv<'_>,
     id: Uuid,
     trigger: SummaryTrigger,
+    latest: Option<DateTime<Utc>>,
 ) -> Result<(), WorkerError> {
     env.queue
-        .enqueue(summarize_job(id, trigger, env.now)?)
+        .enqueue(summarize_job(
+            id,
+            trigger,
+            priority_of(trigger, latest, env.now),
+            env.now,
+        )?)
         .await
         .map(|_| ())
         .map_err(WorkerError::queue)
@@ -211,6 +228,7 @@ async fn enqueue(
 fn summarize_job(
     id: Uuid,
     trigger: SummaryTrigger,
+    priority: i16,
     now: DateTime<Utc>,
 ) -> Result<Job, WorkerError> {
     let payload = SummarizePayload {
@@ -222,23 +240,30 @@ fn summarize_job(
         payload: JsonObject::from_serialize(&payload).map_err(WorkerError::summary_payload)?,
         key: Some(format!("compact-{id}")),
         key_mode: JobKeyMode::Replace,
-        priority: priority_of(trigger),
+        priority,
         run_at: Some(now),
         max_attempts: Some(SUMMARIZE_ATTEMPTS),
     })
 }
 
-fn priority_of(trigger: SummaryTrigger) -> i16 {
-    match trigger {
-        SummaryTrigger::SessionStale => STALE_PRIORITY,
-        SummaryTrigger::Threshold | SummaryTrigger::SessionIdle | SummaryTrigger::Explicit => {
-            IDLE_PRIORITY
-        }
+fn priority_of(trigger: SummaryTrigger, latest: Option<DateTime<Utc>>, now: DateTime<Utc>) -> i16 {
+    let recent = message_age(latest, now).is_some_and(|age| age < RECENT);
+    match (trigger, recent) {
+        (SummaryTrigger::SessionStale, true) => RECENT_STALE_PRIORITY,
+        (SummaryTrigger::SessionStale, false) => STALE_PRIORITY,
+        (
+            SummaryTrigger::Threshold | SummaryTrigger::SessionIdle | SummaryTrigger::Explicit,
+            true,
+        ) => RECENT_IDLE_PRIORITY,
+        (
+            SummaryTrigger::Threshold | SummaryTrigger::SessionIdle | SummaryTrigger::Explicit,
+            false,
+        ) => IDLE_PRIORITY,
     }
 }
 
-fn aged(window: &ConversationWindow, now: DateTime<Utc>, minimum: TimeDelta) -> bool {
-    match message_age(window.latest_message_at, now) {
+fn aged(latest: Option<DateTime<Utc>>, now: DateTime<Utc>, minimum: TimeDelta) -> bool {
+    match message_age(latest, now) {
         Some(age) => age >= minimum,
         None => false,
     }

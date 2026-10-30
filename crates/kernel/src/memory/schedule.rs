@@ -1,4 +1,4 @@
-use crate::queue::{FixedJob, Job, JobKeyMode, JobName, WorkerRole};
+use crate::queue::{FixedJob, Job, JobKeyMode, JobName, MAINTENANCE_PRIORITY, WorkerRole};
 use wire::JsonObject;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,7 +19,7 @@ impl CronEntry {
             payload: JsonObject::default(),
             key: Some(self.identifier.clone()),
             key_mode: JobKeyMode::KeepRunAt,
-            priority: 0,
+            priority: MAINTENANCE_PRIORITY,
             run_at: None,
             max_attempts: Some(self.max_attempts),
         }

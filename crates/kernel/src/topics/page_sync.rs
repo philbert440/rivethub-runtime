@@ -9,6 +9,7 @@ use crate::queue::FixedJob;
 use crate::queue::Job;
 use crate::queue::JobKeyMode;
 use crate::queue::JobName;
+use crate::queue::MAINTENANCE_PRIORITY;
 use crate::wiki::page::WikiSlug;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,7 +81,7 @@ impl SyncTopicPage {
                 .map_err(|source| TopicPageError::Payload(Box::new(source)))?,
             key,
             key_mode: JobKeyMode::Replace,
-            priority: 0,
+            priority: MAINTENANCE_PRIORITY,
             run_at: None,
             max_attempts: None,
         })

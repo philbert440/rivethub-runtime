@@ -76,11 +76,63 @@ async fn recorded_leaf_round_trips_through_the_store() -> TestResult {
     assert_eq!(leaf.message_count, 10);
     assert_eq!(leaf.content, recorded_content(scenario)?);
     let pending = fresh.store.pending().await?;
-    let open = pending.first().ok_or("pending window")?;
+    let open = pending.first().ok_or("pending conversation")?;
     assert_eq!(pending.len(), 1);
-    assert_eq!(open.conversation.session_key, "cli:open");
+    assert_eq!(
+        open.id,
+        Uuid::parse_str("10000000-0000-4000-8000-000000000001")?
+    );
+    assert_eq!(open.unsummarized, 1);
     let mut ids = common::Ids::default();
     compare_tables(&fresh.store, &scenario.tables, &mut ids, LEAF).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn pending_lists_the_most_recent_activity_first() -> TestResult {
+    let fresh = fresh_store(None)?;
+    let seeded = [
+        (
+            "20000000-0000-4000-8000-000000000001",
+            "2026-10-11T09:00:00.000Z",
+        ),
+        (
+            "20000000-0000-4000-8000-000000000002",
+            "2026-10-30T17:00:00.000Z",
+        ),
+        (
+            "20000000-0000-4000-8000-000000000003",
+            "2026-10-24T12:00:00.000Z",
+        ),
+    ];
+    for (index, (id, latest)) in seeded.iter().enumerate() {
+        seed_conversation(&fresh.store, id, &format!("cli:{index}"), "rivet").await?;
+        for (step, at) in ["2026-10-01T08:00:00.000Z", latest].iter().enumerate() {
+            message(
+                &fresh.store,
+                &format!("30000000-0000-4000-8000-0000000000{index}{step}"),
+                id,
+                body("rivet", "user", "a message", at),
+            )
+            .await?;
+        }
+    }
+    let order: Vec<Uuid> = fresh
+        .store
+        .pending()
+        .await?
+        .into_iter()
+        .map(|conversation| conversation.id)
+        .collect();
+    let expected = [
+        "20000000-0000-4000-8000-000000000002",
+        "20000000-0000-4000-8000-000000000003",
+        "20000000-0000-4000-8000-000000000001",
+    ]
+    .into_iter()
+    .map(Uuid::parse_str)
+    .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(order, expected);
     Ok(())
 }
 
