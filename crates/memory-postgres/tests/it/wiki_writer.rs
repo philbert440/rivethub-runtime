@@ -266,7 +266,7 @@ async fn quoted_glob_slug_is_normalized_and_unrelated_staged_work_is_preserved()
 }
 
 #[tokio::test]
-async fn failed_pull_continues_with_local_page_commit() -> TestResult {
+async fn a_repository_without_a_remote_commits_without_pulling() -> TestResult {
     let directory = tempfile::tempdir()?;
     apply(directory.path(), patch("release")).await?;
     tokio::fs::create_dir_all(directory.path().join(".git/refs/remotes")).await?;
@@ -275,6 +275,50 @@ async fn failed_pull_continues_with_local_page_commit() -> TestResult {
         git(directory.path(), &["rev-list", "--count", "HEAD"]).await?,
         "2\n"
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn pulls_only_while_the_branch_tracks_a_remote() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path();
+    git(root, &["init", "-q", "--bare", "-b", "main", "origin.git"]).await?;
+    git(root, &["clone", "-q", "origin.git", "other"]).await?;
+    upstream_commit(&root.join("other"), "first").await?;
+    git(root, &["clone", "-q", "origin.git", "wiki"]).await?;
+    let wiki = root.join("wiki");
+    upstream_commit(&root.join("other"), "second").await?;
+    apply(&wiki, patch("release")).await?;
+    assert!(
+        git(&wiki, &["log", "--format=%s"])
+            .await?
+            .contains("second")
+    );
+    git(&wiki, &["branch", "--unset-upstream"]).await?;
+    upstream_commit(&root.join("other"), "third").await?;
+    apply(&wiki, patch("later")).await?;
+    let fetched = git(&wiki, &["log", "--format=%s", "origin/main"]).await?;
+    assert!(!fetched.contains("third"), "{fetched}");
+    Ok(())
+}
+
+async fn upstream_commit(clone: &Path, message: &str) -> TestResult {
+    git(
+        clone,
+        &[
+            "-c",
+            "user.name=Upstream",
+            "-c",
+            "user.email=upstream@example.com",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            message,
+        ],
+    )
+    .await?;
+    git(clone, &["push", "-q", "origin", "HEAD:main"]).await?;
     Ok(())
 }
 

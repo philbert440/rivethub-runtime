@@ -268,7 +268,13 @@ impl ChatActor {
                 .release(&self.session)
                 .await
                 .map_err(ApiError::from),
-            Surface::Terminal => self.service.remove_terminal(&self.user, &self.key).await,
+            Surface::Terminal => match self.service.remove_terminal(&self.user, &self.key).await {
+                Err(ApiError::Unavailable(reason)) if self.service.shutdown.is_cancelled() => {
+                    tracing::debug!(%reason, "the terminal stopped with the gateway before its session");
+                    Ok(())
+                }
+                removed => removed,
+            },
             Surface::Idle => Ok(()),
         };
         let result = outcome.and(cleanup);

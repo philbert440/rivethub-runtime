@@ -16,7 +16,10 @@ pub(super) async fn chat(
 ) -> Result<LlmResponse, WorkerError> {
     cancelled(env)?;
     let request = ModelRequest {
-        options: kernel::model::ModelOptions::default(),
+        options: kernel::model::ModelOptions {
+            temperature: None,
+            enable_thinking: Some(false),
+        },
         model: env.settings.model.clone(),
         messages: vec![
             text_message(Role::System, system),

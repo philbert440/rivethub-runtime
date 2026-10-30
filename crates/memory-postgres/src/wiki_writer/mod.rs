@@ -174,7 +174,7 @@ async fn fold_locked(
 
 async fn sync(root: &Path) -> Result<(), WikiWriteError> {
     ensure_repo(root).await?;
-    if tokio::fs::try_exists(root.join(".git/refs/remotes")).await? {
+    if tracks_upstream(root).await? {
         #[expect(
             clippy::let_underscore_must_use,
             reason = "CONTRACT B11: wiki pull failure warns and local page application continues"
@@ -184,6 +184,22 @@ async fn sync(root: &Path) -> Result<(), WikiWriteError> {
             .inspect_err(|error| tracing::warn!(%error, "wiki pull failed; applying local patch"));
     }
     reject_symlink(&root.join("topics")).await
+}
+
+async fn tracks_upstream(root: &Path) -> Result<bool, WikiWriteError> {
+    let branches = git(
+        root,
+        &[
+            "for-each-ref",
+            "--format=%(HEAD)%(upstream:remotename)",
+            "refs/heads",
+        ],
+    )
+    .await?;
+    Ok(branches
+        .lines()
+        .filter_map(|line| line.strip_prefix('*'))
+        .any(|remote| !remote.is_empty() && remote != "."))
 }
 
 fn topic_path(slug: &WikiSlug) -> String {

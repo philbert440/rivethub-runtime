@@ -19,7 +19,7 @@ impl PostgresTasks {
         &self,
         cancel: CancellationToken,
     ) -> Result<JoinHandle<Result<(), TaskError>>, TaskError> {
-        let mut listener = Listener::connect(
+        let mut listener = Listener::connect_resilient(
             self.pool().clone(),
             &["ros_task_done"],
             "task watch",

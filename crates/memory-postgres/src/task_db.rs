@@ -56,6 +56,12 @@ impl PostgresTasks {
         Ok(Self::from_pool(pool))
     }
 
+    pub fn connect_lazy(url: &str) -> Result<Self, TaskError> {
+        let pool = crate::lazy_pool(url, 8, None)
+            .map_err(|source| TaskError::Unavailable(Box::new(source)))?;
+        Ok(Self::from_pool(pool))
+    }
+
     #[must_use]
     pub fn from_pool(pool: PgPool) -> Self {
         let (events, _receiver) = watch::channel(0);

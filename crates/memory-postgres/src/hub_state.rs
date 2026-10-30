@@ -58,6 +58,11 @@ impl PostgresHubState {
 
 impl PostgresMemory {
     pub async fn hub_state(&self) -> Result<Option<PostgresHubState>, Error> {
+        if self.unverified {
+            return Ok(Some(PostgresHubState {
+                pool: self.pool.clone(),
+            }));
+        }
         PostgresHubState::detect(self.pool.clone()).await
     }
 }

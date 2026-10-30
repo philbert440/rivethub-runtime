@@ -342,7 +342,10 @@ fn existing(name: &TopicName, listings: &[TopicListing]) -> Option<TopicId> {
 async fn chat(env: &FilingEnv<'_>, user: &str) -> Result<String, WorkerError> {
     cancelled(env)?;
     let request = ModelRequest {
-        options: ModelOptions::default(),
+        options: ModelOptions {
+            temperature: None,
+            enable_thinking: Some(false),
+        },
         model: env.model.to_owned(),
         messages: vec![
             text_message(Role::System, FILING_SYSTEM_PROMPT),

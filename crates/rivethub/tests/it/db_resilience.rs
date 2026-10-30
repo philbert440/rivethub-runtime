@@ -277,6 +277,42 @@ async fn gateway_stays_up_across_a_database_outage(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrations = false)]
+async fn gateway_starts_while_the_database_is_down(pool: PgPool) -> TestResult {
+    migrate::postgres_pool(&pool).await?;
+    let (proxy, url) = front(&pool).await?;
+    proxy.pause().await;
+    let home = tempfile::tempdir()?;
+    let port = free_port()?;
+    write_state(
+        home.path(),
+        &provider_config(
+            home.path(),
+            &url,
+            &format!("gateway:\n  host: 127.0.0.1\n  port: {port}\n"),
+        ),
+    )?;
+    let mut running = spawn_rh(home.path(), &["gateway"], "gateway listening on ").await?;
+    let client = client()?;
+    let base = format!("http://127.0.0.1:{port}");
+    let degraded = wait_http(&client, &format!("{base}/healthz"), 503).await?;
+    let parsed: HealthzResponse = serde_json::from_str(&degraded)?;
+    assert!(!parsed.ok);
+    wait_http(&client, &format!("{base}/api/memory/stats"), 503).await?;
+    wait_http(&client, &format!("{base}/api/events/sessions"), 200).await?;
+    proxy.resume();
+    wait_http(&client, &format!("{base}/healthz"), 200).await?;
+    wait_http(&client, &format!("{base}/api/memory/stats"), 200).await?;
+    running
+        .logs
+        .wait_for("the memory database answered; memory is available")
+        .await?;
+    alive(&mut running.child)?;
+    stop(running, "gateway stopped").await?;
+    drop(proxy);
+    Ok(())
+}
+
+#[sqlx::test(migrations = false)]
 async fn worker_stays_up_and_claims_after_the_database_returns(pool: PgPool) -> TestResult {
     migrate::postgres_pool(&pool).await?;
     install_queue(&pool).await?;

@@ -80,6 +80,11 @@ impl PostgresPresets {
 
 impl PostgresMemory {
     pub async fn agent_presets(&self) -> Result<Option<PostgresPresets>, Error> {
+        if self.unverified {
+            return Ok(Some(PostgresPresets {
+                pool: self.pool.clone(),
+            }));
+        }
         PostgresPresets::detect(self.pool.clone()).await
     }
 }

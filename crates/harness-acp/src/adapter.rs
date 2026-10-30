@@ -1,16 +1,12 @@
 use std::collections::BTreeMap;
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
-use std::time::Instant;
 
 use agent_client_protocol::schema::v1 as acp;
 use async_trait::async_trait;
 use config::Config;
-use kernel::harness::Command;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::HarnessAdapterError;
 use kernel::harness::HarnessCommands;
@@ -87,13 +83,9 @@ pub struct AcpHarnessAdapter {
     sessions: Mutex<BTreeMap<SessionId, SessionEntry>>,
     sheets: BTreeMap<HarnessId, SheetInput>,
     search_paths: Vec<PathBuf>,
-    advertised: Mutex<BTreeMap<HarnessId, crate::discovery::Advertisement>>,
-    discovered_commands: Mutex<BTreeMap<HarnessId, Vec<Command>>>,
+    discoveries: Arc<crate::discovery::Discoveries>,
     discovery_dir: Option<PathBuf>,
-    failed_discoveries: tokio::sync::Mutex<BTreeMap<HarnessId, Instant>>,
 }
-
-const DISCOVERY_RETRY: Duration = Duration::from_secs(60);
 
 impl AcpHarnessAdapter {
     pub(crate) fn headless(
@@ -108,14 +100,11 @@ impl AcpHarnessAdapter {
     }
 
     pub(crate) fn advertise(
-        mut self,
+        self,
         harness: HarnessId,
         advertisement: crate::discovery::Advertisement,
     ) -> Self {
-        self.discovered_commands
-            .get_mut()
-            .insert(harness, advertisement.commands().to_vec());
-        self.advertised.get_mut().insert(harness, advertisement);
+        self.discoveries.record(harness, advertisement);
         self
     }
 
@@ -130,10 +119,8 @@ impl AcpHarnessAdapter {
             sessions: Mutex::new(BTreeMap::new()),
             sheets: sheet_inputs(config),
             search_paths: Vec::new(),
-            advertised: Mutex::new(BTreeMap::new()),
-            discovered_commands: Mutex::new(BTreeMap::new()),
+            discoveries: Arc::default(),
             discovery_dir: None,
-            failed_discoveries: tokio::sync::Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -145,10 +132,8 @@ impl AcpHarnessAdapter {
             sessions: Mutex::new(BTreeMap::new()),
             sheets: BTreeMap::new(),
             search_paths: Vec::new(),
-            advertised: Mutex::new(BTreeMap::new()),
-            discovered_commands: Mutex::new(BTreeMap::new()),
+            discoveries: Arc::default(),
             discovery_dir: None,
-            failed_discoveries: tokio::sync::Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -208,10 +193,9 @@ impl AcpHarnessAdapter {
             .get(session)
             .map(|entry| Arc::clone(&entry.options));
         live.or_else(|| {
-            self.advertised
-                .lock()
-                .get(&session.harness())
-                .map(crate::discovery::Advertisement::options)
+            self.discoveries
+                .advertised(session.harness())
+                .map(|advertised| advertised.options())
         })
         .unwrap_or_default()
     }
@@ -262,37 +246,22 @@ impl AcpHarnessAdapter {
             .ok_or_else(|| port(AcpError::WorkingDir))
     }
 
-    async fn discovered(
+    fn discovery_target(
         &self,
         harness: HarnessId,
-        command: &AcpCommand,
-        cwd: &Path,
-    ) -> Option<crate::discovery::Advertisement> {
-        let mut failed = self.failed_discoveries.lock().await;
-        let known = self.advertised.lock().get(&harness).cloned();
-        let due = failed
-            .get(&harness)
-            .is_none_or(|at| at.elapsed() >= DISCOVERY_RETRY);
-        if known.is_some() || !due {
-            return known;
+    ) -> Result<Option<(HarnessId, AcpCommand, PathBuf)>, HarnessAdapterError> {
+        let launch = self.launch.launch(harness).map_err(port)?;
+        if !launch.is_verified() {
+            return Ok(None);
         }
-        match crate::discovery::discover(command, cwd, crate::discovery::DEFAULT_DISCOVERY_TIMEOUT)
-            .await
-        {
-            Ok(advertised) => {
-                failed.remove(&harness);
-                self.discovered_commands
-                    .lock()
-                    .insert(harness, advertised.commands().to_vec());
-                self.advertised.lock().insert(harness, advertised.clone());
-                Some(advertised)
-            }
-            Err(error) => {
-                tracing::warn!(%harness, %error, "harness discovery failed; offering it without chat");
-                failed.insert(harness, Instant::now());
-                None
-            }
-        }
+        let command = self.located(launch.command().clone())?;
+        let cwd = self
+            .discovery_dir
+            .as_ref()
+            .or(command.working_dir.as_ref())
+            .or(self.default_working_dir.as_ref())
+            .cloned();
+        Ok(cwd.map(|cwd| (harness, command, cwd)))
     }
 
     fn requested_session(spec: &SessionSpec) -> Result<(), HarnessAdapterError> {
@@ -361,7 +330,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
                 return Err(port(AcpError::SessionActive { session: canonical }));
             }
         }
-        self.advertised.lock().insert(
+        self.discoveries.remember(
             spec.harness,
             crate::discovery::Advertisement::from_agent(&agent),
         );
@@ -401,7 +370,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
         let agent = crate::connection::start_loaded(&command, &working_dir, &protocol_session)
             .await
             .map_err(port)?;
-        self.advertised.lock().insert(
+        self.discoveries.remember(
             native.harness(),
             crate::discovery::Advertisement::from_agent(&agent),
         );
@@ -562,59 +531,52 @@ impl HarnessAdapter for AcpHarnessAdapter {
                 source: Box::new(error),
             })?;
         let mut offerings = Vec::new();
+        let mut pending = Vec::new();
         for (fact, present) in installed {
             if !present {
                 continue;
             }
-            let mut offering = crate::sheets::offering(
-                fact.harness,
-                fact.verified_chat,
-                self.sheets.get(&fact.harness),
-            )
-            .map_err(|error| HarnessAdapterError::Failed {
-                message: error.to_string(),
-                source: Box::new(error),
-            })?;
-            let known = self.advertised.lock().get(&fact.harness).cloned();
-            if let Some(advertised) = known {
-                advertised
-                    .apply(&mut offering, self.sheets.get(&fact.harness))
-                    .map_err(port)?;
-            } else {
-                let launch = self.launch.launch(fact.harness).map_err(port)?;
-                if launch.is_verified() {
-                    let command = &self.located(launch.command().clone())?;
-                    if let Some(cwd) = self
-                        .discovery_dir
-                        .as_ref()
-                        .or(command.working_dir.as_ref())
-                        .or(self.default_working_dir.as_ref())
-                    {
-                        match self.discovered(fact.harness, command, cwd).await {
-                            Some(advertised) => advertised
-                                .apply(&mut offering, self.sheets.get(&fact.harness))
-                                .map_err(port)?,
-                            None => offering.chat = false,
-                        }
-                    }
-                }
+            offerings.push(
+                crate::sheets::offering(
+                    fact.harness,
+                    fact.verified_chat,
+                    self.sheets.get(&fact.harness),
+                )
+                .map_err(|error| HarnessAdapterError::Failed {
+                    message: error.to_string(),
+                    source: Box::new(error),
+                })?,
+            );
+            if self.discoveries.advertised(fact.harness).is_none()
+                && let Some(target) = self.discovery_target(fact.harness)?
+            {
+                pending.push(target);
             }
-            offerings.push(offering);
+        }
+        let attempted: Vec<HarnessId> = pending.iter().map(|(harness, ..)| *harness).collect();
+        self.discoveries.start_due(pending);
+        for offering in &mut offerings {
+            match self.discoveries.advertised(offering.harness_id) {
+                Some(advertised) => advertised
+                    .apply(offering, self.sheets.get(&offering.harness_id))
+                    .map_err(port)?,
+                None if attempted.contains(&offering.harness_id) => offering.chat = false,
+                None => {}
+            }
         }
         Ok(offerings)
     }
 
     async fn commands(&self) -> Result<Vec<HarnessCommands>, HarnessAdapterError> {
         let offered = self.offerings().await?;
-        let discovered = self.discovered_commands.lock();
         Ok(offered
             .iter()
             .filter_map(|offering| {
-                discovered
-                    .get(&offering.harness_id)
+                self.discoveries
+                    .commands(offering.harness_id)
                     .map(|commands| HarnessCommands {
                         harness: offering.harness_id,
-                        commands: commands.clone(),
+                        commands,
                     })
             })
             .collect())

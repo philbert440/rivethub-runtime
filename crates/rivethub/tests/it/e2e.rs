@@ -486,6 +486,9 @@ async fn first_start_moves_legacy_state_and_the_alias_names_the_new_variable() -
     );
     assert!(stderr.contains("RIVETOS_PG_URL is deprecated"), "{stderr}");
     assert!(stderr.contains(config::POSTGRES_URL_VARIABLE), "{stderr}");
-    assert_eq!(again.status.code(), Some(2), "{stderr}");
+    assert!(
+        stderr.contains("the memory database is unreachable; memory stays unavailable"),
+        "an unreachable database no longer stops the gateway: {stderr}"
+    );
     Ok(())
 }
