@@ -208,3 +208,57 @@ async fn post_event(body: &str) -> testkit::Response {
 fn error_of(response: &testkit::Response) -> GatewayError {
     serde_json::from_slice(&response.body).expect("error response")
 }
+
+#[tokio::test]
+async fn a_batch_keeps_its_known_events_and_an_unknown_activity_when_some_are_of_kinds_this_node_does_not_know()
+ {
+    let batch = r#"[
+        {"v":1,"session":"tolerant","type":"session.start","title":"Tolerant"},
+        {"v":1,"session":"tolerant","type":"thinking.end"},
+        {"v":1,"session":"tolerant","type":"speech.stt","active":true},
+        {"v":1,"session":"tolerant","type":"activity","activity":"writing_plan"},
+        {"v":1,"session":"tolerant","type":"turn.end"}
+    ]"#;
+    let response = post_batch(batch).await;
+    assert_eq!(response.status, 200);
+    let body: Ingested = serde_json::from_slice(&response.body).expect("ingested body");
+    assert_eq!(body.ingested, 3);
+}
+
+#[tokio::test]
+async fn a_malformed_event_of_a_known_kind_still_refuses_its_batch() {
+    let batch = r#"[
+        {"v":1,"session":"tolerant","type":"thinking.end"},
+        {"v":1,"session":"tolerant","type":"task.check","index":-1}
+    ]"#;
+    let response = post_batch(batch).await;
+    assert_eq!(response.status, 422);
+    assert_eq!(
+        error_of(&response).error,
+        "event[1] is not a valid v1 AgentEvent"
+    );
+}
+
+#[derive(serde::Deserialize)]
+struct Ingested {
+    ingested: usize,
+}
+
+async fn post_batch(body: &str) -> testkit::Response {
+    common::answer(
+        app(),
+        testkit::Request {
+            method: "POST".to_owned(),
+            target: "/events".to_owned(),
+            headers: vec![
+                ("Host".to_owned(), "127.0.0.1:5174".to_owned()),
+                ("Content-Type".to_owned(), "application/json".to_owned()),
+            ],
+            body: body.as_bytes().to_vec(),
+            recipe: None,
+            via: Some("loopback (source 127.0.0.1)".to_owned()),
+        },
+    )
+    .await
+    .expect("in-process answer")
+}
