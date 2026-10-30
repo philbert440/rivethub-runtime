@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use harness_acp::{AcpCommand, AcpHarnessAdapter, AcpLaunch, LaunchTable};
 use kernel::harness::{HarnessAdapter, SessionOption, SessionSpec};
-use wire::harness::{HarnessId, HarnessModelsSource};
+use wire::harness::{HarnessId, HarnessModelsSource, HarnessOffering};
 use wire::session_id::SessionId;
 
 fn adapter(cwd: Option<&Path>, listing: bool) -> AcpHarnessAdapter {
@@ -39,13 +39,25 @@ fn recording_adapter(
     )]))
 }
 
+async fn discovered(
+    adapter: &AcpHarnessAdapter,
+) -> Result<Vec<HarnessOffering>, kernel::harness::HarnessAdapterError> {
+    loop {
+        let offerings = adapter.offerings().await?;
+        if offerings.first().is_some_and(|offering| offering.chat) {
+            return Ok(offerings);
+        }
+        tokio::task::yield_now().await;
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn discovery_uses_advertised_labels_current_model_and_session_listing() {
     tokio::time::timeout(Duration::from_secs(30), async {
         let cwd = tempfile::tempdir().expect("cwd");
         for listing in [true, false] {
             let adapter = adapter(Some(cwd.path()), listing);
-            let offerings = adapter.offerings().await.expect("discovery");
+            let offerings = discovered(&adapter).await.expect("discovered");
             let offering = offerings.first().expect("offering");
             assert_eq!(offering.capabilities.observation.list_sessions, listing);
             assert_eq!(
@@ -83,10 +95,9 @@ async fn concurrent_offerings_discover_once_in_the_discovery_dir() {
             calls.spawn(async move { adapter.offerings().await });
         }
         while let Some(offered) = calls.join_next().await {
-            let offerings = offered.expect("join").expect("offerings");
-            assert!(offerings.first().expect("offering").chat);
+            offered.expect("join").expect("offerings");
         }
-        adapter.offerings().await.expect("cached offerings");
+        discovered(&adapter).await.expect("discovered");
         let recorded = std::fs::read_to_string(&record).expect("record");
         assert_eq!(
             recorded.lines().collect::<Vec<_>>(),
@@ -95,6 +106,27 @@ async fn concurrent_offerings_discover_once_in_the_discovery_dir() {
     })
     .await
     .expect("discovery timeout");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_harness_that_never_answers_does_not_hold_up_offerings() {
+    let cwd = tempfile::tempdir().expect("cwd");
+    let adapter = AcpHarnessAdapter::with_launch_table(LaunchTable::from_entries([(
+        HarnessId::Opencode,
+        AcpLaunch::Native(AcpCommand {
+            program: "/bin/sh".into(),
+            args: vec!["-c".to_owned(), "exec sleep 600".to_owned()],
+            working_dir: Some(cwd.path().to_path_buf()),
+            env: Vec::new(),
+        }),
+    )]));
+    for _ in 0..3 {
+        let offerings = tokio::time::timeout(Duration::from_secs(1), adapter.offerings())
+            .await
+            .expect("offerings answer while discovery hangs")
+            .expect("offerings");
+        assert!(!offerings.first().expect("offering").chat);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

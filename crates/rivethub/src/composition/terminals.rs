@@ -91,7 +91,16 @@ pub(super) async fn build(
     )));
     let service = Arc::new(with_claude_trust(built, config, env));
     claim_adopted(&service, &mux, owner, &mut adopted)?;
+    start_discovery(&service).await;
     Ok(service)
+}
+
+async fn start_discovery(service: &TerminalService) {
+    if let Some(adapter) = service.adapter()
+        && let Err(error) = adapter.offerings().await
+    {
+        tracing::warn!(%error, "harness discovery could not start");
+    }
 }
 
 fn with_claude_trust(

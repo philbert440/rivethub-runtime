@@ -7,7 +7,6 @@ use std::time::Instant;
 
 use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::Command;
-use kernel::harness::HarnessAdapterError;
 use kernel::harness::SessionEvent;
 use parking_lot::Mutex;
 use wire::harness::HarnessId;
@@ -110,46 +109,60 @@ pub const DEFAULT_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
 
 const DISCOVERY_RETRY: Duration = Duration::from_secs(60);
 
-pub(crate) async fn discover_due(
-    pending: Vec<(HarnessId, AcpCommand, PathBuf)>,
-    failed: &tokio::sync::Mutex<BTreeMap<HarnessId, Instant>>,
-    advertised: &Mutex<BTreeMap<HarnessId, Advertisement>>,
-    discovered_commands: &Mutex<BTreeMap<HarnessId, Vec<Command>>>,
-) -> Result<(), HarnessAdapterError> {
-    let mut failed = failed.lock().await;
-    let mut running = tokio::task::JoinSet::new();
-    for (harness, command, cwd) in pending {
-        let due = failed
-            .get(&harness)
-            .is_none_or(|at| at.elapsed() >= DISCOVERY_RETRY);
-        if due && !advertised.lock().contains_key(&harness) {
-            running.spawn(async move {
-                let outcome = discover(&command, &cwd, DEFAULT_DISCOVERY_TIMEOUT).await;
-                (harness, outcome)
+#[derive(Debug, Default)]
+pub(crate) struct Discoveries {
+    advertised: Mutex<BTreeMap<HarnessId, Advertisement>>,
+    commands: Mutex<BTreeMap<HarnessId, Vec<Command>>>,
+    attempts: Mutex<BTreeMap<HarnessId, Instant>>,
+}
+
+impl Discoveries {
+    pub(crate) fn advertised(&self, harness: HarnessId) -> Option<Advertisement> {
+        self.advertised.lock().get(&harness).cloned()
+    }
+
+    pub(crate) fn remember(&self, harness: HarnessId, advertisement: Advertisement) {
+        self.advertised.lock().insert(harness, advertisement);
+    }
+
+    pub(crate) fn record(&self, harness: HarnessId, advertisement: Advertisement) {
+        self.commands
+            .lock()
+            .insert(harness, advertisement.commands().to_vec());
+        self.remember(harness, advertisement);
+    }
+
+    pub(crate) fn commands(&self, harness: HarnessId) -> Option<Vec<Command>> {
+        self.commands.lock().get(&harness).cloned()
+    }
+
+    pub(crate) fn start_due(self: &Arc<Self>, pending: Vec<(HarnessId, AcpCommand, PathBuf)>) {
+        for (harness, command, cwd) in pending {
+            {
+                let mut attempts = self.attempts.lock();
+                let due = attempts
+                    .get(&harness)
+                    .is_none_or(|at| at.elapsed() >= DISCOVERY_RETRY);
+                if !due || self.advertised.lock().contains_key(&harness) {
+                    continue;
+                }
+                attempts.insert(harness, Instant::now());
+            }
+            let discoveries = Arc::clone(self);
+            tokio::spawn(async move {
+                match discover(&command, &cwd, DEFAULT_DISCOVERY_TIMEOUT).await {
+                    Ok(found) => {
+                        discoveries.record(harness, found);
+                        discoveries.attempts.lock().remove(&harness);
+                    }
+                    Err(error) => {
+                        tracing::warn!(%harness, %error, "harness discovery failed; offering it without chat");
+                        discoveries.attempts.lock().insert(harness, Instant::now());
+                    }
+                }
             });
         }
     }
-    while let Some(joined) = running.join_next().await {
-        let (harness, outcome) = joined.map_err(|error| HarnessAdapterError::Failed {
-            message: "harness discovery failed".into(),
-            source: Box::new(error),
-        })?;
-        match outcome {
-            Ok(found) => {
-                failed.remove(&harness);
-                discovered_commands
-                    .lock()
-                    .insert(harness, found.commands().to_vec());
-                advertised.lock().insert(harness, found);
-            }
-            Err(error) => {
-                tracing::warn!(%harness, %error, "harness discovery failed; offering it without chat");
-                failed.insert(harness, Instant::now());
-            }
-        }
-    }
-    drop(failed);
-    Ok(())
 }
 
 pub(crate) async fn discover(
