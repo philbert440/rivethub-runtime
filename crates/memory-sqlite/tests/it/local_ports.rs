@@ -118,6 +118,47 @@ async fn apply_wiki_stores_the_topic_and_a_repeat_returns_it() -> TestResult {
 }
 
 #[tokio::test]
+async fn apply_wiki_keeps_the_title_of_the_page_a_patch_resolves_to() -> TestResult {
+    let fixture = fixture()?;
+    let first = summary_id()?;
+    let second = Uuid::parse_str("0199e2a0-7b3c-7a00-8000-000000000002")?;
+    seed_summary(&fixture.path, first)?;
+    seed_summary(&fixture.path, second)?;
+    fixture
+        .store
+        .apply_wiki(
+            &job(first),
+            vec![patch()?],
+            &WikiRouting::default(),
+            Utc::now(),
+        )
+        .await?;
+    let other = WikiPatch {
+        slug: WikiSlug::try_from("label-printer-jam".to_owned())?,
+        title: "Label printer jam".to_owned(),
+        aliases: vec![WikiSlug::try_from("acmekit-deploys".to_owned())?],
+        ..patch()?
+    };
+    let touched = fixture
+        .store
+        .apply_wiki(
+            &job(second),
+            vec![other],
+            &WikiRouting::default(),
+            Utc::now(),
+        )
+        .await?;
+    assert_eq!(touched, vec!["acmekit-deploys".to_owned()]);
+    let title = cell(
+        &fixture.path,
+        "SELECT title FROM ros_wiki_topics WHERE slug = ?1",
+        "acmekit-deploys",
+    )?;
+    assert_eq!(title, "AcmeKit deploys");
+    Ok(())
+}
+
+#[tokio::test]
 async fn fail_wiki_does_not_clobber_a_done_extraction() -> TestResult {
     let fixture = fixture()?;
     let id = summary_id()?;

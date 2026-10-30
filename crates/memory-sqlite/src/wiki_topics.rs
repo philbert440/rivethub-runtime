@@ -40,17 +40,28 @@ pub(crate) fn apply(
     let aliases = alias_list(patch, &slug);
     let at = time::stamp(now);
     let existing = load(conn, &slug)?;
+    let title = match &existing {
+        Some(row) if slug != patch.slug.as_ref() => row.title.clone(),
+        _ => patch.title.clone(),
+    };
     let article = stored_article(patch.article.as_deref(), existing.as_ref());
     let related = stored_related(patch.related.as_ref(), existing.as_ref())?;
     let aliases_json = json(&aliases)?;
     let tags_json = json(&patch.tags)?;
     let entities_json = json(&patch.entities)?;
-    let search = search_text(patch, &aliases, patch.article.as_deref(), existing.as_ref());
+    let search = search_text(
+        patch,
+        &title,
+        &aliases,
+        patch.article.as_deref(),
+        existing.as_ref(),
+    );
     let changed = write_topic(
         conn,
         &slug,
         patch,
         &TopicWrite {
+            title,
             aliases: aliases_json,
             tags: tags_json,
             entities: entities_json,
@@ -86,6 +97,7 @@ pub(crate) fn cite(
 }
 
 struct TopicWrite {
+    title: String,
     aliases: String,
     tags: String,
     entities: String,
@@ -130,7 +142,7 @@ fn unchanged(
         return Ok(false);
     };
     let state_matches = row.current_state == patch.summary;
-    Ok(row.title == patch.title
+    Ok(row.title == write.title
         && row.aliases == write.aliases
         && row.tags == write.tags
         && row.entities == write.entities
@@ -152,7 +164,7 @@ fn insert_topic(
          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?11)",
         params![
             slug,
-            patch.title,
+            write.title,
             write.aliases,
             write.tags,
             write.entities,
@@ -181,7 +193,7 @@ fn update_topic(
          WHERE slug = ?1",
         params![
             slug,
-            patch.title,
+            write.title,
             write.aliases,
             write.tags,
             write.entities,
@@ -413,13 +425,14 @@ fn stored_related(
 
 fn search_text(
     patch: &WikiPatch,
+    title: &str,
     aliases: &[String],
     article: Option<&str>,
     existing: Option<&Existing>,
 ) -> String {
     let prefix = format!(
         "{}\n{}\n{}\n{}\n{}",
-        patch.title,
+        title,
         patch.summary,
         aliases.join(" "),
         patch.tags.join(" "),
