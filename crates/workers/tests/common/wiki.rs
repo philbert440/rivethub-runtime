@@ -89,7 +89,7 @@ impl WikiBuilderStore for WikiStore {
         Ok(())
     }
 
-    async fn filed_deferrals(&self, _limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
+    async fn unsettled_notes(&self, _limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
         Ok(Vec::new())
     }
 
@@ -99,10 +99,6 @@ impl WikiBuilderStore for WikiStore {
         _slug: &WikiSlug,
         _now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
-        Ok(())
-    }
-
-    async fn forget_deferral(&self, _summary_id: Uuid) -> Result<(), WikiStoreError> {
         Ok(())
     }
 }

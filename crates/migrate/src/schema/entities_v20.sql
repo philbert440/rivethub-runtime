@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS rh_wiki_deferred (
     summary_id TEXT PRIMARY KEY,
     waits_session TEXT CHECK (waits_session <> ''),
     waits_conversation TEXT,
+    applied_topic TEXT,
     patches TEXT NOT NULL,
     deferred_at TEXT NOT NULL,
     CHECK ((waits_session IS NULL) <> (waits_conversation IS NULL))

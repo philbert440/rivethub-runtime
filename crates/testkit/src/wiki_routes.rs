@@ -207,6 +207,17 @@ impl RouteStores<'_> {
         self.pages.settle().await
     }
 
+    async fn notes(&self, topic: &Topic) -> Found<Vec<(String, String)>> {
+        Ok(self
+            .pages
+            .page(topic)
+            .await?
+            .sections
+            .into_iter()
+            .map(|section| (section.heading, section.body))
+            .collect())
+    }
+
     async fn named(&self, kind: TopicKind, name: &str) -> Found<Option<Topic>> {
         Ok(self
             .pages
@@ -440,6 +451,46 @@ pub async fn a_child_session_waits_for_its_parent(
         sections,
         vec![("Billing".to_owned(), note.to_owned())],
     )?;
+    Ok(())
+}
+
+pub async fn a_moved_session_takes_its_notes_along(
+    stores: RouteStores<'_>,
+    job: &ExtractWiki,
+) -> Outcome {
+    let text = "Invoices go out monthly.";
+    let note = vec![("Billing".to_owned(), text.to_owned())];
+    let acmekit = stores
+        .pages
+        .create(new_topic("AcmeKit", &[], None)?)
+        .await?;
+    let desk = stores
+        .pages
+        .create(new_topic("Billing Desk", &[], None)?)
+        .await?;
+    stores.place(&acmekit).await?;
+    stores
+        .route(job, vec![patch("acmekit-billing", "Billing", text)?])
+        .await?;
+    same("written", stores.notes(&acmekit).await?, note.clone())?;
+    stores.place(&desk).await?;
+    stores.router().apply_deferred().await?;
+    same(
+        "left the old topic",
+        stores.notes(&acmekit).await?,
+        Vec::new(),
+    )?;
+    same("moved", stores.notes(&desk).await?, note.clone())?;
+    stores
+        .pages
+        .topics
+        .unplace(&SessionId::from_str(SESSION_KEY)?)
+        .await?;
+    stores.router().apply_deferred().await?;
+    same("held while unfiled", stores.notes(&desk).await?, Vec::new())?;
+    stores.place(&acmekit).await?;
+    stores.router().apply_deferred().await?;
+    same("back once filed", stores.notes(&acmekit).await?, note)?;
     Ok(())
 }
 

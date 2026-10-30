@@ -20,6 +20,9 @@ use super::entity::Filed;
 use crate::filing::Filable;
 use crate::filing::FilingStore;
 use crate::filing::Target;
+use crate::memory::ConversationHead;
+use crate::topics::PageSection;
+use crate::topics::PlacementSource;
 use crate::topics::Topic;
 use crate::topics::TopicId;
 use crate::topics::TopicKey;
@@ -90,7 +93,7 @@ struct Routed {
     written: Vec<WikiSlug>,
     cited: Vec<WikiSlug>,
     earlier: Vec<(Uuid, WikiSlug)>,
-    waiting: Vec<WikiPatch>,
+    notes: Vec<WikiPatch>,
 }
 
 impl WikiRouter<'_> {
@@ -135,11 +138,12 @@ impl WikiRouter<'_> {
                     self.route_to_entity(known, summary, patch, &mut routed)
                         .await?,
                 );
-            } else if let Some(topic) = target {
-                self.write_note(topic, &patch).await?;
-                routed.written.push(topic.page_slug.clone());
             } else {
-                routed.waiting.push(patch);
+                if let Some(topic) = target {
+                    self.write_note(topic, &patch).await?;
+                    routed.written.push(topic.page_slug.clone());
+                }
+                routed.notes.push(patch);
             }
         }
         self.finish(job, summary, target, routed).await
@@ -147,18 +151,32 @@ impl WikiRouter<'_> {
 
     pub async fn apply_deferred(&self) -> Result<Vec<String>, TopicPageError> {
         let mut touched = Vec::new();
-        for deferred in self.wiki.filed_deferrals(DEFERRALS_PER_SWEEP).await? {
-            let Some(topic) = self.topics.filed_target(&deferred.waits, self.now).await? else {
-                continue;
-            };
-            for patch in &deferred.patches {
-                self.write_note(&topic, patch).await?;
+        for held in self.wiki.unsettled_notes(DEFERRALS_PER_SWEEP).await? {
+            if let Some(old) = held.applied
+                && let Some(topic) = self.topics.topics.find(&TopicKey::Id(old)).await?
+                && let Some(route) = self.topics.target(&topic, self.now).await?
+            {
+                for patch in &held.patches {
+                    self.withdraw_note(&route, patch).await?;
+                }
+                touched.push(route.page_slug.as_ref().to_owned());
+            }
+            let route = self.topics.filed_target(&held.waits, self.now).await?;
+            if let Some(route) = &route {
+                for patch in &held.patches {
+                    self.write_note(route, patch).await?;
+                }
+                self.wiki
+                    .cite_wiki(held.summary_id, &route.page_slug, self.now)
+                    .await?;
+                touched.push(route.page_slug.as_ref().to_owned());
             }
             self.wiki
-                .cite_wiki(deferred.summary_id, &topic.page_slug, self.now)
+                .defer_wiki(DeferredWiki {
+                    applied: route.map(|route| route.topic),
+                    ..held
+                })
                 .await?;
-            self.wiki.forget_deferral(deferred.summary_id).await?;
-            touched.push(topic.page_slug.as_ref().to_owned());
         }
         touched.sort();
         touched.dedup();
@@ -214,14 +232,15 @@ impl WikiRouter<'_> {
         target: Option<&TopicTarget>,
         mut routed: Routed,
     ) -> Result<Vec<String>, TopicPageError> {
-        if !routed.waiting.is_empty()
+        if !routed.notes.is_empty()
             && let Some(waits) = self.topics.waits_on(summary).await?
         {
             self.wiki
                 .defer_wiki(DeferredWiki {
                     summary_id: summary.id,
                     waits,
-                    patches: routed.waiting,
+                    applied: target.map(|topic| topic.topic),
+                    patches: routed.notes,
                     at: self.now,
                 })
                 .await?;
@@ -268,20 +287,22 @@ impl WikiRouter<'_> {
         route: &TopicTarget,
         patch: &WikiPatch,
     ) -> Result<(), TopicPageError> {
-        let text = section_text(patch);
-        match &route.section {
-            Some(heading) => {
-                let body = format!("### {}\n\n{text}", patch.title.trim());
-                self.edit_page(route, |page| {
-                    page.add_to_section(route.topic, heading, &body);
-                })
-                .await
-            }
-            None => {
-                self.edit_page(route, |page| page.add_note(patch.title.trim(), &text))
-                    .await
-            }
-        }
+        let (topic, heading, body) = note_parts(route, patch);
+        self.edit_page(route, |page| match topic {
+            Some(topic) => page.add_to_section(topic, &heading, &body),
+            None => page.add_note(&heading, &body),
+        })
+        .await
+    }
+
+    async fn withdraw_note(
+        &self,
+        route: &TopicTarget,
+        patch: &WikiPatch,
+    ) -> Result<(), TopicPageError> {
+        let (topic, heading, body) = note_parts(route, patch);
+        self.edit_page(route, |page| withdraw(page, topic, &heading, &body))
+            .await
     }
 
     async fn edit_page(
@@ -306,11 +327,10 @@ impl WikiRouter<'_> {
 impl TopicPorts<'_> {
     async fn waits_on(&self, summary: &WikiSummary) -> Result<Option<Target>, TopicPageError> {
         let filed = match summary.conversation_id {
-            Some(conversation) => self
-                .filing
-                .subject(conversation)
-                .await?
-                .and_then(|subject| Filable::of(&subject.head).target(conversation)),
+            Some(conversation) => match self.filing.subject(conversation).await? {
+                Some(subject) => self.followed(&subject.head, conversation).await?,
+                None => None,
+            },
             None => session(summary).map(Target::Session),
         };
         let Some(Target::Session(session)) = filed else {
@@ -324,6 +344,25 @@ impl TopicPorts<'_> {
             .await
             .map_err(|error| TopicPageError::ParentPlacement(error.into()))?;
         Ok(Some(Target::Session(parent.unwrap_or(session))))
+    }
+
+    async fn followed(
+        &self,
+        head: &ConversationHead,
+        conversation: Uuid,
+    ) -> Result<Option<Target>, TopicPageError> {
+        let filable = Filable::of(head);
+        let Filable::Task(task) = filable else {
+            return Ok(filable.target(conversation));
+        };
+        let own = self.filing.conversation_placement(conversation).await?;
+        if own.is_some_and(|placed| placed.by == PlacementSource::You) {
+            return Ok(Some(Target::Conversation(conversation)));
+        }
+        Ok(match self.filing.task_parent(task, conversation).await? {
+            Some(parent) => Filable::of(&parent).target(parent.id),
+            None => Some(Target::Conversation(conversation)),
+        })
     }
 
     async fn filed_target(
@@ -397,6 +436,40 @@ fn session(summary: &WikiSummary) -> Option<SessionId> {
         return None;
     };
     Some(session)
+}
+
+fn note_parts(route: &TopicTarget, patch: &WikiPatch) -> (Option<TopicId>, String, String) {
+    let text = section_text(patch);
+    match &route.section {
+        Some(heading) => (
+            Some(route.topic),
+            heading.clone(),
+            format!("### {}\n\n{text}", patch.title.trim()),
+        ),
+        None => (None, patch.title.trim().to_owned(), text),
+    }
+}
+
+fn withdraw(page: &mut TopicPage, topic: Option<TopicId>, heading: &str, body: &str) {
+    let body = body.trim();
+    let holds = |section: &PageSection| match topic {
+        Some(topic) => section.topic == Some(topic),
+        None => section.topic.is_none() && section.heading.eq_ignore_ascii_case(heading),
+    };
+    for section in page.sections.iter_mut().filter(|section| holds(section)) {
+        if let Some(at) = section.body.find(body) {
+            let (before, rest) = section.body.split_at(at);
+            let before = before.trim_end();
+            let after = rest.get(body.len()..).unwrap_or_default().trim_start();
+            section.body = match (before.is_empty(), after.is_empty()) {
+                (true, _) => after.to_owned(),
+                (_, true) => before.to_owned(),
+                (false, false) => format!("{before}\n\n{after}"),
+            };
+        }
+    }
+    page.sections
+        .retain(|section| !(holds(section) && section.body.trim().is_empty()));
 }
 
 fn section_text(patch: &WikiPatch) -> String {

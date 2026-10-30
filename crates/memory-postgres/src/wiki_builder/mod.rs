@@ -124,8 +124,8 @@ impl WikiBuilderStore for PostgresMemory {
         held::defer(&self.pool, deferred).await
     }
 
-    async fn filed_deferrals(&self, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
-        held::filed(&self.pool, limit).await
+    async fn unsettled_notes(&self, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
+        held::unsettled(&self.pool, limit).await
     }
 
     async fn cite_wiki(
@@ -135,10 +135,6 @@ impl WikiBuilderStore for PostgresMemory {
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
         held::cite(&self.pool, summary_id, slug, now).await
-    }
-
-    async fn forget_deferral(&self, summary_id: Uuid) -> Result<(), WikiStoreError> {
-        held::forget(&self.pool, summary_id).await
     }
 }
 

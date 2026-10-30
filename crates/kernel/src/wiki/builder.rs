@@ -8,6 +8,7 @@ use wire::gateway::wiki::WikiSlug;
 use crate::BoxError;
 use crate::filing::Target;
 use crate::topics::Slug;
+use crate::topics::TopicId;
 
 pub const WIKI_PIPELINE_VERSION: i32 = 4;
 
@@ -54,6 +55,7 @@ pub struct HeldEntity {
 pub struct DeferredWiki {
     pub summary_id: Uuid,
     pub waits: Target,
+    pub applied: Option<TopicId>,
     pub patches: Vec<WikiPatch>,
     pub at: DateTime<Utc>,
 }
@@ -111,7 +113,7 @@ pub trait WikiBuilderStore: Send + Sync {
 
     async fn defer_wiki(&self, deferred: DeferredWiki) -> Result<(), WikiStoreError>;
 
-    async fn filed_deferrals(&self, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError>;
+    async fn unsettled_notes(&self, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError>;
 
     async fn cite_wiki(
         &self,
@@ -119,8 +121,6 @@ pub trait WikiBuilderStore: Send + Sync {
         slug: &WikiSlug,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError>;
-
-    async fn forget_deferral(&self, summary_id: Uuid) -> Result<(), WikiStoreError>;
 }
 
 #[derive(Debug, Error)]

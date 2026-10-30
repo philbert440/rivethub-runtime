@@ -77,8 +77,8 @@ impl WikiBuilderStore for SqliteStore {
         blocking(self, move |conn| wiki_held::defer(conn, &deferred)).await
     }
 
-    async fn filed_deferrals(&self, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
-        blocking(self, move |conn| wiki_held::filed(conn, limit)).await
+    async fn unsettled_notes(&self, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
+        blocking(self, move |conn| wiki_held::unsettled(conn, limit)).await
     }
 
     async fn cite_wiki(
@@ -92,10 +92,6 @@ impl WikiBuilderStore for SqliteStore {
             wiki_held::cite(conn, summary_id, &slug, now)
         })
         .await
-    }
-
-    async fn forget_deferral(&self, summary_id: Uuid) -> Result<(), WikiStoreError> {
-        blocking(self, move |conn| wiki_held::forget(conn, summary_id)).await
     }
 }
 

@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use kernel::filing::Target;
 use kernel::topics::Slug;
+use kernel::topics::TopicId;
 use kernel::wiki::builder::{DeferredWiki, ExtractWiki, HeldEntity, WikiPatch, WikiStoreError};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -23,6 +24,7 @@ struct DeferredRow {
     summary_id: Uuid,
     waits_session: Option<String>,
     waits_conversation: Option<Uuid>,
+    applied_topic: Option<Uuid>,
     patches: String,
     deferred_at: DateTime<Utc>,
 }
@@ -77,15 +79,17 @@ pub(super) async fn release(pool: &PgPool, key: &Slug) -> Result<(), WikiStoreEr
 
 pub(super) async fn defer(pool: &PgPool, deferred: DeferredWiki) -> Result<(), WikiStoreError> {
     sqlx::query(
-        "INSERT INTO rh_wiki_deferred (summary_id, waits_session, waits_conversation, patches, deferred_at)
-         VALUES ($1, $2, $3, $4::jsonb, $5)
+        "INSERT INTO rh_wiki_deferred
+             (summary_id, waits_session, waits_conversation, applied_topic, patches, deferred_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, $6)
          ON CONFLICT (summary_id) DO UPDATE SET waits_session = EXCLUDED.waits_session,
-            waits_conversation = EXCLUDED.waits_conversation,
+            waits_conversation = EXCLUDED.waits_conversation, applied_topic = EXCLUDED.applied_topic,
             patches = EXCLUDED.patches, deferred_at = EXCLUDED.deferred_at",
     )
     .bind(deferred.summary_id)
     .bind(deferred.waits.session().map(SessionId::as_str))
     .bind(deferred.waits.conversation())
+    .bind(deferred.applied.map(TopicId::uuid))
     .bind(encoded(&deferred.patches)?)
     .bind(deferred.at)
     .execute(pool)
@@ -94,14 +98,17 @@ pub(super) async fn defer(pool: &PgPool, deferred: DeferredWiki) -> Result<(), W
     Ok(())
 }
 
-pub(super) async fn filed(pool: &PgPool, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
+pub(super) async fn unsettled(
+    pool: &PgPool,
+    limit: u32,
+) -> Result<Vec<DeferredWiki>, WikiStoreError> {
     sqlx::query_as::<_, DeferredRow>(
-        "SELECT d.summary_id, d.waits_session, d.waits_conversation, d.patches::text AS patches,
-                d.deferred_at
+        "SELECT d.summary_id, d.waits_session, d.waits_conversation, d.applied_topic,
+                d.patches::text AS patches, d.deferred_at
            FROM rh_wiki_deferred d
-          WHERE EXISTS (SELECT 1 FROM rh_session_placements p WHERE p.session_id = d.waits_session)
-             OR EXISTS (SELECT 1 FROM rh_conversation_placements c
-                         WHERE c.conversation_id = d.waits_conversation)
+           LEFT JOIN rh_session_placements p ON p.session_id = d.waits_session
+           LEFT JOIN rh_conversation_placements c ON c.conversation_id = d.waits_conversation
+          WHERE COALESCE(p.topic_id, c.topic_id) IS DISTINCT FROM d.applied_topic
           ORDER BY d.deferred_at, d.summary_id LIMIT $1",
     )
     .bind(i64::from(limit))
@@ -116,6 +123,7 @@ pub(super) async fn filed(pool: &PgPool, limit: u32) -> Result<Vec<DeferredWiki>
                 .ok_or_else(|| {
                     invalid("a deferral waits on neither a session nor a conversation")
                 })?,
+            applied: row.applied_topic.map(TopicId::from_uuid),
             patches: serde_json::from_str::<Vec<WikiPatch>>(&row.patches).map_err(invalid)?,
             at: row.deferred_at,
         })
@@ -137,15 +145,6 @@ pub(super) async fn cite(
     let summary = load_summary(&mut tx, &job, false).await?;
     topics::cite(&mut tx, slug.as_ref(), &summary, now).await?;
     tx.commit().await.map_err(query_error)
-}
-
-pub(super) async fn forget(pool: &PgPool, summary_id: Uuid) -> Result<(), WikiStoreError> {
-    sqlx::query("DELETE FROM rh_wiki_deferred WHERE summary_id = $1")
-        .bind(summary_id)
-        .execute(pool)
-        .await
-        .map_err(query_error)?;
-    Ok(())
 }
 
 fn encoded<T: serde::Serialize>(value: &T) -> Result<String, WikiStoreError> {

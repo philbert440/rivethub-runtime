@@ -119,6 +119,12 @@ async fn a_child_session_waits_for_its_parent(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_moved_session_takes_its_notes_along(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool).await?;
+    wiki_routes::a_moved_session_takes_its_notes_along(seeded.stores(), &seeded.job).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn a_deleted_entity_is_not_recreated(pool: PgPool) -> TestResult {
     let seeded = Seeded::new(pool).await?;
     wiki_routes::a_deleted_entity_is_not_recreated(seeded.stores(), &seeded.job).await

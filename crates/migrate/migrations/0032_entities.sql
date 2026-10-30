@@ -36,6 +36,7 @@ BEGIN
         summary_id UUID PRIMARY KEY,
         waits_session TEXT CHECK (waits_session <> ''),
         waits_conversation UUID,
+        applied_topic UUID,
         patches JSONB NOT NULL,
         deferred_at TIMESTAMPTZ NOT NULL,
         CHECK ((waits_session IS NULL) <> (waits_conversation IS NULL))

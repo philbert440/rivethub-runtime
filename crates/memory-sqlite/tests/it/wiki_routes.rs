@@ -100,6 +100,13 @@ async fn a_child_session_waits_for_its_parent() -> TestResult {
 }
 
 #[tokio::test]
+async fn a_moved_session_takes_its_notes_along() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    wiki_routes::a_moved_session_takes_its_notes_along(stores(&store), &job).await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_deleted_entity_is_not_recreated() -> TestResult {
     let (_directory, store, job) = seeded().await?;
     wiki_routes::a_deleted_entity_is_not_recreated(stores(&store), &job).await?;
