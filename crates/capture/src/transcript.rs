@@ -238,6 +238,11 @@ pub fn read_capped(path: &Path) -> Result<String, TranscriptReaderError> {
     Ok(capped_text(&bytes))
 }
 
+pub(crate) fn read_uncapped(path: &Path) -> Result<String, TranscriptReaderError> {
+    let bytes = std::fs::read(path).map_err(|error| read_error(path, error))?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 pub async fn read_capped_async(path: &Path) -> Result<String, TranscriptReaderError> {
     let bytes = tokio::fs::read(path)
         .await

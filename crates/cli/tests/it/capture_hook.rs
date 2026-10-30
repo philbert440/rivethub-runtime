@@ -59,7 +59,7 @@ async fn the_capture_command_lists_the_hook_subcommand() {
     assert!(
         report
             .stdout
-            .contains("hook  Capture one Claude Code hook payload read from stdin"),
+            .contains("hook  Capture one harness hook payload read from stdin"),
         "{}",
         report.stdout
     );

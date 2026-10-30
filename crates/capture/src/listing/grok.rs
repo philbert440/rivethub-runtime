@@ -371,6 +371,23 @@ pub(crate) fn describe_many(
     Ok(newest.into_values().collect())
 }
 
+pub(crate) fn title(root: &Path, id: &str) -> Result<Option<String>, TranscriptReaderError> {
+    if !segment_safe(id) {
+        return Ok(None);
+    }
+    let Some(store) = sessions(root)? else {
+        return Ok(None);
+    };
+    Ok(directories(&store, store.canonical())
+        .into_iter()
+        .map(|encoded| encoded.path.join(id).join("summary.json"))
+        .filter(|summary| regular_file(&store, summary))
+        .filter_map(|summary| whole_file(&summary).and_then(|text| summary_row(&text, id)))
+        .max_by_key(|grok| grok.row.updated_at)
+        .filter(|grok| !grok.untitled)
+        .map(|grok| grok.row.title))
+}
+
 pub(crate) fn rename(
     root: &Path,
     spawns: &SpawnIndex,

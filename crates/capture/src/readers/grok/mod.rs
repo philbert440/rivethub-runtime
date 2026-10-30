@@ -1,3 +1,4 @@
+mod ordinal;
 mod output;
 mod turns;
 pub(crate) mod updates;
@@ -20,6 +21,7 @@ use super::message::native;
 use super::message::project_turns;
 use super::message::report;
 use super::scan::read_optional;
+use super::scan::read_whole;
 use crate::store_path::Child;
 use crate::store_path::DirState;
 use crate::store_path::Root;
@@ -49,7 +51,15 @@ impl GrokTranscriptReader {
         session: &SessionId,
         offset: u64,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
-        self.slice(session, offset, Extent::Settled).await
+        self.slice(session, offset, Extent::Settled, Reach::Capped)
+            .await
+    }
+
+    pub async fn capture(
+        &self,
+        session: &SessionId,
+    ) -> Result<TranscriptSlice, TranscriptReaderError> {
+        self.slice(session, 0, Extent::Live, Reach::Whole).await
     }
 
     async fn slice(
@@ -57,13 +67,21 @@ impl GrokTranscriptReader {
         session: &SessionId,
         offset: u64,
         extent: Extent,
+        reach: Reach,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
         let Some(native_id) = native(session, HarnessId::GrokBuild).map(str::to_owned) else {
             return Ok(TranscriptSlice::empty(offset));
         };
         let root = self.root.clone();
         let session = session.clone();
-        let slice = blocking(move || load(&root, &session, &native_id, offset, extent)).await?;
+        let slice = blocking(move || {
+            let text = updates_text(&root, &native_id, reach)?;
+            text.map_or_else(
+                || Ok(TranscriptSlice::empty(offset)),
+                |text| updates::map_updates(&session, &text, offset, extent),
+            )
+        })
+        .await?;
         report(FORMAT, &slice.skipped);
         Ok(slice)
     }
@@ -77,7 +95,9 @@ impl TranscriptReader for GrokTranscriptReader {
     }
 
     async fn read(&self, session: &SessionId) -> Result<Vec<Turn>, TranscriptReaderError> {
-        Ok(project_turns(&self.slice(session, 0, Extent::Live).await?))
+        Ok(project_turns(
+            &self.slice(session, 0, Extent::Live, Reach::Capped).await?,
+        ))
     }
 
     async fn tail(
@@ -104,30 +124,27 @@ fn list_sessions(store: &Path) -> Result<Vec<SessionId>, TranscriptReaderError> 
     Ok(sessions)
 }
 
-fn load(
-    store: &Path,
-    session: &SessionId,
-    native_id: &str,
-    offset: u64,
-    extent: Extent,
-) -> Result<TranscriptSlice, TranscriptReaderError> {
-    let Some(text) = updates_text(store, native_id)? else {
-        return Ok(TranscriptSlice::empty(offset));
-    };
-    updates::map_updates(session, &text, offset, extent)
-}
-
 pub(crate) fn update_lines(
     store: &Path,
     native_id: &str,
 ) -> Result<UpdateLines, TranscriptReaderError> {
-    match updates_text(store, native_id)? {
+    match updates_text(store, native_id, Reach::Capped)? {
         Some(text) => updates::parse_lines(&text),
         None => Ok(UpdateLines::default()),
     }
 }
 
-fn updates_text(store: &Path, native_id: &str) -> Result<Option<String>, TranscriptReaderError> {
+#[derive(Debug, Clone, Copy)]
+enum Reach {
+    Capped,
+    Whole,
+}
+
+fn updates_text(
+    store: &Path,
+    native_id: &str,
+    reach: Reach,
+) -> Result<Option<String>, TranscriptReaderError> {
     session_component(native_id)?;
     let root = Root::open(store)?;
     let Some(dir) = session_dirs(&root)?
@@ -136,7 +153,10 @@ fn updates_text(store: &Path, native_id: &str) -> Result<Option<String>, Transcr
     else {
         return Ok(None);
     };
-    read_optional(&root, &dir.join(UPDATES))
+    match reach {
+        Reach::Capped => read_optional(&root, &dir.join(UPDATES)),
+        Reach::Whole => read_whole(&root, &dir.join(UPDATES)),
+    }
 }
 
 fn session_dirs(root: &Root) -> Result<Vec<(String, PathBuf)>, TranscriptReaderError> {
