@@ -341,3 +341,10 @@ async fn a_deleted_session_used_again_comes_back() -> TestResult {
     session_delete::a_deleted_session_used_again_comes_back(&store, &store).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn a_kept_session_is_remembered_from_its_latest_keep() -> TestResult {
+    let (_directory, store) = store()?;
+    session_delete::a_kept_session_is_remembered_from_its_latest_keep(&store).await?;
+    Ok(())
+}

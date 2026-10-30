@@ -19,10 +19,10 @@ async fn a_migration_missing_below_the_newest_is_pending_until_migrate_applies_i
         .await?;
 
     let gapped = migrate::postgres_status_pool(&pool).await?;
-    assert_eq!((gapped.current, gapped.pending), (41, 1));
+    assert_eq!((gapped.current, gapped.pending), (43, 1));
 
     let migrated = migrate::postgres_pool(&pool).await?;
-    assert_eq!((migrated.current, migrated.pending), (41, 0));
+    assert_eq!((migrated.current, migrated.pending), (43, 0));
     let index: Option<String> =
         sqlx::query_scalar("SELECT to_regclass('idx_rh_messages_unembedded')::text")
             .fetch_one(&pool)
@@ -38,12 +38,12 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 39);
+    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 40);
 
     let applied = sqlx::query("SELECT count(*)::bigint AS n FROM _sqlx_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 39);
+    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 40);
 
     migrate::postgres_pool(&pool).await?;
 
@@ -221,8 +221,8 @@ async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
         .await?;
     assert_eq!(
         tracked.try_get::<i64, _>("n").unwrap(),
-        39,
-        "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, 0025 adds topic suggestions, 0026 adds the hub state table, 0027 binds wiki pages to topics, 0028 keeps each session's startup context, 0029 records how it was delivered, 0030 adds topic decisions, 0031 records closed topics and sessions marked as history, 0032 adds topic kinds and entities, 0033 files conversations and keeps filing corrections, 0034 keeps tidy proposals and worker finishes, 0036 indexes the messages still waiting for an embedding, 0037 records the node that captured each conversation, 0039 adds the session tombstones, 0040 archives the old tasks, and 0041 indexes summaries and wiki provenance by conversation"
+        40,
+        "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, 0025 adds topic suggestions, 0026 adds the hub state table, 0027 binds wiki pages to topics, 0028 keeps each session's startup context, 0029 records how it was delivered, 0030 adds topic decisions, 0031 records closed topics and sessions marked as history, 0032 adds topic kinds and entities, 0033 files conversations and keeps filing corrections, 0034 keeps tidy proposals and worker finishes, 0036 indexes the messages still waiting for an embedding, 0037 records the node that captured each conversation, 0039 adds the session tombstones, 0040 archives the old tasks, 0041 indexes summaries and wiki provenance by conversation, and 0043 keeps sessions out of the trash review"
     );
     let summaries_trgm =
         sqlx::query("SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_ros_summaries_trgm'")

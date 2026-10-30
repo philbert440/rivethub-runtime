@@ -22,7 +22,11 @@ pub(crate) fn ladder(
 
 fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<(), Error> {
     match to {
-        SchemaVersion::V1 | SchemaVersion::V2 | SchemaVersion::V4 | SchemaVersion::V5 => Ok(()),
+        SchemaVersion::V1
+        | SchemaVersion::V2
+        | SchemaVersion::V4
+        | SchemaVersion::V5
+        | SchemaVersion::V28 => Ok(()),
         SchemaVersion::V3 => in_transaction(conn, to, |tx| {
             add_message_embedding_columns(tx)?;
             move_embed_queue_into_jobs(tx, now)
@@ -70,6 +74,9 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         }),
         SchemaVersion::V27 => in_transaction(conn, to, |tx| {
             tx.execute_batch(include_str!("schema/job_priority_v27.sql"))
+        }),
+        SchemaVersion::V29 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/session_keeps_v29.sql"))
         }),
     }
 }

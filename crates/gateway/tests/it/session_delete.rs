@@ -658,3 +658,34 @@ async fn a_deleted_session_resumed_in_its_harness_is_listed_again() {
     let (_, body) = call(&setup, "GET", "/api/sessions/trash", "", None).await;
     assert_eq!(String::from_utf8_lossy(&body), r#"{"candidates":[]}"#);
 }
+
+#[tokio::test]
+async fn a_kept_session_leaves_the_trash_until_it_is_used_again() {
+    let stores = Stores {
+        rows: vec![
+            row("t-kept", hours_ago(3)),
+            row("t-used-since", hours_ago(2)),
+        ],
+        ..Stores::default()
+    };
+    let deletion = FakeSessionDeletion::default();
+    deletion.keep(&claude("t-used-since"), Utc::now() - TimeDelta::hours(3));
+    let setup = setup("{}", stores, deletion).await;
+    let trash = |body: &[u8]| -> Vec<String> {
+        parsed::<SessionTrashList>(body)
+            .candidates
+            .into_iter()
+            .map(|candidate| candidate.session.native().to_owned())
+            .collect()
+    };
+    let (_, body) = call(&setup, "GET", "/api/sessions/trash", "", None).await;
+    assert_eq!(trash(&body), ["t-kept", "t-used-since"]);
+    let path = format!("/api/sessions/{}/keep", segment("t-kept"));
+    let (status, body) = call(&setup, "PUT", &path, "", None).await;
+    assert_eq!(status, 204, "{}", String::from_utf8_lossy(&body));
+    let (_, body) = call(&setup, "GET", "/api/sessions/trash", "", None).await;
+    assert_eq!(trash(&body), ["t-used-since"]);
+    let unknown = format!("/api/sessions/{}/keep", segment("t-unknown"));
+    let (status, _) = call(&setup, "PUT", &unknown, "", None).await;
+    assert_eq!(status, 404);
+}

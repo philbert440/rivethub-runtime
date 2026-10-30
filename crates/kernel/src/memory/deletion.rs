@@ -84,6 +84,18 @@ pub trait SessionDeletion: Send + Sync {
     async fn empty_sessions(&self, limit: u32) -> Result<Vec<String>, MemoryStoreError>;
 
     async fn purge_tombstoned(&self, limit: u32) -> Result<DeletedSession, MemoryStoreError>;
+
+    async fn keep_session(
+        &self,
+        session_key: &str,
+        kept_by: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> Result<(), MemoryStoreError>;
+
+    async fn kept(
+        &self,
+        session_keys: &[String],
+    ) -> Result<BTreeMap<String, DateTime<Utc>>, MemoryStoreError>;
 }
 
 #[must_use]

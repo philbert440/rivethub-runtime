@@ -342,3 +342,28 @@ pub async fn an_empty_session_is_reported_until_it_is_deleted(
     )?;
     Ok(())
 }
+
+pub async fn a_kept_session_is_remembered_from_its_latest_keep(
+    deletions: &dyn SessionDeletion,
+) -> Outcome {
+    let kept = session(DELETED)?;
+    let other = session(SIBLING)?;
+    let asked = keys(&[&kept, &other]);
+    same(
+        "nothing is kept before a keep",
+        deletions.kept(&asked).await?,
+        BTreeMap::new(),
+    )?;
+    deletions
+        .keep_session(kept.as_str(), Some("owner"), at(3))
+        .await?;
+    deletions
+        .keep_session(kept.as_str(), Some("owner"), at(7))
+        .await?;
+    same(
+        "only the kept session is named, at its latest keep",
+        deletions.kept(&asked).await?,
+        BTreeMap::from([(kept.as_str().to_owned(), at(7))]),
+    )?;
+    Ok(())
+}
