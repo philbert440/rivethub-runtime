@@ -1,10 +1,16 @@
+use std::collections::BTreeMap;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 
 use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::Command;
+use kernel::harness::HarnessAdapterError;
 use kernel::harness::SessionEvent;
+use parking_lot::Mutex;
+use wire::harness::HarnessId;
 use wire::harness::HarnessModelsSource;
 use wire::harness::HarnessOffering;
 
@@ -101,6 +107,50 @@ impl Advertisement {
 }
 
 pub const DEFAULT_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
+
+const DISCOVERY_RETRY: Duration = Duration::from_secs(60);
+
+pub(crate) async fn discover_due(
+    pending: Vec<(HarnessId, AcpCommand, PathBuf)>,
+    failed: &tokio::sync::Mutex<BTreeMap<HarnessId, Instant>>,
+    advertised: &Mutex<BTreeMap<HarnessId, Advertisement>>,
+    discovered_commands: &Mutex<BTreeMap<HarnessId, Vec<Command>>>,
+) -> Result<(), HarnessAdapterError> {
+    let mut failed = failed.lock().await;
+    let mut running = tokio::task::JoinSet::new();
+    for (harness, command, cwd) in pending {
+        let due = failed
+            .get(&harness)
+            .is_none_or(|at| at.elapsed() >= DISCOVERY_RETRY);
+        if due && !advertised.lock().contains_key(&harness) {
+            running.spawn(async move {
+                let outcome = discover(&command, &cwd, DEFAULT_DISCOVERY_TIMEOUT).await;
+                (harness, outcome)
+            });
+        }
+    }
+    while let Some(joined) = running.join_next().await {
+        let (harness, outcome) = joined.map_err(|error| HarnessAdapterError::Failed {
+            message: "harness discovery failed".into(),
+            source: Box::new(error),
+        })?;
+        match outcome {
+            Ok(found) => {
+                failed.remove(&harness);
+                discovered_commands
+                    .lock()
+                    .insert(harness, found.commands().to_vec());
+                advertised.lock().insert(harness, found);
+            }
+            Err(error) => {
+                tracing::warn!(%harness, %error, "harness discovery failed; offering it without chat");
+                failed.insert(harness, Instant::now());
+            }
+        }
+    }
+    drop(failed);
+    Ok(())
+}
 
 pub(crate) async fn discover(
     command: &AcpCommand,
