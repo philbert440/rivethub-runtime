@@ -84,6 +84,7 @@ async fn synthesize(
         options: ModelOptions {
             temperature: Some(0.2),
             enable_thinking: Some(false),
+            ..ModelOptions::default()
         },
         model: model.to_owned(),
         messages: vec![

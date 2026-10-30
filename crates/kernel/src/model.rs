@@ -102,10 +102,11 @@ pub struct ProviderHealth {
     pub status: watch::Receiver<ProviderStatus>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ModelOptions {
     pub temperature: Option<f64>,
     pub enable_thinking: Option<bool>,
+    pub json_schema: Option<schemars::Schema>,
 }
 
 #[derive(Debug, Error)]
