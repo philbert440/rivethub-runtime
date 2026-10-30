@@ -414,8 +414,8 @@ async fn seed_message(
 async fn seed_leaf(pool: &PgPool, conversation: Uuid, content: &str) -> Result<(), sqlx::Error> {
     let mut tx = deferred(pool).await?;
     sqlx::query(
-        "insert into rh_summaries (conversation_id, content, kind, earliest_at, latest_at)
-         values ($1, $2, 'leaf', clock_timestamp(), clock_timestamp())",
+        "insert into rh_summaries (conversation_id, content, kind, earliest_at, latest_at, owner_user_id)
+         values ($1, $2, 'leaf', clock_timestamp(), clock_timestamp(), 'owner')",
     )
     .bind(conversation)
     .bind(content)
