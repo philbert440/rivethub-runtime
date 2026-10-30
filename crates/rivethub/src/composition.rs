@@ -2,10 +2,9 @@ mod devices;
 mod identities;
 mod mesh;
 mod models;
-mod stores;
 mod terminals;
 
-pub use stores::store_roots;
+pub use capture::listing::store_roots;
 
 use std::sync::Arc;
 use std::time::Duration;

@@ -1,10 +1,14 @@
 use std::cmp::Reverse;
+use std::collections::BTreeSet;
 
 use crate::topics::PlacementSource;
 use crate::topics::Redirect;
 use crate::topics::TopicId;
+use crate::topics::TopicKind;
 use crate::topics::TopicListing;
 use crate::topics::mentioned;
+
+use super::repo_topic;
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, strum::Display, serde::Serialize, serde::Deserialize,
@@ -14,6 +18,7 @@ use crate::topics::mentioned;
 pub enum Rule {
     Parent,
     Folder,
+    Repo,
     Name,
     Model,
 }
@@ -24,7 +29,7 @@ pub enum Step {
     Corrected,
     Inherits,
     File { topic: TopicId, rule: Rule },
-    Ask,
+    Ask { named: Option<TopicId> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +41,7 @@ pub struct Evidence<'a> {
     pub cwd: Option<&'a str>,
     pub title: Option<&'a str>,
     pub summary: Option<&'a str>,
+    pub generic: &'a BTreeSet<String>,
 }
 
 impl Evidence<'_> {
@@ -63,14 +69,33 @@ impl Evidence<'_> {
             };
         }
         let texts: Vec<&str> = self.title.into_iter().chain(self.summary).collect();
-        match mentioned(topics, redirects, &texts).as_slice() {
+        let places: Vec<&str> = texts.iter().copied().chain(self.cwd).collect();
+        if let Some(topic) = repo_topic(topics, redirects, &places) {
+            if has_subtopics(topic, topics) {
+                return Step::Ask { named: Some(topic) };
+            }
+            return Step::File {
+                topic,
+                rule: Rule::Repo,
+            };
+        }
+        match mentioned(topics, redirects, &texts, self.generic).as_slice() {
+            [topic] if has_subtopics(*topic, topics) => Step::Ask {
+                named: Some(*topic),
+            },
             [topic] => Step::File {
                 topic: *topic,
                 rule: Rule::Name,
             },
-            _ => Step::Ask,
+            _ => Step::Ask { named: None },
         }
     }
+}
+
+fn has_subtopics(topic: TopicId, topics: &[TopicListing]) -> bool {
+    topics
+        .iter()
+        .any(|listing| listing.topic.parent == Some(topic) && listing.topic.kind == TopicKind::Work)
 }
 
 fn folder_topic(cwd: &str, topics: &[TopicListing]) -> Option<TopicId> {

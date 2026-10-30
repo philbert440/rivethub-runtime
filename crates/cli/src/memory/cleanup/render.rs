@@ -48,6 +48,7 @@ pub(super) fn markdown(data: &ReportData) -> String {
     );
     push(&mut out, &format!("**Headline:** {}\n", headline(data)));
     conversations(&mut out, data);
+    automated(&mut out, data);
     tree(&mut out, data);
     filings(&mut out, data);
     folds(&mut out, data);
@@ -70,6 +71,20 @@ fn conversations(out: &mut String, data: &ReportData) {
     push(
         out,
         &format!(
+            "| automated runs left out (scheduled or templated, single-turn, naming no project) | {} |",
+            counts.automated
+        ),
+    );
+    push(
+        out,
+        &format!(
+            "| child sessions following their parent | {} |",
+            counts.children
+        ),
+    );
+    push(
+        out,
+        &format!(
             "| same session as another conversation | {} |",
             counts.same_session
         ),
@@ -77,6 +92,38 @@ fn conversations(out: &mut String, data: &ReportData) {
     push(
         out,
         &format!("| filed one by one | {} |\n", counts.filed_one_by_one),
+    );
+}
+
+fn automated(out: &mut String, data: &ReportData) {
+    push(out, "## Automated runs left out\n");
+    push(
+        out,
+        &format!(
+            "{} task runs started by a heartbeat or an eval. Opening prompts shared by at least {} conversations, mostly single-turn and naming no project:\n",
+            data.automated.by_task,
+            kernel::cleanup::TEMPLATE_RUNS
+        ),
+    );
+    push(out, "| opening prompt | runs | left out |\n|---|---:|---:|");
+    for template in &data.automated.templates {
+        push(
+            out,
+            &format!(
+                "| {} | {} | {} |",
+                cell(&template.opening),
+                template.runs,
+                template.left_out
+            ),
+        );
+    }
+    push(
+        out,
+        &format!(
+            "\nNames and aliases too common to decide a filing by name (in more than {}% of conversations): {}\n",
+            kernel::topics::GENERIC_SHARE_PERCENT,
+            data.generic.join(", ")
+        ),
     );
 }
 
@@ -232,6 +279,8 @@ fn junk(out: &mut String, data: &ReportData) {
             JunkReason::Rejected => "rejected or deleted before".to_owned(),
             JunkReason::Title => "a conversation title".to_owned(),
             JunkReason::Task => "a one-off task".to_owned(),
+            JunkReason::Activity => "an activity, not an area".to_owned(),
+            JunkReason::Vague => "a vague name".to_owned(),
             JunkReason::Refused { refusal } => format!("looks like a {refusal}"),
             JunkReason::Duplicate { of } => format!("duplicate of {of}"),
             JunkReason::TooDeep => "deeper than 4 levels".to_owned(),

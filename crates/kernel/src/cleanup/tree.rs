@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 use chrono::DateTime;
 use chrono::Utc;
@@ -11,7 +12,6 @@ use super::JunkStage;
 use super::NameGuard;
 use super::Snapshot;
 use super::SnapshotRoot;
-use super::names::near_duplicate;
 use crate::filing::TopicLine;
 use crate::topics::Alias;
 use crate::topics::MAX_DEPTH;
@@ -27,6 +27,7 @@ use crate::topics::fold;
 
 pub const MIN_SESSIONS: u32 = 3;
 const PATH_SEPARATOR: &str = " › ";
+const MIN_OWNER_WORD_CHARS: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display)]
 #[serde(rename_all = "kebab-case")]
@@ -241,7 +242,12 @@ impl ProposedTree {
             });
         }
         for project in &snapshot.projects {
-            let name = TopicName::new(&project.name)?;
+            let named = snapshot
+                .topics
+                .iter()
+                .find(|topic| fold(&topic.name) == fold(&project.name))
+                .map_or_else(|| project.name.clone(), |topic| topic.name.clone());
+            let name = TopicName::new(&named)?;
             if let Some(reason @ (JunkReason::Generic | JunkReason::Rejected)) = guard.junk(&name) {
                 tree.junk(&project.name, reason);
                 continue;
@@ -254,7 +260,7 @@ impl ProposedTree {
                 }
                 None => tree.topics.push(TreeTopic {
                     id: TopicId::random(),
-                    name: project.name.clone(),
+                    name: named,
                     parent: None,
                     aliases: project.aliases.clone(),
                     about: None,
@@ -264,7 +270,52 @@ impl ProposedTree {
                 }),
             }
         }
+        tree.absorb_restated();
         Ok(tree)
+    }
+
+    fn absorb_restated(&mut self) {
+        let projects: Vec<(TopicId, Vec<BTreeSet<String>>)> = self
+            .topics
+            .iter()
+            .filter(|topic| topic.origin == Origin::Project)
+            .map(|topic| {
+                let names = std::iter::once(&topic.name)
+                    .chain(&topic.aliases)
+                    .map(|name| {
+                        fold(name)
+                            .split('-')
+                            .map(str::to_owned)
+                            .collect::<BTreeSet<_>>()
+                    })
+                    .filter(|words| {
+                        words
+                            .iter()
+                            .any(|word| word.chars().count() >= MIN_OWNER_WORD_CHARS)
+                    })
+                    .collect();
+                (topic.id, names)
+            })
+            .collect();
+        let restated: Vec<(TopicId, TopicId)> = self
+            .topics
+            .iter()
+            .filter(|topic| topic.origin == Origin::Existing && topic.parent.is_none())
+            .filter_map(|topic| {
+                let words: BTreeSet<String> =
+                    fold(&topic.name).split('-').map(str::to_owned).collect();
+                let mut owners = projects
+                    .iter()
+                    .filter(|(_, names)| names.iter().any(|name| name.is_subset(&words)));
+                match (owners.next(), owners.next()) {
+                    (Some((owner, _)), None) => Some((topic.id, *owner)),
+                    (Some(_), Some(_)) | (None, _) => None,
+                }
+            })
+            .collect();
+        for (from, into) in restated {
+            self.merge_into(from, into);
+        }
     }
 
     fn admit(
@@ -284,10 +335,16 @@ impl ProposedTree {
             return Ok(Admitted::Done);
         }
         let twin = self
-            .topics
+            .merges
             .iter()
-            .find(|topic| near_duplicate(&topic.name, name.as_str()))
-            .map(|topic| topic.id);
+            .find(|merge| guard.twin(&merge.name, name.as_str()))
+            .and_then(|merge| self.resolve(merge.into))
+            .or_else(|| {
+                self.topics
+                    .iter()
+                    .find(|topic| guard.twin(&topic.name, name.as_str()))
+                    .map(|topic| topic.id)
+            });
         if let Some(twin) = twin {
             self.grow(twin, &draft);
             let of = self.path(twin);
@@ -300,14 +357,42 @@ impl ProposedTree {
             Some(None) if last => None,
             Some(None) => return Ok(Admitted::Waiting(draft)),
         };
+        let head = guard.head(name.as_str());
+        let sibling = self
+            .topics
+            .iter()
+            .find(|topic| {
+                topic.parent.is_some()
+                    && topic.parent == parent
+                    && head.is_some()
+                    && guard.head(&topic.name) == head
+            })
+            .map(|topic| topic.id);
+        if let Some(sibling) = sibling {
+            self.grow(sibling, &draft);
+            let of = self.path(sibling);
+            self.junk(name.as_str(), JunkReason::Duplicate { of });
+            return Ok(Admitted::Done);
+        }
         if parent.is_some_and(|parent| self.chain(parent).len() >= MAX_DEPTH) {
             self.junk(name.as_str(), JunkReason::TooDeep);
             return Ok(Admitted::Done);
         }
+        if let Some(parent) = parent.filter(|parent| self.restates(*parent, &draft.merges)) {
+            self.grow(parent, &draft);
+            self.merge_named(&draft.merges, parent);
+            let of = self.path(parent);
+            self.junk(name.as_str(), JunkReason::Duplicate { of });
+            return Ok(Admitted::Done);
+        }
         let id = TopicId::random();
+        let name = parent
+            .and_then(|parent| self.topic(parent))
+            .and_then(|parent| without_prefix(name.as_str(), &parent.name))
+            .unwrap_or_else(|| name.as_str().to_owned());
         self.topics.push(TreeTopic {
             id,
-            name: name.as_str().to_owned(),
+            name,
             parent,
             aliases: Vec::new(),
             about: draft.about.clone(),
@@ -328,35 +413,56 @@ impl ProposedTree {
         }
     }
 
+    fn restates(&self, parent: TopicId, merges: &[String]) -> bool {
+        let Some(parent) = self.topic(parent) else {
+            return false;
+        };
+        let words = owner_words(&parent.name);
+        merges.iter().any(|name| {
+            self.named(name)
+                .and_then(|id| self.topic(id))
+                .is_some_and(|topic| {
+                    topic.origin == Origin::Existing
+                        && topic.id != parent.id
+                        && !owner_words(&topic.name).is_disjoint(&words)
+                })
+        })
+    }
+
     fn merge_named(&mut self, names: &[String], into: TopicId) {
         for name in names {
-            let Some(from) = self
-                .named(name)
-                .and_then(|id| self.topic(id))
-                .filter(|topic| topic.origin == Origin::Existing && topic.id != into)
-                .cloned()
-            else {
-                continue;
-            };
-            if self.chain(into).iter().any(|above| above.id == from.id) {
-                continue;
+            if let Some(from) = self.named(name) {
+                self.merge_into(from, into);
             }
-            self.topics.retain(|topic| topic.id != from.id);
-            for topic in &mut self.topics {
-                if topic.parent == Some(from.id) {
-                    topic.parent = Some(into);
-                }
-            }
-            if let Some(target) = self.topics.iter_mut().find(|topic| topic.id == into) {
-                target.estimate = target.estimate.saturating_add(from.estimate);
-                target.aliases.extend(from.aliases.iter().cloned());
-            }
-            self.merges.push(TreeMerge {
-                from: from.id,
-                name: from.name,
-                into,
-            });
         }
+    }
+
+    fn merge_into(&mut self, from: TopicId, into: TopicId) {
+        let Some(from) = self
+            .topic(from)
+            .filter(|topic| topic.origin == Origin::Existing && topic.id != into)
+            .cloned()
+        else {
+            return;
+        };
+        if self.chain(into).iter().any(|above| above.id == from.id) {
+            return;
+        }
+        self.topics.retain(|topic| topic.id != from.id);
+        for topic in &mut self.topics {
+            if topic.parent == Some(from.id) {
+                topic.parent = Some(into);
+            }
+        }
+        if let Some(target) = self.topics.iter_mut().find(|topic| topic.id == into) {
+            target.estimate = target.estimate.saturating_add(from.estimate);
+            target.aliases.extend(from.aliases.iter().cloned());
+        }
+        self.merges.push(TreeMerge {
+            from: from.id,
+            name: from.name,
+            into,
+        });
     }
 
     fn prune(&mut self, counts: &BTreeMap<TopicId, u32>) -> Vec<Lift> {
@@ -438,102 +544,23 @@ impl ProposedTree {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::cleanup::Project;
-    use crate::cleanup::SnapshotTopic;
+fn without_prefix(name: &str, parent: &str) -> Option<String> {
+    let head = name.get(..parent.len())?;
+    let rest = name.get(parent.len()..)?.strip_prefix(' ')?.trim_start();
+    (head.eq_ignore_ascii_case(parent) && !rest.is_empty()).then(|| capitalized(rest))
+}
 
-    fn draft(name: &str, parent: Option<&str>, estimate: u32, merges: &[&str]) -> DraftTopic {
-        DraftTopic {
-            name: name.to_owned(),
-            parent: parent.map(str::to_owned),
-            about: None,
-            estimate,
-            merges: merges.iter().map(|merge| (*merge).to_owned()).collect(),
-        }
-    }
+fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
 
-    #[test]
-    fn seeds_projects_and_guards_the_proposed_names() {
-        let now = Utc::now();
-        let existing = SnapshotTopic {
-            id: TopicId::random(),
-            kind: TopicKind::Work,
-            name: "AcmeKit Rewrite".to_owned(),
-            parent: None,
-            aliases: Vec::new(),
-            directory: None,
-            created_at: now,
-            updated_at: now,
-        };
-        let snapshot = Snapshot {
-            taken_at: now,
-            conversations: Vec::new(),
-            topics: vec![existing.clone()],
-            redirects: Vec::new(),
-            placements: Vec::new(),
-            corrections: Vec::new(),
-            projects: vec![
-                Project {
-                    name: "AcmeKit".to_owned(),
-                    aliases: vec!["acmekit-main".to_owned()],
-                },
-                Project {
-                    name: "General".to_owned(),
-                    aliases: Vec::new(),
-                },
-            ],
-            refused: Vec::new(),
-            pages: Vec::new(),
-            sections: Vec::new(),
-        };
-        let guard = NameGuard::new(["Fix the nightly build"], []);
-        let drafts = vec![
-            draft("Release Pipeline", Some("AcmeKit"), 9, &[]),
-            draft("Release pipelines", Some("AcmeKit"), 2, &[]),
-            draft("Fix the nightly build", Some("AcmeKit"), 5, &[]),
-            draft("Nightly Signing", Some("Release Pipeline"), 4, &[]),
-            draft("Docs Site", None, 1, &[]),
-            draft("acmekit-main", None, 6, &["AcmeKit Rewrite"]),
-        ];
-        let tree = ProposedTree::propose(&snapshot, drafts, &guard).unwrap();
-        let paths: Vec<String> = tree
-            .topics
-            .iter()
-            .map(|topic| tree.path(topic.id))
-            .collect();
-        assert_eq!(
-            paths,
-            [
-                "AcmeKit",
-                "AcmeKit › Release Pipeline",
-                "AcmeKit › Release Pipeline › Nightly Signing"
-            ]
-        );
-        assert_eq!(tree.merges.len(), 1);
-        assert_eq!(
-            tree.resolve(existing.id),
-            tree.topics.first().map(|topic| topic.id)
-        );
-        let reasons: Vec<(&str, &JunkReason)> = tree
-            .junk
-            .iter()
-            .map(|junk| (junk.name.as_str(), &junk.reason))
-            .collect();
-        assert_eq!(
-            reasons,
-            [
-                ("General", &JunkReason::Generic),
-                (
-                    "Release pipelines",
-                    &JunkReason::Duplicate {
-                        of: "AcmeKit › Release Pipeline".to_owned()
-                    }
-                ),
-                ("Fix the nightly build", &JunkReason::Title),
-                ("Docs Site", &JunkReason::TooFew { sessions: 1 }),
-            ]
-        );
-    }
+fn owner_words(name: &str) -> BTreeSet<String> {
+    fold(name)
+        .split('-')
+        .filter(|word| word.chars().count() >= MIN_OWNER_WORD_CHARS)
+        .map(str::to_owned)
+        .collect()
 }

@@ -104,7 +104,7 @@ fn with_claude_trust(
         .as_ref()
         .and_then(|gateway| gateway.terminal.as_ref())
         .is_some_and(|terminal| terminal.trust_claude_launch_dirs == Some(true));
-    match super::stores::claude_config_file(env) {
+    match capture::listing::claude_config_file(env) {
         Some(file) if enabled => service.with_claude_trust(ClaudeTrust {
             config: file,
             roots: harness_directories(config),

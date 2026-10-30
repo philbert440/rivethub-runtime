@@ -5,6 +5,7 @@ use crate::topics::fold;
 const MAX_NAME_WORDS: usize = 4;
 const MAX_NAME_CHARS: usize = 40;
 const MIN_ID_CHARS: usize = 6;
+const MAX_VERSION_DIGITS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Answer {
@@ -57,7 +58,7 @@ impl Refusal {
         }
         if text.contains(['/', '\\', '~'])
             || text.starts_with('.')
-            || words.iter().any(|word| dotted(word))
+            || words.iter().any(|word| file_name(word))
         {
             return Some(Self::Path);
         }
@@ -77,10 +78,50 @@ impl Refusal {
     }
 }
 
-fn dotted(word: &str) -> bool {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
+enum FileExtension {
+    Md,
+    Rs,
+    Ts,
+    Tsx,
+    Js,
+    Jsx,
+    Mjs,
+    Cjs,
+    Py,
+    Json,
+    Jsonl,
+    Yaml,
+    Yml,
+    Toml,
+    Sh,
+    Txt,
+    Log,
+    Sql,
+    Html,
+    Css,
+    Go,
+    Kt,
+    Java,
+    Swift,
+    Lock,
+    Env,
+    Conf,
+    Cfg,
+    Ini,
+    Xml,
+    Csv,
+    Png,
+    Jpg,
+    Svg,
+    Pdf,
+}
+
+fn file_name(word: &str) -> bool {
     word.trim_matches(|ch: char| !ch.is_alphanumeric())
-        .split_once('.')
-        .is_some_and(|(left, right)| !left.is_empty() && !right.is_empty())
+        .rsplit_once('.')
+        .is_some_and(|(left, right)| !left.is_empty() && right.parse::<FileExtension>().is_ok())
 }
 
 fn ticket(word: &str) -> bool {
@@ -103,10 +144,20 @@ fn pr_number(words: &[&str]) -> bool {
 }
 
 fn version(word: &str) -> bool {
-    let lower = word.to_ascii_lowercase();
-    lower
-        .strip_prefix('v')
-        .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|ch| ch.is_ascii_digit()))
+    let lower = word
+        .trim_matches(|ch: char| !ch.is_alphanumeric())
+        .to_ascii_lowercase();
+    let short = lower.strip_prefix('v').is_some_and(|rest| {
+        !rest.is_empty()
+            && rest.chars().count() <= MAX_VERSION_DIGITS
+            && rest.chars().all(|ch| ch.is_ascii_digit())
+    });
+    short
+        || lower.rsplit_once('.').is_some_and(|(left, right)| {
+            left.ends_with(|ch: char| ch.is_ascii_digit())
+                && !right.is_empty()
+                && right.chars().all(|ch| ch.is_ascii_digit())
+        })
 }
 
 fn branch(words: &[&str]) -> bool {

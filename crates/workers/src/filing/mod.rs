@@ -3,6 +3,7 @@ mod job;
 mod parse;
 mod prompt;
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use chrono::DateTime;
@@ -139,6 +140,7 @@ pub async fn plan_filing(
         .filter(|listing| listing.topic.kind == TopicKind::Work)
         .collect();
     let redirects = env.topics.store.redirects().await?;
+    let generic = BTreeSet::new();
     let evidence = Evidence {
         placed: placed.map(|(by, _)| by),
         corrected,
@@ -147,6 +149,7 @@ pub async fn plan_filing(
         cwd: subject.cwd.as_deref(),
         title: subject.head.title.as_deref(),
         summary: subject.summary.as_deref(),
+        generic: &generic,
     };
     match evidence.decide(&listings, &redirects) {
         Step::Placed(by) => Ok(FilingPlan::Placed(by)),
@@ -157,7 +160,7 @@ pub async fn plan_filing(
             topic,
             rule,
         }),
-        Step::Ask => ask(env, &subject, target, &listings).await,
+        Step::Ask { named } => ask(env, &subject, target, &listings, named).await,
     }
 }
 
@@ -283,11 +286,16 @@ async fn ask(
     subject: &Subject,
     target: Target,
     listings: &[TopicListing],
+    named: Option<TopicId>,
 ) -> Result<FilingPlan, WorkerError> {
     let lines = env.topics.filing.topic_lines().await?;
     let corrections = env.topics.filing.corrections(CORRECTION_EXAMPLES).await?;
     let tree = prompt::Tree::of(listings, &lines);
-    let reply = chat(env, &prompt::user_prompt(&tree, &corrections, subject)).await?;
+    let reply = chat(
+        env,
+        &prompt::user_prompt(&tree, &corrections, subject, named),
+    )
+    .await?;
     let answer = parse::answer(&reply, &tree)?;
     let deleted = match &answer {
         Answer::Suggest { name, .. } => match Slug::of_heading(name.as_str()) {

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::cleanup::Automated;
 use kernel::cleanup::Fate;
 use kernel::cleanup::FiledHow;
 use kernel::cleanup::Filing;
@@ -51,6 +52,8 @@ pub(super) struct ReportData {
     pub(super) fold_samples: BTreeMap<String, Vec<FoldRow>>,
     pub(super) sections: Vec<FoldRow>,
     pub(super) junk: Vec<Junk>,
+    pub(super) automated: Automated,
+    pub(super) generic: Vec<String>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -58,6 +61,8 @@ pub(super) struct ReportData {
 pub(super) struct Counts {
     pub(super) summarized: usize,
     pub(super) never: usize,
+    pub(super) automated: usize,
+    pub(super) children: usize,
     pub(super) same_session: usize,
     pub(super) filed_one_by_one: usize,
 }
@@ -128,7 +133,12 @@ fn build(
     let one_by_one: Vec<&Filing> = filed
         .filings
         .iter()
-        .filter(|filing| !matches!(filing.how, FiledHow::Never | FiledHow::SameTarget))
+        .filter(|filing| {
+            !matches!(
+                filing.how,
+                FiledHow::Never | FiledHow::SameTarget | FiledHow::Automated
+            )
+        })
         .collect();
     let (filed_by_rule, unfiled, nothing_fits) = rule_counts(&one_by_one);
     let (fold_outcomes, fold_rules, fold_samples) = fold_summary(tree, &folds.pages);
@@ -139,6 +149,8 @@ fn build(
         conversations: Counts {
             summarized: stage.snapshot.conversations.len(),
             never: count_how(filed, |how| matches!(how, FiledHow::Never)),
+            automated: count_how(filed, |how| matches!(how, FiledHow::Automated)),
+            children: count_how(filed, |how| matches!(how, FiledHow::Inherits)),
             same_session: count_how(filed, |how| matches!(how, FiledHow::SameTarget)),
             filed_one_by_one: one_by_one.len(),
         },
@@ -171,6 +183,8 @@ fn build(
             .map(|folded| fold_row(tree, folded))
             .collect(),
         junk: junk(stage, filed, folds)?,
+        automated: stage.automated.clone(),
+        generic: filed.generic.iter().cloned().collect(),
     })
 }
 
@@ -322,6 +336,7 @@ fn fold_row(tree: &ProposedTree, folded: &Folded) -> FoldRow {
         Fate::Section { topic } => ("section", Some(tree.path(*topic))),
         Fate::Merge { into } => ("merge", Some(into.clone())),
         Fate::Remove => ("remove", None),
+        Fate::Keep => ("keep", None),
         Fate::Undecided => ("undecided", None),
     };
     FoldRow {
@@ -352,7 +367,8 @@ fn junk(stage: &Stage<'_>, filed: &Filed, folds: &Folds) -> Result<Vec<Junk>, Er
             | FiledHow::Inherits
             | FiledHow::Rule { .. }
             | FiledHow::Nothing
-            | FiledHow::Unanswered => {}
+            | FiledHow::Unanswered
+            | FiledHow::Automated => {}
         }
     }
     junk.extend(folds.junk.iter().cloned());
@@ -396,6 +412,7 @@ fn rule_name(filing: &Filing) -> String {
         FiledHow::Refused { .. } => "suggestion refused".to_owned(),
         FiledHow::Nothing => "nothing fits".to_owned(),
         FiledHow::Unanswered => "no usable answer".to_owned(),
+        FiledHow::Automated => "automated run".to_owned(),
     };
     match &filing.lifted {
         Some(_) if filing.topic.is_some() => format!("{name}, lifted to parent"),
@@ -415,7 +432,8 @@ fn rule_label(filing: &Filing) -> String {
         | FiledHow::Inherits
         | FiledHow::Rule { .. }
         | FiledHow::Nothing
-        | FiledHow::Unanswered => filing.lifted.as_ref().map(|from| format!("from {from}")),
+        | FiledHow::Unanswered
+        | FiledHow::Automated => filing.lifted.as_ref().map(|from| format!("from {from}")),
     };
     match detail {
         Some(detail) => format!("{}: {detail}", rule_name(filing)),

@@ -10,6 +10,7 @@ mod grok;
 mod history;
 mod kimi;
 mod omp;
+mod roots;
 mod text;
 pub(crate) mod time;
 mod title;
@@ -30,6 +31,8 @@ use kernel::transcript::TranscriptReaderError;
 use wire::harness::HarnessId;
 
 pub use ancestors::with_ancestors;
+pub use roots::claude_config_file;
+pub use roots::store_roots;
 pub use transcripts::StoreTranscriptReader;
 
 use crate::readers::blocking;

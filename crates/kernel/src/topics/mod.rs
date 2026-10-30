@@ -18,6 +18,8 @@ use wire::session_id::SessionId;
 
 use crate::BoxError;
 
+pub use categorize::GENERIC_SHARE_PERCENT;
+pub use categorize::generic_keys;
 pub use categorize::mentioned;
 pub use decision::DECISIONS_HEADING;
 pub use decision::Decision;

@@ -35,6 +35,7 @@ pub(super) async fn stage(stage: &Stage<'_>) -> Result<ProposedTree, Error> {
     let items: Vec<TreeItem<'_>> = grouped
         .filable
         .iter()
+        .filter(|(_, conversation)| !stage.automated.runs.contains(&conversation.head.id))
         .map(|(_, conversation)| TreeItem {
             title: conversation.title(),
             cwd: conversation.cwd.as_deref(),

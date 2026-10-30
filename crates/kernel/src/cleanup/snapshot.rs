@@ -8,6 +8,7 @@ use crate::filing::CorrectionExample;
 use crate::filing::Subject;
 use crate::filing::Target;
 use crate::memory::ConversationHead;
+use crate::tasks::TaskOrigin;
 use crate::topics::PlacementSource;
 use crate::topics::Root;
 use crate::topics::RootKind;
@@ -75,6 +76,10 @@ pub struct SnapshotConversation {
     pub summary: Option<String>,
     pub last_active: DateTime<Utc>,
     pub task_parent: Option<SnapshotHead>,
+    pub task_origin: Option<TaskOrigin>,
+    pub opening: Option<String>,
+    pub user_turns: u32,
+    pub parent_session: Option<String>,
 }
 
 impl SnapshotConversation {

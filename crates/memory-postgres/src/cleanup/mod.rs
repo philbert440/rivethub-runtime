@@ -48,6 +48,13 @@ impl PostgresMemory {
         Ok(Self::new(pool))
     }
 
+    pub async fn database(&self) -> Result<String, Error> {
+        sqlx::query_scalar::<_, String>("SELECT current_database()")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|source| Error::operation("database name", source))
+    }
+
     async fn ensure_read_only(&self) -> Result<(), Error> {
         let setting = sqlx::query_scalar::<_, String>("SELECT current_setting($1)")
             .bind(READ_ONLY_SETTING)
@@ -81,10 +88,17 @@ impl PostgresMemory {
              )
              SELECT c.id, c.session_key, c.agent, c.channel, c.title,
                     c.settings->>'cwd' AS cwd, s.content AS summary,
-                    c.updated_at AS last_active
+                    c.updated_at AS last_active, opening.content AS opening,
+                    turns.count AS user_turns, t.origin AS task_origin
                FROM first
                JOIN rh_summaries s ON s.id = first.id
                JOIN rh_conversations c ON c.id = first.conversation_id
+               LEFT JOIN LATERAL (SELECT m.content FROM rh_messages m
+                                   WHERE m.conversation_id = c.id AND m.role = 'user'
+                                   ORDER BY m.created_at LIMIT 1) opening ON true
+               LEFT JOIN LATERAL (SELECT count(*) AS count FROM rh_messages m
+                                   WHERE m.conversation_id = c.id AND m.role = 'user') turns ON true
+               LEFT JOIN rh_tasks t ON c.session_key = 'task:' || t.id::text
               ORDER BY c.updated_at, c.id",
         )
         .fetch_all(&self.pool)
@@ -92,7 +106,7 @@ impl PostgresMemory {
         .map_err(|source| Error::operation("cleanup conversations", source))?;
         let mut conversations = Vec::with_capacity(rows.len());
         for row in rows {
-            let mut conversation = row.conversation();
+            let mut conversation = row.conversation()?;
             if let Filable::Task(task) = Filable::of(&conversation.head.head()) {
                 conversation.task_parent = self
                     .task_parent(task, conversation.head.id)

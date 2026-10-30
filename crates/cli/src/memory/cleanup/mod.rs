@@ -1,7 +1,9 @@
 mod book;
 mod filing;
 mod fold;
+mod lineage;
 mod pool;
+mod propose;
 mod render;
 mod report;
 mod tree;
@@ -12,9 +14,12 @@ use std::time::Duration;
 use std::time::Instant;
 
 use config::Environment;
+use kernel::cleanup::Automated;
 use kernel::cleanup::CleanupSource as _;
 use kernel::cleanup::NameGuard;
 use kernel::cleanup::Snapshot;
+use kernel::cleanup::group;
+use kernel::cleanup::seed_keys;
 use memory_postgres::PostgresMemory;
 use serde::Deserialize;
 use serde::Serialize;
@@ -36,10 +41,18 @@ const ATTEMPTS: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::memory) struct CleanupArgs {
+    mode: Mode,
+    database: Option<String>,
     out: PathBuf,
     model_url: String,
     model: String,
     settings: Settings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    DryRun,
+    Propose,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,8 +77,8 @@ impl Timings {
 
 pub(in crate::memory) fn parse(args: &[String]) -> Result<CleanupArgs, Error> {
     let mut scan = Scan::new(args);
-    let mut dry_run = false;
-    let (mut out, mut model_url, mut model) = (None, None, None);
+    let (mut dry_run, mut propose) = (false, false);
+    let (mut out, mut model_url, mut model, mut database) = (None, None, None, None);
     let mut settings = Settings {
         concurrency: DEFAULT_CONCURRENCY,
         batch: DEFAULT_BATCH,
@@ -77,7 +90,13 @@ pub(in crate::memory) fn parse(args: &[String]) -> Result<CleanupArgs, Error> {
             dry_run = true;
             continue;
         }
-        if let Some(value) = text(&mut scan, "--out")? {
+        if scan.flag("--propose") {
+            propose = true;
+            continue;
+        }
+        if let Some(value) = text(&mut scan, "--database")? {
+            database = Some(value);
+        } else if let Some(value) = text(&mut scan, "--out")? {
             out = Some(PathBuf::from(value));
         } else if let Some(value) = text(&mut scan, "--model-url")? {
             model_url = Some(value);
@@ -98,10 +117,15 @@ pub(in crate::memory) fn parse(args: &[String]) -> Result<CleanupArgs, Error> {
             return Err(Error::Unexpected(token));
         }
     }
-    if !dry_run {
-        return Err(Error::CleanupDryRun);
-    }
+    let mode = match (dry_run, propose) {
+        (true, false) => Mode::DryRun,
+        (false, true) if database.is_some() => Mode::Propose,
+        (false, true) => return Err(Error::CleanupDatabase),
+        (true, true) | (false, false) => return Err(Error::CleanupMode),
+    };
     Ok(CleanupArgs {
+        mode,
+        database,
         out: out.ok_or(Error::CleanupOut)?,
         model_url: model_url.ok_or(Error::CleanupModel)?,
         model: model.ok_or(Error::CleanupModel)?,
@@ -114,24 +138,17 @@ pub(in crate::memory) async fn run(
     env: &Environment,
     shutdown: &CancellationToken,
 ) -> Result<Report, Error> {
+    let target = match &args.database {
+        Some(url) => url.clone(),
+        None => super::run::postgres_url(env)?,
+    };
+    let live = match args.mode {
+        Mode::Propose => Some(propose::refuse_live(&target, env)?),
+        Mode::DryRun => None,
+    };
     let book = Book::open(args.out.clone()).await?;
     let mut timings: Timings = book.read(TIMINGS).await?.unwrap_or_default();
-    let started = Instant::now();
-    let snapshot = if let Some(snapshot) = book.read::<Snapshot>(SNAPSHOT).await? {
-        snapshot
-    } else {
-        let snapshot = gather(super::run::postgres_url(env)?, env).await?;
-        book.write(SNAPSHOT, &snapshot).await?;
-        timings.add("gather", started);
-        book.write(TIMINGS, &timings).await?;
-        snapshot
-    };
-    book.note(&format!(
-        "snapshot: {} conversations, {} pages",
-        snapshot.conversations.len(),
-        snapshot.pages.len()
-    ))
-    .await?;
+    let snapshot = snapshot(&book, &target, env, &mut timings).await?;
     let provider = providers::OpenAiCompatible::build(
         config::ProviderType::Vllm,
         &config::provider::OpenaiProvider {
@@ -148,12 +165,14 @@ pub(in crate::memory) async fn run(
         timeout: args.settings.timeout,
         cancel: shutdown,
     };
-    let guard = NameGuard::new(
-        snapshot
-            .conversations
+    let guard = name_guard(&snapshot);
+    let grouped = group(&snapshot.conversations);
+    let automated = Automated::detect(
+        grouped
+            .filable
             .iter()
-            .filter_map(|conversation| conversation.title()),
-        snapshot.refused.iter().map(String::as_str),
+            .map(|(_, conversation)| *conversation),
+        &seed_keys(&snapshot),
     );
     let stage = Stage {
         book: &book,
@@ -161,6 +180,7 @@ pub(in crate::memory) async fn run(
         call: &call,
         settings: &args.settings,
         guard: &guard,
+        automated: &automated,
     };
     let started = Instant::now();
     let proposed = tree::stage(&stage).await;
@@ -177,8 +197,12 @@ pub(in crate::memory) async fn run(
     book.write(TIMINGS, &timings).await?;
     let folds = folds?;
     let summary = report::write(&stage, &filed, &folds, &timings).await?;
+    let proposed = match &live {
+        None => String::new(),
+        Some(live) => propose::write(&stage, &filed, &folds, &target, live).await?,
+    };
     Ok(Report::success(format!(
-        "{summary}\nwrote {}\n",
+        "{summary}\nwrote {}\n{proposed}",
         book.path(report::REPORT).display()
     )))
 }
@@ -189,6 +213,7 @@ struct Stage<'a> {
     call: &'a ModelCall<'a>,
     settings: &'a Settings,
     guard: &'a NameGuard,
+    automated: &'a Automated,
 }
 
 impl Stage<'_> {
@@ -201,6 +226,51 @@ impl Stage<'_> {
             .await?;
         Err(Error::CleanupIncomplete { stage, failed })
     }
+}
+
+async fn snapshot(
+    book: &Book,
+    target: &str,
+    env: &Environment,
+    timings: &mut Timings,
+) -> Result<Snapshot, Error> {
+    let started = Instant::now();
+    let snapshot = if let Some(snapshot) = book.read::<Snapshot>(SNAPSHOT).await? {
+        snapshot
+    } else {
+        let mut snapshot = gather(target.to_owned(), env).await?;
+        let children = lineage::enrich(&mut snapshot, env).await?;
+        book.note(&format!("lineage: {children} child session(s)"))
+            .await?;
+        book.write(SNAPSHOT, &snapshot).await?;
+        timings.add("gather", started);
+        book.write(TIMINGS, &*timings).await?;
+        snapshot
+    };
+    book.note(&format!(
+        "snapshot: {} conversations, {} pages",
+        snapshot.conversations.len(),
+        snapshot.pages.len()
+    ))
+    .await?;
+    Ok(snapshot)
+}
+
+fn name_guard(snapshot: &Snapshot) -> NameGuard {
+    NameGuard::new(
+        snapshot
+            .conversations
+            .iter()
+            .filter_map(|conversation| conversation.title()),
+        snapshot.refused.iter().map(String::as_str),
+    )
+    .with_context(
+        snapshot
+            .projects
+            .iter()
+            .flat_map(|project| std::iter::once(&project.name).chain(&project.aliases))
+            .map(String::as_str),
+    )
 }
 
 async fn gather(url: String, env: &Environment) -> Result<Snapshot, Error> {

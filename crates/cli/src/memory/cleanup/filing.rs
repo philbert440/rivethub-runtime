@@ -7,6 +7,7 @@ use kernel::cleanup::Filing;
 use kernel::cleanup::Grouped;
 use kernel::cleanup::Lift;
 use kernel::cleanup::ProposedTree;
+use kernel::cleanup::SnapshotConversation;
 use kernel::cleanup::SnapshotCorrection;
 use kernel::cleanup::Turn;
 use kernel::cleanup::filed_counts;
@@ -38,6 +39,7 @@ pub(super) struct Filed {
     pub(super) tree: ProposedTree,
     pub(super) lifts: Vec<Lift>,
     pub(super) filings: Vec<Filing>,
+    pub(super) generic: BTreeSet<String>,
 }
 
 struct Context<'a> {
@@ -52,10 +54,18 @@ pub(super) async fn stage(stage: &Stage<'_>, tree: ProposedTree) -> Result<Filed
     if let Some(filed) = stage.book.read::<Filed>(FILINGS).await? {
         return Ok(filed);
     }
+    let grouped = group(&stage.snapshot.conversations);
+    let representatives: Vec<&SnapshotConversation> = grouped
+        .filable
+        .iter()
+        .map(|(_, conversation)| *conversation)
+        .collect();
     let desk = Desk::new(
         stage.snapshot,
         &tree,
         tree.listings(stage.snapshot.taken_at)?,
+        &representatives,
+        stage.automated.clone(),
     );
     let lines = tree.lines();
     let corrections = stage
@@ -78,7 +88,6 @@ pub(super) async fn stage(stage: &Stage<'_>, tree: ProposedTree) -> Result<Filed
         corrections: &corrections,
         deleted: &deleted,
     };
-    let grouped = group(&stage.snapshot.conversations);
     let mut filings: Vec<Filing> = grouped
         .never
         .iter()
@@ -92,6 +101,20 @@ pub(super) async fn stage(stage: &Stage<'_>, tree: ProposedTree) -> Result<Filed
             FiledHow::SameTarget,
         )
     }));
+    let parents: HashMap<Uuid, Target> = representatives
+        .iter()
+        .filter_map(|conversation| {
+            Desk::parent_session(conversation).map(|parent| (conversation.head.id, parent))
+        })
+        .collect();
+    for filing in filings
+        .iter_mut()
+        .filter(|filing| filing.how == FiledHow::Inherits)
+    {
+        filing.topic = parents
+            .get(&filing.conversation)
+            .and_then(|parent| filed.get(parent).copied().flatten());
+    }
     let mut tree = tree;
     let lifts = tree.lift(&filed_counts(&filings));
     for filing in &mut filings {
@@ -101,6 +124,7 @@ pub(super) async fn stage(stage: &Stage<'_>, tree: ProposedTree) -> Result<Filed
         tree,
         lifts,
         filings,
+        generic: desk.generic().clone(),
     };
     stage.book.write(FILINGS, &filed).await?;
     Ok(filed)
@@ -140,13 +164,14 @@ async fn file_rounds(
             };
             let filing = match desk.turn(conversation, target, parent) {
                 Turn::Done(filing) => filing,
-                Turn::Ask => {
+                Turn::Ask { named } => {
                     if let Some(filing) = answered.remove(&conversation.head.id) {
                         filing
                     } else {
                         asks.push(BatchItem {
                             target: target.clone(),
                             subject: conversation.subject(),
+                            named,
                         });
                         continue;
                     }
