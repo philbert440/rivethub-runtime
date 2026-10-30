@@ -12,6 +12,7 @@ use axum::response::IntoResponse;
 use axum::response::Redirect;
 use axum::response::Response;
 use axum::routing::get;
+use kernel::wiki::WIKI_LIMIT_MAX;
 use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
 use kernel::wiki::page::WikiSlug;
@@ -92,19 +93,14 @@ async fn topics(
     State(gateway): State<Arc<Gateway>>,
     Query(query): Query<WikiQuery>,
 ) -> Result<Json<WikiTopicList>, ApiError> {
-    Ok(Json(gateway.store().wiki_topics(query.into()).await?))
+    Ok(Json(gateway.store().wiki_topics(filter(query)).await?))
 }
 
 async fn gaps(
     State(gateway): State<Arc<Gateway>>,
     Query(query): Query<WikiQuery>,
 ) -> Result<Json<WikiGapsResponse>, ApiError> {
-    Ok(Json(
-        gateway
-            .store()
-            .wiki_gaps(WikiFilter::from(query).limit)
-            .await?,
-    ))
+    Ok(Json(gateway.store().wiki_gaps(filter(query).limit).await?))
 }
 
 async fn page(
@@ -132,7 +128,7 @@ async fn index(
     State(gateway): State<Arc<Gateway>>,
     Query(query): Query<WikiQuery>,
 ) -> Result<Response, WikiError> {
-    let filter = WikiFilter::from(query);
+    let filter = filter(query);
     let topics = gateway
         .store()
         .wiki_topics(filter.clone())
@@ -149,6 +145,26 @@ async fn article(
     Path(slug): Path<String>,
 ) -> Result<Response, WikiError> {
     respond(&gateway, requested_slug(slug)?, Format::Html).await
+}
+
+fn filter(query: WikiQuery) -> WikiFilter {
+    #[expect(
+        clippy::manual_unwrap_or_default,
+        reason = "CONTRACT B1: an absent offset selects the first page; serde rejects invalid offsets"
+    )]
+    let offset = match query.offset {
+        Some(offset) => offset,
+        None => 0,
+    };
+    WikiFilter {
+        query: query.q.filter(|text| !text.trim().is_empty()),
+        tag: query.tag,
+        limit: match query.limit {
+            Some(limit) => limit.clamp(1, WIKI_LIMIT_MAX),
+            None => 50,
+        },
+        offset,
+    }
 }
 
 fn requested_slug(slug: String) -> Result<WikiSlug, ApiError> {

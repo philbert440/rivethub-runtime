@@ -242,7 +242,7 @@ count = 10
 check = "KERNELWIRE"
 file = "crates/kernel/src/wiki.rs"
 text = "wire"
-count = 2
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"
