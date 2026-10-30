@@ -39,12 +39,12 @@ async fn seed(pool: &PgPool) -> TestResult {
         .execute(pool)
         .await?;
     sqlx::query(
-        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at)
-         VALUES ('release', '00000000-0000-4000-8000-000000000001', 'decision', 'Ship it', '2026-10-01T00:00:00Z')",
+        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at, owner_user_id)
+         VALUES ('release', '00000000-0000-4000-8000-000000000001', 'decision', 'Ship it', '2026-10-01T00:00:00Z', 'owner')",
     ).execute(pool).await?;
     sqlx::query(
-        "INSERT INTO rh_wiki_provenance (topic_slug, source_kind, source_id, conversation_id)
-         VALUES ('release', 'summary', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002')",
+        "INSERT INTO rh_wiki_provenance (topic_slug, source_kind, source_id, conversation_id, owner_user_id)
+         VALUES ('release', 'summary', '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002', 'owner')",
     ).execute(pool).await?;
     Ok(())
 }

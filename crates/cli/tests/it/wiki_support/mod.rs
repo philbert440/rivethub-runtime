@@ -75,6 +75,7 @@ pub(crate) async fn filed(store: &PostgresMemory, job: &ExtractWiki) -> TestResu
                         aliases: Vec::new(),
                         parent: None,
                         directory: None,
+                        owner: testkit::owner().ok(),
                     },
                     now(),
                 )?)
@@ -90,6 +91,7 @@ pub(crate) async fn filed(store: &PostgresMemory, job: &ExtractWiki) -> TestResu
             topic: topic.id,
             by: PlacementSource::You,
             at: now(),
+            owner: testkit::owner().ok(),
         })
         .await?;
     Ok(())
@@ -119,12 +121,12 @@ pub(crate) async fn seed(pool: &PgPool) -> Result<ExtractWiki, sqlx::Error> {
         .await?;
     let conversation_id = Uuid::new_v4();
     let summary_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO rh_conversations (id, session_key, agent) VALUES ($1, $2, 'rivet')")
+    sqlx::query("INSERT INTO rh_conversations (id, session_key, agent, owner_user_id) VALUES ($1, $2, 'rivet', 'owner')")
         .bind(conversation_id)
         .bind(format!("claude-code:{conversation_id}"))
         .execute(&mut *tx)
         .await?;
-    sqlx::query("INSERT INTO rh_summaries (id, conversation_id, content, kind) VALUES ($1, $2, 'Deploy with a health gate.', 'leaf')")
+    sqlx::query("INSERT INTO rh_summaries (id, conversation_id, content, kind, owner_user_id) VALUES ($1, $2, 'Deploy with a health gate.', 'leaf', 'owner')")
         .bind(summary_id).bind(conversation_id).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(ExtractWiki {
@@ -179,9 +181,9 @@ pub(crate) async fn seed_recording(pool: &PgPool, row: &Summary) -> Result<(), s
     sqlx::query("SET LOCAL rivet.defer_embed_enqueue = 'on'")
         .execute(&mut *tx)
         .await?;
-    sqlx::query("INSERT INTO rh_conversations (id, session_key, agent) VALUES ($1, $2, 'rivet') ON CONFLICT DO NOTHING")
+    sqlx::query("INSERT INTO rh_conversations (id, session_key, agent, owner_user_id) VALUES ($1, $2, 'rivet', 'owner') ON CONFLICT DO NOTHING")
         .bind(row.conversation_id).bind(format!("claude-code:{}", row.conversation_id)).execute(&mut *tx).await?;
-    sqlx::query("INSERT INTO rh_summaries (id, conversation_id, content, kind, depth, message_count, earliest_at, latest_at, created_at, model, pipeline_version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+    sqlx::query("INSERT INTO rh_summaries (id, conversation_id, content, kind, depth, message_count, earliest_at, latest_at, created_at, model, pipeline_version, owner_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, 'owner')")
         .bind(row.id).bind(row.conversation_id).bind(&row.content).bind(&row.kind).bind(row.depth).bind(row.message_count)
         .bind(row.earliest_at).bind(row.latest_at).bind(row.created_at).bind(&row.model).bind(row.pipeline_version)
         .execute(&mut *tx).await?;

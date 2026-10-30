@@ -365,7 +365,10 @@ async fn seed_conversation(
         }],
     };
     memory
-        .capture_batch(&batch, &memory_postgres::CaptureOptions::default())
+        .capture_batch(
+            &batch,
+            &memory_postgres::CaptureOptions::owned_by(&testkit::owner()?),
+        )
         .await?;
     let found: Uuid = sqlx::query_scalar("select id from rh_conversations where session_key = $1")
         .bind(session)
@@ -384,7 +387,7 @@ async fn insert_summary(
     sqlx::query("select set_config('rivet.defer_embed_enqueue', 'on', true)")
         .execute(&mut *tx)
         .await?;
-    sqlx::query("insert into rh_summaries (id, conversation_id, content) values ($1, $2, $3)")
+    sqlx::query("insert into rh_summaries (id, conversation_id, content, owner_user_id) values ($1, $2, $3, 'owner')")
         .bind(summary)
         .bind(conversation)
         .bind(content)

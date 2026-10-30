@@ -1,14 +1,25 @@
 use super::*;
 
 pub(crate) async fn seed_fts() -> TestResult<Fresh> {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let now = instant(common::RECORDED_START)?;
     let deployed = fresh
         .store
-        .capture(deploy_batch("cli:sess-1", "rivet")?, None, now)
+        .capture(
+            deploy_batch("cli:sess-1", "rivet")?,
+            &testkit::owner()?,
+            None,
+            now,
+        )
         .await?;
-    let helper = fresh.store.capture(helper_batch()?, None, now).await?;
-    fresh.store.capture(rollback_batch()?, None, now).await?;
+    let helper = fresh
+        .store
+        .capture(helper_batch()?, &testkit::owner()?, None, now)
+        .await?;
+    fresh
+        .store
+        .capture(rollback_batch()?, &testkit::owner()?, None, now)
+        .await?;
     let sess1 = deployed.conversation_id;
     let sess2 = helper.conversation_id;
     fresh
@@ -129,7 +140,12 @@ fn insert_tag(
 
 pub(crate) async fn seed_tag_pool(store: &SqliteStore, now: DateTime<Utc>) -> TestResult {
     let tagged = store
-        .capture(one_message("tagged", TAGGED_NOTE), None, now)
+        .capture(
+            one_message("tagged", TAGGED_NOTE),
+            &testkit::owner()?,
+            None,
+            now,
+        )
         .await?;
     store
         .with_conn({
@@ -150,6 +166,7 @@ pub(crate) async fn seed_tag_pool(store: &SqliteStore, now: DateTime<Utc>) -> Te
         store
             .capture(
                 one_message(&format!("short-{index}"), "rollback"),
+                &testkit::owner()?,
                 None,
                 now,
             )
@@ -161,7 +178,12 @@ pub(crate) async fn seed_tag_pool(store: &SqliteStore, now: DateTime<Utc>) -> Te
             .collect::<Vec<_>>()
             .join(" ");
         store
-            .capture(one_message(&format!("pad-{index}"), &pad), None, now)
+            .capture(
+                one_message(&format!("pad-{index}"), &pad),
+                &testkit::owner()?,
+                None,
+                now,
+            )
             .await?;
     }
     Ok(())

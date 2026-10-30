@@ -162,7 +162,7 @@ impl TopicStore for PostgresMemory {
     async fn list(&self) -> Result<Vec<TopicListing>, TopicError> {
         let topics = sqlx::query!(
             r#"SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
-                      t.directory_path, t.created_at, t.updated_at, t.closed_at,
+                      t.directory_path, t.created_at, t.updated_at, t.closed_at, t.owner_user_id,
                       (SELECT count(*) FROM rh_session_placements p WHERE p.topic_id = t.id)
                         AS "session_count!",
                       (SELECT max(c.updated_at)
@@ -199,6 +199,7 @@ impl TopicStore for PostgresMemory {
                         created_at: row.created_at,
                         updated_at: row.updated_at,
                         closed_at: row.closed_at,
+                        owner_user_id: row.owner_user_id,
                     },
                     own,
                 )?;
@@ -260,7 +261,7 @@ impl TopicStore for PostgresMemory {
         sqlx::query_as!(
             PlacementRow,
             "DELETE FROM rh_session_placements WHERE session_id = $1
-             RETURNING session_id, topic_id, placed_by, placed_at",
+             RETURNING session_id, topic_id, placed_by, placed_at, owner_user_id",
             session.as_str()
         )
         .fetch_optional(&self.pool)
@@ -282,7 +283,7 @@ impl TopicStore for PostgresMemory {
     async fn sessions(&self, topic: TopicId) -> Result<Vec<PlacedSession>, TopicError> {
         sqlx::query_as!(
             PlacedRow,
-            "SELECT p.session_id, p.topic_id, p.placed_by, p.placed_at, c.last_active
+            "SELECT p.session_id, p.topic_id, p.placed_by, p.placed_at, p.owner_user_id, c.last_active
                FROM rh_session_placements p
                LEFT JOIN LATERAL (
                    SELECT max(updated_at) AS last_active

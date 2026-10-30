@@ -1,3 +1,4 @@
+use kernel::owner::Owner;
 use kernel::topics::Alias;
 use kernel::topics::MergePlan;
 use kernel::topics::Placement;
@@ -83,8 +84,9 @@ pub(super) async fn insert(conn: &mut PgConnection, topic: &Topic) -> Result<(),
     let directory = topic.directory.as_ref();
     sqlx::query!(
         "INSERT INTO rh_topics (id, slug, name, parent_id, directory_kind, directory_node,
-                                directory_path, created_at, updated_at, closed_at, kind)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                                directory_path, created_at, updated_at, closed_at, kind,
+                                owner_user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
         topic.id.uuid(),
         topic.slug.as_str(),
         topic.name.as_str(),
@@ -95,7 +97,8 @@ pub(super) async fn insert(conn: &mut PgConnection, topic: &Topic) -> Result<(),
         topic.created_at,
         topic.updated_at,
         topic.closed_at,
-        topic.kind.to_string()
+        topic.kind.to_string(),
+        topic.owner.as_ref().map(Owner::as_str)
     )
     .execute(&mut *conn)
     .await
@@ -355,15 +358,19 @@ pub(super) async fn placement(
     placement: &Placement,
 ) -> Result<(), TopicError> {
     sqlx::query!(
-        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at)
-         VALUES ($1, $2, $3, $4)
+        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at, owner_user_id)
+         VALUES ($1, $2, $3, $4,
+                 coalesce((SELECT c.owner_user_id FROM rh_conversations c WHERE c.session_key = $1
+                            ORDER BY c.created_at LIMIT 1), $5))
          ON CONFLICT (session_id) DO UPDATE SET topic_id = EXCLUDED.topic_id,
                                                 placed_by = EXCLUDED.placed_by,
-                                                placed_at = EXCLUDED.placed_at",
+                                                placed_at = EXCLUDED.placed_at,
+                                                owner_user_id = EXCLUDED.owner_user_id",
         placement.session.as_str(),
         placement.topic.uuid(),
         placement.by.to_string(),
-        placement.at
+        placement.at,
+        placement.owner.as_ref().map(Owner::as_str)
     )
     .execute(&mut *conn)
     .await

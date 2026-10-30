@@ -185,6 +185,7 @@ impl ProposedTree {
                         created_at: now,
                         updated_at: now,
                         closed_at: None,
+                        owner: None,
                     },
                     session_count: u64::from(topic.estimate),
                     last_active: None,

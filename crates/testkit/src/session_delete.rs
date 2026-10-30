@@ -84,13 +84,25 @@ pub async fn seed(
     let deleted = session(DELETED)?;
     let sibling = session(SIBLING)?;
     memory
-        .capture(batch(&deleted, "opus", exchange("a")), None)
+        .capture(
+            batch(&deleted, "opus", exchange("a")),
+            &crate::owner()?,
+            None,
+        )
         .await?;
     memory
-        .capture(batch(&deleted, "sonnet", exchange("b")), None)
+        .capture(
+            batch(&deleted, "sonnet", exchange("b")),
+            &crate::owner()?,
+            None,
+        )
         .await?;
     memory
-        .capture(batch(&sibling, "opus", exchange("c")), None)
+        .capture(
+            batch(&sibling, "opus", exchange("c")),
+            &crate::owner()?,
+            None,
+        )
         .await?;
     Ok((deleted, sibling))
 }
@@ -111,7 +123,11 @@ pub async fn capture_for_a_deleted_session_writes_nothing(
         BTreeMap::from([(deleted.as_str().to_owned(), at(5))]),
     )?;
     let resent = memory
-        .capture(batch(&deleted, "opus", exchange("again")), None)
+        .capture(
+            batch(&deleted, "opus", exchange("again")),
+            &crate::owner()?,
+            None,
+        )
         .await?;
     same("capture inserts nothing", resent.inserted, 0)?;
     same("capture reports the batch skipped", resent.skipped, 2)?;
@@ -120,7 +136,7 @@ pub async fn capture_for_a_deleted_session_writes_nothing(
         message.created_at = None;
     }
     let unstamped = memory
-        .capture(batch(&deleted, "opus", unstamped), None)
+        .capture(batch(&deleted, "opus", unstamped), &crate::owner()?, None)
         .await?;
     same(
         "messages without a timestamp count as old",
@@ -128,19 +144,22 @@ pub async fn capture_for_a_deleted_session_writes_nothing(
         0,
     )?;
     let appended = memory
-        .append(vec![MemoryEntry {
-            id: Some("append-1".to_owned()),
-            session_id: deleted.as_str().to_owned(),
-            agent: "opus".to_owned(),
-            channel: "cli".to_owned(),
-            role: Role::User,
-            content: "one more".to_owned(),
-            tool_name: None,
-            tool_args: None,
-            tool_result: None,
-            metadata: None,
-            created_at: Some(at(5)),
-        }])
+        .append(
+            &crate::owner()?,
+            vec![MemoryEntry {
+                id: Some("append-1".to_owned()),
+                session_id: deleted.as_str().to_owned(),
+                agent: "opus".to_owned(),
+                channel: "cli".to_owned(),
+                role: Role::User,
+                content: "one more".to_owned(),
+                tool_name: None,
+                tool_args: None,
+                tool_result: None,
+                metadata: None,
+                created_at: Some(at(5)),
+            }],
+        )
         .await?;
     same("append inserts nothing", appended, 0)?;
     same(
@@ -162,7 +181,11 @@ pub async fn capture_for_a_deleted_session_writes_nothing(
         Some(2),
     )?;
     let sibling_more = memory
-        .capture(batch(&sibling, "opus", exchange("d")), None)
+        .capture(
+            batch(&sibling, "opus", exchange("d")),
+            &crate::owner()?,
+            None,
+        )
         .await?;
     same("sibling still captures", sibling_more.inserted, 2)?;
     Ok(())
@@ -177,6 +200,7 @@ pub async fn activity_counts_turns_tools_and_placements(
     let busy = session("00000000-0000-4000-8000-0000000000a2")?;
     let placed = session("00000000-0000-4000-8000-0000000000a3")?;
     let absent = session("00000000-0000-4000-8000-0000000000a4")?;
+    let owner = crate::owner()?;
     memory
         .capture(
             batch(
@@ -188,6 +212,7 @@ pub async fn activity_counts_turns_tools_and_placements(
                     message("q-2", Role::Assistant, "Hello!"),
                 ],
             ),
+            &owner,
             None,
         )
         .await?;
@@ -201,11 +226,12 @@ pub async fn activity_counts_turns_tools_and_placements(
                 "opus",
                 vec![message("b-1", Role::User, "list files"), tool],
             ),
+            &owner,
             None,
         )
         .await?;
     memory
-        .capture(batch(&placed, "opus", exchange("p")), None)
+        .capture(batch(&placed, "opus", exchange("p")), &owner, None)
         .await?;
     let topic = topics.create(new_topic("Kept", &[], None)?).await?;
     topics
@@ -214,6 +240,7 @@ pub async fn activity_counts_turns_tools_and_placements(
             topic: topic.id,
             by: PlacementSource::You,
             at: at(3),
+            owner: Some(owner),
         })
         .await?;
     let activity = deletions
@@ -262,7 +289,7 @@ pub async fn a_deleted_session_used_again_comes_back(
         reply.created_at = Some(at(7));
     }
     let revived = memory
-        .capture(batch(&deleted, "opus", resumed), None)
+        .capture(batch(&deleted, "opus", resumed), &crate::owner()?, None)
         .await?;
     same("the whole batch is captured", revived.inserted, 2)?;
     same(
@@ -280,34 +307,37 @@ pub async fn a_deleted_session_used_again_comes_back(
         .delete_session(deleted.as_str(), None, at(10))
         .await?;
     let appended = memory
-        .append(vec![
-            MemoryEntry {
-                id: Some("append-old".to_owned()),
-                session_id: deleted.as_str().to_owned(),
-                agent: "opus".to_owned(),
-                channel: "cli".to_owned(),
-                role: Role::User,
-                content: "an old line".to_owned(),
-                tool_name: None,
-                tool_args: None,
-                tool_result: None,
-                metadata: None,
-                created_at: Some(at(9)),
-            },
-            MemoryEntry {
-                id: Some("append-new".to_owned()),
-                session_id: deleted.as_str().to_owned(),
-                agent: "opus".to_owned(),
-                channel: "cli".to_owned(),
-                role: Role::Assistant,
-                content: "a new reply".to_owned(),
-                tool_name: None,
-                tool_args: None,
-                tool_result: None,
-                metadata: None,
-                created_at: Some(at(11)),
-            },
-        ])
+        .append(
+            &crate::owner()?,
+            vec![
+                MemoryEntry {
+                    id: Some("append-old".to_owned()),
+                    session_id: deleted.as_str().to_owned(),
+                    agent: "opus".to_owned(),
+                    channel: "cli".to_owned(),
+                    role: Role::User,
+                    content: "an old line".to_owned(),
+                    tool_name: None,
+                    tool_args: None,
+                    tool_result: None,
+                    metadata: None,
+                    created_at: Some(at(9)),
+                },
+                MemoryEntry {
+                    id: Some("append-new".to_owned()),
+                    session_id: deleted.as_str().to_owned(),
+                    agent: "opus".to_owned(),
+                    channel: "cli".to_owned(),
+                    role: Role::Assistant,
+                    content: "a new reply".to_owned(),
+                    tool_name: None,
+                    tool_args: None,
+                    tool_result: None,
+                    metadata: None,
+                    created_at: Some(at(11)),
+                },
+            ],
+        )
         .await?;
     same("append keeps the whole batch", appended, 2)?;
     same(
@@ -325,7 +355,7 @@ pub async fn an_empty_session_is_reported_until_it_is_deleted(
     seed(memory).await?;
     let empty = session("00000000-0000-4000-8000-0000000000e1")?;
     memory
-        .capture(batch(&empty, "grok", Vec::new()), None)
+        .capture(batch(&empty, "grok", Vec::new()), &crate::owner()?, None)
         .await?;
     same(
         "only the session without messages is empty",

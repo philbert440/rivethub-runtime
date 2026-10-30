@@ -21,6 +21,7 @@ use kernel::memory::TagTaxonomyDecision;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
 use kernel::memory::spoken_title;
+use kernel::owner::Owner;
 use serde::Deserialize as _;
 use uuid::Uuid;
 use wire::capture::CaptureBatchRequest;
@@ -43,12 +44,11 @@ impl crate::PostgresMemory {
         options: &CaptureOptions,
     ) -> Result<CaptureResult, Error> {
         let channel = batch.channel.as_deref().ok_or(Error::MissingChannel)?;
-        let owner = options.owner_user_id.as_deref();
         let mut writer = CaptureWriter::begin(&self.pool, &batch.session_key).await?;
         if let Some(dropped) = dropped_when_deleted(&mut writer, batch).await? {
             return Ok(dropped);
         }
-        let conversation_id = writer
+        let conversation = writer
             .upsert_conversation(&ConversationUpsert {
                 session_key: &batch.session_key,
                 agent: &batch.agent,
@@ -56,10 +56,11 @@ impl crate::PostgresMemory {
                 title: batch.title.as_deref().and_then(spoken_title),
                 settings: batch.settings.as_ref(),
                 task_id: batch.task_id.as_deref(),
-                owner_user_id: owner,
+                owner_user_id: options.owner.as_str(),
                 node: options.node.as_deref(),
             })
             .await?;
+        let conversation_id = conversation.id;
         let event_ids: Vec<String> = batch
             .messages
             .iter()
@@ -83,7 +84,7 @@ impl crate::PostgresMemory {
                     tool_args: message.tool_args.as_ref(),
                     tool_result: prepared.tool_result.as_deref(),
                     metadata: &prepared.metadata,
-                    owner_user_id: owner,
+                    owner_user_id: &conversation.owner_user_id,
                     created_at: prepared.created_at,
                 })
                 .await?;
@@ -272,26 +273,32 @@ impl MemoryStore for crate::PostgresMemory {
     async fn capture(
         &self,
         mut batch: CaptureBatchRequest,
+        owner: &Owner,
         node: Option<&str>,
     ) -> Result<CaptureResult, MemoryStoreError> {
         batch
             .channel
             .get_or_insert_with(|| UNKNOWN_CHANNEL.to_owned());
         let options = CaptureOptions {
+            owner: owner.clone(),
             node: node.map(str::to_owned),
-            ..CaptureOptions::default()
         };
         self.capture_batch(&batch, &options)
             .await
             .map_err(MemoryStoreError::from)
     }
 
-    async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
+    async fn append(
+        &self,
+        owner: &Owner,
+        batch: Vec<MemoryEntry>,
+    ) -> Result<u64, MemoryStoreError> {
         let mut inserted = 0u64;
+        let options = CaptureOptions::owned_by(owner);
         for group in group_entries(batch) {
             let request = capture_request(&group)?;
             let result = self
-                .capture_batch(&request, &CaptureOptions::default())
+                .capture_batch(&request, &options)
                 .await
                 .map_err(MemoryStoreError::from)?;
             inserted += result.inserted;

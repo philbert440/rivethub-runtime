@@ -26,6 +26,7 @@ use kernel::memory::TagSuggestionWrite;
 use kernel::memory::TagTaxonomyDecision;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use kernel::owner::Owner;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 use wire::gateway::memory::MemoryHitSource;
@@ -253,10 +254,12 @@ impl MemoryStore for FakeMemoryStore {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        owner: &Owner,
         _node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
         let mut entries = batch.entries();
-        self.record(MemoryRequest::Append(entries.clone())).await;
+        self.record(MemoryRequest::Append(owner.clone(), entries.clone()))
+            .await;
         let now = Utc::now();
         let total = entries.len() as u64;
         let inserted = {
@@ -277,9 +280,14 @@ impl MemoryStore for FakeMemoryStore {
         })
     }
 
-    async fn append(&self, mut batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
+    async fn append(
+        &self,
+        owner: &Owner,
+        mut batch: Vec<MemoryEntry>,
+    ) -> Result<u64, MemoryStoreError> {
         let count = batch.len() as u64;
-        self.record(MemoryRequest::Append(batch.clone())).await;
+        self.record(MemoryRequest::Append(owner.clone(), batch.clone()))
+            .await;
         let now = Utc::now();
         for entry in &mut batch {
             entry.id.get_or_insert_with(|| Uuid::new_v4().to_string());

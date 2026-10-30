@@ -57,9 +57,9 @@ async fn seed(pool: &PgPool) -> TestResult {
         })
     })
     .collect::<Result<Vec<_>, chrono::ParseError>>()?;
-    memory.append(entries).await?;
+    memory.append(&testkit::owner()?, entries).await?;
     let mut tx = testkit::capture_tx(pool).await?;
-    sqlx::query("INSERT INTO rh_summaries (conversation_id, content, kind, depth, message_count, created_at) SELECT conversation_id, content, 'leaf', 0, 1, created_at FROM rh_messages")
+    sqlx::query("INSERT INTO rh_summaries (conversation_id, content, kind, depth, message_count, created_at, owner_user_id) SELECT conversation_id, content, 'leaf', 0, 1, created_at, owner_user_id FROM rh_messages")
         .execute(&mut *tx).await?;
     sqlx::query("INSERT INTO rh_summary_sources (summary_id, message_id) SELECT s.id, m.id FROM rh_summaries s JOIN rh_messages m ON m.conversation_id = s.conversation_id AND m.created_at = s.created_at")
         .execute(&mut *tx).await?;
@@ -299,7 +299,7 @@ async fn window_filters_and_each_explicit_bound_overrides_it(pool: PgPool) -> Te
 async fn chunk_only_parents_respect_time_bounds(pool: PgPool) -> TestResult {
     seed(&pool).await?;
     let vector = vec![0.5; 1024];
-    sqlx::query("INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content, embedding) SELECT id, 0, 0, 7, 'release', $1 FROM rh_messages")
+    sqlx::query("INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content, embedding, owner_user_id) SELECT id, 0, 0, 7, 'release', $1, owner_user_id FROM rh_messages")
         .bind(HalfVector::from_f32_slice(&vector)).execute(&pool).await?;
     let memory = PostgresMemory::new(pool).with_query_embed(QueryEmbed::new(
         Arc::new(FakeProvider::new(vec![Script::Embed(vec![Embedding {

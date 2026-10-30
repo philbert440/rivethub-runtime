@@ -14,21 +14,23 @@ use super::rows::stored;
 use super::rows::timestamp;
 
 const INHERITED: &str = "
-WITH RECURSIVE inherited (session_id, parent, task, node, topic_id, placed_by, placed_at, depth) AS (
+WITH RECURSIVE inherited (session_id, parent, task, node, topic_id, placed_by, placed_at,
+                           owner_user_id, depth) AS (
     SELECT t.child_session_id, t.parent_session_id, t.id, t.node, p.topic_id, p.placed_by,
-           p.placed_at, 1
+           p.placed_at, t.owner_user_id, 1
       FROM rh_tasks t
       JOIN rh_session_placements p ON p.session_id = t.parent_session_id
      WHERE t.child_session_id IS NOT NULL AND (?1 IS NULL OR p.topic_id = ?1)
     UNION ALL
     SELECT t.child_session_id, t.parent_session_id, t.id, t.node, i.topic_id, i.placed_by,
-           i.placed_at, i.depth + 1
+           i.placed_at, t.owner_user_id, i.depth + 1
       FROM rh_tasks t
       JOIN inherited i ON t.parent_session_id = i.session_id
      WHERE t.child_session_id IS NOT NULL AND i.depth < 8
        AND NOT EXISTS (SELECT 1 FROM rh_session_placements own WHERE own.session_id = i.session_id)
 )
 SELECT i.session_id, i.parent, i.task, i.node, i.topic_id, i.placed_by, i.placed_at,
+       i.owner_user_id,
        (SELECT c.title FROM ros_conversations c
          WHERE c.session_key = i.session_id AND c.title IS NOT NULL
          ORDER BY c.updated_at DESC LIMIT 1),
@@ -61,12 +63,13 @@ pub(super) fn sessions(
                     topic_id: row.get(4)?,
                     placed_by: row.get(5)?,
                     placed_at: row.get(6)?,
+                    owner_user_id: row.get(7)?,
                 },
                 parent: row.get(1)?,
                 task: row.get(2)?,
                 node: row.get(3)?,
-                title: row.get(7)?,
-                last_active: row.get(8)?,
+                title: row.get(8)?,
+                last_active: row.get(9)?,
             })
         })
         .map_err(failed("inherited sessions"))?

@@ -8,6 +8,7 @@ mod hub_state;
 mod index_friendly;
 mod memory_golden;
 mod named_queues;
+mod owners;
 mod queue;
 mod queue_notifications;
 mod search_filters;

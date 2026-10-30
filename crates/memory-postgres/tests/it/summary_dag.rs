@@ -14,19 +14,19 @@ use wire::gateway::memory::VectorState;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 const SEED: &[&str] = &[
-    "insert into rh_conversations (id, session_key, agent, channel, active, created_at, updated_at) values
-      ('00000000-0000-4000-8000-000000000001', 'cli:dag', 'rivet', 'cli', false, '2026-10-10T12:00:00Z', '2026-10-10T13:00:00Z'),
-      ('00000000-0000-4000-8000-000000000002', 'cli:dag', 'helper', 'cli', false, '2026-10-10T11:00:00Z', '2026-10-10T11:30:00Z')",
-    "insert into rh_messages (id, conversation_id, agent, channel, role, content, tool_name, embed_status, created_at) values
-      ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'user', 'one', null, null, '2026-10-10T12:00:00Z'),
-      ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'assistant', 'two', null, 'failed', '2026-10-10T12:01:00Z'),
-      ('00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'assistant', 'three', 'Bash', 'unembeddable', '2026-10-10T12:02:00Z'),
-      ('00000000-0000-4000-8000-000000000104', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'tool', 'four', null, null, '2026-10-10T12:03:00Z')",
-    "insert into rh_summaries (id, conversation_id, depth, content, kind, message_count, earliest_at, latest_at, created_at, embed_status) values
-      ('00000000-0000-4000-8000-000000000014', '00000000-0000-4000-8000-000000000001', 1, 'branch', 'branch', 2, '2026-10-10T12:00:00Z', '2026-10-10T12:01:00Z', '2026-10-10T12:30:00Z', null),
-      ('00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000001', 0, 'first', 'leaf', 1, '2026-10-10T12:00:00Z', '2026-10-10T12:00:00Z', '2026-10-10T12:30:00Z', 'failed'),
-      ('00000000-0000-4000-8000-000000000012', '00000000-0000-4000-8000-000000000001', 0, 'second', 'leaf', 1, '2026-10-10T12:01:00Z', '2026-10-10T12:01:00Z', '2026-10-10T12:30:00Z', 'unembeddable'),
-      ('00000000-0000-4000-8000-000000000015', '00000000-0000-4000-8000-000000000002', 0, 'stale', 'leaf', 0, '2026-10-10T11:00:00Z', '2026-10-10T11:00:00Z', '2026-10-10T11:30:00Z', null)",
+    "insert into rh_conversations (id, session_key, agent, channel, active, created_at, updated_at, owner_user_id) values
+      ('00000000-0000-4000-8000-000000000001', 'cli:dag', 'rivet', 'cli', false, '2026-10-10T12:00:00Z', '2026-10-10T13:00:00Z', 'owner'),
+      ('00000000-0000-4000-8000-000000000002', 'cli:dag', 'helper', 'cli', false, '2026-10-10T11:00:00Z', '2026-10-10T11:30:00Z', 'owner')",
+    "insert into rh_messages (id, conversation_id, agent, channel, role, content, tool_name, embed_status, created_at, owner_user_id) values
+      ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'user', 'one', null, null, '2026-10-10T12:00:00Z', 'owner'),
+      ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'assistant', 'two', null, 'failed', '2026-10-10T12:01:00Z', 'owner'),
+      ('00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'assistant', 'three', 'Bash', 'unembeddable', '2026-10-10T12:02:00Z', 'owner'),
+      ('00000000-0000-4000-8000-000000000104', '00000000-0000-4000-8000-000000000001', 'rivet', 'cli', 'tool', 'four', null, null, '2026-10-10T12:03:00Z', 'owner')",
+    "insert into rh_summaries (id, conversation_id, depth, content, kind, message_count, earliest_at, latest_at, created_at, embed_status, owner_user_id) values
+      ('00000000-0000-4000-8000-000000000014', '00000000-0000-4000-8000-000000000001', 1, 'branch', 'branch', 2, '2026-10-10T12:00:00Z', '2026-10-10T12:01:00Z', '2026-10-10T12:30:00Z', null, 'owner'),
+      ('00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000001', 0, 'first', 'leaf', 1, '2026-10-10T12:00:00Z', '2026-10-10T12:00:00Z', '2026-10-10T12:30:00Z', 'failed', 'owner'),
+      ('00000000-0000-4000-8000-000000000012', '00000000-0000-4000-8000-000000000001', 0, 'second', 'leaf', 1, '2026-10-10T12:01:00Z', '2026-10-10T12:01:00Z', '2026-10-10T12:30:00Z', 'unembeddable', 'owner'),
+      ('00000000-0000-4000-8000-000000000015', '00000000-0000-4000-8000-000000000002', 0, 'stale', 'leaf', 0, '2026-10-10T11:00:00Z', '2026-10-10T11:00:00Z', '2026-10-10T11:30:00Z', null, 'owner')",
     "update rh_messages set embedding = array_fill(0.5::real, array[1024])::halfvec
       where id = '00000000-0000-4000-8000-000000000101'",
     "update rh_summaries set embedding = array_fill(0.5::real, array[1024])::halfvec

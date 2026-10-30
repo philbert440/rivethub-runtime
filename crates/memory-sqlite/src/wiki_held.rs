@@ -25,10 +25,12 @@ pub(crate) fn hold(
     held: &HeldEntity,
 ) -> Result<Vec<HeldEntity>, WikiStoreError> {
     conn.execute(
-        "INSERT INTO rh_wiki_entity_candidates (key, source, summary_id, patch, held_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)
+        "INSERT INTO rh_wiki_entity_candidates (key, source, summary_id, patch, held_at, owner_user_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, (SELECT c.owner_user_id FROM ros_summaries s
+                                       JOIN ros_conversations c ON c.id = s.conversation_id
+                                      WHERE s.id = ?3))
          ON CONFLICT (key, source) DO UPDATE SET summary_id = excluded.summary_id,
-            patch = excluded.patch, held_at = excluded.held_at",
+            patch = excluded.patch, held_at = excluded.held_at, owner_user_id = excluded.owner_user_id",
         params![
             held.key.as_str(),
             held.source,
@@ -93,8 +95,11 @@ pub(crate) fn release(conn: &mut Connection, held: &[HeldEntity]) -> Result<(), 
 pub(crate) fn defer(conn: &Connection, deferred: &DeferredWiki) -> Result<(), WikiStoreError> {
     conn.execute(
         "INSERT INTO rh_wiki_deferred
-             (summary_id, waits_session, waits_conversation, applied_topic, patches, deferred_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             (summary_id, waits_session, waits_conversation, applied_topic, patches, deferred_at,
+              owner_user_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, (SELECT c.owner_user_id FROM ros_summaries s
+                                           JOIN ros_conversations c ON c.id = s.conversation_id
+                                          WHERE s.id = ?1))
          ON CONFLICT (summary_id) DO UPDATE SET waits_session = excluded.waits_session,
             waits_conversation = excluded.waits_conversation, applied_topic = excluded.applied_topic,
             patches = excluded.patches, deferred_at = excluded.deferred_at",

@@ -4,12 +4,12 @@ use wire::gateway::users::UsersRegistry;
 use super::ComposeError;
 
 #[derive(Debug)]
-pub(super) struct Identity {
-    pub(super) tenancy: Tenancy,
+pub(crate) struct Identity {
+    pub(crate) tenancy: Tenancy,
     pub(super) owner: UserId,
 }
 
-pub(super) async fn load(
+pub(crate) async fn load(
     config: &config::Config,
     env: &config::Environment,
 ) -> Result<Identity, ComposeError> {

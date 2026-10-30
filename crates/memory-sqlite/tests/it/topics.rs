@@ -145,6 +145,7 @@ async fn listings_count_sessions_and_take_last_activity_from_conversations() -> 
                 topic,
                 by: PlacementSource::You,
                 at: topics::at(1),
+                owner: testkit::owner().ok(),
             })
             .await?;
     }

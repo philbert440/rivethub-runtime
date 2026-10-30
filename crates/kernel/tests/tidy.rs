@@ -37,6 +37,7 @@ fn listing(
         aliases: Vec::new(),
         parent,
         directory: None,
+        owner: testkit::owner().ok(),
     };
     Ok(TopicListing {
         topic: Topic::create(TopicId::random(), new, DateTime::<Utc>::UNIX_EPOCH)?,

@@ -1,4 +1,4 @@
-INSERT INTO rh_conversations (id, session_key, agent, channel)
-VALUES ('00000000-0000-4000-8000-000000000001', 'jobs-fixture', 'test', 'test');
-INSERT INTO rh_messages (id, conversation_id, agent, channel, role, content, tool_name, tool_args, created_at)
-VALUES ('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', 'test', 'test', 'assistant', '', 'read', '{"path":"/etc/service.conf"}', '2026-10-01T00:00:00Z');
+INSERT INTO rh_conversations (id, session_key, agent, channel, owner_user_id)
+VALUES ('00000000-0000-4000-8000-000000000001', 'jobs-fixture', 'test', 'test', 'owner');
+INSERT INTO rh_messages (id, conversation_id, agent, channel, role, content, tool_name, tool_args, created_at, owner_user_id)
+VALUES ('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', 'test', 'test', 'assistant', '', 'read', '{"path":"/etc/service.conf"}', '2026-10-01T00:00:00Z', 'owner');

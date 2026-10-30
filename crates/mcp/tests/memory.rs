@@ -211,7 +211,10 @@ async fn memory_results_preserve_content_and_enabled_write_annotations() {
         metadata: None,
         created_at: Some("2026-10-13T12:00:00Z".parse().expect("timestamp")),
     };
-    store.append(vec![entry.clone()]).await.expect("seed");
+    store
+        .append(&testkit::owner().expect("owner"), vec![entry.clone()])
+        .await
+        .expect("seed");
     let result = support::call(&server, "memory_get_full", r#"{"id":"row-1"}"#).await;
     assert_eq!(result.content.len(), 1);
     let content = result
@@ -380,7 +383,10 @@ async fn tool_previews_count_characters_and_reject_malformed_capture_metadata() 
         metadata: None,
         created_at: Some("2026-09-02T00:00:00Z".parse().expect("date")),
     };
-    store.append(vec![entry.clone()]).await.expect("seed");
+    store
+        .append(&testkit::owner().expect("owner"), vec![entry.clone()])
+        .await
+        .expect("seed");
     let result = support::call(&server, "memory_browse", r#"{"include_tools":true}"#).await;
     assert_eq!(result.is_error, None);
     let text = &result
@@ -398,7 +404,7 @@ async fn tool_previews_count_characters_and_reject_malformed_capture_metadata() 
     entry.id = Some("malformed".into());
     entry.metadata = Some(serde_json::from_str(r#"{"truncated":"true"}"#).expect("metadata"));
     store
-        .append(vec![entry])
+        .append(&testkit::owner().expect("owner"), vec![entry])
         .await
         .expect("seed malformed metadata");
     let result = support::call(&server, "memory_get_full", r#"{"id":"malformed"}"#).await;

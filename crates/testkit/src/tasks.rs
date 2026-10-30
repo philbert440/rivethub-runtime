@@ -232,6 +232,7 @@ pub async fn a_delegated_child_is_filed_under_its_parents_topic(
             topic: home.id,
             by: PlacementSource::You,
             at: at(1),
+            owner: Some(crate::owner()?),
         })
         .await?;
     let chain = [
@@ -255,6 +256,7 @@ pub async fn a_delegated_child_is_filed_under_its_parents_topic(
             topic: elsewhere.id,
             by: PlacementSource::You,
             at: at(9),
+            owner: Some(crate::owner()?),
         })
         .await?;
     listed_in(filing, home.id).await?;

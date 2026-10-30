@@ -6,6 +6,7 @@ mod topics;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use kernel::owner::Owner;
 use kernel::topics::Slug;
 use kernel::wiki::builder::{
     DeferredWiki, ExtractWiki, HeldEntity, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiRouting,
@@ -25,6 +26,7 @@ struct SummaryRow {
     conversation_id: Option<Uuid>,
     content: String,
     session_key: Option<String>,
+    owner_user_id: String,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -101,8 +103,8 @@ impl WikiBuilderStore for PostgresMemory {
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError> {
         sqlx::query(
-            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, error, extracted_at)
-             VALUES ($1, 'failed', $2, $3, $4)
+            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, error, extracted_at, owner_user_id)
+             VALUES ($1, 'failed', $2, $3, $4, (SELECT owner_user_id FROM rh_summaries WHERE id = $1))
              ON CONFLICT (summary_id) DO UPDATE SET status = 'failed', pipeline_version = EXCLUDED.pipeline_version,
                 error = EXCLUDED.error, extracted_at = EXCLUDED.extracted_at
              WHERE rh_wiki_extractions.status = 'failed' OR rh_wiki_extractions.pipeline_version < $2
@@ -196,12 +198,13 @@ impl PostgresMemory {
         touched.sort();
         touched.dedup();
         sqlx::query(
-            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, topics_touched, extracted_at, git_sha)
-             VALUES ($1, 'done', $2, $3, $4, $5)
+            "INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, topics_touched, extracted_at, git_sha, owner_user_id)
+             VALUES ($1, 'done', $2, $3, $4, $5, $6)
              ON CONFLICT (summary_id) DO UPDATE SET status = 'done', pipeline_version = EXCLUDED.pipeline_version,
                 topics_touched = EXCLUDED.topics_touched, error = NULL, extracted_at = EXCLUDED.extracted_at, git_sha = EXCLUDED.git_sha",
         )
         .bind(job.summary_id).bind(WIKI_PIPELINE_VERSION).bind(&touched).bind(now).bind(last_sha)
+        .bind(summary.owner.as_ref().map(Owner::as_str))
         .execute(&mut *tx).await.map_err(query_error)?;
         tx.commit().await.map_err(query_error)?;
         Ok(touched)
@@ -229,7 +232,7 @@ async fn load_summary(
     lock: bool,
 ) -> Result<WikiSummary, WikiStoreError> {
     let mut query = sqlx::QueryBuilder::<Postgres>::new(
-        "SELECT s.id, s.conversation_id, s.content, c.session_key FROM rh_summaries s
+        "SELECT s.id, s.conversation_id, s.content, c.session_key, s.owner_user_id FROM rh_summaries s
          LEFT JOIN rh_conversations c ON c.id = s.conversation_id WHERE s.id = ",
     );
     query.push_bind(job.summary_id);
@@ -253,6 +256,10 @@ async fn load_summary(
         conversation_id: row.conversation_id,
         content: row.content,
         session_key: row.session_key,
+        owner: Some(
+            Owner::new(row.owner_user_id)
+                .map_err(|error| WikiStoreError::Query(Box::new(error)))?,
+        ),
     })
 }
 

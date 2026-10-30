@@ -104,7 +104,7 @@ fn leaf<'a>(
 }
 
 async fn seeded() -> TestResult<common::Fresh> {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     execute(&fresh.store, SEED).await?;
     let first = ("2026-10-10T12:00:00.000Z", "2026-10-10T12:01:00.000Z");
     let second = ("2026-10-10T12:02:00.000Z", "2026-10-10T12:02:00.000Z");

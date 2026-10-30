@@ -62,7 +62,8 @@ fn seeded() -> Result<(Arc<testkit::FakeMemoryStore>, axum::Router), String> {
         entry("m1", "hello world", "2026-10-10T12:00:00Z"),
         entry("m2", "goodbye", "2026-10-10T13:00:00Z"),
     ];
-    block_on(store.append(batch)).map_err(|error| error.to_string())?;
+    let owner = testkit::owner().map_err(|error| error.to_string())?;
+    block_on(store.append(&owner, batch)).map_err(|error| error.to_string())?;
     Ok((store, gateway.router(false)))
 }
 

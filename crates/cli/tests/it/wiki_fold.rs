@@ -79,7 +79,7 @@ async fn seed_topic(
     .execute(pool)
     .await?;
     sqlx::query(
-        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind) VALUES ($1, $2, 'summary')",
+        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, owner_user_id) VALUES ($1, $2, 'summary', 'owner')",
     )
     .bind(topic.slug)
     .bind(job.summary_id)

@@ -170,10 +170,7 @@ async fn run(
     let _guard = shutdown.clone().drop_guard();
     let embed = crate::service::sqlite_query_embed(config, env, &shutdown, &activities)?;
     let model = crate::service::sqlite_vector_model(config, env);
-    let owner = crate::composition::Composition::node_owner(config, env)
-        .await
-        .map_err(StartupError::from)?;
-    let store = open_store(database, embed, model, owner.as_str()).await?;
+    let store = open_store(database, embed, model).await?;
     import::pending(&store, config, &shutdown).await?;
     let switches = config.service_switches();
     let node = bind_node(&store, &switches, config, env, &shutdown, &activities).await?;
@@ -436,11 +433,8 @@ async fn open_store(
     path: PathBuf,
     embed: Option<QueryEmbed>,
     model: Option<String>,
-    owner: &str,
 ) -> Result<Arc<SqliteStore>, LocalError> {
-    let store = tokio::task::spawn_blocking(move || SqliteStore::open(path))
-        .await??
-        .with_owner(owner);
+    let store = tokio::task::spawn_blocking(move || SqliteStore::open(path)).await??;
     let store = match embed {
         Some(embed) => {
             let store = store.with_query_embed(embed);

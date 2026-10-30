@@ -30,6 +30,7 @@ use wire::gateway::memory::TagWire;
 use wire::memory::MemoryEntry;
 
 use crate::BoxError;
+use crate::owner::Owner;
 
 pub mod budget;
 mod deletion;
@@ -397,10 +398,12 @@ pub trait MemoryStore: Send + Sync {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        owner: &Owner,
         node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError>;
 
-    async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError>;
+    async fn append(&self, owner: &Owner, batch: Vec<MemoryEntry>)
+    -> Result<u64, MemoryStoreError>;
 
     async fn search(&self, query: SearchQuery) -> Result<SearchOutcome, MemoryStoreError>;
 

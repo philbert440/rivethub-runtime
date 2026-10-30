@@ -181,6 +181,7 @@ async fn local_serves_health_and_sqlite_memory_then_stops_on_sigterm() -> TestRe
                     metadata: None,
                     created_at: Some(now),
                 }],
+                &testkit::owner()?,
                 now,
             )
             .await?;
@@ -557,8 +558,8 @@ fn seed_summary(path: &Path) -> TestResult {
         (topic, &now),
     )?;
     conn.execute(
-        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at)
-         VALUES (?1, ?2, 'you', ?3)",
+        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at, owner_user_id)
+         VALUES (?1, ?2, 'you', ?3, 'owner')",
         (&session, topic, &now),
     )?;
     Ok(())

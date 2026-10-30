@@ -7,6 +7,7 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use super::TopicError;
+use crate::owner::Owner;
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
@@ -239,6 +240,7 @@ pub struct Topic {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
+    pub owner: Option<Owner>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -248,6 +250,7 @@ pub struct NewTopic {
     pub aliases: Vec<Alias>,
     pub parent: Option<TopicId>,
     pub directory: Option<Root>,
+    pub owner: Option<Owner>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -292,6 +295,7 @@ impl Topic {
             created_at: now,
             updated_at: now,
             closed_at: None,
+            owner: new.owner,
         })
     }
 

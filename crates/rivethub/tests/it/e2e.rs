@@ -194,7 +194,7 @@ async fn recorded_batches_land_and_read_back_through_the_memory_api(pool: PgPool
     ]);
     let config: Config = serde_yaml_ng::from_str("gateway:\n  host: 127.0.0.1\n  port: 0\n")?;
     let store = rivethub::service::connect(&config, &env).await?;
-    let gateway = rivethub::service::compose(&config, &env, store)?;
+    let gateway = rivethub::service::compose(&config, &env, store).await?;
     let (listener, tls) = rivethub::service::listen(&config, &env).await?;
     assert!(tls.is_none(), "loopback binds resolve without tls");
     let port = listener.local_addr()?.port();

@@ -118,7 +118,7 @@ async fn wiki_reads_match_the_recording() -> TestResult {
         .iter()
         .find(|scenario| scenario.name == INDEX)
         .ok_or("missing wiki index scenario")?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed_topics(&fresh.store, step(scenario, "listTopics")?).await?;
     seed_redirect(&fresh.store).await?;
     let mut ids = common::Ids::default();

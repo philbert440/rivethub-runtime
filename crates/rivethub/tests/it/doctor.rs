@@ -67,7 +67,7 @@ async fn sqlite_doctor_checks_current_and_behind_without_migrating() {
     assert_eq!(memory(&report).status, CheckStatus::Fail);
     assert_eq!(
         memory(&report).message,
-        "Schema 0 is not current; required 27, pending 27. Run rivethub-migrate explicitly."
+        "Schema 0 is not current; required 28, pending 28. Run rivethub-migrate explicitly."
     );
     assert!(!path.exists(), "doctor must not create missing stores");
     migrate::sqlite(&path).expect("test schema");
@@ -75,7 +75,7 @@ async fn sqlite_doctor_checks_current_and_behind_without_migrating() {
     let (exit, report) = doctor(&env).await;
     assert_eq!(exit, Exit::Ok, "{report:?}");
     assert_eq!(memory(&report).status, CheckStatus::Pass);
-    assert_eq!(memory(&report).message, "Schema 27 is current.");
+    assert_eq!(memory(&report).message, "Schema 28 is current.");
     assert_eq!(std::fs::read(&path).expect("after"), before);
     let connection = rusqlite::Connection::open(&path).expect("fixture database");
     connection
@@ -88,7 +88,7 @@ async fn sqlite_doctor_checks_current_and_behind_without_migrating() {
     assert_eq!(memory(&report).status, CheckStatus::Fail);
     assert_eq!(
         memory(&report).message,
-        "Schema 6 is not current; required 27, pending 21. Run rivethub-migrate explicitly."
+        "Schema 6 is not current; required 28, pending 22. Run rivethub-migrate explicitly."
     );
     assert_eq!(std::fs::read(&path).expect("after old schema"), before);
 }
@@ -221,7 +221,7 @@ async fn absent_memory_section_uses_the_environment_postgres_url(pool: sqlx::PgP
     ]);
     let (_, report) = doctor(&env).await;
     assert_eq!(memory(&report).status, CheckStatus::Pass);
-    assert_eq!(memory(&report).message, "Schema 41 is current.");
+    assert_eq!(memory(&report).message, "Schema 42 is current.");
 }
 
 #[tokio::test]

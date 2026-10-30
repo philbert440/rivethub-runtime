@@ -57,6 +57,7 @@ pub use capture::ConversationRecord;
 pub use capture::ConversationUpdate;
 pub use capture::ConversationUpsert;
 pub use capture::MessageRow;
+pub use capture::UpsertedConversation;
 pub use embed::QueryEmbed;
 pub use error::Error;
 use graphile::GraphileQueue;
@@ -65,7 +66,7 @@ pub use queue::PostgresQueue;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-pub const SCHEMA_VERSION: i64 = 41;
+pub const SCHEMA_VERSION: i64 = 42;
 pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]

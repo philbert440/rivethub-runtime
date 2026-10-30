@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use kernel::owner::Owner;
 use kernel::wiki::builder::{WikiStoreError, WikiSummary};
 use kernel::wiki::page::WikiPatch;
 use kernel::wiki::page::{CitationKind, PageCitation, PagePatch, PageSource, WikiPage};
@@ -145,18 +146,27 @@ async fn provenance(
     now: DateTime<Utc>,
 ) -> Result<(), WikiStoreError> {
     sqlx::query(
-        "INSERT INTO rh_wiki_provenance (topic_slug, source_kind, source_id, conversation_id, created_at)
-         VALUES ($1, 'summary', $2, $3, $4) ON CONFLICT DO NOTHING",
-    ).bind(slug).bind(summary.id).bind(summary.conversation_id).bind(now)
-        .execute(&mut **tx).await.map_err(query_error)?;
+        "INSERT INTO rh_wiki_provenance
+             (topic_slug, source_kind, source_id, conversation_id, created_at, owner_user_id)
+         VALUES ($1, 'summary', $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+    )
+    .bind(slug)
+    .bind(summary.id)
+    .bind(summary.conversation_id)
+    .bind(now)
+    .bind(summary.owner.as_ref().map(Owner::as_str))
+    .execute(&mut **tx)
+    .await
+    .map_err(query_error)?;
     sqlx::query(
-        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at)
-         VALUES ($1, $2, 'summary', $3, $4) ON CONFLICT DO NOTHING",
+        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at, owner_user_id)
+         VALUES ($1, $2, 'summary', $3, $4, $5) ON CONFLICT DO NOTHING",
     )
     .bind(slug)
     .bind(summary.id)
     .bind(note)
     .bind(now)
+    .bind(summary.owner.as_ref().map(Owner::as_str))
     .execute(&mut **tx)
     .await
     .map_err(query_error)?;

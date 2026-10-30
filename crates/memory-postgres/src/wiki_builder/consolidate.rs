@@ -166,11 +166,13 @@ async fn retire(
     now: DateTime<Utc>,
 ) -> Result<(), WikiStoreError> {
     for statement in [
-        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at)
-         SELECT $2, summary_id, kind, note, cited_at FROM rh_wiki_citations WHERE topic_slug = $1
+        "INSERT INTO rh_wiki_citations (topic_slug, summary_id, kind, note, cited_at, owner_user_id)
+         SELECT $2, summary_id, kind, note, cited_at, owner_user_id
+           FROM rh_wiki_citations WHERE topic_slug = $1
          ON CONFLICT DO NOTHING",
-        "INSERT INTO rh_wiki_provenance (topic_slug, source_kind, source_id, conversation_id, git_sha, created_at)
-         SELECT $2, source_kind, source_id, conversation_id, git_sha, created_at
+        "INSERT INTO rh_wiki_provenance
+             (topic_slug, source_kind, source_id, conversation_id, git_sha, created_at, owner_user_id)
+         SELECT $2, source_kind, source_id, conversation_id, git_sha, created_at, owner_user_id
            FROM rh_wiki_provenance WHERE topic_slug = $1
          ON CONFLICT DO NOTHING",
         "UPDATE rh_wiki_redirects SET to_slug = $2 WHERE to_slug = $1",

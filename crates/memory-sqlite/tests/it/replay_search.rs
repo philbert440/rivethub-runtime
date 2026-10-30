@@ -114,7 +114,7 @@ async fn fts_only_replay_matches_the_recording() -> TestResult {
 async fn tag_pool_widening_returns_the_buried_hit() -> TestResult {
     let file: Json = common::recording("search.json")?;
     let pool = file.get("tag_pool_widening").ok_or("tag_pool_widening")?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let now = instant(POOL_CLOCK)?;
     seed_tag_pool(&fresh.store, now).await?;
     let step = pool
@@ -147,7 +147,7 @@ async fn tag_pool_widening_returns_the_buried_hit() -> TestResult {
 
 #[tokio::test]
 async fn search_modes_and_request_validation() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let now = instant(CLOCK)?;
     for mode in [SearchMode::Fts, SearchMode::Hybrid, SearchMode::Vector] {
         let mut query = asked("deploy", MemoryScope::Both, 10);

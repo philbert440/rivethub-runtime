@@ -1,6 +1,7 @@
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::spoken_title;
+use kernel::owner::Owner;
 use rusqlite::OptionalExtension as _;
 use rusqlite::Transaction;
 use rusqlite::params;
@@ -53,7 +54,7 @@ struct Target<'a> {
     conversation_id: &'a str,
     agent: &'a str,
     channel: &'a str,
-    owner: Option<&'a str>,
+    owner: &'a str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,11 +68,12 @@ impl SqliteStore {
     pub async fn capture(
         &self,
         batch: CaptureBatchRequest,
+        owner: &Owner,
         node: Option<&str>,
         now: DateTime<Utc>,
     ) -> Result<CaptureResult, SqliteError> {
         let prepared = PreparedBatch::new(batch, node)?;
-        let owner = self.owner.clone();
+        let owner = owner.clone();
         let embed = self.embed_armed();
         let result = self
             .with_conn(move |conn| {
@@ -85,7 +87,7 @@ impl SqliteStore {
                     );
                     return prepared.dropped();
                 }
-                let result = prepared.write(&tx, owner.as_deref(), now, embed)?;
+                let result = prepared.write(&tx, owner.as_str(), now, embed)?;
                 tx.commit().map_err(SqliteError::query("capture commit"))?;
                 Ok(result)
             })
@@ -154,7 +156,7 @@ impl PreparedBatch {
     fn write(
         &self,
         tx: &Transaction<'_>,
-        owner: Option<&str>,
+        owner: &str,
         now: DateTime<Utc>,
         embed: bool,
     ) -> Result<CaptureResult, SqliteError> {
@@ -191,7 +193,7 @@ impl PreparedBatch {
             conversation_id: &conversation.id,
             agent: &self.key.agent,
             channel,
-            owner,
+            owner: conversation.owner.as_deref().unwrap_or(owner),
         };
         let mut inserted: u64 = 0;
         let mut skipped: u64 = 0;
@@ -228,7 +230,7 @@ impl PreparedBatch {
         tx: &Transaction<'_>,
         id: &str,
         stored_updated_at: DateTime<Utc>,
-        owner: Option<&str>,
+        owner: &str,
         now: DateTime<Utc>,
     ) -> Result<(), SqliteError> {
         let updated_at = self.updated_at.at(now).max(stored_updated_at);

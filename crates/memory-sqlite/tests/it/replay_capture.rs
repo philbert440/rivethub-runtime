@@ -11,6 +11,7 @@ use common::fresh_store;
 use common::instant;
 use common::message;
 use common::object;
+use kernel::owner::Owner;
 use testkit::Json;
 use wire::capture::CaptureBatchRequest;
 use wire::memory::MemoryEntry;
@@ -452,7 +453,8 @@ fn plan(name: &str) -> TestResult<Option<Plan>> {
 
 async fn replay(scenario: &mut Scenario, plan: Plan) -> TestResult<Vec<String>> {
     let mut notes = Vec::new();
-    let fresh = fresh_store(plan.owner)?;
+    let fresh = fresh_store()?;
+    let owner = Owner::new(plan.owner.unwrap_or(testkit::OWNER).trim().to_owned())?;
     let store = &fresh.store;
     let mut ids = Ids::default();
     assert_eq!(
@@ -467,7 +469,7 @@ async fn replay(scenario: &mut Scenario, plan: Plan) -> TestResult<Vec<String>> 
         let at = format!("{} / {label}", scenario.name);
         match action {
             Action::Capture(request) => {
-                match (store.capture(request, None, now).await, &step.error) {
+                match (store.capture(request, &owner, None, now).await, &step.error) {
                     (Ok(result), None) => {
                         let actual: Json = serde_json::to_value(&result)?;
                         let expected = step.result.clone().unwrap_or(Json::Null);
@@ -485,7 +487,7 @@ async fn replay(scenario: &mut Scenario, plan: Plan) -> TestResult<Vec<String>> 
                 }
             }
             Action::Append(entry) => {
-                let appended = store.append_entries(vec![entry], now).await?;
+                let appended = store.append_entries(vec![entry], &owner, now).await?;
                 let actual = Json::Array(appended.into_iter().map(Json::String).collect());
                 let expected = Json::Array(step.result.clone().into_iter().collect());
                 ids.same(&expected, &actual, &at)?;
@@ -510,6 +512,17 @@ async fn replay(scenario: &mut Scenario, plan: Plan) -> TestResult<Vec<String>> 
                 )
             })?;
         row.insert(deviation.column.to_owned(), deviation.value);
+    }
+    if plan.owner.is_none() {
+        notes.push(format!(
+            "deviation {}: owner_user_id is the capturing caller, where the recording ran without a user (CONTRACT note 88)",
+            scenario.name
+        ));
+        for table in ["ros_conversations", "ros_messages"] {
+            if let Some(rows) = scenario.tables.get_mut(table) {
+                common::owned_by_the_caller(rows);
+            }
+        }
     }
     compare_tables(store, &scenario.tables, &mut ids, &scenario.name).await?;
     Ok(notes)

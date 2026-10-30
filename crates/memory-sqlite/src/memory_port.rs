@@ -24,6 +24,7 @@ use kernel::memory::TagSuggestionWrite;
 use kernel::memory::TagTaxonomyDecision;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use kernel::owner::Owner;
 use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
 use kernel::wiki::page::WikiSlug;
@@ -75,18 +76,23 @@ impl MemoryStore for SqliteStore {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        owner: &Owner,
         node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
         let now = self.now();
-        Self::capture(self, batch, node, now)
+        Self::capture(self, batch, owner, node, now)
             .await
             .map_err(MemoryStoreError::from)
     }
 
-    async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError> {
+    async fn append(
+        &self,
+        owner: &Owner,
+        batch: Vec<MemoryEntry>,
+    ) -> Result<u64, MemoryStoreError> {
         let now = self.now();
         let ids = self
-            .append_entries(batch, now)
+            .append_entries(batch, owner, now)
             .await
             .map_err(MemoryStoreError::from)?;
         u64::try_from(ids.len()).map_err(|error| MemoryStoreError::Query {

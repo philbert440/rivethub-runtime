@@ -56,7 +56,10 @@ async fn seed_conversation(
         }],
     };
     memory
-        .capture_batch(&batch, &memory_postgres::CaptureOptions::default())
+        .capture_batch(
+            &batch,
+            &memory_postgres::CaptureOptions::owned_by(&testkit::owner()?),
+        )
         .await?;
     let id: sqlx::types::Uuid =
         sqlx::query_scalar("SELECT id FROM rh_conversations WHERE session_key = $1")
@@ -147,7 +150,7 @@ async fn add_tag_accepts_ids_and_session_keys(pool: PgPool) -> TestResult {
     assert_eq!(conflict.state, TagState::Accepted, "an add revives the row");
 
     sqlx::query(
-        "INSERT INTO rh_conversations (session_key, agent) VALUES ('claude-code:tags', 'other')",
+        "INSERT INTO rh_conversations (session_key, agent, owner_user_id) VALUES ('claude-code:tags', 'other', 'owner')",
     )
     .execute(&pool)
     .await?;

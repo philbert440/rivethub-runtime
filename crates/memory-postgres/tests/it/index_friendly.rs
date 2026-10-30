@@ -46,8 +46,8 @@ const PREVIOUS_CLAIM_ORDER: &str = "SELECT j.id FROM graphile_worker._private_jo
 
 async fn conversation(pool: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO rh_conversations (id, session_key, agent, channel)
-         VALUES ($1::uuid, 'index-friendly', 'acme', 'test')",
+        "INSERT INTO rh_conversations (id, session_key, agent, channel, owner_user_id)
+         VALUES ($1::uuid, 'index-friendly', 'acme', 'test', 'owner')",
     )
     .bind(CONVERSATION)
     .execute(pool)
@@ -65,9 +65,9 @@ async fn message(
     let id = Uuid::from_u128(u128::from(minute));
     let mut tx = testkit::capture_tx(pool).await?;
     sqlx::query(
-        "INSERT INTO rh_messages (id, conversation_id, agent, channel, role, content, tool_result, embed_status, created_at)
+        "INSERT INTO rh_messages (id, conversation_id, agent, channel, role, content, tool_result, embed_status, created_at, owner_user_id)
          VALUES ($1, $2::uuid, 'acme', 'test', 'user', $3, $4, $5,
-                 '2026-10-01T00:00:00Z'::timestamptz + make_interval(mins => $6))",
+                 '2026-10-01T00:00:00Z'::timestamptz + make_interval(mins => $6), 'owner')",
     )
     .bind(id)
     .bind(CONVERSATION)
@@ -84,9 +84,9 @@ async fn message(
 async fn summary(pool: &PgPool, minute: u16, content: &str) -> Result<Uuid, sqlx::Error> {
     let mut tx = testkit::capture_tx(pool).await?;
     let id = sqlx::query_scalar(
-        "INSERT INTO rh_summaries (conversation_id, content, kind, depth, message_count, created_at)
+        "INSERT INTO rh_summaries (conversation_id, content, kind, depth, message_count, created_at, owner_user_id)
          VALUES ($1::uuid, $2, 'leaf', 0, 1,
-                 '2026-10-01T00:00:00Z'::timestamptz + make_interval(mins => $3))
+                 '2026-10-01T00:00:00Z'::timestamptz + make_interval(mins => $3), 'owner')
          RETURNING id",
     )
     .bind(CONVERSATION)
@@ -269,8 +269,8 @@ async fn unchunked_returns_the_rows_of_the_full_length_scan(pool: PgPool) -> Tes
         chunked.get_or_insert(id);
     }
     sqlx::query(
-        "INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content, embed_status)
-         VALUES ($1, 0, 0, 21, 'x', 'embedded')",
+        "INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content, embed_status, owner_user_id)
+         VALUES ($1, 0, 0, 21, 'x', 'embedded', 'owner')",
     )
     .bind(chunked.ok_or("no fixture rows")?)
     .execute(&pool)

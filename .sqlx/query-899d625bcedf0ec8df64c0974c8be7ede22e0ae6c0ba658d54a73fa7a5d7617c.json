@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT session_id, topic_id, placed_by, placed_at\n               FROM rh_session_placements WHERE topic_id = $1",
+  "query": "SELECT session_id, topic_id, placed_by, placed_at, owner_user_id\n               FROM rh_session_placements WHERE topic_id = $1",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "placed_at"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "owner_user_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_session_placements",
+            "name": "owner_user_id"
+          }
+        }
       }
     ],
     "parameters": {
@@ -57,8 +68,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "6ff29cc20d4e294b15d62ed0c1a03d8818a4aa10e85d707e833550d99b36fc21"
+  "hash": "899d625bcedf0ec8df64c0974c8be7ede22e0ae6c0ba658d54a73fa7a5d7617c"
 }

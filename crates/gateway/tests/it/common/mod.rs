@@ -70,8 +70,14 @@ pub(crate) fn gateway_with_files(root: std::path::PathBuf) -> Arc<Gateway> {
 pub(crate) fn gateway() -> (Arc<Gateway>, Arc<FakeMemoryStore>) {
     let store = Arc::new(FakeMemoryStore::default());
     let handle: Arc<dyn MemoryStore> = Arc::clone(&store) as Arc<dyn MemoryStore>;
-    let gateway = Arc::new(Gateway::new(handle, settings()));
-    (gateway, store)
+    (Arc::new(owned(Gateway::new(handle, settings()))), store)
+}
+
+fn owned(served: Gateway) -> Gateway {
+    match gateway::tenancy::UserId::new(testkit::OWNER.to_owned()) {
+        Ok(owner) => served.with_tenancy(gateway::tenancy::Tenancy::local(owner)),
+        Err(_) => served,
+    }
 }
 
 pub(crate) fn spawn_healthz() -> Result<u16, FailedHealthz> {
@@ -125,7 +131,7 @@ pub(crate) fn gateway_with(settings: Settings) -> Arc<Gateway> {
 
 pub(crate) fn failing_gateway() -> Arc<Gateway> {
     let handle: Arc<dyn MemoryStore> = Arc::new(FailingStore);
-    Arc::new(Gateway::new(handle, settings()))
+    Arc::new(owned(Gateway::new(handle, settings())))
 }
 
 pub(crate) struct FailingStore;
@@ -178,6 +184,7 @@ impl MemoryStore for FailingStore {
     async fn capture(
         &self,
         _batch: wire::capture::CaptureBatchRequest,
+        _owner: &kernel::owner::Owner,
         _node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
         unavailable()
@@ -185,6 +192,7 @@ impl MemoryStore for FailingStore {
 
     async fn append(
         &self,
+        _owner: &kernel::owner::Owner,
         _batch: Vec<wire::memory::MemoryEntry>,
     ) -> Result<u64, MemoryStoreError> {
         unavailable()
@@ -389,13 +397,18 @@ impl MemoryStore for GatedStore {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        owner: &kernel::owner::Owner,
         node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
-        self.inner.capture(batch, node).await
+        self.inner.capture(batch, owner, node).await
     }
 
-    async fn append(&self, batch: Vec<wire::memory::MemoryEntry>) -> Result<u64, MemoryStoreError> {
-        self.inner.append(batch).await
+    async fn append(
+        &self,
+        owner: &kernel::owner::Owner,
+        batch: Vec<wire::memory::MemoryEntry>,
+    ) -> Result<u64, MemoryStoreError> {
+        self.inner.append(owner, batch).await
     }
 
     async fn search(

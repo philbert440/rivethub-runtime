@@ -18,8 +18,8 @@ async fn summary(
     let offset = f64::from(id);
     let id = Uuid::from_u128(u128::from(id));
     sqlx::query(
-        "INSERT INTO rh_summaries (id, conversation_id, kind, content, created_at)
-         VALUES ($1, $2, $3, 'a summary', '2026-10-01T00:00:00Z'::timestamptz + make_interval(secs => $4))",
+        "INSERT INTO rh_summaries (id, conversation_id, kind, content, created_at, owner_user_id)
+         VALUES ($1, $2, $3, 'a summary', '2026-10-01T00:00:00Z'::timestamptz + make_interval(secs => $4), 'owner')",
     )
     .bind(id)
     .bind(conversation)
@@ -33,7 +33,7 @@ async fn summary(
 async fn conversation(pool: &PgPool, id: u128, key: &str) -> Result<Uuid, sqlx::Error> {
     let id = Uuid::from_u128(id);
     sqlx::query(
-        "INSERT INTO rh_conversations (id, session_key, agent, channel) VALUES ($1, $2, 'test', 'test')",
+        "INSERT INTO rh_conversations (id, session_key, agent, channel, owner_user_id) VALUES ($1, $2, 'test', 'test', 'owner')",
     )
     .bind(id)
     .bind(key)
@@ -97,7 +97,7 @@ async fn stale_wiki_re_adds_only_never_extracted_unqueued_leaves(pool: PgPool) -
     let queued = summary(&pool, 14, "leaf", Some(chat)).await?;
     summary(&pool, 15, "branch", Some(chat)).await?;
     let similar = summary(&pool, 16, "leaf", Some(near)).await?;
-    sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version) VALUES ($1, 'failed', 1)")
+    sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, owner_user_id) VALUES ($1, 'failed', 1, 'owner')")
         .bind(extracted)
         .execute(&pool)
         .await?;

@@ -241,7 +241,7 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
         ("done", 5, false),
     ] {
         let job = seed(&pool).await?;
-        sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version) VALUES ($1,$2,$3)")
+        sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, owner_user_id) VALUES ($1,$2,$3, 'owner')")
             .bind(job.summary_id).bind(status).bind(version).execute(&pool).await?;
         if eligible {
             expected.insert(job.summary_id);
