@@ -34,7 +34,7 @@ use crate::error::ApiError;
 use crate::extract::Body;
 use crate::routes::agents::Failure;
 use crate::tenancy::UserId;
-use crate::term::{ChatStart, DelegatedTurn};
+use crate::term::{ChatStart, Delegate, DelegatedTurn};
 use crate::uploads::AttachedTurn;
 
 pub(crate) fn router() -> Router<Arc<Gateway>> {
@@ -182,7 +182,9 @@ async fn prompt(
     }
     match posted.wait.as_deref() {
         None => accept(gateway, user, session, request).await,
-        Some("1") if request.harness.is_some() => delegated(gateway, user, session, request).await,
+        Some("1") if request.harness.is_some() || delegate_of(&gateway, &request).is_some() => {
+            delegated(gateway, user, session, request).await
+        }
         Some("1") => waited(gateway, extension, session, request).await,
         Some(_) => Err(ApiError::BadRequest("wait must be 1".into())),
     }
@@ -313,8 +315,10 @@ async fn delegated(
     session: String,
     request: SessionPostRequest,
 ) -> Result<Response, ApiError> {
+    let delegate = delegate_of(&gateway, &request);
     let harness = request
         .harness
+        .or_else(|| delegate.as_ref().map(|agent| agent.harness))
         .ok_or_else(|| ApiError::BadRequest("harness is required".into()))?;
     let attachments = staged(&gateway, &user, request.attachments).await?;
     let journal = if attachments.is_empty() {
@@ -325,7 +329,9 @@ async fn delegated(
     let turn = DelegatedTurn {
         start: ChatStart {
             harness,
-            model: request.model,
+            model: request
+                .model
+                .or_else(|| delegate.as_ref().and_then(|agent| agent.model.clone())),
             effort: request.thinking,
             cwd: request.working_dir.map(std::path::PathBuf::from),
             agent: None,
@@ -335,6 +341,7 @@ async fn delegated(
         system_prompt: request.system_prompt,
         attachments,
         journal,
+        delegate,
     };
     let reply = service(&gateway)?.delegated_turn(&user, turn).await?;
     let mut message = reply_message(&session, reply.text);
@@ -347,6 +354,14 @@ async fn delegated(
             .unwrap_or_default(),
     });
     Ok(Json(SessionPostReply { message }).into_response())
+}
+
+fn delegate_of(gateway: &Gateway, request: &SessionPostRequest) -> Option<Delegate> {
+    let delegate = gateway.terminal()?.delegate(request.agent.as_deref()?)?;
+    request
+        .harness
+        .is_none_or(|harness| harness == delegate.harness)
+        .then(|| delegate.clone())
 }
 
 fn turn_messages(request: &SessionPostRequest) -> Result<Vec<Message>, ApiError> {

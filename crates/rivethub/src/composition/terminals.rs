@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use config::provider::ProviderBody;
 use config::{Config, Environment};
 use gateway::sessions::SessionRegistry;
-use gateway::term::{ClaudeTrust, LaunchCommand, TerminalOptions, TerminalService};
+use gateway::term::{ClaudeTrust, Delegate, LaunchCommand, TerminalOptions, TerminalService};
 use kernel::terminal::TerminalMux;
 use tokio_util::sync::CancellationToken;
 
@@ -88,7 +90,8 @@ pub(super) async fn build(
     ))
     .with_session_lister(Arc::new(capture::listing::StoreSessionLister::new(
         super::store_roots(env),
-    )));
+    )))
+    .with_delegates(delegates(config)?);
     let service = Arc::new(with_claude_trust(built, config, env));
     claim_adopted(&service, &mux, owner, &mut adopted)?;
     Ok(service)
@@ -111,6 +114,38 @@ fn with_claude_trust(
         }),
         _ => service,
     }
+}
+
+fn delegates(config: &Config) -> Result<BTreeMap<String, Delegate>, ComposeError> {
+    let mut delegates = BTreeMap::new();
+    for (name, agent) in config.agents.iter().flatten() {
+        let Some(slot) = agent
+            .provider
+            .as_deref()
+            .and_then(|provider| config.providers.as_ref()?.get(provider))
+        else {
+            continue;
+        };
+        let (Some(kind), ProviderBody::Cli(body)) = (slot.kind, &slot.body) else {
+            continue;
+        };
+        let harness = providers::cli::harness_id(kind)
+            .map_err(|error| ComposeError::Invalid(error.to_string()))?;
+        let model = agent
+            .model
+            .clone()
+            .or_else(|| body.model.clone())
+            .filter(|model| !matches!(model.trim(), "" | "default"));
+        delegates.insert(
+            name.clone(),
+            Delegate {
+                harness,
+                model,
+                permission_mode: body.permission_mode.clone(),
+            },
+        );
+    }
+    Ok(delegates)
 }
 
 fn harness_directories(config: &Config) -> Vec<std::path::PathBuf> {

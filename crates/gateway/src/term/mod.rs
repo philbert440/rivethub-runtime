@@ -28,6 +28,7 @@ use crate::sessions::SessionRegistry;
 use crate::tenancy::UserId;
 use actor::{Command, Handle};
 pub(crate) use chat::ChatStart;
+pub use delegated::Delegate;
 pub(crate) use delegated::DelegatedTurn;
 pub use trust::ClaudeTrust;
 
@@ -121,6 +122,7 @@ pub struct TerminalService {
     injecting: tokio::sync::Mutex<()>,
     claude_trust: Option<ClaudeTrust>,
     session_lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
+    delegates: BTreeMap<String, Delegate>,
 }
 
 impl TerminalService {
@@ -154,6 +156,7 @@ impl TerminalService {
             injecting: tokio::sync::Mutex::new(()),
             claude_trust: None,
             session_lister: None,
+            delegates: BTreeMap::new(),
         })
     }
 

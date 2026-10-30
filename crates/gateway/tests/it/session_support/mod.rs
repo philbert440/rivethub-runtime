@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use gateway::tenancy::{Tenancy, UserId};
-use gateway::term::{LaunchCommand, TerminalOptions, TerminalService};
+use gateway::term::{Delegate, LaunchCommand, TerminalOptions, TerminalService};
 use kernel::terminal::{
     PtyInfo, TermSize, TerminalAttachment, TerminalDetails, TerminalId, TerminalMux,
     TerminalMuxError,
@@ -314,6 +314,16 @@ impl Fixture {
         lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
         extra: &[(&str, HarnessId)],
     ) -> Self {
+        Self::with_delegates(harness, registry, lister, extra, BTreeMap::new()).await
+    }
+
+    pub(crate) async fn with_delegates(
+        harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
+        registry: gateway::sessions::SessionRegistry,
+        lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
+        extra: &[(&str, HarnessId)],
+        delegates: BTreeMap<String, Delegate>,
+    ) -> Self {
         let directory = tempfile::tempdir().expect("temporary terminal directory");
         let root = directory.path().to_path_buf();
         let registry = Arc::new(registry);
@@ -347,7 +357,7 @@ impl Fixture {
         )
         .await
         .expect("terminal service");
-        let service = terminal(service, harness, lister.clone());
+        let service = terminal(service.with_delegates(delegates), harness, lister.clone());
         let tenancy = Tenancy::local(user("owner"))
             .with_token("alice-test-token", user("alice"))
             .expect("token");
