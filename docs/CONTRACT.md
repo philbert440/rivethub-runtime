@@ -407,6 +407,10 @@ transcript; `prompts` of 0 or more than the session has is `400`, and a harness 
 (opencode, hermes, kimi-code) is `501` with code `capability_unsupported`. Bodies are
 `wire::gateway::sessions::HarnessSessionForkRequest` in `contract/*.schema.json`. The route is new, with no TypeScript
 recording.
+(47) Waiting approvals on attach (Phil, 2026-10-29): after each `transcript` a harness session socket sends, it sends
+again every `approval-request` of that chat still waiting for an answer, so a client that opens the session after the
+request went out, as from a needs-you notice, can still answer it. A request leaves the set when it is resolved, the
+turn completes or fails, or the session stops being active.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

@@ -116,6 +116,7 @@ pub struct TerminalService {
     harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
     summaries: RwLock<BTreeMap<String, wire::harness::HarnessSessionSummary>>,
     activity: RwLock<BTreeMap<String, kernel::preview::LiveActivity>>,
+    approvals: RwLock<BTreeMap<String, Vec<wire::harness::HarnessEvent>>>,
     harness_events:
         RwLock<BTreeMap<String, tokio::sync::broadcast::Sender<wire::harness::HarnessEvent>>>,
     registry_events: tokio::sync::broadcast::Sender<live::RegistryEvent>,
@@ -151,6 +152,7 @@ impl TerminalService {
             harness: None,
             summaries: RwLock::new(BTreeMap::new()),
             activity: RwLock::new(BTreeMap::new()),
+            approvals: RwLock::new(BTreeMap::new()),
             harness_events: RwLock::new(BTreeMap::new()),
             registry_events: tokio::sync::broadcast::channel(live::REGISTRY_EVENT_BUFFER).0,
             injecting: tokio::sync::Mutex::new(()),

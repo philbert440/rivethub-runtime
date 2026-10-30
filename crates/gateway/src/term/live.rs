@@ -85,11 +85,54 @@ impl TerminalService {
 
     pub(crate) fn publish_harness(&self, key: &str, event: HarnessEvent) {
         self.follow(key, &event);
+        self.hold_approvals(key, &event);
         let sender = self.harness_events.read().get(key).cloned();
         if let Some(sender) = sender
             && sender.send(event).is_err()
         {
             tracing::trace!("harness event has no live session socket");
+        }
+    }
+
+    pub(crate) fn pending_approvals(&self, key: &str) -> Vec<HarnessEvent> {
+        self.approvals.read().get(key).cloned().unwrap_or_default()
+    }
+
+    fn hold_approvals(&self, key: &str, event: &HarnessEvent) {
+        let mut approvals = self.approvals.write();
+        match event {
+            HarnessEvent::ApprovalRequest { .. } => {
+                approvals
+                    .entry(key.to_owned())
+                    .or_default()
+                    .push(event.clone());
+            }
+            HarnessEvent::ApprovalResolved { request_id, .. } => {
+                if let Some(waiting) = approvals.get_mut(key) {
+                    waiting.retain(|held| {
+                        !matches!(held, HarnessEvent::ApprovalRequest { request_id: id, .. } if id == request_id)
+                    });
+                }
+            }
+            HarnessEvent::TurnComplete { .. } | HarnessEvent::Error { .. } => {
+                approvals.remove(key);
+            }
+            HarnessEvent::SessionUpdated { status, .. }
+                if *status != HarnessSessionStatus::Active =>
+            {
+                approvals.remove(key);
+            }
+            HarnessEvent::AssistantDelta { .. }
+            | HarnessEvent::ReasoningDelta { .. }
+            | HarnessEvent::ToolUse { .. }
+            | HarnessEvent::ToolUpdate { .. }
+            | HarnessEvent::ToolResult { .. }
+            | HarnessEvent::SessionCreated { .. }
+            | HarnessEvent::Plan { .. }
+            | HarnessEvent::SessionUpdated { .. }
+            | HarnessEvent::Transcript { .. }
+            | HarnessEvent::Status(_)
+            | HarnessEvent::Prompt { .. } => {}
         }
     }
 

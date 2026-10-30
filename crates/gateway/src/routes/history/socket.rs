@@ -209,6 +209,11 @@ impl Attached<'_> {
         };
         self.rev += 1;
         let turns = read.read.turns;
+        let waiting = self
+            .gateway
+            .terminal()
+            .map(|terminal| terminal.pending_approvals(&resolved.native))
+            .unwrap_or_default();
         send(
             &mut self.socket,
             &HarnessEvent::Transcript {
@@ -224,6 +229,10 @@ impl Attached<'_> {
                 context_source: Some(read.stamp.source),
             },
         )
-        .await
+        .await?;
+        for approval in &waiting {
+            send(&mut self.socket, approval).await?;
+        }
+        Ok(())
     }
 }
