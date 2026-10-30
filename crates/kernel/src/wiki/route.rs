@@ -159,6 +159,9 @@ impl WikiRouter<'_> {
                 for patch in &held.patches {
                     self.withdraw_note(&route, patch).await?;
                 }
+                self.wiki
+                    .uncite_wiki(held.summary_id, &route.page_slug)
+                    .await?;
                 touched.push(route.page_slug.as_ref().to_owned());
             }
             let route = self.topics.filed_target(&held.waits, self.now).await?;

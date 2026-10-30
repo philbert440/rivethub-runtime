@@ -40,6 +40,7 @@ struct PreparedBatch {
     title: Option<String>,
     settings: Option<String>,
     task_id: Option<String>,
+    node: Option<String>,
     finalize: bool,
     created_at: Stamp,
     updated_at: Stamp,
@@ -65,9 +66,10 @@ impl SqliteStore {
     pub async fn capture(
         &self,
         batch: CaptureBatchRequest,
+        node: Option<&str>,
         now: DateTime<Utc>,
     ) -> Result<CaptureResult, SqliteError> {
-        let prepared = PreparedBatch::new(batch)?;
+        let prepared = PreparedBatch::new(batch, node)?;
         let owner = self.owner.clone();
         let embed = self.embed_armed();
         let result = self
@@ -88,7 +90,7 @@ impl SqliteStore {
 }
 
 impl PreparedBatch {
-    fn new(batch: CaptureBatchRequest) -> Result<Self, SqliteError> {
+    fn new(batch: CaptureBatchRequest, node: Option<&str>) -> Result<Self, SqliteError> {
         let created_at = crate::time::Stamp::from(batch.created_at);
         let updated_at = crate::time::Stamp::from(batch.updated_at);
         let settings = batch
@@ -110,6 +112,7 @@ impl PreparedBatch {
             title: batch.title,
             settings,
             task_id: batch.task_id,
+            node: node.map(str::to_owned),
             finalize: batch.finalize == Some(true),
             created_at,
             updated_at,
@@ -141,6 +144,14 @@ impl PreparedBatch {
             }
             .insert(tx)?,
         };
+        if let Some(node) = &self.node {
+            tx.execute(
+                "INSERT INTO rh_conversation_nodes (conversation_id, node) VALUES (?1, ?2)
+                 ON CONFLICT (conversation_id) DO NOTHING",
+                params![conversation.id, node],
+            )
+            .map_err(SqliteError::query("conversation node"))?;
+        }
         let channel = match &self.channel {
             Some(channel) => channel,
             None => &conversation.channel,

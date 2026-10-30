@@ -14,12 +14,12 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 
 | # | Boundary | Who observes it | Spec (inventory) | Pinned by (recording) | Acceptance test |
 |---|---|---|---|---|---|
-| B1 | Gateway HTTP + WS API (`/api/*`, `/files/*`, `/term`, `/event(s)`, `/sessions`, `/state`, `/layout`, `/healthz`, `/mesh.json`, static SPA, `/ws`, `/v1` OpenAI-compatible; the Topics routes `GET/POST /api/topics`, `GET /api/topics/search?q=`, `GET/PATCH/DELETE /api/topics/{id}` (note 29), `POST /api/topics/{id}/merge`, `GET /api/topics/{id}/sessions`, `GET /api/topics/{id}/page`, `GET/POST /api/topics/{id}/decisions`, `PATCH /api/topics/{id}/decisions/{decision}`, `POST /api/topics/{id}/decisions/{decision}/supersede` (note 27) and `GET/PUT/DELETE /api/sessions/{session}/placement`; `POST /api/harness-sessions` with optional `topicId` and `prompt`, answering with optional `startupContext`, and `GET /api/harness-sessions/{session}/startup-context` (note 24); `POST /term` and `POST /api/terminal` with optional `topicId` (note 25); the tool output route `GET /api/harness-sessions/{session}/tools/{tool}/output`; the hub state route `GET/PUT /api/hub/state` and its `hub.state` notice on `/api/events/ws`) | RivetHub web/Android/Electron, hooks, mesh peers, scripts | gateway-api.md §2–§17 (route table §4, aliases §5) | `golden/gateway/` (28 files, recorded traffic incl. startup refusals) + `golden/term/` (17) | replay every recorded exchange: same status, headers (names case-insensitive), body; WS frames in order |
+| B1 | Gateway HTTP + WS API (`/api/*`, `/files/*`, `/term`, `/event(s)`, `/sessions`, `/state`, `/layout`, `/healthz`, `/mesh.json`, static SPA, `/ws`, `/v1` OpenAI-compatible; the Topics routes `GET/POST /api/topics`, `GET /api/topics/search?q=`, `GET/PATCH/DELETE /api/topics/{id}` (note 29), `POST /api/topics/{id}/merge`, `GET /api/topics/{id}/sessions`, `GET/PUT /api/topics/{id}/page` (note 63), `GET/POST /api/topics/{id}/decisions`, `PATCH /api/topics/{id}/decisions/{decision}`, `POST /api/topics/{id}/decisions/{decision}/supersede` (note 27) and `GET/PUT/DELETE /api/sessions/{session}/placement`; `POST /api/harness-sessions` with optional `topicId` and `prompt`, answering with optional `startupContext`, and `GET /api/harness-sessions/{session}/startup-context` (note 24); `POST /term` and `POST /api/terminal` with optional `topicId` (note 25); the tool output route `GET /api/harness-sessions/{session}/tools/{tool}/output`; the hub state route `GET/PUT /api/hub/state` and its `hub.state` notice on `/api/events/ws`) | RivetHub web/Android/Electron, hooks, mesh peers, scripts | gateway-api.md §2–§17 (route table §4, aliases §5) | `golden/gateway/` (28 files, recorded traffic incl. startup refusals) + `golden/term/` (17) | replay every recorded exchange: same status, headers (names case-insensitive), body; WS frames in order |
 | B2 | Session event stream v1 (`AgentEvent`, `v: 1`) and the room/session snapshot | RivetHub clients `/ws` clients, `POST /event(s)` producers | gateway-api.md §6, core-domain.md §1.10 | gateway + term recordings (events and snapshots) | accept/reject decisions and emitted snapshots identical on recorded inputs |
 | B3 | Capture ingest: hook payloads from every harness → `POST /api/capture` batch body | 10 harness integration kits (claude, codex, grok, kimi, qwen, opencode, hermes, pi, cursor, cowork) | data-layer.md §3.1–§3.6; harness-control-plane.md §3 | `golden/capture/` (22: pg arms), `golden/capture-zod/` (batch validation) | same rows written for the same hook input; same validation errors |
 | B4 | Postgres schema and data (`rh_*` tables, migrations 0001–0020 including `0020_tag_removals`, then 0021 renames `ros_*` to `rh_*` with `ros_*` views over them, through 0028 `rh_session_startup` (note 24) and 0029 `rh_session_startup.delivered_via` (note 25), views, triggers, graphile_worker jobs). Migrations are applied only by `rivethub-migrate postgres`, which then requires every migration file name in `_rivetos_migrations`; the runtime verifies one schema version (`memory_postgres::SCHEMA_VERSION`) at connect — equal ok, newer ok with one warning, no `_sqlx_migrations` table a `NotAdopted` error (one `rivethub-migrate postgres` adopts it, including a database whose history is only `_rivetos_migrations`), behind a `SchemaBehind` error naming the migrate command — and runs no DDL | the live datahub, the TypeScript workers during cutover, operators | data-layer.md §1–§2 | `golden/capture/pg/` (30 scenarios), `golden/memory/` | Rust migrates a 0001-era DB to the same schema; writes rows the TypeScript reads and vice versa; enqueues the same jobs with the same keys |
 | B5 | SQLite memory file (`memory.sqlite`, schema v7 and its upgrade ladder through cutover; schema v8 adds a sqlite-vec index afterwards). Creation and upgrades run only through `rivethub-migrate sqlite`, which copies the original file to `<file>.v<N>.bak` before any read-write connection and returns `BackupExists` when that path is already there; the runtime reads `user_version` on a read-only connection (0 → `NotInitialised`, below 7 → `SchemaBehind` naming the file, above 7 → `UnsupportedSchema`), a refused open leaves the file unchanged, and it never creates the file | standalone nodes, TypeScript nodes during cutover | data-layer.md §3; sqlite plugin | `golden/memory-sqlite/` (20 files incl. fixture DBs, upgrades, search results) | same `sqlite_master`, same rows, same search ranks; files open both ways |
-| B6 | Memory read API: search / browse / stats / get_full / tags (HTTP and MCP); the per-session summary DAG and the gzip memory export (HTTP) | RivetHub clients, MCP clients (Claude Code etc.), agents | data-layer.md §3.7–§3.11; gateway-api.md §11 | `golden/memory-sqlite/` search cases; gateway recordings | same results and ranking on the same data |
+| B6 | Memory read API: search / browse / stats / get_full / tags (HTTP and MCP); the per-session and per-conversation summary DAG (note 61) and the gzip memory export (HTTP) | RivetHub clients, MCP clients (Claude Code etc.), agents | data-layer.md §3.7–§3.11; gateway-api.md §11 | `golden/memory-sqlite/` search cases; gateway recordings | same results and ranking on the same data |
 | B7 | MCP sidecar: RivetHub's own tools only, exactly nine (`memory_search`, `memory_browse`, `memory_get_full`, `memory_stats`, `memory_tags`, `wiki_search`, `wiki_read`, `delegate_task`, `list_agents`); `echo`, `skill_list`, `skill_manage`, `internet_search` and `web_fetch` are removed (Phil, 2026-10-13). Their schemas, transports (stdio, streamable HTTP, unix socket) | Claude Code, codex, every MCP client | mcp-tools-providers.md §2–§3 | `golden/mcp/` (`tools-list.json`, `calls.json`) | `tools/list` for the nine equals the recording after the RivetOS→RivetHub name translation, compared as parsed values; recorded calls give the same results |
 | B8 | Provider wire traffic: the OpenAI-compatible chat (streamed) and embeddings API as spoken to vLLM, SGLang and hosted OpenAI-compatible endpoints through one client (no Ollama, no llama-server type) | the model servers | mcp-tools-providers.md §5.4–§5.5 | the vllm scenarios in `golden/providers/` (request+response) | byte-equal request bodies (headers filtered) except the intentional wire deltas of one typed table (testkit `B8_OMITTED_REQUEST_FIELDS`): the runtime sends NO sampling fields where the TypeScript sent hard-coded `temperature: 0.7`/`top_p: 0.95`, never sends `tool_choice` (the server's own `auto` default applies when `tools` are present), and sends `max_tokens` only when the provider config sets it (the TypeScript's 4096 default is gone); same parsed responses and stream chunks |
 | B9 | CLI: command tree, flags, output text, exit codes, prompts | operators, systemd units, scripts, `rh update --mesh` | cli.md §0–§19 | `tests` listed in cli.md §21; (recording to add: CLI golden transcripts) | same stdout/stderr/exit for the same argv on the same state |
@@ -352,7 +352,8 @@ on its page as before, a patch whose `type` names one of the types goes to that 
 any other patch becomes a note section on the session's topic page. A session that isn't filed yet keeps its notes until it
 is filed (a child session until its parent is, a conversation or delegated task until that conversation is), then
 they land on its topic page and cite its summary. A session's notes follow it: moved to another topic, by you or
-the categorizer, they leave the old topic's page for the new one, and taken out of a topic they wait until it is
+the categorizer, they leave the old topic's page for the new one (and so does the summary's citation, unless the summary
+also patched the old page itself), and taken out of a topic they wait until it is
 filed again; a child follows its parent, and a delegated task its parent unless you placed it; an entity named by one session waits as a candidate until
 a second session names it. `WikiPatch.kind` (person, host or tool) is replaced by `type`, and the extraction input lists
 the type paths as `types`. Postgres migration `0032_entities.sql` and SQLite schema 20 add the kind, the tombstones and the
@@ -360,7 +361,7 @@ candidate and deferred tables; they make People and Hosts types, rename Tools to
 entities (dropping the filings that pointed at them and unbinding the type pages), and seed the types Agents, Hardware,
 Models, Services, Repos, Domains and Databases, with Software's CLIs and tools, Apps, Libraries and frameworks, OS and
 platforms, and Plugins and skills.
-(41) Wiki edits (Phil, 2026-10-29): `PUT /api/wiki/{slug}` with `{ "currentState"?, "article"? }`
+(41) Wiki edits (Phil, 2026-10-29; the route moved by (63)): `PUT /api/wiki/{slug}` with `{ "currentState"?, "article"? }`
 (`wire::gateway::wiki::WikiPageEdit`) replaces what it names on a topic or entity page, commits the page to the wiki
 repository as "Edited in Memory" with a `user` source and a dated history entry, and answers the page as
 `GET /api/wiki/{slug}` does. A slug that isn't a topic or entity page is `404`; wiki pages not configured is `503`. A page's
@@ -375,7 +376,7 @@ task id (as a conversation when none is found or it is unfiled); any other key f
 keys starting `grokbot-run-sand-subagent-` or `heartbeat`, and the channels `test-channel`, `env-test-channel` and
 `test`. Order: an existing placement is kept; a child session follows its parent on the client and is not filed; a
 task follows its parent; a working directory inside a topic's own directory (deepest wins, a tie decides nothing; a
-local directory matches by path, since captured conversations do not record their node) files it there; exactly one
+local directory matches by path, since conversations captured before (64) record no node) files it there; exactly one
 topic named in the title or first leaf files it there; otherwise the model answers file, suggest a name (with an
 optional parent) or nothing. A suggestion that matches a topic's slug or alias files there; one that repeats the title
 or reads like a sentence, path, file, ticket, PR, version, branch or id, or names a deleted topic, is refused; the rest is kept for sessions as the
@@ -387,6 +388,70 @@ shown to the model as examples. `GET /api/topics/{topic}/sessions` answers `sess
 `lastActive` across the session's conversation keys, so rows need no harness list) and `conversations`
 (`conversationId`, `topicId`, `by`, `at`, `channel`, optional `title` and `lastActive`). Merges move conversation
 placements and suggestion parents; deleting a topic drops its conversation placements and the corrections that name it.
+(43) Tidy proposals (Phil, 2026-10-29): changes to topics, entities and types that someone has to approve wait as proposals.
+A change (`wire::gateway::tidy::TidyChange`, tagged by `kind`) is `merge` (`source` into `into`, two topics of one kind),
+`move` (`topic` under `parent`, top level when absent), `rename` (`topic` to `name`), `close`, `delete`, `createTopic`
+(the new work topic's chosen `topic` id, `name`, optional `parent`, and the `sessions` and `conversations` to file under
+it) or `addType` (the new type's `topic` id, `name`, optional parent type). A proposal (`TidyProposal`) carries `id`,
+`batchId`, `change`, a `reason`, `evidence` (`{ sessions, samples: [{ id, title? }] }`), `proposedBy` (`categorizer` or
+`backfill`), `proposedAt`, `state` (`pending`, `approved`, `rejected`) and `decidedAt`. `GET /api/tidy/proposals`
+answers `{ batches: [{ batchId, proposedBy, proposedAt, proposals }] }`, pending proposals only, newest batch first and
+each batch in proposal order. `POST /api/tidy/proposals/{proposal}/approve` applies the change through the topic
+operations (a merge leaves its redirect, a new topic files its members `by: "categorizer"`, so your placements stay) and
+answers the proposal approved; `POST …/reject` answers it rejected. A decided proposal is `409`, an unknown one `404`, an
+id that is not a uuid `400`; a change the topic rules refuse answers that topic error and stays pending.
+`POST /api/tidy/batches/{batch}/approve` and `…/reject` decide every pending proposal of the batch in order and answer
+`{ decided, failed: [{ proposalId, error }] }`, where a failed proposal stays pending; an unknown batch is `404`. Every
+change has a fingerprint (a merge's unordered pair; a move's topic and parent; a rename's topic and new slug; the topic
+of a close or delete; the folded name of a new topic or type), and a proposal whose fingerprint is pending or rejected is
+dropped when a batch is stored, so a rejected change is never proposed again; approvals are not remembered. The
+categorizer role claims `propose-tidy` (cron `tidy-sweep`, hourly; `rh local` also queues it at start), which does
+nothing until a week has passed since the categorizer's last batch. It reads the work tree and the types with session
+counts and the filings of the last 7 days, the clusters of pending session suggestions that share a folded name (3
+sessions or more), the pairs of same-kind topics that share a topic identity key, and the newest eight corrections; asks
+the model filing uses for one JSON object per line; drops lines that name nothing listed; and keeps a change only when it
+passes the guard: a new topic needs at least 3 sessions, a new or renamed name passes note 42's name rule and is neither
+tombstoned nor taken, merges and moves pass the topic rules, a close takes an open work topic, a delete only a topic with
+no sessions and no subtopics, and nothing pending or rejected is proposed. Each run stores its batch, empty or not.
+Postgres migration `0034_tidy.sql` and SQLite schema 22 add `rh_tidy_batches`, `rh_tidy_proposals` and `rh_worker_runs`
+(note 44). The routes and the job are new, with no TypeScript recording.
+(44) Memory upkeep (Phil, 2026-10-29): `GET /api/memory/upkeep` answers `wire::gateway::tidy::MemoryUpkeep` for the
+Memory Stats tab. `filing` counts every conversation once: `categorizer` and `you` by the placement that files it (its
+session's, a bare Claude uuid through its `claude-code:` session, or its own), `leftOut` for note 42's never-filed keys
+and channels, `uncategorized` for the rest, so the four add up to `/api/memory/stats` `conversations`; and
+`correctionsLastWeek`. `wiki` has `topicPages` (pages bound to work topics), `entityTypes` (`[{ typeId, name, entities }]`,
+every type with the entities directly under it) and `loosePages` (pages bound to no topic). `workers` has `embedder`,
+`summarizer`, `categorizer` and `wikiBuilder`, each `{ lastFinishedAt?, failing }`: the newest finish of a job in the
+role's task list, and how many of its jobs have failed at least once without succeeding since, dead ones included.
+Completing a job records its task's finish in `rh_worker_runs`, in the graphile completion statement or the SQLite
+completion transaction. `pendingProposals` counts pending proposals. Without the stores the route is `503`.
+(61) Conversation summaries (Phil, 2026-10-29): `GET /api/memory/conversations/{id}/summaries` answers one
+conversation's summary DAG by its id, as `MemorySummaryDagResponse` with `sessionId` set to the conversation's own key,
+so a conversation filed in a topic that is no harness session shows its summaries. A segment that isn't a uuid is `400`
+and an unknown conversation is `404`. `GET /api/memory/summaries/{session}` is unchanged.
+(62) Page owners and citations (Phil, 2026-10-29): each `WikiTopic` row of the wiki listing (`GET /api/wiki`,
+`/api/wiki/topics`, `/api/wiki/search` and `_gaps`' `stalest`) carries an optional `topicId`, the topic or entity that owns
+the page, as `GET /api/wiki/{slug}` already did, so a client tells an entity's page from a page without a topic. Each
+`WikiCitation` gains what a reader needs to list who cites the page, like Wikipedia's "What links here": optional
+`conversationId` (the cited summary's conversation), `sessionId` (that conversation's harness session, when it is one, by
+the filing rule of (42)), `title` and `channel` (the conversation's), and `topicId` (where it is filed: the session's
+placement, or the conversation's own placement when it is no session). A citation whose summary is gone keeps only its
+own fields.
+(63) Page edits by topic (Phil, 2026-10-29): `PUT /api/topics/{topic}/page` (an id or slug) with
+`{ "currentState"?, "article"? }` (`WikiPageEdit`) replaces `PUT /api/wiki/{slug}` of (41). It edits the page
+`GET /api/topics/{topic}/page` shows (an entity's own page, a work topic's root page), writing that page first when the wiki
+hasn't, so an entity the builder hasn't written a page for yet can be edited, and answers `TopicPage` as the GET does. The
+commit, history entry and user source are as (41) says. A type has no page (`409`, "A type has no page"); an unknown topic
+is `404`; wiki pages not configured is `503`.
+(64) Conversation nodes (Phil, 2026-10-29): `POST /api/capture` records the receiving node's name (`mesh.node_name`,
+as `/healthz` reports it) on a conversation it creates or captures into, the first node to capture it winning.
+Postgres migration `0037_conversation_node.sql` adds the nullable `rh_conversations.node`; SQLite schema 25 keeps it in
+`rh_conversation_nodes` so the legacy `ros_conversations` table is unchanged. `TopicSession` (the newest node across the
+session's conversation keys) and `TopicConversation` on `GET /api/topics/{topic}/sessions` carry an optional `node`.
+Conversations captured before 0037, appended through `memory_append`, or imported, have none.
+(65) Topic mentions (Phil, 2026-10-29): `TopicPage` (`GET` and `PUT /api/topics/{topic}/page`) gains `mentions`, the
+entities whose pages cite summaries of the sessions and conversations filed in the topic or anywhere under it, as
+`TopicMention` (`topicId`, `name`), most mentioned first and at most 24. A type or an entity answers none.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

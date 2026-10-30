@@ -29,10 +29,12 @@ mod task_jobs;
 mod task_query;
 mod task_rows;
 mod task_watch;
+mod tidy;
 mod title;
 mod topics;
 mod wiki;
 mod wiki_builder;
+mod wiki_citations;
 pub mod wiki_writer;
 
 #[cfg(test)]
@@ -60,7 +62,7 @@ pub use queue::PostgresQueue;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-pub const SCHEMA_VERSION: i64 = 33;
+pub const SCHEMA_VERSION: i64 = 37;
 pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]

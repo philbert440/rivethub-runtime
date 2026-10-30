@@ -19,6 +19,8 @@ use kernel::filing::FilingStore;
 use kernel::hub_state::HubStateStore;
 use kernel::memory::MemoryExport;
 use kernel::memory::MemoryStore;
+use kernel::tidy::TidyStore;
+use kernel::tidy::UpkeepStore;
 use kernel::topics::DecisionStore;
 use kernel::topics::StartupStore;
 use kernel::topics::TopicPageStore;
@@ -129,6 +131,7 @@ struct Backing<'tasks> {
     topics: Option<(Arc<dyn TopicStore>, Arc<dyn FilingStore>)>,
     decisions: Option<Arc<dyn DecisionStore>>,
     startup: Option<(Arc<dyn TopicPageStore>, Arc<dyn StartupStore>)>,
+    tidy: Option<(Arc<dyn TidyStore>, Arc<dyn UpkeepStore>)>,
     tasks: Option<&'tasks crate::agent::LocalTasks>,
 }
 
@@ -168,6 +171,10 @@ fn with_backing(gateway: Gateway, backing: &Backing<'_>) -> Gateway {
     };
     let gateway = match backing.decisions.clone() {
         Some(decisions) => gateway.with_decisions(decisions),
+        None => gateway,
+    };
+    let gateway = match backing.tidy.clone() {
+        Some((tidy, upkeep)) => gateway.with_tidy(tidy, upkeep),
         None => gateway,
     };
     match backing.startup.clone() {
@@ -261,6 +268,7 @@ impl Composition {
             topics: Some((memory.clone(), memory.clone())),
             decisions: Some(memory.clone()),
             startup: Some((memory.clone(), memory.clone())),
+            tidy: Some((memory.clone(), memory.clone())),
             tasks: None,
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
@@ -285,6 +293,7 @@ impl Composition {
             topics: Some((store.clone(), store.clone())),
             decisions: Some(store.clone()),
             startup: Some((store.clone(), store.clone())),
+            tidy: Some((store.clone(), store.clone())),
             tasks,
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)

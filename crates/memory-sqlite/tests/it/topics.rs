@@ -228,3 +228,24 @@ async fn conversations_file_with_titles_and_corrections() -> TestResult {
     testkit::filing::conversations_file_with_titles_and_corrections(&store).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn editing_an_unwritten_entity_writes_its_page() -> TestResult {
+    let (_directory, store) = store()?;
+    topic_pages::editing_an_unwritten_entity_writes_its_page(pages(&store)).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn proposals_are_decided_and_rejections_remembered() -> TestResult {
+    let (_directory, store) = store()?;
+    testkit::tidy::proposals_are_decided_and_rejections_remembered(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn upkeep_counts_filings_entities_and_finished_jobs() -> TestResult {
+    let (_directory, store) = store()?;
+    testkit::tidy::upkeep_counts_filings_entities_and_finished_jobs(&store, &store).await?;
+    Ok(())
+}

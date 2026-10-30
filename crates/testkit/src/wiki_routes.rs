@@ -39,6 +39,7 @@ use crate::topics::same;
 
 pub const SESSION_KEY: &str = "claude-code:00000000-0000-4000-8000-000000000042";
 pub const PARENT_KEY: &str = "claude-code:00000000-0000-4000-8000-000000000041";
+pub const SESSION_TITLE: &str = "AcmeKit release prep";
 
 type Found<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -165,7 +166,7 @@ impl SessionLister for ChildOfParent {
 }
 
 impl RouteStores<'_> {
-    async fn place(&self, topic: &Topic) -> Outcome {
+    pub(crate) async fn place(&self, topic: &Topic) -> Outcome {
         self.place_as(SESSION_KEY, topic).await
     }
 
@@ -195,7 +196,7 @@ impl RouteStores<'_> {
         }
     }
 
-    async fn route(&self, job: &ExtractWiki, patches: Vec<WikiPatch>) -> Outcome {
+    pub(crate) async fn route(&self, job: &ExtractWiki, patches: Vec<WikiPatch>) -> Outcome {
         let router = self.router();
         let WikiWork::Pending(summary) = self.wiki.wiki_work(job).await? else {
             return Err("the summary was already extracted".into());
@@ -218,7 +219,18 @@ impl RouteStores<'_> {
             .collect())
     }
 
-    async fn named(&self, kind: TopicKind, name: &str) -> Found<Option<Topic>> {
+    async fn cited(&self, slug: &str) -> Found<Vec<String>> {
+        Ok(self
+            .pages
+            .shown(slug)
+            .await?
+            .citations
+            .into_iter()
+            .map(|citation| citation.summary_id)
+            .collect())
+    }
+
+    pub(crate) async fn named(&self, kind: TopicKind, name: &str) -> Found<Option<Topic>> {
         Ok(self
             .pages
             .topics
@@ -226,7 +238,11 @@ impl RouteStores<'_> {
             .await?)
     }
 
-    async fn mentioned_elsewhere(&self, job: &ExtractWiki, patch: &WikiPatch) -> Outcome {
+    pub(crate) async fn mentioned_elsewhere(
+        &self,
+        job: &ExtractWiki,
+        patch: &WikiPatch,
+    ) -> Outcome {
         self.wiki
             .hold_entity(HeldEntity {
                 key: Slug::fold(&patch.title)?,
@@ -256,7 +272,7 @@ fn patch(slug: &str, title: &str, summary: &str) -> Found<WikiPatch> {
     })
 }
 
-fn host(text: &str) -> Found<WikiPatch> {
+pub(crate) fn host(text: &str) -> Found<WikiPatch> {
     let mut host = patch("acmekit-build-box", "AcmeKit build box", text)?;
     host.entity_type = Some("Hosts".to_owned());
     Ok(host)
@@ -481,6 +497,12 @@ pub async fn a_moved_session_takes_its_notes_along(
         Vec::new(),
     )?;
     same("moved", stores.notes(&desk).await?, note.clone())?;
+    same("uncited", stores.cited("acmekit").await?, Vec::new())?;
+    same(
+        "cited where it went",
+        stores.cited("billing-desk").await?,
+        vec![job.summary_id.to_string()],
+    )?;
     stores
         .pages
         .topics

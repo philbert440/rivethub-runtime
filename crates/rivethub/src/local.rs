@@ -15,6 +15,7 @@ use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::shutdown::Activities;
 use kernel::tasks::Delegation;
+use kernel::tidy::TidyStore;
 use kernel::topics::DecisionStore;
 use kernel::topics::TopicPageStore;
 use kernel::topics::TopicStore;
@@ -497,6 +498,7 @@ async fn build_runners(
             filing: Arc::clone(store) as Arc<dyn FilingStore>,
             pages: Arc::clone(store) as Arc<dyn TopicPageStore>,
             decisions: Arc::clone(store) as Arc<dyn DecisionStore>,
+            tidy: Arc::clone(store) as Arc<dyn TidyStore>,
             lineage: worker::session_lineage(env),
         };
         let mut runner =
@@ -506,7 +508,10 @@ async fn build_runners(
                 .runner
                 .with_unembedded(Arc::clone(store) as Arc<dyn UnembeddedStore>);
         }
-        if matches!(role, ProcessRole::Embedder | ProcessRole::Summarizer) {
+        if matches!(
+            role,
+            ProcessRole::Embedder | ProcessRole::Summarizer | ProcessRole::Categorizer
+        ) {
             runner.runner = runner.runner.with_schedules(true).with_schedule_at_start();
         }
         built.push((role, runner));

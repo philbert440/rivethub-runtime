@@ -12,6 +12,7 @@ use kernel::filing::Filed;
 use kernel::filing::FiledConversation;
 use kernel::filing::FiledSession;
 use kernel::filing::FilingStore;
+use kernel::filing::Mention;
 use kernel::filing::Subject;
 use kernel::filing::Target;
 use kernel::filing::TopicLine;
@@ -51,6 +52,7 @@ struct SeenRow {
     session_key: String,
     title: Option<String>,
     last_active: Option<DateTime<Utc>>,
+    node: Option<String>,
 }
 
 #[async_trait]
@@ -201,11 +203,14 @@ impl FilingStore for PostgresMemory {
             .collect();
         let seen: BTreeMap<String, SeenRow> = sqlx::query_as!(
             SeenRow,
-            r#"SELECT DISTINCT ON (session_key) session_key, title,
-                      max(updated_at) OVER (PARTITION BY session_key) AS last_active
-                 FROM rh_conversations
-                WHERE session_key = ANY($1::text[])
-                ORDER BY session_key, title IS NULL, updated_at DESC"#,
+            r#"SELECT DISTINCT ON (c.session_key) c.session_key, c.title,
+                      max(c.updated_at) OVER (PARTITION BY c.session_key) AS last_active,
+                      (SELECT n.node FROM rh_conversations n
+                        WHERE n.session_key = c.session_key AND n.node IS NOT NULL
+                        ORDER BY n.updated_at DESC LIMIT 1) AS node
+                 FROM rh_conversations c
+                WHERE c.session_key = ANY($1::text[])
+                ORDER BY c.session_key, c.title IS NULL, c.updated_at DESC"#,
             &keys
         )
         .fetch_all(&self.pool)
@@ -224,42 +229,22 @@ impl FilingStore for PostgresMemory {
                 FiledSession {
                     title: found.iter().find_map(|row| row.title.clone()),
                     last_active: found.iter().filter_map(|row| row.last_active).max(),
+                    node: found.iter().find_map(|row| row.node.clone()),
                     placement,
                 }
             })
             .collect();
         sessions.sort_by_key(|filed| Reverse(filed.last_active));
-        let mut conversations = sqlx::query!(
-            "SELECT p.conversation_id, p.topic_id, p.placed_by, p.placed_at,
-                    c.title, c.channel, c.updated_at
-               FROM rh_conversation_placements p
-               JOIN rh_conversations c ON c.id = p.conversation_id
-              WHERE p.topic_id = $1",
-            topic.uuid()
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(failed("filed conversations"))?
-        .into_iter()
-        .map(|row| {
-            Ok(FiledConversation {
-                placement: conversation_placement(&ConversationPlacementRow {
-                    conversation_id: row.conversation_id,
-                    topic_id: row.topic_id,
-                    placed_by: row.placed_by,
-                    placed_at: row.placed_at,
-                })?,
-                title: row.title,
-                channel: row.channel,
-                last_active: Some(row.updated_at),
-            })
-        })
-        .collect::<Result<Vec<_>, TopicError>>()?;
+        let mut conversations = filed_conversations(&self.pool, topic).await?;
         conversations.sort_by_key(|filed| Reverse(filed.last_active));
         Ok(Filed {
             sessions,
             conversations,
         })
+    }
+
+    async fn mentions(&self, topics: &[TopicId], limit: u32) -> Result<Vec<Mention>, TopicError> {
+        super::mentions::read(&self.pool, topics, limit).await
     }
 
     async fn corrected(&self, target: &Target) -> Result<bool, TopicError> {
@@ -344,6 +329,39 @@ impl FilingStore for PostgresMemory {
         })
         .collect())
     }
+}
+
+async fn filed_conversations(
+    pool: &sqlx::PgPool,
+    topic: TopicId,
+) -> Result<Vec<FiledConversation>, TopicError> {
+    sqlx::query!(
+        "SELECT p.conversation_id, p.topic_id, p.placed_by, p.placed_at,
+                c.title, c.channel, c.updated_at, c.node
+           FROM rh_conversation_placements p
+           JOIN rh_conversations c ON c.id = p.conversation_id
+          WHERE p.topic_id = $1",
+        topic.uuid()
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(failed("filed conversations"))?
+    .into_iter()
+    .map(|row| {
+        Ok(FiledConversation {
+            placement: conversation_placement(&ConversationPlacementRow {
+                conversation_id: row.conversation_id,
+                topic_id: row.topic_id,
+                placed_by: row.placed_by,
+                placed_at: row.placed_at,
+            })?,
+            title: row.title,
+            channel: row.channel,
+            last_active: Some(row.updated_at),
+            node: row.node,
+        })
+    })
+    .collect()
 }
 
 pub(super) async fn fold_into(

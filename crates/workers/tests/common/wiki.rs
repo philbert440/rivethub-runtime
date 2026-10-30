@@ -101,4 +101,8 @@ impl WikiBuilderStore for WikiStore {
     ) -> Result<(), WikiStoreError> {
         Ok(())
     }
+
+    async fn uncite_wiki(&self, _summary_id: Uuid, _slug: &WikiSlug) -> Result<(), WikiStoreError> {
+        Ok(())
+    }
 }

@@ -10,6 +10,7 @@ use kernel::filing::Filed;
 use kernel::filing::FiledConversation;
 use kernel::filing::FiledSession;
 use kernel::filing::FilingStore;
+use kernel::filing::Mention;
 use kernel::filing::Subject;
 use kernel::filing::Target;
 use kernel::filing::TopicLine;
@@ -40,6 +41,7 @@ const PLACED_COLUMNS: &str = "conversation_id, topic_id, placed_by, placed_at";
 struct Seen {
     title: Option<String>,
     last_active: Option<String>,
+    node: Option<String>,
 }
 
 #[async_trait]
@@ -170,6 +172,14 @@ impl FilingStore for SqliteStore {
                 sessions,
                 conversations,
             })
+        })
+        .await
+    }
+
+    async fn mentions(&self, topics: &[TopicId], limit: u32) -> Result<Vec<Mention>, TopicError> {
+        let topics = topics.to_vec();
+        self.topics("topic mentions", move |conn| {
+            super::mentions::read(conn, &topics, limit)
         })
         .await
     }
@@ -377,7 +387,12 @@ fn filed_sessions(conn: &Connection, topic: TopicId) -> Result<Vec<FiledSession>
     let mut seen = BTreeMap::new();
     let mut lookup = conn
         .prepare(
-            "SELECT title, max(updated_at) OVER () FROM ros_conversations
+            "SELECT title, max(updated_at) OVER (),
+                    (SELECT n.node FROM ros_conversations k
+                       JOIN rh_conversation_nodes n ON n.conversation_id = k.id
+                      WHERE k.session_key = ?1
+                      ORDER BY k.updated_at DESC LIMIT 1)
+               FROM ros_conversations
               WHERE session_key = ?1
               ORDER BY title IS NULL, updated_at DESC
               LIMIT 1",
@@ -392,6 +407,7 @@ fn filed_sessions(conn: &Connection, topic: TopicId) -> Result<Vec<FiledSession>
                 Ok(Seen {
                     title: row.get(0)?,
                     last_active: row.get(1)?,
+                    node: row.get(2)?,
                 })
             })
             .optional()
@@ -414,6 +430,7 @@ fn filed_sessions(conn: &Connection, topic: TopicId) -> Result<Vec<FiledSession>
         sessions.push(FiledSession {
             title: found.iter().find_map(|row| row.title.clone()),
             last_active,
+            node: found.iter().find_map(|row| row.node.clone()),
             placement,
         });
     }
@@ -428,9 +445,10 @@ fn filed_conversations(
     let mut statement = conn
         .prepare(
             "SELECT p.conversation_id, p.topic_id, p.placed_by, p.placed_at,
-                    c.title, c.channel, c.updated_at
+                    c.title, c.channel, c.updated_at, n.node
                FROM rh_conversation_placements p
                JOIN ros_conversations c ON c.id = p.conversation_id
+               LEFT JOIN rh_conversation_nodes n ON n.conversation_id = c.id
               WHERE p.topic_id = ?1",
         )
         .map_err(failed("filed conversations"))?;
@@ -441,6 +459,7 @@ fn filed_conversations(
                 row.get::<_, Option<String>>(4)?,
                 row.get::<_, String>(5)?,
                 row.get::<_, String>(6)?,
+                row.get::<_, Option<String>>(7)?,
             ))
         })
         .map_err(failed("filed conversations"))?
@@ -448,12 +467,13 @@ fn filed_conversations(
         .map_err(failed("filed conversations"))?;
     let mut conversations = found
         .into_iter()
-        .map(|(placed, title, channel, updated)| {
+        .map(|(placed, title, channel, updated, node)| {
             Ok(FiledConversation {
                 placement: conversation_placement(placed)?,
                 title,
                 channel,
                 last_active: Some(timestamp(&updated, "updated_at")?),
+                node,
             })
         })
         .collect::<Result<Vec<_>, TopicError>>()?;

@@ -128,6 +128,7 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
     for case in &recording.results {
         let options = CaptureOptions {
             owner_user_id: case.opts.owner_user_id.clone(),
+            node: None,
         };
         if MEMORY_SKIPS.iter().any(|(name, _)| *name == case.label) {
             assert!(matches!(

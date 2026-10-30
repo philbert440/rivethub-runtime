@@ -53,6 +53,7 @@ impl crate::PostgresMemory {
                 settings: batch.settings.as_ref(),
                 task_id: batch.task_id.as_deref(),
                 owner_user_id: owner,
+                node: options.node.as_deref(),
             })
             .await?;
         let event_ids: Vec<String> = batch
@@ -241,11 +242,16 @@ impl MemoryStore for crate::PostgresMemory {
     async fn capture(
         &self,
         mut batch: CaptureBatchRequest,
+        node: Option<&str>,
     ) -> Result<CaptureResult, MemoryStoreError> {
         batch
             .channel
             .get_or_insert_with(|| UNKNOWN_CHANNEL.to_owned());
-        self.capture_batch(&batch, &CaptureOptions::default())
+        let options = CaptureOptions {
+            node: node.map(str::to_owned),
+            ..CaptureOptions::default()
+        };
+        self.capture_batch(&batch, &options)
             .await
             .map_err(MemoryStoreError::from)
     }
@@ -294,9 +300,9 @@ impl MemoryStore for crate::PostgresMemory {
 
     async fn summary_dag(
         &self,
-        session: &str,
+        owner: &kernel::memory::SummaryOwner,
     ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
-        self.read_summary_dag(session).await
+        self.read_summary_dag(owner).await
     }
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError> {

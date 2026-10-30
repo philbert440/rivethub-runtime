@@ -1,11 +1,9 @@
-mod edit;
 mod html;
 
 use std::sync::Arc;
 
 use axum::Json;
 use axum::Router;
-use axum::extract::DefaultBodyLimit;
 use axum::extract::Path;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -76,10 +74,7 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         )
         .route(
             "/api/wiki/{slug}",
-            get(page)
-                .put(edit::edit)
-                .layer(DefaultBodyLimit::max(super::BODY_LIMIT))
-                .fallback(super::method_not_allowed),
+            get(page).fallback(super::method_not_allowed),
         )
         .route(
             "/api/wiki/{slug}/raw",

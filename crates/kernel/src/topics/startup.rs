@@ -25,6 +25,7 @@ use crate::memory::Limit;
 use crate::memory::MemoryStore;
 use crate::memory::SearchMode;
 use crate::memory::SearchQuery;
+use crate::memory::SummaryOwner;
 use crate::memory::budget::char_prefix;
 use crate::memory::budget::estimate_tokens;
 use crate::memory::budget::relative_when;
@@ -275,7 +276,7 @@ async fn recent_part(
         }
         let id = &session.placement.session;
         let latest = memory
-            .summary_dag(id.as_str())
+            .summary_dag(&SummaryOwner::Session(id.as_str().to_owned()))
             .await?
             .summaries
             .into_iter()

@@ -14,6 +14,7 @@ pub const MAX_CONTENT_CHARS: usize = 16_000;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CaptureOptions {
     pub owner_user_id: Option<String>,
+    pub node: Option<String>,
 }
 
 #[derive(Debug)]
@@ -30,6 +31,7 @@ pub struct ConversationUpsert<'a> {
     pub settings: Option<&'a JsonObject>,
     pub task_id: Option<&'a str>,
     pub owner_user_id: Option<&'a str>,
+    pub node: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

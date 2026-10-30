@@ -13,6 +13,7 @@ use uuid::Uuid;
 use wire::JsonObject;
 use wire::capture::CaptureBatchRequest;
 use wire::capture::CaptureMessage;
+use wire::gateway::memory::MemorySummaryDagResponse;
 use wire::gateway::topics::ConversationPlacementReply;
 use wire::gateway::topics::PlacedBy;
 use wire::gateway::topics::TopicRecord;
@@ -230,6 +231,7 @@ async fn conversation(
                 created_at: None,
             }],
         },
+        None,
     )
     .await?;
     let id = Uuid::parse_str(&captured.conversation_id)?;
@@ -248,4 +250,98 @@ async fn conversation(
 #[derive(serde::Serialize)]
 struct Settings<'a> {
     cwd: &'a str,
+}
+
+#[tokio::test]
+async fn a_conversation_captured_here_names_this_node_and_its_summaries() -> TestResult {
+    let api = Api::new(true)?;
+    let bench: TopicRecord = api
+        .json(
+            "POST",
+            "/api/topics",
+            r#"{"name":"Bench"}"#,
+            StatusCode::CREATED,
+        )
+        .await?;
+    let id = captured_here(&api, "qwen-code:51").await?;
+    api.database()?.execute(
+        "INSERT INTO ros_summaries (id, conversation_id, content, kind, created_at)
+         VALUES ('00000000-0000-4000-8000-000000000052', ?1, 'Benched it.', 'leaf',
+                 '2026-10-29T12:00:00.000Z')",
+        [id.as_str()],
+    )?;
+    let _: ConversationPlacementReply = api
+        .json(
+            "PUT",
+            &format!("/api/conversations/{id}/placement"),
+            &format!(r#"{{"topicId":"{}"}}"#, bench.id),
+            StatusCode::OK,
+        )
+        .await?;
+    let listed: TopicSessionList = api
+        .json(
+            "GET",
+            &format!("/api/topics/{}/sessions", bench.id),
+            "",
+            StatusCode::OK,
+        )
+        .await?;
+    assert_eq!(
+        listed
+            .conversations
+            .iter()
+            .map(|row| row.node.as_deref())
+            .collect::<Vec<_>>(),
+        vec![Some("node-a")]
+    );
+    let dag: MemorySummaryDagResponse = api
+        .json(
+            "GET",
+            &format!("/api/memory/conversations/{id}/summaries"),
+            "",
+            StatusCode::OK,
+        )
+        .await?;
+    assert_eq!(dag.session_id, "qwen-code:51");
+    assert_eq!(
+        dag.summaries
+            .iter()
+            .map(|node| node.content.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Benched it."]
+    );
+    Ok(())
+}
+
+async fn captured_here(api: &Api, key: &str) -> TestResult<String> {
+    let batch = CaptureBatchRequest {
+        session_key: key.to_owned(),
+        agent: "rivet".to_owned(),
+        channel: Some("qwen-code".to_owned()),
+        title: Some("Quantised bench".to_owned()),
+        settings: None,
+        task_id: None,
+        finalize: None,
+        created_at: None,
+        updated_at: None,
+        messages: vec![CaptureMessage {
+            event_id: format!("{key}-1"),
+            role: Role::User,
+            content: "Bench the quantised model.".to_owned(),
+            tool_name: None,
+            tool_args: None,
+            tool_result: None,
+            metadata: None,
+            created_at: None,
+        }],
+    };
+    let (status, _) = api
+        .call("POST", "/api/capture", &serde_json::to_string(&batch)?)
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    Ok(api.database()?.query_row(
+        "SELECT id FROM ros_conversations WHERE session_key = ?1",
+        [key],
+        |row| row.get(0),
+    )?)
 }

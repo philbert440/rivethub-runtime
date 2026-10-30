@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use strum::IntoEnumIterator;
 use uuid::Uuid;
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
@@ -10,7 +11,7 @@ const SANDBOX_RUN_PREFIX: &str = "grokbot-run-sand-subagent-";
 const HEARTBEAT_PREFIX: &str = "heartbeat";
 const TASK_PREFIX: &str = "task:";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString, strum::Display, strum::EnumIter)]
 #[strum(serialize_all = "kebab-case")]
 enum UnfiledChannel {
     TestChannel,
@@ -118,6 +119,29 @@ impl Filable {
             Self::Never => None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LeftOut {
+    pub key_prefixes: Vec<String>,
+    pub channels: Vec<String>,
+}
+
+impl LeftOut {
+    #[must_use]
+    pub fn rules() -> Self {
+        Self {
+            key_prefixes: vec![SANDBOX_RUN_PREFIX.to_owned(), HEARTBEAT_PREFIX.to_owned()],
+            channels: UnfiledChannel::iter()
+                .map(|channel| channel.to_string())
+                .collect(),
+        }
+    }
+}
+
+#[must_use]
+pub fn bare_session_prefix() -> String {
+    format!("{}:", HarnessId::ClaudeCode)
 }
 
 #[must_use]

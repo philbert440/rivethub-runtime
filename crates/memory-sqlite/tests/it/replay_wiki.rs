@@ -230,6 +230,7 @@ fn project_topic(topic: &Json) -> TestResult<WikiTopic> {
         entities: string_list(topic, "entities")?,
         updated_at: common::instant(&json_text(topic, "updatedAt")?)?,
         excerpt,
+        topic_id: None,
     })
 }
 

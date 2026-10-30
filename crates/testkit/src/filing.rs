@@ -21,6 +21,8 @@ use crate::topics::session;
 
 const CLAUDE: &str = "00000000-0000-4000-8000-000000000031";
 const BARE: &str = "00000000-0000-4000-8000-000000000032";
+const NODE_A: &str = "node-a";
+const NODE_B: &str = "node-b";
 
 pub async fn conversations_file_with_titles_and_corrections<S>(store: &S) -> Outcome
 where
@@ -30,9 +32,16 @@ where
     let rivetos = store.create(new_topic("RivetOS", &[], None)?).await?;
     let current = session(CLAUDE)?;
     let legacy = session(BARE)?;
-    capture(store, current.as_str(), "claude-code", "Topic screen").await?;
-    capture(store, BARE, "claude-code", "Old claude").await?;
-    let qwen = capture(store, "qwen-code:41", "qwen-code", "Qwen run").await?;
+    capture(
+        store,
+        current.as_str(),
+        "claude-code",
+        "Topic screen",
+        Some(NODE_A),
+    )
+    .await?;
+    capture(store, BARE, "claude-code", "Old claude", None).await?;
+    let qwen = capture(store, "qwen-code:41", "qwen-code", "Qwen run", Some(NODE_B)).await?;
     for filed in [&current, &legacy] {
         store
             .place(Placement {
@@ -68,26 +77,34 @@ where
 
 async fn listed_with_titles<S: FilingStore>(store: &S, desktop: TopicId) -> Outcome {
     let listed = store.filed(desktop).await?;
-    let titles: Vec<Option<String>> = listed
+    let mut titles: Vec<(Option<String>, Option<String>)> = listed
         .sessions
         .iter()
-        .map(|row| row.title.clone())
+        .map(|row| (row.title.clone(), row.node.clone()))
         .collect();
-    same("both sessions are listed", titles.len(), 2)?;
+    titles.sort();
     same(
-        "a legacy key still names its session",
-        titles.contains(&Some("Old claude".to_owned()))
-            && titles.contains(&Some("Topic screen".to_owned())),
-        true,
+        "a legacy key still names its session, and each says where it was captured",
+        titles,
+        vec![
+            (Some("Old claude".to_owned()), None),
+            (Some("Topic screen".to_owned()), Some(NODE_A.to_owned())),
+        ],
     )?;
     same(
         "the conversation row",
         listed
             .conversations
             .iter()
-            .map(|row| (row.channel.as_str(), row.title.as_deref()))
+            .map(|row| {
+                (
+                    row.channel.as_str(),
+                    row.title.as_deref(),
+                    row.node.as_deref(),
+                )
+            })
             .collect::<Vec<_>>(),
-        vec![("qwen-code", Some("Qwen run"))],
+        vec![("qwen-code", Some("Qwen run"), Some(NODE_B))],
     )?;
     Ok(())
 }
@@ -142,34 +159,38 @@ async fn corrections_follow_the_tree<S: TopicStore + FilingStore>(
     Ok(())
 }
 
-async fn capture<S: MemoryStore>(
+pub(crate) async fn capture<S: MemoryStore>(
     store: &S,
     key: &str,
     channel: &str,
     title: &str,
+    node: Option<&str>,
 ) -> Result<Uuid, Box<dyn std::error::Error>> {
     let captured = store
-        .capture(CaptureBatchRequest {
-            session_key: key.to_owned(),
-            agent: "rivet".to_owned(),
-            channel: Some(channel.to_owned()),
-            title: Some(title.to_owned()),
-            settings: None,
-            task_id: None,
-            finalize: None,
-            created_at: Some(at(0)),
-            updated_at: Some(at(0)),
-            messages: vec![CaptureMessage {
-                event_id: format!("{key}-1"),
-                role: Role::User,
-                content: title.to_owned(),
-                tool_name: None,
-                tool_args: None,
-                tool_result: None,
-                metadata: None,
+        .capture(
+            CaptureBatchRequest {
+                session_key: key.to_owned(),
+                agent: "rivet".to_owned(),
+                channel: Some(channel.to_owned()),
+                title: Some(title.to_owned()),
+                settings: None,
+                task_id: None,
+                finalize: None,
                 created_at: Some(at(0)),
-            }],
-        })
+                updated_at: Some(at(0)),
+                messages: vec![CaptureMessage {
+                    event_id: format!("{key}-1"),
+                    role: Role::User,
+                    content: title.to_owned(),
+                    tool_name: None,
+                    tool_args: None,
+                    tool_result: None,
+                    metadata: None,
+                    created_at: Some(at(0)),
+                }],
+            },
+            node,
+        )
         .await?;
     Ok(Uuid::parse_str(&captured.conversation_id)?)
 }

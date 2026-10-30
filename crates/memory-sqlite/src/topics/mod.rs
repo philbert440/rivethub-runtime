@@ -1,6 +1,7 @@
 mod decisions;
 mod filing;
 mod history;
+mod mentions;
 mod rows;
 mod startup;
 mod write;

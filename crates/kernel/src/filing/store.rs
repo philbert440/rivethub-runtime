@@ -11,6 +11,7 @@ use crate::topics::Placement;
 use crate::topics::PlacementSource;
 use crate::topics::TopicError;
 use crate::topics::TopicId;
+use crate::topics::TopicName;
 
 const TOPIC_LINE_CHARS: usize = 160;
 
@@ -44,6 +45,7 @@ pub struct FiledSession {
     pub placement: Placement,
     pub title: Option<String>,
     pub last_active: Option<DateTime<Utc>>,
+    pub node: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +54,13 @@ pub struct FiledConversation {
     pub title: Option<String>,
     pub channel: String,
     pub last_active: Option<DateTime<Utc>>,
+    pub node: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mention {
+    pub entity: TopicId,
+    pub name: TopicName,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -106,6 +115,8 @@ pub trait FilingStore: Send + Sync {
     ) -> Result<Option<ConversationPlacement>, TopicError>;
 
     async fn filed(&self, topic: TopicId) -> Result<Filed, TopicError>;
+
+    async fn mentions(&self, topics: &[TopicId], limit: u32) -> Result<Vec<Mention>, TopicError>;
 
     async fn correct(&self, correction: Correction) -> Result<(), TopicError>;
 

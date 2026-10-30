@@ -230,8 +230,15 @@ impl SearchQuery {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SummaryDag {
+    pub session_key: Option<String>,
     pub summaries: Vec<MemorySummaryNode>,
     pub messages: MemoryMessageTally,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SummaryOwner {
+    Session(String),
+    Conversation(Uuid),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -371,6 +378,7 @@ pub trait MemoryStore: Send + Sync {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError>;
 
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError>;
@@ -385,7 +393,7 @@ pub trait MemoryStore: Send + Sync {
 
     async fn context(&self, session: &str, now: DateTime<Utc>) -> Result<String, MemoryStoreError>;
 
-    async fn summary_dag(&self, session: &str) -> Result<SummaryDag, MemoryStoreError>;
+    async fn summary_dag(&self, owner: &SummaryOwner) -> Result<SummaryDag, MemoryStoreError>;
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError>;
 

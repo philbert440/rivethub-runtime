@@ -121,6 +121,8 @@ pub trait WikiBuilderStore: Send + Sync {
         slug: &WikiSlug,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError>;
+
+    async fn uncite_wiki(&self, summary_id: Uuid, slug: &WikiSlug) -> Result<(), WikiStoreError>;
 }
 
 #[derive(Debug, Error)]

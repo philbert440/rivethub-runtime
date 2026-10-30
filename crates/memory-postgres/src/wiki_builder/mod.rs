@@ -136,6 +136,10 @@ impl WikiBuilderStore for PostgresMemory {
     ) -> Result<(), WikiStoreError> {
         held::cite(&self.pool, summary_id, slug, now).await
     }
+
+    async fn uncite_wiki(&self, summary_id: Uuid, slug: &WikiSlug) -> Result<(), WikiStoreError> {
+        held::uncite(&self.pool, summary_id, slug).await
+    }
 }
 
 impl PostgresMemory {

@@ -221,8 +221,8 @@ async fn the_capture_port_skips_resent_events_and_defaults_the_channel(pool: PgP
     );
     sent.channel = None;
     sent.title = Some("Resent".to_owned());
-    let first = memory.capture(sent.clone()).await?;
-    let second = memory.capture(sent).await?;
+    let first = memory.capture(sent.clone(), None).await?;
+    let second = memory.capture(sent, None).await?;
     assert_eq!((first.inserted, first.skipped), (2, 0));
     assert_eq!((second.inserted, second.skipped), (0, 2));
     let row = sqlx::query(

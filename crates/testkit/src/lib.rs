@@ -18,8 +18,10 @@ pub mod sqlite;
 pub mod stub;
 pub mod sweeps;
 pub mod task_memory;
+pub mod tidy;
 pub mod topic_pages;
 pub mod topics;
+pub mod wiki_mentions;
 pub mod wiki_routes;
 pub mod ws;
 

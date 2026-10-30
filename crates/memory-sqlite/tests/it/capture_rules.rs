@@ -30,11 +30,11 @@ async fn updated_at_only_moves_forward() -> TestResult {
     };
     fresh
         .store
-        .capture(stamped("2025-03-01T01:00:00+01:00")?, now)
+        .capture(stamped("2025-03-01T01:00:00+01:00")?, None, now)
         .await?;
     fresh
         .store
-        .capture(stamped("2024-06-01T00:00:00Z")?, now)
+        .capture(stamped("2024-06-01T00:00:00Z")?, None, now)
         .await?;
     assert_eq!(
         stored_updated_at(&fresh.store).await?,
@@ -42,7 +42,7 @@ async fn updated_at_only_moves_forward() -> TestResult {
     );
     fresh
         .store
-        .capture(batch("old-task", "rivet", "cli"), now)
+        .capture(batch("old-task", "rivet", "cli"), None, now)
         .await?;
     assert_eq!(
         stored_updated_at(&fresh.store).await?,
@@ -92,6 +92,7 @@ async fn a_filled_tool_result_is_queued_again() -> TestResult {
         .store
         .capture(
             tool_call(None, r#"{"tool_use_id":"tu1","pending_result":true}"#)?,
+            None,
             now,
         )
         .await?;
@@ -108,6 +109,7 @@ async fn a_filled_tool_result_is_queued_again() -> TestResult {
                 Some("deployed build 42"),
                 r#"{"tool_use_id":"tu1","pending_result":false}"#,
             )?,
+            None,
             now,
         )
         .await?;
@@ -136,6 +138,7 @@ async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
         .store
         .capture(
             tool_call(None, r#"{"tool_use_id":"tu1","pending_result":true}"#)?,
+            None,
             now,
         )
         .await?;
@@ -146,6 +149,7 @@ async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
                 Some("deployed build 42"),
                 r#"{"tool_use_id":"tu1","pending_result":false}"#,
             )?,
+            None,
             now,
         )
         .await?;

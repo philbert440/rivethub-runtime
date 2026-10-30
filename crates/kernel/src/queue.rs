@@ -90,6 +90,7 @@ pub enum FixedJob {
     SummarizeConversation,
     SynthesizeToolCall,
     FileConversation,
+    ProposeTidy,
     EnqueueIdle,
     ExtractWiki,
     EnqueueWikiBackfill,
@@ -283,7 +284,10 @@ impl WorkerRole {
                 JobName::Fixed(FixedJob::ReapDeadJobs),
                 JobName::Fixed(FixedJob::SyncTopicPage),
             ],
-            Self::Categorizer => &[JobName::Fixed(FixedJob::FileConversation)],
+            Self::Categorizer => &[
+                JobName::Fixed(FixedJob::FileConversation),
+                JobName::Fixed(FixedJob::ProposeTidy),
+            ],
             Self::WikiBuilder => &[
                 JobName::Fixed(FixedJob::ExtractWiki),
                 JobName::Fixed(FixedJob::EnqueueWikiBackfill),

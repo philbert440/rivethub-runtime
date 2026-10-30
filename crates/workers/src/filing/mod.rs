@@ -39,6 +39,7 @@ use wire::message::Role;
 
 pub use job::file_conversation_job;
 pub use prompt::FILING_SYSTEM_PROMPT;
+pub(crate) use prompt::correction_line;
 
 use crate::error::WorkerError;
 use crate::summarize::llm_error;

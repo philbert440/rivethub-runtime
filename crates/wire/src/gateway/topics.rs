@@ -20,6 +20,8 @@ pub enum TopicDirectory {
     Default,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     Hash,
     Serialize,
     Deserialize,
@@ -186,6 +188,8 @@ pub struct TopicSession {
     #[serde(default)]
     #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
     pub last_active: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub node: Option<String>,
 }
 
 #[serde_as]
@@ -212,6 +216,8 @@ pub struct TopicConversation {
     #[serde(default)]
     #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
     pub last_active: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub node: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -237,6 +243,15 @@ pub struct TopicPage {
     pub topic: TopicRecord,
     #[serde(default)]
     pub page: Option<WikiPageResponse>,
+    #[serde(default)]
+    pub mentions: Vec<TopicMention>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicMention {
+    pub topic_id: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
