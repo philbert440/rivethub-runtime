@@ -28,8 +28,6 @@ use crate::topics::TopicName;
 use crate::topics::fold;
 use crate::wiki::page::WikiSlug;
 
-const SAMPLES: usize = 3;
-
 #[derive(Debug, Clone, Copy)]
 pub struct BackfillBatch<'a> {
     pub snapshot: &'a Snapshot,
@@ -49,14 +47,15 @@ impl BackfillBatch<'_> {
                 Desk::target(conversation).map(|target| (conversation.head.id, target))
             })
             .collect();
-        let titles: HashMap<Uuid, &str> = self
+        let seen: HashMap<Uuid, (Option<&str>, DateTime<Utc>)> = self
             .snapshot
             .conversations
             .iter()
-            .filter_map(|conversation| {
-                conversation
-                    .title()
-                    .map(|title| (conversation.head.id, title))
+            .map(|conversation| {
+                (
+                    conversation.head.id,
+                    (conversation.title(), conversation.last_active),
+                )
             })
             .collect();
         let mut members: BTreeMap<TopicId, Vec<(Target, Uuid)>> = BTreeMap::new();
@@ -73,7 +72,7 @@ impl BackfillBatch<'_> {
         let mut batch = Batch::new(Proposer::Backfill, at);
         for topic in &self.tree.topics {
             let filed = members.remove(&topic.id).unwrap_or_default();
-            let evidence = evidence(&filed, &titles)?;
+            let evidence = evidence(&filed, &seen)?;
             let members: Vec<Target> = filed.into_iter().map(|(target, _)| target).collect();
             let edits = self.topic_edits(topic, members)?;
             for (edit, reason) in edits {
@@ -205,20 +204,28 @@ fn page_edit(page: &Folded) -> Result<Option<(TreeEdit, String)>, TidyError> {
     })
 }
 
-fn evidence(filed: &[(Target, Uuid)], titles: &HashMap<Uuid, &str>) -> Result<Evidence, TidyError> {
+fn evidence(
+    filed: &[(Target, Uuid)],
+    seen: &HashMap<Uuid, (Option<&str>, DateTime<Utc>)>,
+) -> Result<Evidence, TidyError> {
     Ok(Evidence {
         sessions: u64::try_from(filed.len()).map_err(|_| TidyError::Invalid {
             what: "a session count".to_owned(),
         })?,
         samples: filed
             .iter()
-            .take(SAMPLES)
-            .map(|(target, conversation)| Sample {
-                id: match target {
-                    Target::Session(session) => session.as_str().to_owned(),
-                    Target::Conversation(id) => id.to_string(),
-                },
-                title: titles.get(conversation).map(|title| (*title).to_owned()),
+            .map(|(target, conversation)| {
+                let (title, last_active) = seen
+                    .get(conversation)
+                    .map_or((None, None), |(title, at)| (*title, Some(*at)));
+                Sample {
+                    id: match target {
+                        Target::Session(session) => session.as_str().to_owned(),
+                        Target::Conversation(id) => id.to_string(),
+                    },
+                    title: title.map(str::to_owned),
+                    last_active,
+                }
             })
             .collect(),
     })

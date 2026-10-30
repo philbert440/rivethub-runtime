@@ -364,6 +364,7 @@ async fn evidence(
                     .map(|suggested| Sample {
                         id: suggested.session.as_str().to_owned(),
                         title: suggested.title.clone(),
+                        last_active: None,
                     })
                     .collect(),
             });
@@ -381,6 +382,7 @@ async fn evidence(
             .map(|row| Sample {
                 id: row.placement.session.as_str().to_owned(),
                 title: row.title,
+                last_active: row.last_active,
             })
             .collect(),
     })

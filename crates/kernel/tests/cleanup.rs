@@ -6,6 +6,7 @@ use kernel::cleanup::Project;
 use kernel::cleanup::ProposedTree;
 use kernel::cleanup::Snapshot;
 use kernel::cleanup::SnapshotTopic;
+use kernel::cleanup::TreeChange;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKind;
 
@@ -100,4 +101,92 @@ fn seeds_projects_and_guards_the_proposed_names() {
             ("Docs Site", &JunkReason::TooFew { sessions: 1 }),
         ]
     );
+}
+
+fn acme_only() -> Snapshot {
+    Snapshot {
+        taken_at: Utc::now(),
+        conversations: Vec::new(),
+        topics: Vec::new(),
+        redirects: Vec::new(),
+        placements: Vec::new(),
+        corrections: Vec::new(),
+        projects: vec![Project {
+            name: "AcmeKit".to_owned(),
+            aliases: Vec::new(),
+        }],
+        refused: Vec::new(),
+        pages: Vec::new(),
+        sections: Vec::new(),
+    }
+}
+
+#[test]
+fn the_review_groups_merges_and_renames_within_the_guards() {
+    let snapshot = acme_only();
+    let guard = NameGuard::new([], []);
+    let drafts = vec![
+        draft("Cloud Auth", Some("AcmeKit"), 9, &[]),
+        draft("Tenant Provisioner", Some("AcmeKit"), 8, &[]),
+        draft("Auth Tokens", Some("AcmeKit"), 4, &[]),
+        draft("Native Clients", Some("AcmeKit"), 6, &[]),
+    ];
+    let mut tree = ProposedTree::propose(&snapshot, drafts, &guard).unwrap();
+    let id = |name: &str| {
+        tree.topics
+            .iter()
+            .find(|topic| topic.name == name)
+            .map(|topic| topic.id)
+            .unwrap()
+    };
+    let (acme, auth, tenants, sign_in, clients) = (
+        id("AcmeKit"),
+        id("Cloud Auth"),
+        id("Tenant Provisioner"),
+        id("Auth Tokens"),
+        id("Native Clients"),
+    );
+    tree.review(
+        vec![
+            TreeChange::Merge {
+                topic: sign_in,
+                into: auth,
+            },
+            TreeChange::Group {
+                name: "AcmeKit Cloud".to_owned(),
+                about: Some("The hosted service".to_owned()),
+                under: Some(acme),
+                topics: vec![auth, tenants],
+            },
+            TreeChange::Rename {
+                topic: clients,
+                name: "Desktop and Phone Apps".to_owned(),
+            },
+            TreeChange::Move {
+                topic: acme,
+                under: Some(auth),
+            },
+        ],
+        &guard,
+    );
+    let mut paths: Vec<String> = tree
+        .topics
+        .iter()
+        .map(|topic| tree.path(topic.id))
+        .collect();
+    paths.sort();
+    assert_eq!(
+        paths,
+        [
+            "AcmeKit",
+            "AcmeKit › AcmeKit Cloud",
+            "AcmeKit › AcmeKit Cloud › Cloud Auth",
+            "AcmeKit › AcmeKit Cloud › Tenant Provisioner",
+            "AcmeKit › Desktop and Phone Apps",
+        ]
+    );
+    assert!(tree.junk.iter().any(|junk| matches!(
+        &junk.reason,
+        JunkReason::Declined { change } if change == "a project stays a root"
+    )));
 }

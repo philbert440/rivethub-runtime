@@ -437,7 +437,7 @@ impl ProposedTree {
         }
     }
 
-    fn merge_into(&mut self, from: TopicId, into: TopicId) {
+    pub(super) fn merge_into(&mut self, from: TopicId, into: TopicId) {
         let Some(from) = self
             .topic(from)
             .filter(|topic| topic.origin == Origin::Existing && topic.id != into)
@@ -465,7 +465,7 @@ impl ProposedTree {
         });
     }
 
-    fn prune(&mut self, counts: &BTreeMap<TopicId, u32>) -> Vec<Lift> {
+    pub(super) fn prune(&mut self, counts: &BTreeMap<TopicId, u32>) -> Vec<Lift> {
         let mut lifts = Vec::new();
         loop {
             let totals = self.totals(counts);
@@ -508,7 +508,7 @@ impl ProposedTree {
         totals
     }
 
-    fn named(&self, name: &str) -> Option<TopicId> {
+    pub(super) fn named(&self, name: &str) -> Option<TopicId> {
         let wanted = fold(name);
         if wanted.is_empty() {
             return None;
@@ -522,7 +522,7 @@ impl ProposedTree {
             .map(|topic| topic.id)
     }
 
-    fn chain(&self, id: TopicId) -> Vec<&TreeTopic> {
+    pub(super) fn chain(&self, id: TopicId) -> Vec<&TreeTopic> {
         let mut chain = Vec::new();
         let mut current = self.topic(id);
         while let Some(topic) = current {
@@ -536,9 +536,13 @@ impl ProposedTree {
     }
 
     fn junk(&mut self, name: &str, reason: JunkReason) {
+        self.note(name, JunkStage::Tree, reason);
+    }
+
+    pub(super) fn note(&mut self, name: &str, stage: JunkStage, reason: JunkReason) {
         self.junk.push(Junk {
             name: name.to_owned(),
-            stage: JunkStage::Tree,
+            stage,
             reason,
         });
     }

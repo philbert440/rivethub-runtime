@@ -22,6 +22,10 @@ pub enum JunkReason {
     Duplicate { of: String },
     TooDeep,
     TooFew { sessions: u32 },
+    Merged { into: String },
+    Regrouped { under: String },
+    Renamed { to: String },
+    Declined { change: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display)]
@@ -29,6 +33,7 @@ pub enum JunkReason {
 #[strum(serialize_all = "kebab-case")]
 pub enum JunkStage {
     Tree,
+    Review,
     Filing,
     Fold,
 }
@@ -169,6 +174,14 @@ impl NameGuard {
             .map(|name| stem(&name))
             .collect();
         self
+    }
+
+    #[must_use]
+    pub fn distinct(&self, name: &str) -> BTreeSet<String> {
+        stems(name)
+            .into_iter()
+            .filter(|word| !self.context.contains(word))
+            .collect()
     }
 
     #[must_use]

@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use kernel::cleanup::DraftTopic;
 use kernel::cleanup::Origin;
 use kernel::cleanup::ProposedTree;
+use kernel::cleanup::TreeChange;
 use kernel::cleanup::group;
 use serde::Deserialize;
 use serde::Serialize;
@@ -17,6 +18,8 @@ use crate::Error;
 pub(super) const TREE: &str = "tree.json";
 const CHUNKS: &str = "tree-chunks.jsonl";
 const DRAFTS: &str = "tree-drafts.jsonl";
+const REVIEW: &str = "tree-review.jsonl";
+const REVIEW_ROUNDS: usize = 2;
 const CHUNK: usize = 250;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,7 +75,8 @@ pub(super) async fn stage(stage: &Stage<'_>) -> Result<ProposedTree, Error> {
         .flat_map(|chunk| chunk.candidates)
         .collect();
     let drafts = drafts(stage, &seeds, candidates).await?;
-    let tree = ProposedTree::propose(stage.snapshot, drafts, stage.guard)?;
+    let mut tree = ProposedTree::propose(stage.snapshot, drafts, stage.guard)?;
+    review(stage, &mut tree).await?;
     stage
         .book
         .forget(&[
@@ -121,6 +125,41 @@ async fn drafts(
     .await?;
     stage.incomplete("tree consolidation", tally.failed).await?;
     Ok(drafts.pop().unwrap_or_default())
+}
+
+async fn review(stage: &Stage<'_>, tree: &mut ProposedTree) -> Result<(), Error> {
+    let saved: Vec<Vec<TreeChange>> = stage.book.lines(REVIEW).await?;
+    let mut saved = saved.into_iter();
+    for round in 1..=REVIEW_ROUNDS {
+        let changes = if let Some(changes) = saved.next() {
+            changes
+        } else {
+            stage
+                .book
+                .note(&format!(
+                    "tree: review round {round} of {} topic(s)",
+                    tree.topics.len()
+                ))
+                .await?;
+            let shown: &ProposedTree = tree;
+            let (mut changes, tally) = pool::drive(
+                vec![()],
+                stage.settings,
+                stage.book,
+                REVIEW,
+                |()| async move {
+                    Ok(vec![
+                        workers::cleanup::review_tree(stage.call, shown, stage.guard).await?,
+                    ])
+                },
+            )
+            .await?;
+            stage.incomplete("tree review", tally.failed).await?;
+            changes.pop().unwrap_or_default()
+        };
+        tree.review(changes, stage.guard);
+    }
+    Ok(())
 }
 
 fn seeds(stage: &Stage<'_>) -> Result<Vec<TreeSeed>, Error> {

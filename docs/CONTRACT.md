@@ -450,7 +450,15 @@ initiative, stuff, things, workstream), a path or file name, ticket, version, br
 deleted, deeper than 4 levels, or held by fewer than 3 conversations (estimated, then again after filing, when a dropped
 topic's filings move to its parent). Two names are one area when the word stems of one, leaving out the projects' own
 words, lie within the other's; an existing root topic that shares a project's name word, and a new subtopic that merges
-such a topic, fold into that project.
+such a topic, fold into that project. A review pass then shows the model the whole draft tree (path, estimated
+conversations, what each covers) and the topics that share a distinctive word in different places, in two rounds, and
+applies its changes in order, checkpointed as `tree-review.jsonl`: merge a topic into another, move it under another or
+to the root, rename it, or group topics under a new or existing parent (a group named after one of its topics gathers the
+rest under that topic). Projects are never merged, moved or renamed; existing topics keep their names; nothing merges
+into a whole project; a merge needs the two names to share a distinctive word; a new or changed name passes the same
+refusals and may not be another topic's; nothing passes 4 levels; a change that breaks a rule is declined and listed;
+topics left under 3 estimated conversations are dropped again. The report's tree shape counts topics, top-level topics,
+topics sharing a distinctive word stem with an unrelated topic, and filings left at a top-level topic.
 Filing runs note 42's rules, with this note's changes to them (live too): after the folder rule, a repo rule files work
 whose title, summary or directory refers to a repo (a `github.com/<owner>/<repo>` link, a path segment, `<repo> PR #n`,
 `<repo>#n`, `PR #n in <repo>`) that is exactly one root topic's name or alias; the name rule ignores names and aliases
@@ -469,7 +477,10 @@ into it (same type first, then the most extended name).
 Proposals: a project or new topic becomes `createTopic` with its non-generic aliases and the sessions and conversations
 the rules or the model filed there; an existing topic gets `move`, `rename` and `fileInto` (new: `{topic, sessions,
 conversations}`); a merged existing topic gets `merge`; a page merge `mergePage` (`{page, into}`, applied as a fold) and
-a removal `removePage` (`{page}`, which deletes the page and its file). `createTopic` gains optional `aliases`. Your
+a removal `removePage` (`{page}`, which deletes the page and its file). `createTopic` gains optional `aliases`. A
+`createTopic` or `fileInto` from the backfill lists every member it files in `evidence.samples` (`id`, `title`,
+`lastActive` in epoch milliseconds, all from the snapshot), so a client shows each session by name without another
+request; the weekly sweep keeps three samples, and `lastActive` is optional there. Your
 placements, child sessions and automated runs are never proposed. `report.md` and `report.json` hold the left-out runs,
 the tree with session counts and samples, filings per rule, a sample of 60, the fold outcomes, the junk names and the
 time each stage took.

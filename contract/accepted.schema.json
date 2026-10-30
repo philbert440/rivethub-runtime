@@ -8088,6 +8088,13 @@
             "string",
             "null"
           ]
+        },
+        "lastActive": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
         }
       },
       "required": [

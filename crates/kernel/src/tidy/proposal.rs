@@ -42,6 +42,8 @@ pub struct Sample {
     pub id: String,
     #[serde(default)]
     pub title: Option<String>,
+    #[serde(default)]
+    pub last_active: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

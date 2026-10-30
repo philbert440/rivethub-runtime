@@ -101,6 +101,7 @@ pub enum TidyChange {
     },
 }
 
+#[serde_as]
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -108,6 +109,9 @@ pub struct TidySample {
     pub id: String,
     #[serde(default)]
     pub title: Option<String>,
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    #[serde(default)]
+    pub last_active: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

@@ -48,8 +48,10 @@ pub(super) fn markdown(data: &ReportData) -> String {
     );
     push(&mut out, &format!("**Headline:** {}\n", headline(data)));
     conversations(&mut out, data);
+    fragmentation(&mut out, data);
     automated(&mut out, data);
     tree(&mut out, data);
+    review(&mut out, data);
     filings(&mut out, data);
     folds(&mut out, data);
     junk(&mut out, data);
@@ -93,6 +95,55 @@ fn conversations(out: &mut String, data: &ReportData) {
         out,
         &format!("| filed one by one | {} |\n", counts.filed_one_by_one),
     );
+}
+
+fn fragmentation(out: &mut String, data: &ReportData) {
+    let shape = &data.fragmentation;
+    push(out, "## Tree shape\n");
+    push(out, "| | |\n|---|---:|");
+    push(out, &format!("| topics | {} |", shape.topics));
+    push(out, &format!("| top-level topics | {} |", shape.roots));
+    push(
+        out,
+        &format!(
+            "| topics sharing a distinctive word with an unrelated topic | {} |",
+            shape.crowded
+        ),
+    );
+    push(
+        out,
+        &format!(
+            "| filings left at a top-level topic | {} of {} |\n",
+            shape.root_direct, shape.filed
+        ),
+    );
+}
+
+fn review(out: &mut String, data: &ReportData) {
+    push(
+        out,
+        &format!("## Tree review ({} changes)\n", data.review.len()),
+    );
+    for change in &data.review {
+        let what = match &change.reason {
+            JunkReason::Merged { into } => format!("merged into {into}"),
+            JunkReason::Regrouped { under } => format!("moved under {under}"),
+            JunkReason::Renamed { to } => format!("renamed to {to}"),
+            JunkReason::Declined { change } => format!("declined: {change}"),
+            JunkReason::Generic
+            | JunkReason::Rejected
+            | JunkReason::Title
+            | JunkReason::Task
+            | JunkReason::Activity
+            | JunkReason::Vague
+            | JunkReason::Refused { .. }
+            | JunkReason::Duplicate { .. }
+            | JunkReason::TooDeep
+            | JunkReason::TooFew { .. } => continue,
+        };
+        push(out, &format!("- {}: {}", cell(&change.name), cell(&what)));
+    }
+    push(out, "");
 }
 
 fn automated(out: &mut String, data: &ReportData) {
@@ -285,6 +336,10 @@ fn junk(out: &mut String, data: &ReportData) {
             JunkReason::Duplicate { of } => format!("duplicate of {of}"),
             JunkReason::TooDeep => "deeper than 4 levels".to_owned(),
             JunkReason::TooFew { sessions } => format!("too few sessions ({sessions})"),
+            JunkReason::Merged { into } => format!("merged into {into} by the review"),
+            JunkReason::Regrouped { under } => format!("moved under {under} by the review"),
+            JunkReason::Renamed { to } => format!("renamed to {to} by the review"),
+            JunkReason::Declined { change } => format!("review change declined: {change}"),
         };
         push(
             out,
