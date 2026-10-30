@@ -36,7 +36,7 @@ async fn start_stops_its_children_within_the_grace_on_sigint(pool: PgPool) -> Te
     let logs = tokio::spawn(async move {
         let mut lines = BufReader::new(stderr).lines();
         let mut text = String::new();
-        let mut pending = vec!["gateway listening on ", "agent running"];
+        let mut pending = vec!["gateway listening on "];
         let mut ready = Some(ready_tx);
         while let Some(line) = lines.next_line().await? {
             if let Some(index) = pending.iter().position(|needle| line.contains(needle)) {

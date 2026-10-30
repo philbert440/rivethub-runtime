@@ -1,34 +1,32 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
-use serde::Deserialize;
-use serde::Serialize;
 use thiserror::Error;
-use wire::JsonObject;
 use wire::gateway::wiki::WikiPageResponse;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::FoldMark;
-use wire::wiki::normalize_slug;
 
 use super::DECISIONS_HEADING;
 use super::DecisionStore;
+use super::PageEdit;
 use super::Slug;
+use super::SyncTopicPage;
 use super::Topic;
 use super::TopicError;
 use super::TopicId;
 use super::TopicKey;
+use super::TopicKind;
 use super::TopicStore;
+use super::TopicTree;
+use super::page_owner;
 use super::render_decisions;
 use crate::BoxError;
 use crate::memory::MemoryStore;
 use crate::memory::MemoryStoreError;
-use crate::queue::FixedJob;
-use crate::queue::Job;
-use crate::queue::JobKeyMode;
-use crate::queue::JobName;
 use crate::wiki::WikiLookup;
 use crate::wiki::builder::WikiStoreError;
 use crate::wiki::builder::WikiWriteError;
+use crate::wiki::page::FoldMark;
+use crate::wiki::page::WikiSlug;
+use crate::wiki::page::normalize_slug;
 
 const SLUG_ATTEMPTS: u32 = 1000;
 const UNNAMED_PAGE: &str = "topic";
@@ -85,6 +83,22 @@ impl TopicPage {
         append(&mut section.body, body);
         self.sections.push(section);
     }
+
+    pub(crate) fn add_note(&mut self, heading: &str, body: &str) {
+        if let Some(section) = self.sections.iter_mut().find(|section| {
+            section.topic.is_none() && section.heading.eq_ignore_ascii_case(heading)
+        }) {
+            append(&mut section.body, body);
+            return;
+        }
+        let mut section = PageSection {
+            topic: None,
+            heading: heading.to_owned(),
+            body: String::new(),
+        };
+        append(&mut section.body, body);
+        self.sections.push(section);
+    }
 }
 
 #[async_trait]
@@ -100,6 +114,13 @@ pub trait TopicPageStore: Send + Sync {
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError>;
 
+    async fn edit_page(
+        &self,
+        slug: &WikiSlug,
+        edit: &PageEdit,
+        now: DateTime<Utc>,
+    ) -> Result<bool, WikiStoreError>;
+
     async fn redirect_page(
         &self,
         from: &WikiSlug,
@@ -114,6 +135,8 @@ pub trait TopicPageStore: Send + Sync {
         mark: FoldMark,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError>;
+
+    async fn remove_page(&self, slug: &WikiSlug) -> Result<(), WikiStoreError>;
 }
 
 #[derive(Debug, Error)]
@@ -130,91 +153,15 @@ pub enum TopicPageError {
     Payload(#[source] BoxError),
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SyncTopicPage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub topic_id: Option<TopicId>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub fold: Vec<WikiSlug>,
-}
-
-impl SyncTopicPage {
-    #[must_use]
-    pub fn topic(id: TopicId) -> Self {
-        Self {
-            topic_id: Some(id),
-            fold: Vec::new(),
-        }
-    }
-
-    #[must_use]
-    pub fn every_topic() -> Self {
-        Self::default()
-    }
-
-    #[must_use]
-    pub fn after_create(topic: &Topic) -> Vec<Self> {
-        vec![Self::topic(topic.id)]
-    }
-
-    #[must_use]
-    pub fn after_update(before: &Topic, after: &Topic) -> Vec<Self> {
-        let mut syncs = vec![Self::topic(after.id)];
-        if before.root() != after.root() && before.root() != after.id {
-            syncs.push(Self::topic(before.root()));
-        }
-        syncs
-    }
-
-    #[must_use]
-    pub fn after_merge(source: &Topic, into: &Topic, page: Option<WikiSlug>) -> Vec<Self> {
-        let mut syncs = vec![Self {
-            topic_id: Some(into.id),
-            fold: page.into_iter().collect(),
-        }];
-        if source.root() != source.id && source.root() != into.root() {
-            syncs.push(Self::topic(source.root()));
-        }
-        syncs
-    }
-
-    #[must_use]
-    pub fn after_delete(topic: &Topic) -> Vec<Self> {
-        topic.parent.map(Self::topic).into_iter().collect()
-    }
-
-    pub fn job(&self) -> Result<Job, TopicPageError> {
-        let key = match (self.topic_id, self.fold.is_empty()) {
-            (Some(id), true) => Some(format!("sync-topic-page:{id}")),
-            (Some(_), false) => None,
-            (None, _) => Some("sync-topic-page:all".to_owned()),
-        };
-        Ok(Job {
-            name: JobName::Fixed(FixedJob::SyncTopicPage),
-            payload: JsonObject::from_serialize(self)
-                .map_err(|source| TopicPageError::Payload(Box::new(source)))?,
-            key,
-            key_mode: JobKeyMode::Replace,
-            priority: 0,
-            run_at: None,
-            max_attempts: None,
-        })
-    }
-
-    pub fn from_payload(payload: &JsonObject) -> Result<Self, TopicPageError> {
-        payload
-            .deserialize()
-            .map_err(|source| TopicPageError::Payload(Box::new(source)))
-    }
-}
-
 pub async fn bound_page(
     topics: &dyn TopicStore,
     memory: &dyn MemoryStore,
     topic: &Topic,
 ) -> Result<Option<WikiPageResponse>, TopicPageError> {
-    let Some(slug) = topics.page_slug(topic.root()).await? else {
+    let Some(owner) = page_owner(topics, topic).await? else {
+        return Ok(None);
+    };
+    let Some(slug) = topics.page_slug(owner.id).await? else {
         return Ok(None);
     };
     Ok(match memory.wiki_page(&slug).await? {
@@ -245,7 +192,14 @@ pub async fn sync_topic_page(
     }
     for listing in topics.list().await? {
         let topic = listing.topic;
-        if topic.parent.is_none() || topics.page_slug(topic.id).await?.is_some() {
+        let owns_page = match topic.kind {
+            TopicKind::Type => false,
+            TopicKind::Entity => true,
+            TopicKind::Work => {
+                topic.parent.is_none() || topics.page_slug(topic.id).await?.is_some()
+            }
+        };
+        if owns_page {
             sync.topic(topic.id, &[], decisions).await?;
         }
     }
@@ -275,9 +229,11 @@ impl PageSync<'_> {
         let Some(topic) = self.topics.find(&TopicKey::Id(id)).await? else {
             return Ok(());
         };
-        let root = self.owner(&topic).await?;
+        let Some(root) = page_owner(self.topics, &topic).await? else {
+            return Ok(());
+        };
         let home = self.ensure(&root).await?;
-        if topic.parent.is_some()
+        if root.id != topic.id
             && let Some(own) = self.topics.page_slug(topic.id).await?
             && own != home
         {
@@ -289,19 +245,6 @@ impl PageSync<'_> {
                 .await?;
         }
         self.reconcile(&root, &home, decisions).await
-    }
-
-    async fn owner(&self, topic: &Topic) -> Result<Topic, TopicError> {
-        match topic.parent {
-            None => Ok(topic.clone()),
-            Some(parent) => self
-                .topics
-                .find(&TopicKey::Id(parent))
-                .await?
-                .ok_or_else(|| TopicError::NotFound {
-                    key: parent.to_string(),
-                }),
-        }
     }
 
     async fn ensure(&self, root: &Topic) -> Result<WikiSlug, TopicPageError> {
@@ -400,7 +343,7 @@ impl PageSync<'_> {
                         None => owned.push(section.clone()),
                     }
                 }
-                Some(_) => match self.landing(root, section).await? {
+                Some(_) => match self.landing(root, &subtopics, section).await? {
                     Landing::Article => into_article.push(section.body.clone()),
                     Landing::Section(id) => into_sections.push((id, section.body.clone())),
                     Landing::Elsewhere(target) => moved.push((target, section.body.clone())),
@@ -442,13 +385,17 @@ impl PageSync<'_> {
     }
 
     async fn subtopics(&self, root: TopicId) -> Result<Vec<Topic>, TopicError> {
-        let mut subtopics: Vec<Topic> = self
+        let topics: Vec<Topic> = self
             .topics
             .list()
             .await?
             .into_iter()
             .map(|listing| listing.topic)
-            .filter(|topic| topic.parent == Some(root))
+            .collect();
+        let tree = TopicTree::of(&topics);
+        let mut subtopics: Vec<Topic> = topics
+            .into_iter()
+            .filter(|topic| topic.id != root && tree.within(topic.id, root))
             .collect();
         subtopics.sort_by(|left, right| {
             left.created_at
@@ -458,7 +405,12 @@ impl PageSync<'_> {
         Ok(subtopics)
     }
 
-    async fn landing(&self, root: &Topic, section: &PageSection) -> Result<Landing, TopicError> {
+    async fn landing(
+        &self,
+        root: &Topic,
+        subtopics: &[Topic],
+        section: &PageSection,
+    ) -> Result<Landing, TopicError> {
         let found = match section.topic {
             Some(id) => self.topics.find(&TopicKey::Id(id)).await?,
             None => None,
@@ -466,14 +418,20 @@ impl PageSync<'_> {
         let target = match found {
             Some(topic) => Some(topic),
             None => match Slug::of_heading(&section.heading) {
-                Some(slug) => self.topics.find(&TopicKey::Slug(slug)).await?,
+                Some(slug) => {
+                    self.topics
+                        .find(&TopicKey::Slug(TopicKind::Work, slug))
+                        .await?
+                }
                 None => None,
             },
         };
         Ok(match target {
             None => Landing::Plain,
             Some(topic) if topic.id == root.id => Landing::Article,
-            Some(topic) if topic.parent == Some(root.id) => Landing::Section(topic.id),
+            Some(topic) if subtopics.iter().any(|sub| sub.id == topic.id) => {
+                Landing::Section(topic.id)
+            }
             Some(topic) => Landing::Elsewhere(topic),
         })
     }
@@ -482,14 +440,16 @@ impl PageSync<'_> {
         if body.trim().is_empty() {
             return Ok(());
         }
-        let owner = self.owner(target).await?;
+        let Some(owner) = page_owner(self.topics, target).await? else {
+            return Ok(());
+        };
         let slug = self.ensure(&owner).await?;
         let before = self.read(&slug).await?;
         let mut after = before.clone();
-        if target.parent.is_some() {
-            after.add_to_section(target.id, target.name.as_str(), body);
-        } else {
+        if owner.id == target.id {
             append(&mut after.article, body);
+        } else {
+            after.add_to_section(target.id, target.name.as_str(), body);
         }
         self.save(owner.id, &before, &after).await
     }

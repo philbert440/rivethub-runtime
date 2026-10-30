@@ -1,4 +1,4 @@
-use crate::queue::{FixedJob, Job, JobKeyMode, JobName, WorkerRole};
+use crate::queue::{FixedJob, Job, JobKeyMode, JobName, MAINTENANCE_PRIORITY, WorkerRole};
 use wire::JsonObject;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,7 +19,7 @@ impl CronEntry {
             payload: JsonObject::default(),
             key: Some(self.identifier.clone()),
             key_mode: JobKeyMode::KeepRunAt,
-            priority: 0,
+            priority: MAINTENANCE_PRIORITY,
             run_at: None,
             max_attempts: Some(self.max_attempts),
         }
@@ -43,8 +43,9 @@ impl WorkerRole {
                 ),
                 cron("reap-dead-jobs", FixedJob::ReapDeadJobs, 60),
                 cron("topic-page-sweep", FixedJob::SyncTopicPage, 60),
+                cron("deleted-session-sweep", FixedJob::PurgeDeletedSessions, 15),
             ],
-            Self::Categorizer => vec![],
+            Self::Categorizer => vec![cron("tidy-sweep", FixedJob::ProposeTidy, 60)],
             Self::WikiBuilder => {
                 let mut entries = vec![cron("wiki-backfill", FixedJob::EnqueueWikiBackfill, 10)];
                 if wiki_enabled {

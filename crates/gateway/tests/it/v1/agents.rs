@@ -37,7 +37,6 @@ impl Pair {
         roster.insert("alpha".to_owned(), bound(&alpha, "alpha-model"));
         roster.insert("beta".to_owned(), bound(&beta, "beta-model"));
         let service = Service::open(
-            "alpha-model".to_owned(),
             &dir.path().join("conversations"),
             CancellationToken::new(),
             roster,

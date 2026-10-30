@@ -144,6 +144,7 @@ impl Turn {
                 return Ok(false);
             }
             SessionEvent::UserMessageChunk { .. }
+            | SessionEvent::Context(_)
             | SessionEvent::ToolCallUpdate(_)
             | SessionEvent::Plan(_)
             | SessionEvent::AvailableCommands(_)

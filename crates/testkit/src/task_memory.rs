@@ -20,22 +20,20 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio::sync::watch;
 use uuid::Uuid;
-use wire::task::TaskPermissionDecision;
-use wire::task::TaskStatus;
 
 mod query;
 
 use kernel::queue::FixedJob;
-use kernel::tasks::ConflictAction;
 use kernel::tasks::Finish;
+use kernel::tasks::Task;
 use kernel::tasks::TaskError;
-use kernel::tasks::TaskRecord;
+use kernel::tasks::TaskFilter;
+use kernel::tasks::TaskStatus;
 use kernel::tasks::TaskStore;
-use kernel::tasks::terminal;
 
 #[derive(Debug)]
 struct MemoryInner {
-    tasks: BTreeMap<Uuid, TaskRecord>,
+    tasks: BTreeMap<Uuid, Task>,
     jobs: BTreeMap<JobId, MemJob>,
     next_job: i64,
 }
@@ -94,7 +92,7 @@ impl TaskMemory {
         });
     }
 
-    fn ended(&self, ids: Vec<Uuid>) {
+    fn changed_ids(&self, ids: Vec<Uuid>) {
         self.touch();
         for id in ids {
             if self.finished.send(id).is_err() {
@@ -119,7 +117,7 @@ impl Default for TaskMemory {
 
 #[async_trait]
 impl TaskStore for TaskMemory {
-    async fn insert(&self, task: &TaskRecord) -> Result<(), TaskError> {
+    async fn insert(&self, task: &Task) -> Result<(), TaskError> {
         let mut inner = self.inner.lock();
         if inner.tasks.contains_key(&task.id) {
             drop(inner);
@@ -127,11 +125,11 @@ impl TaskStore for TaskMemory {
         }
         inner.tasks.insert(task.id, task.clone());
         drop(inner);
-        self.touch();
+        self.changed_ids(vec![task.id]);
         Ok(())
     }
 
-    async fn load(&self, id: Uuid) -> Result<TaskRecord, TaskError> {
+    async fn load(&self, id: Uuid) -> Result<Task, TaskError> {
         self.inner
             .lock()
             .tasks
@@ -140,227 +138,168 @@ impl TaskStore for TaskMemory {
             .ok_or(TaskError::Missing { id })
     }
 
-    async fn mark_running(
-        &self,
-        id: Uuid,
-        claimed_by: &str,
-        node: &str,
-        now: DateTime<Utc>,
-    ) -> Result<TaskRecord, TaskError> {
-        let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
-        let claimable = matches!(task.status, TaskStatus::Queued | TaskStatus::AwaitingInput);
-        let affinity = task
-            .node_affinity
-            .as_deref()
-            .is_none_or(|affinity| affinity == node);
-        if !claimable || !affinity {
-            let status = task.status;
-            drop(inner);
-            return Err(TaskError::Conflict {
-                id,
-                status,
-                action: ConflictAction::Run,
-            });
+    async fn list(&self, filter: &TaskFilter) -> Result<Vec<Task>, TaskError> {
+        if self.fail_list.swap(false, Ordering::SeqCst) {
+            return Err(TaskError::QueueAbsent);
         }
-        let pending = task.pending_message.clone();
-        task.status = TaskStatus::Running;
-        task.attempt = task
-            .attempt
-            .checked_add(1)
-            .ok_or(TaskError::Stored("attempt overflow".to_string()))?;
-        task.started_at = Some(now);
-        task.claimed_by = Some(claimed_by.to_string());
-        task.last_heartbeat_at = Some(now);
-        task.pending_message = None;
-        let mut running = task.clone();
-        running.pending_message = pending;
-        drop(inner);
-        self.touch();
-        Ok(running)
+        let mut tasks: Vec<Task> = self
+            .inner
+            .lock()
+            .tasks
+            .values()
+            .filter(|task| query::listed(task, filter))
+            .cloned()
+            .collect();
+        tasks.sort_by(|left, right| {
+            right
+                .created_at
+                .cmp(&left.created_at)
+                .then(right.id.cmp(&left.id))
+        });
+        if let Some(limit) = filter.limit {
+            tasks.truncate(
+                usize::try_from(limit).map_err(|_| TaskError::Stored("limit".to_string()))?,
+            );
+        }
+        Ok(tasks)
     }
 
-    async fn release_running(&self, id: Uuid) -> Result<(), TaskError> {
+    async fn by_child(&self, session: &str) -> Result<Option<Task>, TaskError> {
+        Ok(self
+            .inner
+            .lock()
+            .tasks
+            .values()
+            .find(|task| task.child.as_deref() == Some(session))
+            .cloned())
+    }
+
+    async fn begin(&self, id: Uuid, node: &str, now: DateTime<Utc>) -> Result<bool, TaskError> {
+        self.change(id, |task| {
+            if task.status != TaskStatus::Queued || task.target.node != node {
+                return false;
+            }
+            task.status = TaskStatus::Running;
+            task.started_at = Some(now);
+            task.alive_at = Some(now);
+            true
+        })
+    }
+
+    async fn attach(
+        &self,
+        id: Uuid,
+        child: &str,
+        harness: kernel::tasks::Harness,
+    ) -> Result<(), TaskError> {
+        self.change(id, |task| {
+            task.child = Some(child.to_owned());
+            task.target.harness = Some(harness);
+            false
+        })
+        .map(drop)
+    }
+
+    async fn flip(&self, id: Uuid, status: TaskStatus) -> Result<bool, TaskError> {
+        self.change(id, |task| {
+            if !task.status.can_become(status) || status.terminal() {
+                return false;
+            }
+            task.status = status;
+            true
+        })
+    }
+
+    async fn alive(&self, ids: &[Uuid], now: DateTime<Utc>) -> Result<(), TaskError> {
         let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
-        if task.status != TaskStatus::Running {
-            let status = task.status;
-            drop(inner);
-            return Err(TaskError::Conflict {
-                id,
-                status,
-                action: ConflictAction::Release,
-            });
+        for id in ids {
+            if let Some(task) = inner.tasks.get_mut(id)
+                && !task.status.terminal()
+            {
+                task.alive_at = Some(now);
+            }
         }
-        task.attempt = task
-            .attempt
-            .checked_sub(1)
-            .ok_or_else(|| TaskError::Stored("attempt underflow".to_owned()))?;
-        task.status = TaskStatus::Queued;
-        task.claimed_by = None;
-        task.started_at = None;
         drop(inner);
-        self.touch();
         Ok(())
     }
 
     async fn finish(&self, id: Uuid, finish: &Finish) -> Result<bool, TaskError> {
-        let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
-        if task.status == TaskStatus::Killed {
-            drop(inner);
-            return Ok(false);
-        }
-        let ended = !terminal(task.status) && terminal(finish.status);
-        task.status = finish.status;
-        task.result.clone_from(&finish.result);
-        task.error.clone_from(&finish.error);
-        task.usage = finish.usage;
-        task.completed_at = Some(finish.completed_at);
-        task.duration_ms = finish.duration_ms;
-        task.pending_message = None;
-        drop(inner);
-        self.ended(ended.then_some(id).into_iter().collect());
-        Ok(true)
-    }
-
-    async fn sweep(&self, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError> {
-        let stale_before = now
-            .checked_sub_signed(chrono::Duration::milliseconds(90_000))
-            .ok_or(TaskError::Clock)?;
-        let mut inner = self.inner.lock();
-        let ids: Vec<Uuid> = inner.tasks.keys().copied().collect();
-        let mut ended = Vec::new();
-        for id in ids {
-            let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
-            let open = !terminal(task.status);
-            if task.status == TaskStatus::Running && task.claimed_by.as_deref() == Some(worker) {
-                let stamp = task.last_heartbeat_at.or(task.started_at);
-                if let Some(stamp) = stamp
-                    && stamp < stale_before
-                {
-                    if task.attempt < task.max_attempts {
-                        task.status = TaskStatus::Queued;
-                        task.claimed_by = None;
-                        task.completed_at = None;
-                    } else {
-                        task.status = TaskStatus::Failed;
-                        task.error = Some("worker_restarted".to_string());
-                        task.completed_at = Some(now);
-                    }
-                }
+        self.change(id, |task| {
+            if !task.status.can_become(finish.status) {
+                return false;
             }
-            if task.status == TaskStatus::AwaitingInput {
-                let ttl_ms = task.budget.max_wall_clock_ms.unwrap_or(86_400_000);
-                let ttl_ms = i64::try_from(ttl_ms).map_err(|_| TaskError::Clock)?;
-                let deadline = now
-                    .checked_sub_signed(chrono::Duration::milliseconds(ttl_ms))
-                    .ok_or(TaskError::Clock)?;
-                let stamp = match task.last_heartbeat_at.or(task.started_at) {
-                    Some(stamp) => stamp,
-                    None => task.created_at,
-                };
-                if stamp < deadline {
-                    task.status = TaskStatus::Timeout;
-                    task.error = Some("awaiting-input expired".to_string());
-                    task.completed_at = Some(now);
-                }
-            }
-            if open && terminal(task.status) {
-                ended.push(id);
-            }
-        }
-        drop(inner);
-        self.ended(ended);
-        Ok(())
-    }
-
-    async fn kill_queued_by_session(
-        &self,
-        session_key: &str,
-        now: DateTime<Utc>,
-    ) -> Result<(), TaskError> {
-        let mut inner = self.inner.lock();
-        let mut ended = Vec::new();
-        for task in inner.tasks.values_mut() {
-            if task.session_key.as_deref() == Some(session_key) && task.status == TaskStatus::Queued
-            {
-                task.status = TaskStatus::Killed;
-                task.completed_at = Some(now);
-                task.error = Some("replaced by a newer heartbeat".to_string());
-                ended.push(task.id);
-            }
-        }
-        drop(inner);
-        self.ended(ended);
-        Ok(())
+            task.status = finish.status;
+            task.result.clone_from(&finish.result);
+            task.error.clone_from(&finish.error);
+            task.usage = finish.usage;
+            task.completed_at = Some(finish.at);
+            true
+        })
     }
 
     async fn kill(&self, id: Uuid, now: DateTime<Utc>) -> Result<TaskStatus, TaskError> {
-        let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
-        let prior = task.status;
-        if terminal(prior) {
-            drop(inner);
-            return Err(TaskError::Conflict {
-                id,
-                status: prior,
-                action: ConflictAction::Kill,
-            });
-        }
-        task.status = TaskStatus::Killed;
-        task.completed_at = Some(now);
-        if task.error.is_none() {
-            task.error = Some("Killed by parent".to_string());
-        }
-        drop(inner);
-        self.ended(vec![id]);
+        let mut prior = TaskStatus::Killed;
+        self.change(id, |task| {
+            prior = task.status;
+            if task.status.terminal() {
+                return false;
+            }
+            task.status = TaskStatus::Killed;
+            task.completed_at = Some(now);
+            true
+        })?;
         Ok(prior)
     }
 
-    async fn set_pending(&self, id: Uuid, message: &str) -> Result<(), TaskError> {
-        let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
-        let open = matches!(
-            task.status,
-            TaskStatus::Queued | TaskStatus::Running | TaskStatus::AwaitingInput
-        );
-        if !open {
-            let status = task.status;
-            drop(inner);
-            return Err(TaskError::Conflict {
-                id,
-                status,
-                action: ConflictAction::Steer,
-            });
-        }
-        task.pending_message = Some(message.to_string());
-        drop(inner);
-        self.touch();
-        Ok(())
+    async fn orphans(&self, node: &str, now: DateTime<Utc>) -> Result<Vec<Uuid>, TaskError> {
+        Ok(self.fail_where(now, "its gateway restarted", |task| {
+            task.target.node == node
+        }))
     }
 
-    async fn add_harness_session(&self, id: Uuid, session: &str) -> Result<(), TaskError> {
-        let mut inner = self.inner.lock();
-        let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
-        task.harness_session_ids.push(session.to_string());
-        drop(inner);
-        self.touch();
-        Ok(())
-    }
-
-    async fn append_permission(
+    async fn reap(
         &self,
-        id: Uuid,
-        decision: &TaskPermissionDecision,
-    ) -> Result<(), TaskError> {
+        stale_before: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<Uuid>, TaskError> {
+        Ok(self.fail_where(now, "its node stopped running it", |task| {
+            task.alive_at.is_none_or(|alive| alive < stale_before)
+        }))
+    }
+}
+
+impl TaskMemory {
+    fn change(&self, id: Uuid, edit: impl FnOnce(&mut Task) -> bool) -> Result<bool, TaskError> {
         let mut inner = self.inner.lock();
         let task = inner.tasks.get_mut(&id).ok_or(TaskError::Missing { id })?;
-        let decisions = task.spec.permission_decisions.get_or_insert_with(Vec::new);
-        decisions.push(decision.clone());
+        let changed = edit(task);
         drop(inner);
-        self.touch();
-        Ok(())
+        if changed {
+            self.changed_ids(vec![id]);
+        }
+        Ok(changed)
+    }
+
+    fn fail_where(
+        &self,
+        now: DateTime<Utc>,
+        error: &str,
+        pick: impl Fn(&Task) -> bool,
+    ) -> Vec<Uuid> {
+        let mut inner = self.inner.lock();
+        let mut failed = Vec::new();
+        for task in inner.tasks.values_mut() {
+            if matches!(task.status, TaskStatus::Running | TaskStatus::AwaitingInput) && pick(task)
+            {
+                task.status = TaskStatus::Failed;
+                task.error = Some(error.to_owned());
+                task.completed_at = Some(now);
+                failed.push(task.id);
+            }
+        }
+        drop(inner);
+        self.changed_ids(failed.clone());
+        failed
     }
 }
 
@@ -376,7 +315,7 @@ impl JobQueue for TaskMemory {
                 JobName::Fixed(FixedJob::EnqueueStaleSummaries),
                 JobName::Fixed(FixedJob::ReapDeadJobs),
             ],
-            WorkerRole::Categorizer => vec![JobName::Fixed(FixedJob::SuggestTags)],
+            WorkerRole::Categorizer => vec![JobName::Fixed(FixedJob::FileConversation)],
             WorkerRole::WikiBuilder => vec![
                 JobName::Fixed(FixedJob::ExtractWiki),
                 JobName::Fixed(FixedJob::EnqueueWikiBackfill),

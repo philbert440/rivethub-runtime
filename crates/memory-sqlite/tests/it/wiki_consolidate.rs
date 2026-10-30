@@ -8,9 +8,9 @@ use kernel::wiki::WikiLookup;
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::WikiConsolidateStore;
 use kernel::wiki::consolidate::WikiFold;
+use kernel::wiki::page::FoldMark;
+use kernel::wiki::page::WikiSlug;
 use memory_sqlite::SqliteStore;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::FoldMark;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 

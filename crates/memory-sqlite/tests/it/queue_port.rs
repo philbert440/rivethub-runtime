@@ -293,3 +293,9 @@ async fn a_pending_sweep_is_queued_once() -> TestResult {
     let opened = open()?;
     testkit::sweeps::a_pending_sweep_is_queued_once(&opened.store).await
 }
+
+#[tokio::test]
+async fn the_sweeps_run_before_an_older_backlog() -> TestResult {
+    let opened = open()?;
+    testkit::sweeps::the_sweeps_run_before_an_older_backlog(&opened.store).await
+}

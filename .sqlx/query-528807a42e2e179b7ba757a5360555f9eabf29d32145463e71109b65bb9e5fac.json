@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH placed AS (\n             UPDATE rh_conversation_placements SET topic_id = $2 WHERE topic_id = $1\n         )\n         UPDATE rh_session_suggestions SET parent_id = $2 WHERE parent_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "528807a42e2e179b7ba757a5360555f9eabf29d32145463e71109b65bb9e5fac"
+}

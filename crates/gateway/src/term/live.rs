@@ -6,6 +6,9 @@ use wire::harness::{
     HarnessEvent, HarnessId, HarnessSessionStatus, HarnessSessionSummary, RosterCommand,
 };
 
+use kernel::harness::ToolCallUpdate;
+use kernel::preview::{LiveActivity, Preview};
+use wire::plugin::process::PluginEvent;
 use wire::session_id::SessionId;
 
 use super::{LaunchCommand, TerminalService};
@@ -47,6 +50,29 @@ impl TerminalService {
         self.summaries.read().get(key).cloned()
     }
 
+    pub(crate) fn is_live(&self, key: &str) -> bool {
+        let running = self
+            .summaries
+            .read()
+            .get(key)
+            .is_some_and(|summary| summary.status != HarnessSessionStatus::Ended);
+        running || self.chats.read().contains_key(key) || self.pty_running(key)
+    }
+
+    pub(crate) fn pty_running(&self, key: &str) -> bool {
+        let spawned = self.entries.read().get(key).is_some_and(|handle| {
+            handle
+                .state
+                .borrow()
+                .as_ref()
+                .is_none_or(|state| state.state == wire::gateway::term::PtyState::Running)
+        });
+        spawned
+            || self.adopted.read().values().any(|(owner, info)| {
+                owner == key && info.state == wire::gateway::term::PtyState::Running
+            })
+    }
+
     pub(crate) fn live_summaries(
         &self,
         harness: HarnessId,
@@ -82,6 +108,14 @@ impl TerminalService {
     }
 
     pub(crate) fn publish_harness(&self, key: &str, event: HarnessEvent) {
+        self.follow(key, &event);
+        self.hold_approvals(key, &event);
+        if matches!(event, HarnessEvent::Context { .. }) {
+            self.contexts.write().insert(key.to_owned(), event.clone());
+        }
+        if matches!(event, HarnessEvent::Driver { .. }) {
+            self.drivers.write().insert(key.to_owned(), event.clone());
+        }
         let sender = self.harness_events.read().get(key).cloned();
         if let Some(sender) = sender
             && sender.send(event).is_err()
@@ -90,8 +124,203 @@ impl TerminalService {
         }
     }
 
+    pub(crate) fn pending_approvals(&self, key: &str) -> Vec<HarnessEvent> {
+        self.approvals.read().get(key).cloned().unwrap_or_default()
+    }
+
+    pub(crate) fn held_context(&self, key: &str) -> Option<HarnessEvent> {
+        self.contexts.read().get(key).cloned()
+    }
+
+    pub(crate) fn held_driver(&self, key: &str) -> Option<HarnessEvent> {
+        self.drivers.read().get(key).cloned()
+    }
+
+    pub(crate) fn forget_driver(&self, key: &str) {
+        self.drivers.write().remove(key);
+    }
+
+    fn hold_approvals(&self, key: &str, event: &HarnessEvent) {
+        let mut approvals = self.approvals.write();
+        match event {
+            HarnessEvent::ApprovalRequest { .. } => {
+                approvals
+                    .entry(key.to_owned())
+                    .or_default()
+                    .push(event.clone());
+            }
+            HarnessEvent::ApprovalResolved { request_id, .. } => {
+                if let Some(waiting) = approvals.get_mut(key) {
+                    waiting.retain(|held| {
+                        !matches!(held, HarnessEvent::ApprovalRequest { request_id: id, .. } if id == request_id)
+                    });
+                }
+            }
+            HarnessEvent::TurnComplete { .. } | HarnessEvent::Error { .. } => {
+                approvals.remove(key);
+            }
+            HarnessEvent::SessionUpdated { status, .. }
+                if *status != HarnessSessionStatus::Active =>
+            {
+                approvals.remove(key);
+            }
+            HarnessEvent::AssistantDelta { .. }
+            | HarnessEvent::ReasoningDelta { .. }
+            | HarnessEvent::ToolUse { .. }
+            | HarnessEvent::ToolUpdate { .. }
+            | HarnessEvent::ToolResult { .. }
+            | HarnessEvent::SessionCreated { .. }
+            | HarnessEvent::Plan { .. }
+            | HarnessEvent::SessionUpdated { .. }
+            | HarnessEvent::Context { .. }
+            | HarnessEvent::Transcript { .. }
+            | HarnessEvent::Status(_)
+            | HarnessEvent::Driver { .. }
+            | HarnessEvent::Prompt { .. } => {}
+        }
+    }
+
+    pub(crate) fn tool_updated(&self, key: &str, update: &ToolCallUpdate) {
+        if let Some(live) = self.activity.write().get_mut(key) {
+            live.tool_updated(
+                &update.tool_call_id,
+                update.title.as_deref(),
+                update.input.as_ref(),
+            );
+        }
+    }
+
+    pub(crate) fn running_tool(&self, call: &str) -> Option<SessionId> {
+        let key = self
+            .activity
+            .read()
+            .iter()
+            .find(|(_, live)| live.running(call))
+            .map(|(key, _)| key.clone())?;
+        self.summaries
+            .read()
+            .get(&key)
+            .map(|summary| summary.session_id.clone())
+    }
+
+    pub(crate) fn live_preview(&self, key: &str) -> Option<Preview> {
+        self.activity
+            .read()
+            .get(key)
+            .and_then(LiveActivity::preview)
+    }
+
+    pub(crate) fn attach_plugins(&self, host: std::sync::Arc<crate::plugins::PluginHost>) {
+        if self.plugins.set(host).is_err() {
+            tracing::debug!("plug-in host already attached to the terminal service");
+        }
+    }
+
+    fn tell_plugins(&self, event: &HarnessEvent) {
+        let Some(host) = self.plugins.get() else {
+            return;
+        };
+        let lifecycle = match event {
+            HarnessEvent::TurnComplete { session_id, .. } => PluginEvent::SessionIdle {
+                session_id: session_id.clone(),
+            },
+            HarnessEvent::SessionUpdated {
+                session_id,
+                status: HarnessSessionStatus::Ended,
+                ..
+            } => PluginEvent::SessionEnded {
+                session_id: session_id.clone(),
+            },
+            HarnessEvent::SessionUpdated { .. }
+            | HarnessEvent::AssistantDelta { .. }
+            | HarnessEvent::ReasoningDelta { .. }
+            | HarnessEvent::ToolUse { .. }
+            | HarnessEvent::ToolUpdate { .. }
+            | HarnessEvent::ToolResult { .. }
+            | HarnessEvent::ApprovalRequest { .. }
+            | HarnessEvent::ApprovalResolved { .. }
+            | HarnessEvent::SessionCreated { .. }
+            | HarnessEvent::Plan { .. }
+            | HarnessEvent::Error { .. }
+            | HarnessEvent::Context { .. }
+            | HarnessEvent::Transcript { .. }
+            | HarnessEvent::Status(_)
+            | HarnessEvent::Driver { .. }
+            | HarnessEvent::Prompt { .. } => return,
+        };
+        host.publish(&lifecycle);
+    }
+
+    fn follow(&self, key: &str, event: &HarnessEvent) {
+        self.tell_plugins(event);
+        let now = chrono::Utc::now();
+        let mut activity = self.activity.write();
+        match event {
+            HarnessEvent::AssistantDelta { text, .. } => {
+                activity.entry(key.to_owned()).or_default().wrote(text, now);
+            }
+            HarnessEvent::ToolUse {
+                tool_call_id,
+                name,
+                input,
+                ..
+            } => activity.entry(key.to_owned()).or_default().tool_started(
+                tool_call_id,
+                name,
+                input,
+                now,
+            ),
+            HarnessEvent::ApprovalRequest {
+                request_id,
+                name,
+                input,
+                ..
+            } => activity
+                .entry(key.to_owned())
+                .or_default()
+                .approval_requested(request_id, name, input, now),
+            HarnessEvent::ToolResult { tool_call_id, .. } => {
+                if let Some(live) = activity.get_mut(key) {
+                    live.tool_finished(tool_call_id);
+                }
+            }
+            HarnessEvent::ApprovalResolved { request_id, .. } => {
+                if let Some(live) = activity.get_mut(key) {
+                    live.approval_resolved(request_id);
+                }
+            }
+            HarnessEvent::TurnComplete { .. } | HarnessEvent::Error { .. } => {
+                activity.remove(key);
+            }
+            HarnessEvent::SessionUpdated { status, .. }
+                if *status != HarnessSessionStatus::Active =>
+            {
+                activity.remove(key);
+            }
+            HarnessEvent::SessionUpdated { .. }
+            | HarnessEvent::ReasoningDelta { .. }
+            | HarnessEvent::ToolUpdate { .. }
+            | HarnessEvent::SessionCreated { .. }
+            | HarnessEvent::Plan { .. }
+            | HarnessEvent::Context { .. }
+            | HarnessEvent::Transcript { .. }
+            | HarnessEvent::Status(_)
+            | HarnessEvent::Driver { .. }
+            | HarnessEvent::Prompt { .. } => {}
+        }
+    }
+
     pub(crate) fn subscribe_registry(&self) -> broadcast::Receiver<RegistryEvent> {
         self.registry_events.subscribe()
+    }
+
+    pub(crate) fn tell_started(&self, session: &SessionId, topic: Option<String>) {
+        if let Some(host) = self.plugins.get() {
+            host.publish(&PluginEvent::SessionStarted {
+                session_id: session.clone(),
+                topic_id: topic,
+            });
+        }
     }
 
     pub(crate) fn publish_registry(&self, key: String, event: HarnessEvent) {

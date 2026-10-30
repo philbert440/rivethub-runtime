@@ -13,7 +13,10 @@ pub(crate) async fn ingest(
     ValidatedBatch(batch): ValidatedBatch,
 ) -> Result<Json<CaptureResult>, ApiError> {
     let session_key = batch.session_key.clone();
-    let captured = gateway.store().capture(batch).await?;
+    let captured = gateway
+        .store()
+        .capture(batch, Some(&gateway.settings().node))
+        .await?;
     Ok(Json(CaptureResult {
         ok: true,
         conversation_id: session_key,

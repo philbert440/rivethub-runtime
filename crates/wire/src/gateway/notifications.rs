@@ -10,6 +10,10 @@ use crate::task::TaskStatus;
 pub struct TaskDoneNotification {
     pub task_id: String,
     pub status: TaskStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_session_id: Option<String>,
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
     pub ts: DateTime<Utc>,
 }

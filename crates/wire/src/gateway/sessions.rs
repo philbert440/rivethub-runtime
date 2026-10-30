@@ -123,6 +123,12 @@ pub struct HarnessSessionTitleRequest {
     pub title: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HarnessSessionForkRequest {
+    pub prompts: u32,
+}
+
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -313,4 +319,30 @@ pub enum HarnessSocketRefusal {
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum HarnessSocketMessage {
     Sync,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionPreviewKind {
+    Running,
+    Asking,
+    Approval,
+    Said,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionPreview {
+    pub session_id: SessionId,
+    pub kind: SessionPreviewKind,
+    pub text: String,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionPreviewList {
+    pub previews: Vec<SessionPreview>,
 }

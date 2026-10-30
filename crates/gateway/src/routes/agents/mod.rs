@@ -35,6 +35,7 @@ use crate::error::body_must_be_object;
 use crate::error::invalid_json;
 use crate::extract::Query;
 use crate::extract::limited_bytes;
+use crate::tenancy::UserId;
 
 use error::AgentError;
 use kernel::agent_presets::AgentPresetStore;
@@ -87,6 +88,15 @@ pub(crate) enum Failure {
     Agent(AgentError),
 }
 
+impl std::fmt::Display for Failure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Api(error) => error.fmt(formatter),
+            Self::Agent(error) => error.fmt(formatter),
+        }
+    }
+}
+
 impl From<ApiError> for Failure {
     fn from(error: ApiError) -> Self {
         Self::Api(error)
@@ -124,8 +134,10 @@ async fn list(
 
 async fn create(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     request: Request,
 ) -> Result<Response, Failure> {
+    gateway.tenancy.owner(&user)?;
     let body: AgentPresetCreateRequest = read_json(request).await?;
     let agent = gateway.presets().create(body).await?;
     Ok((StatusCode::CREATED, Json(AgentResponse { agent })).into_response())
@@ -141,9 +153,11 @@ async fn get_one(
 
 async fn patch(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     AgentId(id): AgentId<String>,
     request: Request,
 ) -> Result<Json<AgentResponse>, Failure> {
+    gateway.tenancy.owner(&user)?;
     let body: AgentPresetUpdate = read_json(request).await?;
     let agent = gateway.presets().update(id, body).await?;
     Ok(Json(AgentResponse { agent }))
@@ -151,8 +165,10 @@ async fn patch(
 
 async fn remove(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     AgentId(id): AgentId<String>,
 ) -> Result<Json<OkReply>, Failure> {
+    gateway.tenancy.owner(&user)?;
     gateway.presets().delete(id).await?;
     Ok(Json(OkReply { ok: true }))
 }

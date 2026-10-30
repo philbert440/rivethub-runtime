@@ -277,6 +277,42 @@ async fn gateway_stays_up_across_a_database_outage(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrations = false)]
+async fn gateway_starts_while_the_database_is_down(pool: PgPool) -> TestResult {
+    migrate::postgres_pool(&pool).await?;
+    let (proxy, url) = front(&pool).await?;
+    proxy.pause().await;
+    let home = tempfile::tempdir()?;
+    let port = free_port()?;
+    write_state(
+        home.path(),
+        &provider_config(
+            home.path(),
+            &url,
+            &format!("gateway:\n  host: 127.0.0.1\n  port: {port}\n"),
+        ),
+    )?;
+    let mut running = spawn_rh(home.path(), &["gateway"], "gateway listening on ").await?;
+    let client = client()?;
+    let base = format!("http://127.0.0.1:{port}");
+    let degraded = wait_http(&client, &format!("{base}/healthz"), 503).await?;
+    let parsed: HealthzResponse = serde_json::from_str(&degraded)?;
+    assert!(!parsed.ok);
+    wait_http(&client, &format!("{base}/api/memory/stats"), 503).await?;
+    wait_http(&client, &format!("{base}/api/events/sessions"), 200).await?;
+    proxy.resume();
+    wait_http(&client, &format!("{base}/healthz"), 200).await?;
+    wait_http(&client, &format!("{base}/api/memory/stats"), 200).await?;
+    running
+        .logs
+        .wait_for("the memory database answered; memory is available")
+        .await?;
+    alive(&mut running.child)?;
+    stop(running, "gateway stopped").await?;
+    drop(proxy);
+    Ok(())
+}
+
+#[sqlx::test(migrations = false)]
 async fn worker_stays_up_and_claims_after_the_database_returns(pool: PgPool) -> TestResult {
     migrate::postgres_pool(&pool).await?;
     install_queue(&pool).await?;
@@ -303,22 +339,37 @@ async fn worker_stays_up_and_claims_after_the_database_returns(pool: PgPool) -> 
 }
 
 #[sqlx::test(migrations = false)]
-async fn agent_stays_up_and_picks_up_a_job_after_recovery(pool: PgPool) -> TestResult {
+async fn gateway_runs_its_tasks_again_after_the_database_returns(pool: PgPool) -> TestResult {
     migrate::postgres_pool(&pool).await?;
     install_queue(&pool).await?;
     let (proxy, url) = front(&pool).await?;
     let home = tempfile::tempdir()?;
-    write_state(home.path(), &provider_config(home.path(), &url, ""))?;
-    let mut running = spawn_rh(home.path(), &["agent"], "agent running").await?;
+    let port = free_port()?;
+    write_state(
+        home.path(),
+        &provider_config(
+            home.path(),
+            &url,
+            &format!(
+                "gateway:\n  host: 127.0.0.1\n  port: {port}\nmesh:\n  node_name: agent-node\n"
+            ),
+        ),
+    )?;
+    let mut running = spawn_rh(home.path(), &["gateway"], "gateway listening on ").await?;
     proxy.pause().await;
     running.logs.wait_for(JOB_DOWN).await?;
     alive(&mut running.child)?;
-    enqueue(&pool, JobName::Fixed(FixedJob::RunTask)).await?;
+    enqueue(
+        &pool,
+        JobName::RunTaskOn {
+            node: "agent-node".to_owned(),
+        },
+    )
+    .await?;
     proxy.resume();
     running.logs.wait_for(JOB_UP).await?;
-    wait_rows(&pool, &mut running.child, "run-task", true).await?;
-    once(&running.logs, JOB_DOWN, JOB_UP).await?;
-    stop(running, "agent stopped").await?;
+    wait_rows(&pool, &mut running.child, "run-task:agent-node", true).await?;
+    stop(running, "gateway stopped").await?;
     drop(proxy);
     Ok(())
 }
@@ -360,7 +411,6 @@ async fn mcp_stats_fail_while_postgres_is_down_and_succeed_after(pool: PgPool) -
         .await?;
     assert_ne!(healthy.is_error, Some(true), "{healthy:?}");
     proxy.pause().await;
-    logs.wait_for(TASK_DOWN).await?;
     alive(&mut child)?;
     let failed = tokio::time::timeout(
         Duration::from_secs(20),
@@ -370,15 +420,18 @@ async fn mcp_stats_fail_while_postgres_is_down_and_succeed_after(pool: PgPool) -
     .map_err(|error| format!("{error}"))?;
     assert_eq!(failed.is_error, Some(true), "{failed:?}");
     proxy.resume();
-    logs.wait_for(TASK_UP).await?;
-    let restored = tokio::time::timeout(
-        Duration::from_secs(20),
-        stats.call(Some(rmcp::model::JsonObject::new()), context),
-    )
-    .await?
-    .map_err(|error| format!("{error}"))?;
-    assert_ne!(restored.is_error, Some(true), "{restored:?}");
-    once(&logs, TASK_DOWN, TASK_UP).await?;
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let restored = stats
+                .call(Some(rmcp::model::JsonObject::new()), context.clone())
+                .await
+                .map_err(|error| format!("{error}"))?;
+            if restored.is_error != Some(true) {
+                return Ok::<(), String>(());
+            }
+        }
+    })
+    .await??;
     let pid = child.id().ok_or("mcp already stopped")?;
     terminate(pid)?;
     let status = tokio::time::timeout(Duration::from_secs(30), child.wait()).await??;

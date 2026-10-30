@@ -21,6 +21,7 @@ use common::Queue;
 use kernel::memory::ConversationHead;
 use kernel::memory::ConversationWindow;
 use kernel::memory::NewSummary;
+use kernel::memory::PendingConversation;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummaryNode;
 use kernel::memory::SummaryStore;
@@ -312,7 +313,6 @@ fn small_settings() -> SummarySettings {
         stale_min_batch: 2,
         max_leaf_rounds: 10,
         pipeline_version: 5,
-        session_tagging: false,
     })
     .expect("small settings")
 }

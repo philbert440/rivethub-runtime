@@ -194,6 +194,51 @@ async fn add_tag_accepts_ids_and_session_keys(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn add_tag_defaults_display_to_the_value(pool: PgPool) -> TestResult {
+    let memory = store(&pool);
+    let conversation = seed_conversation(&pool, "claude-code:display").await?;
+
+    let omitted = memory
+        .add_tag(TagAdd {
+            entity_type: TagEntityType::Conversation,
+            entity: TagEntity::Id(conversation),
+            agent: None,
+            tag: kernel::memory::TagLiteral {
+                key: "project".to_string(),
+                value: "General".to_string(),
+            },
+            display: None,
+            reason: None,
+            decided_by: None,
+        })
+        .await?;
+    assert_eq!(
+        omitted.display, "General",
+        "an omitted display falls back to the value"
+    );
+
+    let blank = memory
+        .add_tag(TagAdd {
+            entity_type: TagEntityType::Conversation,
+            entity: TagEntity::Id(conversation),
+            agent: None,
+            tag: kernel::memory::TagLiteral {
+                key: "project".to_string(),
+                value: "Local Model Dev".to_string(),
+            },
+            display: Some("   ".to_string()),
+            reason: None,
+            decided_by: None,
+        })
+        .await?;
+    assert_eq!(
+        blank.display, "Local Model Dev",
+        "a blank display falls back to the value"
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn list_pending_counts_and_lookup_read_the_tags(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let conversation = seed_conversation(&pool, "claude-code:read").await?;
@@ -652,79 +697,5 @@ async fn pre_0019_databases_get_empty_reads_and_refused_writes(pool: PgPool) -> 
         })
         .await;
     assert!(matches!(refused, Err(MemoryStoreError::TagTablesMissing)));
-    Ok(())
-}
-
-#[derive(serde::Serialize)]
-struct CwdSettings<'a> {
-    cwd: &'a str,
-}
-
-async fn capture_in(pool: &PgPool, session: &str, cwd: &str) -> TestResult {
-    let batch = CaptureBatchRequest {
-        session_key: session.to_string(),
-        agent: "rivet".to_string(),
-        channel: Some("claude-code".to_string()),
-        title: None,
-        settings: Some(wire::JsonObject::from_serialize(&CwdSettings { cwd })?),
-        task_id: None,
-        finalize: None,
-        created_at: None,
-        updated_at: None,
-        messages: vec![CaptureMessage {
-            event_id: "only".to_string(),
-            role: Role::User,
-            content: "tagged turn".to_string(),
-            tool_name: None,
-            tool_args: None,
-            tool_result: None,
-            metadata: None,
-            created_at: None,
-        }],
-    };
-    store(pool)
-        .capture_batch(&batch, &memory_postgres::CaptureOptions::default())
-        .await?;
-    Ok(())
-}
-
-async fn rule_projects(pool: &PgPool) -> Result<BTreeMap<String, String>, sqlx::Error> {
-    let rows = sqlx::query(
-        "SELECT c.session_key, t.value || '|' || t.display AS tag
-           FROM rh_tags t JOIN rh_conversations c ON c.id = t.entity_id
-          WHERE t.source = 'rule' AND t.key = 'project'",
-    )
-    .fetch_all(pool)
-    .await?;
-    rows.iter()
-        .map(|row| Ok((row.try_get("session_key")?, row.try_get("tag")?)))
-        .collect()
-}
-
-#[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn the_project_rule_reuses_the_taxonomy(pool: PgPool) -> TestResult {
-    sqlx::query(
-        "INSERT INTO rh_tag_taxonomy (key, value, display, aliases, state, source) VALUES
-           ('project', 'Widget Hub', 'Widget Hub', ARRAY['Widgets'], 'accepted', 'user'),
-           ('project', 'scratch', '', '{}', 'rejected', 'user')",
-    )
-    .execute(&pool)
-    .await?;
-    capture_in(&pool, "cli:alias", "/nonexistent/widgets").await?;
-    capture_in(&pool, "cli:canonical", "/nonexistent/widget hub").await?;
-    capture_in(&pool, "cli:rejected", "/nonexistent/Scratch").await?;
-    capture_in(&pool, "cli:fresh", "/nonexistent/gizmo").await?;
-    let expected = BTreeMap::from([
-        ("cli:alias".to_string(), "Widget Hub|Widget Hub".to_string()),
-        (
-            "cli:canonical".to_string(),
-            "Widget Hub|Widget Hub".to_string(),
-        ),
-        ("cli:fresh".to_string(), "gizmo|gizmo".to_string()),
-    ]);
-    assert_eq!(rule_projects(&pool).await?, expected);
-    sqlx::query("DELETE FROM rh_tags").execute(&pool).await?;
-    assert_eq!(store(&pool).backfill_project_rules(None).await?, 3);
-    assert_eq!(rule_projects(&pool).await?, expected);
     Ok(())
 }

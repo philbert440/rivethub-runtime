@@ -1,7 +1,8 @@
-use kernel::wiki::builder::{WikiAction, WikiPatch, WikiStoreError};
+use kernel::wiki::builder::WikiStoreError;
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::{WikiAction, WikiPatch};
+use kernel::wiki::page::{find_stem_match, normalize_slug, topic_identity};
 use sqlx::{Postgres, Transaction};
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::{find_stem_match, normalize_slug, topic_identity};
 
 use super::query_error;
 const RRF_K: f64 = 20.0;
@@ -20,7 +21,6 @@ pub(super) enum ResolveReason {
     Redirect,
     Alias,
     Identity,
-    Entity,
     Stem,
     Search,
     None,
@@ -34,7 +34,6 @@ impl std::fmt::Display for ResolveReason {
             Self::Redirect => "redirect",
             Self::Alias => "alias",
             Self::Identity => "identity",
-            Self::Entity => "entity",
             Self::Stem => "stem",
             Self::Search => "search",
             Self::None => "none",
@@ -110,23 +109,6 @@ async fn resolve(
         && open(tx, &found, page).await?
     {
         return Ok(Some((found, ResolveReason::Identity)));
-    }
-    if !entities.is_empty() {
-        let shared = sqlx::query_scalar::<_, String>(
-            "SELECT slug FROM rh_wiki_topics WHERE entities && $1::text[]
-             ORDER BY (SELECT count(DISTINCT val) FROM unnest(entities) AS e(val) WHERE val = ANY($1::text[])) DESC,
-                updated_at DESC, slug
-             LIMIT 1",
-        )
-        .bind(entities)
-        .fetch_optional(&mut **tx)
-        .await
-        .map_err(query_error)?;
-        if let Some(found) = shared
-            && open(tx, &found, page).await?
-        {
-            return Ok(Some((found, ResolveReason::Entity)));
-        }
     }
     let variants = sqlx::query_scalar::<_, String>(
         "SELECT slug FROM rh_wiki_topics

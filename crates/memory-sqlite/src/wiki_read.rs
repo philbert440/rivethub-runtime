@@ -4,15 +4,14 @@ use std::collections::BTreeSet;
 use kernel::memory::MemoryStoreError;
 use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::page::WikiSlug;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params_from_iter;
 use rusqlite::types::Value;
-use wire::gateway::wiki::WikiCitation;
 use wire::gateway::wiki::WikiGapsResponse;
 use wire::gateway::wiki::WikiPageResponse;
 use wire::gateway::wiki::WikiRedLink;
-use wire::gateway::wiki::WikiSlug;
 use wire::gateway::wiki::WikiSource;
 use wire::gateway::wiki::WikiSourceKind;
 use wire::gateway::wiki::WikiTopic;
@@ -34,6 +33,7 @@ struct Topic {
     entities: Vec<String>,
     current_state: String,
     updated_at: String,
+    owner: Option<String>,
 }
 
 impl SqliteStore {
@@ -80,7 +80,8 @@ fn list_topics(conn: &Connection, filter: &WikiFilter) -> Result<WikiTopicList, 
     listed.push(Value::Integer(i64::from(filter.offset)));
     let mut statement = conn
         .prepare(&format!(
-            "SELECT slug, title, aliases, tags, entities, current_state, updated_at \
+            "SELECT slug, title, aliases, tags, entities, current_state, updated_at, \
+                    (SELECT topic_id FROM rh_topic_pages WHERE page_slug = ros_wiki_topics.slug) \
                FROM ros_wiki_topics WHERE {where_sql} \
               ORDER BY updated_at DESC, slug ASC LIMIT ? OFFSET ?"
         ))
@@ -189,7 +190,7 @@ fn page(conn: &Connection, slug: &str) -> Result<WikiLookup, SqliteError> {
         article: article_text,
         see_also: None,
         history: Vec::new(),
-        citations: citations(conn, &slug)?,
+        citations: crate::wiki_citations::citations(conn, &slug)?,
         markdown,
         sources: sources(conn, &slug)?,
         git_sha,
@@ -254,7 +255,8 @@ fn gaps(conn: &Connection, limit: u32) -> Result<WikiGapsResponse, SqliteError> 
     red_links.truncate(capped);
     let mut statement = conn
         .prepare(
-            "SELECT slug, title, aliases, tags, entities, current_state, updated_at \
+            "SELECT slug, title, aliases, tags, entities, current_state, updated_at, \
+                    (SELECT topic_id FROM rh_topic_pages WHERE page_slug = ros_wiki_topics.slug) \
                FROM ros_wiki_topics \
               ORDER BY coalesce(last_verified_at, updated_at), slug LIMIT ?1",
         )
@@ -299,7 +301,8 @@ fn known(entity: &str, topics: &[Topic], redirects: &[String]) -> bool {
 fn all_topics(conn: &Connection) -> Result<Vec<Topic>, SqliteError> {
     let mut statement = conn
         .prepare(
-            "SELECT slug, title, aliases, tags, entities, current_state, updated_at \
+            "SELECT slug, title, aliases, tags, entities, current_state, updated_at, \
+                    (SELECT topic_id FROM rh_topic_pages WHERE page_slug = ros_wiki_topics.slug) \
                FROM ros_wiki_topics",
         )
         .map_err(SqliteError::query("wiki gaps"))?;
@@ -319,37 +322,6 @@ fn redirect_slugs(conn: &Connection) -> Result<Vec<String>, SqliteError> {
         .map_err(SqliteError::query("wiki redirects"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(SqliteError::query("wiki redirects"))
-}
-
-fn citations(conn: &Connection, slug: &str) -> Result<Vec<WikiCitation>, SqliteError> {
-    let mut statement = conn
-        .prepare(
-            "SELECT summary_id, kind, note, cited_at FROM ros_wiki_citations \
-              WHERE topic_slug = ?1 ORDER BY cited_at, summary_id",
-        )
-        .map_err(SqliteError::query("wiki citations"))?;
-    let rows = statement
-        .query_map(params_from_iter([Value::Text(slug.to_owned())]), |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, Option<String>>(1)?,
-                row.get::<_, Option<String>>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })
-        .map_err(SqliteError::query("wiki citations"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(SqliteError::query("wiki citations"))?;
-    rows.into_iter()
-        .map(|(summary_id, kind, note, cited_at)| {
-            Ok(WikiCitation {
-                summary_id,
-                date: Some(time::stored(&cited_at, "cited_at")?),
-                kind,
-                note,
-            })
-        })
-        .collect()
 }
 
 fn sources(conn: &Connection, slug: &str) -> Result<Vec<WikiSource>, SqliteError> {
@@ -400,6 +372,7 @@ fn read_topic(row: &rusqlite::Row<'_>) -> rusqlite::Result<Topic> {
         entities: string_list(&row.get::<_, String>(4)?)?,
         current_state: row.get(5)?,
         updated_at: row.get(6)?,
+        owner: row.get(7)?,
     })
 }
 
@@ -417,6 +390,7 @@ fn topic_wire(topic: Topic) -> Result<WikiTopic, SqliteError> {
         entities: topic.entities,
         updated_at: time::stored(&topic.updated_at, "updated_at")?,
         excerpt: topic.current_state.chars().take(EXCERPT_CHARS).collect(),
+        topic_id: topic.owner,
     })
 }
 

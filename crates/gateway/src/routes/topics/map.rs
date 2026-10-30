@@ -1,18 +1,25 @@
+use kernel::filing::FiledConversation;
+use kernel::filing::FiledSession;
 use kernel::topics::Alias;
 use kernel::topics::Decision;
 use kernel::topics::DecisionStatus;
-use kernel::topics::PlacedSession;
+use kernel::topics::HistoryMark;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
 use kernel::topics::Root;
 use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicPageError;
+use wire::gateway::topics::ConversationPlacement;
 use wire::gateway::topics::PlacedBy;
+use wire::gateway::topics::SessionHistoryMark;
+use wire::gateway::topics::TopicConversation;
 use wire::gateway::topics::TopicDecision;
 use wire::gateway::topics::TopicDirectory;
+use wire::gateway::topics::TopicKind as TopicKindBody;
 use wire::gateway::topics::TopicPlacement;
 use wire::gateway::topics::TopicRecord;
 use wire::gateway::topics::TopicSession;
@@ -21,22 +28,26 @@ use wire::gateway::topics::TopicSummary;
 
 use crate::error::ApiError;
 
-pub(super) fn error(error: TopicError) -> ApiError {
+pub(crate) fn error(error: TopicError) -> ApiError {
     match error {
         TopicError::EmptyName
         | TopicError::EmptyAlias
         | TopicError::EmptySlug { .. }
         | TopicError::OwnParent
+        | TopicError::EntityWithoutType
         | TopicError::SelfMerge
         | TopicError::EmptyDecision
         | TopicError::ForeignReplacement => ApiError::BadRequest(error.to_string()),
         TopicError::SlugTaken { .. }
         | TopicError::AliasTaken { .. }
-        | TopicError::ParentIsSubtopic { .. }
-        | TopicError::HasSubtopics
-        | TopicError::CategoryTopic { .. }
+        | TopicError::TooDeep { .. }
+        | TopicError::IntoOwnSubtree
+        | TopicError::WorkMisplaced
+        | TopicError::TypeMisplaced
+        | TopicError::EntityMisplaced
+        | TopicError::MergeAcrossKinds
+        | TopicError::NotWork { .. }
         | TopicError::SubtopicsRemain { .. }
-        | TopicError::MergeWouldNest { .. }
         | TopicError::DecisionSuperseded { .. } => ApiError::Conflict(error.to_string()),
         TopicError::NotFound { .. } | TopicError::UnknownDecision { .. } => {
             ApiError::Missing(error.to_string())
@@ -68,6 +79,22 @@ pub(super) fn aliases(texts: &[String]) -> Result<Vec<Alias>, ApiError> {
         .collect()
 }
 
+pub(super) const fn kind(kind: TopicKindBody) -> TopicKind {
+    match kind {
+        TopicKindBody::Work => TopicKind::Work,
+        TopicKindBody::Type => TopicKind::Type,
+        TopicKindBody::Entity => TopicKind::Entity,
+    }
+}
+
+const fn kind_body(kind: TopicKind) -> TopicKindBody {
+    match kind {
+        TopicKind::Work => TopicKindBody::Work,
+        TopicKind::Type => TopicKindBody::Type,
+        TopicKind::Entity => TopicKindBody::Entity,
+    }
+}
+
 pub(super) fn root(directory: TopicDirectory) -> Root {
     match directory {
         TopicDirectory::Local { node, path } => Root::Local { node, path },
@@ -92,6 +119,7 @@ const fn placed_by(source: PlacementSource) -> PlacedBy {
 pub(super) fn record(topic: Topic) -> TopicRecord {
     TopicRecord {
         id: topic.id.to_string(),
+        kind: kind_body(topic.kind),
         slug: topic.slug.to_string(),
         name: topic.name.as_str().to_owned(),
         aliases: topic
@@ -103,6 +131,7 @@ pub(super) fn record(topic: Topic) -> TopicRecord {
         directory: topic.directory.map(directory),
         created_at: topic.created_at,
         updated_at: topic.updated_at,
+        closed_at: topic.closed_at,
     }
 }
 
@@ -123,17 +152,50 @@ pub(super) fn placement(placement: Placement) -> TopicPlacement {
     }
 }
 
+pub(super) fn history_mark(mark: HistoryMark) -> SessionHistoryMark {
+    SessionHistoryMark {
+        session_id: mark.session,
+        marked_at: mark.at,
+    }
+}
+
 pub(super) fn suggestion(suggestion: &Suggestion) -> TopicSuggestion {
     TopicSuggestion {
         name: suggestion.name.as_str().to_owned(),
         topic_id: suggestion.topic.map(|topic| topic.to_string()),
+        parent_id: suggestion.parent.map(|topic| topic.to_string()),
     }
 }
 
-pub(super) fn session(placed: PlacedSession) -> TopicSession {
+pub(super) fn filed_session(filed: FiledSession) -> TopicSession {
     TopicSession {
-        placement: placement(placed.placement),
-        last_active: placed.last_active,
+        placement: placement(filed.placement),
+        title: filed.title,
+        last_active: filed.last_active,
+        node: filed.node,
+        parent_session_id: filed.lineage.as_ref().map(|lineage| lineage.parent.clone()),
+        task_id: filed.lineage.map(|lineage| lineage.task.to_string()),
+    }
+}
+
+pub(super) fn conversation_placement(
+    placement: &kernel::filing::ConversationPlacement,
+) -> ConversationPlacement {
+    ConversationPlacement {
+        conversation_id: placement.conversation.to_string(),
+        topic_id: placement.topic.to_string(),
+        by: placed_by(placement.by),
+        at: placement.at,
+    }
+}
+
+pub(super) fn filed_conversation(filed: FiledConversation) -> TopicConversation {
+    TopicConversation {
+        placement: conversation_placement(&filed.placement),
+        channel: filed.channel,
+        title: filed.title,
+        last_active: filed.last_active,
+        node: filed.node,
     }
 }
 

@@ -1,34 +1,12 @@
 use std::collections::BTreeMap;
 
 use crate::enums::{HarnessId, ModelsMode, listed};
-use crate::model::{EvalSection, HarnessEntry, HarnessSlot, TasksSection};
+use crate::model::{HarnessEntry, HarnessSlot, TasksSection};
 use crate::report::ValidationResult;
 
 pub(super) fn validate(out: &mut ValidationResult, section: &TasksSection) {
-    if let Some(eval) = &section.eval {
-        eval_section(out, eval);
-    }
     if let Some(harnesses) = &section.harnesses {
         harness_map(out, harnesses);
-    }
-}
-
-fn eval_section(out: &mut ValidationResult, eval: &EvalSection) {
-    if let Some(verifier) = &eval.verifier
-        && verifier.executor.is_none()
-    {
-        out.error(
-            "tasks.eval.verifier.executor",
-            "\"tasks.eval.verifier.executor\" must be 'chat-loop' or 'harness-session'",
-        );
-    }
-    if let Some(escalation) = &eval.escalation
-        && escalation.channel.is_none()
-    {
-        out.error(
-            "tasks.eval.escalation.channel",
-            "\"tasks.eval.escalation.channel\" must be a string",
-        );
     }
 }
 

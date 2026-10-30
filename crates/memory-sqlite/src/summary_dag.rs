@@ -1,5 +1,6 @@
 use kernel::memory::MemoryStoreError;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryOwner;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::Row;
@@ -16,8 +17,10 @@ use crate::SqliteStore;
 use crate::error::SqliteError;
 use crate::time;
 
-const CONVERSATION_SQL: &str = "SELECT id FROM ros_conversations WHERE session_key = ?1 \
+const SESSION_SQL: &str = "SELECT id, session_key FROM ros_conversations WHERE session_key = ?1 \
      ORDER BY (active IS NOT 0) DESC, updated_at DESC, id LIMIT 1";
+
+const CONVERSATION_SQL: &str = "SELECT id, session_key FROM ros_conversations WHERE id = ?1";
 
 const DAG_SQL: &str = "WITH RECURSIVE dag(id, level) AS ( \
         SELECT id, 0 FROM ros_summaries WHERE conversation_id = ?1 \
@@ -65,25 +68,27 @@ struct DagRow {
 impl SqliteStore {
     pub(crate) async fn read_summary_dag(
         &self,
-        session: &str,
+        owner: &SummaryOwner,
     ) -> Result<SummaryDag, MemoryStoreError> {
-        let session = session.to_owned();
-        self.with_conn(move |conn| summary_dag(conn, session))
+        let owner = owner.clone();
+        self.with_conn(move |conn| summary_dag(conn, owner))
             .await
             .map_err(MemoryStoreError::from)
     }
 }
 
-fn summary_dag(conn: &Connection, session: String) -> Result<SummaryDag, SqliteError> {
-    let conversation = conn
-        .query_row(
-            CONVERSATION_SQL,
-            params_from_iter([Value::Text(session)]),
-            |row| row.get::<_, String>(0),
-        )
+fn summary_dag(conn: &Connection, owner: SummaryOwner) -> Result<SummaryDag, SqliteError> {
+    let (sql, key) = match owner {
+        SummaryOwner::Session(session) => (SESSION_SQL, session),
+        SummaryOwner::Conversation(id) => (CONVERSATION_SQL, id.to_string()),
+    };
+    let found = conn
+        .query_row(sql, params_from_iter([Value::Text(key)]), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
         .optional()
         .map_err(SqliteError::query("summary dag"))?;
-    let Some(conversation) = conversation else {
+    let Some((conversation, session_key)) = found else {
         return Ok(SummaryDag::default());
     };
     let mut statement = conn
@@ -102,6 +107,7 @@ fn summary_dag(conn: &Connection, session: String) -> Result<SummaryDag, SqliteE
         .map(|row| summary_node(&mut sources, row))
         .collect::<Result<_, _>>()?;
     Ok(SummaryDag {
+        session_key: Some(session_key),
         summaries,
         messages: message_tally(conn, &conversation)?,
     })

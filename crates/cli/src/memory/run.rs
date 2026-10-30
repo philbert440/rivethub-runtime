@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -63,7 +62,6 @@ pub(super) async fn run(
             dry_run,
             sqlite,
         } => import(path, dry_run, sqlite, env, shutdown).await,
-        MemoryCommand::Rules { since, sqlite } => rules(since, sqlite, env).await,
         MemoryCommand::Titles {
             dry_run,
             json,
@@ -75,6 +73,7 @@ pub(super) async fn run(
             dry_run,
             json,
         } => consolidate_wiki(limit, dry_run, json, env).await,
+        MemoryCommand::Cleanup(args) => super::cleanup::run(args, env, shutdown).await,
     }
 }
 
@@ -270,28 +269,6 @@ async fn import(
     }
 }
 
-async fn rules(
-    since: Option<DateTime<Utc>>,
-    sqlite: Option<PathBuf>,
-    env: &Environment,
-) -> Result<Report, Error> {
-    let applied = match resolve(env, sqlite, Kind::Either)? {
-        Target::Postgres(url) => {
-            PostgresMemory::connect(&url)
-                .await?
-                .backfill_project_rules(since)
-                .await?
-        }
-        Target::Sqlite(path) => {
-            let store = open_sqlite(&path).await?;
-            apply_sqlite_rules(&store, since).await?
-        }
-    };
-    Ok(Report::success(format!(
-        "applied {applied} project rule tag(s)\n"
-    )))
-}
-
 async fn titles(
     dry_run: bool,
     json: bool,
@@ -376,29 +353,6 @@ async fn import_sqlite(
     io::summary_report(origin, io::sqlite_rows(report.rows), dry_run)
 }
 
-async fn apply_sqlite_rules(
-    store: &SqliteStore,
-    since: Option<DateTime<Utc>>,
-) -> Result<u64, Error> {
-    let found = store.conversation_directories(since).await?;
-    let mut grouped: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for row in found {
-        grouped.entry(row.cwd).or_default().push(row.id);
-    }
-    let mut applied = 0u64;
-    for (cwd, ids) in grouped {
-        let Some(tag) = memory_postgres::project::project_rule_tag(Some(cwd), true).await? else {
-            continue;
-        };
-        for id in ids {
-            applied += store
-                .apply_project_rule(id, tag.value.clone(), tag.display.clone())
-                .await?;
-        }
-    }
-    Ok(applied)
-}
-
 async fn publish(out: Option<PathBuf>, bytes: Vec<u8>, tty: bool) -> Result<Report, Error> {
     if let Some(path) = out {
         let display = path.display().to_string();
@@ -416,7 +370,7 @@ async fn publish(out: Option<PathBuf>, bytes: Vec<u8>, tty: bool) -> Result<Repo
     })
 }
 
-fn postgres_url(env: &Environment) -> Result<String, Error> {
+pub(super) fn postgres_url(env: &Environment) -> Result<String, Error> {
     match resolve(env, None, Kind::Postgres)? {
         Target::Postgres(url) => Ok(url),
         Target::Sqlite(_) => Err(Error::PostgresUrlRequired),

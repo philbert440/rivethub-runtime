@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::topics::PageEdit;
 use kernel::topics::PageSection;
 use kernel::topics::TopicId;
 use kernel::topics::TopicPage;
@@ -8,13 +9,13 @@ use kernel::topics::TopicPageStore;
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::WikiConsolidateStore;
 use kernel::wiki::consolidate::WikiFold;
+use kernel::wiki::page::FoldMark;
+use kernel::wiki::page::WikiSlug;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
 use serde::Deserialize;
 use serde::Serialize;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::FoldMark;
 
 use crate::SqliteStore;
 use crate::time;
@@ -64,6 +65,42 @@ impl TopicPageStore for SqliteStore {
         .await
     }
 
+    async fn edit_page(
+        &self,
+        slug: &WikiSlug,
+        edit: &PageEdit,
+        now: DateTime<Utc>,
+    ) -> Result<bool, WikiStoreError> {
+        let (slug, edit) = (slug.clone(), edit.clone());
+        blocking(self, move |conn| {
+            let tx = conn.transaction().map_err(query)?;
+            let owner = tx
+                .query_row(
+                    "SELECT topic_id FROM rh_topic_pages WHERE page_slug = ?1",
+                    params![slug.as_ref()],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(query)?;
+            let (Some(owner), Some(mut page)) = (owner, read(&tx, &slug)?) else {
+                return Ok(false);
+            };
+            let topic = owner
+                .parse::<TopicId>()
+                .map_err(|error| WikiStoreError::Query(Box::new(error)))?;
+            if let Some(text) = &edit.current_state {
+                text.trim().clone_into(&mut page.summary);
+            }
+            if let Some(text) = &edit.article {
+                text.trim().clone_into(&mut page.article);
+            }
+            save(&tx, topic, &page, &time::stamp(now))?;
+            tx.commit().map_err(query)?;
+            Ok(true)
+        })
+        .await
+    }
+
     async fn redirect_page(
         &self,
         from: &WikiSlug,
@@ -100,6 +137,22 @@ impl TopicPageStore for SqliteStore {
             mark,
         };
         self.fold_wiki(&fold, now).await.map(drop)
+    }
+
+    async fn remove_page(&self, slug: &WikiSlug) -> Result<(), WikiStoreError> {
+        let slug = slug.as_ref().to_owned();
+        blocking(self, move |conn| {
+            for statement in [
+                "DELETE FROM ros_wiki_citations WHERE topic_slug = ?1",
+                "DELETE FROM ros_wiki_provenance WHERE topic_slug = ?1",
+                "DELETE FROM ros_wiki_redirects WHERE to_slug = ?1",
+                "DELETE FROM ros_wiki_topics WHERE slug = ?1",
+            ] {
+                conn.execute(statement, params![slug]).map_err(query)?;
+            }
+            Ok(())
+        })
+        .await
     }
 }
 

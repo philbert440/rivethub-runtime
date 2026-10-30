@@ -32,6 +32,7 @@ use wire::message::Role;
 use crate::BoxError;
 
 pub mod budget;
+mod deletion;
 mod embed;
 mod export;
 mod origin;
@@ -40,6 +41,19 @@ mod suggest;
 mod summary;
 mod title;
 
+pub use deletion::DeletedSession;
+pub use deletion::EMPTY_SESSIONS_MAX;
+pub use deletion::SessionActivity;
+pub use deletion::SessionDeletion;
+pub use deletion::Speaker;
+pub use deletion::SpokenTurn;
+pub use deletion::TOMBSTONE_PURGE_BATCH;
+pub use deletion::TRASH_MESSAGES_MAX;
+pub use deletion::TrashReason;
+pub use deletion::TrashSignals;
+pub use deletion::TrashVerdict;
+pub use deletion::trash_verdict;
+pub use deletion::used_since;
 pub use embed::EmbedModelMismatch;
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;
@@ -66,14 +80,19 @@ pub use summary::ConversationHead;
 pub use summary::ConversationWindow;
 pub use summary::HEARTBEAT_SESSION_PREFIX;
 pub use summary::NewSummary;
+pub use summary::PendingConversation;
 pub use summary::SummaryKind;
 pub use summary::SummaryNode;
 pub use summary::SummarySource;
 pub use summary::SummaryStore;
 pub use summary::SummaryStoreError;
+pub use summary::SummaryWatch;
 pub use summary::SummaryWrite;
 pub use summary::WindowMessage;
+pub use summary::WrittenSummary;
 pub use title::SUMMARY_TITLE_MAX_CHARS;
+pub use title::names_session;
+pub use title::spoken_title;
 pub use title::summary_title;
 
 #[derive(Debug, Error)]
@@ -230,8 +249,15 @@ impl SearchQuery {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SummaryDag {
+    pub session_key: Option<String>,
     pub summaries: Vec<MemorySummaryNode>,
     pub messages: MemoryMessageTally,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SummaryOwner {
+    Session(String),
+    Conversation(Uuid),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -360,7 +386,7 @@ pub trait MemoryStore: Send + Sync {
 
     async fn wiki_page(
         &self,
-        slug: &wire::gateway::wiki::WikiSlug,
+        slug: &crate::wiki::page::WikiSlug,
     ) -> Result<crate::wiki::WikiLookup, MemoryStoreError>;
 
     async fn wiki_gaps(
@@ -371,6 +397,7 @@ pub trait MemoryStore: Send + Sync {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError>;
 
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError>;
@@ -385,7 +412,7 @@ pub trait MemoryStore: Send + Sync {
 
     async fn context(&self, session: &str, now: DateTime<Utc>) -> Result<String, MemoryStoreError>;
 
-    async fn summary_dag(&self, session: &str) -> Result<SummaryDag, MemoryStoreError>;
+    async fn summary_dag(&self, owner: &SummaryOwner) -> Result<SummaryDag, MemoryStoreError>;
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError>;
 

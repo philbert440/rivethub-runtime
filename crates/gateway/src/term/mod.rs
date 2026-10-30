@@ -3,12 +3,15 @@ mod chat;
 mod delegated;
 mod inject;
 pub(crate) mod live;
+mod options;
 pub mod socket;
+mod startup;
 mod stored;
+mod tasks;
 mod trust;
 
 use std::collections::BTreeMap;
-use std::path::{Component, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -27,8 +30,10 @@ use crate::error::ApiError;
 use crate::sessions::SessionRegistry;
 use crate::tenancy::UserId;
 use actor::{Command, Handle};
-pub(crate) use chat::ChatStart;
-pub(crate) use delegated::DelegatedTurn;
+pub(crate) use chat::{ChatStart, Lineage};
+pub use delegated::Delegate;
+use options::validate_options;
+pub(crate) use tasks::BYPASS_PERMISSIONS;
 pub use trust::ClaudeTrust;
 
 #[derive(Debug, Clone)]
@@ -51,7 +56,7 @@ pub struct RememberedSession {
 
 #[derive(Debug, Clone)]
 pub struct TerminalOptions {
-    pub root: PathBuf,
+    pub roots: Vec<PathBuf>,
     pub default: String,
     pub commands: Vec<LaunchCommand>,
     pub max_ptys: usize,
@@ -84,11 +89,16 @@ pub(crate) struct AgentLaunch {
 }
 
 impl AgentLaunch {
-    fn stored(&self, label: &str, value: &str) -> Result<Option<String>, ApiError> {
+    fn stored(
+        &self,
+        label: &str,
+        value: &str,
+        valid: fn(&str) -> bool,
+    ) -> Result<Option<String>, ApiError> {
         if value.is_empty() {
             return Ok(None);
         }
-        if valid_token(value) {
+        if valid(value) {
             Ok(Some(value.to_owned()))
         } else {
             Err(ApiError::BadRequest(format!(
@@ -115,12 +125,20 @@ pub struct TerminalService {
     pub(crate) chats: RwLock<BTreeMap<String, crate::sessions::control::ChatHandle>>,
     harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
     summaries: RwLock<BTreeMap<String, wire::harness::HarnessSessionSummary>>,
+    activity: RwLock<BTreeMap<String, kernel::preview::LiveActivity>>,
+    approvals: RwLock<BTreeMap<String, Vec<wire::harness::HarnessEvent>>>,
+    contexts: RwLock<BTreeMap<String, wire::harness::HarnessEvent>>,
+    drivers: RwLock<BTreeMap<String, wire::harness::HarnessEvent>>,
     harness_events:
         RwLock<BTreeMap<String, tokio::sync::broadcast::Sender<wire::harness::HarnessEvent>>>,
     registry_events: tokio::sync::broadcast::Sender<live::RegistryEvent>,
     injecting: tokio::sync::Mutex<()>,
     claude_trust: Option<ClaudeTrust>,
     session_lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
+    startup_dir: Option<PathBuf>,
+    plugins: std::sync::OnceLock<Arc<crate::plugins::PluginHost>>,
+    delegates: BTreeMap<String, Delegate>,
+    requested: RwLock<BTreeMap<String, SessionId>>,
 }
 
 impl TerminalService {
@@ -149,11 +167,19 @@ impl TerminalService {
             chats: RwLock::new(BTreeMap::new()),
             harness: None,
             summaries: RwLock::new(BTreeMap::new()),
+            activity: RwLock::new(BTreeMap::new()),
+            approvals: RwLock::new(BTreeMap::new()),
+            contexts: RwLock::new(BTreeMap::new()),
+            drivers: RwLock::new(BTreeMap::new()),
             harness_events: RwLock::new(BTreeMap::new()),
             registry_events: tokio::sync::broadcast::channel(live::REGISTRY_EVENT_BUFFER).0,
             injecting: tokio::sync::Mutex::new(()),
             claude_trust: None,
             session_lister: None,
+            startup_dir: None,
+            plugins: std::sync::OnceLock::new(),
+            delegates: BTreeMap::new(),
+            requested: RwLock::new(BTreeMap::new()),
         })
     }
 
@@ -175,7 +201,7 @@ impl TerminalService {
     ) -> Result<(), ApiError> {
         match &self.claude_trust {
             Some(trust) if command.harness == Some(HarnessId::ClaudeCode) => {
-                trust.apply(&self.options.root, &command.cwd).await
+                trust.apply(&self.options.roots, &command.cwd).await
             }
             _ => Ok(()),
         }
@@ -213,17 +239,17 @@ impl TerminalService {
             .find(|command| command.id == key)
             .cloned()
             .ok_or_else(|| ApiError::UnknownCommand(key))?;
-        token("model", request.model.as_deref())?;
-        token("effort", request.effort.as_deref())?;
+        token("model", request.model.as_deref(), valid_model)?;
+        token("effort", request.effort.as_deref(), valid_token)?;
         let (model, effort) = match preset {
             Some(preset) => {
                 let model = match request.model {
                     Some(model) => Some(model),
-                    None => preset.stored("model", &preset.model)?,
+                    None => preset.stored("model", &preset.model, valid_model)?,
                 };
                 let effort = match request.effort {
                     Some(effort) => Some(effort),
-                    None => preset.stored("effort", &preset.effort)?,
+                    None => preset.stored("effort", &preset.effort, valid_token)?,
                 };
                 command.cwd = preset.directory;
                 (model, effort)
@@ -474,6 +500,8 @@ impl TerminalService {
         let key = self.registry.authorize(user, session)?;
         let chat = self.chats.write().remove(&key);
         self.summaries.write().remove(&key);
+        self.contexts.write().remove(&key);
+        self.drivers.write().remove(&key);
         if let Some(chat) = chat {
             chat.close().await?;
         }
@@ -528,9 +556,9 @@ impl TerminalService {
     }
 }
 
-fn token(label: &str, value: Option<&str>) -> Result<(), ApiError> {
+fn token(label: &str, value: Option<&str>, valid: fn(&str) -> bool) -> Result<(), ApiError> {
     match value {
-        Some(value) if !valid_token(value) => Err(ApiError::BadRequest(format!(
+        Some(value) if !valid(value) => Err(ApiError::BadRequest(format!(
             "{label} must be a 1-64 token"
         ))),
         _ => Ok(()),
@@ -538,74 +566,19 @@ fn token(label: &str, value: Option<&str>) -> Result<(), ApiError> {
 }
 
 fn valid_token(value: &str) -> bool {
+    value.chars().count() <= 64 && token_part(value)
+}
+
+fn valid_model(value: &str) -> bool {
+    value.chars().count() <= 64 && value.split('/').all(token_part)
+}
+
+fn token_part(value: &str) -> bool {
     !value.is_empty()
-        && value.chars().count() <= 64
         && !value.contains("..")
         && value
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':'))
-}
-
-fn validate_options(mut options: TerminalOptions) -> Result<TerminalOptions, ApiError> {
-    options.root = options.root.canonicalize().map_err(ApiError::Io)?;
-    if options.max_ptys == 0
-        || !options
-            .commands
-            .iter()
-            .any(|command| command.id == options.default)
-    {
-        return Err(ApiError::BadRequest(
-            "invalid terminal configuration".into(),
-        ));
-    }
-    for command in &mut options.commands {
-        if command.argv.is_empty() {
-            return Err(ApiError::BadRequest(
-                "invalid terminal command or directory".into(),
-            ));
-        }
-        if !command.cwd.is_absolute() {
-            return Err(ApiError::BadRequest(
-                "invalid terminal command or directory".into(),
-            ));
-        }
-    }
-    Ok(options)
-}
-
-fn contained_directory(
-    root: &std::path::Path,
-    directory: &std::path::Path,
-) -> Result<PathBuf, ApiError> {
-    if !directory.is_absolute()
-        || directory
-            .components()
-            .any(|part| part == Component::ParentDir)
-    {
-        return Err(ApiError::BadRequest(
-            "invalid terminal command or directory".into(),
-        ));
-    }
-    let directory = match directory.canonicalize() {
-        Ok(directory) => directory,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Err(ApiError::BadRequest(
-                "working directory does not exist".into(),
-            ));
-        }
-        Err(error) => return Err(ApiError::Io(error)),
-    };
-    if !directory.starts_with(root) {
-        return Err(ApiError::Forbidden(
-            "working directory is outside the terminal root".into(),
-        ));
-    }
-    if !directory.is_dir() {
-        return Err(ApiError::BadRequest(
-            "working directory is not a directory".into(),
-        ));
-    }
-    Ok(directory)
 }
 
 fn native_id(value: &str) -> &str {

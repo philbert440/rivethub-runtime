@@ -1,8 +1,8 @@
 {
-  "$id": "https://github.com/philbert440/rivethub-runtime/contract/0.1.0/accepted.schema.json",
+  "$id": "https://github.com/philbert440/rivethub-runtime/contract/0.7.0/accepted.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RivetHub contract (accepted by the runtime)",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "$defs": {
     "AgentPreset": {
       "type": "object",
@@ -830,171 +830,6 @@
         }
       ]
     },
-    "CatalogCommand": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
-        "argHint": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "description",
-        "source"
-      ]
-    },
-    "CatalogExecutorEntry": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string"
-        },
-        "capabilities": {
-          "$ref": "#/$defs/HarnessExecutorCapabilities"
-        },
-        "commands": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CatalogCommand"
-          }
-        },
-        "harnessId": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/HarnessId"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "implemented": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "key",
-        "capabilities",
-        "commands"
-      ]
-    },
-    "HarnessExecutorCapabilities": {
-      "type": "object",
-      "properties": {
-        "steerable": {
-          "type": "boolean"
-        },
-        "multiTurn": {
-          "type": "boolean"
-        },
-        "structuredStream": {
-          "type": "boolean"
-        },
-        "usageInResult": {
-          "type": "boolean"
-        },
-        "sessionIdCapture": {
-          "type": "boolean"
-        },
-        "slashCommands": {
-          "type": "boolean"
-        },
-        "effortSelection": {
-          "type": "boolean"
-        },
-        "mcpInjection": {
-          "$ref": "#/$defs/McpInjection"
-        }
-      },
-      "required": [
-        "steerable",
-        "multiTurn",
-        "structuredStream",
-        "usageInResult",
-        "sessionIdCapture",
-        "slashCommands",
-        "effortSelection",
-        "mcpInjection"
-      ]
-    },
-    "McpInjection": {
-      "type": "string",
-      "enum": [
-        "flag",
-        "cwdFile",
-        "persistentConfig",
-        "none"
-      ]
-    },
-    "CatalogSkillEntry": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "description"
-      ]
-    },
-    "CatalogSheet": {
-      "type": "object",
-      "properties": {
-        "node": {
-          "type": "string"
-        },
-        "agents": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CatalogAgent"
-          }
-        },
-        "executors": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CatalogExecutorEntry"
-          }
-        },
-        "tools": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "skills": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CatalogSkillEntry"
-          }
-        }
-      },
-      "required": [
-        "node",
-        "agents",
-        "executors",
-        "tools",
-        "skills"
-      ]
-    },
     "CatalogAgentsResponse": {
       "type": "object",
       "properties": {
@@ -1007,142 +842,6 @@
       },
       "required": [
         "agents"
-      ]
-    },
-    "OutcomeBucket": {
-      "type": "object",
-      "properties": {
-        "tasks": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "completed": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "failed": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "verified": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "refuted": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "escalated": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "diverged": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "divergenceRate": {
-          "type": "number",
-          "format": "double"
-        },
-        "totalCostUsd": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double"
-        },
-        "avgDurationMs": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "tasks",
-        "completed",
-        "failed",
-        "verified",
-        "refuted",
-        "escalated",
-        "diverged",
-        "divergenceRate"
-      ]
-    },
-    "OutcomesFilter": {
-      "type": "object",
-      "properties": {
-        "since": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
-        },
-        "until": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
-        },
-        "agentId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "origin": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "OutcomesResponse": {
-      "type": "object",
-      "properties": {
-        "filter": {
-          "$ref": "#/$defs/OutcomesFilter"
-        },
-        "totals": {
-          "$ref": "#/$defs/OutcomeBucket"
-        },
-        "byAgent": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/OutcomeBucket"
-          }
-        },
-        "byExecutor": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/OutcomeBucket"
-          }
-        },
-        "byDay": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/OutcomeBucket"
-          }
-        }
-      },
-      "required": [
-        "filter",
-        "totals",
-        "byAgent",
-        "byExecutor",
-        "byDay"
       ]
     },
     "MeshOverview": {
@@ -4869,6 +4568,167 @@
         "cmd"
       ]
     },
+    "SessionDeleted": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "session": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "conversations": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "messages": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "summaries": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "ok",
+        "session",
+        "conversations",
+        "messages",
+        "summaries"
+      ]
+    },
+    "SessionDeleteRequest": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionId"
+          }
+        }
+      },
+      "required": [
+        "sessions"
+      ]
+    },
+    "SessionDeleteError": {
+      "type": "string",
+      "enum": [
+        "session is live",
+        "not found",
+        "delete failed"
+      ]
+    },
+    "SessionDeleteRefused": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "error": {
+          "$ref": "#/$defs/SessionDeleteError"
+        }
+      },
+      "required": [
+        "session",
+        "ok",
+        "error"
+      ]
+    },
+    "SessionDeleteResult": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SessionDeleted"
+        },
+        {
+          "$ref": "#/$defs/SessionDeleteRefused"
+        }
+      ]
+    },
+    "SessionDeleteResults": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionDeleteResult"
+          }
+        }
+      },
+      "required": [
+        "results"
+      ]
+    },
+    "SessionTrashReason": {
+      "type": "string",
+      "enum": [
+        "empty",
+        "one-word-reply"
+      ]
+    },
+    "SessionTrashCandidate": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "harness": {
+          "$ref": "#/$defs/HarnessId"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reason": {
+          "$ref": "#/$defs/SessionTrashReason"
+        },
+        "userTurns": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reply": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session",
+        "harness",
+        "updatedAt",
+        "reason",
+        "userTurns"
+      ]
+    },
+    "SessionTrashList": {
+      "type": "object",
+      "properties": {
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionTrashCandidate"
+          }
+        }
+      },
+      "required": [
+        "candidates"
+      ]
+    },
     "TranscriptTurn": {
       "type": "object",
       "properties": {
@@ -5691,6 +5551,53 @@
         "contextSource"
       ]
     },
+    "SessionPreviewKind": {
+      "type": "string",
+      "enum": [
+        "running",
+        "asking",
+        "approval",
+        "said"
+      ]
+    },
+    "SessionPreview": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "kind": {
+          "$ref": "#/$defs/SessionPreviewKind"
+        },
+        "text": {
+          "type": "string"
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "sessionId",
+        "kind",
+        "text",
+        "at"
+      ]
+    },
+    "SessionPreviewList": {
+      "type": "object",
+      "properties": {
+        "previews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionPreview"
+          }
+        }
+      },
+      "required": [
+        "previews"
+      ]
+    },
     "HarnessTurnAccepted": {
       "type": "object",
       "properties": {
@@ -5993,6 +5900,19 @@
       },
       "required": [
         "title"
+      ]
+    },
+    "HarnessSessionForkRequest": {
+      "type": "object",
+      "properties": {
+        "prompts": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "prompts"
       ]
     },
     "HarnessToolOutput": {
@@ -7415,6 +7335,40 @@
             "string",
             "null"
           ]
+        },
+        "conversationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "channel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -7463,7 +7417,8 @@
         "conversation",
         "task",
         "leaf",
-        "extract-wiki"
+        "extract-wiki",
+        "user"
       ]
     },
     "WikiSourceSpan": {
@@ -7694,6 +7649,12 @@
         },
         "excerpt": {
           "type": "string"
+        },
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -7723,6 +7684,577 @@
       "required": [
         "topics",
         "total"
+      ]
+    },
+    "ProposalState": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected"
+      ]
+    },
+    "Proposer": {
+      "type": "string",
+      "enum": [
+        "categorizer",
+        "backfill"
+      ]
+    },
+    "TidyChange": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "merge"
+            },
+            "source": {
+              "type": "string"
+            },
+            "into": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "source",
+            "into"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "move"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "parent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "topic"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "rename"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "topic",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "close"
+            },
+            "topic": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "topic"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "delete"
+            },
+            "topic": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "topic"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "createTopic"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sessions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SessionId"
+              },
+              "default": []
+            },
+            "conversations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "kind",
+            "topic",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "fileInto"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "sessions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SessionId"
+              },
+              "default": []
+            },
+            "conversations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "kind",
+            "topic"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "mergePage"
+            },
+            "page": {
+              "type": "string"
+            },
+            "into": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "page",
+            "into"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "removePage"
+            },
+            "page": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "page"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "addType"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "parent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "topic",
+            "name"
+          ]
+        }
+      ]
+    },
+    "TidySample": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lastActive": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "TidyEvidence": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidySample"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "sessions"
+      ]
+    },
+    "TidyProposal": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "batchId": {
+          "type": "string"
+        },
+        "change": {
+          "$ref": "#/$defs/TidyChange"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/TidyEvidence"
+        },
+        "proposedBy": {
+          "$ref": "#/$defs/Proposer"
+        },
+        "proposedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "state": {
+          "$ref": "#/$defs/ProposalState"
+        },
+        "decidedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "required": [
+        "id",
+        "batchId",
+        "change",
+        "reason",
+        "evidence",
+        "proposedBy",
+        "proposedAt",
+        "state"
+      ]
+    },
+    "TidyBatch": {
+      "type": "object",
+      "properties": {
+        "batchId": {
+          "type": "string"
+        },
+        "proposedBy": {
+          "$ref": "#/$defs/Proposer"
+        },
+        "proposedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "proposals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidyProposal"
+          }
+        }
+      },
+      "required": [
+        "batchId",
+        "proposedBy",
+        "proposedAt",
+        "proposals"
+      ]
+    },
+    "TidyPending": {
+      "type": "object",
+      "properties": {
+        "batches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidyBatch"
+          }
+        }
+      },
+      "required": [
+        "batches"
+      ]
+    },
+    "TidyFailure": {
+      "type": "object",
+      "properties": {
+        "proposalId": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposalId",
+        "error"
+      ]
+    },
+    "TidyBatchDecision": {
+      "type": "object",
+      "properties": {
+        "decided": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidyProposal"
+          }
+        },
+        "failed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TidyFailure"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "decided"
+      ]
+    },
+    "FilingUpkeep": {
+      "type": "object",
+      "properties": {
+        "categorizer": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "you": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "uncategorized": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "leftOut": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "correctionsLastWeek": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "categorizer",
+        "you",
+        "uncategorized",
+        "leftOut",
+        "correctionsLastWeek"
+      ]
+    },
+    "EntityTypeCount": {
+      "type": "object",
+      "properties": {
+        "typeId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "entities": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "typeId",
+        "name",
+        "entities"
+      ]
+    },
+    "WikiUpkeep": {
+      "type": "object",
+      "properties": {
+        "topicPages": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "entityTypes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntityTypeCount"
+          }
+        },
+        "loosePages": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "topicPages",
+        "entityTypes",
+        "loosePages"
+      ]
+    },
+    "WorkerActivity": {
+      "type": "object",
+      "properties": {
+        "lastFinishedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "failing": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "failing"
+      ]
+    },
+    "WorkerUpkeep": {
+      "type": "object",
+      "properties": {
+        "embedder": {
+          "$ref": "#/$defs/WorkerActivity"
+        },
+        "summarizer": {
+          "$ref": "#/$defs/WorkerActivity"
+        },
+        "categorizer": {
+          "$ref": "#/$defs/WorkerActivity"
+        },
+        "wikiBuilder": {
+          "$ref": "#/$defs/WorkerActivity"
+        }
+      },
+      "required": [
+        "embedder",
+        "summarizer",
+        "categorizer",
+        "wikiBuilder"
+      ]
+    },
+    "MemoryUpkeep": {
+      "type": "object",
+      "properties": {
+        "filing": {
+          "$ref": "#/$defs/FilingUpkeep"
+        },
+        "wiki": {
+          "$ref": "#/$defs/WikiUpkeep"
+        },
+        "workers": {
+          "$ref": "#/$defs/WorkerUpkeep"
+        },
+        "pendingProposals": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "filing",
+        "wiki",
+        "workers",
+        "pendingProposals"
       ]
     },
     "TopicDirectory": {
@@ -7765,6 +8297,14 @@
         }
       ]
     },
+    "TopicKind": {
+      "type": "string",
+      "enum": [
+        "work",
+        "type",
+        "entity"
+      ]
+    },
     "PlacedBy": {
       "type": "string",
       "enum": [
@@ -7777,6 +8317,10 @@
       "properties": {
         "id": {
           "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/TopicKind",
+          "default": "work"
         },
         "slug": {
           "type": "string"
@@ -7812,6 +8356,13 @@
         },
         "updatedAt": {
           "type": "integer",
+          "format": "int64"
+        },
+        "closedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "int64"
         }
       },
@@ -7830,6 +8381,10 @@
         "id": {
           "type": "string"
         },
+        "kind": {
+          "$ref": "#/$defs/TopicKind",
+          "default": "work"
+        },
         "slug": {
           "type": "string"
         },
@@ -7864,6 +8419,13 @@
         },
         "updatedAt": {
           "type": "integer",
+          "format": "int64"
+        },
+        "closedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "int64"
         },
         "sessionCount": {
@@ -7906,6 +8468,10 @@
     "TopicCreateRequest": {
       "type": "object",
       "properties": {
+        "kind": {
+          "$ref": "#/$defs/TopicKind",
+          "default": "work"
+        },
         "name": {
           "type": "string"
         },
@@ -7937,6 +8503,24 @@
       "required": [
         "name"
       ]
+    },
+    "WikiPageEdit": {
+      "type": "object",
+      "properties": {
+        "currentState": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "article": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "TopicUpdate": {
       "type": "object",
@@ -8022,6 +8606,12 @@
             "string",
             "null"
           ]
+        },
+        "parentId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -8065,6 +8655,36 @@
         "topicId"
       ]
     },
+    "SessionHistoryMark": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "markedAt": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "sessionId",
+        "markedAt"
+      ]
+    },
+    "SessionHistoryList": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionHistoryMark"
+          }
+        }
+      },
+      "required": [
+        "sessions"
+      ]
+    },
     "TopicSession": {
       "type": "object",
       "properties": {
@@ -8081,12 +8701,40 @@
           "type": "integer",
           "format": "int64"
         },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "lastActive": {
           "type": [
             "integer",
             "null"
           ],
           "format": "int64"
+        },
+        "node": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parentSessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "taskId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -8104,11 +8752,173 @@
           "items": {
             "$ref": "#/$defs/TopicSession"
           }
+        },
+        "conversations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicConversation"
+          },
+          "default": []
         }
       },
       "required": [
         "sessions"
       ]
+    },
+    "TopicConversation": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string"
+        },
+        "topicId": {
+          "type": "string"
+        },
+        "by": {
+          "$ref": "#/$defs/PlacedBy"
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "channel": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lastActive": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "node": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "conversationId",
+        "topicId",
+        "by",
+        "at",
+        "channel"
+      ]
+    },
+    "TopicFiling": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicSession"
+          }
+        },
+        "conversations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicConversation"
+          }
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionHistoryMark"
+          }
+        }
+      },
+      "required": [
+        "sessions",
+        "conversations",
+        "history"
+      ]
+    },
+    "SessionSuggestion": {
+      "type": "object",
+      "properties": {
+        "sessionId": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "sessionId",
+        "name"
+      ]
+    },
+    "SessionSuggestionList": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionSuggestion"
+          }
+        }
+      },
+      "required": [
+        "sessions"
+      ]
+    },
+    "ConversationPlacement": {
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string"
+        },
+        "topicId": {
+          "type": "string"
+        },
+        "by": {
+          "$ref": "#/$defs/PlacedBy"
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "conversationId",
+        "topicId",
+        "by",
+        "at"
+      ]
+    },
+    "ConversationPlacementReply": {
+      "type": "object",
+      "properties": {
+        "placement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConversationPlacement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
     },
     "TopicPage": {
       "type": "object",
@@ -8125,10 +8935,32 @@
               "type": "null"
             }
           ]
+        },
+        "mentions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopicMention"
+          },
+          "default": []
         }
       },
       "required": [
         "topic"
+      ]
+    },
+    "TopicMention": {
+      "type": "object",
+      "properties": {
+        "topicId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "topicId",
+        "name"
       ]
     },
     "DecisionStatus": {
@@ -8559,6 +9391,36 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "approval.wait"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "args": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "ts": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          "required": [
+            "type",
+            "tool"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "turn.end"
             },
             "ts": {
@@ -8868,6 +9730,36 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "approval.wait"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "args": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "ts": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          "required": [
+            "type",
+            "tool"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "turn.end"
             },
             "ts": {
@@ -8882,6 +9774,13 @@
             "type"
           ]
         }
+      ]
+    },
+    "ContextUsageSource": {
+      "type": "string",
+      "enum": [
+        "harness",
+        "last-call"
       ]
     },
     "LiveSessionSummary": {
@@ -9087,20 +9986,8 @@
       ]
     },
     "SessionBroadcast": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/snapshot"
-        },
-        {
-          "$ref": "#/$defs/session.removed"
-        },
-        {
-          "$ref": "#/$defs/hub.state"
-        },
-        {
-          "$ref": "#/$defs/AgentEvent"
-        }
-      ]
+      "type": "object",
+      "additionalProperties": true
     },
     "CaptureBatchRequest": {
       "type": "object",
@@ -10955,6 +11842,37 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "tool-update"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "toolCallId": {
+              "type": "string"
+            },
+            "input": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "turnId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "sessionId",
+            "toolCallId",
+            "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "tool-result"
             },
             "sessionId": {
@@ -11148,11 +12066,53 @@
                   "type": "null"
                 }
               ]
+            },
+            "modelMs": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             }
           },
           "required": [
             "type",
             "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "context"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "used": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "window": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "source": {
+              "$ref": "#/$defs/ContextUsageSource"
+            }
+          },
+          "required": [
+            "type",
+            "sessionId",
+            "used",
+            "source"
           ]
         },
         {
@@ -11325,6 +12285,53 @@
           "$ref": "#/$defs/HarnessStatusFrame",
           "required": [
             "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "driver"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "driver": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SessionDriver"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "busy": {
+              "type": "boolean"
+            },
+            "queued": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "approval": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TerminalApproval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "sessionId",
+            "busy",
+            "queued"
           ]
         },
         {
@@ -11654,6 +12661,31 @@
         "sessionId",
         "status",
         "since"
+      ]
+    },
+    "SessionDriver": {
+      "type": "string",
+      "enum": [
+        "chat",
+        "terminal"
+      ]
+    },
+    "TerminalApproval": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "type": "string"
+        },
+        "input": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "tool"
       ]
     },
     "PromptKind": {
@@ -12131,14 +13163,6 @@
         "sessions"
       ]
     },
-    "TaskExecutorKind": {
-      "type": "string",
-      "enum": [
-        "chat-loop",
-        "harness-session",
-        "mesh"
-      ]
-    },
     "task.done": {
       "type": "object",
       "properties": {
@@ -12147,6 +13171,18 @@
         },
         "status": {
           "$ref": "#/$defs/TaskStatus"
+        },
+        "parentSessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "childSessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "ts": {
           "type": "integer",
@@ -12167,38 +13203,6 @@
         "killed",
         "timeout",
         "budget-exceeded"
-      ]
-    },
-    "ContextRefKind": {
-      "type": "string",
-      "enum": [
-        "conversation",
-        "message",
-        "task",
-        "file",
-        "url",
-        "wiki"
-      ]
-    },
-    "ContextRef": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "$ref": "#/$defs/ContextRefKind"
-        },
-        "ref": {
-          "type": "string"
-        },
-        "note": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "ref"
       ]
     },
     "CriterionKind": {
@@ -12236,21 +13240,6 @@
     "TaskBudget": {
       "type": "object",
       "properties": {
-        "maxUsd": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double"
-        },
-        "maxTokens": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        },
         "maxTurns": {
           "type": [
             "integer",
@@ -12296,13 +13285,6 @@
           "format": "uint64",
           "minimum": 0
         },
-        "costUsd": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double"
-        },
         "turns": {
           "type": "integer",
           "format": "uint32",
@@ -12327,260 +13309,6 @@
         "high"
       ]
     },
-    "TaskIsolation": {
-      "type": "string",
-      "enum": [
-        "inherit",
-        "isolated"
-      ]
-    },
-    "TaskPromptMode": {
-      "type": "string",
-      "enum": [
-        "task",
-        "heartbeat"
-      ]
-    },
-    "TaskSpec": {
-      "type": "object",
-      "properties": {
-        "delegation": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "meshFrom": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "taskId": {
-          "type": "string"
-        },
-        "agentId": {
-          "type": "string"
-        },
-        "goal": {
-          "type": "string"
-        },
-        "resolvedContext": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ContextRef"
-          }
-        },
-        "acceptanceCriteria": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/AcceptanceCriterion"
-          }
-        },
-        "budget": {
-          "$ref": "#/$defs/TaskBudget",
-          "default": {}
-        },
-        "tools": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "workingDir": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "model": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "effort": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Effort"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "systemPromptAppend": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "isolation": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskIsolation"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "promptMode": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskPromptMode"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "excludeTools": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "resumeMessage": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "session": {
-          "type": "string"
-        },
-        "permissionDecisions": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/TaskPermissionDecision"
-          }
-        },
-        "presetId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "presetName": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "auditOnly": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "taskId",
-        "agentId",
-        "goal",
-        "resolvedContext",
-        "acceptanceCriteria",
-        "session"
-      ],
-      "additionalProperties": true
-    },
-    "TaskPermissionDecision": {
-      "type": "object",
-      "properties": {
-        "requestId": {
-          "type": "string"
-        },
-        "tool": {
-          "type": "string"
-        },
-        "decision": {
-          "$ref": "#/$defs/TaskPermissionOutcome"
-        },
-        "at": {
-          "type": "integer",
-          "format": "int64"
-        },
-        "message": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "requestId",
-        "tool",
-        "decision",
-        "at"
-      ]
-    },
-    "TaskPermissionOutcome": {
-      "type": "string",
-      "enum": [
-        "allow",
-        "deny",
-        "timeout"
-      ]
-    },
-    "ArtifactKind": {
-      "type": "string",
-      "enum": [
-        "file",
-        "url",
-        "commit",
-        "message"
-      ]
-    },
-    "TaskArtifact": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "$ref": "#/$defs/ArtifactKind"
-        },
-        "ref": {
-          "type": "string"
-        },
-        "note": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "ref"
-      ]
-    },
-    "CriterionReport": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "met": {
-          "type": "boolean"
-        },
-        "evidence": {
-          "type": "string",
-          "default": ""
-        }
-      },
-      "required": [
-        "id",
-        "met"
-      ]
-    },
     "TaskResult": {
       "type": "object",
       "properties": {
@@ -12589,27 +13317,6 @@
         },
         "summary": {
           "type": "string"
-        },
-        "output": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "artifacts": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/TaskArtifact"
-          }
-        },
-        "criteriaSelfReport": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/CriterionReport"
-          }
         },
         "usage": {
           "$ref": "#/$defs/TaskUsage"
@@ -12624,370 +13331,7 @@
       "required": [
         "verdict",
         "summary",
-        "artifacts",
         "usage"
-      ]
-    },
-    "EvalVerdict": {
-      "type": "string",
-      "enum": [
-        "verified",
-        "refuted",
-        "escalated"
-      ]
-    },
-    "EvalOutcome": {
-      "type": "object",
-      "properties": {
-        "verdict": {
-          "$ref": "#/$defs/EvalVerdict"
-        },
-        "attempts": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "verifierTaskIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "criteriaReport": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/CriterionReport"
-          }
-        },
-        "diverged": {
-          "type": "boolean"
-        },
-        "escalatedAt": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "verdict",
-        "attempts",
-        "verifierTaskIds",
-        "criteriaReport",
-        "diverged"
-      ]
-    },
-    "ExecutorTurnCapabilities": {
-      "type": "object",
-      "properties": {
-        "steerable": {
-          "type": "boolean"
-        },
-        "multiTurn": {
-          "type": "boolean"
-        },
-        "structuredStream": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "steerable",
-        "multiTurn",
-        "structuredStream"
-      ]
-    },
-    "ExecutorResultCapabilities": {
-      "type": "object",
-      "properties": {
-        "usageInResult": {
-          "type": "boolean"
-        },
-        "sessionIdCapture": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "usageInResult",
-        "sessionIdCapture"
-      ]
-    },
-    "ExecutorInteractionCapabilities": {
-      "type": "object",
-      "properties": {
-        "slashCommands": {
-          "type": "boolean"
-        },
-        "effortSelection": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "slashCommands",
-        "effortSelection"
-      ]
-    },
-    "TaskApprovalRequest": {
-      "type": "object",
-      "properties": {
-        "taskId": {
-          "type": "string"
-        },
-        "requestId": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "input": {
-          "type": "object",
-          "additionalProperties": true
-        },
-        "toolCallId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "taskId",
-        "requestId",
-        "name",
-        "input"
-      ]
-    },
-    "TaskEvent": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "den"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "event": {
-              "$ref": "#/$defs/AgentEvent"
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "event"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "turn.start"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "turn": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "turn"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "turn.end"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "turn": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "usage": {
-              "$ref": "#/$defs/TaskUsage"
-            },
-            "harnessSessionId": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/SessionId"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "turn",
-            "usage"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "session.spawned"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "nativeSessionId": {
-              "type": "string"
-            },
-            "model": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "nativeSessionId"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "cost"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "deltaUsd": {
-              "type": "number",
-              "format": "double"
-            },
-            "totalUsd": {
-              "type": "number",
-              "format": "double"
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "deltaUsd",
-            "totalUsd"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "log"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "level": {
-              "$ref": "#/$defs/LogLevel"
-            },
-            "message": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "level",
-            "message"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "approval-request"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "taskId": {
-              "type": "string"
-            },
-            "requestId": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
-            "input": {
-              "type": "object",
-              "additionalProperties": true
-            },
-            "toolCallId": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "taskId",
-            "requestId",
-            "name",
-            "input"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "approval-resolved"
-            },
-            "ts": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "taskId": {
-              "type": "string"
-            },
-            "requestId": {
-              "type": "string"
-            },
-            "decision": {
-              "$ref": "#/$defs/TaskPermissionOutcome"
-            }
-          },
-          "required": [
-            "type",
-            "ts",
-            "taskId",
-            "requestId",
-            "decision"
-          ]
-        }
       ]
     },
     "LogLevel": {
@@ -13008,32 +13352,39 @@
         "goal": {
           "type": "string"
         },
-        "contextRefs": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ContextRef"
-          }
-        },
         "acceptanceCriteria": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/AcceptanceCriterion"
           }
         },
-        "spec": {
-          "$ref": "#/$defs/TaskSpec"
+        "agentId": {
+          "type": "string"
         },
-        "executor": {
-          "$ref": "#/$defs/TaskExecutorKind"
+        "node": {
+          "type": "string"
         },
-        "executorTarget": {
+        "harness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HarnessId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model": {
           "type": [
             "string",
             "null"
           ]
         },
-        "agentId": {
-          "type": "string"
+        "effort": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "requestedBy": {
           "type": [
@@ -13041,8 +13392,11 @@
             "null"
           ]
         },
-        "origin": {
-          "type": "string"
+        "parentSessionId": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "parentTaskId": {
           "type": [
@@ -13050,18 +13404,13 @@
             "null"
           ]
         },
-        "chainDepth": {
+        "depth": {
           "type": "integer",
-          "format": "uint32",
-          "minimum": 0
+          "format": "uint8",
+          "minimum": 0,
+          "maximum": 255
         },
-        "nodeAffinity": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "claimedBy": {
+        "childSessionId": {
           "type": [
             "string",
             "null"
@@ -13083,22 +13432,6 @@
         "status": {
           "$ref": "#/$defs/TaskStatus"
         },
-        "attempt": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "maxAttempts": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "pendingMessage": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "error": {
           "type": [
             "string",
@@ -13115,51 +13448,11 @@
             }
           ]
         },
-        "conversationId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sessionKey": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "harnessSessionIds": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "eval": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/EvalOutcome"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "evalAttempt": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
         "createdAt": {
           "type": "integer",
           "format": "int64"
         },
         "startedAt": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "int64"
-        },
-        "lastHeartbeatAt": {
           "type": [
             "integer",
             "null"
@@ -13180,33 +13473,17 @@
           ],
           "format": "uint64",
           "minimum": 0
-        },
-        "pendingApprovals": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/TaskApprovalRequest"
-          }
         }
       },
       "required": [
         "id",
         "goal",
-        "contextRefs",
         "acceptanceCriteria",
-        "spec",
-        "executor",
         "agentId",
-        "origin",
-        "chainDepth",
+        "node",
+        "depth",
         "budget",
         "status",
-        "attempt",
-        "maxAttempts",
-        "harnessSessionIds",
-        "evalAttempt",
         "createdAt"
       ]
     },
@@ -13214,46 +13491,16 @@
       "type": "object",
       "properties": {
         "goal": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "agentId": {
-          "type": "string"
-        },
-        "executor": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskExecutorKind"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "executorTarget": {
           "type": [
             "string",
             "null"
           ]
-        },
-        "requestedBy": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "parentTaskId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "chainDepth": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
         },
         "nodeAffinity": {
           "type": [
@@ -13261,15 +13508,14 @@
             "null"
           ]
         },
-        "spec": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskSpec"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "acceptanceCriteria": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/AcceptanceCriterion"
+          }
         },
         "budget": {
           "anyOf": [
@@ -13281,29 +13527,42 @@
             }
           ]
         },
-        "contextRefs": {
+        "parentSessionId": {
           "type": [
-            "array",
+            "string",
             "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/ContextRef"
-          }
+          ]
         },
-        "acceptanceCriteria": {
+        "model": {
           "type": [
-            "array",
+            "string",
             "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/AcceptanceCriterion"
-          }
+          ]
+        },
+        "effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThinkingLevel"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workingDir": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requestedBy": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": [
-        "goal",
-        "agentId"
-      ]
+      "additionalProperties": true
     },
     "TaskResponse": {
       "type": "object",
@@ -13330,17 +13589,6 @@
         "tasks"
       ]
     },
-    "TaskSteerAccepted": {
-      "type": "object",
-      "properties": {
-        "ok": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "ok"
-      ]
-    },
     "TaskKillResponse": {
       "type": "object",
       "properties": {
@@ -13360,28 +13608,6 @@
       },
       "required": [
         "ok"
-      ]
-    },
-    "TaskApprovalAccepted": {
-      "type": "object",
-      "properties": {
-        "ok": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "ok"
-      ]
-    },
-    "TaskApprovalWaitResponse": {
-      "type": "object",
-      "properties": {
-        "approval": {
-          "$ref": "#/$defs/TaskApprovalRequest"
-        }
-      },
-      "required": [
-        "approval"
       ]
     },
     "TaskWaitTimeoutResponse": {
@@ -13404,114 +13630,6 @@
       "required": [
         "error"
       ]
-    },
-    "TaskOverrides": {
-      "type": "object",
-      "properties": {
-        "delegation": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "meshFrom": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "presetId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "presetName": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "permissionDecisions": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/$defs/TaskPermissionDecision"
-          }
-        },
-        "auditOnly": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "workingDir": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "model": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "effort": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Effort"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "systemPromptAppend": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "isolation": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskIsolation"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "promptMode": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TaskPromptMode"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "excludeTools": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
-        },
-        "resumeMessage": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": true
     },
     "MemorySearchResult": {
       "type": "object",
@@ -13572,6 +13690,3775 @@
         "content",
         "relevanceScore",
         "createdAt"
+      ]
+    },
+    "PluginId": {
+      "type": "string",
+      "pattern": "^[a-z](-?[a-z0-9])+$",
+      "maxLength": 24
+    },
+    "ToolName": {
+      "type": "string",
+      "pattern": "^[a-z](_?[a-z0-9])*$",
+      "maxLength": 24
+    },
+    "RouteName": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "maxLength": 64
+    },
+    "PluginManifest": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manifest": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "id": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run": {
+          "$ref": "#/$defs/PluginRun"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Permission"
+          }
+        },
+        "settings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewField"
+          }
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginTool"
+          }
+        },
+        "contributes": {
+          "$ref": "#/$defs/PluginContributions",
+          "default": {}
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginJob"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginEventKind"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "manifest",
+        "id",
+        "name",
+        "version",
+        "description",
+        "run"
+      ]
+    },
+    "PluginRun": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "readyTimeoutMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ]
+    },
+    "Permission": {
+      "type": "string",
+      "enum": [
+        "memory.read",
+        "memory.write",
+        "sessions.read",
+        "sessions.control",
+        "topics.read",
+        "topics.write",
+        "tasks.read",
+        "tasks.delegate",
+        "agents.read",
+        "notifications.send",
+        "host.files.read",
+        "host.files.write",
+        "host.network",
+        "host.exec"
+      ]
+    },
+    "ViewField": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "input": {
+          "$ref": "#/$defs/ViewInput"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "help": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "placeholder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "label",
+        "input"
+      ]
+    },
+    "ViewInput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "text"
+            },
+            "multiline": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "secret"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "number"
+            },
+            "min": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "max": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "step": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "toggle"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "select"
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewOption"
+              }
+            },
+            "multiple": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "options"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            },
+            "multiple": {
+              "type": "boolean"
+            },
+            "accept": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "ViewOption": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "label"
+      ]
+    },
+    "ViewValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewFile"
+          }
+        }
+      ]
+    },
+    "ViewFile": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "mimeType": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "mimeType",
+        "data"
+      ]
+    },
+    "PluginTool": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/ToolName"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "inputSchema": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "hints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginToolHint"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description",
+        "inputSchema"
+      ]
+    },
+    "PluginToolHint": {
+      "type": "string",
+      "enum": [
+        "readOnly",
+        "destructive",
+        "idempotent",
+        "openWorld"
+      ]
+    },
+    "PluginContributions": {
+      "type": "object",
+      "properties": {
+        "pages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginPage"
+          }
+        },
+        "topicCards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginTopicCard"
+          }
+        },
+        "sessionActions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginSessionAction"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "PluginPage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "title": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "view": {
+          "$ref": "#/$defs/RouteName"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "view"
+      ]
+    },
+    "PluginTopicCard": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "title": {
+          "type": "string"
+        },
+        "view": {
+          "$ref": "#/$defs/RouteName"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "view"
+      ]
+    },
+    "PluginSessionAction": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "title": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "action": {
+          "$ref": "#/$defs/ViewAction"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "action"
+      ]
+    },
+    "ViewAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "call"
+            },
+            "action": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "params": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "action"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "navigate"
+            },
+            "view": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "params": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "replace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "view"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "dialog"
+            },
+            "view": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "params": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "view"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "back"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "refresh"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "toast"
+            },
+            "text": {
+              "type": "string"
+            },
+            "tone": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewTone"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "copy"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "openSession"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "openTopic"
+            },
+            "topicId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "topicId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "openUrl"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "url"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "download"
+            },
+            "path": {
+              "type": "string"
+            },
+            "filename": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "path"
+          ]
+        }
+      ]
+    },
+    "ViewTone": {
+      "type": "string",
+      "enum": [
+        "neutral",
+        "info",
+        "success",
+        "warning",
+        "danger"
+      ]
+    },
+    "PluginJob": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "title": {
+          "type": "string"
+        },
+        "schedule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeoutMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title"
+      ]
+    },
+    "PluginEventKind": {
+      "type": "string",
+      "enum": [
+        "session.started",
+        "session.idle",
+        "session.ended",
+        "session.placed",
+        "summary.written",
+        "task.done"
+      ]
+    },
+    "View": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "toolbar": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewButton"
+          }
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewBlock"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "blocks"
+      ]
+    },
+    "ViewButton": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "style": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewButtonStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action": {
+          "$ref": "#/$defs/ViewAction"
+        },
+        "confirm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewConfirm"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disabled": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "action"
+      ]
+    },
+    "ViewButtonStyle": {
+      "type": "string",
+      "enum": [
+        "primary",
+        "secondary",
+        "danger"
+      ]
+    },
+    "ViewConfirm": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "confirmLabel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "text"
+      ]
+    },
+    "ViewBlock": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "section"
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "subtitle": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "actions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewButton"
+              }
+            },
+            "blocks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewBlock"
+              }
+            },
+            "collapsed": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "blocks"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "split"
+            },
+            "primary": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewBlock"
+              }
+            },
+            "secondary": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewBlock"
+              }
+            },
+            "ratio": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "primary",
+            "secondary"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tabs"
+            },
+            "tabs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewTab"
+              }
+            },
+            "selected": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RouteName"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "tabs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "text"
+            },
+            "text": {
+              "type": "string"
+            },
+            "tone": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewTone"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "monospace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "markdown"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "code"
+            },
+            "text": {
+              "type": "string"
+            },
+            "language": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "follow": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "image"
+            },
+            "path": {
+              "type": "string"
+            },
+            "alt": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "path",
+            "alt"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "properties"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewProperty"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "progress"
+            },
+            "value": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "notice"
+            },
+            "tone": {
+              "$ref": "#/$defs/ViewTone"
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "actions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewButton"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "tone",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "list"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewListItem"
+              }
+            },
+            "empty": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewEmpty"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "table"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewColumn"
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewRow"
+              }
+            },
+            "empty": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewEmpty"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "columns",
+            "rows"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "breadcrumbs"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewCrumb"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "actions"
+            },
+            "buttons": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewButton"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "buttons"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "form"
+            },
+            "id": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewField"
+              }
+            },
+            "buttons": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewButton"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "fields",
+            "buttons"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "canvas"
+            },
+            "id": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "scene": {
+              "$ref": "#/$defs/CanvasScene"
+            },
+            "height": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "readOnly": {
+              "type": "boolean"
+            },
+            "menu": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasMenuItem"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "scene"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "webPanel"
+            },
+            "id": {
+              "$ref": "#/$defs/RouteName"
+            },
+            "entry": {
+              "type": "string"
+            },
+            "height": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "params": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "entry"
+          ]
+        }
+      ]
+    },
+    "ViewTab": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "title": {
+          "type": "string"
+        },
+        "badge": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewBlock"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "blocks"
+      ]
+    },
+    "ViewProperty": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/ViewInline"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "value"
+      ]
+    },
+    "ViewInline": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "text"
+            },
+            "text": {
+              "type": "string"
+            },
+            "tone": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewTone"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "icon": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "monospace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "badge"
+            },
+            "text": {
+              "type": "string"
+            },
+            "tone": {
+              "$ref": "#/$defs/ViewTone"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text",
+            "tone"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "time"
+            },
+            "at": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "style": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewTimeStyle"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "at"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "duration"
+            },
+            "ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "ms"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "bytes"
+            },
+            "value": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ]
+        }
+      ]
+    },
+    "ViewTimeStyle": {
+      "type": "string",
+      "enum": [
+        "relative",
+        "absolute"
+      ]
+    },
+    "ViewListItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "trailing": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewInline"
+          }
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "menu": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewButton"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title"
+      ]
+    },
+    "ViewEmpty": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "button": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewButton"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "ViewColumn": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "align": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAlign"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sortable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "ViewAlign": {
+      "type": "string",
+      "enum": [
+        "start",
+        "center",
+        "end"
+      ]
+    },
+    "ViewRow": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewInline"
+          }
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "menu": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewButton"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "cells"
+      ]
+    },
+    "ViewCrumb": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ]
+    },
+    "CanvasScene": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CanvasItem"
+          }
+        },
+        "grid": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanvasGrid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "viewport": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanvasViewport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ]
+    },
+    "CanvasItem": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "node"
+            },
+            "id": {
+              "type": "string"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "width": {
+              "type": "number",
+              "format": "double"
+            },
+            "height": {
+              "type": "number",
+              "format": "double"
+            },
+            "shapes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasShape"
+              }
+            },
+            "anchors": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasAnchor"
+              }
+            },
+            "tooltip": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "menu": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasMenuItem"
+              }
+            },
+            "locked": {
+              "type": "boolean"
+            },
+            "decorative": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "x",
+            "y",
+            "width",
+            "height",
+            "shapes"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "connector"
+            },
+            "id": {
+              "type": "string"
+            },
+            "from": {
+              "$ref": "#/$defs/CanvasEnd"
+            },
+            "to": {
+              "$ref": "#/$defs/CanvasEnd"
+            },
+            "route": {
+              "$ref": "#/$defs/CanvasRoute"
+            },
+            "stroke": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "strokeWidth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "dashed": {
+              "type": "boolean"
+            },
+            "arrow": {
+              "$ref": "#/$defs/CanvasArrow"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tooltip": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "menu": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasMenuItem"
+              }
+            },
+            "decorative": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "from",
+            "to",
+            "route",
+            "arrow"
+          ]
+        }
+      ]
+    },
+    "CanvasShape": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "rect"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "width": {
+              "type": "number",
+              "format": "double"
+            },
+            "height": {
+              "type": "number",
+              "format": "double"
+            },
+            "radius": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "fill": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stroke": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "strokeWidth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "x",
+            "y",
+            "width",
+            "height"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ellipse"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "width": {
+              "type": "number",
+              "format": "double"
+            },
+            "height": {
+              "type": "number",
+              "format": "double"
+            },
+            "fill": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stroke": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "strokeWidth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "x",
+            "y",
+            "width",
+            "height"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "text"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "text": {
+              "type": "string"
+            },
+            "size": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "weight": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CanvasWeight"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "color": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "align": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ViewAlign"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxWidth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "monospace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "x",
+            "y",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "path"
+            },
+            "d": {
+              "type": "string"
+            },
+            "fill": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "stroke": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "strokeWidth": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "dashed": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "d"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "icon"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            },
+            "name": {
+              "type": "string"
+            },
+            "size": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "color": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColorRole"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "x",
+            "y",
+            "name"
+          ]
+        }
+      ]
+    },
+    "ColorRole": {
+      "type": "string",
+      "enum": [
+        "surface",
+        "surfaceContainer",
+        "surfaceContainerHigh",
+        "primary",
+        "primaryContainer",
+        "onPrimary",
+        "onPrimaryContainer",
+        "secondaryContainer",
+        "onSurface",
+        "onSurfaceVariant",
+        "outline",
+        "outlineVariant",
+        "info",
+        "success",
+        "warning",
+        "danger",
+        "category1",
+        "category2",
+        "category3",
+        "category4",
+        "category5",
+        "category6"
+      ]
+    },
+    "CanvasWeight": {
+      "type": "string",
+      "enum": [
+        "regular",
+        "medium",
+        "bold"
+      ]
+    },
+    "CanvasAnchor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "side": {
+          "$ref": "#/$defs/CanvasSide"
+        },
+        "direction": {
+          "$ref": "#/$defs/CanvasDirection"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "x",
+        "y",
+        "side",
+        "direction"
+      ]
+    },
+    "CanvasSide": {
+      "type": "string",
+      "enum": [
+        "top",
+        "right",
+        "bottom",
+        "left"
+      ]
+    },
+    "CanvasDirection": {
+      "type": "string",
+      "enum": [
+        "in",
+        "out",
+        "both"
+      ]
+    },
+    "CanvasMenuItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "danger": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label"
+      ]
+    },
+    "CanvasEnd": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "anchor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "node"
+      ]
+    },
+    "CanvasRoute": {
+      "type": "string",
+      "enum": [
+        "straight",
+        "curved",
+        "orthogonal"
+      ]
+    },
+    "CanvasArrow": {
+      "type": "string",
+      "enum": [
+        "none",
+        "end",
+        "start",
+        "both"
+      ]
+    },
+    "CanvasGrid": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "type": "number",
+          "format": "double"
+        },
+        "snap": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "size"
+      ]
+    },
+    "CanvasViewport": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        },
+        "zoom": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "zoom"
+      ]
+    },
+    "ViewRequest": {
+      "type": "object",
+      "properties": {
+        "params": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "context": {
+          "$ref": "#/$defs/ViewContext",
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "ViewContext": {
+      "type": "object",
+      "properties": {
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ViewActionRequest": {
+      "type": "object",
+      "properties": {
+        "params": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ViewValue"
+          }
+        },
+        "context": {
+          "$ref": "#/$defs/ViewContext",
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "ViewActionResult": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewAction"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "ViewActionRefusal": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message"
+      ]
+    },
+    "CanvasEventRequest": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/CanvasEvent"
+        },
+        "params": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "context": {
+          "$ref": "#/$defs/ViewContext",
+          "default": {}
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "event"
+      ]
+    },
+    "CanvasEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "selected"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "moved"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CanvasPosition"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "connected"
+            },
+            "from": {
+              "$ref": "#/$defs/CanvasEnd"
+            },
+            "to": {
+              "$ref": "#/$defs/CanvasEnd"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "from",
+            "to"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "deleted"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "activated"
+            },
+            "item": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "item"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "menu"
+            },
+            "item": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "choice": {
+              "type": "string"
+            },
+            "x": {
+              "type": "number",
+              "format": "double"
+            },
+            "y": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "choice",
+            "x",
+            "y"
+          ]
+        }
+      ]
+    },
+    "CanvasPosition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number",
+          "format": "double"
+        },
+        "y": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "x",
+        "y"
+      ]
+    },
+    "CanvasResponse": {
+      "type": "object",
+      "properties": {
+        "ops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CanvasOp"
+          },
+          "default": []
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewAction"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "CanvasOp": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "upsert"
+            },
+            "item": {
+              "$ref": "#/$defs/CanvasItem"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "item"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "remove"
+            },
+            "ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "ids"
+          ]
+        }
+      ]
+    },
+    "PanelTheme": {
+      "type": "object",
+      "properties": {
+        "scheme": {
+          "$ref": "#/$defs/PanelScheme"
+        },
+        "colors": {
+          "type": "object",
+          "properties": {
+            "category1": {
+              "type": "string"
+            },
+            "category2": {
+              "type": "string"
+            },
+            "category3": {
+              "type": "string"
+            },
+            "category4": {
+              "type": "string"
+            },
+            "category5": {
+              "type": "string"
+            },
+            "category6": {
+              "type": "string"
+            },
+            "danger": {
+              "type": "string"
+            },
+            "info": {
+              "type": "string"
+            },
+            "onPrimary": {
+              "type": "string"
+            },
+            "onPrimaryContainer": {
+              "type": "string"
+            },
+            "onSurface": {
+              "type": "string"
+            },
+            "onSurfaceVariant": {
+              "type": "string"
+            },
+            "outline": {
+              "type": "string"
+            },
+            "outlineVariant": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "string"
+            },
+            "primaryContainer": {
+              "type": "string"
+            },
+            "secondaryContainer": {
+              "type": "string"
+            },
+            "success": {
+              "type": "string"
+            },
+            "surface": {
+              "type": "string"
+            },
+            "surfaceContainer": {
+              "type": "string"
+            },
+            "surfaceContainerHigh": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "fontMono": {
+          "type": "string"
+        },
+        "fontSize": {
+          "type": "number",
+          "format": "double"
+        },
+        "radius": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "scheme",
+        "colors",
+        "fontFamily",
+        "fontMono",
+        "fontSize",
+        "radius"
+      ]
+    },
+    "PanelScheme": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark"
+      ]
+    },
+    "PanelHostMessage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "init"
+            },
+            "theme": {
+              "$ref": "#/$defs/PanelTheme"
+            },
+            "params": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "context": {
+              "$ref": "#/$defs/ViewContext"
+            },
+            "plugin": {
+              "$ref": "#/$defs/PluginId"
+            },
+            "node": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "theme",
+            "context",
+            "plugin",
+            "node"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "theme"
+            },
+            "theme": {
+              "$ref": "#/$defs/PanelTheme"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "theme"
+          ]
+        }
+      ]
+    },
+    "PanelMessage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ready"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "resize"
+            },
+            "height": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "height"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "action"
+            },
+            "action": {
+              "$ref": "#/$defs/ViewAction"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "action"
+          ]
+        }
+      ]
+    },
+    "PluginList": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginRecord"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "plugins"
+      ]
+    },
+    "PluginRecord": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "node": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "manifest": {
+          "$ref": "#/$defs/PluginManifest"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "state": {
+          "$ref": "#/$defs/PluginState"
+        },
+        "granted": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Permission"
+          }
+        },
+        "pending": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Permission"
+          }
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lastExit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginExit"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "restarts": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "startedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "installedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginJobStatus"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "node",
+        "path",
+        "manifest",
+        "enabled",
+        "state",
+        "granted",
+        "pending",
+        "restarts",
+        "installedAt",
+        "jobs"
+      ]
+    },
+    "PluginState": {
+      "type": "string",
+      "enum": [
+        "disabled",
+        "awaitingApproval",
+        "starting",
+        "running",
+        "backoff",
+        "invalid"
+      ]
+    },
+    "PluginExit": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "code": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "signal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "at"
+      ]
+    },
+    "PluginJobStatus": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RouteName"
+        },
+        "lastRun": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginJobRun"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    },
+    "PluginJobRun": {
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/PluginJobTrigger"
+        },
+        "startedAt": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "finishedAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginJobOutcome"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "trigger",
+        "startedAt"
+      ]
+    },
+    "PluginJobTrigger": {
+      "type": "string",
+      "enum": [
+        "schedule",
+        "manual"
+      ]
+    },
+    "PluginJobOutcome": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed"
+      ]
+    },
+    "PluginInstallRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "PluginEnableRequest": {
+      "type": "object",
+      "properties": {
+        "approve": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Permission"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "PluginLogs": {
+      "type": "object",
+      "properties": {
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginLogLine"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "lines"
+      ]
+    },
+    "PluginLogLine": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "stream": {
+          "$ref": "#/$defs/PluginLogStream"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "at",
+        "stream",
+        "text"
+      ]
+    },
+    "PluginLogStream": {
+      "type": "string",
+      "enum": [
+        "stdout",
+        "stderr",
+        "host"
+      ]
+    },
+    "PluginSettings": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ViewValue"
+          }
+        },
+        "secretsSet": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "values"
+      ]
+    },
+    "PluginSettingsUpdate": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ViewValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "values"
+      ]
+    },
+    "plugin.changed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "plugin": {
+          "$ref": "#/$defs/PluginId"
+        }
+      },
+      "required": [
+        "v",
+        "plugin"
+      ]
+    },
+    "plugin.views": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "plugin": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RouteName"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "plugin",
+        "views"
+      ]
+    },
+    "PluginToolList": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PluginToolEntry"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "tools"
+      ]
+    },
+    "PluginToolEntry": {
+      "type": "object",
+      "properties": {
+        "plugin": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "tool": {
+          "$ref": "#/$defs/PluginTool"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "plugin",
+        "tool"
+      ]
+    },
+    "PluginEventDelivery": {
+      "type": "object",
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "at": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "missed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "event": {
+          "$ref": "#/$defs/PluginEvent"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "seq",
+        "at",
+        "missed",
+        "event"
+      ]
+    },
+    "PluginEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "session.started"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "topicId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "session.idle"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "session.ended"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "session.placed"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "topicId": {
+              "type": "string"
+            },
+            "by": {
+              "$ref": "#/$defs/PlacedBy"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sessionId",
+            "topicId",
+            "by"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "summary.written"
+            },
+            "summaryId": {
+              "type": "string"
+            },
+            "sessionId": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SessionId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "$ref": "#/$defs/SummaryKind"
+            },
+            "level": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "summaryId",
+            "kind",
+            "level"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "task.done"
+            },
+            "taskId": {
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/TaskStatus"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "taskId",
+            "status"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "settings.changed"
+            },
+            "values": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/ViewValue"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "values"
+          ]
+        }
+      ]
+    },
+    "PluginJobRequest": {
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/PluginJobTrigger"
+        },
+        "scheduledAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "trigger"
+      ]
+    },
+    "PluginJobResult": {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "$ref": "#/$defs/PluginJobOutcome"
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "outcome"
+      ]
+    },
+    "PluginToolCall": {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "arguments"
+      ]
+    },
+    "PluginToolResult": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "isError": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ]
+    },
+    "PluginSelf": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "node": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Permission"
+          }
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ViewValue"
+          }
+        },
+        "dataDir": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "node",
+        "version",
+        "permissions",
+        "settings",
+        "dataDir"
+      ]
+    },
+    "PluginViewsChanged": {
+      "type": "object",
+      "properties": {
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RouteName"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "views"
+      ]
+    },
+    "PluginNotify": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewTone"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ]
+    },
+    "plugin.notification": {
+      "type": "object",
+      "properties": {
+        "plugin": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "node": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewTone"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewAction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ts": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "required": [
+        "plugin",
+        "node",
+        "title",
+        "ts"
       ]
     }
   }

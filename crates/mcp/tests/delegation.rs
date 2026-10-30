@@ -7,6 +7,7 @@ use kernel::tasks::DelegateRequest;
 use kernel::tasks::Delegation;
 use kernel::tasks::DelegationError;
 use kernel::tasks::PresetAgent;
+use kernel::tasks::TaskStatus;
 use mcp::Server;
 use mcp::Surface;
 use rmcp::ServiceExt;
@@ -21,8 +22,6 @@ use tokio::sync::Mutex;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
-use wire::harness::HarnessId;
-use wire::task::TaskStatus;
 
 #[derive(Debug)]
 struct Fake {
@@ -63,7 +62,7 @@ fn directory() -> AgentDirectory {
             id: "preset-id".to_owned(),
             name: "worker".to_owned(),
             node: None,
-            harness: Some(HarnessId::Codex),
+            harness: Some(kernel::tasks::Harness::Codex),
             directory: None,
             local: true,
         }],
@@ -75,8 +74,11 @@ fn outcome() -> DelegateOutcome {
     DelegateOutcome {
         id: Uuid::nil(),
         status: TaskStatus::Completed,
-        result: None,
+        summary: None,
         error: Some("kept".to_owned()),
+        child: Some("codex:child".to_owned()),
+        node: "a".to_owned(),
+        tokens: None,
         timed_out: false,
     }
 }
@@ -148,22 +150,27 @@ async fn delegate_task_joins_context_and_applies_the_default_timeout() {
     let result = call(
         &server,
         "delegate_task",
-        r#"{"to_agent":"worker","task":"ship it","context":["one",""]}"#,
+        r#"{"to_agent":"worker","task":"ship it","context":["one",""],"criteria":["tested"]}"#,
     )
     .await;
     assert_eq!(result.is_error, None);
     let rendered = text(&result);
     assert!(
-        rendered.starts_with("[no response from remote agent]\n\n---\n_Delegation [completed]: "),
+        rendered.starts_with("[no response from the delegate]\n\n---\n_Delegation [completed]: "),
         "{rendered}"
     );
-    assert!(rendered.ends_with("ms_"), "{rendered}");
+    assert!(
+        rendered.ends_with(&format!(
+            "task {} · session codex:child · node a",
+            Uuid::nil()
+        )),
+        "{rendered}"
+    );
     let request = port.requests.lock().await.first().expect("request").clone();
     assert_eq!(request.target, "worker");
-    assert_eq!(request.requested_by.as_deref(), Some("mcp-sidecar"));
     assert_eq!(request.prompt, "ship it\none\n");
+    assert_eq!(request.criteria, vec!["tested".to_owned()]);
     assert_eq!(request.model, None);
-    assert_eq!(request.node, None);
     assert_eq!(request.timeout, Duration::from_mins(20));
 }
 

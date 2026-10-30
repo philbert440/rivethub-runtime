@@ -285,7 +285,8 @@ gate exactly as it fails CI, and `cargo sqlx prepare --workspace --check` runs w
 Anti-pattern: the same enum defined in several modules (`Role`, `CaptureRole`, `stream::Role`). Pattern: one definition,
 imported where needed; a wire payload that genuinely differs gets a type that differs. Check: dylint `duptype` (same
 variant set and the same final name word, e.g. `Role`/`CaptureRole`, across the crate and its dependencies — renaming
-must not hide it).
+must not hide it). A kernel enum that mirrors a `wire` contract enum is the one sanctioned twin: it carries an
+expectation whose reason cites `KERNELWIRE`.
 
 ## DUPFIXTURE
 Anti-pattern: the same recording vendored by more than one crate (`capture/writer/*` under `crates/wire/tests/golden/`
@@ -397,6 +398,16 @@ The third-party SQLx vector codec pgvector is an additional sqlx wrapper, restri
 services cannot bypass the database ban through it.
 The PORTS metadata check rejects normal and build dependencies on testkit, including renamed and target-specific edges.
 
+## KERNELWIRE
+Anti-pattern: a kernel type, port or rule that imports `wire`: a contract DTO in a port signature, a domain enum defined
+in `wire::gateway` and re-exported by the kernel, a kernel function that builds a response body. The published contract
+then dictates the domain, and a contract change ripples through every adapter. Pattern: the kernel owns its domain types
+(topic kinds, Tidy proposals, plug-in manifests, wiki pages and patches); the gateway's routes and the adapters translate
+between them and `wire` at the edge. A kernel enum that mirrors a contract enum carries a `duptype` expectation whose
+reason cites `KERNELWIRE`. Check: xtask `KERNELWIRE` parses every file under `crates/kernel/` with syn and counts its
+`use wire::…` items and `wire::…` paths. `xtask/baseline.toml` holds each file's count; a file over its count fails and
+lists its references, so the total of files and references can only fall.
+
 ## BASELINE
 Anti-pattern: a scan whose existing hits are waived wholesale (a free allow-list) or whose history is rewritten (line
 numbers that churn, entries re-added after a fix). Pattern: `xtask/baseline.toml` holds one entry per existing hit — check
@@ -406,7 +417,8 @@ code, so a fixed hit is removed in the same commit; an added entry or increased 
 (the baseline can only shrink). The commit that introduces the file sets the floor: the shrink leg only ever reports when
 it actually compared — if `origin/main` is absent, the merge-base cannot be resolved (a shallow or partial fetch), the
 merge-base carries no `xtask/baseline.toml`, the leg passes without a finding. A malformed comparable baseline fails the gate.
-From the first comparable commit on, every entry must trace back to the merge-base. Check: xtask `BASELINE`.
+From the first comparable commit on, every entry must trace back to the merge-base. A check the merge-base's
+`xtask/src/baseline.rs` does not name yet sets its own floor the same way, in the commit that introduces it. Check: xtask `BASELINE`.
 
 ## PATTERNS
 Anti-pattern: a rule with no written entry, or an entry whose enforcement drifted. Pattern: every lint and check name has

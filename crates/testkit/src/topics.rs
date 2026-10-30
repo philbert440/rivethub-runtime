@@ -7,6 +7,7 @@ use chrono::Utc;
 use kernel::topics::Alias;
 use kernel::topics::Change;
 use kernel::topics::DeliveredVia;
+use kernel::topics::HistoryMark;
 use kernel::topics::NewTopic;
 use kernel::topics::Placement;
 use kernel::topics::PlacementOutcome;
@@ -24,10 +25,12 @@ use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
+use kernel::topics::TopicKind;
+use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
 use kernel::topics::TopicStore;
-use wire::gateway::wiki::WikiSlug;
+use kernel::wiki::page::WikiSlug;
 use wire::session_id::SessionId;
 
 pub type Outcome = Result<(), Box<dyn std::error::Error>>;
@@ -72,6 +75,7 @@ pub fn new_topic(
     Topic::create(
         TopicId::random(),
         NewTopic {
+            kind: TopicKind::Work,
             name: TopicName::new(name)?,
             aliases: aliases
                 .iter()
@@ -82,6 +86,15 @@ pub fn new_topic(
         },
         at(0),
     )
+}
+
+pub async fn work_topics(store: &dyn TopicStore) -> Result<Vec<TopicListing>, TopicError> {
+    Ok(store
+        .list()
+        .await?
+        .into_iter()
+        .filter(|listing| listing.topic.kind == TopicKind::Work)
+        .collect())
 }
 
 fn alias_texts(topic: &Topic) -> Vec<&str> {
@@ -148,7 +161,7 @@ pub async fn topics_are_created_found_and_renamed(store: &dyn TopicStore) -> Out
     )?;
     let missing = store.find(&TopicKey::parse("no-such-topic")?).await?;
     same("missing", missing, None)?;
-    let listed = store.list().await?;
+    let listed = work_topics(store).await?;
     same("listed", listed.len(), 1)?;
     Ok(())
 }
@@ -179,7 +192,7 @@ pub async fn slugs_and_aliases_are_unique_across_topics(store: &dyn TopicStore) 
     if !matches!(renamed, Err(TopicError::SlugTaken { .. })) {
         return Err(format!("a rename onto a taken slug must be refused: {renamed:?}").into());
     }
-    same("first kept", store.list().await?.len(), 2)?;
+    same("first kept", work_topics(store).await?.len(), 2)?;
     same(
         "first still owns its alias",
         store
@@ -191,14 +204,21 @@ pub async fn slugs_and_aliases_are_unique_across_topics(store: &dyn TopicStore) 
     Ok(())
 }
 
-pub async fn sub_topics_stay_one_level_deep(store: &dyn TopicStore) -> Outcome {
-    let parent = store.create(new_topic("Runtime", &[], None)?).await?;
-    let child = store
-        .create(new_topic("Topics", &[], Some(parent.id))?)
+pub async fn topics_nest_up_to_four_levels(store: &dyn TopicStore) -> Outcome {
+    let runtime = store.create(new_topic("Runtime", &[], None)?).await?;
+    let topics = store
+        .create(new_topic("Topics", &[], Some(runtime.id))?)
         .await?;
-    let grandchild = store.create(new_topic("Merge", &[], Some(child.id))?).await;
-    if !matches!(grandchild, Err(TopicError::ParentIsSubtopic { .. })) {
-        return Err(format!("a third level must be refused: {grandchild:?}").into());
+    let merge = store
+        .create(new_topic("Merge", &[], Some(topics.id))?)
+        .await?;
+    let plan = store
+        .create(new_topic("Plan", &[], Some(merge.id))?)
+        .await?;
+    same("fourth level kept", plan.parent, Some(merge.id))?;
+    let fifth = store.create(new_topic("Steps", &[], Some(plan.id))?).await;
+    if !matches!(fifth, Err(TopicError::TooDeep { max: 4 })) {
+        return Err(format!("a fifth level must be refused: {fifth:?}").into());
     }
     let orphan = store
         .create(new_topic("Orphan", &[], Some(TopicId::random()))?)
@@ -206,23 +226,22 @@ pub async fn sub_topics_stay_one_level_deep(store: &dyn TopicStore) -> Outcome {
     if !matches!(orphan, Err(TopicError::NotFound { .. })) {
         return Err(format!("an unknown parent must be refused: {orphan:?}").into());
     }
-    let other = store.create(new_topic("Gateway", &[], None)?).await?;
-    let nested = store
+    let looped = store
         .update(
-            parent.id,
+            runtime.id,
             TopicChanges {
-                parent: Change::Set(other.id),
+                parent: Change::Set(merge.id),
                 ..TopicChanges::default()
             },
             at(1),
         )
         .await;
-    if !matches!(nested, Err(TopicError::HasSubtopics)) {
-        return Err(format!("a parent cannot become a sub-topic: {nested:?}").into());
+    if !matches!(looped, Err(TopicError::IntoOwnSubtree)) {
+        return Err(format!("a topic cannot move under its own subtopic: {looped:?}").into());
     }
     let cleared = store
         .update(
-            child.id,
+            topics.id,
             TopicChanges {
                 parent: Change::Clear,
                 ..TopicChanges::default()
@@ -287,6 +306,77 @@ pub async fn placements_keep_your_choice(store: &dyn TopicStore) -> Outcome {
     same("unplaced", store.unplace(&session).await?, Some(yours))?;
     same("forming again", store.placement(&session).await?, None)?;
     same("unplace twice", store.unplace(&session).await?, None)?;
+    Ok(())
+}
+
+pub async fn topics_close_and_sessions_are_marked_as_history(store: &dyn TopicStore) -> Outcome {
+    let topic = store.create(new_topic("Release", &[], None)?).await?;
+    same("open when created", topic.closed_at, None)?;
+    let closed = store.set_closed(topic.id, Some(at(5)), at(5)).await?;
+    same("closed", closed.closed_at, Some(at(5)))?;
+    same(
+        "listed as closed",
+        store
+            .list()
+            .await?
+            .into_iter()
+            .find(|listing| listing.topic.id == topic.id)
+            .and_then(|listing| listing.topic.closed_at),
+        Some(at(5)),
+    )?;
+    same(
+        "closing again moves the time",
+        store
+            .set_closed(topic.id, Some(at(7)), at(7))
+            .await?
+            .closed_at,
+        Some(at(7)),
+    )?;
+    same(
+        "reopened",
+        store.set_closed(topic.id, None, at(8)).await?.closed_at,
+        None,
+    )?;
+    let unknown = store
+        .set_closed(TopicId::random(), Some(at(9)), at(9))
+        .await;
+    if !matches!(unknown, Err(TopicError::NotFound { .. })) {
+        return Err(format!("an unknown topic cannot be closed: {unknown:?}").into());
+    }
+    let loose = session("00000000-0000-4000-8000-000000000031")?;
+    let filed = session("00000000-0000-4000-8000-000000000032")?;
+    let mark = |session: &SessionId, minute: u32| HistoryMark {
+        session: session.clone(),
+        at: at(minute),
+    };
+    same(
+        "marked",
+        store.mark_history(mark(&loose, 10)).await?,
+        mark(&loose, 10),
+    )?;
+    store.mark_history(mark(&filed, 11)).await?;
+    store
+        .place(Placement {
+            session: filed.clone(),
+            topic: topic.id,
+            by: PlacementSource::You,
+            at: at(12),
+        })
+        .await?;
+    store.unplace(&filed).await?;
+    same(
+        "newest mark first, kept through place and unplace",
+        store.history().await?,
+        vec![mark(&filed, 11), mark(&loose, 10)],
+    )?;
+    same(
+        "marking again moves the time",
+        store.mark_history(mark(&loose, 13)).await?,
+        mark(&loose, 13),
+    )?;
+    store.unmark_history(&loose).await?;
+    store.unmark_history(&loose).await?;
+    same("unmarked", store.history().await?, vec![mark(&filed, 11)])?;
     Ok(())
 }
 
@@ -394,6 +484,7 @@ pub async fn suggestions_hold_until_the_session_is_placed(store: &dyn TopicStore
         session: session.clone(),
         name: TopicName::new("Mesh retries")?,
         topic: Some(mesh.id),
+        parent: Some(mesh.id),
     };
     store.suggest(unsure.clone()).await?;
     same(
@@ -403,16 +494,17 @@ pub async fn suggestions_hold_until_the_session_is_placed(store: &dyn TopicStore
     )?;
     store.merge(mesh.id, gateway.id, at(2)).await?;
     same(
-        "a merge moves the unsure topic",
+        "a merge moves the unsure topic and the parent",
         store
             .suggestion(&session)
             .await?
-            .and_then(|suggestion| suggestion.topic),
-        Some(gateway.id),
+            .map(|suggestion| (suggestion.topic, suggestion.parent)),
+        Some((Some(gateway.id), Some(gateway.id))),
     )?;
     let renamed = Suggestion {
         name: TopicName::new("Retry budget")?,
         topic: None,
+        parent: None,
         ..unsure
     };
     store.suggest(renamed.clone()).await?;

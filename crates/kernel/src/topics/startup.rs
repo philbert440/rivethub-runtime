@@ -3,13 +3,11 @@ use std::collections::HashSet;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use serde::Deserialize;
+use serde::Serialize;
 use wire::gateway::memory::MemoryHitSource;
 use wire::gateway::memory::MemoryScope;
 use wire::gateway::memory::SummaryKind;
-use wire::gateway::topics as dto;
-pub use wire::gateway::topics::DeliveredVia;
-pub use wire::gateway::topics::StartupKind;
-use wire::gateway::wiki::WikiSlug;
 use wire::memory::MemorySearchResult;
 use wire::session_id::SessionId;
 
@@ -20,14 +18,17 @@ use super::TopicId;
 use super::TopicPageError;
 use super::TopicPageStore;
 use super::TopicStore;
+use super::root_of;
 use crate::memory::Limit;
 use crate::memory::MemoryStore;
 use crate::memory::SearchMode;
 use crate::memory::SearchQuery;
+use crate::memory::SummaryOwner;
 use crate::memory::budget::char_prefix;
 use crate::memory::budget::estimate_tokens;
 use crate::memory::budget::relative_when;
 use crate::memory::summary_title;
+use crate::wiki::page::WikiSlug;
 
 pub const STARTUP_BUDGET: usize = 4_000;
 const TOPIC_SHARE: usize = 1_600;
@@ -40,6 +41,7 @@ const RECENT_CAP: usize = 900;
 const RELEVANT_CAP: usize = 500;
 const SHORTEST_CLIP: usize = 80;
 const SEPARATOR: &str = "\n\n";
+const TOPIC_PAGE: &str = "Topic page";
 
 const fn share(kind: StartupKind) -> usize {
     match kind {
@@ -49,13 +51,45 @@ const fn share(kind: StartupKind) -> usize {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns a startup section's kind; wire::gateway::topics::StartupKind is the contract's copy, translated by the gateway"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StartupKind {
+    Topic,
+    Recent,
+    Relevant,
+}
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns how a startup context was delivered; wire::gateway::topics::DeliveredVia is the contract's copy, translated by the gateway"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "camelCase")]
+pub enum DeliveredVia {
+    MetaAppend,
+    CliFlag,
+    None,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum StartupSource {
     Session(SessionId),
     Wiki(WikiSlug),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartupSection {
     pub kind: StartupKind,
     pub title: String,
@@ -139,7 +173,7 @@ pub fn render(context: &StartupContext, topic: &str) -> Option<String> {
     let mut text = format!("## Memory for this session (topic: {topic})");
     for section in &context.sections {
         let title = match section.kind {
-            StartupKind::Topic => "Topic page",
+            StartupKind::Topic => TOPIC_PAGE,
             StartupKind::Recent | StartupKind::Relevant => section.title.as_str(),
         };
         for piece in ["\n\n### ", title, "\n\n", section.text.as_str()] {
@@ -234,7 +268,8 @@ async fn page_part(
         title: topic.name.as_str().to_owned(),
         entries: Vec::new(),
     };
-    let Some(slug) = topics.page_slug(topic.root()).await? else {
+    let root = root_of(topics, topic).await?;
+    let Some(slug) = topics.page_slug(root.id).await? else {
         return Ok(part);
     };
     let Some(page) = pages.topic_page(&slug).await? else {
@@ -273,7 +308,7 @@ async fn recent_part(
         }
         let id = &session.placement.session;
         let latest = memory
-            .summary_dag(id.as_str())
+            .summary_dag(&SummaryOwner::Session(id.as_str().to_owned()))
             .await?
             .summaries
             .into_iter()
@@ -377,53 +412,6 @@ fn relevant_entry(hit: &MemorySearchResult, now: DateTime<Utc>) -> StartupEntry 
             char_prefix(hit.content.trim(), RELEVANT_CAP)
         ),
         source,
-    }
-}
-
-impl From<&StartupSection> for dto::StartupSection {
-    fn from(section: &StartupSection) -> Self {
-        Self {
-            kind: section.kind,
-            title: section.title.clone(),
-            text: section.text.clone(),
-            sources: section
-                .sources
-                .iter()
-                .map(|source| match source {
-                    StartupSource::Session(id) => dto::StartupSource::Session(id.clone()),
-                    StartupSource::Wiki(slug) => dto::StartupSource::Wiki(slug.clone()),
-                })
-                .collect(),
-        }
-    }
-}
-
-impl From<dto::StartupSection> for StartupSection {
-    fn from(section: dto::StartupSection) -> Self {
-        Self {
-            kind: section.kind,
-            title: section.title,
-            text: section.text,
-            sources: section
-                .sources
-                .into_iter()
-                .map(|source| match source {
-                    dto::StartupSource::Session(id) => StartupSource::Session(id),
-                    dto::StartupSource::Wiki(slug) => StartupSource::Wiki(slug),
-                })
-                .collect(),
-        }
-    }
-}
-
-impl From<&StartupContext> for dto::StartupContext {
-    fn from(context: &StartupContext) -> Self {
-        Self {
-            topic_id: context.topic.to_string(),
-            sections: context.sections.iter().map(Into::into).collect(),
-            tokens: context.tokens,
-            delivered_via: context.delivered_via,
-        }
     }
 }
 

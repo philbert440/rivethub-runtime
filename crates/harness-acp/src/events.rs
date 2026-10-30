@@ -26,7 +26,10 @@ pub(crate) fn session_event(update: acp::SessionUpdate) -> Result<Option<Session
         }),
         acp::SessionUpdate::ToolCall(call) => Ok(SessionEvent::ToolCall(ToolCallInfo {
             tool_call_id: call.tool_call_id.0.to_string(),
-            name: call.title,
+            name: call
+                .name
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or(call.title),
             input: object_input(call.raw_input)?,
         })),
         acp::SessionUpdate::ToolCallUpdate(update) => tool_update(&update),
@@ -44,9 +47,11 @@ pub(crate) fn session_event(update: acp::SessionUpdate) -> Result<Option<Session
         acp::SessionUpdate::CurrentModeUpdate(update) => Ok(SessionEvent::CurrentMode {
             mode: update.current_mode_id.to_string(),
         }),
+        acp::SessionUpdate::UsageUpdate(update) => {
+            Ok(SessionEvent::Context(crate::context::reported(&update)))
+        }
         acp::SessionUpdate::ConfigOptionUpdate(_)
         | acp::SessionUpdate::SessionInfoUpdate(_)
-        | acp::SessionUpdate::UsageUpdate(_)
         | acp::SessionUpdate::Notice(_)
         | acp::SessionUpdate::CompactionUpdate(_)
         | acp::SessionUpdate::CompactionSummaryChunk(_) => return Ok(None),
@@ -134,10 +139,16 @@ fn tool_update(update: &acp::ToolCallUpdate) -> Result<SessionEvent, AcpError> {
         None => ToolCallStatus::Running,
     };
     let output = content_text(update.fields.content.as_deref())?;
+    let input = match update.fields.raw_input.clone() {
+        Some(raw) => Some(object_input(Some(raw))?),
+        None => None,
+    };
     Ok(SessionEvent::ToolCallUpdate(ToolCallUpdate {
         tool_call_id: update.tool_call_id.0.to_string(),
         status,
         output,
+        title: update.fields.title.clone(),
+        input,
     }))
 }
 

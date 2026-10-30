@@ -15,10 +15,8 @@ pub(super) struct AgentBinding {
 }
 
 pub(super) struct ModelServices {
-    pub(super) runner: Arc<dyn TurnRunner>,
     pub(super) service: Arc<gateway::routes::v1::Service>,
     pub(super) agents: BTreeMap<String, AgentBinding>,
-    pub(super) tools: Vec<String>,
 }
 
 pub(super) async fn build(
@@ -35,10 +33,6 @@ pub(super) async fn build(
         .runtime
         .as_ref()
         .ok_or_else(|| ComposeError::Invalid("runtime is required for providers".into()))?;
-    let default_agent = runtime
-        .default_agent
-        .as_ref()
-        .ok_or_else(|| ComposeError::Invalid("default_agent is required".into()))?;
     let agents = config
         .agents
         .as_ref()
@@ -51,8 +45,6 @@ pub(super) async fn build(
     let hooks = hooks(workspace, &state, tasks, cancel).await?;
     let mut bindings = BTreeMap::new();
     let mut roster = BTreeMap::new();
-    let mut selected = None;
-    let mut tool_names = BTreeSet::new();
     for (id, agent) in agents {
         let provider_id = agent
             .provider
@@ -63,11 +55,7 @@ pub(super) async fn build(
         } = factory.build(config, provider_id, agent.model.as_deref(), cancel)?;
         let built =
             agent_loop::AgentLoop::new(provider_id.clone(), provider, Vec::new(), hooks.clone())?;
-        tool_names.extend(built.tool_names());
         let runner: Arc<dyn TurnRunner> = Arc::new(built);
-        if id == default_agent {
-            selected = Some((Arc::clone(&runner), model.clone()));
-        }
         roster.insert(
             id.clone(),
             BoundAgent {
@@ -77,20 +65,15 @@ pub(super) async fn build(
         );
         bindings.insert(id.clone(), AgentBinding { runner, model });
     }
-    let (runner, model) =
-        selected.ok_or_else(|| ComposeError::Invalid("default agent is missing".into()))?;
     let service = gateway::routes::v1::Service::open(
-        model,
         &state.join("conversations"),
         cancel.child_token(),
         roster,
     )
     .await?;
     Ok(Some(ModelServices {
-        runner,
         service,
         agents: bindings,
-        tools: tool_names.into_iter().collect(),
     }))
 }
 

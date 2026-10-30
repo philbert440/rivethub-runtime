@@ -187,7 +187,6 @@ async fn traversal_invalid_ids_and_symlink_records_are_refused() {
         .await
         .expect("symlink");
     let open = gateway::routes::v1::Service::open(
-        "test-model".to_owned(),
         &directory,
         CancellationToken::new(),
         std::collections::BTreeMap::new(),
@@ -202,7 +201,6 @@ async fn traversal_invalid_ids_and_symlink_records_are_refused() {
     );
     let traversal = directory.join("../conversations-sibling");
     let open = gateway::routes::v1::Service::open(
-        "test-model".to_owned(),
         &traversal,
         CancellationToken::new(),
         std::collections::BTreeMap::new(),

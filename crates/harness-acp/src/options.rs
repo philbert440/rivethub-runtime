@@ -1,6 +1,7 @@
 use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::SessionOption;
 use parking_lot::Mutex;
+use wire::gateway::agents::model_id;
 use wire::gateway::sessions::SessionSwitches;
 
 use crate::error::AcpError;
@@ -43,7 +44,7 @@ impl SessionOptions {
         let models = items
             .into_iter()
             .map(|item| wire::harness::HarnessModelOption {
-                id: item.value.0.to_string(),
+                id: model_id(&item.value.0).into_owned(),
                 label: item.name.clone(),
                 is_default: Some(item.value == select.current_value),
                 input_modalities: None,
@@ -57,6 +58,19 @@ impl SessionOptions {
     pub(crate) fn select(&self, option: &SessionOption) -> Result<ConfigSelection, AcpError> {
         let options = self.options.lock();
         select(&options, option)
+    }
+
+    pub(crate) fn mode(&self) -> Option<String> {
+        let options = self.options.lock();
+        options
+            .iter()
+            .find_map(|option| match (&option.category, &option.kind) {
+                (
+                    Some(acp::SessionConfigOptionCategory::Mode),
+                    acp::SessionConfigKind::Select(select),
+                ) => Some(select.current_value.0.to_string()),
+                _ => None,
+            })
     }
 
     pub(crate) fn switches(&self) -> SessionSwitches {
@@ -108,8 +122,11 @@ fn select(
         return Err(AcpError::ConfigOptionUnavailable { category: label });
     };
     let offered = select_ids(found, label)?;
-    let chosen = if offered.iter().any(|id| id.0.as_ref() == value) {
-        Some(value.clone())
+    let chosen = if let Some(id) = offered
+        .iter()
+        .find(|id| id.0.as_ref() == value || model_id(&id.0) == value.as_str())
+    {
+        Some(id.0.to_string())
     } else if category == acp::SessionConfigOptionCategory::Model {
         alias(&offered, &value)
     } else {
@@ -244,6 +261,34 @@ mod tests {
             select(&twins, &SessionOption::Model("fable".to_owned())),
             Err(AcpError::ConfigValueRejected { .. })
         ));
+    }
+
+    #[test]
+    fn a_provider_and_model_pair_is_offered_and_chosen_as_provider_slash_model() {
+        let value = r#"["gpubox","deepseek-v4.1-flash"]"#;
+        let options = vec![
+            acp::SessionConfigOption::select(
+                "model",
+                "Model",
+                value.to_owned(),
+                vec![acp::SessionConfigSelectOption::new(
+                    value.to_owned(),
+                    "Flash",
+                )],
+            )
+            .category(acp::SessionConfigOptionCategory::Model),
+        ];
+        let stored = super::SessionOptions::default();
+        stored.replace(options.clone());
+        let models = stored.models().expect("models").expect("offered");
+        assert_eq!(
+            models.first().expect("model").id,
+            "gpubox/deepseek-v4.1-flash"
+        );
+        for asked in ["gpubox/deepseek-v4.1-flash", value] {
+            let chosen = select(&options, &SessionOption::Model(asked.to_owned())).expect(asked);
+            assert_eq!(chosen.value, acp::SessionConfigOptionValue::value_id(value));
+        }
     }
 
     #[test]

@@ -10,16 +10,21 @@ pub(crate) struct SessionClient {
     pub(crate) events: mpsc::Sender<SessionEvent>,
     pub(crate) permissions: std::sync::Arc<PermissionRegistry>,
     pub(crate) options: std::sync::Arc<crate::options::SessionOptions>,
+    pub(crate) context: std::sync::Arc<crate::context::ContextWindows>,
 }
 
 pub(crate) async fn on_session_update(
     notification: acp::SessionNotification,
     events: &mpsc::Sender<SessionEvent>,
     options: &crate::options::SessionOptions,
+    context: &crate::context::ContextWindows,
 ) -> Result<(), acp::Error> {
     if let acp::SessionUpdate::ConfigOptionUpdate(update) = notification.update {
         options.replace(update.config_options);
         return Ok(());
+    }
+    if matches!(notification.update, acp::SessionUpdate::UsageUpdate(_)) {
+        context.reported();
     }
     match events::session_event(notification.update) {
         Ok(Some(event)) => {

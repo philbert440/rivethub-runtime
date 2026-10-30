@@ -11,10 +11,11 @@ use tokio::sync::broadcast;
 use tokio::time::{Instant, MissedTickBehavior};
 use uuid::Uuid;
 use wire::gateway::notifications::TaskDoneNotification;
+use wire::plugin::process::PluginNotification;
 
 use super::sessions::{SocketError, send};
-use super::tasks::TasksApi;
 use crate::Gateway;
+use crate::tasks::Tasks;
 use crate::tenancy::UserId;
 
 const HEARTBEAT: Duration = Duration::from_secs(30);
@@ -30,7 +31,8 @@ async fn upgrade(
     upgrade: WebSocketUpgrade,
 ) -> Response {
     let tasks = gateway.tasks().cloned();
-    let finished = tasks.as_ref().map(|api| api.watch.finished());
+    let finished = tasks.as_ref().map(|tasks| tasks.watch.changed());
+    let plugins = gateway.plugins().map(|host| host.notifications());
     upgrade
         .max_write_buffer_size(SEND_BUFFER)
         .on_upgrade(move |socket| async move {
@@ -39,10 +41,19 @@ async fn upgrade(
                 gateway: &gateway,
                 tasks,
             };
-            if let Err(error) = listener.stream(finished).await {
+            if let Err(error) = listener.stream(finished, plugins).await {
                 tracing::debug!(%error, "notifications socket ended");
             }
         })
+}
+
+async fn next_notice(
+    plugins: &mut Option<broadcast::Receiver<PluginNotification>>,
+) -> Result<PluginNotification, broadcast::error::RecvError> {
+    match plugins {
+        Some(plugins) => plugins.recv().await,
+        None => std::future::pending().await,
+    }
 }
 
 async fn next_finished(
@@ -57,13 +68,14 @@ async fn next_finished(
 struct Listener<'a> {
     socket: WebSocket,
     gateway: &'a Gateway,
-    tasks: Option<Arc<TasksApi>>,
+    tasks: Option<Arc<Tasks>>,
 }
 
 impl Listener<'_> {
     async fn stream(
         mut self,
         mut finished: Option<broadcast::Receiver<Uuid>>,
+        mut plugins: Option<broadcast::Receiver<PluginNotification>>,
     ) -> Result<(), SocketError> {
         let mut heartbeat = tokio::time::interval_at(Instant::now() + HEARTBEAT, HEARTBEAT);
         heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -88,6 +100,11 @@ impl Listener<'_> {
                     awaiting_pong = true;
                     self.socket.send(Message::Ping(Vec::new().into())).await?;
                 }
+                notice = next_notice(&mut plugins) => match notice {
+                    Ok(notice) => send(&mut self.socket, &notice).await?,
+                    Err(broadcast::error::RecvError::Closed) => plugins = None,
+                    Err(broadcast::error::RecvError::Lagged(_)) => return Err(SocketError::Lagged),
+                },
                 id = next_finished(&mut finished) => match id {
                     Ok(id) => self.task_done(id).await?,
                     Err(broadcast::error::RecvError::Closed) => finished = None,
@@ -108,14 +125,16 @@ impl Listener<'_> {
                 return Ok(());
             }
         };
-        if !kernel::tasks::terminal(task.status) {
+        if !task.status.terminal() {
             return Ok(());
         }
         send(
             &mut self.socket,
             &TaskDoneNotification {
                 task_id: id.to_string(),
-                status: task.status,
+                status: super::tasks::status_out(task.status),
+                parent_session_id: task.parent.session,
+                child_session_id: task.child,
                 ts: Utc::now(),
             },
         )

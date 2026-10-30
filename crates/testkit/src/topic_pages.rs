@@ -7,22 +7,28 @@ use kernel::topics::Change;
 use kernel::topics::Decision;
 use kernel::topics::DecisionStore;
 use kernel::topics::DecisionText;
+use kernel::topics::NewTopic;
+use kernel::topics::PageEdit;
 use kernel::topics::PageSection;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
+use kernel::topics::Slug;
 use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
 use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
+use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicName;
 use kernel::topics::TopicPage;
 use kernel::topics::TopicPageStore;
 use kernel::topics::TopicStore;
+use kernel::topics::edit_topic_page;
 use kernel::topics::sync_topic_page;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::page::WikiSlug;
 use wire::gateway::wiki::WikiPageResponse;
-use wire::gateway::wiki::WikiSlug;
 
 use crate::topics::Outcome;
 use crate::topics::at;
@@ -65,7 +71,7 @@ impl PageStores<'_> {
         self.settle().await
     }
 
-    async fn slug(&self, topic: &Topic) -> Result<WikiSlug, Box<dyn std::error::Error>> {
+    pub(crate) async fn slug(&self, topic: &Topic) -> Result<WikiSlug, Box<dyn std::error::Error>> {
         Ok(self
             .topics
             .page_slug(topic.id)
@@ -343,10 +349,60 @@ pub async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(
     let shown = stores.shown("desktop-smoke").await?;
     same("unbound", shown.topic_id, None)?;
     same("kept", shown.current_state.as_str(), "Smoke notes.")?;
-    let category = stores.create(new_topic("Hosts", &[], None)?).await?;
-    let refused = stores.topics.delete(category.id).await;
-    if !matches!(refused, Err(TopicError::CategoryTopic { .. })) {
-        return Err(format!("a category topic must stay: {refused:?}").into());
-    }
+    let hosts = stores.create(new_topic("Hosts", &[], None)?).await?;
+    stores.topics.delete(hosts.id).await?;
+    same(
+        "tombstone",
+        stores
+            .topics
+            .tombstoned(TopicKind::Work, &hosts.slug)
+            .await?,
+        true,
+    )?;
+    Ok(())
+}
+
+pub async fn editing_an_unwritten_entity_writes_its_page(stores: PageStores<'_>) -> Outcome {
+    let hosts = stores
+        .topics
+        .find(&TopicKey::Slug(TopicKind::Type, Slug::fold("Hosts")?))
+        .await?
+        .ok_or("the Hosts type is seeded")?;
+    let entity = stores
+        .topics
+        .create(Topic::create(
+            TopicId::random(),
+            NewTopic {
+                kind: TopicKind::Entity,
+                name: TopicName::new("AcmeKit build box")?,
+                aliases: Vec::new(),
+                parent: Some(hosts.id),
+                directory: None,
+            },
+            at(1),
+        )?)
+        .await?;
+    same("unwritten", stores.topics.page_slug(entity.id).await?, None)?;
+    let edit = PageEdit {
+        current_state: Some("Builds AcmeKit every night.".to_owned()),
+        article: None,
+    };
+    let slug = edit_topic_page(stores.topics, stores.pages, &entity, &edit, at(2))
+        .await?
+        .ok_or("an entity owns a page")?;
+    stores.settle().await?;
+    let page = stores.shown(slug.as_ref()).await?;
+    same(
+        "written",
+        page.current_state.as_str(),
+        "Builds AcmeKit every night.",
+    )?;
+    same("title", page.title.as_str(), "AcmeKit build box")?;
+    same("bound", page.topic_id, Some(entity.id.to_string()))?;
+    same(
+        "a type has no page",
+        edit_topic_page(stores.topics, stores.pages, &hosts, &edit, at(3)).await?,
+        None,
+    )?;
     Ok(())
 }

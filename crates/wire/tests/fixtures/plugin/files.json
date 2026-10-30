@@ -1,0 +1,515 @@
+{
+  "manifests": [
+    {
+      "manifest": 1,
+      "id": "files",
+      "name": "Files",
+      "version": "0.1.0",
+      "description": "Browse, preview and manage the node's files.",
+      "icon": "folder",
+      "run": {
+        "command": [
+          "./target/release/rivethub-files"
+        ]
+      },
+      "permissions": [
+        "host.files.read",
+        "host.files.write"
+      ],
+      "settings": [
+        {
+          "key": "root",
+          "label": "Root folder",
+          "input": {
+            "type": "text"
+          },
+          "value": "/home/user",
+          "required": true
+        },
+        {
+          "key": "showHidden",
+          "label": "Show hidden files",
+          "input": {
+            "type": "toggle"
+          }
+        }
+      ],
+      "contributes": {
+        "pages": [
+          {
+            "id": "files",
+            "title": "Files",
+            "icon": "folder",
+            "view": "browse"
+          }
+        ],
+        "sessionActions": [
+          {
+            "id": "open-cwd",
+            "title": "Browse this session's folder",
+            "icon": "folder_open",
+            "action": {
+              "type": "call",
+              "action": "open-session-folder"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "views": [
+    {
+      "title": "Files",
+      "subtitle": "/home/user/projects/acmekit",
+      "toolbar": [
+        {
+          "label": "New folder",
+          "icon": "create_new_folder",
+          "action": {
+            "type": "dialog",
+            "view": "new-folder",
+            "params": {
+              "path": "/home/user/projects/acmekit"
+            }
+          }
+        },
+        {
+          "label": "Upload",
+          "icon": "upload",
+          "action": {
+            "type": "dialog",
+            "view": "upload",
+            "params": {
+              "path": "/home/user/projects/acmekit"
+            }
+          }
+        },
+        {
+          "label": "Up",
+          "icon": "arrow_upward",
+          "action": {
+            "type": "navigate",
+            "view": "browse",
+            "params": {
+              "path": "/home/user/projects"
+            },
+            "replace": true
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "breadcrumbs",
+          "items": [
+            {
+              "label": "user",
+              "action": {
+                "type": "navigate",
+                "view": "browse",
+                "params": {
+                  "path": "/home/user"
+                },
+                "replace": true
+              }
+            },
+            {
+              "label": "projects",
+              "action": {
+                "type": "navigate",
+                "view": "browse",
+                "params": {
+                  "path": "/home/user/projects"
+                },
+                "replace": true
+              }
+            },
+            {
+              "label": "acmekit"
+            }
+          ]
+        },
+        {
+          "type": "split",
+          "ratio": 0.55,
+          "primary": [
+            {
+              "type": "table",
+              "columns": [
+                {
+                  "title": "Name",
+                  "sortable": true
+                },
+                {
+                  "title": "Size",
+                  "align": "end",
+                  "sortable": true
+                },
+                {
+                  "title": "Modified",
+                  "sortable": true
+                }
+              ],
+              "rows": [
+                {
+                  "id": "src",
+                  "cells": [
+                    {
+                      "type": "text",
+                      "text": "src",
+                      "icon": "folder"
+                    },
+                    {
+                      "type": "text",
+                      "text": "",
+                      "tone": "neutral"
+                    },
+                    {
+                      "type": "time",
+                      "at": 1793000000000
+                    }
+                  ],
+                  "action": {
+                    "type": "navigate",
+                    "view": "browse",
+                    "params": {
+                      "path": "/home/user/projects/acmekit/src"
+                    },
+                    "replace": true
+                  }
+                },
+                {
+                  "id": "README.md",
+                  "cells": [
+                    {
+                      "type": "text",
+                      "text": "README.md",
+                      "icon": "description"
+                    },
+                    {
+                      "type": "bytes",
+                      "value": 4210
+                    },
+                    {
+                      "type": "time",
+                      "at": 1792913600000
+                    }
+                  ],
+                  "action": {
+                    "type": "navigate",
+                    "view": "browse",
+                    "params": {
+                      "path": "/home/user/projects/acmekit",
+                      "preview": "README.md"
+                    },
+                    "replace": true
+                  },
+                  "menu": [
+                    {
+                      "label": "Download",
+                      "icon": "download",
+                      "action": {
+                        "type": "download",
+                        "path": "download?path=%2Fhome%2Fuser%2Fprojects%2Facmekit%2FREADME.md",
+                        "filename": "README.md"
+                      }
+                    },
+                    {
+                      "label": "Copy path",
+                      "icon": "content_copy",
+                      "action": {
+                        "type": "copy",
+                        "text": "/home/user/projects/acmekit/README.md"
+                      }
+                    },
+                    {
+                      "label": "Rename",
+                      "icon": "edit",
+                      "action": {
+                        "type": "dialog",
+                        "view": "rename",
+                        "params": {
+                          "path": "/home/user/projects/acmekit/README.md"
+                        }
+                      }
+                    },
+                    {
+                      "label": "Delete",
+                      "icon": "delete",
+                      "style": "danger",
+                      "action": {
+                        "type": "call",
+                        "action": "delete",
+                        "params": {
+                          "path": "/home/user/projects/acmekit/README.md"
+                        }
+                      },
+                      "confirm": {
+                        "title": "Delete README.md?",
+                        "text": "This cannot be undone.",
+                        "confirmLabel": "Delete"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "logo.png",
+                  "cells": [
+                    {
+                      "type": "text",
+                      "text": "logo.png",
+                      "icon": "image"
+                    },
+                    {
+                      "type": "bytes",
+                      "value": 18233
+                    },
+                    {
+                      "type": "time",
+                      "at": 1792827200000
+                    }
+                  ],
+                  "action": {
+                    "type": "navigate",
+                    "view": "browse",
+                    "params": {
+                      "path": "/home/user/projects/acmekit",
+                      "preview": "logo.png"
+                    },
+                    "replace": true
+                  },
+                  "menu": [
+                    {
+                      "label": "Download",
+                      "icon": "download",
+                      "action": {
+                        "type": "download",
+                        "path": "download?path=%2Fhome%2Fuser%2Fprojects%2Facmekit%2Flogo.png",
+                        "filename": "logo.png"
+                      }
+                    },
+                    {
+                      "label": "Copy path",
+                      "icon": "content_copy",
+                      "action": {
+                        "type": "copy",
+                        "text": "/home/user/projects/acmekit/logo.png"
+                      }
+                    },
+                    {
+                      "label": "Rename",
+                      "icon": "edit",
+                      "action": {
+                        "type": "dialog",
+                        "view": "rename",
+                        "params": {
+                          "path": "/home/user/projects/acmekit/logo.png"
+                        }
+                      }
+                    },
+                    {
+                      "label": "Delete",
+                      "icon": "delete",
+                      "style": "danger",
+                      "action": {
+                        "type": "call",
+                        "action": "delete",
+                        "params": {
+                          "path": "/home/user/projects/acmekit/logo.png"
+                        }
+                      },
+                      "confirm": {
+                        "title": "Delete logo.png?",
+                        "text": "This cannot be undone.",
+                        "confirmLabel": "Delete"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "empty": {
+                "title": "This folder is empty"
+              }
+            }
+          ],
+          "secondary": [
+            {
+              "type": "section",
+              "title": "README.md",
+              "subtitle": "Markdown",
+              "actions": [
+                {
+                  "label": "Download",
+                  "icon": "download",
+                  "action": {
+                    "type": "download",
+                    "path": "download?path=%2Fhome%2Fuser%2Fprojects%2Facmekit%2FREADME.md"
+                  }
+                }
+              ],
+              "blocks": [
+                {
+                  "type": "markdown",
+                  "text": "# AcmeKit\n\nA small toolkit."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "logo.png",
+      "subtitle": "/home/user/projects/acmekit",
+      "blocks": [
+        {
+          "type": "image",
+          "path": "raw?path=%2Fhome%2Fuser%2Fprojects%2Facmekit%2Flogo.png",
+          "alt": "logo.png"
+        },
+        {
+          "type": "properties",
+          "items": [
+            {
+              "label": "Size",
+              "value": {
+                "type": "bytes",
+                "value": 18233
+              }
+            },
+            {
+              "label": "Modified",
+              "value": {
+                "type": "time",
+                "at": 1792827200000
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "main.rs",
+      "subtitle": "/home/user/projects/acmekit/src",
+      "blocks": [
+        {
+          "type": "code",
+          "text": "fn main() {}\n",
+          "language": "rust"
+        },
+        {
+          "type": "text",
+          "text": "Showing the first 64 KiB.",
+          "tone": "neutral"
+        }
+      ]
+    },
+    {
+      "title": "Upload to acmekit",
+      "blocks": [
+        {
+          "type": "form",
+          "id": "upload",
+          "fields": [
+            {
+              "key": "files",
+              "label": "Files",
+              "input": {
+                "type": "file",
+                "multiple": true
+              },
+              "required": true
+            },
+            {
+              "key": "images",
+              "label": "Images only",
+              "input": {
+                "type": "file",
+                "accept": [
+                  "image/png",
+                  "image/jpeg"
+                ]
+              }
+            },
+            {
+              "key": "overwrite",
+              "label": "Replace files with the same name",
+              "input": {
+                "type": "toggle"
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "label": "Cancel",
+              "action": {
+                "type": "back"
+              }
+            },
+            {
+              "label": "Upload",
+              "style": "primary",
+              "icon": "upload",
+              "action": {
+                "type": "call",
+                "action": "upload",
+                "params": {
+                  "path": "/home/user/projects/acmekit"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "actionRequests": [
+    {
+      "params": {
+        "path": "/home/user/projects/acmekit"
+      },
+      "values": {
+        "files": [
+          {
+            "name": "notes.txt",
+            "mimeType": "text/plain",
+            "data": "aGVsbG8K"
+          }
+        ],
+        "overwrite": true
+      },
+      "context": {}
+    }
+  ],
+  "actionResults": [
+    {
+      "actions": [
+        {
+          "type": "back"
+        },
+        {
+          "type": "refresh"
+        },
+        {
+          "type": "toast",
+          "text": "Uploaded notes.txt",
+          "tone": "success"
+        }
+      ]
+    },
+    {
+      "actions": [
+        {
+          "type": "navigate",
+          "view": "browse",
+          "params": {
+            "path": "/home/user/projects/acmekit"
+          }
+        },
+        {
+          "type": "openUrl",
+          "url": "https://example.com/docs"
+        }
+      ]
+    }
+  ]
+}

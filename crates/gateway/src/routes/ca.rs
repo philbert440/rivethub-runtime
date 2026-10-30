@@ -24,6 +24,7 @@ use kernel::ca::CsrPem;
 use kernel::ca::EnrollmentToken;
 use kernel::ca::SignAuthority;
 use wire::ca::SignRequest;
+use wire::ca::SignResponse;
 use wire::gateway::GatewayError;
 
 use crate::Gateway;
@@ -59,9 +60,10 @@ impl From<ApiError> for CaRouteError {
             | ApiError::BodyMustBeObject
             | ApiError::Serialize(_) => Self::BadRequest,
             ApiError::BodyTooLarge => Self::BodyTooLarge,
-            ApiError::Unauthorized | ApiError::ForbiddenOrigin | ApiError::SessionForbidden => {
-                Self::Unauthorized
-            }
+            ApiError::Unauthorized
+            | ApiError::ForbiddenOrigin
+            | ApiError::SessionForbidden
+            | ApiError::OwnerRequired => Self::Unauthorized,
             ApiError::MethodNotAllowed => Self::MethodNotAllowed,
             ApiError::Unavailable(_)
             | ApiError::RequestTimeout
@@ -163,7 +165,7 @@ async fn sign(
     peer: Option<Extension<PeerCertificate>>,
     headers: HeaderMap,
     Body(SignRequest { csr }): Body<SignRequest>,
-) -> Result<Json<wire::ca::SignResponse>, CaRouteError> {
+) -> Result<Json<SignResponse>, CaRouteError> {
     let principal = match peer.as_ref() {
         Some(Extension(certificate)) => certificate.verified_principal().map_err(map_ca)?,
         None => None,
@@ -177,7 +179,10 @@ async fn sign(
         .sign(CsrPem(csr), sign_authority)
         .await
         .map_err(map_ca)?;
-    Ok(Json(signed))
+    Ok(Json(SignResponse {
+        leaf: signed.leaf,
+        chain: signed.chain,
+    }))
 }
 
 fn authority_of(gateway: &Gateway) -> Result<Arc<dyn CertificateAuthority>, CaRouteError> {

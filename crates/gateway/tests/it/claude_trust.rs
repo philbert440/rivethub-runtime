@@ -52,7 +52,7 @@ impl Lab {
             mux.clone(),
             registry.clone(),
             TerminalOptions {
-                root: workspace,
+                roots: vec![workspace],
                 default: "shell".into(),
                 commands,
                 max_ptys: 8,

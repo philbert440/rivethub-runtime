@@ -1,14 +1,18 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::topics::Slug;
+use kernel::wiki::builder::DeferredWiki;
 use kernel::wiki::builder::ExtractWiki;
+use kernel::wiki::builder::HeldEntity;
 use kernel::wiki::builder::WIKI_PIPELINE_VERSION;
 use kernel::wiki::builder::WikiBuilderStore;
-use kernel::wiki::builder::WikiPatch;
 use kernel::wiki::builder::WikiRouting;
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::builder::WikiSummary;
 use kernel::wiki::builder::WikiWork;
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::WikiSlug;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::Transaction;
@@ -16,6 +20,7 @@ use rusqlite::params;
 use uuid::Uuid;
 
 use crate::SqliteStore;
+use crate::wiki_held;
 
 #[async_trait]
 impl WikiBuilderStore for SqliteStore {
@@ -57,6 +62,46 @@ impl WikiBuilderStore for SqliteStore {
     ) -> Result<(), WikiStoreError> {
         let error = error.to_owned();
         blocking(self, move |conn| fail(conn, summary_id, &error, now)).await
+    }
+
+    async fn hold_entity(&self, held: HeldEntity) -> Result<Vec<HeldEntity>, WikiStoreError> {
+        blocking(self, move |conn| wiki_held::hold(conn, &held)).await
+    }
+
+    async fn held_entities(&self, key: &Slug) -> Result<Vec<HeldEntity>, WikiStoreError> {
+        let key = key.clone();
+        blocking(self, move |conn| wiki_held::candidates(conn, &key)).await
+    }
+
+    async fn release_entity(&self, held: &[HeldEntity]) -> Result<(), WikiStoreError> {
+        let held = held.to_vec();
+        blocking(self, move |conn| wiki_held::release(conn, &held)).await
+    }
+
+    async fn defer_wiki(&self, deferred: DeferredWiki) -> Result<(), WikiStoreError> {
+        blocking(self, move |conn| wiki_held::defer(conn, &deferred)).await
+    }
+
+    async fn unsettled_notes(&self, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
+        blocking(self, move |conn| wiki_held::unsettled(conn, limit)).await
+    }
+
+    async fn cite_wiki(
+        &self,
+        summary_id: Uuid,
+        slug: &WikiSlug,
+        now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError> {
+        let slug = slug.clone();
+        blocking(self, move |conn| {
+            wiki_held::cite(conn, summary_id, &slug, now)
+        })
+        .await
+    }
+
+    async fn uncite_wiki(&self, summary_id: Uuid, slug: &WikiSlug) -> Result<(), WikiStoreError> {
+        let slug = slug.clone();
+        blocking(self, move |conn| wiki_held::uncite(conn, summary_id, &slug)).await
     }
 }
 
@@ -204,7 +249,10 @@ fn record_done(
     Ok(())
 }
 
-fn load_summary(conn: &Connection, job: &ExtractWiki) -> Result<WikiSummary, WikiStoreError> {
+pub(crate) fn load_summary(
+    conn: &Connection,
+    job: &ExtractWiki,
+) -> Result<WikiSummary, WikiStoreError> {
     let row = conn
         .query_row(
             "SELECT s.id, s.conversation_id, s.content, c.session_key FROM ros_summaries s

@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (c.session_key) c.session_key, c.title,\n                      max(c.updated_at) OVER (PARTITION BY c.session_key) AS last_active,\n                      (SELECT n.node FROM rh_conversations n\n                        WHERE n.session_key = c.session_key AND n.node IS NOT NULL\n                        ORDER BY n.updated_at DESC LIMIT 1) AS node\n                 FROM rh_conversations c\n                WHERE c.session_key = ANY($1::text[])\n                ORDER BY c.session_key, c.title IS NULL, c.updated_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "session_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "last_active",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "node",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "89c9859467e9babff061875f543cfd3f53ef2b9641b702de3eb4d1c3dcc800a1"
+}

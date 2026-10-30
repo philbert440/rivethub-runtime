@@ -11,7 +11,7 @@ use wire::stream::ThinkingLevel;
 
 use super::{AgentLaunch, TerminalService};
 use crate::error::ApiError;
-use crate::sessions::control::{ChatActor, ChatHandle};
+use crate::sessions::control::{ChatActor, ChatHandle, TerminalSignal};
 use crate::tenancy::UserId;
 
 #[derive(Debug)]
@@ -20,8 +20,17 @@ pub(crate) struct ChatStart {
     pub(crate) model: Option<String>,
     pub(crate) effort: Option<ThinkingLevel>,
     pub(crate) cwd: Option<std::path::PathBuf>,
+    pub(crate) inherited_cwd: Option<std::path::PathBuf>,
     pub(crate) agent: Option<AgentLaunch>,
     pub(crate) startup_context: Option<String>,
+    pub(crate) topic: Option<String>,
+    pub(crate) lineage: Option<Lineage>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct Lineage {
+    pub(crate) parent: Option<SessionId>,
+    pub(crate) task: String,
 }
 
 type ChatDefaults = (
@@ -39,12 +48,12 @@ impl AgentLaunch {
     ) -> Result<ChatDefaults, ApiError> {
         let model = match model {
             Some(model) => Some(model),
-            None => self.stored("model", &self.model)?,
+            None => self.stored("model", &self.model, super::valid_model)?,
         };
         let effort = match effort {
             Some(effort) => Some(effort),
             None => self
-                .stored("effort", &self.effort)?
+                .stored("effort", &self.effort, super::valid_token)?
                 .map(|level| level.parse::<ThinkingLevel>())
                 .transpose()
                 .map_err(|_| {
@@ -77,8 +86,11 @@ impl TerminalService {
                 model,
                 effort: None,
                 cwd,
+                inherited_cwd: None,
                 agent: None,
                 startup_context: None,
+                topic: None,
+                lineage: None,
             },
         )
         .await
@@ -94,29 +106,35 @@ impl TerminalService {
             model,
             effort,
             cwd,
+            inherited_cwd,
             agent,
             startup_context,
+            topic,
+            lineage,
         } = start;
         let harness = self
             .harness
             .clone()
             .ok_or_else(|| ApiError::Unavailable("chat harness unavailable".into()))?;
         let home = self.chat_home(harness_id)?;
-        let (directory, model, effort, agent_name) = match agent {
-            Some(agent) => agent.chat_defaults(model, effort)?,
-            None => (self.chat_directory(cwd, &home).await?, model, effort, None),
+        let (directory, model, effort, agent_name) = match (agent, inherited_cwd) {
+            (Some(agent), _) => agent.chat_defaults(model, effort)?,
+            (None, Some(directory)) => (existing_directory(directory).await?, model, effort, None),
+            (None, None) => (self.chat_directory(cwd, &home).await?, model, effort, None),
         };
+        let requested = SessionId::new(harness_id, &uuid::Uuid::new_v4().to_string());
         let spec = SessionSpec {
-            session: SessionId::new(harness_id, &uuid::Uuid::new_v4().to_string()),
+            session: requested.clone(),
             harness: harness_id,
             model: model.clone(),
             effort,
             working_dir: Some(directory.clone()),
-            startup_context,
+            startup_context: startup_context.clone(),
         };
         let session = harness.new_session(spec).await?;
+        self.remember_requested(&requested, &session);
         let initialized = self
-            .register_chat(user, &harness, &session, harness_id)
+            .register_chat(user, &harness, &session, harness_id, startup_context)
             .await;
         if let Err(error) = initialized {
             harness.release(&session).await?;
@@ -134,9 +152,9 @@ impl TerminalService {
             blocked: None,
             supersedes: None,
             model,
-            parent_session_id: None,
+            parent_session_id: lineage.as_ref().and_then(|lineage| lineage.parent.clone()),
             agent_name,
-            task_id: None,
+            task_id: lineage.map(|lineage| lineage.task),
             effort: effort.map(|level| level.to_string()),
             transport: Some(Transport::Protocol),
             startup_context: None,
@@ -152,6 +170,7 @@ impl TerminalService {
                 supersedes: None,
             },
         );
+        self.tell_started(&summary.session_id, topic);
         Ok(summary)
     }
 
@@ -163,12 +182,15 @@ impl TerminalService {
             .find(|command| command.harness == Some(harness))
         {
             Some(command) => Ok(command.cwd.clone()),
-            None if wire::gateway::roster::session_flags(harness).is_none() => Ok(self
+            None if wire::gateway::roster::session_flags(harness).is_none() => self
                 .options
                 .commands
                 .iter()
                 .find(|command| command.id == self.options.default)
-                .map_or_else(|| self.options.root.clone(), |command| command.cwd.clone())),
+                .map(|command| &command.cwd)
+                .or_else(|| self.options.roots.first())
+                .cloned()
+                .ok_or_else(|| ApiError::BadRequest("no terminal root exists".into())),
             None => Err(ApiError::BadRequest(
                 "harness is not allowed on this node".into(),
             )),
@@ -182,10 +204,12 @@ impl TerminalService {
     ) -> Result<std::path::PathBuf, ApiError> {
         match cwd {
             Some(directory) => {
-                let root = self.options.root.clone();
-                tokio::task::spawn_blocking(move || super::contained_directory(&root, &directory))
-                    .await
-                    .map_err(ApiError::Task)?
+                let roots = self.options.roots.clone();
+                tokio::task::spawn_blocking(move || {
+                    super::options::contained_directory(&roots, &directory)
+                })
+                .await
+                .map_err(ApiError::Task)?
             }
             None => Ok(fallback.to_path_buf()),
         }
@@ -197,15 +221,17 @@ impl TerminalService {
         harness: &Arc<dyn kernel::harness::HarnessAdapter>,
         session: &SessionId,
         harness_id: HarnessId,
+        startup: Option<String>,
     ) -> Result<(), ApiError> {
         let key = self.registry.claim(user, session.as_str())?;
         let events = harness.events(session).await?;
-        let chat = ChatActor::start(
+        let chat = ChatActor::start_with(
             self,
             harness.clone(),
             user.clone(),
             session.clone(),
             Some(events),
+            startup,
         )?;
         self.chats.write().insert(key.clone(), chat);
         self.registry.ingest(
@@ -249,7 +275,7 @@ impl TerminalService {
         Ok(chat)
     }
 
-    fn live_chat(&self, key: &str) -> Option<ChatHandle> {
+    pub(crate) fn live_chat(&self, key: &str) -> Option<ChatHandle> {
         self.chats
             .read()
             .get(key)
@@ -299,12 +325,44 @@ impl TerminalService {
         wire::harness::HarnessSessionList { sessions }
     }
 
-    pub async fn terminal_turn_end(&self, user: &UserId, session: &str) -> Result<(), ApiError> {
+    pub(crate) async fn terminal_hook(
+        &self,
+        user: &UserId,
+        session: &str,
+        signal: TerminalSignal,
+    ) -> Result<(), ApiError> {
         let key = self.registry.authorize(user, session)?;
         let chat = self.chats.read().get(&key).cloned();
         if let Some(chat) = chat {
-            chat.turn_end().await?;
+            chat.signal(signal).await?;
         }
         Ok(())
+    }
+
+    pub(crate) async fn terminal_typed(&self, key: &str, bytes: &[u8]) -> Result<(), ApiError> {
+        let chat = self.chats.read().get(key).cloned();
+        if let Some(chat) = chat {
+            chat.signal(TerminalSignal::typed(bytes)).await?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn terminal_exited(&self, key: &str) {
+        let chat = self.chats.read().get(key).cloned();
+        if let Some(chat) = chat {
+            chat.try_signal(TerminalSignal::Exited);
+        }
+    }
+}
+
+async fn existing_directory(directory: std::path::PathBuf) -> Result<std::path::PathBuf, ApiError> {
+    let found = tokio::task::spawn_blocking(move || directory.canonicalize())
+        .await
+        .map_err(ApiError::Task)?;
+    match found {
+        Ok(directory) if directory.is_dir() => Ok(directory),
+        Ok(_) | Err(_) => Err(ApiError::BadRequest(
+            "the session's working directory is gone".into(),
+        )),
     }
 }

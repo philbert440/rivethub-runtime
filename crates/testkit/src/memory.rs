@@ -12,6 +12,7 @@ use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
 use kernel::memory::SearchQuery;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryOwner;
 use kernel::memory::TagAdd;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
@@ -52,7 +53,7 @@ pub struct FakeMemoryStore {
     tag_context: Mutex<Option<TagJobContext>>,
     tag_entities: Mutex<BTreeMap<String, Uuid>>,
     embeddings_armed: std::sync::atomic::AtomicBool,
-    summary_dags: Mutex<BTreeMap<String, SummaryDag>>,
+    summary_dags: Mutex<BTreeMap<SummaryOwner, SummaryDag>>,
     embed_mismatch: Mutex<Option<EmbedModelMismatch>>,
 }
 
@@ -86,8 +87,8 @@ impl FakeMemoryStore {
         self.wiki_redirects.lock().await.insert(from, to);
     }
 
-    pub async fn script_summary_dag(&self, session: String, dag: SummaryDag) {
-        self.summary_dags.lock().await.insert(session, dag);
+    pub async fn script_summary_dag(&self, owner: SummaryOwner, dag: SummaryDag) {
+        self.summary_dags.lock().await.insert(owner, dag);
     }
 
     pub async fn requests(&self) -> Vec<MemoryRequest> {
@@ -170,7 +171,7 @@ impl MemoryStore for FakeMemoryStore {
 
     async fn wiki_page(
         &self,
-        slug: &wire::gateway::wiki::WikiSlug,
+        slug: &kernel::wiki::page::WikiSlug,
     ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
         self.record(MemoryRequest::WikiPage(slug.as_ref().to_owned()))
             .await;
@@ -252,6 +253,7 @@ impl MemoryStore for FakeMemoryStore {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        _node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
         let mut entries = batch.entries();
         self.record(MemoryRequest::Append(entries.clone())).await;
@@ -393,14 +395,13 @@ impl MemoryStore for FakeMemoryStore {
             .join("\n"))
     }
 
-    async fn summary_dag(&self, session: &str) -> Result<SummaryDag, MemoryStoreError> {
-        self.record(MemoryRequest::SummaryDag(session.to_owned()))
-            .await;
+    async fn summary_dag(&self, owner: &SummaryOwner) -> Result<SummaryDag, MemoryStoreError> {
+        self.record(MemoryRequest::SummaryDag(owner.clone())).await;
         Ok(self
             .summary_dags
             .lock()
             .await
-            .get(session)
+            .get(owner)
             .cloned()
             .unwrap_or_default())
     }
@@ -460,14 +461,10 @@ impl MemoryStore for FakeMemoryStore {
 
     async fn add_tag(&self, add: TagAdd) -> Result<TagWire, MemoryStoreError> {
         self.record(MemoryRequest::AddTag(add.clone())).await;
-        #[cfg_attr(
-            dylint_lib = "rr_lints",
-            expect(
-                fallback,
-                reason = "CONTRACT B6: omitted tag display is stored as empty text"
-            )
-        )]
-        let display = add.display.as_deref().unwrap_or("").to_owned();
+        let display = match add.display.as_deref().map(str::trim) {
+            Some(text) if !text.is_empty() => text.to_owned(),
+            _ => add.tag.value.clone(),
+        };
         #[cfg_attr(
             dylint_lib = "rr_lints",
             expect(
@@ -600,5 +597,6 @@ fn wiki_topic(page: &wire::gateway::wiki::WikiPageResponse) -> wire::gateway::wi
         entities: page.entities.clone(),
         updated_at: page.updated_at,
         excerpt: page.current_state.chars().take(240).collect(),
+        topic_id: page.topic_id.clone(),
     }
 }

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM rh_filing_corrections\n                               WHERE session_id = $1 OR conversation_id = $2) AS \"corrected!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "corrected!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "26b732e92fbf77fa68789e7d82c1e14095de4c1214444b7cd7cd69d24f003b73"
+}

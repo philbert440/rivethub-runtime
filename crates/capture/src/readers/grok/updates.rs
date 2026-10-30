@@ -9,6 +9,7 @@ use wire::message::Role;
 use wire::session_id::SessionId;
 
 use super::FORMAT;
+use super::ordinal::ordinals;
 use super::output::ContentItem;
 use super::output::tool_result;
 use super::turns::TurnLedger;
@@ -77,6 +78,12 @@ pub(super) fn map_updates(
     };
     drafts.retain(|draft| draft.position <= settled);
     skipped.retain(|record| record.position <= settled);
+    let ordinals = ordinals(&records)?;
+    for draft in &mut drafts {
+        if let Some(ordinal) = ordinals.get(&draft.position) {
+            draft.message.event_id = format!("{session}:{ordinal}");
+        }
+    }
     Ok(assemble(offset, settled, drafts, skipped))
 }
 

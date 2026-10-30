@@ -273,7 +273,7 @@ async fn roster_commands_may_start_outside_the_files_root_but_must_be_absolute()
             fixture.mux.clone(),
             fixture.registry.clone(),
             TerminalOptions {
-                root: root.clone(),
+                roots: vec![root.clone()],
                 default: "shell".into(),
                 max_ptys: 1,
                 commands: vec![LaunchCommand {
@@ -301,7 +301,7 @@ async fn a_chat_directory_outside_the_root_or_missing_is_named_in_the_refusal() 
     for (cwd, refusal) in [
         (
             outside.path().to_path_buf(),
-            "working directory is outside the terminal root",
+            "working directory is outside the terminal roots",
         ),
         (
             fixture.directory.path().join("missing"),
@@ -400,11 +400,13 @@ async fn handoff_waits_for_turn_end_releases_then_resumes_and_delivers_queued_ch
     fixture.gateway.close().await;
 }
 
-#[tokio::test]
-async fn terminal_first_session_queues_chat_until_the_hook_and_delete_releases_chat() {
-    let harness = Arc::new(session_support::harness::Harness::default());
+const TERMINAL_FIRST: &str = "11111111-2222-4333-8444-555555555555";
+
+async fn terminal_first(
+    harness: &Arc<session_support::harness::Harness>,
+) -> (Fixture, gateway::sessions::control::ChatHandle) {
     let fixture = Fixture::with_harness(Some(harness.clone())).await;
-    let mut request = spawn("11111111-2222-4333-8444-555555555555");
+    let mut request = spawn(TERMINAL_FIRST);
     request.command = Some("claude".into());
     fixture
         .service
@@ -413,29 +415,95 @@ async fn terminal_first_session_queues_chat_until_the_hook_and_delete_releases_c
         .expect("terminal first");
     let chat = fixture
         .service
-        .chat(
-            &user("owner"),
-            "claude-code:11111111-2222-4333-8444-555555555555",
-        )
+        .chat(&user("owner"), &format!("claude-code:{TERMINAL_FIRST}"))
         .expect("registered session");
+    (fixture, chat)
+}
+
+async fn submit_in_terminal(fixture: &Fixture) -> tokio_util::sync::CancellationToken {
+    let (address, stop, _server) = fixture.serve().await;
+    let (mut socket, _) = tokio_tungstenite::connect_async(format!("ws://{address}/term?id=pty-1"))
+        .await
+        .expect("connect");
+    frame(&mut socket).await;
+    frame(&mut socket).await;
+    socket
+        .send(Message::binary(b"go\r".to_vec()))
+        .await
+        .expect("typed");
+    fixture
+        .mux
+        .called(|calls| calls.contains(&Call::Input(b"go\r".to_vec())))
+        .await;
+    stop
+}
+
+async fn held(harness: &session_support::harness::Harness, prompt: &str) {
+    let ran = tokio::time::timeout(
+        std::time::Duration::from_millis(200),
+        harness.traced(prompt),
+    );
+    assert!(
+        ran.await.is_err(),
+        "{prompt} ran while the terminal was busy"
+    );
+    assert_eq!(*harness.trace.borrow(), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn an_idle_terminal_hands_the_session_to_chat_at_once() {
+    let harness = Arc::new(session_support::harness::Harness::default());
+    let (fixture, chat) = terminal_first(&harness).await;
+    chat.prompt("now".into(), None, Vec::new(), Vec::new())
+        .await
+        .expect("accepted");
+    harness.traced("prompt:now").await;
+    assert!(fixture.mux.calls.borrow().contains(&Call::Kill));
+    harness.finish.add_permits(1);
+    fixture.gateway.close().await;
+}
+
+#[tokio::test]
+async fn a_terminal_that_exits_mid_turn_runs_the_queued_chat() {
+    let harness = Arc::new(session_support::harness::Harness::default());
+    let (fixture, chat) = terminal_first(&harness).await;
+    let stop = submit_in_terminal(&fixture).await;
+    chat.prompt("later".into(), None, Vec::new(), Vec::new())
+        .await
+        .expect("queued");
+    held(&harness, "prompt:later").await;
+    fixture.mux.exit(&TerminalId::new("pty-1"), 0);
+    harness.traced("prompt:later").await;
+    assert!(!fixture.mux.calls.borrow().contains(&Call::Kill));
+    harness.finish.add_permits(1);
+    stop.cancel();
+    fixture.gateway.close().await;
+}
+
+#[tokio::test]
+async fn terminal_first_session_queues_chat_until_the_hook_and_delete_releases_chat() {
+    let harness = Arc::new(session_support::harness::Harness::default());
+    let (fixture, chat) = terminal_first(&harness).await;
+    let stop = submit_in_terminal(&fixture).await;
     chat.prompt("queued".into(), None, Vec::new(), Vec::new())
         .await
         .expect("queued");
-    assert_eq!(*harness.trace.borrow(), Vec::<String>::new());
+    held(&harness, "prompt:queued").await;
     chat.turn_end().await.expect("hook");
     harness.traced("prompt:queued").await;
     fixture
         .service
-        .remove_session(&user("owner"), "11111111-2222-4333-8444-555555555555")
+        .remove_session(&user("owner"), TERMINAL_FIRST)
         .await
         .expect("close session");
     harness.traced("release").await;
     assert!(
         fixture
             .service
-            .chat(&user("owner"), "11111111-2222-4333-8444-555555555555")
+            .chat(&user("owner"), TERMINAL_FIRST)
             .is_err()
     );
+    stop.cancel();
     fixture.gateway.close().await;
 }
 

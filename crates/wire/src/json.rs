@@ -16,6 +16,10 @@ impl Extra {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.0.keys().map(String::as_str)
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

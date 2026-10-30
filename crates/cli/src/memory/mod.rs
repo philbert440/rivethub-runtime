@@ -1,3 +1,4 @@
+mod cleanup;
 mod export;
 mod io;
 mod parse;
@@ -46,10 +47,10 @@ Commands:\n\
   backfill-tool-synth [--limit <n>] [--dry-run] [--json]\n\
   export [--out <file>] [--since <iso>] [--sqlite <file>]\n\
   import <file> [--dry-run] [--sqlite <file>]\n\
-  tags backfill-rule [--since <iso>] [--sqlite <file>]\n\
   backfill-titles [--dry-run] [--json] [--sqlite <file>]\n\
   reembed [--dry-run] [--sqlite <file>]\n\
   consolidate-wiki [--limit <n>] [--dry-run] [--json]\n\
-Postgres commands read RIVETHUB_PG_URL. export, import, tags backfill-rule and backfill-titles use --sqlite or memory.sqlite.path when no Postgres URL is set. reembed runs on a SQLite memory file only.\n"
+  cleanup (--dry-run [--database <url>] | --propose --database <url>) --out <dir> --model-url <url> --model <name> [--batch <n>] [--concurrency <n>] [--timeout <seconds>]\n\
+Postgres commands read RIVETHUB_PG_URL. export, import and backfill-titles use --sqlite or memory.sqlite.path when no Postgres URL is set. reembed runs on a SQLite memory file only. cleanup reads memory read-only, plans the topic tree, filings and wiki folds with the model, checkpoints every stage in --out and writes report.md there; rerun it to resume. --propose also writes the plan as one tidy batch to the database --database names, never to the live memory database.\n"
         .to_owned()
 }

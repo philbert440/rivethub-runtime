@@ -3,11 +3,11 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::topics::DeliveredVia;
 use kernel::topics::StartupContext;
+use kernel::topics::StartupSection;
 use kernel::topics::StartupStore;
 use kernel::topics::TopicError;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
-use wire::gateway::topics::StartupSection;
 use wire::session_id::SessionId;
 
 use super::rows::failed;
@@ -24,8 +24,7 @@ impl StartupStore for SqliteStore {
         context: &StartupContext,
         now: DateTime<Utc>,
     ) -> Result<(), TopicError> {
-        let sections: Vec<StartupSection> = context.sections.iter().map(Into::into).collect();
-        let sections = serde_json::to_string(&sections)
+        let sections = serde_json::to_string(&context.sections)
             .map_err(|source| stored("startup sections")(Box::new(source)))?;
         let session = session.as_str().to_owned();
         let topic = context.topic.to_string();
@@ -81,7 +80,7 @@ impl StartupStore for SqliteStore {
                 .map_err(|source| stored("startup sections")(Box::new(source)))?;
             Ok(Some(StartupContext {
                 topic: topic_id(&topic)?,
-                sections: sections.into_iter().map(Into::into).collect(),
+                sections,
                 tokens,
                 delivered_via: delivered
                     .parse::<DeliveredVia>()

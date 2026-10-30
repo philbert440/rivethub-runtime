@@ -4,6 +4,7 @@ mod delegate;
 pub mod error;
 pub mod memory;
 mod nonblock;
+pub mod plugins;
 mod render_delegate;
 mod render_memory;
 mod render_search;
@@ -15,12 +16,13 @@ pub mod wiki;
 pub use catalog::Surface;
 pub use error::Error;
 use kernel::memory::MemoryStore;
+use kernel::plugins::PluginTools;
 use kernel::tasks::Delegation;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, ContentBlock, Implementation, ListToolsResult,
     PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
 };
-use rmcp::service::{RequestContext, RoleServer};
+use rmcp::service::{NotificationContext, RequestContext, RoleServer};
 use rmcp::{ErrorData, ServerHandler};
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
@@ -34,6 +36,7 @@ pub struct Server {
     memory_write: bool,
     shutdown: CancellationToken,
     zone: chrono_tz::Tz,
+    plugins: Option<Arc<dyn PluginTools>>,
 }
 
 pub struct Builder {
@@ -42,6 +45,7 @@ pub struct Builder {
     shutdown: CancellationToken,
     delegation: Option<(Arc<dyn Delegation>, Surface)>,
     zone: Option<chrono_tz::Tz>,
+    plugins: Option<Arc<dyn PluginTools>>,
 }
 
 #[cfg_attr(
@@ -56,6 +60,7 @@ impl std::fmt::Debug for Server {
         f.debug_struct("Server")
             .field("memory_write", &self.memory_write)
             .field("delegation", &self.delegation.is_some())
+            .field("plugins", &self.plugins.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -118,6 +123,7 @@ impl Server {
             shutdown,
             delegation: None,
             zone: None,
+            plugins: None,
         }
     }
 
@@ -130,15 +136,28 @@ impl Server {
     }
 
     pub async fn call(&self, request: CallToolRequestParams) -> Result<CallToolResult, ErrorData> {
-        self.dispatch(request, self.shutdown.clone()).await
+        self.dispatch(request, None, self.shutdown.clone()).await
     }
 
     async fn dispatch(
         &self,
         request: CallToolRequestParams,
+        tool_use: Option<String>,
         cancel: CancellationToken,
     ) -> Result<CallToolResult, ErrorData> {
         if !self.tools.iter().any(|tool| tool.name == request.name) {
+            if let Some(port) = &self.plugins
+                && kernel::plugins::split_tool_name(&request.name).is_ok()
+            {
+                let arguments = request.arguments.unwrap_or_default();
+                return Ok(plugins::call(
+                    port.as_ref(),
+                    &request.name,
+                    arguments,
+                    tool_use.as_deref(),
+                )
+                .await);
+            }
             return Err(ErrorData::invalid_params(
                 format!("Tool {} not found", request.name),
                 None,
@@ -218,6 +237,12 @@ impl Builder {
     }
 
     #[must_use]
+    pub fn plugins(mut self, port: Arc<dyn PluginTools>) -> Self {
+        self.plugins = Some(port);
+        self
+    }
+
+    #[must_use]
     pub fn delegation(mut self, port: Arc<dyn Delegation>, surface: Surface) -> Self {
         self.delegation = Some((port, surface));
         self
@@ -251,6 +276,7 @@ impl Builder {
             memory_write: self.memory_write,
             shutdown: self.shutdown,
             zone: self.zone.unwrap_or(chrono_tz::Tz::UTC),
+            plugins: self.plugins,
         })
     }
 }
@@ -269,15 +295,55 @@ impl ServerHandler for Server {
         ))
     }
 
-    fn list_tools(
+    async fn list_tools(
         &self,
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
-    ) -> impl std::future::Future<Output = Result<ListToolsResult, ErrorData>> + Send {
-        std::future::ready(Ok(ListToolsResult {
-            tools: self.tools.as_ref().clone(),
+    ) -> Result<ListToolsResult, ErrorData> {
+        let mut tools = self.tools.as_ref().clone();
+        if let Some(port) = &self.plugins {
+            match port.tools().await {
+                Ok(list) => tools.extend(plugins::definitions(&list)),
+                Err(error) => tracing::debug!(%error, "plug-in tools left out of the list"),
+            }
+        }
+        Ok(ListToolsResult {
+            tools,
             ..ListToolsResult::default()
-        }))
+        })
+    }
+
+    async fn on_initialized(&self, context: NotificationContext<RoleServer>) {
+        let Some(port) = self.plugins.clone() else {
+            return;
+        };
+        let shutdown = self.shutdown.child_token();
+        tokio::spawn(async move {
+            let mut seen = match port.tools().await {
+                Ok(list) => list.version,
+                Err(error) => {
+                    tracing::debug!(%error, "plug-in tool changes are not followed");
+                    return;
+                }
+            };
+            loop {
+                let changed = tokio::select! {
+                    () = shutdown.cancelled() => return,
+                    changed = port.changed(seen) => changed,
+                };
+                match changed {
+                    Ok(version) => seen = version,
+                    Err(error) => {
+                        tracing::debug!(%error, "plug-in tool changes stopped");
+                        return;
+                    }
+                }
+                if let Err(error) = context.peer.notify_tool_list_changed().await {
+                    tracing::debug!(%error, "client left; plug-in tool changes stopped");
+                    return;
+                }
+            }
+        });
     }
 
     async fn call_tool(
@@ -286,7 +352,8 @@ impl ServerHandler for Server {
         context: RequestContext<RoleServer>,
     ) -> Result<rmcp::model::CallToolResponse, ErrorData> {
         let cancel = self.shutdown.child_token();
-        let pending = self.dispatch(request, cancel.clone());
+        let tool_use = plugins::tool_use(&context.meta);
+        let pending = self.dispatch(request, tool_use, cancel.clone());
         tokio::pin!(pending);
         tokio::select! {
             biased;

@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT f.name AS from_name, t.name AS \"to_name?\",\n                      COALESCE(\n                          (SELECT c.title FROM rh_conversations c WHERE c.id = k.conversation_id),\n                          (SELECT c.title FROM rh_conversations c\n                            WHERE c.session_key = k.session_id\n                            ORDER BY c.updated_at DESC LIMIT 1)\n                      ) AS title\n                 FROM rh_filing_corrections k\n                 JOIN rh_topics f ON f.id = k.from_topic\n                 LEFT JOIN rh_topics t ON t.id = k.to_topic\n                ORDER BY k.corrected_at DESC\n                LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "from_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "to_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "17bf30515a9cda1f87717e198d208296522e5a54bad274a4de1d3439e5c9bbc3"
+}

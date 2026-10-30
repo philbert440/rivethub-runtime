@@ -2,7 +2,8 @@
 
 use crate::wiki_support;
 
-use kernel::wiki::builder::{WikiAction, WikiBuilderStore, WikiRouting, WikiStoreError};
+use kernel::wiki::builder::{WikiBuilderStore, WikiRouting, WikiStoreError};
+use kernel::wiki::page::WikiAction;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use testkit::fakes::{FakeJobQueue, FakeProvider};
@@ -51,13 +52,15 @@ async fn wiki_alias_updates_and_new_sources_commit_provenance(pool: PgPool) -> T
     )
     .fetch_one(&pool)
     .await?;
-    assert_eq!(row.0, format!("{}\n\n{}", patch().summary, update.summary));
+    assert_eq!(row.0, patch().summary);
     assert_eq!(
         row.1,
-        wire::wiki::demote_h2_headings(&patch().article.expect("article"))
+        kernel::wiki::page::demote_h2_headings(&patch().article.expect("article"))
     );
-    assert_eq!(row.2, 1);
+    assert_eq!(row.2, 2);
     assert_eq!(row.3, None);
+    let page = std::fs::read_to_string(wiki.path().join("topics/acmekit-deploys.md"))?;
+    assert!(page.contains(&update.summary));
     let aliases: (Vec<String>,) = sqlx::query_as("SELECT aliases FROM rh_wiki_topics")
         .fetch_one(&pool)
         .await?;
@@ -152,7 +155,7 @@ async fn wiki_rejects_wrong_conversation_before_model_or_writes(pool: PgPool) ->
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     assert!(matches!(
         handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload).await,
@@ -188,7 +191,7 @@ async fn wiki_bad_model_output_is_failed_and_retryable(pool: PgPool) -> TestResu
             model: "fake-chat",
             now: now(),
             cancel: &cancel,
-            topics: None,
+            topics: Some(wiki_support::ports(&store)),
         };
         assert!(
             handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload)
@@ -258,7 +261,7 @@ async fn wiki_cancellation_leaves_no_extraction(pool: PgPool) -> TestResult {
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     assert!(matches!(
         handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload).await,
@@ -275,17 +278,17 @@ async fn wiki_cancellation_leaves_no_extraction(pool: PgPool) -> TestResult {
 #[test]
 fn wiki_model_types_reject_bad_slugs_and_wrong_types() -> TestResult {
     for slug in ["../escape", "/absolute", "a/b", "a\\b", ""] {
-        assert!(wire::gateway::wiki::WikiSlug::try_from(slug.to_owned()).is_err());
+        assert!(kernel::wiki::page::WikiSlug::try_from(slug.to_owned()).is_err());
     }
     for slug in ["acmekit-rollout", "developer's-notes", "release-v2"] {
-        assert!(wire::gateway::wiki::WikiSlug::try_from(slug.to_owned()).is_ok());
+        assert!(kernel::wiki::page::WikiSlug::try_from(slug.to_owned()).is_ok());
     }
     assert!(
         serde_json::from_str::<kernel::wiki::builder::ExtractWiki>(r#"{"summaryId":3}"#).is_err()
     );
     let encoded = serde_json::to_string(&vec![patch()])?;
     assert_eq!(
-        serde_json::from_str::<Vec<kernel::wiki::builder::WikiPatch>>(&encoded)?,
+        serde_json::from_str::<Vec<kernel::wiki::page::WikiPatch>>(&encoded)?,
         vec![patch()]
     );
     Ok(())
@@ -325,6 +328,7 @@ async fn wiki_file_failure_marks_extraction_failed_and_retry_reconciles(
     tokio::fs::symlink(outside.path(), wiki.path().join("topics")).await?;
     let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let job = seed(&pool).await?;
+    wiki_support::filed(&store, &job).await?;
     let model = provider(&[patch()]);
     let queue = FakeJobQueue::default();
     let cancel = CancellationToken::new();
@@ -335,7 +339,7 @@ async fn wiki_file_failure_marks_extraction_failed_and_retry_reconciles(
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     assert!(
         handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload)

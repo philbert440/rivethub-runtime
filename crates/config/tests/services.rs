@@ -12,10 +12,6 @@ use config::model::PostgresSection;
 use config::model::SqliteSection;
 use config::model::TransportSection;
 
-fn bare_env() -> Environment {
-    Environment::from_vars(std::iter::empty::<(&str, &str)>())
-}
-
 fn config_with(memory: Option<MemorySection>, gateway: Option<GatewaySection>) -> Config {
     Config {
         memory,
@@ -26,9 +22,8 @@ fn config_with(memory: Option<MemorySection>, gateway: Option<GatewaySection>) -
 
 #[test]
 fn service_switches_follow_the_configured_flags() {
-    let env = bare_env();
     let plain = Config::default();
-    assert_eq!(plain.service_switches(&env), vec![ServiceSwitch::Gateway]);
+    assert_eq!(plain.service_switches(), vec![ServiceSwitch::Gateway]);
 
     let disabled = config_with(
         None,
@@ -37,7 +32,7 @@ fn service_switches_follow_the_configured_flags() {
             ..GatewaySection::default()
         }),
     );
-    assert_eq!(disabled.service_switches(&env), Vec::new());
+    assert_eq!(disabled.service_switches(), Vec::new());
 
     let sqlite = config_with(
         Some(MemorySection {
@@ -54,7 +49,7 @@ fn service_switches_follow_the_configured_flags() {
         None,
     );
     assert_eq!(
-        sqlite.service_switches(&env),
+        sqlite.service_switches(),
         vec![
             ServiceSwitch::Gateway,
             ServiceSwitch::Workers,
@@ -76,7 +71,7 @@ fn service_switches_follow_the_configured_flags() {
         ..Config::default()
     };
     assert_eq!(
-        mcp.service_switches(&env),
+        mcp.service_switches(),
         vec![ServiceSwitch::Gateway, ServiceSwitch::Mcp]
     );
 
@@ -86,7 +81,7 @@ fn service_switches_follow_the_configured_flags() {
         transports: Some(port_only),
         ..Config::default()
     };
-    assert_eq!(quiet.service_switches(&env), vec![ServiceSwitch::Gateway]);
+    assert_eq!(quiet.service_switches(), vec![ServiceSwitch::Gateway]);
 
     let postgres = config_with(
         Some(MemorySection {
@@ -95,69 +90,7 @@ fn service_switches_follow_the_configured_flags() {
         }),
         None,
     );
-    assert_eq!(
-        postgres.service_switches(&env),
-        vec![ServiceSwitch::Gateway]
-    );
-}
-
-#[test]
-fn a_postgres_config_includes_the_agent_and_a_sqlite_config_does_not() {
-    let env = bare_env();
-    let postgres = config_with(
-        Some(MemorySection {
-            backend: Some(MemoryBackend::Postgres),
-            postgres: Some(PostgresSection {
-                connection_string: Some("postgres://127.0.0.1:1/rivethub".to_owned()),
-                ..PostgresSection::default()
-            }),
-            ..MemorySection::default()
-        }),
-        None,
-    );
-    assert_eq!(
-        postgres.service_switches(&env),
-        vec![ServiceSwitch::Gateway, ServiceSwitch::Agent]
-    );
-
-    let sqlite = config_with(
-        Some(MemorySection {
-            backend: Some(MemoryBackend::Sqlite),
-            postgres: Some(PostgresSection {
-                connection_string: Some("postgres://127.0.0.1:1/rivethub".to_owned()),
-                ..PostgresSection::default()
-            }),
-            sqlite: Some(SqliteSection {
-                workers: Some(true),
-                ..SqliteSection::default()
-            }),
-            ..MemorySection::default()
-        }),
-        None,
-    );
-    assert_eq!(
-        sqlite.service_switches(&env),
-        vec![ServiceSwitch::Gateway, ServiceSwitch::Workers,]
-    );
-
-    let from_env = Environment::from_vars([(config::POSTGRES_URL_VARIABLE, "postgres://db")]);
-    assert_eq!(
-        Config::default().service_switches(&from_env),
-        vec![ServiceSwitch::Gateway, ServiceSwitch::Agent]
-    );
-
-    let pending = config_with(
-        Some(MemorySection {
-            postgres: Some(PostgresSection {
-                connection_string: Some("postgres://127.0.0.1:1/rivethub".to_owned()),
-                embedded: Some(EmbeddedSection::default()),
-                ..PostgresSection::default()
-            }),
-            ..MemorySection::default()
-        }),
-        None,
-    );
-    assert_eq!(pending.service_switches(&env), vec![ServiceSwitch::Gateway]);
+    assert_eq!(postgres.service_switches(), vec![ServiceSwitch::Gateway]);
 }
 
 #[test]

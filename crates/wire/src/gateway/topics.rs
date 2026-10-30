@@ -13,6 +13,31 @@ pub enum TopicDirectory {
     Shared { path: String },
 }
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    strum::Display,
+    strum::EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "lowercase")]
+pub enum TopicKind {
+    #[default]
+    Work,
+    Type,
+    Entity,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum PlacedBy {
@@ -26,6 +51,8 @@ pub enum PlacedBy {
 #[serde(rename_all = "camelCase")]
 pub struct TopicRecord {
     pub id: String,
+    #[serde(default)]
+    pub kind: TopicKind,
     pub slug: String,
     pub name: String,
     pub aliases: Vec<String>,
@@ -37,6 +64,9 @@ pub struct TopicRecord {
     pub created_at: DateTime<Utc>,
     #[serde_as(as = "serde_with::TimestampMilliSeconds")]
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub closed_at: Option<DateTime<Utc>>,
 }
 
 #[serde_as]
@@ -62,6 +92,8 @@ pub struct TopicList {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct TopicCreateRequest {
+    #[serde(default)]
+    pub kind: TopicKind,
     pub name: String,
     #[serde(default)]
     pub aliases: Vec<String>,
@@ -109,6 +141,8 @@ pub struct TopicSuggestion {
     pub name: String,
     #[serde(default)]
     pub topic_id: Option<String>,
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -128,6 +162,21 @@ pub struct PlacementRequest {
 }
 
 #[serde_as]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionHistoryMark {
+    pub session_id: SessionId,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub marked_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionHistoryList {
+    pub sessions: Vec<SessionHistoryMark>,
+}
+
+#[serde_as]
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -135,14 +184,82 @@ pub struct TopicSession {
     #[serde(flatten)]
     pub placement: TopicPlacement,
     #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
     #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
     pub last_active: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub node: Option<String>,
+    #[serde(default)]
+    pub parent_session_id: Option<SessionId>,
+    #[serde(default)]
+    pub task_id: Option<String>,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationPlacement {
+    pub conversation_id: String,
+    pub topic_id: String,
+    pub by: PlacedBy,
+    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
+    pub at: DateTime<Utc>,
+}
+
+#[serde_as]
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicConversation {
+    #[serde(flatten)]
+    pub placement: ConversationPlacement,
+    pub channel: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+    pub last_active: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub node: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TopicSessionList {
     pub sessions: Vec<TopicSession>,
+    #[serde(default)]
+    pub conversations: Vec<TopicConversation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicFiling {
+    pub sessions: Vec<TopicSession>,
+    pub conversations: Vec<TopicConversation>,
+    pub history: Vec<SessionHistoryMark>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSuggestion {
+    pub session_id: SessionId,
+    #[serde(flatten)]
+    pub suggestion: TopicSuggestion,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSuggestionList {
+    pub sessions: Vec<SessionSuggestion>,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationPlacementReply {
+    #[serde(default)]
+    pub placement: Option<ConversationPlacement>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -152,6 +269,15 @@ pub struct TopicPage {
     pub topic: TopicRecord,
     #[serde(default)]
     pub page: Option<WikiPageResponse>,
+    #[serde(default)]
+    pub mentions: Vec<TopicMention>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicMention {
+    pub topic_id: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

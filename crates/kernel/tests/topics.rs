@@ -3,8 +3,7 @@ use chrono::TimeZone;
 use chrono::Utc;
 use kernel::topics::Alias;
 use kernel::topics::Change;
-use kernel::topics::FirstLeaf;
-use kernel::topics::Lineage;
+use kernel::topics::MAX_DEPTH;
 use kernel::topics::MergePlan;
 use kernel::topics::NewTopic;
 use kernel::topics::Placement;
@@ -19,10 +18,11 @@ use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
-use kernel::topics::Verdict;
+use kernel::topics::TopicTree;
 use kernel::topics::check_parent;
 use kernel::topics::rank;
 use std::str::FromStr;
@@ -41,6 +41,7 @@ fn topic(name: &str, aliases: &[&str]) -> Result<Topic, TopicError> {
     Topic::create(
         TopicId::random(),
         NewTopic {
+            kind: TopicKind::Work,
             name: TopicName::new(name)?,
             aliases: aliases
                 .iter()
@@ -188,25 +189,51 @@ fn placements_replace_one_another_otherwise() -> TestResult {
     Ok(())
 }
 
+fn refusal(result: &Result<(), TopicError>) -> &'static str {
+    if result.is_ok() {
+        "ok"
+    } else if matches!(result, Err(TopicError::TooDeep { max: MAX_DEPTH })) {
+        "too deep"
+    } else if matches!(result, Err(TopicError::IntoOwnSubtree)) {
+        "own subtree"
+    } else if matches!(result, Err(TopicError::OwnParent)) {
+        "own parent"
+    } else {
+        "other"
+    }
+}
+
+fn under(name: &str, parent: Option<&Topic>) -> Result<Topic, Box<dyn std::error::Error>> {
+    let mut made = topic(name, &[])?;
+    made.parent = parent.map(|parent| parent.id);
+    Ok(made)
+}
+
 #[test]
-fn sub_topics_are_one_level_deep_and_never_their_own_parent() -> TestResult {
-    let parent = topic("Runtime", &[])?;
-    let child = topic("Topics", &[])?;
-    assert!(check_parent(child.id, false, &parent).is_ok());
-    assert!(matches!(
-        check_parent(parent.id, false, &parent),
-        Err(TopicError::OwnParent)
-    ));
-    assert!(matches!(
-        check_parent(child.id, true, &parent),
-        Err(TopicError::HasSubtopics)
-    ));
-    let mut nested = topic("Nested", &[])?;
-    nested.parent = Some(parent.id);
-    assert!(matches!(
-        check_parent(child.id, false, &nested),
-        Err(TopicError::ParentIsSubtopic { .. })
-    ));
+fn topics_nest_four_levels_deep_and_never_under_themselves() -> TestResult {
+    let runtime = under("Runtime", None)?;
+    let topics = under("Topics", Some(&runtime))?;
+    let merge = under("Merge", Some(&topics))?;
+    let desktop = under("Desktop", None)?;
+    let memory = under("Memory", Some(&desktop))?;
+    let fresh = under("Fresh", None)?;
+    let tree = TopicTree::of([&runtime, &topics, &merge, &desktop, &memory]);
+    for (child, parent, want) in [
+        (&fresh, &merge, "ok"),
+        (&desktop, &topics, "ok"),
+        (&desktop, &merge, "too deep"),
+        (&runtime, &merge, "own subtree"),
+        (&runtime, &runtime, "own parent"),
+    ] {
+        assert_eq!(
+            refusal(&check_parent(child, parent, &tree)),
+            want,
+            "under {}",
+            parent.name.as_str()
+        );
+    }
+    assert_eq!((tree.depth(merge.id), tree.height(runtime.id)), (3, 3));
+    assert_eq!(tree.root(merge.id), runtime.id);
     Ok(())
 }
 
@@ -214,7 +241,8 @@ fn sub_topics_are_one_level_deep_and_never_their_own_parent() -> TestResult {
 fn merging_redirects_the_slug_and_moves_aliases_that_do_not_clash() -> TestResult {
     let source = topic("Desktop App", &["electron", "Tauri"])?;
     let into = topic("RivetHub Desktop", &["tauri"])?;
-    let plan = MergePlan::new(&source, &into, &[])?;
+    let tree = TopicTree::of([&source, &into]);
+    let plan = MergePlan::new(&source, &into, &tree)?;
     assert_eq!(
         plan.redirect,
         Redirect {
@@ -229,7 +257,7 @@ fn merging_redirects_the_slug_and_moves_aliases_that_do_not_clash() -> TestResul
     assert_eq!(aliases, ["electron", "tauri"]);
     assert_eq!(merged.updated_at, at(9));
     assert!(matches!(
-        MergePlan::new(&source, &source, &[]),
+        MergePlan::new(&source, &source, &tree),
         Err(TopicError::SelfMerge)
     ));
     Ok(())
@@ -237,26 +265,37 @@ fn merging_redirects_the_slug_and_moves_aliases_that_do_not_clash() -> TestResul
 
 #[test]
 fn merging_a_parent_into_its_child_lifts_the_child_and_adopts_its_siblings() -> TestResult {
-    let parent = topic("Runtime", &[])?;
-    let mut child = topic("Topics", &[])?;
-    child.parent = Some(parent.id);
-    let sibling = TopicId::random();
-    let plan = MergePlan::new(&parent, &child, &[child.id, sibling])?;
+    let parent = under("Runtime", None)?;
+    let child = under("Topics", Some(&parent))?;
+    let sibling = under("Gateway", Some(&parent))?;
+    let plan = MergePlan::new(&parent, &child, &TopicTree::of([&parent, &child, &sibling]))?;
     assert_eq!(plan.into_parent, None);
-    assert_eq!(plan.subtopics, [sibling]);
+    assert_eq!(plan.subtopics, [sibling.id]);
     Ok(())
 }
 
 #[test]
-fn a_sub_topic_cannot_take_over_sub_topics() -> TestResult {
-    let parent = topic("Runtime", &[])?;
-    let mut target = topic("Elsewhere", &[])?;
-    target.parent = Some(TopicId::random());
+fn merging_keeps_to_four_levels_and_never_into_a_deeper_descendant() -> TestResult {
+    let runtime = under("Runtime", None)?;
+    let topics = under("Topics", Some(&runtime))?;
+    let merge = under("Merge", Some(&topics))?;
+    let shallow = under("Shallow", None)?;
+    let leaf = under("Leaf", Some(&shallow))?;
+    let deep = under("Deep", None)?;
+    let middle = under("Middle", Some(&deep))?;
+    let bottom = under("Bottom", Some(&middle))?;
+    let tree = TopicTree::of([
+        &runtime, &topics, &merge, &shallow, &leaf, &deep, &middle, &bottom,
+    ]);
+    assert!(MergePlan::new(&shallow, &merge, &tree).is_ok());
     assert!(matches!(
-        MergePlan::new(&parent, &target, &[TopicId::random()]),
-        Err(TopicError::MergeWouldNest { .. })
+        MergePlan::new(&deep, &merge, &tree),
+        Err(TopicError::TooDeep { max: MAX_DEPTH })
     ));
-    assert!(MergePlan::new(&parent, &target, &[]).is_ok());
+    assert!(matches!(
+        MergePlan::new(&runtime, &merge, &tree),
+        Err(TopicError::IntoOwnSubtree)
+    ));
     Ok(())
 }
 
@@ -266,7 +305,7 @@ fn keys_are_ids_or_folded_slugs() -> TestResult {
     assert_eq!(TopicKey::parse(&id.to_string())?, TopicKey::Id(id));
     assert_eq!(
         TopicKey::parse("RivetHub Desktop")?,
-        TopicKey::Slug(Slug::fold("rivethub-desktop")?)
+        TopicKey::Slug(TopicKind::Work, Slug::fold("rivethub-desktop")?)
     );
     assert!(TopicKey::parse("--").is_err());
     Ok(())
@@ -316,125 +355,65 @@ fn search_matches_prefixes_folded_slugs_aliases_and_redirects_by_recent_activity
     Ok(())
 }
 
-fn catalog(topics: &[&Topic]) -> Vec<TopicListing> {
-    topics
-        .iter()
-        .map(|topic| TopicListing {
-            topic: (*topic).clone(),
-            session_count: 0,
-            last_active: None,
-        })
-        .collect()
-}
-
-fn first_leaf<'a>(title: Option<&'a str>, summary: &'a str) -> FirstLeaf<'a> {
-    FirstLeaf {
-        placement: None,
-        lineage: Lineage::Root,
-        title,
-        summary,
-    }
+fn kinded(kind: TopicKind, name: &str, parent: Option<&Topic>) -> Result<Topic, TopicError> {
+    Topic::create(
+        TopicId::random(),
+        NewTopic {
+            kind,
+            name: TopicName::new(name)?,
+            aliases: Vec::new(),
+            parent: parent.map(|parent| parent.id),
+            directory: None,
+        },
+        at(0),
+    )
 }
 
 #[test]
-fn the_categorizer_leaves_placed_and_child_sessions_alone() -> TestResult {
-    let desktop = topic("RivetHub Desktop", &[])?;
-    let topics = catalog(&[&desktop]);
-    let summary = "Fixed the RivetHub desktop window.";
-    let yours = placement(PlacementSource::You, desktop.id, 1)?;
-    let placed = FirstLeaf {
-        placement: Some(&yours),
-        ..first_leaf(None, summary)
+fn each_kind_nests_only_where_it_belongs() -> TestResult {
+    let software = kinded(TopicKind::Type, "Software", None)?;
+    let apps = kinded(TopicKind::Type, "Apps", Some(&software))?;
+    let rust = kinded(TopicKind::Type, "Rust", Some(&apps))?;
+    let crates = kinded(TopicKind::Type, "Crates", Some(&rust))?;
+    let tokio = kinded(TopicKind::Entity, "tokio", Some(&crates))?;
+    let project = kinded(TopicKind::Work, "RivetOS", None)?;
+    let tree = TopicTree::of([&software, &apps, &rust, &crates, &tokio, &project]);
+    let refused = |child: &Topic, parent: &Topic| match check_parent(child, parent, &tree) {
+        Ok(()) => None,
+        Err(error) => Some(error.to_string()),
     };
-    assert_eq!(placed.categorize(&topics, &[])?, Verdict::AlreadyPlaced);
-    let child = FirstLeaf {
-        lineage: Lineage::Child,
-        ..first_leaf(None, summary)
-    };
-    assert_eq!(child.categorize(&topics, &[])?, Verdict::InheritsParent);
-    Ok(())
-}
-
-#[test]
-fn one_named_topic_is_a_clear_match() -> TestResult {
-    let runtime = topic("RivetHub", &[])?;
-    let mut desktop = topic("RivetHub Desktop", &["Tauri"])?;
-    desktop.parent = Some(runtime.id);
-    let gateway = topic("Gateway", &[])?;
-    let renamed = Redirect {
-        slug: Slug::fold("Mesh Gateway")?,
-        topic: gateway.id,
-    };
-    let topics = catalog(&[&runtime, &desktop, &gateway]);
-    let by_alias = first_leaf(None, "Moved the tauri shell to the new window API.");
+    assert_eq!(refused(&tokio, &crates), None);
     assert_eq!(
-        by_alias.categorize(&topics, &[])?,
-        Verdict::Place(desktop.id)
-    );
-    let sub_topic = first_leaf(Some("RivetHub desktop menus"), "Reworked the menus.");
-    assert_eq!(
-        sub_topic.categorize(&topics, &[])?,
-        Verdict::Place(desktop.id)
-    );
-    let unrelated = catalog(&[&runtime, &desktop]);
-    let by_redirect = first_leaf(None, "Retried the mesh gateway handshake.");
-    assert_eq!(
-        by_redirect.categorize(&unrelated, &[])?,
-        Verdict::Suggest {
-            name: TopicName::new("Retried the mesh gateway handshake")?,
-            topic: None,
-        }
-    );
-    let redirected = Redirect {
-        topic: desktop.id,
-        ..renamed
-    };
-    assert_eq!(
-        by_redirect.categorize(&unrelated, &[redirected])?,
-        Verdict::Place(desktop.id)
-    );
-    Ok(())
-}
-
-#[test]
-fn unclear_sessions_get_a_suggestion_from_their_title() -> TestResult {
-    let desktop = topic("RivetHub Desktop", &[])?;
-    let gateway = topic("Gateway", &[])?;
-    let short = topic("UI", &[])?;
-    let topics = catalog(&[&desktop, &gateway, &short]);
-    let both = first_leaf(
-        None,
-        "Wired the gateway into RivetHub Desktop. The gateway now retries.",
+        refused(&project, &software).as_deref(),
+        Some("Work topics nest only under work topics")
     );
     assert_eq!(
-        both.categorize(&topics, &[])?,
-        Verdict::Suggest {
-            name: TopicName::new("Wired the gateway into RivetHub Desktop")?,
-            topic: None,
-        }
-    );
-    let titled = first_leaf(
-        Some("Gateway retries"),
-        "Tuned the RivetHub desktop and the gateway backoff.",
+        refused(&apps, &project).as_deref(),
+        Some("Types nest only under types")
     );
     assert_eq!(
-        titled.categorize(&topics, &[])?,
-        Verdict::Suggest {
-            name: TopicName::new("Gateway retries")?,
-            topic: Some(gateway.id),
-        }
+        refused(&tokio, &tokio).as_deref(),
+        Some("a topic cannot be its own parent")
     );
-    let unknown = first_leaf(None, "Cleaned up the ui and gatewayish code.");
+    let other = kinded(TopicKind::Entity, "serde", Some(&crates))?;
     assert_eq!(
-        unknown.categorize(&topics, &[])?,
-        Verdict::Suggest {
-            name: TopicName::new("Cleaned up the ui and gatewayish code")?,
-            topic: None,
-        }
+        refused(&other, &tokio).as_deref(),
+        Some("An entity sits only under a type")
     );
-    assert_eq!(
-        first_leaf(None, "  ").categorize(&topics, &[])?,
-        Verdict::Untitled
-    );
+    let depth = TopicTree::of([&apps, &rust, &crates, &tokio]);
+    assert_eq!(depth.height(apps.id), 3);
+    assert!(matches!(
+        kinded(TopicKind::Entity, "loose", None),
+        Err(TopicError::EntityWithoutType)
+    ));
+    assert!(matches!(
+        MergePlan::new(&tokio, &crates, &tree),
+        Err(TopicError::MergeAcrossKinds)
+    ));
+    assert!(matches!(
+        software.accepts_sessions(),
+        Err(TopicError::NotWork { .. })
+    ));
+    assert!(project.accepts_sessions().is_ok());
     Ok(())
 }

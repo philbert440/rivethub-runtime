@@ -2,6 +2,8 @@ use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
+use crate::session_id::SessionId;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct WikiQuery {
     pub q: Option<String>,
@@ -71,6 +73,16 @@ pub struct WikiCitation {
     pub date: Option<DateTime<Utc>>,
     pub kind: Option<String>,
     pub note: Option<String>,
+    #[serde(default)]
+    pub conversation_id: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<SessionId>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub channel: Option<String>,
+    #[serde(default)]
+    pub topic_id: Option<String>,
 }
 
 #[serde_with::skip_serializing_none]
@@ -103,6 +115,15 @@ pub enum WikiSourceKind {
     Task,
     Leaf,
     ExtractWiki,
+    User,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields, rename_all = "camelCase")]
+pub struct WikiPageEdit {
+    pub current_state: Option<String>,
+    pub article: Option<String>,
 }
 
 #[serde_as]
@@ -172,6 +193,7 @@ pub struct WikiGapsResponse {
 }
 
 #[serde_as]
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiTopic {
@@ -182,6 +204,8 @@ pub struct WikiTopic {
     #[serde_as(as = "crate::time::Millis")]
     pub updated_at: DateTime<Utc>,
     pub excerpt: String,
+    #[serde(default)]
+    pub topic_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

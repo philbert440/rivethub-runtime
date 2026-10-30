@@ -2,6 +2,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::MemoryStoreError;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryOwner;
 use uuid::Uuid;
 use wire::gateway::memory::MemoryMessageTally;
 use wire::gateway::memory::MemorySummaryNode;
@@ -11,8 +12,10 @@ use wire::gateway::memory::VectorState;
 use crate::PostgresMemory;
 use crate::error::Error;
 
-const CONVERSATION_SQL: &str = "select id from rh_conversations where session_key = $1
+const SESSION_SQL: &str = "select id, session_key from rh_conversations where session_key = $1
     order by active is not false desc, updated_at desc, id limit 1";
+
+const CONVERSATION_SQL: &str = "select id, session_key from rh_conversations where id = $1";
 
 const DAG_SQL: &str = "with recursive dag(id, level) as (
         select id, 0 from rh_summaries where conversation_id = $1
@@ -76,14 +79,16 @@ struct TallyRow {
 impl PostgresMemory {
     pub(crate) async fn read_summary_dag(
         &self,
-        session: &str,
+        owner: &SummaryOwner,
     ) -> Result<SummaryDag, MemoryStoreError> {
-        let conversation: Option<Uuid> = sqlx::query_scalar(CONVERSATION_SQL)
-            .bind(session)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|source| Error::operation("summary dag", source))?;
-        let Some(conversation) = conversation else {
+        let found: Option<(Uuid, String)> = match owner {
+            SummaryOwner::Session(session) => sqlx::query_as(SESSION_SQL).bind(session),
+            SummaryOwner::Conversation(id) => sqlx::query_as(CONVERSATION_SQL).bind(*id),
+        }
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|source| Error::operation("summary dag", source))?;
+        let Some((conversation, session_key)) = found else {
             return Ok(SummaryDag::default());
         };
         let rows: Vec<DagRow> = sqlx::query_as(DAG_SQL)
@@ -97,6 +102,7 @@ impl PostgresMemory {
             .await
             .map_err(|source| Error::operation("summary dag messages", source))?;
         Ok(SummaryDag {
+            session_key: Some(session_key),
             summaries: rows
                 .into_iter()
                 .map(summary_node)

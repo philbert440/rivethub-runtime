@@ -1,5 +1,5 @@
 use agent_client_protocol::schema::v1 as acp;
-use kernel::harness::SessionEvent;
+use kernel::harness::{ContextUsage, ContextUsageSource, SessionEvent};
 
 use crate::error::AcpError;
 use crate::events::{permission_request, session_event, turn_usage};
@@ -74,6 +74,51 @@ fn missing_tool_output_and_empty_tool_output_remain_distinct() {
     assert_eq!(present.output, Some(String::new()));
 }
 
+#[derive(serde::Serialize)]
+struct CommandInput {
+    command: &'static str,
+}
+
+#[test]
+fn a_tool_update_carries_the_title_and_input_it_brings() {
+    let raw = serde_json::to_value(CommandInput {
+        command: "cargo test",
+    })
+    .expect("input");
+    let update = session_event(acp::SessionUpdate::ToolCallUpdate(
+        acp::ToolCallUpdate::new(
+            "call",
+            acp::ToolCallUpdateFields::new()
+                .title("`cargo test`".to_owned())
+                .raw_input(raw),
+        ),
+    ))
+    .expect("tool update");
+    let Some(SessionEvent::ToolCallUpdate(update)) = update else {
+        panic!("tool update")
+    };
+    assert_eq!(update.title.as_deref(), Some("`cargo test`"));
+    let command = update
+        .input
+        .as_ref()
+        .and_then(|input| input.get("command"))
+        .and_then(|value| value.as_str());
+    assert_eq!(command, Some("cargo test"));
+}
+
+#[test]
+fn a_tool_call_is_named_by_its_tool_when_the_agent_says_so() {
+    let named = |call: acp::ToolCall| match session_event(acp::SessionUpdate::ToolCall(call)) {
+        Ok(Some(SessionEvent::ToolCall(call))) => call.name,
+        other => panic!("tool call: {other:?}"),
+    };
+    assert_eq!(
+        named(acp::ToolCall::new("call", "Terminal").name("Bash".to_owned())),
+        "Bash"
+    );
+    assert_eq!(named(acp::ToolCall::new("call", "Terminal")), "Terminal");
+}
+
 #[tokio::test]
 async fn config_notifications_refresh_the_current_model() {
     let options = crate::options::SessionOptions::default();
@@ -103,6 +148,7 @@ async fn config_notifications_refresh_the_current_model() {
             ),
             &events,
             &options,
+            &crate::context::ContextWindows::default(),
         ),
     )
     .await
@@ -178,4 +224,53 @@ fn usage_meta_that_is_not_token_counts_is_refused() {
         turn_usage(&response),
         Err(AcpError::UsageMeta { .. })
     ));
+}
+
+#[test]
+fn a_usage_update_is_the_harness_context_count() {
+    let reported = |raw: &str| {
+        let update: acp::SessionUpdate = serde_json::from_str(raw).expect("usage update");
+        session_event(update).expect("mapped")
+    };
+    assert_eq!(
+        reported(r#"{"sessionUpdate":"usage_update","used":16168,"size":1000000}"#),
+        Some(SessionEvent::Context(ContextUsage {
+            used: 16_168,
+            window: Some(1_000_000),
+            source: ContextUsageSource::Harness,
+        }))
+    );
+    assert_eq!(
+        reported(r#"{"sessionUpdate":"usage_update","used":900,"size":0}"#),
+        Some(SessionEvent::Context(ContextUsage {
+            used: 900,
+            window: None,
+            source: ContextUsageSource::Harness,
+        }))
+    );
+}
+
+#[test]
+fn a_turn_without_usage_updates_counts_its_last_call_against_the_advertised_window() {
+    let opened: crate::context::OpenedSession = serde_json::from_str(
+        r#"{"sessionId":"s","models":{"currentModelId":"grok-4.7","availableModels":[{"modelId":"grok-4.7","name":"Grok 4.7","_meta":{"totalContextTokens":256000}},{"modelId":"grok-4.5","name":"Grok 4.5"}]}}"#,
+    )
+    .expect("session/new result");
+    let ended: acp::PromptResponse = serde_json::from_str(
+        r#"{"stopReason":"end_turn","_meta":{"modelId":"grok-4.7","inputTokens":17341,"outputTokens":21,"usage":{"inputTokens":34605,"outputTokens":80,"modelCalls":2}}}"#,
+    )
+    .expect("prompt result");
+    let windows = crate::context::ContextWindows::default();
+    windows.learn(opened.models);
+    let call = crate::context::last_call(&ended).expect("last call");
+    assert_eq!(
+        windows.after_turn(call.as_ref()),
+        Some(ContextUsage {
+            used: 17_362,
+            window: Some(256_000),
+            source: ContextUsageSource::LastCall,
+        })
+    );
+    windows.reported();
+    assert_eq!(windows.after_turn(call.as_ref()), None);
 }

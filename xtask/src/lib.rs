@@ -10,6 +10,7 @@ pub mod fallback;
 pub mod git;
 pub mod jsnames;
 pub mod jsonbytes;
+pub mod kernelwire;
 pub mod labpath;
 pub mod lang;
 pub mod manifests;

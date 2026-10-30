@@ -72,7 +72,8 @@ pub(crate) fn handler_ready(name: &JobName) -> bool {
                 | FixedJob::EnqueueIdle
                 | FixedJob::EnqueueStaleSummaries
                 | FixedJob::ReapDeadJobs
-                | FixedJob::SuggestTags
+                | FixedJob::FileConversation
+                | FixedJob::ProposeTidy
                 | FixedJob::ExtractWiki
                 | FixedJob::EnqueueWikiBackfill
                 | FixedJob::ConsolidateWiki
@@ -80,6 +81,7 @@ pub(crate) fn handler_ready(name: &JobName) -> bool {
                 | FixedJob::EnqueueUnchunked
                 | FixedJob::EnqueueStaleWiki
                 | FixedJob::SyncTopicPage
+                | FixedJob::PurgeDeletedSessions
         )
     )
 }

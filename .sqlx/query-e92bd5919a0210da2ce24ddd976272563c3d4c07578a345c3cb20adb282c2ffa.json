@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH candidates AS (DELETE FROM rh_wiki_entity_candidates WHERE summary_id = ANY($3))\n         DELETE FROM rh_wiki_deferred\n          WHERE waits_session = $1 OR waits_conversation = ANY($2) OR summary_id = ANY($3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "UuidArray",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e92bd5919a0210da2ce24ddd976272563c3d4c07578a345c3cb20adb282c2ffa"
+}

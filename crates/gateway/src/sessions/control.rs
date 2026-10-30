@@ -3,15 +3,22 @@ use std::sync::Arc;
 
 use kernel::harness::{HarnessAdapter, SessionEvent, SessionOption, TurnAttachment, TurnInput};
 use tokio::sync::{mpsc, oneshot};
-use wire::events::{AgentEvent, AgentEventKind, ProtocolVersion};
 use wire::gateway::term::TermSpawnResponse;
-use wire::harness::{HarnessCode, HarnessEvent, HarnessSessionStatus, SteerOutcome};
+use wire::harness::{
+    HarnessCode, HarnessEvent, HarnessSessionStatus, SteerOutcome, TerminalApproval,
+};
 use wire::session_id::SessionId;
 
 use super::fanout::ToolNames;
 use crate::error::ApiError;
 use crate::tenancy::UserId;
 use crate::term::{Launch, TerminalService};
+
+mod driver;
+mod handover;
+mod publish;
+
+pub(crate) use driver::TerminalSignal;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Surface {
@@ -37,7 +44,7 @@ enum Request {
         message: Queued,
         reply: oneshot::Sender<Result<SteerOutcome, ApiError>>,
     },
-    TurnEnd,
+    Signal(TerminalSignal),
     Stop {
         reply: oneshot::Sender<Result<(), ApiError>>,
     },
@@ -101,7 +108,23 @@ impl ChatHandle {
     }
 
     pub async fn turn_end(&self) -> Result<(), ApiError> {
-        self.send(Request::TurnEnd).await
+        self.signal(TerminalSignal::TurnEnded).await
+    }
+
+    pub(crate) async fn signal(&self, signal: TerminalSignal) -> Result<(), ApiError> {
+        self.send(Request::Signal(signal)).await
+    }
+
+    pub(crate) fn try_signal(&self, signal: TerminalSignal) {
+        match self.commands.try_send(Request::Signal(signal)) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                tracing::warn!("session actor missed a terminal signal");
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                tracing::debug!("a terminal signal arrived after its session actor stopped");
+            }
+        }
     }
 
     pub(crate) fn is_closed(&self) -> bool {
@@ -185,6 +208,9 @@ pub(crate) struct ChatActor {
     closing: Option<oneshot::Sender<Result<(), ApiError>>>,
     tools: ToolNames,
     steering: tokio::task::JoinSet<Steered>,
+    startup: Option<String>,
+    approval: Option<TerminalApproval>,
+    announced: Option<HarnessEvent>,
 }
 
 impl ChatActor {
@@ -195,12 +221,23 @@ impl ChatActor {
         session: SessionId,
         events: Option<mpsc::Receiver<SessionEvent>>,
     ) -> Result<ChatHandle, ApiError> {
+        Self::start_with(service, harness, user, session, events, None)
+    }
+
+    pub(crate) fn start_with(
+        service: &Arc<TerminalService>,
+        harness: Arc<dyn HarnessAdapter>,
+        user: UserId,
+        session: SessionId,
+        events: Option<mpsc::Receiver<SessionEvent>>,
+        startup: Option<String>,
+    ) -> Result<ChatHandle, ApiError> {
         let surface = if events.is_some() {
             Surface::Chat
         } else {
             Surface::Terminal
         };
-        Self::spawn(service, harness, user, session, events, surface)
+        Self::spawn(service, harness, user, session, (events, surface), startup)
     }
 
     pub(crate) fn idle(
@@ -209,7 +246,7 @@ impl ChatActor {
         user: UserId,
         session: SessionId,
     ) -> Result<ChatHandle, ApiError> {
-        Self::spawn(service, harness, user, session, None, Surface::Idle)
+        Self::spawn(service, harness, user, session, (None, Surface::Idle), None)
     }
 
     fn spawn(
@@ -217,8 +254,8 @@ impl ChatActor {
         harness: Arc<dyn HarnessAdapter>,
         user: UserId,
         session: SessionId,
-        events: Option<mpsc::Receiver<SessionEvent>>,
-        surface: Surface,
+        (events, surface): (Option<mpsc::Receiver<SessionEvent>>, Surface),
+        startup: Option<String>,
     ) -> Result<ChatHandle, ApiError> {
         let key = service.registry.authorize(&user, session.as_str())?;
         let (commands, requests) = mpsc::channel(64);
@@ -229,7 +266,7 @@ impl ChatActor {
             session,
             key,
             surface,
-            terminal_busy: surface == Surface::Terminal,
+            terminal_busy: false,
             turn_ended: true,
             pending: None,
             queued: VecDeque::new(),
@@ -237,6 +274,9 @@ impl ChatActor {
             closing: None,
             tools: ToolNames::default(),
             steering: tokio::task::JoinSet::new(),
+            startup,
+            approval: None,
+            announced: None,
         };
         service.track(async move {
             if let Err(error) = actor.run(requests).await {
@@ -268,9 +308,16 @@ impl ChatActor {
                 .release(&self.session)
                 .await
                 .map_err(ApiError::from),
-            Surface::Terminal => self.service.remove_terminal(&self.user, &self.key).await,
+            Surface::Terminal => match self.service.remove_terminal(&self.user, &self.key).await {
+                Err(ApiError::Unavailable(reason)) if self.service.shutdown.is_cancelled() => {
+                    tracing::debug!(%reason, "the terminal stopped with the gateway before its session");
+                    Ok(())
+                }
+                removed => removed,
+            },
             Surface::Idle => Ok(()),
         };
+        self.service.forget_driver(&self.key);
         let result = outcome.and(cleanup);
         if let Some(reply) = self.closing {
             respond(reply, result);
@@ -287,6 +334,7 @@ impl ChatActor {
     ) -> Result<(), ApiError> {
         loop {
             self.advance(turn).await?;
+            self.announce(!turn.is_empty() || !self.turn_ended);
             tokio::select! {
                 () = self.service.shutdown.cancelled() => return Ok(()),
                 request = requests.recv() => {
@@ -305,13 +353,13 @@ impl ChatActor {
                             else { self.pending = Some((launch, reply)); }
                         }
                         Request::Steer { message, reply } => { let running = !turn.is_empty() || !self.turn_ended; self.steer(running, message, reply); }
-                        Request::TurnEnd => self.terminal_busy = false,
+                        Request::Signal(signal) => self.terminal_signal(signal),
                         Request::Stop { reply } => {
                             let result = match self.surface {
                                 Surface::Chat => self.harness.cancel(&self.session).await.map_err(ApiError::from),
                                 Surface::Terminal => {
                                     let result = self.service.remove_terminal(&self.user, &self.key).await;
-                                    if result.is_ok() { self.terminal_busy = false; self.surface = Surface::Idle; }
+                                    if result.is_ok() { self.terminal_busy = false; self.approval = None; self.surface = Surface::Idle; }
                                     result
                                 }
                                 Surface::Idle => Ok(()),
@@ -347,12 +395,13 @@ impl ChatActor {
             return Ok(());
         }
         if let Some((mut launch, reply)) = self.pending.take() {
+            let fresh = self.fresh().await?;
             if self.surface == Surface::Chat {
                 self.harness.release(&self.session).await?;
                 self.events = None;
                 self.surface = Surface::Idle;
             }
-            launch.resume = Some(self.session.native().into());
+            self.prepare(&mut launch, fresh);
             let result = self
                 .service
                 .spawn_raw(&self.user, &self.key, launch)
@@ -360,7 +409,7 @@ impl ChatActor {
                 .map(|spawned| spawned.response);
             if result.is_ok() {
                 self.surface = Surface::Terminal;
-                self.terminal_busy = true;
+                self.terminal_busy = false;
             }
             respond(reply, result);
             return Ok(());
@@ -372,6 +421,7 @@ impl ChatActor {
             if self.surface == Surface::Terminal {
                 self.service.remove_terminal(&self.user, &self.key).await?;
             }
+            self.approval = None;
             self.surface = Surface::Idle;
             self.harness.resume(&self.session).await?;
             self.surface = Surface::Chat;
@@ -461,75 +511,6 @@ impl ChatActor {
         );
         self.turn_ended = true;
         self.publish(SessionEvent::TurnEnded)
-    }
-
-    fn fan_out(&mut self, event: &SessionEvent) {
-        if let Some(harness_event) = self.tools.harness_event(&self.session, event) {
-            self.service.publish_harness(&self.key, harness_event);
-        }
-        if matches!(event, SessionEvent::Permission(_)) {
-            self.service.set_blocked(&self.key, &self.session, true);
-            return;
-        }
-        let status = if matches!(event, SessionEvent::TurnEnded) {
-            HarnessSessionStatus::Idle
-        } else if matches!(event, SessionEvent::Exited { .. }) {
-            HarnessSessionStatus::Ended
-        } else {
-            return;
-        };
-        self.service
-            .set_live_status(&self.key, &self.session, status);
-    }
-
-    fn publish(&mut self, event: SessionEvent) -> Result<(), ApiError> {
-        self.fan_out(&event);
-        let ts = Some(chrono::Utc::now());
-        let kind = match event {
-            SessionEvent::UserMessageChunk { text } => AgentEventKind::MessageUser { text, ts },
-            SessionEvent::AgentMessageChunk { text } => AgentEventKind::MessageAgent {
-                text,
-                model: None,
-                duration_ms: None,
-                usage: None,
-                ts,
-            },
-            SessionEvent::AgentThoughtChunk { text } => AgentEventKind::ThinkingDelta { text, ts },
-            SessionEvent::ToolCall(call) => AgentEventKind::ToolStart {
-                tool: call.name,
-                args: Some(call.input),
-                ts,
-            },
-            SessionEvent::Plan(plan) => AgentEventKind::TaskPlan {
-                tasks: plan.into_iter().map(|entry| entry.content).collect(),
-                ts,
-            },
-            SessionEvent::TurnEnded => AgentEventKind::TurnEnd { ts },
-            SessionEvent::Exited { .. } => AgentEventKind::SessionEnd { ts },
-            SessionEvent::Permission(request) => AgentEventKind::ToolStart {
-                tool: request.name,
-                args: Some(request.input),
-                ts,
-            },
-            SessionEvent::ToolCallUpdate(_)
-            | SessionEvent::Usage { .. }
-            | SessionEvent::AvailableCommands(_)
-            | SessionEvent::CurrentMode { .. }
-            | SessionEvent::TerminalBytes { .. }
-            | SessionEvent::TerminalResize { .. } => {
-                tracing::trace!("harness metadata has no v1 session projection");
-                return Ok(());
-            }
-        };
-        self.service.registry.ingest(
-            &self.user,
-            vec![AgentEvent {
-                v: ProtocolVersion::V1,
-                session: self.key.clone(),
-                kind,
-                extra: wire::Extra::default(),
-            }],
-        )
     }
 }
 

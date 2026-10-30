@@ -1,6 +1,7 @@
 pub mod adapter;
 pub mod client;
 pub mod connection;
+mod context;
 mod discovery;
 pub mod error;
 pub mod events;

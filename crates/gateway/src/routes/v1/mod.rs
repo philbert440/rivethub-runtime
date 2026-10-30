@@ -35,7 +35,6 @@ pub struct BoundAgent {
     reason = "the turn runner port does not implement Debug"
 )]
 pub struct Service {
-    model: String,
     roster: BTreeMap<String, BoundAgent>,
     conversations: storage::Store,
     limits: TurnLimits,
@@ -45,7 +44,6 @@ pub struct Service {
 
 impl Service {
     pub async fn open(
-        model: String,
         directory: &Path,
         cancel: CancellationToken,
         roster: BTreeMap<String, BoundAgent>,
@@ -53,7 +51,6 @@ impl Service {
         let tasks = TaskTracker::new();
         let conversations = storage::Store::open(directory, &tasks, &cancel).await?;
         Ok(Arc::new(Self {
-            model,
             roster,
             conversations,
             limits: TurnLimits {
@@ -83,18 +80,6 @@ impl Service {
             )));
         };
         Ok((Arc::clone(&agent.runner), agent.model.clone()))
-    }
-
-    pub(crate) fn model(&self) -> &str {
-        &self.model
-    }
-
-    pub(crate) fn limits(&self) -> TurnLimits {
-        self.limits
-    }
-
-    pub(crate) fn child_token(&self) -> CancellationToken {
-        self.cancel.child_token()
     }
 
     pub fn router(self: &Arc<Self>, gateway: &Arc<Gateway>, secure: bool) -> Router {

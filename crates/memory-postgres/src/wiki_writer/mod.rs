@@ -3,11 +3,11 @@ mod lock;
 use std::path::{Component, Path, PathBuf};
 
 use kernel::wiki::builder::WikiWriteError;
-use tokio::process::Command;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::{
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::{
     PagePatch, WikiPage, apply_patch, normalize_slug, parse_wiki_page, serialize_wiki_page,
 };
+use tokio::process::Command;
 
 use lock::WriterLock;
 
@@ -25,6 +25,11 @@ pub struct AppliedPage {
 impl WikiRepository {
     pub fn new(root: PathBuf) -> Self {
         Self { root }
+    }
+
+    pub async fn read_unlocked(&self, slug: &WikiSlug) -> Result<Option<WikiPage>, WikiWriteError> {
+        let root = tokio::fs::canonicalize(&self.root).await?;
+        read_page(&root, slug).await
     }
 
     pub async fn lock(&self) -> Result<LockedRepository, WikiWriteError> {
@@ -62,6 +67,14 @@ impl LockedRepository {
         message: &str,
     ) -> Result<String, WikiWriteError> {
         fold_locked(&self.root, page, removed, message).await
+    }
+
+    pub async fn remove(
+        &mut self,
+        removed: &[String],
+        message: &str,
+    ) -> Result<String, WikiWriteError> {
+        remove_locked(&self.root, removed, message).await
     }
 
     pub async fn release(self) -> Result<(), WikiWriteError> {
@@ -153,6 +166,22 @@ async fn fold_locked(
 ) -> Result<String, WikiWriteError> {
     sync(root).await?;
     let mut paths = vec![store_page(root, page).await?];
+    paths.extend(remove_files(root, removed).await?);
+    commit(root, &paths, message).await
+}
+
+async fn remove_locked(
+    root: &Path,
+    removed: &[String],
+    message: &str,
+) -> Result<String, WikiWriteError> {
+    sync(root).await?;
+    let paths = remove_files(root, removed).await?;
+    commit(root, &paths, message).await
+}
+
+async fn remove_files(root: &Path, removed: &[String]) -> Result<Vec<String>, WikiWriteError> {
+    let mut paths = Vec::new();
     for slug in removed {
         let slug = WikiSlug::try_from(normalize_slug(slug))?;
         let relative = topic_path(&slug);
@@ -169,12 +198,12 @@ async fn fold_locked(
         }
         paths.push(relative);
     }
-    commit(root, &paths, message).await
+    Ok(paths)
 }
 
 async fn sync(root: &Path) -> Result<(), WikiWriteError> {
     ensure_repo(root).await?;
-    if tokio::fs::try_exists(root.join(".git/refs/remotes")).await? {
+    if tracks_upstream(root).await? {
         #[expect(
             clippy::let_underscore_must_use,
             reason = "CONTRACT B11: wiki pull failure warns and local page application continues"
@@ -184,6 +213,22 @@ async fn sync(root: &Path) -> Result<(), WikiWriteError> {
             .inspect_err(|error| tracing::warn!(%error, "wiki pull failed; applying local patch"));
     }
     reject_symlink(&root.join("topics")).await
+}
+
+async fn tracks_upstream(root: &Path) -> Result<bool, WikiWriteError> {
+    let branches = git(
+        root,
+        &[
+            "for-each-ref",
+            "--format=%(HEAD)%(upstream:remotename)",
+            "refs/heads",
+        ],
+    )
+    .await?;
+    Ok(branches
+        .lines()
+        .filter_map(|line| line.strip_prefix('*'))
+        .any(|remote| !remote.is_empty() && remote != "."))
 }
 
 fn topic_path(slug: &WikiSlug) -> String {

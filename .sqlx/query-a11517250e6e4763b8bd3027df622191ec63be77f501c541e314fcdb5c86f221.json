@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH named AS (\n                 SELECT m.conversation_id, m.created_at, true AS tool_output FROM rh_messages m\n                  WHERE m.tool_result IS NOT NULL AND length(m.tool_result) > 0\n                    AND m.tool_result LIKE $1\n                 UNION ALL\n                 SELECT m.conversation_id, m.created_at, false FROM rh_messages m\n                  WHERE m.content LIKE $1\n             )\n             SELECT c.id, c.session_key, c.agent, c.channel, c.title\n               FROM named n\n               JOIN rh_conversations c ON c.id = n.conversation_id\n              WHERE n.conversation_id <> $2\n              ORDER BY n.tool_output DESC, n.created_at, c.id\n              LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "session_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "session_key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "agent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "agent"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "channel",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "channel"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "title"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "a11517250e6e4763b8bd3027df622191ec63be77f501c541e314fcdb5c86f221"
+}

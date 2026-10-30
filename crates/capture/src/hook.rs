@@ -1,3 +1,4 @@
+pub mod grok;
 mod transcript_batch;
 
 use std::os::unix::fs::PermissionsExt as _;
@@ -7,6 +8,7 @@ use std::path::PathBuf;
 use chrono::DateTime;
 use chrono::SecondsFormat;
 use chrono::Utc;
+use kernel::memory::spoken_title;
 use thiserror::Error;
 use tokio::io::AsyncWriteExt as _;
 use wire::JsonObject;
@@ -271,11 +273,8 @@ fn user_prompt_batch(
 ) -> Result<CaptureBatchRequest, HookError> {
     let mut batch = base_batch(session_key);
     let prompt = payload.prompt.clone().unwrap_or_default();
-    batch.title = Some(if prompt.is_empty() {
-        FALLBACK_TITLE.to_owned()
-    } else {
-        prompt.clone()
-    });
+    batch.title =
+        Some(spoken_title(&prompt).map_or_else(|| FALLBACK_TITLE.to_owned(), str::to_owned));
     let suffix = user_ordinal(transcript, &prompt);
     batch.messages.push(CaptureMessage {
         event_id: format!("{session_key}:u{suffix}"),

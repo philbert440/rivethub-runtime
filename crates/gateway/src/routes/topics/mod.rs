@@ -1,5 +1,8 @@
 mod decisions;
+mod done;
+mod filing;
 mod map;
+mod page;
 mod startup;
 
 use std::sync::Arc;
@@ -12,6 +15,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing;
 use chrono::Utc;
+use kernel::filing::Target;
 use kernel::topics::Change;
 use kernel::topics::NewTopic;
 use kernel::topics::Placement;
@@ -20,19 +24,17 @@ use kernel::topics::Topic;
 use kernel::topics::TopicChanges;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
 use kernel::topics::TopicStore;
-use kernel::topics::bound_page;
 use serde::Deserialize;
 use wire::gateway::topics::PlacementReply;
 use wire::gateway::topics::PlacementRequest;
 use wire::gateway::topics::TopicCreateRequest;
 use wire::gateway::topics::TopicList;
 use wire::gateway::topics::TopicMergeRequest;
-use wire::gateway::topics::TopicPage;
 use wire::gateway::topics::TopicRecord;
-use wire::gateway::topics::TopicSessionList;
 use wire::gateway::topics::TopicUpdate;
 use wire::session_id::SessionId;
 use wire::session_id::SessionRef;
@@ -42,9 +44,10 @@ use crate::error::ApiError;
 use crate::extract::Body;
 use crate::extract::Query;
 
+pub(super) use map::error as topic_error;
 pub(super) use startup::Started;
 pub(super) use startup::begin;
-pub(super) use startup::prepare;
+pub(crate) use startup::prepare;
 
 const SEARCH_LIMIT_DEFAULT: usize = 10;
 const SEARCH_LIMIT_MAX: usize = 50;
@@ -73,8 +76,12 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::post(merge).fallback(super::method_not_allowed),
         )
         .route(
-            "/api/topics/{topic}/page",
-            routing::get(page).fallback(super::method_not_allowed),
+            "/api/topics/{topic}/close",
+            routing::post(done::close).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/topics/{topic}/reopen",
+            routing::post(done::reopen).fallback(super::method_not_allowed),
         )
         .route(
             "/api/topics/{topic}/decisions",
@@ -92,7 +99,11 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         )
         .route(
             "/api/topics/{topic}/sessions",
-            routing::get(sessions).fallback(super::method_not_allowed),
+            routing::get(filing::sessions).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/topics/{topic}/startup",
+            routing::get(startup::preview).fallback(super::method_not_allowed),
         )
         .route(
             "/api/harness-sessions/{session}/startup-context",
@@ -105,6 +116,18 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
                 .delete(unplace)
                 .fallback(super::method_not_allowed),
         )
+        .route(
+            "/api/sessions/history",
+            routing::get(done::history).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/sessions/{session}/history",
+            routing::put(done::mark)
+                .delete(done::unmark)
+                .fallback(super::method_not_allowed),
+        )
+        .merge(filing::router())
+        .merge(page::router())
         .layer(DefaultBodyLimit::max(super::BODY_LIMIT))
 }
 
@@ -130,10 +153,45 @@ fn canonical(segment: &str) -> Result<SessionId, ApiError> {
     }
 }
 
-async fn list(State(gateway): State<Arc<Gateway>>) -> Result<Json<TopicList>, ApiError> {
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Shown {
+    #[default]
+    Work,
+    Type,
+    Entity,
+    All,
+}
+
+impl Shown {
+    fn shows(self, listing: &kernel::topics::TopicListing) -> bool {
+        let kind = listing.topic.kind;
+        match self {
+            Self::All => true,
+            Self::Work => kind == TopicKind::Work,
+            Self::Type => kind == TopicKind::Type,
+            Self::Entity => kind == TopicKind::Entity,
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct ListParams {
+    kind: Shown,
+}
+
+async fn list(
+    State(gateway): State<Arc<Gateway>>,
+    Query(params): Query<ListParams>,
+) -> Result<Json<TopicList>, ApiError> {
     let listings = gateway.topics()?.list().await.map_err(map::error)?;
     Ok(Json(TopicList {
-        topics: listings.into_iter().map(map::summary).collect(),
+        topics: listings
+            .into_iter()
+            .filter(|listing| params.kind.shows(listing))
+            .map(map::summary)
+            .collect(),
     }))
 }
 
@@ -142,6 +200,7 @@ async fn list(State(gateway): State<Arc<Gateway>>) -> Result<Json<TopicList>, Ap
 struct SearchParams {
     q: String,
     limit: Option<usize>,
+    kind: Shown,
 }
 
 async fn search(
@@ -152,11 +211,14 @@ async fn search(
         Some(limit) => limit.clamp(1, SEARCH_LIMIT_MAX),
         None => SEARCH_LIMIT_DEFAULT,
     };
-    let hits = gateway
-        .topics()?
-        .search(&TopicQuery::new(&params.q), limit)
-        .await
-        .map_err(map::error)?;
+    let store = gateway.topics()?;
+    let listings = store.list().await.map_err(map::error)?;
+    let redirects = store.redirects().await.map_err(map::error)?;
+    let shown = listings
+        .into_iter()
+        .filter(|listing| params.kind.shows(listing))
+        .collect();
+    let hits = kernel::topics::rank(shown, &redirects, &TopicQuery::new(&params.q), limit);
     Ok(Json(TopicList {
         topics: hits.into_iter().map(map::summary).collect(),
     }))
@@ -180,6 +242,7 @@ async fn create(
         None => None,
     };
     let new = NewTopic {
+        kind: map::kind(request.kind),
         name: TopicName::new(&request.name).map_err(map::error)?,
         aliases: map::aliases(&request.aliases)?,
         parent,
@@ -250,33 +313,6 @@ async fn merge(
     Ok(Json(map::record(merged)))
 }
 
-async fn page(
-    State(gateway): State<Arc<Gateway>>,
-    Path(key): Path<String>,
-) -> Result<Json<TopicPage>, ApiError> {
-    let store = gateway.topics()?;
-    let topic = resolve(store.as_ref(), &key).await?;
-    let page = bound_page(store.as_ref(), gateway.store().as_ref(), &topic)
-        .await
-        .map_err(map::page_error)?;
-    Ok(Json(TopicPage {
-        topic: map::record(topic),
-        page,
-    }))
-}
-
-async fn sessions(
-    State(gateway): State<Arc<Gateway>>,
-    Path(key): Path<String>,
-) -> Result<Json<TopicSessionList>, ApiError> {
-    let store = gateway.topics()?;
-    let id = resolve_id(store.as_ref(), &key).await?;
-    let placed = store.sessions(id).await.map_err(map::error)?;
-    Ok(Json(TopicSessionList {
-        sessions: placed.into_iter().map(map::session).collect(),
-    }))
-}
-
 async fn placement(
     State(gateway): State<Arc<Gateway>>,
     Path(segment): Path<String>,
@@ -302,17 +338,29 @@ async fn place(
     let session = canonical(&segment)?;
     let store = gateway.topics()?;
     let topic = resolve_id(store.as_ref(), &request.topic_id).await?;
+    let before = store.placement(&session).await.map_err(map::error)?;
+    let now = Utc::now();
     let outcome = store
         .place(Placement {
-            session,
+            session: session.clone(),
             topic,
             by: PlacementSource::You,
-            at: Utc::now(),
+            at: now,
         })
         .await
         .map_err(map::error)?;
+    let filed = before.map(|placement| (placement.by, placement.topic));
+    filing::correct(&gateway, Target::Session(session), filed, Some(topic), now).await?;
+    let placement = map::placement(outcome.into_placement());
+    if let Some(host) = gateway.plugins() {
+        host.publish(&wire::plugin::process::PluginEvent::SessionPlaced {
+            session_id: placement.session_id.clone(),
+            topic_id: placement.topic_id.clone(),
+            by: placement.by,
+        });
+    }
     Ok(Json(PlacementReply {
-        placement: Some(map::placement(outcome.into_placement())),
+        placement: Some(placement),
         suggestion: None,
     }))
 }
@@ -322,11 +370,13 @@ async fn unplace(
     Path(segment): Path<String>,
 ) -> Result<Json<PlacementReply>, ApiError> {
     let session = canonical(&segment)?;
-    gateway
+    let removed = gateway
         .topics()?
         .unplace(&session)
         .await
         .map_err(map::error)?;
+    let filed = removed.map(|placement| (placement.by, placement.topic));
+    filing::correct(&gateway, Target::Session(session), filed, None, Utc::now()).await?;
     Ok(Json(PlacementReply {
         placement: None,
         suggestion: None,

@@ -4,7 +4,11 @@ use async_trait::async_trait;
 #[derive(Debug)]
 pub struct CsrPem(pub String);
 
-pub use wire::ca::SignResponse as CertChainPem;
+#[derive(Debug)]
+pub struct CertChainPem {
+    pub leaf: String,
+    pub chain: Vec<String>,
+}
 
 #[derive(Debug)]
 pub struct CrlPem(pub String);

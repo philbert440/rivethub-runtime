@@ -16,7 +16,6 @@ async fn missing_turn_runner_refuses_before_creating_a_conversation() {
     let harness = Harness::new(chunks()).await;
     let dir = tempfile::tempdir().expect("scratch directory");
     let service = Service::open(
-        "test-model".to_owned(),
         &dir.path().join("conversations"),
         CancellationToken::new(),
         std::collections::BTreeMap::new(),

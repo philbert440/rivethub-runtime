@@ -10,6 +10,7 @@ use testkit::fakes::FakeJobQueue;
 use tokio_util::sync::CancellationToken;
 use wiki_support::{TestResult, fixture, now, patch, provider, seed, seed_recording};
 use wire::message::MessageContent;
+use wire::stream::openai::FinishReason;
 use workers::wiki_builder::{
     WikiBuilderEnv, extract_wiki_job, handle_extract_wiki, handle_wiki_backfill,
 };
@@ -67,12 +68,13 @@ async fn wiki_replays_every_recorded_summary_shape(pool: PgPool) -> TestResult {
                 model: "fake-chat",
                 now: row.created_at,
                 cancel: &cancel,
-                topics: None,
+                topics: Some(wiki_support::ports(&store)),
             };
             let job = ExtractWiki {
                 summary_id: row.id,
                 conversation_id: Some(row.conversation_id),
             };
+            wiki_support::filed(&store, &job).await?;
             let work = store.wiki_work(&job).await?;
             let WikiWork::Pending(summary) = work else {
                 panic!("fresh extraction");
@@ -94,10 +96,10 @@ async fn wiki_replays_every_recorded_summary_shape(pool: PgPool) -> TestResult {
             else {
                 panic!("text");
             };
-            assert_eq!(
-                serde_json::from_str::<wire::JsonObject>(user)?,
-                wire::JsonObject::from_serialize(&summary)?,
-            );
+            let sent: wire::JsonObject = serde_json::from_str(user)?;
+            for (field, value) in wire::JsonObject::from_serialize(&summary)?.as_map() {
+                assert_eq!(sent.get(field), Some(value), "{field}");
+            }
             let state: (String, i32, Vec<String>) = sqlx::query_as("SELECT status, pipeline_version, topics_touched FROM rh_wiki_extractions WHERE summary_id = $1")
                 .bind(row.id).fetch_one(&pool).await?;
             assert_eq!(state, ("done".to_owned(), WIKI_PIPELINE_VERSION, topics));
@@ -136,6 +138,7 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
         .await?
         .expect("wiki job");
     assert_eq!(claimed.name, JobName::Fixed(FixedJob::ExtractWiki));
+    wiki_support::filed(&store, &job).await?;
     let env = WikiBuilderEnv {
         store: &store,
         provider: &model,
@@ -143,7 +146,7 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     let topics = handle_extract_wiki(&env, &claimed.payload).await?;
     assert_eq!(topics, vec!["acmekit-deploys"]);
@@ -184,7 +187,7 @@ async fn wiki_claims_jobs_persists_sources_and_retries_embedding_delivery(
     let head = String::from_utf8(output.stdout)?.trim().to_owned();
     assert_eq!(sha, (Some(head.clone()), Some(head)));
     let markdown = tokio::fs::read_to_string(wiki.path().join("topics/acmekit-deploys.md")).await?;
-    let page = wire::wiki::parse_wiki_page(&markdown)?;
+    let page = kernel::wiki::page::parse_wiki_page(&markdown)?;
     assert_eq!(
         page.citations.first().ok_or("citation")?.note.as_deref(),
         Some("Blue-green adopted")
@@ -252,7 +255,7 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
         model: "fake-chat",
         now: now(),
         cancel: &cancel,
-        topics: None,
+        topics: Some(wiki_support::ports(&store)),
     };
     assert_eq!(handle_wiki_backfill(&env).await?, expected.len());
     assert_eq!(handle_wiki_backfill(&env).await?, expected.len());
@@ -274,5 +277,44 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
         |cron| cron.task == JobName::Fixed(FixedJob::EnqueueWikiBackfill)
             && cron.schedule == "*/10 * * * *"
     ));
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn wiki_extraction_constrains_the_model_and_reads_loose_slugs_and_dates(
+    pool: PgPool,
+) -> TestResult {
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
+    let job = seed(&pool).await?;
+    wiki_support::filed(&store, &job).await?;
+    let answer = r#"[{"action":"create","slug":"AcmeKit/Deploys","title":"AcmeKit deploys","aliases":["","acmekit rollout"],"tags":["deploy"],"entities":[],"summary":"Deploys go blue-green.","article":null,"related":null,"history_entry":{"date":"2026-10-03T04:24:00Z","title":"Blue-green adopted","body":"Decided to deploy blue-green."},"type":null}]"#;
+    let model = wiki_support::raw_provider(answer, FinishReason::Stop);
+    let queue = FakeJobQueue::default();
+    let cancel = CancellationToken::new();
+    let env = WikiBuilderEnv {
+        store: &store,
+        provider: &model,
+        queue: &queue,
+        model: "fake-chat",
+        now: now(),
+        cancel: &cancel,
+        topics: Some(wiki_support::ports(&store)),
+    };
+    let topics = handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload).await?;
+    assert_eq!(topics, vec!["acmekit-deploys"]);
+    let calls = model.chat_requests().await;
+    let request = calls.first().ok_or("one request")?;
+    let MessageContent::Text(system) = &request.messages.first().ok_or("system")?.content else {
+        return Err("a text system prompt".into());
+    };
+    assert!(system.contains(r#""pattern":"^[a-z0-9]+(-[a-z0-9]+)*$""#));
+    assert!(system.contains(r#""format":"date""#));
+    let constraint = request
+        .options
+        .json_schema
+        .as_ref()
+        .ok_or("a response schema")?;
+    assert!(system.contains(&serde_json::to_string(constraint)?));
     Ok(())
 }

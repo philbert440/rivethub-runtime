@@ -1,16 +1,15 @@
 use std::path::Path;
 
+use wire::gateway::GatewayError;
 use wire::gateway::catalog::CatalogAgent;
 use wire::gateway::catalog::CatalogAgentsResponse;
 use wire::task::TaskCreateRequest;
-use wire::task::TaskResponse;
-use wire::task::TaskStatus;
 use wire::task::TasksListResponse;
 
-use super::{DELEGATE_TEXT, TestResult, free_port, model_stub, provider_base, start, stop};
+use super::{TestResult, free_port, model_stub, provider_base, start, stop};
 
 struct Observed {
-    created: TaskResponse,
+    refused: (reqwest::StatusCode, GatewayError),
     listed: TasksListResponse,
     agents: CatalogAgentsResponse,
     outcomes: reqwest::StatusCode,
@@ -23,34 +22,26 @@ fn gateway_config(database: &Path, gateway: u16) -> String {
     )
 }
 
-fn request() -> TaskCreateRequest {
-    TaskCreateRequest {
-        goal: "finish the ledger".to_owned(),
-        agent_id: "main".to_owned(),
-        executor: None,
-        executor_target: None,
-        requested_by: None,
-        parent_task_id: None,
-        chain_depth: None,
-        node_affinity: None,
-        spec: None,
-        budget: None,
-        context_refs: None,
-        acceptance_criteria: None,
-    }
+fn retired() -> TestResult<TaskCreateRequest> {
+    let extra: wire::Extra =
+        serde_json::from_str(r#"{"executor": "chat-loop", "budget": {"maxUsd": 1.0}}"#)?;
+    Ok(TaskCreateRequest {
+        goal: Some("finish the ledger".to_owned()),
+        agent_id: Some("main".to_owned()),
+        extra,
+        ..TaskCreateRequest::default()
+    })
 }
 
 async fn observe(gateway: u16) -> TestResult<Observed> {
     let client = reqwest::Client::builder().no_proxy().build()?;
     let base = format!("http://127.0.0.1:{gateway}");
-    let created = client
+    let response = client
         .post(format!("{base}/api/tasks?wait=1&timeoutMs=20000"))
-        .json(&request())
+        .json(&retired()?)
         .send()
-        .await?
-        .error_for_status()?
-        .json::<TaskResponse>()
         .await?;
+    let refused = (response.status(), response.json::<GatewayError>().await?);
     let listed = client
         .get(format!("{base}/api/tasks"))
         .send()
@@ -67,7 +58,7 @@ async fn observe(gateway: u16) -> TestResult<Observed> {
         .await?;
     let outcomes = client.get(format!("{base}/api/outcomes")).send().await?;
     Ok(Observed {
-        created,
+        refused,
         listed,
         agents,
         outcomes: outcomes.status(),
@@ -75,7 +66,8 @@ async fn observe(gateway: u16) -> TestResult<Observed> {
 }
 
 #[tokio::test]
-async fn task_routes_run_tasks_on_the_sqlite_engine() -> TestResult {
+async fn an_agent_on_a_model_provider_is_not_delegable_and_the_retired_routes_are_gone()
+-> TestResult {
     let home = tempfile::tempdir()?;
     let gateway = free_port()?;
     let stub = model_stub().await?;
@@ -100,18 +92,10 @@ async fn task_routes_run_tasks_on_the_sqlite_engine() -> TestResult {
     let observed = observed?;
     stopped?;
     closed?;
-    let task = observed.created.task;
-    assert_eq!(task.status, TaskStatus::Completed, "{task:?}");
-    assert_eq!(task.claimed_by.as_deref(), Some("standalone-node:agent"));
-    let result = task.result.ok_or("task result")?;
-    assert_eq!(result.summary, DELEGATE_TEXT);
-    let listed: Vec<&str> = observed
-        .listed
-        .tasks
-        .iter()
-        .map(|listed| listed.id.as_str())
-        .collect();
-    assert_eq!(listed, vec![task.id.as_str()]);
+    let (status, refused) = observed.refused;
+    assert_eq!(status, reqwest::StatusCode::BAD_REQUEST, "{refused:?}");
+    assert!(refused.error.contains("can't be delegated"), "{refused:?}");
+    assert_eq!(observed.listed.tasks, Vec::new());
     assert!(
         observed
             .agents
@@ -121,6 +105,6 @@ async fn task_routes_run_tasks_on_the_sqlite_engine() -> TestResult {
         "{:?}",
         observed.agents
     );
-    assert_eq!(observed.outcomes, reqwest::StatusCode::OK);
+    assert_eq!(observed.outcomes, reqwest::StatusCode::NOT_FOUND);
     Ok(())
 }

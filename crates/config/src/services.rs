@@ -1,10 +1,8 @@
-use crate::Environment;
 use crate::model::{Config, TransportSection};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceSwitch {
     Gateway,
-    Agent,
     Workers,
     Tagging,
     Wiki,
@@ -13,7 +11,7 @@ pub enum ServiceSwitch {
 
 impl Config {
     #[must_use]
-    pub fn service_switches(&self, env: &Environment) -> Vec<ServiceSwitch> {
+    pub fn service_switches(&self) -> Vec<ServiceSwitch> {
         let mut switches = Vec::new();
         if self
             .gateway
@@ -21,9 +19,6 @@ impl Config {
             .is_none_or(|section| section.enabled != Some(false))
         {
             switches.push(ServiceSwitch::Gateway);
-        }
-        if agent_root(self, env) {
-            switches.push(ServiceSwitch::Agent);
         }
         if let Some(sqlite) = self
             .memory
@@ -50,10 +45,6 @@ impl Config {
         }
         switches
     }
-}
-
-fn agent_root(config: &Config, env: &Environment) -> bool {
-    config.postgres_selected(env)
 }
 
 fn mcp_enabled(section: &TransportSection) -> bool {

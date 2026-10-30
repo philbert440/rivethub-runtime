@@ -102,13 +102,18 @@ async fn slugs_and_aliases_are_unique_across_topics(pool: PgPool) -> TestResult 
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn sub_topics_stay_one_level_deep(pool: PgPool) -> TestResult {
-    topics::sub_topics_stay_one_level_deep(&PostgresMemory::new(pool)).await
+async fn topics_nest_up_to_four_levels(pool: PgPool) -> TestResult {
+    topics::topics_nest_up_to_four_levels(&PostgresMemory::new(pool)).await
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn placements_keep_your_choice(pool: PgPool) -> TestResult {
     topics::placements_keep_your_choice(&PostgresMemory::new(pool)).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn topics_close_and_sessions_are_marked_as_history(pool: PgPool) -> TestResult {
+    topics::topics_close_and_sessions_are_marked_as_history(&PostgresMemory::new(pool)).await
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
@@ -171,7 +176,7 @@ async fn listings_count_sessions_and_take_last_activity_from_conversations(
         .execute(&pool)
         .await?;
     }
-    let listed = store.list().await?;
+    let listed = testkit::topics::work_topics(&store).await?;
     let summary: Vec<(&str, u64, Option<String>)> = listed
         .iter()
         .map(|listing| {
@@ -228,4 +233,58 @@ async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(
         queue: &queue,
     })
     .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn conversations_file_with_titles_and_corrections(pool: PgPool) -> TestResult {
+    testkit::filing::conversations_file_with_titles_and_corrections(&PostgresMemory::new(pool))
+        .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_task_files_under_the_conversation_that_started_it(pool: PgPool) -> TestResult {
+    testkit::filing::a_task_files_under_the_conversation_that_started_it(&PostgresMemory::new(pool))
+        .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn editing_an_unwritten_entity_writes_its_page(pool: PgPool) -> TestResult {
+    let (_directory, memory, queue) = page_stores(pool).await?;
+    topic_pages::editing_an_unwritten_entity_writes_its_page(PageStores {
+        topics: &memory,
+        pages: &memory,
+        decisions: &memory,
+        wiki: &memory,
+        queue: &queue,
+    })
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn proposals_are_decided_and_rejections_remembered(pool: PgPool) -> TestResult {
+    testkit::tidy::proposals_are_decided_and_rejections_remembered(&PostgresMemory::new(pool)).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn an_approval_that_stopped_part_way_finishes_on_retry(pool: PgPool) -> TestResult {
+    testkit::tidy::an_approval_that_stopped_part_way_finishes_on_retry(&PostgresMemory::new(pool))
+        .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn samples_show_each_session_s_current_title(pool: PgPool) -> TestResult {
+    testkit::tidy::samples_show_each_session_s_current_title(&PostgresMemory::new(pool)).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn upkeep_counts_filings_entities_and_finished_jobs(pool: PgPool) -> TestResult {
+    crate::common::install_graphile(&pool).await?;
+    let memory = PostgresMemory::new(pool);
+    let queue = memory.queue().await?;
+    testkit::tidy::upkeep_counts_filings_entities_and_finished_jobs(&memory, &queue).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn every_topic_s_filing_reads_at_once(pool: PgPool) -> TestResult {
+    testkit::filing_bulk::every_topic_s_filing_reads_at_once(&PostgresMemory::new(pool)).await
 }

@@ -15,9 +15,9 @@ pub(super) const MIN_BRANCHES_FOR_ROOT: u32 = 3;
 pub(super) const IDLE_MINUTES: u32 = 15;
 pub(super) const STALE_MINUTES: u32 = 5_760;
 pub(super) const STALE_MIN_BATCH: u32 = 2;
-const LEAF_MAX_TOKENS: u32 = 7_000;
-const BRANCH_MAX_TOKENS: u32 = 14_000;
-const ROOT_MAX_TOKENS: u32 = 20_000;
+const LEAF_MAX_TOKENS: u32 = 16_384;
+const BRANCH_MAX_TOKENS: u32 = 24_576;
+const ROOT_MAX_TOKENS: u32 = 32_768;
 pub const DEAD_REST: TimeDelta = TimeDelta::minutes(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,7 +42,6 @@ pub struct SummarySettings {
     pub stale_min_batch: u32,
     pub max_leaf_rounds: u32,
     pub pipeline_version: i32,
-    pub session_tagging: bool,
     pub leaf_max_tokens: u32,
     pub branch_max_tokens: u32,
     pub root_max_tokens: u32,
@@ -61,7 +60,6 @@ pub struct SummaryParts {
     pub stale_min_batch: u32,
     pub max_leaf_rounds: u32,
     pub pipeline_version: i32,
-    pub session_tagging: bool,
 }
 
 impl SummarySettings {
@@ -78,7 +76,6 @@ impl SummarySettings {
             stale_min_batch: STALE_MIN_BATCH,
             max_leaf_rounds: MAX_LEAF_ROUNDS,
             pipeline_version: PIPELINE_VERSION,
-            session_tagging: false,
         })
     }
 
@@ -108,7 +105,6 @@ impl SummarySettings {
             stale_min_batch: parts.stale_min_batch,
             max_leaf_rounds: parts.max_leaf_rounds,
             pipeline_version: parts.pipeline_version,
-            session_tagging: parts.session_tagging,
             leaf_max_tokens: LEAF_MAX_TOKENS,
             branch_max_tokens: BRANCH_MAX_TOKENS,
             root_max_tokens: ROOT_MAX_TOKENS,

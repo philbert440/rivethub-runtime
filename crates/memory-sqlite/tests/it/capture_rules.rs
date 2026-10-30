@@ -30,11 +30,11 @@ async fn updated_at_only_moves_forward() -> TestResult {
     };
     fresh
         .store
-        .capture(stamped("2025-03-01T01:00:00+01:00")?, now)
+        .capture(stamped("2025-03-01T01:00:00+01:00")?, None, now)
         .await?;
     fresh
         .store
-        .capture(stamped("2024-06-01T00:00:00Z")?, now)
+        .capture(stamped("2024-06-01T00:00:00Z")?, None, now)
         .await?;
     assert_eq!(
         stored_updated_at(&fresh.store).await?,
@@ -42,7 +42,7 @@ async fn updated_at_only_moves_forward() -> TestResult {
     );
     fresh
         .store
-        .capture(batch("old-task", "rivet", "cli"), now)
+        .capture(batch("old-task", "rivet", "cli"), None, now)
         .await?;
     assert_eq!(
         stored_updated_at(&fresh.store).await?,
@@ -92,6 +92,7 @@ async fn a_filled_tool_result_is_queued_again() -> TestResult {
         .store
         .capture(
             tool_call(None, r#"{"tool_use_id":"tu1","pending_result":true}"#)?,
+            None,
             now,
         )
         .await?;
@@ -108,6 +109,7 @@ async fn a_filled_tool_result_is_queued_again() -> TestResult {
                 Some("deployed build 42"),
                 r#"{"tool_use_id":"tu1","pending_result":false}"#,
             )?,
+            None,
             now,
         )
         .await?;
@@ -136,6 +138,7 @@ async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
         .store
         .capture(
             tool_call(None, r#"{"tool_use_id":"tu1","pending_result":true}"#)?,
+            None,
             now,
         )
         .await?;
@@ -146,6 +149,7 @@ async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
                 Some("deployed build 42"),
                 r#"{"tool_use_id":"tu1","pending_result":false}"#,
             )?,
+            None,
             now,
         )
         .await?;
@@ -172,56 +176,52 @@ async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
     Ok(())
 }
 
+async fn stored_title(store: &memory_sqlite::SqliteStore) -> TestResult<Option<String>> {
+    let rows = table(store, "ros_conversations").await?;
+    let row = rows.first().ok_or("one conversation")?;
+    Ok(row
+        .get("title")
+        .and_then(testkit::Json::as_str)
+        .map(str::to_owned))
+}
+
 #[tokio::test]
-async fn the_project_rule_reuses_the_taxonomy() -> TestResult {
+async fn a_placeholder_title_never_replaces_the_person_s_words() -> TestResult {
     let fresh = fresh_store(None)?;
-    common::execute(
-        &fresh.store,
-        "INSERT INTO ros_tag_taxonomy (key, value, display, aliases, state, created_at, updated_at) \
-         VALUES ('project', 'Widget Hub', 'Widget Hub', '[\"Widgets\"]', 'accepted', \
-                 '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'), \
-                ('project', 'scratch', '', '[]', 'rejected', \
-                 '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');",
-    )
-    .await?;
-    let mut applied = Vec::new();
-    for (id, value, display) in [
-        ("alias", "widgets", "widgets"),
-        ("canonical", "widget-hub", "widget hub"),
-        ("rejected", "scratch", "Scratch"),
-        ("fresh", "gizmo", "gizmo"),
-    ] {
-        applied.push(
-            fresh
-                .store
-                .apply_project_rule(id.to_owned(), value.to_owned(), display.to_owned())
-                .await?,
-        );
-    }
-    assert_eq!(applied, vec![1, 1, 0, 1]);
-    let rows = fresh
+    let now = instant(common::RECORDED_START)?;
+    let titled = |title: &str| {
+        let mut capture = batch("cli:titled", "rivet", "cli");
+        capture.title = Some(title.to_owned());
+        capture
+    };
+    fresh
         .store
-        .with_conn(|conn| {
-            let mut statement = conn
-                .prepare(
-                    "SELECT entity_id, value, display FROM ros_tags \
-                     WHERE source = 'rule' ORDER BY entity_id",
-                )
-                .map_err(common::seed)?;
-            let found = statement
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
-                .map_err(common::seed)?
-                .collect::<Result<Vec<(String, String, String)>, _>>()
-                .map_err(common::seed)?;
-            Ok(found)
-        })
+        .capture(titled("Kimi Code session"), None, now)
         .await?;
-    let expected = [
-        ("alias", "Widget Hub", "Widget Hub"),
-        ("canonical", "Widget Hub", "Widget Hub"),
-        ("fresh", "gizmo", "gizmo"),
-    ]
-    .map(|(id, value, display)| (id.to_owned(), value.to_owned(), display.to_owned()));
-    assert_eq!(rows, expected);
+    assert_eq!(stored_title(&fresh.store).await?, None);
+    fresh
+        .store
+        .capture(
+            titled("<user_instructions>be brief</user_instructions>\nport the parser"),
+            None,
+            now,
+        )
+        .await?;
+    assert_eq!(
+        stored_title(&fresh.store).await?.as_deref(),
+        Some("port the parser")
+    );
+    fresh
+        .store
+        .capture(titled("Kimi Code session"), None, now)
+        .await?;
+    fresh
+        .store
+        .capture(titled("<recommended_plugins> Here is a list"), None, now)
+        .await?;
+    assert_eq!(
+        stored_title(&fresh.store).await?.as_deref(),
+        Some("port the parser")
+    );
     Ok(())
 }

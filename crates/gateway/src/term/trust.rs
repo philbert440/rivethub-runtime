@@ -39,9 +39,13 @@ impl ClaudeProject {
 }
 
 impl ClaudeTrust {
-    pub(super) async fn apply(&self, root: &Path, directory: &Path) -> Result<(), ApiError> {
+    pub(super) async fn apply(
+        &self,
+        allowed: &[PathBuf],
+        directory: &Path,
+    ) -> Result<(), ApiError> {
         let config = self.config.clone();
-        let mut roots = vec![root.to_path_buf()];
+        let mut roots = allowed.to_vec();
         roots.extend(self.roots.iter().cloned());
         let directory = directory.to_path_buf();
         tokio::task::spawn_blocking(move || {

@@ -237,4 +237,38 @@ pub enum Error {
     WikiStore(#[from] kernel::wiki::builder::WikiStoreError),
     #[error(transparent)]
     JobQueue(#[from] kernel::queue::JobQueueError),
+    #[error("rh memory cleanup runs as --dry-run or --propose")]
+    CleanupMode,
+    #[error(
+        "rh memory cleanup --propose needs --database <url> naming the database to write the proposals to"
+    )]
+    CleanupDatabase,
+    #[error("refusing to write cleanup proposals to the node's live memory database")]
+    CleanupLive,
+    #[error("rh memory cleanup --propose needs RIVETHUB_PG_URL to know which database is live")]
+    CleanupLiveUnknown,
+    #[error(transparent)]
+    Lineage(#[from] kernel::transcript::TranscriptReaderError),
+    #[error(transparent)]
+    Tidy(#[from] kernel::tidy::TidyError),
+    #[error("rh memory cleanup needs --out <dir> for its checkpoints and report")]
+    CleanupOut,
+    #[error("rh memory cleanup needs --model-url <url> and --model <name>")]
+    CleanupModel,
+    #[error("{0} requires a value")]
+    CleanupValue(&'static str),
+    #[error("{0} requires a positive integer")]
+    CleanupNumber(&'static str),
+    #[error(
+        "the {stage} stage stopped with {failed} failed job(s); rerun the same command to resume"
+    )]
+    CleanupIncomplete { stage: &'static str, failed: usize },
+    #[error(transparent)]
+    CleanupSource(#[from] kernel::cleanup::CleanupError),
+    #[error(transparent)]
+    Topic(#[from] kernel::topics::TopicError),
+    #[error(transparent)]
+    Worker(#[from] workers::WorkerError),
+    #[error(transparent)]
+    ProviderBuild(#[from] providers::BuildError),
 }

@@ -43,8 +43,7 @@ Under the `gateway` configuration section (`den` is its deprecated alias):
   device leaves use the registry mapping and emit a deprecation warning. An
   explicit missing or invalid file refuses startup. Without a registry, the local
   identity is `owner` and no device identities are accepted.
-- `terminal.enabled: true` enables the herdr-backed terminal service. It needs a
-  filesystem root (`files_root` or `runtime.workspace`). The roster path is
+- `terminal.enabled: true` enables the herdr-backed terminal service. The roster path is
   `commands_file` when set, otherwise `RIVETHUB_TERM_CONFIG`, otherwise the
   deprecated `RIVETOS_DEN_TERM_CONFIG` alias (one warning while the new name is
   unset), otherwise `<state dir>/den-term.json`. The file maps command ids to
@@ -53,6 +52,15 @@ Under the `gateway` configuration section (`den` is its deprecated alias):
   Malformed JSON, an empty argv, a relative cwd, an invalid key, or a default
   that names no command refuses startup. Direct PTY fallback is not selected by
   the composition. Missing herdr refuses terminal startup.
+- `terminal.roots` lists the folders a session may start in; a session working
+  directory must resolve inside one of them, otherwise the start is refused with
+  403. Every entry must be an absolute path. Without the key the roots are
+  `files_root` (else `runtime.workspace`), the service user's home directory,
+  and the shared directory (`/rivet-shared`, or `RIVETHUB_SHARED_DIR`). Roots that
+  do not exist are skipped with a warning, and terminal startup is refused when
+  none exists. A relative directory from a delegated turn is joined to the first
+  root. These roots do not change what the Files tab browses, which stays
+  `files_root`.
 
 Mesh requires `enabled`, `node_name`, `advertise_host`, `agent_channel_port`,
 and TLS with a client CA. It writes `mesh.json` beneath the configured shared

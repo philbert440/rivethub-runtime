@@ -4,7 +4,6 @@ use crate::capture::ConversationUpsert;
 use crate::capture::MessageRow;
 use crate::capture::prepare_capture_message;
 use crate::error::Error;
-use crate::project;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
@@ -21,6 +20,7 @@ use kernel::memory::TagLookup;
 use kernel::memory::TagTaxonomyDecision;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use kernel::memory::spoken_title;
 use serde::Deserialize as _;
 use uuid::Uuid;
 use wire::capture::CaptureBatchRequest;
@@ -43,35 +43,21 @@ impl crate::PostgresMemory {
         options: &CaptureOptions,
     ) -> Result<CaptureResult, Error> {
         let channel = batch.channel.as_deref().ok_or(Error::MissingChannel)?;
-        let cwd = batch
-            .settings
-            .as_ref()
-            .map(|settings| {
-                CaptureSettings::deserialize(serde::de::value::MapDeserializer::<
-                    _,
-                    serde_json::Error,
-                >::new(
-                    settings
-                        .as_map()
-                        .iter()
-                        .map(|(key, value)| (key.as_str(), value)),
-                ))
-                .map(|settings| settings.cwd)
-            })
-            .transpose()?
-            .flatten();
-        let tag = project::resolve_project_tag_blocking(cwd, options.allow_filesystem).await?;
         let owner = options.owner_user_id.as_deref();
         let mut writer = CaptureWriter::begin(&self.pool, &batch.session_key).await?;
+        if let Some(dropped) = dropped_when_deleted(&mut writer, batch).await? {
+            return Ok(dropped);
+        }
         let conversation_id = writer
             .upsert_conversation(&ConversationUpsert {
                 session_key: &batch.session_key,
                 agent: &batch.agent,
                 channel: Some(channel),
-                title: batch.title.as_deref(),
+                title: batch.title.as_deref().and_then(spoken_title),
                 settings: batch.settings.as_ref(),
                 task_id: batch.task_id.as_deref(),
                 owner_user_id: owner,
+                node: options.node.as_deref(),
             })
             .await?;
         let event_ids: Vec<String> = batch
@@ -103,9 +89,6 @@ impl crate::PostgresMemory {
                 .await?;
             inserted += 1;
         }
-        if let Some(tag) = &tag {
-            writer.apply_project_tag(conversation_id, tag).await?;
-        }
         if batch.finalize == Some(true) {
             writer.finalize_conversation(conversation_id).await?;
         }
@@ -117,11 +100,6 @@ impl crate::PostgresMemory {
             skipped: u64::try_from(batch.messages.len())? - inserted,
         })
     }
-}
-
-#[derive(serde::Deserialize)]
-struct CaptureSettings {
-    cwd: Option<String>,
 }
 
 struct EntryGroup {
@@ -221,6 +199,32 @@ fn append_event_id(entry: &MemoryEntry) -> Result<String, Error> {
     )?)))
 }
 
+async fn dropped_when_deleted(
+    writer: &mut CaptureWriter<'_>,
+    batch: &CaptureBatchRequest,
+) -> Result<Option<CaptureResult>, Error> {
+    let Some(deleted_at) =
+        crate::deletion::tombstone_at(&mut writer.tx, &batch.session_key).await?
+    else {
+        return Ok(None);
+    };
+    let stamps = batch.messages.iter().map(|message| message.created_at);
+    if kernel::memory::used_since(deleted_at, stamps) {
+        crate::deletion::lift(&mut writer.tx, &batch.session_key).await?;
+        return Ok(None);
+    }
+    tracing::debug!(
+        session_key = %batch.session_key,
+        "capture dropped for a deleted session"
+    );
+    Ok(Some(CaptureResult {
+        ok: true,
+        conversation_id: String::new(),
+        inserted: 0,
+        skipped: u64::try_from(batch.messages.len())?,
+    }))
+}
+
 #[async_trait]
 impl MemoryStore for crate::PostgresMemory {
     async fn close(&self) -> Result<(), MemoryStoreError> {
@@ -253,7 +257,7 @@ impl MemoryStore for crate::PostgresMemory {
 
     async fn wiki_page(
         &self,
-        slug: &wire::gateway::wiki::WikiSlug,
+        slug: &kernel::wiki::page::WikiSlug,
     ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
         self.read_wiki_page(slug).await.map_err(Into::into)
     }
@@ -268,11 +272,16 @@ impl MemoryStore for crate::PostgresMemory {
     async fn capture(
         &self,
         mut batch: CaptureBatchRequest,
+        node: Option<&str>,
     ) -> Result<CaptureResult, MemoryStoreError> {
         batch
             .channel
             .get_or_insert_with(|| UNKNOWN_CHANNEL.to_owned());
-        self.capture_batch(&batch, &CaptureOptions::default())
+        let options = CaptureOptions {
+            node: node.map(str::to_owned),
+            ..CaptureOptions::default()
+        };
+        self.capture_batch(&batch, &options)
             .await
             .map_err(MemoryStoreError::from)
     }
@@ -321,9 +330,9 @@ impl MemoryStore for crate::PostgresMemory {
 
     async fn summary_dag(
         &self,
-        session: &str,
+        owner: &kernel::memory::SummaryOwner,
     ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
-        self.read_summary_dag(session).await
+        self.read_summary_dag(owner).await
     }
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError> {

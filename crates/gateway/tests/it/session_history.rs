@@ -8,6 +8,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures::{SinkExt as _, StreamExt as _};
 use gateway::sessions::{SessionRegistry, owners_file};
+use kernel::harness::{SessionEvent, ToolCallInfo};
 use kernel::transcript::{
     ListLimit, SessionLister, SessionRenameError, StoreSession, StoreTranscript, ToolOutputRead,
     TranscriptRead, TranscriptReaderError,
@@ -22,7 +23,8 @@ use wire::gateway::GatewayError;
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTranscriptResponse, HarnessSocketRefusal,
     HarnessSocketRefusalCode, HarnessTranscriptTurn, MessageUsage, SessionMessageRole,
-    SessionPostRequest, SessionSteerResponse, TranscriptAttachment,
+    SessionPostRequest, SessionPreviewKind, SessionPreviewList, SessionSteerResponse,
+    TranscriptAttachment,
 };
 use wire::harness::{
     HarnessEvent, HarnessId, HarnessOfferingList, HarnessSessionList, HarnessSessionStatus,
@@ -816,6 +818,9 @@ async fn a_live_turn_streams_deltas_then_a_committed_snapshot() {
     tokio::time::timeout(WAIT, async {
         loop {
             let next = event(&mut socket).await;
+            if matches!(next, HarnessEvent::Driver { .. }) {
+                continue;
+            }
             let done = matches!(
                 next,
                 HarnessEvent::SessionUpdated {
@@ -931,6 +936,9 @@ async fn a_live_turn_with_no_transcript_source_streams_without_a_snapshot() {
     tokio::time::timeout(WAIT, async {
         loop {
             let next = event(&mut socket).await;
+            if matches!(next, HarnessEvent::Driver { .. }) {
+                continue;
+            }
             let done = matches!(
                 next,
                 HarnessEvent::SessionUpdated {
@@ -1220,54 +1228,6 @@ async fn a_reloaded_transcript_names_the_uploads_its_user_turn_carried() {
     );
 }
 
-fn delegated_attached_turn(path: &str) -> Vec<u8> {
-    let mut turn: SessionPostRequest =
-        serde_json::from_str(&attached_turn(path)).expect("turn json");
-    turn.harness = Some(HarnessId::ClaudeCode);
-    serde_json::to_vec(&turn).expect("turn json")
-}
-
-#[tokio::test]
-async fn a_delegated_turn_names_the_uploads_it_carried_when_reloaded() {
-    let setup = setup("{}", Stores::default()).await;
-    let shot = staged(&setup, "shot.png", "image/png", None).await;
-    setup.harness.finish.add_permits(1);
-    let (status, body) = http(
-        &setup.fixture.gateway,
-        "POST",
-        "/api/sessions/task:abc/messages?wait=1",
-        delegated_attached_turn(&shot.uri),
-        None,
-    )
-    .await;
-    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
-    let session = setup
-        .harness
-        .specs
-        .lock()
-        .first()
-        .map(|spec| spec.session.clone())
-        .expect("one harness session");
-    let native = session.native().to_owned();
-    setup.lister.later.lock().insert(
-        native,
-        vec![
-            image_turn("look"),
-            answered("answer", "claude-opus-4-1", 10),
-        ],
-    );
-    let turns = transcript_turns(&setup, session.as_str()).await;
-    assert_eq!(
-        turns.first().and_then(|turn| turn.attachments.clone()),
-        Some(vec![TranscriptAttachment {
-            media_type: "image/png".to_owned(),
-            name: Some("shot.png".to_owned()),
-            uri: Some(shot.uri.clone()),
-            upload_id: Some(shot.id.clone()),
-        }])
-    );
-}
-
 #[tokio::test]
 async fn an_attachment_that_is_not_the_callers_upload_is_refused() {
     let setup = setup("{}", Stores::default()).await;
@@ -1388,4 +1348,232 @@ fn harness_codes_map_to_their_statuses() {
     for code in wire::harness::HarnessCode::iter() {
         assert_eq!(gateway::error::harness_status(code).as_u16(), code.status());
     }
+}
+
+fn previewed(body: &[u8]) -> Vec<(SessionId, SessionPreviewKind, String)> {
+    parsed::<SessionPreviewList>(body)
+        .previews
+        .into_iter()
+        .map(|preview| (preview.session_id, preview.kind, preview.text))
+        .collect()
+}
+
+#[tokio::test]
+async fn previews_show_the_last_line_of_the_last_reply_and_refuse_bad_requests() {
+    let stores = Stores {
+        rows: vec![
+            row(HarnessId::ClaudeCode, U1, 1),
+            row(HarnessId::ClaudeCode, U2, 1),
+        ],
+        transcripts: BTreeMap::from([(
+            (HarnessId::ClaudeCode, U1.to_owned()),
+            vec![
+                turn(SessionMessageRole::User, "check it"),
+                turn(
+                    SessionMessageRole::Assistant,
+                    "Done.\nAll four checks pass.",
+                ),
+            ],
+        )]),
+        ..Stores::default()
+    };
+    let setup = setup("{}", stores).await;
+    let path =
+        format!("/api/harness-sessions/previews?session=claude-code:{U1}&session=claude-code:{U2}");
+    let (status, body) = get(&setup, &path, None).await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(
+        previewed(&body),
+        [(
+            claude(U1),
+            SessionPreviewKind::Said,
+            "All four checks pass.".to_owned()
+        )]
+    );
+    let (status, _) = get(
+        &setup,
+        &format!("/api/harness-sessions/previews?session={U1}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 400, "a bare id is not a canonical session");
+    let many: Vec<String> = (0..51)
+        .map(|index| format!("session=claude-code:00000000-0000-4000-8000-{index:012}"))
+        .collect();
+    let (status, _) = get(
+        &setup,
+        &format!("/api/harness-sessions/previews?{}", many.join("&")),
+        None,
+    )
+    .await;
+    assert_eq!(status, 400, "more than 50 sessions is refused");
+}
+
+#[tokio::test]
+async fn a_live_session_previews_the_tool_it_is_running() {
+    let setup = setup("{}", Stores::default()).await;
+    let (status, body) = http(
+        &setup.fixture.gateway,
+        "POST",
+        "/api/harness-sessions",
+        r#"{"harness":"claude-code"}"#,
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    let live = parsed::<wire::harness::HarnessSessionSummary>(&body).session_id;
+    let (mut socket, stop) = socket(&setup, &encode_segment(&live), None).await;
+    silent(&mut socket).await;
+    let input = serde_json::from_str(r#"{"command":"cargo clippy --workspace"}"#).expect("input");
+    let call = ToolCallInfo {
+        tool_call_id: "t1".to_owned(),
+        name: "Bash".to_owned(),
+        input,
+    };
+    setup
+        .harness
+        .emit(&live, SessionEvent::ToolCall(call))
+        .await;
+    tokio::time::timeout(WAIT, async {
+        while !matches!(event(&mut socket).await, HarnessEvent::ToolUse { .. }) {}
+    })
+    .await
+    .expect("tool use");
+    let (_, body) = get(
+        &setup,
+        &format!("/api/harness-sessions/previews?session={live}"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        previewed(&body),
+        [(
+            live.clone(),
+            SessionPreviewKind::Running,
+            "Bash: cargo clippy --workspace".to_owned()
+        )]
+    );
+    stop.cancel();
+}
+
+async fn next_transcript(socket: &mut Socket) -> Vec<String> {
+    loop {
+        if let HarnessEvent::Transcript { turns, .. } = event(socket).await {
+            return turns.into_iter().map(|turn| turn.text).collect();
+        }
+    }
+}
+
+async fn terminal_session(setup: &Setup) {
+    let request = wire::gateway::term::TermSpawnRequest {
+        session: Some(format!("claude-code:{U1}")),
+        command: Some("claude".into()),
+        model: None,
+        effort: None,
+        resume: Some(format!("claude-code:{U1}")),
+        agent_id: None,
+        force: None,
+        cols: None,
+        rows: None,
+        topic_id: None,
+    };
+    setup
+        .fixture
+        .service
+        .spawn(&user("owner"), request)
+        .await
+        .expect("terminal");
+}
+
+async fn driver_until(
+    socket: &mut Socket,
+    wanted: impl Fn(Option<&wire::harness::TerminalApproval>) -> bool,
+) -> HarnessEvent {
+    tokio::time::timeout(WAIT, async {
+        loop {
+            let next = event(socket).await;
+            if let HarnessEvent::Driver { approval, .. } = &next
+                && wanted(approval.as_ref())
+            {
+                return next;
+            }
+        }
+    })
+    .await
+    .expect("driver")
+}
+
+#[tokio::test]
+async fn while_the_terminal_drives_the_socket_follows_its_transcript() {
+    let stores = one_claude_row();
+    stores.later.lock().insert(
+        U1.to_owned(),
+        vec![turn(SessionMessageRole::User, "from the terminal")],
+    );
+    let setup = setup("{}", stores).await;
+    terminal_session(&setup).await;
+    let (mut socket, stop) = socket(&setup, &enc(&format!("claude-code:{U1}")), None).await;
+    assert_eq!(next_transcript(&mut socket).await, ["from the terminal"]);
+    let HarnessEvent::Driver { driver, busy, .. } = driver_until(&mut socket, |_| true).await
+    else {
+        unreachable!("a driver event");
+    };
+    assert_eq!(
+        (driver, busy),
+        (Some(wire::harness::SessionDriver::Terminal), false)
+    );
+    setup.lister.later.lock().insert(
+        U1.to_owned(),
+        vec![
+            turn(SessionMessageRole::User, "from the terminal"),
+            turn(SessionMessageRole::Assistant, "written as it runs"),
+        ],
+    );
+    assert_eq!(
+        next_transcript(&mut socket).await,
+        ["from the terminal", "written as it runs"]
+    );
+    stop.cancel();
+}
+
+#[tokio::test]
+async fn a_hook_reported_terminal_approval_shows_until_the_turn_ends() {
+    let setup = setup("{}", one_claude_row()).await;
+    terminal_session(&setup).await;
+    let (mut socket, stop) = socket(&setup, &enc(&format!("claude-code:{U1}")), None).await;
+    let hook = |kind: &str| format!(r#"[{{"v":1,"session":"{U1}","type":{kind}}}]"#);
+    let (status, _) = http(
+        &setup.fixture.gateway,
+        "POST",
+        "/events",
+        hook(r#""approval.wait","tool":"Write","args":{"file_path":"hi.txt"}"#),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200);
+    let HarnessEvent::Driver { approval, .. } =
+        driver_until(&mut socket, |approval| approval.is_some()).await
+    else {
+        unreachable!("a driver event");
+    };
+    assert_eq!(
+        approval.map(|approval| approval.tool).as_deref(),
+        Some("Write")
+    );
+    let (status, _) = http(
+        &setup.fixture.gateway,
+        "POST",
+        "/events",
+        hook(r#""turn.end""#),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200);
+    let HarnessEvent::Driver { driver, .. } =
+        driver_until(&mut socket, |approval| approval.is_none()).await
+    else {
+        unreachable!("a driver event");
+    };
+    assert_eq!(driver, Some(wire::harness::SessionDriver::Terminal));
+    stop.cancel();
 }

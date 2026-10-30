@@ -52,5 +52,5 @@ pub enum MemoryRequest {
     WikiTopics(kernel::wiki::WikiFilter),
     WikiPage(String),
     WikiGaps(u32),
-    SummaryDag(String),
+    SummaryDag(kernel::memory::SummaryOwner),
 }

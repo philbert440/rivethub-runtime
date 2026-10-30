@@ -20,6 +20,15 @@ pub enum SchemaVersion {
     V16 = 16,
     V17 = 17,
     V18 = 18,
+    V19 = 19,
+    V20 = 20,
+    V21 = 21,
+    V22 = 22,
+    V23 = 23,
+    V24 = 24,
+    V25 = 25,
+    V26 = 26,
+    V27 = 27,
 }
 
 impl SchemaVersion {
@@ -48,7 +57,16 @@ impl SchemaVersion {
             Self::V15 => Some(Self::V16),
             Self::V16 => Some(Self::V17),
             Self::V17 => Some(Self::V18),
-            Self::V18 => None,
+            Self::V18 => Some(Self::V19),
+            Self::V19 => Some(Self::V20),
+            Self::V20 => Some(Self::V21),
+            Self::V21 => Some(Self::V22),
+            Self::V22 => Some(Self::V23),
+            Self::V23 => Some(Self::V24),
+            Self::V24 => Some(Self::V25),
+            Self::V25 => Some(Self::V26),
+            Self::V26 => Some(Self::V27),
+            Self::V27 => None,
         }
     }
 }
@@ -76,6 +94,15 @@ impl TryFrom<i64> for SchemaVersion {
             16 => Ok(Self::V16),
             17 => Ok(Self::V17),
             18 => Ok(Self::V18),
+            19 => Ok(Self::V19),
+            20 => Ok(Self::V20),
+            21 => Ok(Self::V21),
+            22 => Ok(Self::V22),
+            23 => Ok(Self::V23),
+            24 => Ok(Self::V24),
+            25 => Ok(Self::V25),
+            26 => Ok(Self::V26),
+            27 => Ok(Self::V27),
             other => Err(Error::Unsupported { found: other }),
         }
     }
@@ -86,9 +113,14 @@ mod tests {
     use super::SchemaVersion;
     use crate::error::Error;
 
+    const LADDER: [i64; 27] = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+        26, 27,
+    ];
+
     #[test]
     fn every_recorded_user_version_maps_to_a_schema_version() {
-        for found in 1..=18 {
+        for found in LADDER {
             let version = SchemaVersion::try_from(found).unwrap_or_else(|error| {
                 panic!("user_version {found} must map to a schema version: {error}")
             });
@@ -98,7 +130,7 @@ mod tests {
 
     #[test]
     fn versions_outside_the_ladder_are_typed_errors() {
-        for found in [-3, 0, 19, 99] {
+        for found in [-3, 0, 28, 99] {
             match SchemaVersion::try_from(found) {
                 Err(Error::Unsupported { found: reported }) => {
                     assert_eq!(reported, found);
@@ -109,15 +141,15 @@ mod tests {
     }
 
     #[test]
-    fn the_ladder_runs_from_any_version_to_the_eighteenth() {
-        for from in 1..=18 {
+    fn the_ladder_runs_from_any_version_to_the_newest() {
+        for (index, from) in LADDER.into_iter().enumerate() {
             let mut current = SchemaVersion::try_from(from).unwrap();
             let mut visited = Vec::new();
             while let Some(next) = current.next() {
                 visited.push(next.number());
                 current = next;
             }
-            let expected: Vec<i64> = (from + 1..=18).collect();
+            let expected: Vec<i64> = LADDER.get(index + 1..).unwrap_or_default().to_vec();
             assert_eq!(visited, expected, "ladder from user_version {from}");
         }
     }

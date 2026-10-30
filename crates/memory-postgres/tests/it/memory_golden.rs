@@ -47,7 +47,6 @@ struct Scenario {
 #[serde(rename_all = "camelCase")]
 struct Options {
     owner_user_id: Option<String>,
-    allow_filesystem: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, sqlx::FromRow)]
@@ -129,7 +128,7 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
     for case in &recording.results {
         let options = CaptureOptions {
             owner_user_id: case.opts.owner_user_id.clone(),
-            allow_filesystem: case.opts.allow_filesystem == Some(true),
+            node: None,
         };
         if MEMORY_SKIPS.iter().any(|(name, _)| *name == case.label) {
             assert!(matches!(
@@ -196,7 +195,12 @@ async fn capture_batch_golden(pool: PgPool) -> TestResult {
     )
     .fetch_all(&pool)
     .await?;
-    assert_eq!(tags, recording.tags);
+    let kept: Vec<&Tag> = recording
+        .tags
+        .iter()
+        .filter(|tag| tag.source != "rule")
+        .collect();
+    assert_eq!(tags.iter().collect::<Vec<_>>(), kept);
     let jobs: i64 = sqlx::query_scalar("SELECT count(*) FROM graphile_worker._private_jobs")
         .fetch_one(&pool)
         .await?;

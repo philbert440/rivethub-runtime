@@ -128,9 +128,9 @@ fn decide_removals(
 fn add_tag(conn: &Connection, add: &TagAdd, at: &str) -> Result<TagWire, SqliteError> {
     let key = clip(&colon_to_hyphen(&add.tag.key), KEY_CHARS);
     let value = clip(&add.tag.value, VALUE_CHARS);
-    let display = match &add.display {
-        Some(text) => clip(text, DISPLAY_CHARS),
-        None => clip(&add.tag.value, DISPLAY_CHARS),
+    let display = match add.display.as_deref().map(str::trim) {
+        Some(text) if !text.is_empty() => clip(text, DISPLAY_CHARS),
+        _ => clip(&add.tag.value, DISPLAY_CHARS),
     };
     if key.is_empty() || value.is_empty() {
         return Err(invalid("key and value are required"));

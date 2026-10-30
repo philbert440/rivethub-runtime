@@ -1,17 +1,17 @@
-use crate::categorize::{CategorizeEnv, TagSettings, handle_suggest};
 use crate::embed::{EmbedSettings, handle_embed};
 use crate::error::WorkerError;
+use crate::filing::{FilingEnv, SessionTopics, file_target, handle_file};
 use crate::role::ProcessRole;
 use crate::summarize::{
-    SessionTopics, SummarizeEnv, SummarySettings, handle_enqueue_idle, handle_enqueue_stale,
-    handle_reap, handle_summarize,
+    SummarizeEnv, SummarySettings, handle_enqueue_idle, handle_enqueue_stale, handle_reap,
+    handle_summarize,
 };
 use crate::wiki_builder::{
     WikiBuilderDeps, WikiBuilderEnv, handle_consolidate_wiki, handle_extract_wiki,
     handle_wiki_backfill,
 };
 use chrono::Utc;
-use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
+use kernel::memory::{EmbeddingStore, SummaryStore};
 use kernel::model::ModelProvider;
 use kernel::queue::{ClaimedJob, FixedJob, JobName, JobQueue};
 use std::sync::Arc;
@@ -25,13 +25,13 @@ pub(crate) struct JobEnv {
     pub(crate) wiki: Option<WikiBuilderDeps>,
     pub(crate) targets: Arc<dyn EmbeddingStore>,
     pub(crate) summaries: Arc<dyn SummaryStore>,
-    pub(crate) memory: Arc<dyn MemoryStore>,
     pub(crate) provider: Arc<dyn ModelProvider>,
     pub(crate) embed: EmbedSettings,
     pub(crate) summary: SummarySettings,
-    pub(crate) tags: TagSettings,
     pub(crate) topics: Option<SessionTopics>,
     pub(crate) topic_pages: Option<crate::topic_page::TopicPages>,
+    pub(crate) tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
+    pub(crate) deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
 }
 
 pub(crate) async fn dispatch<Q: JobQueue>(
@@ -47,7 +47,6 @@ pub(crate) async fn dispatch<Q: JobQueue>(
         settings: &env.summary,
         now: Utc::now(),
         cancel,
-        topics: env.topics.as_ref(),
     };
     match &job.name {
         JobName::Fixed(FixedJob::ExtractWiki | FixedJob::EnqueueWikiBackfill) => {
@@ -94,27 +93,70 @@ pub(crate) async fn dispatch<Q: JobQueue>(
             handle_enqueue_stale(&summarize).await.map(|_| ())
         }
         JobName::Fixed(FixedJob::ReapDeadJobs) => handle_reap(&summarize).await.map(|_| ()),
-        JobName::Fixed(FixedJob::SuggestTags) => {
-            let categorize = CategorizeEnv {
-                store: env.memory.as_ref(),
-                provider: env.provider.as_ref(),
-                settings: &env.tags,
-                now: Utc::now(),
-                cancel,
-                attempt: job.attempt,
-            };
-            handle_suggest(&categorize, &job.payload).await.map(|_| ())
-        }
+        JobName::Fixed(FixedJob::FileConversation) => dispatch_file(env, job, cancel).await,
+        JobName::Fixed(FixedJob::ProposeTidy) => dispatch_tidy(env, cancel).await,
         JobName::Fixed(FixedJob::ConsolidateWiki) => {
             dispatch_consolidate(queue, env, job, cancel).await
         }
         JobName::Fixed(FixedJob::SyncTopicPage) => dispatch_topic_page(env, job, cancel).await,
+        JobName::Fixed(FixedJob::PurgeDeletedSessions) => dispatch_purge(env, cancel).await,
         JobName::Fixed(FixedJob::RecompileWiki | FixedJob::RunTask)
         | JobName::Heartbeat { .. }
         | JobName::RunTaskOn { .. } => Err(WorkerError::Unhandled {
             name: job.name.to_string(),
         }),
     }
+}
+
+async fn dispatch_file(
+    env: &JobEnv,
+    job: &ClaimedJob,
+    cancel: &CancellationToken,
+) -> Result<(), WorkerError> {
+    let conversation = file_target(&job.payload)?;
+    let topics = env
+        .topics
+        .as_ref()
+        .ok_or(WorkerError::MissingDependencies {
+            role: ProcessRole::Categorizer,
+        })?;
+    let filing = FilingEnv {
+        topics,
+        provider: env.provider.as_ref(),
+        model: &env.summary.model,
+        now: Utc::now(),
+        cancel,
+    };
+    handle_file(&filing, conversation).await.map(|_| ())
+}
+
+async fn dispatch_purge(env: &JobEnv, cancel: &CancellationToken) -> Result<(), WorkerError> {
+    let deletions = env
+        .deletions
+        .as_ref()
+        .ok_or(WorkerError::MissingDependencies {
+            role: ProcessRole::Summarizer,
+        })?;
+    crate::deleted_sessions::handle_purge(deletions.as_ref(), cancel)
+        .await
+        .map(|_| ())
+}
+
+async fn dispatch_tidy(env: &JobEnv, cancel: &CancellationToken) -> Result<(), WorkerError> {
+    let (Some(topics), Some(tidy)) = (&env.topics, &env.tidy) else {
+        return Err(WorkerError::MissingDependencies {
+            role: ProcessRole::Categorizer,
+        });
+    };
+    let run = crate::tidy::TidyEnv {
+        topics,
+        tidy: tidy.as_ref(),
+        provider: env.provider.as_ref(),
+        model: &env.summary.model,
+        now: Utc::now(),
+        cancel,
+    };
+    crate::tidy::handle_tidy(&run).await.map(|_| ())
 }
 
 async fn dispatch_topic_page(
@@ -147,6 +189,7 @@ async fn dispatch_wiki<Q: JobQueue>(
         (Some(sessions), Some(pages)) => Some(kernel::wiki::route::TopicPorts {
             topics: sessions.store.as_ref(),
             pages: pages.pages.as_ref(),
+            filing: sessions.filing.as_ref(),
             lineage: sessions.lineage.as_ref(),
         }),
         (None, _) | (_, None) => None,
