@@ -15,6 +15,9 @@ regex = { workspace = true }
 rmcp = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
+serde_with = { workspace = true }
+serde_yaml_ng = { workspace = true }
+sha2 = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
@@ -25,6 +28,7 @@ wire.workspace = true
 [dev-dependencies]
 chrono-tz = { workspace = true }
 serde_json = { workspace = true }
+testkit = { workspace = true }
 uuid = { workspace = true }
 
 [lints]

@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use config::{Config, Environment};
+use kernel::filing::FilingStore;
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::JobQueue;
 use kernel::shutdown::Activities;
+use kernel::tidy::TidyStore;
 use kernel::topics::DecisionStore;
 use kernel::topics::TopicPageStore;
 use kernel::topics::TopicStore;
@@ -136,23 +138,25 @@ async fn run(
         let targets: Arc<dyn EmbeddingStore> = memory.clone();
         let summaries: Arc<dyn SummaryStore> = memory.clone();
         let wiki: Arc<dyn WikiBuilderStore> = memory.clone();
-        let store: Arc<dyn MemoryStore> = memory.clone();
         let consolidate: Arc<dyn WikiConsolidateStore> = memory.clone();
         let topics: Arc<dyn TopicStore> = memory.clone();
+        let filing: Arc<dyn FilingStore> = memory.clone();
         let pages: Arc<dyn TopicPageStore> = memory.clone();
         let decisions: Arc<dyn DecisionStore> = memory.clone();
+        let tidy: Arc<dyn TidyStore> = memory.clone();
         let mut runner = build_runner(
             role,
             WorkerPorts {
                 queue: Arc::new(queue),
                 targets,
                 summaries,
-                memory: store,
                 wiki,
                 consolidate: Some(consolidate),
                 topics,
+                filing,
                 pages,
                 decisions,
+                tidy,
                 lineage: session_lineage(env),
             },
             &config,
@@ -165,6 +169,7 @@ async fn run(
             .runner
             .with_memory_jobs(memory.clone())
             .with_unembedded(memory.clone())
+            .with_session_deletion(memory.clone())
             .with_job_settings(workers::MemoryJobSettings::from_environment(env)?)
             .with_schedules(wiki_extraction(env));
         runner.runner = runner.runner.tuned(env)?;
@@ -191,12 +196,13 @@ pub struct WorkerPorts<Q> {
     pub queue: Arc<Q>,
     pub targets: Arc<dyn EmbeddingStore>,
     pub summaries: Arc<dyn SummaryStore>,
-    pub memory: Arc<dyn MemoryStore>,
     pub wiki: Arc<dyn WikiBuilderStore>,
     pub consolidate: Option<Arc<dyn WikiConsolidateStore>>,
     pub topics: Arc<dyn TopicStore>,
+    pub filing: Arc<dyn FilingStore>,
     pub pages: Arc<dyn TopicPageStore>,
     pub decisions: Arc<dyn DecisionStore>,
+    pub tidy: Arc<dyn TidyStore>,
     pub lineage: Arc<dyn SessionLister>,
 }
 
@@ -241,8 +247,6 @@ pub fn with_models<Q: JobQueue + 'static>(
         provider,
         embed: EmbedSettings::from_config(config)?,
         summary: SummarySettings::standard(model.clone())?,
-        memory: ports.memory,
-        tags: workers::TagSettings::new(model.clone(), false)?,
     };
     let runner = Runner::new(
         ports.queue,
@@ -255,8 +259,10 @@ pub fn with_models<Q: JobQueue + 'static>(
         model,
     })
     .with_topic_pages(Arc::clone(&ports.topics), ports.pages, ports.decisions)
+    .with_tidy(ports.tidy)
     .with_session_topics(workers::SessionTopics {
         store: ports.topics,
+        filing: ports.filing,
         lineage: ports.lineage,
     })
     .with_activities(activities.clone());

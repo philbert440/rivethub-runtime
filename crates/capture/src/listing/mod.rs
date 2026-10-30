@@ -10,6 +10,7 @@ mod grok;
 mod history;
 mod kimi;
 mod omp;
+mod roots;
 mod text;
 pub(crate) mod time;
 mod title;
@@ -30,6 +31,8 @@ use kernel::transcript::TranscriptReaderError;
 use wire::harness::HarnessId;
 
 pub use ancestors::with_ancestors;
+pub use roots::claude_config_file;
+pub use roots::store_roots;
 pub use transcripts::StoreTranscriptReader;
 
 use crate::readers::blocking;
@@ -101,6 +104,13 @@ impl StoreSessionLister {
     }
 }
 
+pub(crate) async fn grok_title(
+    root: PathBuf,
+    id: String,
+) -> Result<Option<String>, TranscriptReaderError> {
+    blocking(move || grok::title(&root, &id)).await
+}
+
 fn list_harness(
     roots: &StoreRoots,
     spawns: &grok::SpawnIndex,
@@ -163,6 +173,33 @@ fn describe_harness(
         }),
         HarnessId::Cowork => Ok(cowork::describe(&roots.cowork, native)),
         HarnessId::Dsh => Ok(None),
+    }
+}
+
+fn describe_many_harness(
+    roots: &StoreRoots,
+    spawns: &grok::SpawnIndex,
+    harness: HarnessId,
+    natives: &[String],
+) -> Result<Vec<StoreSession>, TranscriptReaderError> {
+    match harness {
+        HarnessId::GrokBuild => absent_store(roots.grok.as_deref(), |root| {
+            grok::describe_many(root, spawns, natives)
+        }),
+        HarnessId::Codex => absent_store(roots.codex.as_deref(), |root| {
+            codex::describe_many(root, natives)
+        }),
+        HarnessId::ClaudeCode
+        | HarnessId::KimiCode
+        | HarnessId::Hermes
+        | HarnessId::Opencode
+        | HarnessId::Omp
+        | HarnessId::Dsh
+        | HarnessId::Cursor
+        | HarnessId::Cowork => natives
+            .iter()
+            .filter_map(|native| describe_harness(roots, spawns, harness, native, None).transpose())
+            .collect(),
     }
 }
 
@@ -260,6 +297,17 @@ impl SessionLister for StoreSessionLister {
         let parent = parent.map(str::to_owned);
         blocking(move || describe_harness(&roots, &spawns, harness, &native, parent.as_deref()))
             .await
+    }
+
+    async fn describe_many(
+        &self,
+        harness: HarnessId,
+        natives: &[String],
+    ) -> Result<Vec<StoreSession>, TranscriptReaderError> {
+        let roots = Arc::clone(&self.roots);
+        let spawns = Arc::clone(&self.spawns);
+        let natives = natives.to_vec();
+        blocking(move || describe_many_harness(&roots, &spawns, harness, &natives)).await
     }
 
     async fn store_cwd(

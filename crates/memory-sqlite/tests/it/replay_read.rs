@@ -121,9 +121,12 @@ async fn stats_replay_the_recorded_scenarios() -> TestResult {
             "captured, no embedding endpoint" => {
                 fresh
                     .store
-                    .capture(deploy_batch("cli:sess-1", "rivet")?, seeded_at)
+                    .capture(deploy_batch("cli:sess-1", "rivet")?, None, seeded_at)
                     .await?;
-                fresh.store.capture(helper_batch()?, seeded_at).await?;
+                fresh
+                    .store
+                    .capture(helper_batch()?, None, seeded_at)
+                    .await?;
             }
             other => return Err(format!("no seed for stats scenario {other:?}").into()),
         }
@@ -171,7 +174,7 @@ const LEAF: &str = "The team decided to deploy the AcmeKit service with a blue-g
 
 async fn seed_tools_store(store: &SqliteStore, now: DateTime<Utc>) -> TestResult<String> {
     let captured = store
-        .capture(deploy_batch("cli:sess-1", "rivet")?, now)
+        .capture(deploy_batch("cli:sess-1", "rivet")?, None, now)
         .await?;
     let conversation = captured.conversation_id;
     common::execute(

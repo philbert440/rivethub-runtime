@@ -153,6 +153,13 @@ pub enum ContextSource {
     Observed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum ContextUsageSource {
+    Harness,
+    LastCall,
+}
+
 #[serde_as]
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -224,10 +231,50 @@ pub struct SessionRemoved {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(untagged)]
+#[serde(untagged, try_from = "crate::JsonObject")]
 pub enum SessionBroadcast {
     Snapshot(Snapshot),
     Removed(SessionRemoved),
     HubState(crate::gateway::hub_state::HubStateChanged),
+    PluginChanged(crate::plugin::host::PluginChangedNotice),
+    PluginViews(crate::plugin::host::PluginViewsNotice),
     Event(AgentEvent),
+}
+
+#[derive(Deserialize)]
+enum BroadcastKind {
+    #[serde(rename = "snapshot")]
+    Snapshot,
+    #[serde(rename = "session.removed")]
+    Removed,
+    #[serde(rename = "hub.state")]
+    HubState,
+    #[serde(rename = "plugin.changed")]
+    PluginChanged,
+    #[serde(rename = "plugin.views")]
+    PluginViews,
+    #[serde(other)]
+    Event,
+}
+
+#[derive(Deserialize)]
+struct BroadcastTag {
+    #[serde(rename = "type")]
+    pub kind: BroadcastKind,
+}
+
+impl TryFrom<crate::JsonObject> for SessionBroadcast {
+    type Error = serde_json::Error;
+
+    fn try_from(frame: crate::JsonObject) -> Result<Self, Self::Error> {
+        let BroadcastTag { kind } = frame.deserialize()?;
+        match kind {
+            BroadcastKind::Snapshot => frame.deserialize().map(Self::Snapshot),
+            BroadcastKind::Removed => frame.deserialize().map(Self::Removed),
+            BroadcastKind::HubState => frame.deserialize().map(Self::HubState),
+            BroadcastKind::PluginChanged => frame.deserialize().map(Self::PluginChanged),
+            BroadcastKind::PluginViews => frame.deserialize().map(Self::PluginViews),
+            BroadcastKind::Event => frame.deserialize().map(Self::Event),
+        }
+    }
 }

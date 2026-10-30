@@ -34,7 +34,7 @@ async fn task_watch_resumes_after_its_backend_is_terminated(pool: PgPool) {
         .await
         .expect("reconnect kicks the watch")
         .expect("watch open");
-    sqlx::query("SELECT pg_notify('ros_task_done', '1')")
+    sqlx::query("SELECT pg_notify('rh_task_changed', '1')")
         .execute(&pool)
         .await
         .expect("notify");
@@ -51,14 +51,14 @@ async fn task_watch_resumes_after_its_backend_is_terminated(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn task_watch_names_each_finished_task(pool: PgPool) {
+async fn task_watch_names_each_changed_task(pool: PgPool) {
     let tasks = PostgresTasks::from_pool(pool.clone());
     let cancel = CancellationToken::new();
     let handle = tasks.spawn_watch(cancel.clone()).await.expect("listen");
-    let mut finished = TaskWatch::finished(&tasks);
+    let mut finished = TaskWatch::changed(&tasks);
     let id = uuid::Uuid::from_u128(42);
     for payload in ["1".to_owned(), id.to_string()] {
-        sqlx::query("SELECT pg_notify('ros_task_done', $1)")
+        sqlx::query("SELECT pg_notify('rh_task_changed', $1)")
             .bind(payload)
             .execute(&pool)
             .await

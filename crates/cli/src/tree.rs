@@ -45,13 +45,6 @@ pub enum Command {
         #[arg(short = 'c', long = "config")]
         config: Option<PathBuf>,
     },
-    #[command(about = "Run the task engine")]
-    Agent {
-        #[arg(long)]
-        check: bool,
-        #[arg(short = 'c', long = "config")]
-        config: Option<PathBuf>,
-    },
     #[command(about = "Manage the systemd service")]
     Service {
         #[command(subcommand)]

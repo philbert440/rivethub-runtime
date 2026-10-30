@@ -9,12 +9,12 @@ use kernel::wiki::WikiLookup;
 use kernel::wiki::consolidate::{
     ConsolidateWiki, WikiConsolidateStore as _, WikiFold, consolidation_plan,
 };
+use kernel::wiki::page::{CitationKind, FoldMark, PageCitation, PagePatch, WikiAction};
+use kernel::wiki::page::{WikiHistoryEntry, WikiSlug};
 use memory_postgres::PostgresMemory;
 use memory_postgres::wiki_writer::WikiRepository;
 use sqlx::PgPool;
 use wiki_support::{TestResult, now, seed};
-use wire::gateway::wiki::{WikiHistoryEntry, WikiSlug};
-use wire::wiki::{CitationKind, FoldMark, PageCitation, PagePatch, WikiAction};
 
 struct Seed<'a> {
     slug: &'a str,

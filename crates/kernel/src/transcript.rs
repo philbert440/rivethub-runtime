@@ -6,12 +6,10 @@ use thiserror::Error;
 use wire::gateway::sessions::HarnessToolOutput;
 use wire::gateway::sessions::HarnessTranscriptTurn;
 use wire::harness::HarnessId;
-use wire::harness::HarnessSessionStatus;
-use wire::harness::HarnessSessionSummary;
-use wire::harness::HarnessStoreSession;
-use wire::harness::RosterCommand;
 use wire::message::Role;
 use wire::session_id::SessionId;
+
+const SUBAGENTS: &str = "/subagents/";
 
 #[derive(Debug, Error)]
 pub enum TranscriptReaderError {
@@ -94,59 +92,10 @@ impl StoreSession {
             task_id: None,
         }
     }
-
-    #[must_use]
-    pub fn legacy_row(&self) -> HarnessStoreSession {
-        HarnessStoreSession {
-            id: self.id.clone(),
-            command: RosterCommand::from(self.harness),
-            title: self.title.clone(),
-            updated_at: epoch_ms(self.updated_at),
-            created_at: self.created_at.map(epoch_ms),
-            parent_session_id: self.parent_session_id.clone(),
-            agent_name: self.agent_name.clone(),
-            model: self.model.clone(),
-            task_id: self.task_id.clone(),
-        }
-    }
-
-    #[must_use]
-    pub fn summary(&self, cwd: Option<String>, now: DateTime<Utc>) -> HarnessSessionSummary {
-        let updated_at = if self.updated_at == 0 {
-            now
-        } else {
-            epoch_ms(self.updated_at)
-        };
-        HarnessSessionSummary {
-            session_id: SessionId::new(self.harness, &self.id),
-            harness_id: self.harness,
-            title: (self.title != self.id).then(|| self.title.clone()),
-            cwd,
-            created_at: epoch_ms(self.created_at.unwrap_or(self.updated_at)),
-            updated_at,
-            status: HarnessSessionStatus::Ended,
-            blocked: None,
-            supersedes: None,
-            model: self.model.clone(),
-            parent_session_id: self
-                .parent_session_id
-                .as_deref()
-                .and_then(|parent| linked_parent(self.harness, parent)),
-            agent_name: self.agent_name.clone(),
-            task_id: self.task_id.clone(),
-            effort: None,
-            transport: None,
-            startup_context: None,
-            extra: wire::Extra::default(),
-        }
-    }
 }
 
-fn epoch_ms(ms: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp_millis(ms).unwrap_or(DateTime::UNIX_EPOCH)
-}
-
-pub(crate) fn linked_parent(harness: HarnessId, parent: &str) -> Option<SessionId> {
+#[must_use]
+pub fn linked_parent(harness: HarnessId, parent: &str) -> Option<SessionId> {
     let linkable = !parent.is_empty()
         && !parent.contains('/')
         && !parent.contains("..")
@@ -155,12 +104,32 @@ pub(crate) fn linked_parent(harness: HarnessId, parent: &str) -> Option<SessionI
     linkable.then(|| SessionId::new(harness, parent))
 }
 
+pub async fn session_parent(
+    lineage: &dyn SessionLister,
+    session: &SessionId,
+) -> Result<Option<String>, TranscriptReaderError> {
+    if let Some((parent, _)) = session.native().split_once(SUBAGENTS)
+        && !parent.is_empty()
+    {
+        return Ok(Some(parent.to_owned()));
+    }
+    Ok(lineage
+        .describe(session.harness(), session.native(), None)
+        .await?
+        .and_then(|row| row.parent_session_id))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ListLimit(usize);
 
 impl ListLimit {
     pub const DEFAULT: Self = Self(100);
     pub const MAX: usize = 500;
+
+    #[must_use]
+    pub const fn most() -> Self {
+        Self(Self::MAX)
+    }
 
     #[must_use]
     pub const fn per_harness_route() -> Self {
@@ -241,6 +210,20 @@ pub trait SessionLister: Send + Sync {
         native: &str,
         parent: Option<&str>,
     ) -> Result<Option<StoreSession>, TranscriptReaderError>;
+
+    async fn describe_many(
+        &self,
+        harness: HarnessId,
+        natives: &[String],
+    ) -> Result<Vec<StoreSession>, TranscriptReaderError> {
+        let mut rows = Vec::with_capacity(natives.len());
+        for native in natives {
+            if let Some(row) = self.describe(harness, native, None).await? {
+                rows.push(row);
+            }
+        }
+        Ok(rows)
+    }
 
     async fn store_cwd(
         &self,

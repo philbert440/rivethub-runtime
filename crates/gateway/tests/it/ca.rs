@@ -118,9 +118,9 @@ impl CertificateAuthority for CountingCa {
         &self,
         _csr: CsrPem,
         _authority: SignAuthority,
-    ) -> std::result::Result<wire::ca::SignResponse, CaError> {
+    ) -> std::result::Result<kernel::ca::CertChainPem, CaError> {
         *self.signs.lock() += 1;
-        Ok(wire::ca::SignResponse {
+        Ok(kernel::ca::CertChainPem {
             leaf: "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n".to_owned(),
             chain: vec![
                 "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n".to_owned(),

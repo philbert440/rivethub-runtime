@@ -1,14 +1,12 @@
 pub mod process;
 
 mod agent_presets;
-mod app_routes;
 mod cli;
 mod cli_provider;
 mod composed;
 mod composed_client_auth;
 mod composed_tls_replay;
 mod db_resilience;
-mod delegate_rows;
 mod doctor;
 mod e2e;
 mod harness_offerings;

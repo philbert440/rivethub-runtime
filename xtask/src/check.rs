@@ -211,6 +211,7 @@ pub fn check(root: &Path, locked: bool, list_tests: bool) -> Result<()> {
         crate::baseline::adjudicate(&baseline, check, &hits, &mut findings);
     }
     crate::baseline::adjudicate(&baseline, "FALLBACK", &fallback_hits, &mut findings);
+    crate::kernelwire::check(root, &baseline, &mut findings)?;
     crate::baseline::shrink(root, &mut findings)?;
     finish("cargo xtask check", &findings)
 }

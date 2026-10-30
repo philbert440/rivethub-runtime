@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH conv AS (\n                   SELECT id, session_key FROM rh_conversations WHERE session_key = ANY($1)\n               ), sums AS (\n                   SELECT s.id, conv.session_key\n                     FROM rh_summaries s\n                     JOIN conv ON conv.id = s.conversation_id\n               )\n               SELECT sums.session_key AS \"session_key!\" FROM sums\n                WHERE EXISTS (SELECT 1 FROM rh_wiki_citations w WHERE w.summary_id = sums.id)\n                   OR EXISTS (\n                          SELECT 1 FROM rh_wiki_provenance p\n                           WHERE p.source_kind = 'summary' AND p.source_id = sums.id\n                      )\n               UNION\n               SELECT conv.session_key FROM conv\n                WHERE EXISTS (SELECT 1 FROM rh_wiki_provenance p WHERE p.conversation_id = conv.id)\n                   OR EXISTS (\n                          SELECT 1 FROM rh_wiki_provenance p\n                           WHERE p.source_kind = 'conversation' AND p.source_id = conv.id\n                      )\n               UNION\n               SELECT conv.session_key\n                 FROM rh_wiki_provenance p\n                 JOIN rh_messages m ON m.id = p.source_id\n                 JOIN conv ON conv.id = m.conversation_id\n                WHERE p.source_kind = 'message'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_key!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "57eec6ad5f97d959b55ef3a4edbfba89bf0da412dabdd4f06921b09d2a26556c"
+}

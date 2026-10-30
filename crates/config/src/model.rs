@@ -7,7 +7,6 @@ use serde::Deserialize;
 use crate::Environment;
 use crate::enums::{
     DeploymentTarget, Effort, HarnessId, Isolation, MemoryBackend, ModelsMode, ThinkingLevel,
-    VerifierExecutor,
 };
 use crate::provider::{ProviderSlot, ProviderType};
 
@@ -59,7 +58,6 @@ pub struct RuntimeSection {
     pub context: Option<ContextSection>,
     pub skill_dirs: Option<Vec<PathBuf>>,
     pub plugin_dirs: Option<Vec<PathBuf>>,
-    pub heartbeats: Vec<HeartbeatEntry>,
     pub safety: Option<SafetySection>,
     pub auto_actions: Option<AutoActionsSection>,
     pub experimental: Option<bool>,
@@ -105,31 +103,6 @@ pub struct AutoActionsSection {
 
 fn default_true() -> bool {
     true
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default)]
-pub struct HeartbeatEntry {
-    pub agent: Option<String>,
-    pub schedule: Option<HeartbeatSchedule>,
-    pub prompt: Option<String>,
-    pub timezone: Option<String>,
-    pub output_channel: Option<String>,
-    pub quiet_hours: Option<QuietHours>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(untagged)]
-pub enum HeartbeatSchedule {
-    Minutes(u32),
-    Expression(String),
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(default)]
-pub struct QuietHours {
-    pub start: Option<u8>,
-    pub end: Option<u8>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -345,13 +318,14 @@ pub struct CertificateAuthoritySection {
     pub roster: Option<PathBuf>,
 }
 
-#[derive(Debug, Default, Clone, Copy, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize)]
 #[serde(default)]
 pub struct TerminalSection {
     pub enabled: Option<bool>,
     pub open: Option<bool>,
     pub idle_ttl_ms: Option<u64>,
     pub trust_claude_launch_dirs: Option<bool>,
+    pub roots: Option<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
@@ -380,41 +354,8 @@ pub struct DevicesSection {
 #[serde(default)]
 pub struct TasksSection {
     pub enabled: Option<bool>,
-    pub pricing: Option<BTreeMap<String, PricingEntry>>,
-    pub eval: Option<EvalSection>,
     pub harnesses: Option<BTreeMap<HarnessSlot, HarnessEntry>>,
     pub sqlite_path: Option<PathBuf>,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize)]
-#[serde(default)]
-pub struct PricingEntry {
-    pub input_per_mtok: Option<f64>,
-    pub output_per_mtok: Option<f64>,
-}
-
-#[derive(Debug, Default, Clone, Deserialize)]
-#[serde(default)]
-pub struct EvalSection {
-    pub enabled: Option<bool>,
-    pub require_criteria: Option<bool>,
-    pub derive_internal: Option<bool>,
-    pub skip_origins: Option<Vec<String>>,
-    pub max_retries: Option<u32>,
-    pub verifier: Option<VerifierSection>,
-    pub escalation: Option<EscalationSection>,
-}
-
-#[derive(Debug, Default, Clone, Copy, Deserialize)]
-#[serde(default)]
-pub struct VerifierSection {
-    pub executor: Option<VerifierExecutor>,
-}
-
-#[derive(Debug, Default, Clone, Deserialize)]
-#[serde(default)]
-pub struct EscalationSection {
-    pub channel: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]

@@ -4,7 +4,6 @@ use kernel::agent::excluded_names;
 use kernel::model::ModelChunk;
 use serde::Deserialize;
 use wire::JsonObject;
-use wire::task_overrides::TaskOverrides;
 
 use crate::support::provider::{Provider, chunks};
 use crate::support::{Harness, agent, call, names, text, turn};
@@ -34,9 +33,14 @@ fn production_exclusions() -> Vec<String> {
         .into_iter()
         .find(|scenario| scenario.name == "production-exclude-tools")
         .expect("production row");
-    let encoded = serde_json::to_string(&scenario.row.spec).expect("spec");
-    let overrides: TaskOverrides = serde_json::from_str(&encoded).expect("overrides");
-    overrides.exclude_tools.expect("excludeTools")
+    let excluded = scenario
+        .row
+        .spec
+        .as_map()
+        .get("excludeTools")
+        .cloned()
+        .expect("excludeTools");
+    serde_json::from_value(excluded).expect("excludeTools list")
 }
 
 #[tokio::test]

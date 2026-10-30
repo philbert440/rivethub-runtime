@@ -435,6 +435,8 @@ fn harness_delivers_session_events() {
                 tool_call_id: "t1".to_string(),
                 status: ToolCallStatus::Completed,
                 output: Some("done".to_string()),
+                title: None,
+                input: None,
             }),
             SessionEvent::Plan(vec![PlanEntry {
                 content: "step".to_string(),

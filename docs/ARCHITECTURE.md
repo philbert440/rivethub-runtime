@@ -7,7 +7,7 @@ Design artifact (visual, authoritative): https://claude.ai/artifact/L7cAvh16cYEZ
 | Layer | Crates | May depend on |
 |---|---|---|
 | foundation | `wire` (serde types for every boundary payload), `config` (config.yaml + env → `Config`) | external crates only; `config` also uses `wire` for the shared closed sets (`HarnessId`, `ThinkingLevel`, effort) |
-| kernel | `kernel` (ports = traits, domain types; no I/O), `testkit` (dev-only: replayers, fakes, stubs) | wire, config |
+| kernel | `kernel` (ports = traits, domain types; no I/O), `testkit` (dev-only: replayers, fakes, stubs) | wire, config; the kernel owns its domain types and the gateway and adapters translate to and from `wire`, and xtask `KERNELWIRE` counts the kernel's remaining references to `wire`, which may only fall |
 | adapters | `memory-postgres`, `memory-sqlite`, `providers`, `harness-acp`, `terminal`, `mcp`, `capture`, `pki`, `stepca` | kernel, wire, config, externals — NEVER another adapter or a service, except `pki` → `stepca`: `stepca` cannot depend on kernel, so the certificate-authority port is implemented in `pki` |
 | services | `gateway` (with the session registry and mesh), `agent-loop`, `workers`, `tasks` (sessions over the gateway API) | kernel, wire, config — NEVER an adapter |
 | operations | `migrate` (every Postgres and SQLite schema change; `cli` owns the `rivethub-migrate` operator binary) | wire, config, externals (sqlx, rusqlite); depended on only by `cli` as a normal dependency and by tests as a dev-dependency — NEVER directly by a runtime crate (`rivethub` is checked transitively by the xtask MANIFEST rule, except for the direct `cli` → `migrate` edge used for schema verification) |
@@ -25,13 +25,16 @@ The gate (`cargo xtask check`) fails any Cargo.toml that breaks this.
 | `TopicPageStore` | topic_page(slug) · page_taken(slug) · save_topic_page(topic, page) (writes and binds) · redirect_page(from, to) · fold_page(child, into, mark). The sync rules (page per root, sub-topic sections, hand-off on reparent, fold on merge) live in `kernel::topics::sync_topic_page`; the route's page lookup is `kernel::topics::bound_page` | memory-postgres (the wiki git page, frontmatter `sections`, `rh_wiki_topics.topic_id`), memory-sqlite (`ros_wiki_topics`, `rh_topic_pages.sections`) | workers (`sync-topic-page`; `extract-wiki` through `kernel::wiki::route`) |
 | `DecisionStore` | decisions(topic) · decision(id) · keep_decisions(batch) (upserts and queues `sync-topic-page` for each topic in one transaction). The `Decision` entity and its rules (non-empty text, only an active decision is edited or superseded, a replacement belongs to the same topic) live in `kernel::topics`; `sync_topic_page` renders a root's and its sub-topics' decisions as the page's `Decisions` section; a merge moves the source's decisions to the target | memory-postgres (`rh_topic_decisions`, migration 0030), memory-sqlite (`rh_topic_decisions`, schema v17) | gateway (`/api/topics/{topic}/decisions`), workers (`sync-topic-page`) |
 | `StartupStore` | keep_startup(session, context) · startup(session). A session's startup context is assembled by `kernel::topics::startup_context` (topic page, recent sessions in the topic, relevant hits) and budgeted by the pure `kernel::topics::assemble`, rendered for delivery by the pure `kernel::topics::render`, and kept with how it was delivered; the token estimate and `relative_when` are `kernel::memory::budget` | memory-postgres (`rh_session_startup`), memory-sqlite (`rh_session_startup`, schema v16) | gateway (`POST /api/harness-sessions` and `POST /api/terminal` with a topic, `GET /api/harness-sessions/{session}/startup-context`) |
-| `JobQueue` | task_names(role) · enqueue(job) → id · claim(selector) · read · subscribe · complete/fail · revive_dead | memory-postgres (graphile tables), memory-sqlite | memory adapters, workers, tasks |
+| `SessionDeletion` | delete_session(session key, by) → counts (writes the tombstone) · tombstones(keys) → deleted_at (a tombstone is lifted when the session is used again) · session_activity(keys) (turn, tool, filing and citation facts for the trash review, read no further than `TRASH_MESSAGES_MAX` messages) · empty_sessions(limit) (remembered with no messages) · purge_tombstoned(limit). The trash rule is the pure `kernel::memory::trash_verdict` over kernel-owned turns; the gateway translates transcripts and the contract's trash reason | memory-postgres (`rh_session_tombstones`, migration 0039; lookups indexed by migration 0041), memory-sqlite (`rh_session_tombstones`, schema v24; lookups indexed by schema v26) | gateway (`DELETE /api/sessions/{session}`, `POST /api/sessions/delete`, `GET /api/sessions/trash`, list filtering), workers (`purge-deleted-sessions`) |
+| `JobQueue` | task_names(role) · enqueue(job) → id · claim(selector) (by priority, then run_at) · read · subscribe · complete/fail · revive_dead | memory-postgres (graphile tables), memory-sqlite (`ros_jobs`, priorities in `rh_job_priorities`, schema v27) | memory adapters, workers, tasks |
 | `ModelProvider` | chat(request) → response · stream(request) → chunk stream (text, reasoning, tool-call deltas, usage) · embed(texts) · list_models | providers: ONE OpenAI-compatible client (vLLM, SGLang, hosted OpenAI-compatible APIs; no sampling fields on the wire) + cli-backed over a headless ACP session; no native Anthropic/Gemini/xAI clients | agent-loop, workers, memory search (query embedding) |
 | `HarnessAdapter` | new_session(spec, with the rendered startup context) · system_prompt(harness) → `SystemPromptSupport` · resume(id) · prompt(id, input) · cancel(id) · answer_permission(id, decision) · set_option(id, model/effort) · switches(id) · admit(id, option) · events(id) → SessionEvent stream | harness-acp (one ACP client + a per-harness launch table: native ACP, or codex-acp / claude-code-acp, and the `_meta` field each adapter reads to append to its system prompt; the terminal CLI flags are `kernel::harness::cli_system_prompt`) | gateway's session registry |
 | `TerminalMux` | spawn(session, argv, cwd, size) · attach(id) → byte stream · input(id, bytes) · resize · kill · list | terminal (herdr over a PTY; the only multiplexer) | gateway |
 | `Tool` | definition() → `rmcp::Tool` · call(args, ctx) → `rmcp::CallToolResult` (the MCP tool shape, no translation) | RivetHub's own capabilities (memory, wiki, delegation, skills) in mcp; remote MCP servers' tools via the mcp client | agent-loop, mcp server |
 | `TranscriptReader` | sessions(store) · read(session) → turns · tail(session, since) | capture's store readers (one per harness) | capture (incremental + backfill), gateway (transcript route) via the binary's wiring |
 | `HubStateStore` | load(user) · replace(user, base version, state) → saved or conflict (compare-and-set on `version`) | memory-postgres (`rh_hub_state` on the memory database, so every node on one datahub shares a user's document); gateway's file store under `<state>/hub-state/` when the node has no Postgres or the table is not migrated yet | gateway `GET`/`PUT /api/hub/state` |
+| `SummaryWatch` | written() → a stream of the summaries stored (id, session key, kind, depth) | memory-postgres (`NOTIFY rh_summary_written` from every summary write, listened for by the gateway's process), memory-sqlite (in process) | gateway's plug-in host (`summary.written`) |
+| `PluginTools` | tools() → the running plug-ins' tools and a version · call(plugin, tool, call, the MCP request's tool-use id) · changed(seen version) → the next version | gateway's plug-in host in-process (`rh local`); mcp's `SocketTools` over the node's `<state>/plugins/tools.sock` (`rh mcp`) | mcp server (lists plug-in tools after its own and sends `tools/list_changed`) |
 | `CertificateAuthority` | issue_token(principal) · sign(CSR, token or verified renewal principal) · chain · crl · revoke(principal) | pki over the stepca HTTP client: one `step ca token` minter shared with `rh ca token`, roster SANs, step-ca chain and CRL, revoke by principal via `step ca revoke`; no local signer | gateway `/ca/v1/`, cli `rh ca` and `rh cert renew` |
 
 A port exists only where several implementations exist or where it is the boundary to an external system. Dropped:
@@ -69,7 +72,7 @@ clamped to 0..=200, 0 disables it). The stale-wiki sweep runs only with `RIVETHU
 
 ### Wiki topic identity and consolidation
 
-`wire::wiki::topic_identity(slug, title)` is a topic's identity key: the slug's words without the product and project words
+`kernel::wiki::page::topic_identity(slug, title)` is a topic's identity key: the slug's words without the product and project words
 (`rivet`, `rivetos`, `rivethub`, `project`, `projects`) or connector words (`the`, `and`, `of`, `for`, `in`, `on`, `to`,
 `with`, `via`, `by`), each singularized, sorted and deduplicated. A trailing `-2`..`-9` is a dedupe suffix and is dropped
 unless the title carries that number, so `grok-4` stays apart from `grok-3` and `rivet-grok`. Numbers inside words
@@ -92,7 +95,7 @@ it is the survivor of its identity group.
 ## Process shape (Phil 2026-10-12)
 
 One process per service, each with one tokio multi-thread runtime built in its own composition root:
-`rh gateway` (gateway with its session registry, terminal, devices, and the certificate authority),
+`rh gateway` (gateway with its session registry, terminal, devices, the certificate authority and the plug-in host),
 `rh agent` (the task engine), `rh worker --role <embedder|summarizer|categorizer|wiki-builder|all>`, and `rh mcp` (sidecar).
 In this checkout `rh start` supervises those roots as children of the same binary and stays hidden from help.
 `rh stop` signals that supervisor. `rh agent` is a composition root. `rh local` composes the gateway, the SQLite worker roles, and network MCP in one process on one SQLite store.
@@ -149,7 +152,9 @@ keeping the binary in the composition crate avoids an adapter-to-adapter depende
 The `migrate` library still owns all schema creation, upgrade ladders and version
 checks. Its existing 1,000-line crate budget is unchanged; every file stays under
 the 600-line file cap.
-No runtime plugin loading: extension points are adapter crates behind ports, the public API, and MCP. `plugins:` and
+No runtime plugin loading: extension points are adapter crates behind ports, the public API, MCP and out-of-process
+plug-ins (B17, the gateway's `plugins` module; launches go through its one `launch` function, which confines each
+process with Landlock on Linux). `plugins:` and
 `channels.*` are accepted-and-ignored compatibility keys.
 
 

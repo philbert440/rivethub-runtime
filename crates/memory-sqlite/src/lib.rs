@@ -2,12 +2,14 @@ mod append;
 pub mod capture;
 mod context;
 mod conversation;
+mod deletion;
 mod embed_store;
 pub mod error;
 pub mod export;
 mod health;
 pub mod import;
 mod insert;
+mod job_rank;
 mod memory_port;
 mod message;
 mod meta;
@@ -17,7 +19,6 @@ mod read;
 mod reembed;
 mod search;
 pub use search::embed::QueryEmbed;
-pub mod rule;
 mod stats;
 mod summary_dag;
 mod summary_port;
@@ -28,6 +29,7 @@ mod task_rows;
 mod task_store;
 mod task_watch;
 mod taxonomy;
+mod tidy;
 mod time;
 mod title;
 mod topic_pages;
@@ -35,7 +37,9 @@ mod topics;
 mod unembedded;
 mod vector;
 mod wiki_builder;
+mod wiki_citations;
 mod wiki_consolidate;
+mod wiki_held;
 mod wiki_read;
 mod wiki_topics;
 
@@ -90,7 +94,7 @@ impl SharedClock {
     }
 }
 
-pub const SCHEMA_VERSION: i64 = 18;
+pub const SCHEMA_VERSION: i64 = 27;
 
 const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
@@ -114,9 +118,11 @@ pub struct SqliteStore {
     notifications: tokio::sync::watch::Sender<()>,
     task_events: tokio::sync::watch::Sender<u64>,
     task_finished: tokio::sync::broadcast::Sender<uuid::Uuid>,
+    summaries_written: tokio::sync::broadcast::Sender<kernel::memory::WrittenSummary>,
 }
 
 const TASK_FINISHED_BUFFER: usize = 256;
+const SUMMARY_WRITTEN_BUFFER: usize = 256;
 
 impl SqliteStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SqliteError> {
@@ -277,6 +283,7 @@ fn from_conn(
         notifications: tokio::sync::watch::channel(()).0,
         task_events,
         task_finished,
+        summaries_written: tokio::sync::broadcast::channel(SUMMARY_WRITTEN_BUFFER).0,
     }
 }
 
@@ -351,7 +358,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(state, (crate::SCHEMA_VERSION, 52));
+        assert_eq!(state, (crate::SCHEMA_VERSION, 65));
     }
 
     #[tokio::test]

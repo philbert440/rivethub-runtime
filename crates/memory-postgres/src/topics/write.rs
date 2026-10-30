@@ -8,15 +8,17 @@ use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
+use kernel::topics::TopicKind;
+use kernel::topics::TopicTree;
+use kernel::wiki::page::WikiSlug;
 use sqlx::PgConnection;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use super::rows::failed;
 
-const SLUG_INDEX: &str = "ux_rh_topics_slug";
-const ALIAS_INDEX: &str = "ux_rh_topic_aliases_key";
+const SLUG_INDEX: &str = "ux_rh_topics_kind_slug";
+const ALIAS_INDEX: &str = "ux_rh_topic_aliases_kind_key";
 
 fn written(operation: &'static str, topic: &Topic) -> impl FnOnce(sqlx::Error) -> TopicError {
     move |source| {
@@ -46,9 +48,10 @@ fn written(operation: &'static str, topic: &Topic) -> impl FnOnce(sqlx::Error) -
 
 pub(super) async fn claim_names(conn: &mut PgConnection, topic: &Topic) -> Result<(), TopicError> {
     let slug_taken = sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM rh_topics WHERE slug = $1 AND id <> $2) AS "taken!""#,
+        r#"SELECT EXISTS (SELECT 1 FROM rh_topics WHERE kind = $3 AND slug = $1 AND id <> $2) AS "taken!""#,
         topic.slug.as_str(),
-        topic.id.uuid()
+        topic.id.uuid(),
+        topic.kind.to_string()
     )
     .fetch_one(&mut *conn)
     .await
@@ -61,10 +64,11 @@ pub(super) async fn claim_names(conn: &mut PgConnection, topic: &Topic) -> Resul
     let keys: Vec<String> = topic.aliases.iter().map(Alias::key).collect();
     let owned = sqlx::query_scalar!(
         "SELECT alias FROM rh_topic_aliases
-          WHERE alias_key = ANY($1::text[]) AND topic_id <> $2
+          WHERE kind = $3 AND alias_key = ANY($1::text[]) AND topic_id <> $2
           ORDER BY alias_key LIMIT 1",
         &keys,
-        topic.id.uuid()
+        topic.id.uuid(),
+        topic.kind.to_string()
     )
     .fetch_optional(&mut *conn)
     .await
@@ -79,8 +83,8 @@ pub(super) async fn insert(conn: &mut PgConnection, topic: &Topic) -> Result<(),
     let directory = topic.directory.as_ref();
     sqlx::query!(
         "INSERT INTO rh_topics (id, slug, name, parent_id, directory_kind, directory_node,
-                                directory_path, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                                directory_path, created_at, updated_at, closed_at, kind)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
         topic.id.uuid(),
         topic.slug.as_str(),
         topic.name.as_str(),
@@ -89,11 +93,26 @@ pub(super) async fn insert(conn: &mut PgConnection, topic: &Topic) -> Result<(),
         directory.and_then(Root::node),
         directory.map(Root::path),
         topic.created_at,
-        topic.updated_at
+        topic.updated_at,
+        topic.closed_at,
+        topic.kind.to_string()
     )
     .execute(&mut *conn)
     .await
     .map_err(written("topic create", topic))?;
+    Ok(())
+}
+
+pub(super) async fn closure(conn: &mut PgConnection, topic: &Topic) -> Result<(), TopicError> {
+    sqlx::query!(
+        "UPDATE rh_topics SET closed_at = $2, updated_at = $3 WHERE id = $1",
+        topic.id.uuid(),
+        topic.closed_at,
+        topic.updated_at
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(failed("topic close"))?;
     Ok(())
 }
 
@@ -134,16 +153,39 @@ pub(super) async fn aliases(conn: &mut PgConnection, topic: &Topic) -> Result<()
         .collect();
     let keys: Vec<String> = topic.aliases.iter().map(Alias::key).collect();
     sqlx::query!(
-        "INSERT INTO rh_topic_aliases (topic_id, alias, alias_key)
-         SELECT $1, alias, alias_key FROM unnest($2::text[], $3::text[]) AS a(alias, alias_key)",
+        "INSERT INTO rh_topic_aliases (topic_id, alias, alias_key, kind)
+         SELECT $1, alias, alias_key, $4 FROM unnest($2::text[], $3::text[]) AS a(alias, alias_key)",
         topic.id.uuid(),
         &texts,
-        &keys
+        &keys,
+        topic.kind.to_string()
     )
     .execute(&mut *conn)
     .await
     .map_err(written("topic aliases", topic))?;
     Ok(())
+}
+
+pub(super) async fn tree(conn: &mut PgConnection) -> Result<TopicTree, TopicError> {
+    let edges = sqlx::query!("SELECT id, parent_id, kind FROM rh_topics ORDER BY id FOR UPDATE")
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(failed("topic tree read"))?;
+    let edges = edges
+        .into_iter()
+        .map(|edge| {
+            let kind = edge
+                .kind
+                .parse::<TopicKind>()
+                .map_err(|error| super::rows::stored("kind")(Box::new(error)))?;
+            Ok((
+                TopicId::from_uuid(edge.id),
+                edge.parent_id.map(TopicId::from_uuid),
+                kind,
+            ))
+        })
+        .collect::<Result<Vec<_>, TopicError>>()?;
+    Ok(TopicTree::new(edges))
 }
 
 pub(super) async fn subtopics(
@@ -191,6 +233,7 @@ pub(super) async fn fold_into(
     .execute(&mut *conn)
     .await
     .map_err(failed("topic merge suggestions"))?;
+    super::filing::fold_into(conn, source, into).await?;
     sqlx::query!(
         "UPDATE rh_topic_decisions SET topic_id = $2 WHERE topic_id = $1",
         source,
@@ -233,8 +276,17 @@ pub(super) async fn fold_into(
     Ok(())
 }
 
-pub(super) async fn remove(conn: &mut PgConnection, id: TopicId) -> Result<(), TopicError> {
-    let id = id.uuid();
+pub(super) async fn remove(conn: &mut PgConnection, topic: &Topic) -> Result<(), TopicError> {
+    sqlx::query!(
+        "INSERT INTO rh_topic_tombstones (kind, slug, deleted_at) VALUES ($1, $2, now())
+         ON CONFLICT (kind, slug) DO UPDATE SET deleted_at = EXCLUDED.deleted_at",
+        topic.kind.to_string(),
+        topic.slug.as_str()
+    )
+    .execute(&mut *conn)
+    .await
+    .map_err(failed("topic tombstone"))?;
+    let id = topic.id.uuid();
     sqlx::query!("DELETE FROM rh_session_placements WHERE topic_id = $1", id)
         .execute(&mut *conn)
         .await
@@ -298,17 +350,6 @@ pub(super) async fn lock_session(
     Ok(())
 }
 
-pub(super) async fn topic_exists(conn: &mut PgConnection, id: TopicId) -> Result<bool, TopicError> {
-    let found = sqlx::query_scalar!(
-        "SELECT id FROM rh_topics WHERE id = $1 FOR SHARE",
-        id.uuid()
-    )
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(failed("session placement topic"))?;
-    Ok(found.is_some())
-}
-
 pub(super) async fn placement(
     conn: &mut PgConnection,
     placement: &Placement,
@@ -342,13 +383,15 @@ pub(super) async fn suggestion(
     suggestion: &Suggestion,
 ) -> Result<(), TopicError> {
     sqlx::query!(
-        "INSERT INTO rh_session_suggestions (session_id, name, topic_id)
-         VALUES ($1, $2, $3)
+        "INSERT INTO rh_session_suggestions (session_id, name, topic_id, parent_id)
+         VALUES ($1, $2, $3, $4)
          ON CONFLICT (session_id) DO UPDATE SET name = EXCLUDED.name,
-                                                topic_id = EXCLUDED.topic_id",
+                                                topic_id = EXCLUDED.topic_id,
+                                                parent_id = EXCLUDED.parent_id",
         suggestion.session.as_str(),
         suggestion.name.as_str(),
-        suggestion.topic.map(TopicId::uuid)
+        suggestion.topic.map(TopicId::uuid),
+        suggestion.parent.map(TopicId::uuid)
     )
     .execute(&mut *conn)
     .await

@@ -7,13 +7,13 @@ use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::WikiConsolidateStore;
 use kernel::wiki::consolidate::WikiFold;
 use kernel::wiki::consolidate::WikiTopicStats;
+use kernel::wiki::page::FoldMark;
+use kernel::wiki::page::FoldedTopic;
+use kernel::wiki::page::fold_text;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::TransactionBehavior;
 use rusqlite::params;
-use wire::wiki::FoldMark;
-use wire::wiki::FoldedTopic;
-use wire::wiki::fold_text;
 
 use crate::SqliteStore;
 use crate::wiki_builder::blocking;

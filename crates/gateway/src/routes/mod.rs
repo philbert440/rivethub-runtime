@@ -12,11 +12,14 @@ pub(crate) mod hub_state;
 pub mod memory;
 mod memory_archive;
 mod notifications;
+mod plugins;
+mod session_delete;
 pub mod sessions;
 pub mod tags;
 pub mod tasks;
 pub mod terminal;
-mod topics;
+mod tidy;
+pub(crate) mod topics;
 pub mod v1;
 pub mod wiki;
 
@@ -50,7 +53,10 @@ pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
         .merge(history::router())
         .merge(notifications::router())
         .merge(topics::router())
+        .merge(tidy::router())
         .merge(hub_state::router())
+        .merge(plugins::router())
+        .merge(session_delete::router())
 }
 
 pub(crate) fn mount(router: Router<Arc<Gateway>>) -> Router<Arc<Gateway>> {

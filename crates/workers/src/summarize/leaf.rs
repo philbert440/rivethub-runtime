@@ -48,23 +48,11 @@ pub(super) async fn write_leaves(
         let content = require_text(&response)?;
         let taken = take_front(&mut window.messages, usize_of(take)?)?;
         let summary = leaf_record(env, &window.conversation, &taken, content)?;
-        let summary_id = summary.id;
         let conversation_id = summary.conversation_id;
         let node = node_from(&summary);
         let stored = env.store.write_summary(summary).await?;
-        if stored == SummaryWrite::FirstLeaf
-            && let Some(topics) = env.topics
-        {
-            super::topic::best_effort_categorize(
-                topics,
-                &window.conversation,
-                &node.content,
-                env.now,
-            )
-            .await;
-        }
-        if env.settings.session_tagging {
-            enqueue_tags(env, summary_id, conversation_id).await?;
+        if stored == SummaryWrite::FirstLeaf {
+            enqueue_filing(env, conversation_id).await?;
         }
         window.leaves.push(node);
         written = written.checked_add(1).ok_or(WorkerError::Count)?;
@@ -83,7 +71,7 @@ fn take_count(
     if available >= batch {
         return Some(batch);
     }
-    if super::sweep::partial_allowed(trigger, window, available, batch, env) {
+    if super::sweep::partial_allowed(trigger, window.latest_message_at, available, batch, env) {
         Some(available)
     } else {
         None
@@ -150,16 +138,9 @@ pub(super) fn usize_of(value: u32) -> Result<usize, WorkerError> {
     usize::try_from(value).map_err(|_| WorkerError::Count)
 }
 
-async fn enqueue_tags(
-    env: &SummarizeEnv<'_>,
-    summary_id: Uuid,
-    conversation_id: Uuid,
-) -> Result<(), WorkerError> {
+async fn enqueue_filing(env: &SummarizeEnv<'_>, conversation_id: Uuid) -> Result<(), WorkerError> {
     env.queue
-        .enqueue(crate::categorize::suggest_tags_job(
-            summary_id,
-            conversation_id,
-        )?)
+        .enqueue(crate::filing::file_conversation_job(conversation_id)?)
         .await
         .map(|_| ())
         .map_err(WorkerError::queue)

@@ -81,11 +81,6 @@ async fn dispatch(command: cli::Cli, env: &Environment) -> Exit {
             let env = overlay(env, config);
             rivethub::sidecar::start(&env, check).await
         }
-        cli::Dispatch::Agent { check, config } => {
-            rivethub::logging::init(env);
-            let env = overlay(env, config);
-            rivethub::agent::start(&env, check).await
-        }
         cli::Dispatch::Local(prepared) => rivethub::local::start(env, *prepared).await,
         cli::Dispatch::Complete(report) => write(report),
     }

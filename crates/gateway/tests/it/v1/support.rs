@@ -35,12 +35,10 @@ impl Harness {
         let dir = tempfile::tempdir().expect("scratch directory");
         let runner = Arc::new(super::runner::FakeRunner::new(provider));
         let service = open_service(dir.path(), roster(&runner)).await;
-        let cloned = Arc::clone(&runner);
-        let shared: Arc<dyn TurnRunner> = cloned;
-        let gateway = Arc::new(
-            Gateway::new(Arc::new(FakeMemoryStore::default()), settings(dir.path()))
-                .with_turn_runner(shared),
-        );
+        let gateway = Arc::new(Gateway::new(
+            Arc::new(FakeMemoryStore::default()),
+            settings(dir.path()),
+        ));
         Self {
             service,
             gateway,
@@ -106,7 +104,6 @@ async fn open_service(
     roster: BTreeMap<String, BoundAgent>,
 ) -> Arc<Service> {
     Service::open(
-        "test-model".to_owned(),
         &root.join("conversations"),
         CancellationToken::new(),
         roster,

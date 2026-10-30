@@ -4,6 +4,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::MemoryStore as _;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryOwner;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use wire::gateway::memory::MemoryMessageTally;
@@ -60,7 +61,9 @@ async fn an_ended_session_walks_its_summary_dag_and_tallies_its_messages(
 ) -> TestResult {
     seed(&pool).await?;
     let memory = PostgresMemory::new(pool);
-    let dag = memory.summary_dag("cli:dag").await?;
+    let dag = memory
+        .summary_dag(&SummaryOwner::Session("cli:dag".to_owned()))
+        .await?;
     let shape: Vec<_> = dag
         .summaries
         .iter()
@@ -127,7 +130,9 @@ async fn an_ended_session_walks_its_summary_dag_and_tallies_its_messages(
         }
     );
     assert_eq!(
-        memory.summary_dag("cli:missing").await?,
+        memory
+            .summary_dag(&SummaryOwner::Session("cli:missing".to_owned()))
+            .await?,
         SummaryDag::default()
     );
     Ok(())
@@ -141,9 +146,31 @@ async fn an_active_conversation_wins_over_a_newer_ended_one(pool: PgPool) -> Tes
     )
     .execute(&pool)
     .await?;
-    let dag = PostgresMemory::new(pool).summary_dag("cli:dag").await?;
+    let dag = PostgresMemory::new(pool)
+        .summary_dag(&SummaryOwner::Session("cli:dag".to_owned()))
+        .await?;
     let ids: Vec<_> = dag.summaries.iter().map(|node| node.id.as_str()).collect();
     assert_eq!(ids, vec!["00000000-0000-4000-8000-000000000015"]);
     assert_eq!(dag.messages, MemoryMessageTally::default());
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_conversation_reads_its_own_summary_dag_by_id(pool: PgPool) -> TestResult {
+    seed(&pool).await?;
+    let memory = PostgresMemory::new(pool);
+    let helper = uuid::uuid!("00000000-0000-4000-8000-000000000002");
+    let dag = memory
+        .summary_dag(&SummaryOwner::Conversation(helper))
+        .await?;
+    assert_eq!(dag.session_key.as_deref(), Some("cli:dag"));
+    let ids: Vec<_> = dag.summaries.iter().map(|node| node.id.as_str()).collect();
+    assert_eq!(ids, vec!["00000000-0000-4000-8000-000000000015"]);
+    assert_eq!(
+        memory
+            .summary_dag(&SummaryOwner::Conversation(uuid::Uuid::nil()))
+            .await?,
+        SummaryDag::default()
+    );
     Ok(())
 }

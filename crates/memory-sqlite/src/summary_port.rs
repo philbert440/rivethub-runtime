@@ -5,12 +5,15 @@ use kernel::memory::ConversationHead;
 use kernel::memory::ConversationWindow;
 use kernel::memory::HEARTBEAT_SESSION_PREFIX;
 use kernel::memory::NewSummary;
+use kernel::memory::PendingConversation;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummaryNode;
 use kernel::memory::SummaryStore;
 use kernel::memory::SummaryStoreError;
+use kernel::memory::SummaryWatch;
 use kernel::memory::SummaryWrite;
 use kernel::memory::WindowMessage;
+use kernel::memory::WrittenSummary;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params_from_iter;
 use rusqlite::types::Value;
@@ -32,54 +35,96 @@ impl SummaryStore for SqliteStore {
             .map_err(store_err)
     }
 
-    async fn pending(&self) -> Result<Vec<ConversationWindow>, SummaryStoreError> {
-        self.with_conn(|conn| pending_windows(conn))
+    async fn pending(&self) -> Result<Vec<PendingConversation>, SummaryStoreError> {
+        self.with_conn(|conn| pending_conversations(conn))
             .await
             .map_err(store_err)
     }
 
     async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError> {
-        self.with_conn(move |conn| write_one(conn, &summary))
+        let (id, kind, depth) = (summary.id, summary.kind, summary.depth);
+        let (written, session_key) = self
+            .with_conn(move |conn| write_one(conn, &summary))
             .await
-            .map_err(store_err)
+            .map_err(store_err)?;
+        let told = self.summaries_written.send(WrittenSummary {
+            id,
+            session_key,
+            kind,
+            depth,
+        });
+        if told.is_err() {
+            tracing::trace!("written summary has no listener");
+        }
+        Ok(written)
     }
 }
 
-fn pending_windows(conn: &rusqlite::Connection) -> Result<Vec<ConversationWindow>, SqliteError> {
+impl SummaryWatch for SqliteStore {
+    fn written(&self) -> tokio::sync::broadcast::Receiver<WrittenSummary> {
+        self.summaries_written.subscribe()
+    }
+}
+
+fn pending_conversations(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<PendingConversation>, SqliteError> {
     let mut statement = conn
         .prepare(
-            "SELECT c.id FROM ros_conversations c \
-              WHERE c.session_key NOT LIKE ?1 AND EXISTS ( \
-                    SELECT 1 FROM ros_messages m \
-                     WHERE m.conversation_id = c.id \
-                       AND NOT EXISTS ( \
-                         SELECT 1 FROM ros_summary_sources s WHERE s.message_id = m.id)) \
-              ORDER BY c.id",
+            "SELECT c.id, pending.unsummarized, \
+                    (SELECT max(m.created_at) FROM ros_messages m WHERE m.conversation_id = c.id) \
+                      AS latest_at \
+               FROM (SELECT m.conversation_id, count(*) AS unsummarized FROM ros_messages m \
+                      WHERE NOT EXISTS ( \
+                        SELECT 1 FROM ros_summary_sources s WHERE s.message_id = m.id) \
+                      GROUP BY m.conversation_id) pending \
+               JOIN ros_conversations c ON c.id = pending.conversation_id \
+              WHERE c.session_key NOT LIKE ?1 \
+              ORDER BY latest_at DESC, c.id",
         )
         .map_err(SqliteError::query("pending summaries"))?;
-    let ids = statement
+    let rows = statement
         .query_map(
             params_from_iter([Value::Text(format!("{HEARTBEAT_SESSION_PREFIX}%"))]),
-            |row| row.get::<_, String>(0),
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            },
         )
         .map_err(SqliteError::query("pending summaries"))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(SqliteError::query("pending summaries"))?;
-    let mut windows = Vec::new();
-    for id in ids {
-        match parse_id(&id).and_then(|uuid| load_window(conn, uuid)) {
-            Ok(Some(window)) => windows.push(window),
-            Ok(None) => tracing::warn!("skipped summary window: conversation {id} not found"),
-            Err(error) => tracing::warn!("skipped summary window for conversation {id}: {error}"),
+    let mut pending = Vec::with_capacity(rows.len());
+    for (id, count, latest) in rows {
+        match pending_conversation(&id, count, latest.as_deref()) {
+            Ok(conversation) => pending.push(conversation),
+            Err(error) => tracing::warn!("skipped pending conversation {id}: {error}"),
         }
     }
-    Ok(windows)
+    Ok(pending)
+}
+
+fn pending_conversation(
+    id: &str,
+    count: i64,
+    latest: Option<&str>,
+) -> Result<PendingConversation, SqliteError> {
+    Ok(PendingConversation {
+        id: parse_id(id)?,
+        unsummarized: u32::try_from(count).map_err(SqliteError::Count)?,
+        latest_message_at: latest
+            .map(|text| time::stored(text, "created_at"))
+            .transpose()?,
+    })
 }
 
 fn write_one(
     conn: &mut rusqlite::Connection,
     summary: &NewSummary,
-) -> Result<SummaryWrite, SqliteError> {
+) -> Result<(SummaryWrite, String), SqliteError> {
     let count = i64::from(summary.message_count);
     let tx = conn
         .transaction()
@@ -139,8 +184,15 @@ fn write_one(
     } else {
         SummaryWrite::Added
     };
+    let session_key: String = tx
+        .query_row(
+            "SELECT session_key FROM ros_conversations WHERE id = ?1",
+            params_from_iter([Value::Text(summary.conversation_id.to_string())]),
+            |row| row.get(0),
+        )
+        .map_err(SqliteError::query("summary session"))?;
     tx.commit().map_err(SqliteError::query("summary commit"))?;
-    Ok(written)
+    Ok((written, session_key))
 }
 
 fn leaf_write(
@@ -403,10 +455,10 @@ mod tests {
     use parking_lot::Mutex;
     use rusqlite::Connection;
 
-    use super::pending_windows;
+    use super::pending_conversations;
 
     const HEALTHY: &str = "0199e2a0-7b3c-7a00-8000-0000000000a1";
-    const UNREADABLE: &str = "0199e2a07b3c7a0080000000000000b2";
+    const UNREADABLE: &str = "not-a-conversation-id";
 
     struct WarningRecorder(Arc<Mutex<Vec<String>>>);
 
@@ -452,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn a_window_that_cannot_be_loaded_is_skipped_with_a_warning() {
+    fn a_conversation_that_cannot_be_read_is_skipped_with_a_warning() {
         use tracing_subscriber::layer::SubscriberExt as _;
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("memory.sqlite");
@@ -462,18 +514,20 @@ mod tests {
         seed(&conn, UNREADABLE, "0199e2a0-7b3c-7a00-8001-0000000000b2");
         let lines: Arc<Mutex<Vec<String>>> = Arc::default();
         let subscriber = tracing_subscriber::registry().with(WarningRecorder(lines.clone()));
-        let windows =
-            tracing::subscriber::with_default(subscriber, || pending_windows(&conn)).unwrap();
-        let ids: Vec<String> = windows
+        let pending =
+            tracing::subscriber::with_default(subscriber, || pending_conversations(&conn)).unwrap();
+        let ids: Vec<String> = pending
             .iter()
-            .map(|window| window.conversation.id.to_string())
+            .map(|conversation| conversation.id.to_string())
             .collect();
         assert_eq!(ids, [HEALTHY]);
-        assert_eq!(
-            *lines.lock(),
-            [format!(
-                "WARN skipped summary window: conversation {UNREADABLE} not found"
-            )]
+        let warnings = lines.lock().clone();
+        let [warning] = warnings.as_slice() else {
+            panic!("one warning: {warnings:?}");
+        };
+        assert!(
+            warning.starts_with(&format!("WARN skipped pending conversation {UNREADABLE}: ")),
+            "{warning}"
         );
     }
 }

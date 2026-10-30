@@ -216,7 +216,7 @@ async fn gateway_healthz_reports_the_configured_node(pool: PgPool) -> TestResult
 }
 
 #[sqlx::test(migrations = false)]
-async fn agent_claims_the_configured_queue_and_not_the_hostname(pool: PgPool) -> TestResult {
+async fn gateway_claims_the_configured_queue_and_not_the_hostname(pool: PgPool) -> TestResult {
     migrate::postgres_pool(&pool).await?;
     install_queue(&pool).await?;
     install_attempt_notify(&pool).await?;
@@ -224,15 +224,18 @@ async fn agent_claims_the_configured_queue_and_not_the_hostname(pool: PgPool) ->
     attempts_heard.listen("rh_node_name_attempts").await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
+    let port = free_port()?;
     write_state(
         home.path(),
         &provider_config(
             home.path(),
             &url,
-            "mesh:\n  node_name: rr-configured-node\n",
+            &format!(
+                "gateway:\n  host: 127.0.0.1\n  port: {port}\nmesh:\n  node_name: rr-configured-node\n"
+            ),
         ),
     )?;
-    let started = start_logged(home.path(), &["agent"], "agent running").await?;
+    let started = start_logged(home.path(), &["gateway"], "gateway listening on ").await?;
     let host = os_hostname()?;
     enqueue(&pool, &format!("run-task:{CONFIGURED}")).await?;
     enqueue(&pool, &format!("run-task:{host}")).await?;
@@ -241,7 +244,7 @@ async fn agent_claims_the_configured_queue_and_not_the_hostname(pool: PgPool) ->
     claimed.map_err(|error| format!("{error}\n{text}"))?;
     assert!(success, "{text}");
     assert!(
-        text.contains(&format!("{}{host}", node_line("agent"))),
+        text.contains(&format!("{}{host}", node_line("gateway"))),
         "{text}"
     );
     Ok(())
@@ -345,7 +348,7 @@ async fn wait_for_claim(
                     None,
                 );
                 if running.is_err() {
-                    return Err("agent exited before the configured job was claimed".to_owned());
+                    return Err("gateway exited before the configured job was claimed".to_owned());
                 }
             }
             let configured_attempts = attempts(pool, &configured)

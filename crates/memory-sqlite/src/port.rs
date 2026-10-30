@@ -18,6 +18,7 @@ use wire::JsonObject;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;
+use crate::job_rank::rank_key;
 use crate::queue::FailOutcome;
 use crate::queue::JobInsert;
 use crate::queue::JobPayload;
@@ -152,10 +153,13 @@ fn enqueue_atomically(
         (None, Some(key)) => {
             let wake = match mode {
                 JobKeyMode::Replace => {
-                    replace(&tx, key, &job.payload, job.run_at, job.now)?;
+                    replace(&tx, key, job)?;
                     true
                 }
-                JobKeyMode::KeepRunAt => revive_one(&tx, key, &job.payload, job.now)?,
+                JobKeyMode::KeepRunAt => {
+                    rank_key(&tx, key, job.priority)?;
+                    revive_one(&tx, key, &job.payload, job.now)?
+                }
             };
             (id_for_key(&tx, key)?, wake)
         }
@@ -204,6 +208,7 @@ pub(crate) fn job_insert(
         task: job.name.to_string(),
         key: job.key.clone(),
         payload,
+        priority: job.priority,
         run_at: match job.run_at {
             Some(at) => at,
             None => now,
@@ -364,8 +369,12 @@ fn tasks_for(role: WorkerRole) -> Vec<JobName> {
             fixed(FixedJob::EnqueueStaleSummaries),
             fixed(FixedJob::ReapDeadJobs),
             fixed(FixedJob::SyncTopicPage),
+            fixed(FixedJob::PurgeDeletedSessions),
         ],
-        WorkerRole::Categorizer => vec![fixed(FixedJob::SuggestTags)],
+        WorkerRole::Categorizer => vec![
+            fixed(FixedJob::FileConversation),
+            fixed(FixedJob::ProposeTidy),
+        ],
         WorkerRole::WikiBuilder => vec![
             fixed(FixedJob::ExtractWiki),
             fixed(FixedJob::EnqueueWikiBackfill),
@@ -389,7 +398,7 @@ fn port_max_attempts(name: &JobName) -> u32 {
 fn fixed_attempts(fixed: FixedJob) -> u32 {
     match fixed {
         FixedJob::SummarizeConversation | FixedJob::SynthesizeToolCall => 3,
-        FixedJob::SuggestTags | FixedJob::ExtractWiki => 2,
+        FixedJob::FileConversation | FixedJob::ExtractWiki => 2,
         FixedJob::RunTask => 1,
         FixedJob::EmbedTarget
         | FixedJob::EnqueueUnembedded
@@ -401,6 +410,8 @@ fn fixed_attempts(fixed: FixedJob) -> u32 {
         | FixedJob::EnqueueStaleWiki
         | FixedJob::EnqueueStaleSummaries
         | FixedJob::ReapDeadJobs
-        | FixedJob::SyncTopicPage => 5,
+        | FixedJob::ProposeTidy
+        | FixedJob::SyncTopicPage
+        | FixedJob::PurgeDeletedSessions => 5,
     }
 }

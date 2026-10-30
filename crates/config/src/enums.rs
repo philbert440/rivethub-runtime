@@ -45,16 +45,6 @@ pub enum ModelsMode {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, strum::Display, strum::EnumString,
-)]
-#[serde(rename_all = "kebab-case")]
-#[strum(serialize_all = "kebab-case")]
-pub enum VerifierExecutor {
-    ChatLoop,
-    HarnessSession,
-}
-
-#[derive(
     Debug,
     Clone,
     Copy,

@@ -163,7 +163,7 @@ impl MemoryStore for FailingStore {
 
     async fn wiki_page(
         &self,
-        _slug: &wire::gateway::wiki::WikiSlug,
+        _slug: &kernel::wiki::page::WikiSlug,
     ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
         unavailable()
     }
@@ -178,6 +178,7 @@ impl MemoryStore for FailingStore {
     async fn capture(
         &self,
         _batch: wire::capture::CaptureBatchRequest,
+        _node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
         unavailable()
     }
@@ -224,7 +225,7 @@ impl MemoryStore for FailingStore {
 
     async fn summary_dag(
         &self,
-        _session: &str,
+        _owner: &kernel::memory::SummaryOwner,
     ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
         unavailable()
     }
@@ -373,7 +374,7 @@ impl MemoryStore for GatedStore {
 
     async fn wiki_page(
         &self,
-        slug: &wire::gateway::wiki::WikiSlug,
+        slug: &kernel::wiki::page::WikiSlug,
     ) -> Result<kernel::wiki::WikiLookup, MemoryStoreError> {
         self.inner.wiki_page(slug).await
     }
@@ -388,8 +389,9 @@ impl MemoryStore for GatedStore {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
-        self.inner.capture(batch).await
+        self.inner.capture(batch, node).await
     }
 
     async fn append(&self, batch: Vec<wire::memory::MemoryEntry>) -> Result<u64, MemoryStoreError> {
@@ -433,9 +435,9 @@ impl MemoryStore for GatedStore {
 
     async fn summary_dag(
         &self,
-        session: &str,
+        owner: &kernel::memory::SummaryOwner,
     ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
-        self.inner.summary_dag(session).await
+        self.inner.summary_dag(owner).await
     }
 
     async fn list_tags(

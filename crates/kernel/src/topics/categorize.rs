@@ -1,92 +1,74 @@
-use super::Placement;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+
 use super::Redirect;
 use super::Topic;
-use super::TopicError;
 use super::TopicId;
+use super::TopicKind;
 use super::TopicListing;
-use super::TopicName;
+use super::TopicTree;
 use super::values::fold;
-use crate::memory::summary_title;
 
 const MIN_KEY_CHARS: usize = 3;
+pub const GENERIC_SHARE_PERCENT: usize = 5;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Lineage {
-    Root,
-    Child,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FirstLeaf<'a> {
-    pub placement: Option<&'a Placement>,
-    pub lineage: Lineage,
-    pub title: Option<&'a str>,
-    pub summary: &'a str,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Verdict {
-    AlreadyPlaced,
-    InheritsParent,
-    Place(TopicId),
-    Suggest {
-        name: TopicName,
-        topic: Option<TopicId>,
-    },
-    Untitled,
-}
-
-impl FirstLeaf<'_> {
-    pub fn categorize(
-        &self,
-        topics: &[TopicListing],
-        redirects: &[Redirect],
-    ) -> Result<Verdict, TopicError> {
-        if self.placement.is_some() {
-            return Ok(Verdict::AlreadyPlaced);
-        }
-        if self.lineage == Lineage::Child {
-            return Ok(Verdict::InheritsParent);
-        }
-        let title = match self.title.map(str::trim) {
-            Some(title) if !title.is_empty() => Some(title.to_owned()),
-            Some(_) | None => summary_title(self.summary),
-        };
-        let folded_title = title.as_deref().map(fold);
-        let mentioned = named(
-            topics,
-            redirects,
-            &[folded_title.as_deref(), Some(&fold(self.summary))],
-        );
-        if let [only] = mentioned.as_slice() {
-            return Ok(Verdict::Place(*only));
-        }
-        let Some(title) = title else {
-            return Ok(Verdict::Untitled);
-        };
-        let unsure = match named(topics, redirects, &[folded_title.as_deref()]).as_slice() {
-            [only] => Some(*only),
-            _ => None,
-        };
-        Ok(Verdict::Suggest {
-            name: TopicName::new(title.trim_end_matches('.'))?,
-            topic: unsure,
-        })
-    }
-}
-
-fn named(topics: &[TopicListing], redirects: &[Redirect], texts: &[Option<&str>]) -> Vec<TopicId> {
+#[must_use]
+pub fn mentioned(
+    topics: &[TopicListing],
+    redirects: &[Redirect],
+    texts: &[&str],
+    generic: &BTreeSet<String>,
+) -> Vec<TopicId> {
+    let folded: Vec<String> = texts.iter().map(|text| fold(text)).collect();
     let hits: Vec<&Topic> = topics
         .iter()
         .map(|listing| &listing.topic)
+        .filter(|topic| topic.kind == TopicKind::Work)
         .filter(|topic| {
             keys(topic, redirects)
-                .any(|key| texts.iter().flatten().any(|text| mentions(text, &key)))
+                .filter(|key| !generic.contains(key))
+                .any(|key| folded.iter().any(|text| mentions(text, &key)))
         })
         .collect();
+    let tree = TopicTree::of(topics.iter().map(|listing| &listing.topic));
     hits.iter()
-        .filter(|topic| !hits.iter().any(|other| other.parent == Some(topic.id)))
+        .filter(|topic| {
+            !hits
+                .iter()
+                .any(|other| other.id != topic.id && tree.within(other.id, topic.id))
+        })
         .map(|topic| topic.id)
+        .collect()
+}
+
+#[must_use]
+pub fn generic_keys(
+    topics: &[TopicListing],
+    redirects: &[Redirect],
+    corpus: &[Vec<&str>],
+) -> BTreeSet<String> {
+    let keys: BTreeSet<String> = topics
+        .iter()
+        .filter(|listing| listing.topic.kind == TopicKind::Work)
+        .flat_map(|listing| keys(&listing.topic, redirects).collect::<Vec<_>>())
+        .filter(|key| key.chars().count() >= MIN_KEY_CHARS)
+        .collect();
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for texts in corpus {
+        let folded: Vec<String> = texts.iter().map(|text| fold(text)).collect();
+        for key in &keys {
+            if folded.iter().any(|text| mentions(text, key)) {
+                let count: &mut usize = counts.entry(key.as_str()).or_default();
+                *count = count.saturating_add(1);
+            }
+        }
+    }
+    counts
+        .into_iter()
+        .filter(|(_, count)| {
+            count.saturating_mul(100) > corpus.len().saturating_mul(GENERIC_SHARE_PERCENT)
+        })
+        .map(|(key, _)| key.to_owned())
         .collect()
 }
 

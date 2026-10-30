@@ -3,12 +3,13 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::response::Response;
 use wire::gateway::GatewayError;
-use wire::harness::HarnessId;
 use wire::task::TaskWaitTimeoutResponse;
 use wire::task::TaskWire;
 
+use crate::tasks::Refusal;
+use crate::tasks::SubmitError;
+
 pub(super) const WAIT_LEFT: &str = "wait deadline exceeded";
-pub(super) const WAIT_KILLED: &str = "wait deadline exceeded — task killed";
 
 #[derive(Debug, thiserror::Error)]
 pub(super) enum TaskHttpError {
@@ -18,37 +19,44 @@ pub(super) enum TaskHttpError {
     NotFound(String),
     #[error("{0}")]
     Conflict(String),
-    #[error("harness \"{0}\" is not allowed on this node (gateway.allowed_harnesses)")]
-    HarnessDenied(HarnessId),
     #[error("{0}")]
     Unavailable(String),
     #[error("{0}")]
     Failed(String),
-    #[error("internal error")]
-    Internal,
     #[error("method not allowed")]
     MethodNotAllowed,
     #[error("body too large")]
     PayloadTooLarge,
-    #[error("{message}")]
-    WaitExceeded {
-        task: Option<Box<TaskWire>>,
-        message: &'static str,
-    },
+    #[error("wait deadline exceeded")]
+    WaitExceeded(Box<TaskWire>),
 }
 
 impl TaskHttpError {
-    pub(super) fn wait_left() -> Self {
-        Self::WaitExceeded {
-            task: None,
-            message: WAIT_LEFT,
-        }
+    pub(super) fn wait_left(task: TaskWire) -> Self {
+        Self::WaitExceeded(Box::new(task))
     }
+}
 
-    pub(super) fn wait_killed(task: Option<TaskWire>) -> Self {
-        Self::WaitExceeded {
-            task: task.map(Box::new),
-            message: WAIT_KILLED,
+impl From<SubmitError> for TaskHttpError {
+    fn from(error: SubmitError) -> Self {
+        let message = error.to_string();
+        match error {
+            SubmitError::Refused(Refusal::Unknown(_) | Refusal::NotOnNode { .. }) => {
+                Self::NotFound(message)
+            }
+            SubmitError::Refused(Refusal::Offline(_)) | SubmitError::Unavailable(_) => {
+                Self::Unavailable(message)
+            }
+            SubmitError::Refused(
+                Refusal::AgentRequired
+                | Refusal::EmptyNode
+                | Refusal::ConflictingNode { .. }
+                | Refusal::Ambiguous(_)
+                | Refusal::PresetHarness(_)
+                | Refusal::NotHarnessed(_),
+            ) => Self::BadRequest(message),
+            SubmitError::Depth(_) => Self::Conflict(message),
+            SubmitError::Store(error) => super::body::store_error(&error),
         }
     }
 }
@@ -59,24 +67,12 @@ impl IntoResponse for TaskHttpError {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, GatewayError::new(message)),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, GatewayError::new(message)),
             Self::Conflict(message) => (StatusCode::CONFLICT, GatewayError::new(message)),
-            Self::HarnessDenied(harness) => {
-                let mut body = GatewayError::new(format!(
-                    "harness \"{harness}\" is not allowed on this node (gateway.allowed_harnesses)"
-                ))
-                .code("harness_not_allowed");
-                body.harness_id = Some(harness);
-                return (StatusCode::FORBIDDEN, Json(body)).into_response();
-            }
             Self::Unavailable(message) => {
                 (StatusCode::SERVICE_UNAVAILABLE, GatewayError::new(message))
             }
             Self::Failed(message) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 GatewayError::new(message),
-            ),
-            Self::Internal => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                GatewayError::new("internal error"),
             ),
             Self::MethodNotAllowed => (
                 StatusCode::METHOD_NOT_ALLOWED,
@@ -86,12 +82,12 @@ impl IntoResponse for TaskHttpError {
                 StatusCode::PAYLOAD_TOO_LARGE,
                 GatewayError::new("body too large"),
             ),
-            Self::WaitExceeded { message, task } => {
+            Self::WaitExceeded(task) => {
                 return (
                     StatusCode::GATEWAY_TIMEOUT,
                     Json(TaskWaitTimeoutResponse {
-                        error: message.to_owned(),
-                        task: task.map(|boxed| *boxed),
+                        error: WAIT_LEFT.to_owned(),
+                        task: Some(*task),
                     }),
                 )
                     .into_response();

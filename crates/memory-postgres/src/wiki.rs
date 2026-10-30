@@ -2,13 +2,13 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::page::WikiSlug;
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
-use wire::gateway::wiki::WikiCitation;
+use uuid::Uuid;
 use wire::gateway::wiki::WikiGapsResponse;
 use wire::gateway::wiki::WikiPageResponse;
 use wire::gateway::wiki::WikiRedLink;
-use wire::gateway::wiki::WikiSlug;
 use wire::gateway::wiki::WikiSource;
 use wire::gateway::wiki::WikiTopic;
 use wire::gateway::wiki::WikiTopicList;
@@ -24,6 +24,7 @@ struct TopicRow {
     entities: Vec<String>,
     current_state: String,
     updated_at: DateTime<Utc>,
+    topic_id: Option<Uuid>,
 }
 
 fn topic_wire(row: TopicRow) -> WikiTopic {
@@ -34,6 +35,7 @@ fn topic_wire(row: TopicRow) -> WikiTopic {
         entities: row.entities,
         updated_at: row.updated_at,
         excerpt: row.current_state.chars().take(240).collect(),
+        topic_id: row.topic_id.map(|id| id.to_string()),
     }
 }
 
@@ -72,7 +74,7 @@ impl PostgresMemory {
             .await
             .map_err(|source| Error::operation("wiki topic count", source))?;
         let rows: Vec<TopicRow> = topic_query(
-            "slug, title, tags, entities, current_state, updated_at",
+            "slug, title, tags, entities, current_state, updated_at, topic_id",
             &filter,
         )
         .push(" ORDER BY updated_at DESC, slug LIMIT ")
@@ -107,7 +109,7 @@ impl PostgresMemory {
             return self.wiki_redirect(slug).await;
         };
         let (citations, sources) =
-            tokio::try_join!(self.wiki_citations(&row.slug), self.wiki_sources(&row.slug))?;
+            tokio::try_join!(self.read_citations(&row.slug), self.wiki_sources(&row.slug))?;
         let markdown = if let Some(directory) = &self.wiki_directory {
             read_markdown(directory, slug).await?
         } else if row.article.is_empty() {
@@ -152,26 +154,6 @@ impl PostgresMemory {
             Some(row) => WikiLookup::Redirect(row.to_slug),
             None => WikiLookup::Missing,
         })
-    }
-
-    async fn wiki_citations(&self, slug: &str) -> Result<Vec<WikiCitation>, Error> {
-        let rows = sqlx::query!(
-            "SELECT summary_id, kind, note, cited_at FROM rh_wiki_citations
-             WHERE topic_slug = $1 ORDER BY cited_at, summary_id",
-            slug
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|source| Error::operation("wiki citations", source))?;
-        Ok(rows
-            .into_iter()
-            .map(|row| WikiCitation {
-                summary_id: row.summary_id.to_string(),
-                date: Some(row.cited_at),
-                kind: row.kind,
-                note: row.note,
-            })
-            .collect())
     }
 
     async fn wiki_sources(&self, slug: &str) -> Result<Vec<WikiSource>, Error> {
@@ -225,7 +207,7 @@ impl PostgresMemory {
         .await
         .map_err(|source| Error::operation("wiki red links", source))?;
         let stalest: Vec<TopicRow> = sqlx::query_as(
-            "SELECT slug, title, tags, entities, current_state, updated_at FROM rh_wiki_topics
+            "SELECT slug, title, tags, entities, current_state, updated_at, topic_id FROM rh_wiki_topics
              ORDER BY coalesce(last_verified_at, updated_at), slug LIMIT $1",
         )
         .bind(limit)

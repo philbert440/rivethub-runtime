@@ -7,19 +7,7 @@ const ARG_ENTRIES: usize = 12;
 const ARG_CHARS: usize = 200;
 const KEPT_INPUT_CHARS: usize = 8192;
 
-#[derive(strum::EnumString)]
-enum PromptTool {
-    #[strum(serialize = "askuserquestion")]
-    Joined,
-    #[strum(serialize = "ask_user_question")]
-    Snake,
-    #[strum(serialize = "ask_user")]
-    Short,
-}
-
-pub(super) fn is_prompt_tool(name: &str) -> bool {
-    name.trim().to_lowercase().parse::<PromptTool>().is_ok()
-}
+pub(super) use kernel::preview::is_prompt_tool;
 
 pub(super) fn keeps_input(name: &str) -> bool {
     is_prompt_tool(name) || name.trim().eq_ignore_ascii_case("todo_write")

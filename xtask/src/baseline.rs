@@ -8,6 +8,7 @@ use crate::git::git;
 use crate::rustsrc::Hit;
 
 pub const FILE: &str = "xtask/baseline.toml";
+const SOURCE: &str = "xtask/src/baseline.rs";
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Entry {
@@ -46,11 +47,11 @@ impl Baseline {
     pub fn known_check(&self, check: &str) -> bool {
         matches!(
             check,
-            "FALLBACK" | "JSMODEL" | "JSONBYTES" | "UTF16" | "PORTS"
+            "FALLBACK" | "JSMODEL" | "JSONBYTES" | "UTF16" | "PORTS" | "KERNELWIRE"
         )
     }
 
-    fn count(&self, check: &str, file: &str, text: &str) -> usize {
+    pub fn count(&self, check: &str, file: &str, text: &str) -> usize {
         self.entries
             .iter()
             .find(|entry| entry.check == check && entry.file == file && entry.text == text)
@@ -126,15 +127,46 @@ pub fn compare(old: &[Entry], current: &[Entry], findings: &mut Vec<String>) {
 }
 
 pub fn shrink(root: &Path, findings: &mut Vec<String>) -> Result<()> {
-    let Ok(base) = git(root, &["merge-base", "origin/main", "HEAD"]) else {
-        return Ok(());
-    };
-    let Ok(text) = git(root, &["show", &format!("{}:{FILE}", base.trim())]) else {
-        return Ok(());
-    };
-    let old = parse_entries(&text)?;
-    compare(&old, Baseline::load(root)?.entries(), findings);
+    if let Some(base) = MergeBase::load(root)? {
+        base.compare(Baseline::load(root)?.entries(), findings);
+    }
     Ok(())
+}
+
+struct MergeBase {
+    entries: Vec<Entry>,
+    source: Option<String>,
+}
+
+impl MergeBase {
+    fn load(root: &Path) -> Result<Option<Self>> {
+        let Ok(base) = git(root, &["merge-base", "origin/main", "HEAD"]) else {
+            return Ok(None);
+        };
+        let base = base.trim();
+        let Ok(text) = git(root, &["show", &format!("{base}:{FILE}")]) else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            entries: parse_entries(&text)?,
+            source: git(root, &["show", &format!("{base}:{SOURCE}")]).ok(),
+        }))
+    }
+
+    fn knows(&self, check: &str) -> bool {
+        self.source
+            .as_ref()
+            .is_none_or(|source| source.contains(&format!("\"{check}\"")))
+    }
+
+    fn compare(&self, current: &[Entry], findings: &mut Vec<String>) {
+        let known = current
+            .iter()
+            .filter(|entry| self.knows(&entry.check))
+            .cloned()
+            .collect::<Vec<_>>();
+        compare(&self.entries, &known, findings);
+    }
 }
 
 pub fn parse_entries(text: &str) -> Result<Vec<Entry>> {
@@ -148,6 +180,11 @@ pub fn write(root: &Path) -> Result<()> {
         crate::fallback::collect(root)?
             .into_iter()
             .map(|hit| ("FALLBACK", hit)),
+    );
+    hits.extend(
+        crate::kernelwire::collect(root)?
+            .into_iter()
+            .map(|reference| (crate::kernelwire::CHECK, reference.hit())),
     );
     write_hits(root, hits)
 }
@@ -173,10 +210,8 @@ pub fn write_hits(root: &Path, hits: Vec<(&str, Hit)>) -> Result<()> {
         .collect();
     let document = Document { entry };
     let mut findings = Vec::new();
-    if let Ok(base) = git(root, &["merge-base", "origin/main", "HEAD"])
-        && let Ok(text) = git(root, &["show", &format!("{}:{FILE}", base.trim())])
-    {
-        compare(&parse_entries(&text)?, &document.entry, &mut findings);
+    if let Some(base) = MergeBase::load(root)? {
+        base.compare(&document.entry, &mut findings);
     }
     if !findings.is_empty() {
         return Err(Error::Finding(findings.join("\n")));

@@ -11,6 +11,7 @@ use kernel::memory::MemoryStoreError;
 use kernel::memory::SearchOutcome;
 use kernel::memory::SearchQuery;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryOwner;
 use kernel::memory::TagAdd;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
@@ -25,6 +26,7 @@ use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
 use kernel::wiki::WikiFilter;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::page::WikiSlug;
 use uuid::Uuid;
 use wire::gateway::memory::MemoryStatsResponse;
 use wire::gateway::memory::PendingTagWire;
@@ -34,7 +36,6 @@ use wire::gateway::memory::TagTaxonomyMerge;
 use wire::gateway::memory::TagTaxonomyMergeResult;
 use wire::gateway::memory::TagWire;
 use wire::gateway::wiki::WikiGapsResponse;
-use wire::gateway::wiki::WikiSlug;
 use wire::gateway::wiki::WikiTopicList;
 use wire::memory::MemoryEntry;
 
@@ -74,9 +75,10 @@ impl MemoryStore for SqliteStore {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
         let now = self.now();
-        Self::capture(self, batch, now)
+        Self::capture(self, batch, node, now)
             .await
             .map_err(MemoryStoreError::from)
     }
@@ -127,8 +129,8 @@ impl MemoryStore for SqliteStore {
         self.context_for(session, now).await
     }
 
-    async fn summary_dag(&self, session: &str) -> Result<SummaryDag, MemoryStoreError> {
-        self.read_summary_dag(session).await
+    async fn summary_dag(&self, owner: &SummaryOwner) -> Result<SummaryDag, MemoryStoreError> {
+        self.read_summary_dag(owner).await
     }
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError> {

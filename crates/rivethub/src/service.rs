@@ -83,7 +83,7 @@ pub(crate) async fn postgres(
 ) -> Result<PostgresMemory, StartupError> {
     let url = postgres_url(config, env)?;
     let embed = query_embed(config, env, shutdown, activities)?;
-    let memory = PostgresMemory::connect(&url)
+    let memory = PostgresMemory::connect_deferred(&url)
         .await?
         .with_wiki_directory(config.wiki_directory(env));
     Ok(match embed {

@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use kernel::topics::{PageSection, TopicId, TopicPage, TopicPageStore};
+use kernel::topics::{PageEdit, PageSection, TopicId, TopicPage, TopicPageStore};
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::consolidate::{WikiConsolidateStore, WikiFold};
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::{ArticleSection, FoldMark, WikiPage, WikiSectionRef};
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::{ArticleSection, FoldMark, WikiPage, WikiSectionRef};
 
 use super::{lock_slug, query_error, settle, topics};
 use crate::PostgresMemory;
@@ -53,6 +53,27 @@ impl TopicPageStore for PostgresMemory {
         settle(saved, repository.release().await)
     }
 
+    async fn edit_page(
+        &self,
+        slug: &WikiSlug,
+        edit: &PageEdit,
+        now: DateTime<Utc>,
+    ) -> Result<bool, WikiStoreError> {
+        let bound = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM rh_wiki_topics WHERE slug = $1 AND topic_id IS NOT NULL)",
+        )
+        .bind(slug.as_ref())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(query_error)?;
+        if !bound {
+            return Ok(false);
+        }
+        let mut repository = self.repository().await?;
+        let edited = self.edit_locked(&mut repository, slug, edit, now).await;
+        settle(edited, repository.release().await).map(|()| true)
+    }
+
     async fn redirect_page(
         &self,
         from: &WikiSlug,
@@ -90,6 +111,25 @@ impl TopicPageStore for PostgresMemory {
         };
         self.fold_wiki(&fold, now).await.map(drop)
     }
+
+    async fn remove_page(&self, slug: &WikiSlug) -> Result<(), WikiStoreError> {
+        let message = format!("wiki({}): removed after a tidy review", slug.as_ref());
+        let removed = {
+            let mut repository = self.repository().await?;
+            let removed = repository
+                .remove(&[slug.as_ref().to_owned()], &message)
+                .await
+                .map_err(WikiStoreError::from);
+            settle(removed, repository.release().await)
+        };
+        removed?;
+        sqlx::query("DELETE FROM rh_wiki_topics WHERE slug = $1")
+            .bind(slug.as_ref())
+            .execute(&self.pool)
+            .await
+            .map_err(query_error)?;
+        Ok(())
+    }
 }
 
 impl PostgresMemory {
@@ -116,6 +156,27 @@ impl PostgresMemory {
             article: row.article,
             sections: Vec::new(),
         }))
+    }
+
+    async fn edit_locked(
+        &self,
+        repository: &mut LockedRepository,
+        slug: &WikiSlug,
+        edit: &PageEdit,
+        now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError> {
+        let mut tx = self.pool.begin().await.map_err(query_error)?;
+        lock_slug(&mut tx, slug.as_ref()).await?;
+        let mut stored = repository
+            .read(slug.as_ref())
+            .await?
+            .ok_or_else(|| WikiStoreError::TopicMissing(slug.as_ref().to_owned()))?;
+        edit.apply_to(&mut stored, now);
+        let git_sha = repository
+            .fold(&stored, &[], &PageEdit::commit_message(slug))
+            .await?;
+        topics::store_topic(&mut tx, &stored, &git_sha, now).await?;
+        tx.commit().await.map_err(query_error)
     }
 
     async fn save_locked(

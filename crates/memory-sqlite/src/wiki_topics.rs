@@ -2,16 +2,16 @@ use std::collections::BTreeSet;
 
 use chrono::DateTime;
 use chrono::Utc;
-use kernel::wiki::builder::WikiAction;
-use kernel::wiki::builder::WikiPatch;
 use kernel::wiki::builder::WikiStoreError;
 use kernel::wiki::builder::WikiSummary;
+use kernel::wiki::page::WikiAction;
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::topic_identity;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
 use thiserror::Error;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::topic_identity;
 
 use crate::time;
 
@@ -40,12 +40,24 @@ pub(crate) fn apply(
     let aliases = alias_list(patch, &slug);
     let at = time::stamp(now);
     let existing = load(conn, &slug)?;
+    if let Some(row) = existing.as_ref().filter(|_| slug != patch.slug.as_ref()) {
+        note(conn, summary, patch, &slug, row, now)?;
+        return Ok(Some(slug));
+    }
     let article = stored_article(patch.article.as_deref(), existing.as_ref());
     let related = stored_related(patch.related.as_ref(), existing.as_ref())?;
     let aliases_json = json(&aliases)?;
     let tags_json = json(&patch.tags)?;
     let entities_json = json(&patch.entities)?;
-    let search = search_text(patch, &aliases, patch.article.as_deref(), existing.as_ref());
+    let search = search_text(
+        &patch.title,
+        &patch.summary,
+        [aliases.as_slice(), &patch.tags, &patch.entities],
+        patch
+            .article
+            .as_deref()
+            .or_else(|| existing.as_ref().map(|row| row.article.as_str())),
+    );
     let changed = write_topic(
         conn,
         &slug,
@@ -393,7 +405,7 @@ fn stored_article(article: Option<&str>, existing: Option<&Existing>) -> String 
 }
 
 fn stored_related(
-    related: Option<&Vec<wire::gateway::wiki::WikiSlug>>,
+    related: Option<&Vec<kernel::wiki::page::WikiSlug>>,
     existing: Option<&Existing>,
 ) -> Result<String, WikiStoreError> {
     match related {
@@ -411,27 +423,55 @@ fn stored_related(
     }
 }
 
-fn search_text(
-    patch: &WikiPatch,
-    aliases: &[String],
-    article: Option<&str>,
-    existing: Option<&Existing>,
-) -> String {
-    let prefix = format!(
-        "{}\n{}\n{}\n{}\n{}",
-        patch.title,
-        patch.summary,
-        aliases.join(" "),
-        patch.tags.join(" "),
-        patch.entities.join(" ")
-    );
+fn search_text(title: &str, state: &str, lists: [&[String]; 3], article: Option<&str>) -> String {
+    let [aliases, tags, entities] = lists.map(|list| list.join(" "));
+    let prefix = format!("{title}\n{state}\n{aliases}\n{tags}\n{entities}");
     match article {
         Some(text) => format!("{prefix}\n{text}"),
-        None => match existing {
-            Some(row) => format!("{prefix}\n{}", row.article),
-            None => prefix,
-        },
+        None => prefix,
     }
+}
+
+fn note(
+    conn: &Connection,
+    summary: &WikiSummary,
+    patch: &WikiPatch,
+    slug: &str,
+    row: &Existing,
+    now: DateTime<Utc>,
+) -> Result<(), WikiStoreError> {
+    let proposed = patch.slug.as_ref().to_owned();
+    let mut aliases = list(&row.aliases)?;
+    if !aliases.contains(&proposed) {
+        aliases.push(proposed.clone());
+    }
+    let search = search_text(
+        &row.title,
+        &row.current_state,
+        [aliases.as_slice(), &list(&row.tags)?, &list(&row.entities)?],
+        Some(&row.article),
+    );
+    let at = time::stamp(now);
+    conn.execute(
+        "UPDATE ros_wiki_topics SET aliases = ?2, search_text = ?3, history_count = history_count + 1,
+            last_verified_at = ?4, updated_at = ?4,
+            embedding = NULL, embed_status = NULL, embed_failures = 0, embed_error = NULL
+         WHERE slug = ?1",
+        params![slug, json(&aliases)?, search, at],
+    )
+    .map_err(query)?;
+    redirects(conn, slug, std::slice::from_ref(&proposed), &at)?;
+    provenance(
+        conn,
+        slug,
+        summary,
+        Some(&patch.note(now.date_naive()).body),
+        &at,
+    )
+}
+
+fn list(text: &str) -> Result<Vec<String>, WikiStoreError> {
+    serde_json::from_str(text).map_err(|source| WikiStoreError::Query(Box::new(source)))
 }
 
 fn json(values: &[String]) -> Result<String, WikiStoreError> {

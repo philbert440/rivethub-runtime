@@ -36,14 +36,14 @@ fn ignored_paths_reach_the_chooser() -> Result<(), Box<dyn std::error::Error>> {
         "runtime:\n  workspace: w\n  default_agent: main\n  heartbeats:\n    - agent: main\n      schedule: 30m\n      prompt: hi\n      bogus: 1\nagents:\n  main:\n    provider: p\n    tools:\n      exclude: []\n      bogus: 2\nproviders:\n  p:\n    model: m\n    bogus: 3\ngateway:\n  port: 3000\n  bogus: 4\nmemory:\n  sqlite:\n    path: ':memory:'\n    bogus: 5\n  capture:\n    redaction:\n      enabled: false\n      bogus: 6\n  postgres:\n    connection_string: postgres://example.com/db\n    embedded:\n      port: 5433\n      bogus: 7\ntasks:\n  harnesses:\n    claude-code:\n      binary: claude\n      bogus: 8\n  eval:\n    enabled: true\n    bogus: 9\nchannels:\n  agent:\n    port: 3100\n    bogus: 10\ndeployment:\n  target: docker\n  bogus: 11\nmesh:\n  enabled: false\n  bogus: 12\ntransports:\n  mcp:\n    port: 5700\n    bogus: 13\n",
     )?);
     for needle in [
-        "runtime.heartbeats[0].bogus | Unknown heartbeat key \"bogus\"",
+        "runtime.heartbeats | \"runtime.heartbeats\" is no longer used",
         "agents.main.tools.bogus | Unknown tools filter key \"bogus\" — expected \"exclude\" or \"include\"",
         "gateway.bogus | Unknown gateway key \"bogus\"",
         "memory.sqlite.bogus | Unknown memory.sqlite key \"bogus\"",
         "memory.capture.redaction.bogus | Unknown memory.capture.redaction key \"bogus\"",
         "memory.postgres.embedded.bogus | Unknown memory.postgres.embedded key \"bogus\"",
         "tasks.harnesses.claude-code.bogus | Unknown key \"bogus\"",
-        "tasks.eval.bogus | Unknown tasks.eval key \"bogus\"",
+        "tasks.eval | \"tasks.eval\" is no longer used",
         "channels.agent.bogus | Unknown key \"bogus\" for channel type \"agent\"",
         "deployment.bogus | Unknown deployment key \"bogus\"",
     ] {

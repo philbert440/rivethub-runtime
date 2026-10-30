@@ -31,6 +31,11 @@ pub(crate) struct DelegateTask {
     )]
     context: Option<Vec<String>>,
     #[schemars(
+        description = "Acceptance criteria the delegate should meet, one per entry",
+        transform = crate::catalog::optional_non_null
+    )]
+    criteria: Option<Vec<String>>,
+    #[schemars(
         description = "Optional model override for this delegation",
         transform = crate::catalog::optional_non_null
     )]
@@ -45,7 +50,7 @@ pub(crate) struct DelegateTask {
 
 impl crate::catalog::ToolInput for DelegateTask {
     const NAME: &'static str = "delegate_task";
-    const DESCRIPTION: &'static str = "Delegate work to a RivetHub agent (preset name or id) or a runtime agent id. Call list_agents first. When no node is given, a preset name or id wins when it also matches a runtime agent id, unless that preset has no harness configured — then the runtime agent runs. agent@node is resolved as a preset only if a preset has that exact name. Presets run as a harness session in the agent directory; runtime agents run as a chat-loop on the newest online node that hosts them; use agent@node to pick the node when several host the same agent id. Waits until the task finishes or the timeout elapses (default 20 minutes, max 30). Set the client tool-call timeout above that wait — Codex tool_timeout_sec (its default of 60s aborts the call) and Claude Code MCP timeout. An aborted call kills the row.";
+    const DESCRIPTION: &'static str = "Delegate work to a RivetHub agent (preset name or id) or a runtime agent id. Call list_agents first. When no node is given, a preset name or id wins when it also matches a runtime agent id, unless that preset has no harness configured — then the runtime agent runs. agent@node is resolved as a preset only if a preset has that exact name. The delegate runs as its own harness session, started by this one: a preset in its agent directory on its node, a runtime agent on the newest online node that hosts it (agent@node picks the node). The session stays open afterwards, filed under this session's topic, so it can be opened and continued. Waits until the task finishes or the timeout elapses (default 20 minutes, max 30). Set the client tool-call timeout above that wait — Codex tool_timeout_sec (its default of 60s aborts the call) and Claude Code MCP timeout. An aborted or timed-out call leaves the task running: the reply names its id and status, and its result comes back to this session as a new message when it finishes.";
 
     fn annotations() -> Option<rmcp::model::ToolAnnotations> {
         None
@@ -84,11 +89,10 @@ pub(crate) async fn task(
     required_text(&arguments.to_agent, "to_agent")?;
     required_text(&arguments.task, "task")?;
     let request = DelegateRequest {
-        requested_by: Some("mcp-sidecar".to_owned()),
         target: arguments.to_agent,
         prompt: prompt(&arguments.task, arguments.context),
+        criteria: arguments.criteria.into_iter().flatten().collect(),
         model: arguments.model,
-        node: None,
         timeout: timeout_ms(arguments.timeout_ms)?,
     };
     let started = std::time::Instant::now();

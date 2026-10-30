@@ -11,7 +11,9 @@ brief names. The TypeScript source at /opt/rivetos is REFERENCE for boundary beh
    and untyped maps; ownership and `&mut` over copy-on-write spreads and whole-state clones; traits only where there are real
    alternatives (the kernel ports); standard crates over custom code (serde, chrono, url, std::path, axum, reqwest, sqlx,
    rusqlite, clap, tracing, thiserror); modules by responsibility; descriptive names (gateway, session, view — never den, room).
-3. Depend only downward. There is no plugin system: do not add registries, dynamic loading or "capability" hooks for code that does not exist. Your crate imports `wire`, `config`, `kernel` (and `testkit` as a dev-dependency) plus external crates.
+3. Depend only downward. Plug-ins are separate processes behind B17 (CONTRACT notes 50–60): the gateway's plug-in host
+   supervises them and they reach rh only through the plug-in API socket with a scoped token. No plug-in code is loaded into
+   rh: do not add dynamic loading, in-process registries or "capability" hooks for code that does not exist. Your crate imports `wire`, `config`, `kernel` (and `testkit` as a dev-dependency) plus external crates.
    Never another adapter or service. If you need another feature, you need a port: stop and write it in the notes.
 4. Types are the validation. Deserialize into typed values; keep only the semantic checks the contract names (version equals
    1, non-negative counts, non-empty ids). No JavaScript emulation: no UTF-16 slicing, no Date.parse heuristics, no key-order

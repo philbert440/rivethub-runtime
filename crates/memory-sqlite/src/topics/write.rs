@@ -7,10 +7,10 @@ use kernel::topics::SyncTopicPage;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
+use kernel::wiki::page::WikiSlug;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
-use wire::gateway::wiki::WikiSlug;
 
 use super::rows::failed;
 use crate::time;
@@ -19,8 +19,8 @@ pub(super) fn claim_names(conn: &Connection, topic: &Topic) -> Result<(), TopicE
     let id = topic.id.to_string();
     let slug_taken = conn
         .query_row(
-            "SELECT 1 FROM rh_topics WHERE slug = ?1 AND id <> ?2",
-            params![topic.slug.as_str(), id],
+            "SELECT 1 FROM rh_topics WHERE kind = ?3 AND slug = ?1 AND id <> ?2",
+            params![topic.slug.as_str(), id, topic.kind.to_string()],
             |row| row.get::<_, i64>(0),
         )
         .optional()
@@ -33,8 +33,9 @@ pub(super) fn claim_names(conn: &Connection, topic: &Topic) -> Result<(), TopicE
     for alias in &topic.aliases {
         let owner = conn
             .query_row(
-                "SELECT alias FROM rh_topic_aliases WHERE alias_key = ?1 AND topic_id <> ?2",
-                params![alias.key(), id],
+                "SELECT alias FROM rh_topic_aliases
+                  WHERE kind = ?3 AND alias_key = ?1 AND topic_id <> ?2",
+                params![alias.key(), id, topic.kind.to_string()],
                 |row| row.get::<_, String>(0),
             )
             .optional()
@@ -50,8 +51,8 @@ pub(super) fn insert(conn: &Connection, topic: &Topic) -> Result<(), TopicError>
     let directory = topic.directory.as_ref();
     conn.execute(
         "INSERT INTO rh_topics (id, slug, name, parent_id, directory_kind, directory_node,
-                                directory_path, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                                directory_path, created_at, updated_at, closed_at, kind)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
             topic.id.to_string(),
             topic.slug.as_str(),
@@ -62,9 +63,24 @@ pub(super) fn insert(conn: &Connection, topic: &Topic) -> Result<(), TopicError>
             directory.map(Root::path),
             time::stamp(topic.created_at),
             time::stamp(topic.updated_at),
+            topic.closed_at.map(time::stamp),
+            topic.kind.to_string(),
         ],
     )
     .map_err(failed("topic create"))?;
+    Ok(())
+}
+
+pub(super) fn closure(conn: &Connection, topic: &Topic) -> Result<(), TopicError> {
+    conn.execute(
+        "UPDATE rh_topics SET closed_at = ?2, updated_at = ?3 WHERE id = ?1",
+        params![
+            topic.id.to_string(),
+            topic.closed_at.map(time::stamp),
+            time::stamp(topic.updated_at),
+        ],
+    )
+    .map_err(failed("topic close"))?;
     Ok(())
 }
 
@@ -99,8 +115,9 @@ pub(super) fn aliases(conn: &Connection, topic: &Topic) -> Result<(), TopicError
     .map_err(failed("topic aliases"))?;
     for alias in &topic.aliases {
         conn.execute(
-            "INSERT INTO rh_topic_aliases (topic_id, alias, alias_key) VALUES (?1, ?2, ?3)",
-            params![id, alias.as_str(), alias.key()],
+            "INSERT INTO rh_topic_aliases (topic_id, alias, alias_key, kind)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![id, alias.as_str(), alias.key(), topic.kind.to_string()],
         )
         .map_err(failed("topic aliases"))?;
     }
@@ -130,6 +147,7 @@ pub(super) fn fold_into(
         params![source, into],
     )
     .map_err(failed("topic merge suggestions"))?;
+    super::filing::fold_into(conn, &source, &into)?;
     conn.execute(
         "UPDATE rh_topic_decisions SET topic_id = ?2 WHERE topic_id = ?1",
         params![source, into],
@@ -165,8 +183,15 @@ pub(super) fn fold_into(
     Ok(())
 }
 
-pub(super) fn remove(conn: &Connection, id: TopicId) -> Result<(), TopicError> {
-    let id = id.to_string();
+pub(super) fn remove(conn: &Connection, topic: &Topic) -> Result<(), TopicError> {
+    conn.execute(
+        "INSERT INTO rh_topic_tombstones (kind, slug, deleted_at)
+         VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+         ON CONFLICT (kind, slug) DO UPDATE SET deleted_at = excluded.deleted_at",
+        params![topic.kind.to_string(), topic.slug.as_str()],
+    )
+    .map_err(failed("topic tombstone"))?;
+    let id = topic.id.to_string();
     for (statement, operation) in [
         (
             "DELETE FROM rh_session_placements WHERE topic_id = ?1",
@@ -241,14 +266,16 @@ pub(super) fn placement(conn: &Connection, placement: &Placement) -> Result<(), 
 
 pub(super) fn suggestion(conn: &Connection, suggestion: &Suggestion) -> Result<(), TopicError> {
     conn.execute(
-        "INSERT INTO rh_session_suggestions (session_id, name, topic_id)
-         VALUES (?1, ?2, ?3)
+        "INSERT INTO rh_session_suggestions (session_id, name, topic_id, parent_id)
+         VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT (session_id) DO UPDATE SET name = excluded.name,
-                                                topic_id = excluded.topic_id",
+                                                topic_id = excluded.topic_id,
+                                                parent_id = excluded.parent_id",
         params![
             suggestion.session.as_str(),
             suggestion.name.as_str(),
             suggestion.topic.map(|topic| topic.to_string()),
+            suggestion.parent.map(|topic| topic.to_string()),
         ],
     )
     .map_err(failed("session suggestion write"))?;

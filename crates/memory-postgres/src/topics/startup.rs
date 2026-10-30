@@ -3,10 +3,10 @@ use chrono::DateTime;
 use chrono::Utc;
 use kernel::topics::DeliveredVia;
 use kernel::topics::StartupContext;
+use kernel::topics::StartupSection;
 use kernel::topics::StartupStore;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
-use wire::gateway::topics::StartupSection;
 use wire::session_id::SessionId;
 
 use super::rows::failed;
@@ -21,8 +21,7 @@ impl StartupStore for PostgresMemory {
         context: &StartupContext,
         now: DateTime<Utc>,
     ) -> Result<(), TopicError> {
-        let sections: Vec<StartupSection> = context.sections.iter().map(Into::into).collect();
-        let sections = serde_json::to_value(sections)
+        let sections = serde_json::to_value(&context.sections)
             .map_err(|source| stored("startup sections")(Box::new(source)))?;
         let tokens = i32::try_from(context.tokens)
             .map_err(|source| stored("startup tokens")(Box::new(source)))?;
@@ -63,7 +62,7 @@ impl StartupStore for PostgresMemory {
             .map_err(|source| stored("startup sections")(Box::new(source)))?;
         Ok(Some(StartupContext {
             topic: TopicId::from_uuid(row.topic_id),
-            sections: sections.into_iter().map(Into::into).collect(),
+            sections,
             tokens: usize::try_from(row.tokens)
                 .map_err(|source| stored("startup tokens")(Box::new(source)))?,
             delivered_via: row

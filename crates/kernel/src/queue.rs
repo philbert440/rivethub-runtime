@@ -89,7 +89,8 @@ pub enum FixedJob {
     #[strum(serialize = "compact-conversation")]
     SummarizeConversation,
     SynthesizeToolCall,
-    SuggestTags,
+    FileConversation,
+    ProposeTidy,
     EnqueueIdle,
     ExtractWiki,
     EnqueueWikiBackfill,
@@ -101,6 +102,7 @@ pub enum FixedJob {
     ReapDeadJobs,
     RunTask,
     SyncTopicPage,
+    PurgeDeletedSessions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -164,6 +166,8 @@ impl From<JobName> for String {
         value.to_string()
     }
 }
+
+pub const MAINTENANCE_PRIORITY: i16 = -100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobKeyMode {
@@ -278,13 +282,16 @@ impl WorkerRole {
             Self::Summarizer => &[
                 JobName::Fixed(FixedJob::SummarizeConversation),
                 JobName::Fixed(FixedJob::SynthesizeToolCall),
-                JobName::Fixed(FixedJob::SuggestTags),
                 JobName::Fixed(FixedJob::EnqueueIdle),
                 JobName::Fixed(FixedJob::EnqueueStaleSummaries),
                 JobName::Fixed(FixedJob::ReapDeadJobs),
                 JobName::Fixed(FixedJob::SyncTopicPage),
+                JobName::Fixed(FixedJob::PurgeDeletedSessions),
             ],
-            Self::Categorizer => &[JobName::Fixed(FixedJob::SuggestTags)],
+            Self::Categorizer => &[
+                JobName::Fixed(FixedJob::FileConversation),
+                JobName::Fixed(FixedJob::ProposeTidy),
+            ],
             Self::WikiBuilder => &[
                 JobName::Fixed(FixedJob::ExtractWiki),
                 JobName::Fixed(FixedJob::EnqueueWikiBackfill),

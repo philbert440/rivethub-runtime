@@ -197,7 +197,7 @@ fn ceiling(name: &JobName) -> i32 {
         JobName::Fixed(fixed) => match fixed {
             FixedJob::EmbedTarget | FixedJob::SyncTopicPage => 5,
             FixedJob::SummarizeConversation | FixedJob::SynthesizeToolCall => 3,
-            FixedJob::SuggestTags | FixedJob::ExtractWiki => 2,
+            FixedJob::FileConversation | FixedJob::ExtractWiki => 2,
             FixedJob::RunTask => 1,
             FixedJob::EnqueueUnembedded
             | FixedJob::EnqueueUnchunked
@@ -207,7 +207,9 @@ fn ceiling(name: &JobName) -> i32 {
             | FixedJob::RecompileWiki
             | FixedJob::EnqueueStaleWiki
             | FixedJob::EnqueueStaleSummaries
-            | FixedJob::ReapDeadJobs => 25,
+            | FixedJob::ReapDeadJobs
+            | FixedJob::ProposeTidy
+            | FixedJob::PurgeDeletedSessions => 25,
         },
         JobName::RunTaskOn { .. } | JobName::Heartbeat { .. } => 1,
     }

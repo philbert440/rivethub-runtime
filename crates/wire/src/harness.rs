@@ -1,5 +1,5 @@
 use crate::Extra;
-use crate::events::ContextSource;
+use crate::events::{ContextSource, ContextUsageSource};
 use crate::gateway::sessions::HarnessTranscriptTurn;
 use crate::gateway::topics::StartupContext;
 use crate::json::JsonObject;
@@ -299,6 +299,13 @@ pub enum HarnessEvent {
         turn_id: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
+    ToolUpdate {
+        session_id: SessionId,
+        tool_call_id: String,
+        input: JsonObject,
+        turn_id: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
     ToolResult {
         session_id: SessionId,
         tool_call_id: String,
@@ -340,6 +347,14 @@ pub enum HarnessEvent {
         turn_id: Option<String>,
         stop_reason: Option<String>,
         usage: Option<crate::stream::LlmUsage>,
+        model_ms: Option<u64>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Context {
+        session_id: SessionId,
+        used: u64,
+        window: Option<u64>,
+        source: ContextUsageSource,
     },
     #[serde(rename_all = "camelCase")]
     Error {

@@ -18,8 +18,9 @@ use tokio_util::compat::TokioAsyncWriteCompatExt as _;
 use tokio_util::sync::CancellationToken;
 use tokio_util::sync::DropGuard;
 use tokio_util::task::TaskTracker;
-use wire::stream::LlmUsage;
 
+use crate::context::ContextWindows;
+use crate::context::TurnEnd;
 use crate::error::AcpError;
 use crate::launch::AcpCommand;
 use crate::options::SessionOptions;
@@ -38,7 +39,7 @@ pub(crate) enum SessionCommand {
     NewSession {
         cwd: PathBuf,
         meta: Option<acp::Meta>,
-        reply: oneshot::Sender<Result<acp::NewSessionResponse, acp::Error>>,
+        reply: oneshot::Sender<Result<crate::context::OpenedSession, acp::Error>>,
     },
     LoadSession {
         native: acp::SessionId,
@@ -64,6 +65,11 @@ pub(crate) enum SessionCommand {
         value: acp::SessionConfigOptionValue,
         reply: oneshot::Sender<Result<acp::SetSessionConfigOptionResponse, acp::Error>>,
     },
+    Delete {
+        acp_session: acp::SessionId,
+        deletion: crate::discovery::Deletion,
+        reply: oneshot::Sender<Result<(), acp::Error>>,
+    },
 }
 
 #[derive(Debug)]
@@ -88,10 +94,11 @@ pub(crate) struct AgentConnection {
     pub(crate) acp_session: acp::SessionId,
     pub(crate) permissions: Arc<PermissionRegistry>,
     pub(crate) options: Arc<SessionOptions>,
-    pub(crate) turn_end: mpsc::UnboundedSender<Option<LlmUsage>>,
+    pub(crate) turn_end: mpsc::UnboundedSender<TurnEnd>,
     pub(crate) events_rx: mpsc::Receiver<SessionEvent>,
     pub(crate) exited: Arc<AtomicBool>,
     pub(crate) shutdown: CancellationToken,
+    pub(crate) context: Arc<ContextWindows>,
 }
 
 struct Connecting {
@@ -102,11 +109,12 @@ struct Connecting {
     commands: mpsc::Sender<SessionCommand>,
     permissions: Arc<PermissionRegistry>,
     options: Arc<SessionOptions>,
-    turn_end: mpsc::UnboundedSender<Option<LlmUsage>>,
+    turn_end: mpsc::UnboundedSender<TurnEnd>,
     events_rx: mpsc::Receiver<SessionEvent>,
     exited: Arc<AtomicBool>,
     shutdown: CancellationToken,
     guard: DropGuard,
+    context: Arc<ContextWindows>,
 }
 
 impl Connecting {
@@ -114,8 +122,10 @@ impl Connecting {
         self,
         acp_session: acp::SessionId,
         config_options: Vec<acp::SessionConfigOption>,
+        models: Option<crate::context::ModelState>,
     ) -> AgentConnection {
         self.options.replace(config_options);
+        self.context.learn(models);
         let Self {
             capabilities,
             steering,
@@ -129,6 +139,7 @@ impl Connecting {
             exited,
             shutdown,
             guard,
+            context,
         } = self;
         drop(guard.disarm());
         AgentConnection {
@@ -144,6 +155,7 @@ impl Connecting {
             events_rx,
             exited,
             shutdown,
+            context,
         }
     }
 }
@@ -174,9 +186,9 @@ pub(crate) async fn start_new(
     })
     .await
     .map_err(|failure| port_failure(failure, "session/new"))?;
-    let session_id = response.session_id.clone();
-    let options = stored_options(response.config_options);
-    Ok(connected.finish(session_id, options))
+    let session_id = response.session.session_id.clone();
+    let options = stored_options(response.session.config_options);
+    Ok(connected.finish(session_id, options, response.models))
 }
 
 pub(crate) async fn start_loaded(
@@ -193,7 +205,8 @@ pub(crate) async fn start_loaded(
     let response = discard_replay(&mut connected.events_rx, load)
         .await
         .map_err(|failure| port_failure(failure, "session/load"))?;
-    Ok(connected.finish(native.clone(), stored_options(response.config_options)))
+    let options = stored_options(response.config_options);
+    Ok(connected.finish(native.clone(), options, None))
 }
 
 async fn discard_replay<T>(
@@ -249,6 +262,7 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
     let permissions = Arc::new(PermissionRegistry::default());
     let options = Arc::new(SessionOptions::default());
     let exited = Arc::new(AtomicBool::new(false));
+    let context = Arc::new(ContextWindows::default());
     let shutdown = CancellationToken::new();
     let guard = shutdown.clone().drop_guard();
     let ChildPipes {
@@ -272,12 +286,14 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
         turn_end_rx,
         connection_ended_rx,
         shutdown.clone(),
+        Arc::clone(&context),
     ));
     let (ready_tx, ready_rx) = oneshot::channel();
     let client = crate::client::SessionClient {
         events: events_tx,
         permissions: Arc::clone(&permissions),
         options: Arc::clone(&options),
+        context: Arc::clone(&context),
     };
     let protocol_shutdown = shutdown.clone();
     tasks.spawn(async move {
@@ -313,6 +329,7 @@ async fn connect(command: &AcpCommand, working_dir: &Path) -> Result<Connecting,
         exited,
         shutdown,
         guard,
+        context,
     })
 }
 
@@ -333,6 +350,7 @@ async fn serve(
                     notification,
                     &session_client.events,
                     &session_client.options,
+                    &session_client.context,
                 )
                 .await
             },
@@ -440,6 +458,14 @@ async fn command_loop(
                         reply,
                         set_config(&connection, acp_session, config_id, value).await,
                     ),
+                    SessionCommand::Delete {
+                        acp_session,
+                        deletion,
+                        reply,
+                    } => deliver(
+                        reply,
+                        crate::discovery::delete(&connection, acp_session, deletion).await,
+                    ),
                 }
             }
         }
@@ -462,9 +488,11 @@ async fn new_session(
     connection: &ConnectionTo<Agent>,
     cwd: PathBuf,
     meta: Option<acp::Meta>,
-) -> Result<acp::NewSessionResponse, acp::Error> {
+) -> Result<crate::context::OpenedSession, acp::Error> {
     connection
-        .send_request(acp::NewSessionRequest::new(cwd).meta(meta))
+        .send_request(crate::context::OpenSession {
+            request: acp::NewSessionRequest::new(cwd).meta(meta),
+        })
         .block_task()
         .await
 }
@@ -513,21 +541,24 @@ fn spawn_request<Request: JsonRpcRequest>(
 
 async fn forward_turn_ends(
     events: mpsc::Sender<SessionEvent>,
-    mut turn_ends: mpsc::UnboundedReceiver<Option<LlmUsage>>,
+    mut turn_ends: mpsc::UnboundedReceiver<TurnEnd>,
     mut connection_ended: oneshot::Receiver<()>,
     shutdown: CancellationToken,
+    context: Arc<ContextWindows>,
 ) {
     loop {
         tokio::select! {
             biased;
             () = shutdown.cancelled() => break,
             turn = turn_ends.recv() => {
-                let Some(usage) = turn else {
+                let Some(turn) = turn else {
                     break;
                 };
-                let ended = usage
-                    .map(|usage| SessionEvent::Usage { usage })
+                let ended = context
+                    .after_turn(turn.last_call.as_ref())
+                    .map(SessionEvent::Context)
                     .into_iter()
+                    .chain(turn.usage.map(|usage| SessionEvent::Usage { usage }))
                     .chain([SessionEvent::TurnEnded]);
                 for event in ended {
                     let sent = tokio::select! {

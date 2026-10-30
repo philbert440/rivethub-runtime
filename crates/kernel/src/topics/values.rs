@@ -4,11 +4,9 @@ use std::str::FromStr;
 
 use chrono::DateTime;
 use chrono::Utc;
-use strum::IntoEnumIterator as _;
 use uuid::Uuid;
 
 use super::TopicError;
-use crate::wiki::route::Category;
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
@@ -151,6 +149,37 @@ pub fn distinct_aliases(aliases: Vec<Alias>) -> Vec<Alias> {
     kept
 }
 
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns topic kinds; wire::gateway::topics::TopicKind is the contract's copy, translated by the gateway's topic routes"
+    )
+)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    strum::Display,
+    strum::EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "lowercase")]
+pub enum TopicKind {
+    #[default]
+    Work,
+    Type,
+    Entity,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum RootKind {
@@ -201,6 +230,7 @@ impl Root {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Topic {
     pub id: TopicId,
+    pub kind: TopicKind,
     pub slug: Slug,
     pub name: TopicName,
     pub aliases: Vec<Alias>,
@@ -208,10 +238,12 @@ pub struct Topic {
     pub directory: Option<Root>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub closed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewTopic {
+    pub kind: TopicKind,
     pub name: TopicName,
     pub aliases: Vec<Alias>,
     pub parent: Option<TopicId>,
@@ -246,8 +278,12 @@ pub struct TopicChanges {
 
 impl Topic {
     pub fn create(id: TopicId, new: NewTopic, now: DateTime<Utc>) -> Result<Self, TopicError> {
+        if new.kind == TopicKind::Entity && new.parent.is_none() {
+            return Err(TopicError::EntityWithoutType);
+        }
         Ok(Self {
             id,
+            kind: new.kind,
             slug: Slug::fold(new.name.as_str())?,
             name: new.name,
             aliases: distinct_aliases(new.aliases),
@@ -255,26 +291,28 @@ impl Topic {
             directory: new.directory,
             created_at: now,
             updated_at: now,
+            closed_at: None,
         })
     }
 
     #[must_use]
-    pub fn root(&self) -> TopicId {
-        self.parent.unwrap_or(self.id)
+    pub fn closed(mut self, at: Option<DateTime<Utc>>, now: DateTime<Utc>) -> Self {
+        self.closed_at = at;
+        self.updated_at = now;
+        self
     }
 
-    #[must_use]
-    pub fn is_category(&self) -> bool {
-        self.parent.is_none()
-            && Category::iter().any(|category| fold(&category.to_string()) == self.slug.as_str())
+    pub fn accepts_sessions(&self) -> Result<(), TopicError> {
+        if self.kind == TopicKind::Work {
+            Ok(())
+        } else {
+            Err(TopicError::NotWork {
+                slug: self.slug.clone(),
+            })
+        }
     }
 
     pub fn check_delete(&self, has_subtopics: bool) -> Result<(), TopicError> {
-        if self.is_category() {
-            return Err(TopicError::CategoryTopic {
-                slug: self.slug.clone(),
-            });
-        }
         if has_subtopics {
             return Err(TopicError::SubtopicsRemain {
                 slug: self.slug.clone(),
@@ -292,6 +330,9 @@ impl Topic {
             self.aliases = distinct_aliases(aliases);
         }
         self.parent = changes.parent.applied_to(self.parent);
+        if self.kind == TopicKind::Entity && self.parent.is_none() {
+            return Err(TopicError::EntityWithoutType);
+        }
         self.directory = changes.directory.applied_to(self.directory);
         self.updated_at = now;
         Ok(self)

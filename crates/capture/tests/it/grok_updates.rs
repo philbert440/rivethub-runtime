@@ -65,19 +65,31 @@ fn rows(slice: &TranscriptSlice) -> Vec<(String, Role, &str)> {
         .collect()
 }
 
-fn expected(rows: &[(u64, Role, &'static str)]) -> Vec<(String, Role, &'static str)> {
+fn expected(rows: &[(i64, Role, &'static str)]) -> Vec<(String, Role, &'static str)> {
     rows.iter()
-        .map(|(line, role, content)| (format!("grok-build:{SESSION}:l{line}"), *role, *content))
+        .map(|(ordinal, role, content)| {
+            (format!("grok-build:{SESSION}:{ordinal}"), *role, *content)
+        })
         .collect()
 }
 
+#[derive(serde::Deserialize)]
+struct Position {
+    position: u64,
+}
+
 fn tool_at(slice: &TranscriptSlice, line: u64) -> Result<&CaptureMessage, String> {
-    let id = format!("grok-build:{SESSION}:l{line}");
     slice
         .messages
         .iter()
-        .find(|message| message.event_id == id)
-        .ok_or(id)
+        .find(|message| {
+            message
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.deserialize::<Position>().ok())
+                .is_some_and(|record| record.position == line)
+        })
+        .ok_or_else(|| format!("no message from line {line}"))
 }
 
 #[tokio::test]
@@ -100,19 +112,23 @@ async fn closed_turns_are_captured_and_the_open_turn_is_held_back() -> TestResul
     assert_eq!(
         rows(&slice),
         expected(&[
-            (2, Role::User, "list the files"),
-            (3, Role::Assistant, "[thinking] The user wants a listing."),
-            (4, Role::Assistant, "Running ls."),
-            (7, Role::Tool, "[tool] run_terminal_command"),
-            (9, Role::Tool, "[tool] read_file"),
-            (11, Role::Tool, "[tool] grep"),
-            (13, Role::Tool, "[tool] docs_search"),
-            (15, Role::Tool, "[tool] ask_user_question"),
-            (16, Role::Tool, "[tool] web_fetch"),
-            (18, Role::Tool, "[tool] Web search:"),
-            (21, Role::Assistant, "Done."),
-            (22, Role::System, "[grok.memory_flush_started]"),
-            (23, Role::System, "[grok.memory_flush_completed]"),
+            (0, Role::User, "list the files"),
+            (
+                10_002,
+                Role::Assistant,
+                "[thinking] The user wants a listing."
+            ),
+            (10_003, Role::Assistant, "Running ls."),
+            (10_006, Role::Tool, "[tool] run_terminal_command"),
+            (10_008, Role::Tool, "[tool] read_file"),
+            (10_010, Role::Tool, "[tool] grep"),
+            (10_012, Role::Tool, "[tool] docs_search"),
+            (10_014, Role::Tool, "[tool] ask_user_question"),
+            (10_015, Role::Tool, "[tool] web_fetch"),
+            (10_017, Role::Tool, "[tool] Web search:"),
+            (10_020, Role::Assistant, "Done."),
+            (10_021, Role::System, "[grok.memory_flush_started]"),
+            (10_022, Role::System, "[grok.memory_flush_completed]"),
         ])
     );
     assert_eq!(slice.next_offset, SETTLED);
@@ -135,9 +151,9 @@ async fn the_held_turn_is_captured_once_it_completes() -> TestResult {
     assert_eq!(
         rows(&slice),
         expected(&[
-            (29, Role::User, "now count them"),
-            (30, Role::Assistant, "Counting."),
-            (31, Role::Assistant, "There are two files."),
+            (1_000_000, Role::User, "now count them"),
+            (1_010_029, Role::Assistant, "Counting."),
+            (1_010_030, Role::Assistant, "There are two files."),
         ])
     );
     assert_eq!(slice.next_offset, 32);

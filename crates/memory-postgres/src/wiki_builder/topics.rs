@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
-use kernel::wiki::builder::{WikiPatch, WikiStoreError, WikiSummary};
+use kernel::wiki::builder::{WikiStoreError, WikiSummary};
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::{CitationKind, PageCitation, PagePatch, PageSource, WikiPage};
+use kernel::wiki::page::{WikiSlug, WikiSourceKind};
 use sqlx::{Postgres, Transaction};
-use wire::gateway::wiki::{WikiSlug, WikiSourceKind};
-use wire::wiki::{CitationKind, PageCitation, PagePatch, PageSource, WikiPage};
 
 use super::{gate, lock_slug, query_error};
 
@@ -16,7 +17,7 @@ pub(super) async fn apply(
     tx: &mut Transaction<'_, Postgres>,
     repository: &mut crate::wiki_writer::LockedRepository,
     source: &Source<'_>,
-    mut patch: WikiPatch,
+    patch: WikiPatch,
     now: DateTime<Utc>,
 ) -> Result<(String, String), WikiStoreError> {
     let Source {
@@ -37,34 +38,35 @@ pub(super) async fn apply(
     }
     lock_slug(tx, &gated.slug).await?;
     let slug = gated.slug;
-    if slug != patch.slug.as_ref() {
-        patch.aliases.push(patch.slug);
-    }
-    let note = patch.history_entry.as_ref().map(|entry| entry.body.clone());
+    let note_entry = (slug != patch.slug.as_ref()).then(|| patch.note(date.date_naive()));
     let citation_note = patch
         .history_entry
         .as_ref()
         .map_or_else(|| patch.title.clone(), |entry| entry.title.clone());
     let summary_id = summary.id.to_string();
-    let page_patch = PagePatch {
+    let mut page_patch = PagePatch {
         action: gated.action,
         slug: slug.clone(),
         verified_at: now,
         title: Some(patch.title),
-        add_aliases: patch.aliases.into_iter().map(String::from).collect(),
-        add_tags: patch.tags,
-        add_entities: patch.entities,
+        add_aliases: patch
+            .aliases
+            .iter()
+            .map(|alias| alias.as_ref().to_owned())
+            .collect(),
+        add_tags: patch.tags.clone(),
+        add_entities: patch.entities.clone(),
         add_related: patch
             .related
-            .into_iter()
+            .iter()
             .flatten()
-            .map(String::from)
+            .map(|slug| slug.as_ref().to_owned())
             .collect(),
-        summary_delta: Some(patch.summary),
+        summary_delta: Some(patch.summary.clone()),
         current_state: None,
-        article: patch.article,
+        article: patch.article.clone(),
         article_patches: Vec::new(),
-        history_entry: patch.history_entry,
+        history_entry: patch.history_entry.clone(),
         add_citations: vec![PageCitation {
             summary_id: summary_id.clone(),
             date: Some(date.date_naive()),
@@ -79,6 +81,19 @@ pub(super) async fn apply(
         }],
         allow_shrink: false,
     };
+    if let Some(entry) = note_entry {
+        page_patch.title = None;
+        page_patch.add_aliases = vec![patch.slug.as_ref().to_owned()];
+        page_patch.add_tags.clear();
+        page_patch.add_entities.clear();
+        page_patch.summary_delta = None;
+        page_patch.article = None;
+        page_patch.history_entry = Some(entry);
+    }
+    let note = page_patch
+        .history_entry
+        .as_ref()
+        .map(|entry| entry.body.clone());
     let applied = repository.apply(page_patch, &summary_id).await?;
     store_topic(tx, &applied.page, &applied.git_sha, now).await?;
     provenance(tx, &slug, summary, note, now).await?;
@@ -93,7 +108,7 @@ pub(super) async fn store_topic(
 ) -> Result<(), WikiStoreError> {
     let history_count = i32::try_from(page.history.len())
         .map_err(|error| WikiStoreError::InvalidPatch(error.to_string()))?;
-    let search_text = wire::wiki::build_wiki_search_text(page);
+    let search_text = kernel::wiki::page::build_wiki_search_text(page);
     sqlx::query(
         "INSERT INTO rh_wiki_topics (slug, title, aliases, tags, entities, current_state, article, related,
             search_text, history_count, last_verified_at, created_at, updated_at, git_sha)

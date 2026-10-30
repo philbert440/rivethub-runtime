@@ -119,7 +119,15 @@ impl Tenancy {
         self
     }
 
-    fn device_user(&self, peer: &PeerCertificate) -> Result<UserId, ApiError> {
+    pub(crate) fn owner(&self, user: &UserId) -> Result<(), ApiError> {
+        if self.local.as_ref() == Some(user) {
+            Ok(())
+        } else {
+            Err(ApiError::OwnerRequired)
+        }
+    }
+
+    pub(crate) fn device_user(&self, peer: &PeerCertificate) -> Result<UserId, ApiError> {
         let (user, device) = match peer {
             PeerCertificate::Device { user, device } => (user, device),
             PeerCertificate::Node { .. }
@@ -177,6 +185,17 @@ impl FromRequestParts<std::sync::Arc<crate::Gateway>> for UserId {
 }
 
 fn caller(gateway: &crate::Gateway, parts: &Parts) -> Result<UserId, ApiError> {
+    if parts
+        .extensions
+        .get::<crate::plugins::PluginCaller>()
+        .is_some()
+    {
+        return gateway
+            .tenancy
+            .local_user()
+            .cloned()
+            .ok_or(ApiError::Unauthorized);
+    }
     if gateway.client_certificate_required()
         || parts
             .headers

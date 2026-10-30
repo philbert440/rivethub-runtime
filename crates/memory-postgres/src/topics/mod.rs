@@ -1,4 +1,9 @@
+mod bulk;
 mod decisions;
+mod filing;
+mod history;
+mod inherited;
+mod mentions;
 mod rows;
 mod startup;
 mod write;
@@ -6,6 +11,7 @@ mod write;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::topics::HistoryMark;
 use kernel::topics::MergePlan;
 use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
@@ -19,11 +25,12 @@ use kernel::topics::TopicChanges;
 use kernel::topics::TopicError;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicStore;
 use kernel::topics::by_activity;
 use kernel::topics::check_parent;
-use wire::gateway::wiki::WikiSlug;
+use kernel::wiki::page::WikiSlug;
 use wire::session_id::SessionId;
 
 use crate::PostgresMemory;
@@ -43,7 +50,7 @@ impl TopicStore for PostgresMemory {
             let parent = rows::by_id(&mut tx, parent)
                 .await?
                 .ok_or_else(|| not_found(parent))?;
-            check_parent(topic.id, false, &parent)?;
+            check_parent(&topic, &parent, &write::tree(&mut tx).await?)?;
         }
         write::claim_names(&mut tx, &topic).await?;
         write::insert(&mut tx, &topic).await?;
@@ -72,8 +79,7 @@ impl TopicStore for PostgresMemory {
             let parent = rows::by_id(&mut tx, parent)
                 .await?
                 .ok_or_else(|| not_found(parent))?;
-            let subtopics = write::subtopics(&mut tx, id).await?;
-            check_parent(id, !subtopics.is_empty(), &parent)?;
+            check_parent(&updated, &parent, &write::tree(&mut tx).await?)?;
         }
         write::claim_names(&mut tx, &updated).await?;
         write::row(&mut tx, &updated).await?;
@@ -102,8 +108,7 @@ impl TopicStore for PostgresMemory {
         let target = rows::by_id(&mut tx, into)
             .await?
             .ok_or_else(|| not_found(into))?;
-        let subtopics = write::subtopics(&mut tx, source).await?;
-        let plan = MergePlan::new(&from, &target, &subtopics)?;
+        let plan = MergePlan::new(&from, &target, &write::tree(&mut tx).await?)?;
         let page = write::page_of(&mut tx, source).await?;
         let syncs = SyncTopicPage::after_merge(&from, &target, page);
         let merged = plan.merged(target, now);
@@ -122,23 +127,42 @@ impl TopicStore for PostgresMemory {
             .await?
             .ok_or_else(|| not_found(id))?;
         topic.check_delete(!write::subtopics(&mut tx, id).await?.is_empty())?;
-        write::remove(&mut tx, id).await?;
+        write::remove(&mut tx, &topic).await?;
         write::enqueue_syncs(&mut tx, SyncTopicPage::after_delete(&topic)).await?;
         tx.commit().await.map_err(failed("topic delete"))
+    }
+
+    async fn set_closed(
+        &self,
+        id: TopicId,
+        closed: Option<DateTime<Utc>>,
+        now: DateTime<Utc>,
+    ) -> Result<Topic, TopicError> {
+        let mut tx = self.pool.begin().await.map_err(failed("topic close"))?;
+        let topic = rows::by_id(&mut tx, id)
+            .await?
+            .ok_or_else(|| not_found(id))?
+            .closed(closed, now);
+        write::closure(&mut tx, &topic).await?;
+        let stored = rows::by_id(&mut tx, id)
+            .await?
+            .ok_or_else(|| not_found(id))?;
+        tx.commit().await.map_err(failed("topic close"))?;
+        Ok(stored)
     }
 
     async fn find(&self, key: &TopicKey) -> Result<Option<Topic>, TopicError> {
         let mut conn = self.pool.acquire().await.map_err(failed("topic read"))?;
         match key {
             TopicKey::Id(id) => rows::by_id(&mut conn, *id).await,
-            TopicKey::Slug(slug) => rows::by_slug(&mut conn, slug).await,
+            TopicKey::Slug(kind, slug) => rows::by_slug(&mut conn, *kind, slug).await,
         }
     }
 
     async fn list(&self) -> Result<Vec<TopicListing>, TopicError> {
         let topics = sqlx::query!(
-            r#"SELECT t.id, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
-                      t.directory_path, t.created_at, t.updated_at,
+            r#"SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
+                      t.directory_path, t.created_at, t.updated_at, t.closed_at,
                       (SELECT count(*) FROM rh_session_placements p WHERE p.topic_id = t.id)
                         AS "session_count!",
                       (SELECT max(c.updated_at)
@@ -165,6 +189,7 @@ impl TopicStore for PostgresMemory {
                 let topic = rows::topic(
                     TopicRow {
                         id: row.id,
+                        kind: row.kind,
                         slug: row.slug,
                         name: row.name,
                         parent_id: row.parent_id,
@@ -173,6 +198,7 @@ impl TopicStore for PostgresMemory {
                         directory_path: row.directory_path,
                         created_at: row.created_at,
                         updated_at: row.updated_at,
+                        closed_at: row.closed_at,
                     },
                     own,
                 )?;
@@ -211,9 +237,10 @@ impl TopicStore for PostgresMemory {
             .await
             .map_err(failed("session placement"))?;
         write::lock_session(&mut tx, &placement.session).await?;
-        if !write::topic_exists(&mut tx, placement.topic).await? {
-            return Err(not_found(placement.topic));
-        }
+        rows::by_id(&mut tx, placement.topic)
+            .await?
+            .ok_or_else(|| not_found(placement.topic))?
+            .accepts_sessions()?;
         let existing = rows::placement_of(&mut tx, &placement.session).await?;
         let outcome = match placement.admit(existing) {
             PlacementOutcome::Placed(placed) => {
@@ -274,6 +301,18 @@ impl TopicStore for PostgresMemory {
         .collect()
     }
 
+    async fn mark_history(&self, mark: HistoryMark) -> Result<HistoryMark, TopicError> {
+        history::keep(&self.pool, &mark).await
+    }
+
+    async fn unmark_history(&self, session: &SessionId) -> Result<(), TopicError> {
+        history::forget(&self.pool, session).await
+    }
+
+    async fn history(&self) -> Result<Vec<HistoryMark>, TopicError> {
+        history::marks(&self.pool).await
+    }
+
     async fn suggest(&self, suggestion: Suggestion) -> Result<(), TopicError> {
         let mut tx = self
             .pool
@@ -294,7 +333,8 @@ impl TopicStore for PostgresMemory {
     async fn suggestion(&self, session: &SessionId) -> Result<Option<Suggestion>, TopicError> {
         sqlx::query_as!(
             SuggestionRow,
-            "SELECT session_id, name, topic_id FROM rh_session_suggestions WHERE session_id = $1",
+            "SELECT session_id, name, topic_id, parent_id
+               FROM rh_session_suggestions WHERE session_id = $1",
             session.as_str()
         )
         .fetch_optional(&self.pool)
@@ -304,8 +344,23 @@ impl TopicStore for PostgresMemory {
         .transpose()
     }
 
+    async fn suggestions(&self) -> Result<Vec<Suggestion>, TopicError> {
+        bulk::suggestions(&self.pool).await
+    }
+
     async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError> {
         let mut conn = self.pool.acquire().await.map_err(failed("topic page"))?;
         write::page_of(&mut conn, topic).await
+    }
+
+    async fn tombstoned(&self, kind: TopicKind, slug: &Slug) -> Result<bool, TopicError> {
+        sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM rh_topic_tombstones WHERE kind = $1 AND slug = $2) AS "gone!""#,
+            kind.to_string(),
+            slug.as_str()
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(failed("topic tombstone read"))
     }
 }

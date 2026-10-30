@@ -161,6 +161,39 @@ async fn vocabulary_matches_the_recording() -> TestResult {
 }
 
 #[tokio::test]
+async fn an_add_defaults_a_blank_display_to_the_value() -> TestResult {
+    let fresh = fresh_store(None)?;
+    seed_sessions(&fresh.store).await?;
+
+    let omitted = fresh
+        .store
+        .add_tag(session_add(
+            "cli:sess-1",
+            "project:acmekit",
+            None,
+            None,
+            None,
+            None,
+        )?)
+        .await?;
+    expect_text("acmekit", &omitted.display)?;
+
+    let blank = fresh
+        .store
+        .add_tag(session_add(
+            "cli:sess-1",
+            "project:acmekit-tools",
+            Some("   "),
+            None,
+            None,
+            None,
+        )?)
+        .await?;
+    expect_text("acmekit-tools", &blank.display)?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_session_key_does_not_address_a_summary() -> TestResult {
     let fresh = fresh_store(None)?;
     let outcome = fresh

@@ -1,24 +1,27 @@
 mod categorize;
 mod decision;
 mod page;
+mod page_edit;
+mod page_sync;
 mod placement;
 mod rules;
 mod search;
 mod startup;
+mod tree;
 mod values;
 
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
-use wire::gateway::wiki::WikiSlug;
 use wire::session_id::SessionId;
 
 use crate::BoxError;
+use crate::wiki::page::WikiSlug;
 
-pub use categorize::FirstLeaf;
-pub use categorize::Lineage;
-pub use categorize::Verdict;
+pub use categorize::GENERIC_SHARE_PERCENT;
+pub use categorize::generic_keys;
+pub use categorize::mentioned;
 pub use decision::DECISIONS_HEADING;
 pub use decision::Decision;
 pub use decision::DecisionId;
@@ -28,13 +31,17 @@ pub use decision::DecisionText;
 pub use decision::render_decisions;
 pub use decision::topic_decision;
 pub use page::PageSection;
-pub use page::SyncTopicPage;
 pub use page::TopicPage;
 pub use page::TopicPageError;
 pub use page::TopicPageStore;
 pub use page::bound_page;
 pub(crate) use page::root_page;
 pub use page::sync_topic_page;
+pub use page_edit::PageEdit;
+pub use page_edit::edit_topic_page;
+pub use page_sync::SyncTopicPage;
+pub use placement::HistoryMark;
+pub use placement::Lineage;
 pub use placement::PlacedSession;
 pub use placement::Placement;
 pub use placement::PlacementOutcome;
@@ -59,6 +66,10 @@ pub use startup::StartupStore;
 pub use startup::assemble;
 pub use startup::render;
 pub use startup::startup_context;
+pub use tree::MAX_DEPTH;
+pub use tree::TopicTree;
+pub use tree::page_owner;
+pub use tree::root_of;
 pub use values::Alias;
 pub use values::Change;
 pub use values::NewTopic;
@@ -69,9 +80,11 @@ pub use values::Slug;
 pub use values::Topic;
 pub use values::TopicChanges;
 pub use values::TopicId;
+pub use values::TopicKind;
 pub use values::TopicListing;
 pub use values::TopicName;
 pub use values::distinct_aliases;
+pub(crate) use values::fold;
 
 #[derive(Debug, Error)]
 pub enum TopicError {
@@ -89,14 +102,24 @@ pub enum TopicError {
     NotFound { key: String },
     #[error("a topic cannot be its own parent")]
     OwnParent,
-    #[error("topic \"{parent}\" is a sub-topic and cannot have sub-topics")]
-    ParentIsSubtopic { parent: Slug },
-    #[error("a topic with sub-topics cannot become a sub-topic")]
-    HasSubtopics,
+    #[error("Work topics nest only under work topics")]
+    WorkMisplaced,
+    #[error("Types nest only under types")]
+    TypeMisplaced,
+    #[error("An entity sits only under a type")]
+    EntityMisplaced,
+    #[error("An entity needs a type")]
+    EntityWithoutType,
+    #[error("Only topics of the same kind merge")]
+    MergeAcrossKinds,
+    #[error("\"{slug}\" is not a work topic; sessions are filed only under work topics")]
+    NotWork { slug: Slug },
+    #[error("Topics nest at most {max} levels deep")]
+    TooDeep { max: usize },
+    #[error("A topic can't move under its own subtopic")]
+    IntoOwnSubtree,
     #[error("a topic cannot be merged into itself")]
     SelfMerge,
-    #[error("topic \"{into}\" is a sub-topic and cannot take over sub-topics")]
-    MergeWouldNest { into: Slug },
     #[error("a decision must not be empty")]
     EmptyDecision,
     #[error("unknown decision {key}")]
@@ -105,8 +128,6 @@ pub enum TopicError {
     DecisionSuperseded { id: DecisionId },
     #[error("a decision is superseded only by another decision of its topic")]
     ForeignReplacement,
-    #[error("\"{slug}\" is a category topic and cannot be deleted")]
-    CategoryTopic { slug: Slug },
     #[error("topic \"{slug}\" has sub-topics; delete or move them first")]
     SubtopicsRemain { slug: Slug },
     #[error("topic store is unavailable")]
@@ -133,6 +154,13 @@ pub trait TopicStore: Send + Sync {
 
     async fn delete(&self, id: TopicId) -> Result<(), TopicError>;
 
+    async fn set_closed(
+        &self,
+        id: TopicId,
+        closed: Option<DateTime<Utc>>,
+        now: DateTime<Utc>,
+    ) -> Result<Topic, TopicError>;
+
     async fn find(&self, key: &TopicKey) -> Result<Option<Topic>, TopicError>;
 
     async fn list(&self) -> Result<Vec<TopicListing>, TopicError>;
@@ -147,11 +175,21 @@ pub trait TopicStore: Send + Sync {
 
     async fn sessions(&self, topic: TopicId) -> Result<Vec<PlacedSession>, TopicError>;
 
+    async fn mark_history(&self, mark: HistoryMark) -> Result<HistoryMark, TopicError>;
+
+    async fn unmark_history(&self, session: &SessionId) -> Result<(), TopicError>;
+
+    async fn history(&self) -> Result<Vec<HistoryMark>, TopicError>;
+
     async fn suggest(&self, suggestion: Suggestion) -> Result<(), TopicError>;
 
     async fn suggestion(&self, session: &SessionId) -> Result<Option<Suggestion>, TopicError>;
 
+    async fn suggestions(&self) -> Result<Vec<Suggestion>, TopicError>;
+
     async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError>;
+
+    async fn tombstoned(&self, kind: TopicKind, slug: &Slug) -> Result<bool, TopicError>;
 
     async fn search(
         &self,

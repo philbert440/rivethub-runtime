@@ -52,7 +52,47 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
             tx.execute_batch(include_str!("schema/topic_decisions_v17.sql"))
         }),
         SchemaVersion::V18 => in_transaction(conn, to, unbind_topic_pages_on_delete),
+        SchemaVersion::V19 => in_transaction(conn, to, add_done_state),
+        SchemaVersion::V20 => in_transaction(conn, to, add_topic_kinds),
+        SchemaVersion::V21 => in_transaction(conn, to, add_conversation_filing),
+        SchemaVersion::V22 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/tidy_v22.sql"))
+        }),
+        SchemaVersion::V23 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/conversation_node_v23.sql"))
+        }),
+        SchemaVersion::V24 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/session_tombstones_v24.sql"))
+        }),
+        SchemaVersion::V25 => in_transaction(conn, to, archive_tasks),
+        SchemaVersion::V26 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/trash_lookups_v26.sql"))
+        }),
+        SchemaVersion::V27 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/job_priority_v27.sql"))
+        }),
     }
+}
+
+const ARCHIVE_TASKS: &str = "
+ALTER TABLE rh_tasks RENAME TO rh_tasks_archive;
+UPDATE rh_tasks_archive
+   SET status = 'killed',
+       completed_at = COALESCE(completed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+       error = COALESCE(error, 'archived with the tasks refactor')
+ WHERE status IN ('queued', 'running', 'awaiting-input');
+";
+
+fn archive_tasks(tx: &rusqlite::Transaction<'_>) -> rusqlite::Result<()> {
+    let legacy: bool = tx.query_row(
+        "SELECT EXISTS (SELECT 1 FROM pragma_table_info('rh_tasks') WHERE name = 'executor')",
+        [],
+        |row| row.get(0),
+    )?;
+    if legacy {
+        tx.execute_batch(ARCHIVE_TASKS)?;
+    }
+    tx.execute_batch(include_str!("schema/tasks_v25.sql"))
 }
 
 const LEGACY_KIND_REWRITE: &str = "
@@ -137,6 +177,28 @@ fn add_startup_delivery(tx: &Transaction<'_>) -> rusqlite::Result<()> {
         return Ok(());
     }
     tx.execute_batch(include_str!("schema/startup_delivery_v16.sql"))
+}
+
+fn add_done_state(tx: &Transaction<'_>) -> rusqlite::Result<()> {
+    if !column_present(tx, "rh_topics", "closed_at")? {
+        tx.execute_batch(include_str!("schema/topic_closed_v19.sql"))?;
+    }
+    tx.execute_batch(include_str!("schema/session_history_v19.sql"))
+}
+
+fn add_topic_kinds(tx: &Transaction<'_>) -> rusqlite::Result<()> {
+    if !column_present(tx, "rh_topics", "kind")? {
+        tx.execute_batch(include_str!("schema/topic_kinds_v20.sql"))?;
+    }
+    tx.execute_batch(include_str!("schema/entities_v20.sql"))
+}
+
+fn add_conversation_filing(tx: &Transaction<'_>) -> rusqlite::Result<()> {
+    tx.execute_batch(include_str!("schema/conversation_filing_v21.sql"))?;
+    if column_present(tx, "rh_session_suggestions", "parent_id")? {
+        return Ok(());
+    }
+    tx.execute_batch(include_str!("schema/suggestion_parent_v21.sql"))
 }
 
 fn unbind_topic_pages_on_delete(tx: &Transaction<'_>) -> rusqlite::Result<()> {

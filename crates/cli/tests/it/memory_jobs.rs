@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+#[path = "memory_jobs/filing.rs"]
+mod filing;
 #[path = "memory_jobs/support.rs"]
 mod support;
 #[path = "memory_jobs/synthesis.rs"]
@@ -14,9 +16,7 @@ use kernel::queue::{Job, JobKeyMode, JobQueue};
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
-use workers::{
-    EmbedSettings, ProcessRole, Runner, RunnerConfig, SummarySettings, TagSettings, WorkerDeps,
-};
+use workers::{EmbedSettings, ProcessRole, Runner, RunnerConfig, SummarySettings, WorkerDeps};
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn every_role_claim_is_dispatched_by_the_real_runner(pool: PgPool) -> support::TestResult {
@@ -48,16 +48,21 @@ async fn every_role_claim_is_dispatched_by_the_real_runner(pool: PgPool) -> supp
         WorkerDeps {
             targets: memory.clone(),
             summaries: memory.clone(),
-            memory: memory.clone(),
             provider,
             embed: EmbedSettings::standard(),
             summary: SummarySettings::standard("model")?,
-            tags: TagSettings::new("model", false)?,
         },
     )
     .with_memory_jobs(memory.clone())
     .with_unembedded(memory.clone())
     .with_topic_pages(memory.clone(), memory.clone(), memory.clone())
+    .with_session_deletion(memory.clone())
+    .with_session_topics(workers::SessionTopics {
+        store: memory.clone(),
+        filing: memory.clone(),
+        lineage: Arc::new(testkit::wiki_routes::NoParents),
+    })
+    .with_tidy(memory.clone())
     .with_wiki_builder(workers::wiki_builder::WikiBuilderDeps {
         store: memory.clone(),
         consolidate: Some(memory),

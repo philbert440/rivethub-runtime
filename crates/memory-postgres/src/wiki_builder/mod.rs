@@ -1,18 +1,21 @@
 mod consolidate;
 mod gate;
+mod held;
 mod topic_pages;
 mod topics;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use kernel::topics::Slug;
 use kernel::wiki::builder::{
-    ExtractWiki, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiPatch, WikiRouting, WikiStoreError,
-    WikiSummary, WikiWork, WikiWriteError,
+    DeferredWiki, ExtractWiki, HeldEntity, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiRouting,
+    WikiStoreError, WikiSummary, WikiWork, WikiWriteError,
 };
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::WikiSlug;
+use kernel::wiki::page::normalize_slug;
 use sqlx::{PgConnection, Postgres, Transaction};
 use uuid::Uuid;
-use wire::gateway::wiki::WikiSlug;
-use wire::wiki::normalize_slug;
 
 use crate::PostgresMemory;
 
@@ -108,6 +111,39 @@ impl WikiBuilderStore for PostgresMemory {
         .bind(summary_id).bind(WIKI_PIPELINE_VERSION).bind(error).bind(now)
         .execute(&self.pool).await.map_err(query_error)?;
         Ok(())
+    }
+
+    async fn hold_entity(&self, held: HeldEntity) -> Result<Vec<HeldEntity>, WikiStoreError> {
+        held::hold(&self.pool, held).await
+    }
+
+    async fn held_entities(&self, key: &Slug) -> Result<Vec<HeldEntity>, WikiStoreError> {
+        held::candidates(&self.pool, key).await
+    }
+
+    async fn release_entity(&self, held: &[HeldEntity]) -> Result<(), WikiStoreError> {
+        held::release(&self.pool, held).await
+    }
+
+    async fn defer_wiki(&self, deferred: DeferredWiki) -> Result<(), WikiStoreError> {
+        held::defer(&self.pool, deferred).await
+    }
+
+    async fn unsettled_notes(&self, limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
+        held::unsettled(&self.pool, limit).await
+    }
+
+    async fn cite_wiki(
+        &self,
+        summary_id: Uuid,
+        slug: &WikiSlug,
+        now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError> {
+        held::cite(&self.pool, summary_id, slug, now).await
+    }
+
+    async fn uncite_wiki(&self, summary_id: Uuid, slug: &WikiSlug) -> Result<(), WikiStoreError> {
+        held::uncite(&self.pool, summary_id, slug).await
     }
 }
 

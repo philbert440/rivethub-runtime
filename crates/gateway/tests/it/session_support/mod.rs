@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use gateway::tenancy::{Tenancy, UserId};
-use gateway::term::{LaunchCommand, TerminalOptions, TerminalService};
+use gateway::term::{Delegate, LaunchCommand, TerminalOptions, TerminalService};
 use kernel::terminal::{
     PtyInfo, TermSize, TerminalAttachment, TerminalDetails, TerminalId, TerminalMux,
     TerminalMuxError,
@@ -314,6 +314,47 @@ impl Fixture {
         lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
         extra: &[(&str, HarnessId)],
     ) -> Self {
+        Self::with_delegates(harness, registry, lister, extra, BTreeMap::new(), None).await
+    }
+
+    pub(crate) async fn with_delegates(
+        harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
+        registry: gateway::sessions::SessionRegistry,
+        lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
+        extra: &[(&str, HarnessId)],
+        delegates: BTreeMap<String, Delegate>,
+        tasks: Option<Arc<gateway::tasks::Tasks>>,
+    ) -> Self {
+        let ports = Ports {
+            lister,
+            deletion: None,
+            tasks,
+        };
+        Self::build(harness, registry, ports, extra, delegates).await
+    }
+
+    pub(crate) async fn with_deletion(
+        harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
+        registry: gateway::sessions::SessionRegistry,
+        lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
+        extra: &[(&str, HarnessId)],
+        deletion: Arc<dyn kernel::memory::SessionDeletion>,
+    ) -> Self {
+        let ports = Ports {
+            lister,
+            deletion: Some(deletion),
+            tasks: None,
+        };
+        Self::build(harness, registry, ports, extra, BTreeMap::new()).await
+    }
+
+    async fn build(
+        harness: Option<Arc<dyn kernel::harness::HarnessAdapter>>,
+        registry: gateway::sessions::SessionRegistry,
+        ports: Ports,
+        extra: &[(&str, HarnessId)],
+        delegates: BTreeMap<String, Delegate>,
+    ) -> Self {
         let directory = tempfile::tempdir().expect("temporary terminal directory");
         let root = directory.path().to_path_buf();
         let registry = Arc::new(registry);
@@ -339,7 +380,7 @@ impl Fixture {
             mux.clone(),
             registry.clone(),
             TerminalOptions {
-                root,
+                roots: vec![root],
                 default: "echo".into(),
                 commands,
                 max_ptys: 64,
@@ -347,7 +388,11 @@ impl Fixture {
         )
         .await
         .expect("terminal service");
-        let service = terminal(service, harness, lister.clone());
+        let service = terminal(
+            service.with_delegates(delegates),
+            harness,
+            ports.lister.clone(),
+        );
         let tenancy = Tenancy::local(user("owner"))
             .with_token("alice-test-token", user("alice"))
             .expect("token");
@@ -377,10 +422,7 @@ impl Fixture {
         .with_sessions(registry.clone())
         .with_terminal(service.clone())
         .with_uploads(uploads(directory.path()));
-        let gateway = Arc::new(match lister {
-            Some(lister) => gateway.with_session_lister(lister),
-            None => gateway,
-        });
+        let gateway = Arc::new(ports.wire(gateway));
         Self {
             gateway,
             service,
@@ -458,4 +500,27 @@ pub(crate) async fn frame(socket: &mut Socket) -> tokio_tungstenite::tungstenite
         .expect("frame timeout")
         .expect("open stream")
         .expect("frame")
+}
+
+struct Ports {
+    lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
+    deletion: Option<Arc<dyn kernel::memory::SessionDeletion>>,
+    tasks: Option<Arc<gateway::tasks::Tasks>>,
+}
+
+impl Ports {
+    fn wire(self, gateway: gateway::Gateway) -> gateway::Gateway {
+        let gateway = match self.lister {
+            Some(lister) => gateway.with_session_lister(lister),
+            None => gateway,
+        };
+        let gateway = match self.deletion {
+            Some(deletion) => gateway.with_session_deletion(deletion),
+            None => gateway,
+        };
+        match self.tasks {
+            Some(tasks) => gateway.with_tasks(tasks),
+            None => gateway,
+        }
+    }
 }

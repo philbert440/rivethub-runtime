@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM rh_session_tombstones WHERE session_key = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6acdb63d92a49aa17d83b6b522533bc24ef3339000a827ec8de5af7a87d5ce6e"
+}

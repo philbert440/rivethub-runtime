@@ -1,5 +1,7 @@
+mod deletion;
 mod provider;
 mod reader;
+pub use deletion::FakeSessionDeletion;
 pub use provider::{FakeProvider, Script};
 pub use reader::FakeReader;
 mod queue;

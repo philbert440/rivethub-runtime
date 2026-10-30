@@ -6,6 +6,7 @@ use kernel::memory::NewSummary;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummarySource;
 use kernel::memory::SummaryStore;
+use kernel::memory::SummaryWatch as _;
 use kernel::memory::SummaryWrite;
 use memory_postgres::PostgresMemory;
 use serde::Deserialize;
@@ -61,8 +62,8 @@ async fn summary_writes_link_children_and_let_the_embed_trigger_fire(pool: PgPoo
     let pending = memory.pending().await?;
     assert_eq!(pending.len(), 1);
     let head = pending.first().expect("pending conversation");
-    assert_eq!(head.conversation.id, conversation);
-    assert_eq!(head.messages.len(), 2);
+    assert_eq!(head.id, conversation);
+    assert_eq!(head.unsummarized, 2);
     assert_eq!(head.latest_message_at, Some(at("2026-10-10T12:01:00Z")));
 
     let leaf_id = Uuid::new_v4();
@@ -167,19 +168,83 @@ async fn summary_writes_link_children_and_let_the_embed_trigger_fire(pool: PgPoo
     Ok(())
 }
 
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn pending_lists_the_most_recent_activity_first(pool: PgPool) -> TestResult {
+    let memory = PostgresMemory::new(pool.clone());
+    let mut seeded = Vec::new();
+    for (session, latest) in [
+        ("cli:old", "2026-10-11T09:00:00Z"),
+        ("cli:recent", "2026-10-30T17:00:00Z"),
+        ("cli:week", "2026-10-24T12:00:00Z"),
+    ] {
+        let id = seed_conversation(&pool, session, session).await?;
+        seed_message(&pool, id, "earlier", at("2026-10-01T08:00:00Z")).await?;
+        seed_message(&pool, id, "latest", at(latest)).await?;
+        seeded.push((id, at(latest)));
+    }
+    seeded.sort_by_key(|(_, latest)| std::cmp::Reverse(*latest));
+    let pending: Vec<_> = memory
+        .pending()
+        .await?
+        .into_iter()
+        .map(|conversation| {
+            (
+                conversation.id,
+                conversation.latest_message_at,
+                conversation.unsummarized,
+            )
+        })
+        .collect();
+    let expected: Vec<_> = seeded
+        .into_iter()
+        .map(|(id, latest)| (id, Some(latest), 2))
+        .collect();
+    assert_eq!(pending, expected);
+    Ok(())
+}
+
 #[derive(Debug, sqlx::FromRow)]
 struct StoredTitle {
     title: Option<String>,
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn the_first_leaf_titles_only_untitled_conversations(pool: PgPool) -> TestResult {
+async fn a_written_summary_is_announced_to_watchers(pool: PgPool) -> TestResult {
+    sqlx::query("alter table rh_summaries disable trigger user")
+        .execute(&pool)
+        .await?;
+    let memory = PostgresMemory::new(pool.clone());
+    let conversation = seed_conversation(&pool, "cli:announced", "Session cli:announced").await?;
+    let listening = tokio_util::sync::CancellationToken::new();
+    let watch = memory.spawn_summary_watch(listening.clone()).await?;
+    let mut written = memory.written();
+    let leaf = titled_leaf(conversation, "Announced to the plug-ins.");
+    let leaf_id = leaf.id;
+    memory.write_summary(leaf).await?;
+    let heard = tokio::time::timeout(std::time::Duration::from_secs(10), written.recv()).await??;
+    assert_eq!(
+        (
+            heard.id,
+            heard.session_key.as_str(),
+            heard.kind,
+            heard.depth
+        ),
+        (leaf_id, "cli:announced", SummaryKind::Leaf, 0)
+    );
+    listening.cancel();
+    watch.await?;
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_first_leaf_titles_only_conversations_without_a_real_title(pool: PgPool) -> TestResult {
     if !testkit::queue_present(&pool).await? {
         return Ok(());
     }
     let memory = PostgresMemory::new(pool.clone());
     let untitled = seed_untitled(&pool, "cli:untitled").await?;
     let named = seed_conversation(&pool, "cli:named", "Named by the hook").await?;
+    let placeholder = seed_conversation(&pool, "cli:placeholder", "dsh session").await?;
     let first = memory
         .write_summary(titled_leaf(
             untitled,
@@ -202,16 +267,31 @@ async fn the_first_leaf_titles_only_untitled_conversations(pool: PgPool) -> Test
         stored_title(&pool, named).await?.as_deref(),
         Some("Named by the hook")
     );
+    memory
+        .write_summary(titled_leaf(placeholder, "### Port the parser"))
+        .await?;
+    assert_eq!(
+        stored_title(&pool, placeholder).await?.as_deref(),
+        Some("Port the parser")
+    );
     sqlx::query("update rh_conversations set title = null where id = $1")
         .bind(untitled)
         .execute(&pool)
         .await?;
-    assert_eq!(memory.backfill_titles(true).await?, 1);
+    sqlx::query("update rh_conversations set title = 'dsh session' where id = $1")
+        .bind(placeholder)
+        .execute(&pool)
+        .await?;
+    assert_eq!(memory.backfill_titles(true).await?, 2);
     assert_eq!(stored_title(&pool, untitled).await?, None);
-    assert_eq!(memory.backfill_titles(false).await?, 1);
+    assert_eq!(memory.backfill_titles(false).await?, 2);
     assert_eq!(
         stored_title(&pool, untitled).await?.as_deref(),
         Some("Moved the build to the new host.")
+    );
+    assert_eq!(
+        stored_title(&pool, placeholder).await?.as_deref(),
+        Some("Port the parser")
     );
     assert_eq!(memory.backfill_titles(false).await?, 0);
     Ok(())

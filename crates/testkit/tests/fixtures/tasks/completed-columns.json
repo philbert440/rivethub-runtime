@@ -1,4 +1,0 @@
-{
-  "usage":{"inputTokens":1,"outputTokens":2,"totalTokens":3,"turns":1,"wallClockMs":10},
-  "result":{"verdict":"completed","summary":"done","artifacts":[],"usage":{"inputTokens":1,"outputTokens":2,"totalTokens":3,"turns":1,"wallClockMs":10}}
-}

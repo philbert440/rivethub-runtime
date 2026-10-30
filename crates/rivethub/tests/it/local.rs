@@ -22,7 +22,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use kernel::ToolContext;
-use kernel::tasks::TaskStore as _;
 use kernel::tool::Tool;
 use mcp::client::Client;
 use rmcp::transport::StreamableHttpClientTransport;
@@ -294,7 +293,7 @@ async fn sqlite_worker_roles_and_mcp_share_the_process() -> TestResult {
 }
 
 #[tokio::test]
-async fn mcp_delegate_task_runs_to_completion() -> TestResult {
+async fn mcp_delegate_task_refuses_an_agent_without_a_harness() -> TestResult {
     let home = tempfile::tempdir()?;
     let stub = model_stub().await?;
     let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
@@ -333,24 +332,14 @@ async fn delegated(home: &Path, database: &Path, mcp_port: u16) -> TestResult {
     let outcome = delegate_outcome(mcp_port).await;
     stop(started).await?;
     let outcome = outcome?;
-    let (body, meta) = outcome
-        .split_once("\n\n---\n")
-        .ok_or("delegation meta line")?;
-    assert_eq!(body, DELEGATE_TEXT);
-    assert!(meta.starts_with("_Delegation [completed]: "), "{meta}");
-    let id: String = rusqlite::Connection::open(database)?.query_row(
-        "SELECT id FROM rh_tasks ORDER BY created_at DESC LIMIT 1",
+    assert!(outcome.contains("can't be delegated"), "{outcome}");
+    assert!(outcome.contains("opencode or pi preset"), "{outcome}");
+    let rows: i64 = rusqlite::Connection::open(database)?.query_row(
+        "SELECT count(*) FROM rh_tasks",
         [],
         |row| row.get(0),
     )?;
-    let store = memory_sqlite::SqliteStore::open(database)?;
-    let stored = store.load(id.parse()?).await?;
-    assert_eq!(stored.status, wire::task::TaskStatus::Completed);
-    assert_eq!(stored.claimed_by.as_deref(), Some("standalone-node:agent"));
-    assert_eq!(stored.node_affinity.as_deref(), Some("standalone-node"));
-    let result = stored.result.ok_or("task result")?;
-    assert_eq!(result.summary, DELEGATE_TEXT);
-    assert_eq!(result.verdict, wire::task::TaskVerdict::Completed);
+    assert_eq!(rows, 0);
     Ok(())
 }
 
@@ -550,9 +539,27 @@ fn seed_summary(path: &Path) -> TestResult {
     migrate::sqlite(path)?;
     let conn = rusqlite::Connection::open(path)?;
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let conversation = "00000000-0000-4000-8000-0000000000c7";
+    let session = format!("claude-code:{conversation}");
+    let topic = "00000000-0000-4000-8000-0000000000e7";
     conn.execute(
-        "INSERT INTO ros_summaries (id, content, created_at) VALUES (?1, ?2, ?3)",
-        (SUMMARY_ID, "AcmeKit deploys on Fridays.", now),
+        "INSERT INTO ros_conversations (id, session_key, agent, created_at, updated_at)
+         VALUES (?1, ?2, 'rivet', ?3, ?3)",
+        (conversation, &session, &now),
+    )?;
+    conn.execute(
+        "INSERT INTO ros_summaries (id, conversation_id, content, created_at) VALUES (?1, ?2, ?3, ?4)",
+        (SUMMARY_ID, conversation, "AcmeKit deploys on Fridays.", &now),
+    )?;
+    conn.execute(
+        "INSERT INTO rh_topics (id, kind, slug, name, created_at, updated_at)
+         VALUES (?1, 'work', 'acmekit-deploys', 'AcmeKit deploys', ?2, ?2)",
+        (topic, &now),
+    )?;
+    conn.execute(
+        "INSERT INTO rh_session_placements (session_id, topic_id, placed_by, placed_at)
+         VALUES (?1, ?2, 'you', ?3)",
+        (&session, topic, &now),
     )?;
     Ok(())
 }

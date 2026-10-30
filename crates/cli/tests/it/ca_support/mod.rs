@@ -116,7 +116,6 @@ pub(crate) async fn invoke(
         Dispatch::Gateway { .. }
         | Dispatch::Worker { .. }
         | Dispatch::Mcp { .. }
-        | Dispatch::Agent { .. }
         | Dispatch::Local(_) => Err("unexpected service launch".into()),
     }
 }

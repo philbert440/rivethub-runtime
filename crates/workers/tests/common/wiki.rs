@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
+use kernel::topics::Slug;
 use kernel::wiki::builder::{
-    ExtractWiki, WikiBuilderStore, WikiPatch, WikiRouting, WikiStoreError, WikiWork,
+    DeferredWiki, ExtractWiki, HeldEntity, WikiBuilderStore, WikiRouting, WikiStoreError, WikiWork,
 };
+use kernel::wiki::page::WikiPatch;
+use kernel::wiki::page::WikiSlug;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -71,6 +74,39 @@ impl WikiBuilderStore for WikiStore {
             .lock()
             .await
             .insert(summary_id, error.to_owned());
+        Ok(())
+    }
+
+    async fn hold_entity(&self, held: HeldEntity) -> Result<Vec<HeldEntity>, WikiStoreError> {
+        Ok(vec![held])
+    }
+
+    async fn held_entities(&self, _key: &Slug) -> Result<Vec<HeldEntity>, WikiStoreError> {
+        Ok(Vec::new())
+    }
+
+    async fn release_entity(&self, _held: &[HeldEntity]) -> Result<(), WikiStoreError> {
+        Ok(())
+    }
+
+    async fn defer_wiki(&self, _deferred: DeferredWiki) -> Result<(), WikiStoreError> {
+        Ok(())
+    }
+
+    async fn unsettled_notes(&self, _limit: u32) -> Result<Vec<DeferredWiki>, WikiStoreError> {
+        Ok(Vec::new())
+    }
+
+    async fn cite_wiki(
+        &self,
+        _summary_id: Uuid,
+        _slug: &WikiSlug,
+        _now: DateTime<Utc>,
+    ) -> Result<(), WikiStoreError> {
+        Ok(())
+    }
+
+    async fn uncite_wiki(&self, _summary_id: Uuid, _slug: &WikiSlug) -> Result<(), WikiStoreError> {
         Ok(())
     }
 }

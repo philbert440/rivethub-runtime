@@ -173,7 +173,6 @@ async fn a_refused_model_is_not_a_failed_summary() {
         settings: &settings,
         now,
         cancel: &token,
-        topics: None,
     };
     let error = handle_summarize(&env, &payload_of(id, SummaryTrigger::SessionStale))
         .await
@@ -196,7 +195,6 @@ async fn a_refused_model_is_not_a_failed_summary() {
         settings: &settings,
         now,
         cancel: &token,
-        topics: None,
     };
     let error = handle_summarize(&env, &payload_of(id, SummaryTrigger::SessionIdle))
         .await
@@ -261,7 +259,6 @@ async fn summarize_against(provider: &StatusChat) -> WorkerError {
         settings: &settings,
         now,
         cancel: &token,
-        topics: None,
     };
     handle_summarize(&env, &payload_of(id, SummaryTrigger::Explicit))
         .await

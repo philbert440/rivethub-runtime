@@ -37,11 +37,15 @@ pub(crate) async fn resolve(gateway: &Gateway, id: String) -> Result<AgentLaunch
         .await
         .map_err(|error| AgentError::Directory(std::io::Error::other(error)))?
         .map_err(directory_failure)?;
+    let model = match preset.launch_model() {
+        Some(model) => model.into_owned(),
+        None => String::new(),
+    };
     Ok(AgentLaunch {
         name: preset.name,
         directory,
         harness: preset.harness_id,
-        model: preset.model,
+        model,
         effort: preset.effort,
     })
 }

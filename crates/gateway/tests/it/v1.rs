@@ -14,6 +14,3 @@ mod support;
 
 #[path = "v1/runner.rs"]
 mod runner;
-
-#[path = "v1/chat.rs"]
-mod chat;

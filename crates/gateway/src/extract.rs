@@ -15,15 +15,17 @@ use kernel::memory::TagLiteral;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::error::Category;
-use serde_json::value::RawValue;
 use wire::JsonObject;
-use wire::events::AgentEvent;
 use wire::gateway::memory::BrowseWindow;
 use wire::gateway::memory::BrowseWindowError;
 use wire::gateway::memory::MemoryScope;
 use wire::gateway::memory::TagEntityType;
 use wire::gateway::memory::TagState;
 use wire::message::Role;
+
+mod batch;
+
+pub(crate) use batch::decode_event_batch;
 
 use crate::error::ApiError;
 use crate::error::body_must_be_object;
@@ -385,30 +387,4 @@ impl StateFilter {
     pub fn into_vec(self) -> Vec<TagState> {
         self.0
     }
-}
-
-const BATCH_LIMIT: usize = 100;
-const BATCH_SHAPE: &str = "expected an array of 1-100 events";
-
-pub(crate) fn decode_event_batch(bytes: &[u8]) -> Result<Vec<AgentEvent>, ApiError> {
-    let elements: Vec<&RawValue> = match serde_json::from_slice(bytes) {
-        Ok(elements) => elements,
-        Err(error) if error.classify() == Category::Data => {
-            return Err(ApiError::BadRequest(BATCH_SHAPE.to_owned()));
-        }
-        Err(_) => return Err(invalid_json()),
-    };
-    if elements.is_empty() || elements.len() > BATCH_LIMIT {
-        return Err(ApiError::BadRequest(BATCH_SHAPE.to_owned()));
-    }
-    elements
-        .into_iter()
-        .enumerate()
-        .map(|(index, element)| {
-            serde_json::from_str::<AgentEvent>(element.get()).map_err(|error| {
-                tracing::debug!("event batch element {index}: {error}");
-                ApiError::Unprocessable(format!("event[{index}] is not a valid v1 AgentEvent"))
-            })
-        })
-        .collect()
 }

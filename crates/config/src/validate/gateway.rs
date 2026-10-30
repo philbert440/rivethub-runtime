@@ -45,6 +45,7 @@ pub(super) fn validate(out: &mut ValidationResult, section: &GatewaySection) {
         }
     }
     allowed_harnesses(out, section);
+    terminal_roots(out, section);
     exposed_terminal_gate(section, out);
     certificate_authority(out, section.certificate_authority.as_ref());
 }
@@ -71,6 +72,22 @@ fn allowed_harnesses(out: &mut ValidationResult, section: &GatewaySection) {
         out.error(
             "gateway.allowed_harnesses",
             "\"gateway.allowed_harnesses\" must be a list of non-empty harness ids (omit the key to allow all)",
+        );
+    }
+}
+
+fn terminal_roots(out: &mut ValidationResult, section: &GatewaySection) {
+    let Some(roots) = section
+        .terminal
+        .as_ref()
+        .and_then(|terminal| terminal.roots.as_ref())
+    else {
+        return;
+    };
+    if roots.is_empty() || roots.iter().any(|root| !root.is_absolute()) {
+        out.error(
+            "gateway.terminal.roots",
+            "\"gateway.terminal.roots\" must be a non-empty list of absolute paths (omit the key for the defaults)",
         );
     }
 }

@@ -178,12 +178,10 @@ async fn service_roots_keep_their_config_flag() {
         .expect("worker dispatch");
     assert_eq!(role, workers::ProcessRole::Summarizer);
     assert_eq!(got, path);
-    let agent =
+    assert!(
         Cli::parse_args(["rh", "agent", "--config", path.to_str().expect("path")].map(Into::into))
-            .expect("agent");
-    let got = require_agent(cli::dispatch(agent, &env, &CancellationToken::new()).await)
-        .expect("agent dispatch");
-    assert_eq!(got, path);
+            .is_err()
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -412,51 +410,6 @@ async fn configured_roots_are_spawned_with_the_resolved_config() {
         arguments(&ServiceRoot::Mcp),
         argv(&["mcp", "--config"], &config_file)
     );
-    assert!(seen.iter().all(|(root, _)| *root != ServiceRoot::Agent));
-}
-
-#[tokio::test(start_paused = true)]
-async fn a_postgres_config_spawns_the_agent_and_not_worker_roles() {
-    let home = home();
-    config(
-        &home,
-        "memory:\n  backend: postgres\n  postgres:\n    connection_string: postgres://127.0.0.1:1/rivethub\n",
-    );
-    let program = write_script(home.path(), "exit", "exit 0\n").expect("script");
-    let shutdown = CancellationToken::new();
-    let config_file = config_path(&home);
-    let (task, mut events) = drive(&home, &program, None, &shutdown);
-    let mut seen = Vec::new();
-    while seen.len() < 2 {
-        match next_event(&mut events).await.expect("event") {
-            SupervisionEvent::Spawned { root, arguments } => {
-                if !seen
-                    .iter()
-                    .any(|(found, _): &(ServiceRoot, _)| found == &root)
-                {
-                    seen.push((root, arguments));
-                }
-            }
-            SupervisionEvent::Waiting { .. } | SupervisionEvent::Stopped { .. } => {}
-        }
-    }
-    shutdown.cancel();
-    task.await.expect("join").expect("shutdown");
-    let arguments = |root: &ServiceRoot| -> &[OsString] {
-        seen.iter()
-            .find(|(found, _)| found == root)
-            .map(|(_, arguments)| arguments.as_slice())
-            .expect("root")
-    };
-    assert_eq!(arguments(&ServiceRoot::Gateway), gateway_args(&config_file));
-    assert_eq!(
-        arguments(&ServiceRoot::Agent),
-        argv(&["agent", "--config"], &config_file)
-    );
-    assert!(
-        seen.iter()
-            .all(|(root, _)| !matches!(root, ServiceRoot::Worker(_)))
-    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -587,28 +540,6 @@ fn require_gateway(dispatch: Dispatch) -> Result<PathBuf, String> {
             config,
         } => Err(format!("worker {role} check={check} config={config:?}")),
         Dispatch::Mcp { check, config } => Err(format!("mcp check={check} config={config:?}")),
-        Dispatch::Agent { check, config } => Err(format!("agent check={check} config={config:?}")),
-        Dispatch::Local(_) => Err("local".to_owned()),
-        Dispatch::Complete(report) => Err(format!("{}{}", report.stdout, report.stderr)),
-    }
-}
-
-fn require_agent(dispatch: Dispatch) -> Result<PathBuf, String> {
-    match dispatch {
-        Dispatch::Agent {
-            check: false,
-            config: Some(path),
-        } => Ok(path),
-        Dispatch::Agent { check, config } => Err(format!("agent check={check} config={config:?}")),
-        Dispatch::Gateway { check, config } => {
-            Err(format!("gateway check={check} config={config:?}"))
-        }
-        Dispatch::Worker {
-            role,
-            check,
-            config,
-        } => Err(format!("worker {role} check={check} config={config:?}")),
-        Dispatch::Mcp { check, config } => Err(format!("mcp check={check} config={config:?}")),
         Dispatch::Local(_) => Err("local".to_owned()),
         Dispatch::Complete(report) => Err(format!("{}{}", report.stdout, report.stderr)),
     }
@@ -630,7 +561,6 @@ fn require_worker(dispatch: Dispatch) -> Result<(workers::ProcessRole, PathBuf),
             Err(format!("gateway check={check} config={config:?}"))
         }
         Dispatch::Mcp { check, config } => Err(format!("mcp check={check} config={config:?}")),
-        Dispatch::Agent { check, config } => Err(format!("agent check={check} config={config:?}")),
         Dispatch::Local(_) => Err("local".to_owned()),
         Dispatch::Complete(report) => Err(format!("{}{}", report.stdout, report.stderr)),
     }

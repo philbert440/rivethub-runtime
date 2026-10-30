@@ -9,9 +9,9 @@ use axum::response::IntoResponse;
 use axum::response::Response;
 use chrono::SecondsFormat;
 use kernel::wiki::WikiFilter;
+use kernel::wiki::page::WikiSlug;
 use wire::gateway::wiki::WikiMissBody;
 use wire::gateway::wiki::WikiPageResponse;
-use wire::gateway::wiki::WikiSlug;
 use wire::gateway::wiki::WikiTopicList;
 
 use super::WikiError;

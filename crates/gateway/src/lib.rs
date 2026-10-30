@@ -1,11 +1,14 @@
+mod attach;
 pub mod auth;
 pub mod error;
 pub mod extract;
 mod history;
 pub mod mesh;
+pub mod plugins;
 pub mod routes;
 pub mod server;
 pub mod sessions;
+pub mod tasks;
 pub mod tenancy;
 pub mod term;
 pub mod tls;
@@ -19,7 +22,7 @@ use std::time::Duration;
 use axum::Router;
 use axum::middleware;
 use axum::routing;
-use kernel::agent::TurnRunner;
+
 use kernel::memory::MemoryStore;
 use tower::ServiceBuilder;
 use tower::util::MapRequestLayer;
@@ -228,7 +231,6 @@ fn configured_files_root(root: Option<PathBuf>) -> Option<PathBuf> {
 )]
 pub struct Gateway {
     store: Arc<dyn MemoryStore>,
-    turn_runner: Option<Arc<dyn TurnRunner>>,
     settings: Settings,
     embed_provider: bool,
     policy: auth::OriginPolicy,
@@ -249,12 +251,18 @@ pub struct Gateway {
     mesh_cache: routes::MeshCache,
     audio: Option<AudioBridge>,
     voice: VoiceProxy,
-    tasks: Option<Arc<routes::tasks::TasksApi>>,
+    tasks: Option<Arc<tasks::Tasks>>,
     providers: Vec<kernel::model::ProviderHealth>,
     memory_export: Option<Arc<dyn kernel::memory::MemoryExport>>,
     topics: Option<Arc<dyn kernel::topics::TopicStore>>,
+    filing: Option<Arc<dyn kernel::filing::FilingStore>>,
     decisions: Option<Arc<dyn kernel::topics::DecisionStore>>,
     startup: Option<StartupMemory>,
+    tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
+    upkeep: Option<Arc<dyn kernel::tidy::UpkeepStore>>,
+    plugins: Option<Arc<plugins::PluginHost>>,
+    summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
+    deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
 }
 
 struct StartupMemory {
@@ -273,7 +281,6 @@ impl Gateway {
         let hub_state = routes::hub_state::open(&settings);
         Self {
             store,
-            turn_runner: None,
             settings,
             embed_provider: false,
             policy,
@@ -300,8 +307,14 @@ impl Gateway {
             providers: Vec::new(),
             memory_export: None,
             topics: None,
+            filing: None,
             decisions: None,
             startup: None,
+            tidy: None,
+            upkeep: None,
+            plugins: None,
+            summaries: None,
+            deletions: None,
         }
     }
 
@@ -331,71 +344,14 @@ impl Gateway {
     }
 
     #[must_use]
-    pub fn with_topics(mut self, store: Arc<dyn kernel::topics::TopicStore>) -> Self {
-        self.topics = Some(store);
-        self
-    }
-
-    pub(crate) fn topics(&self) -> Result<&Arc<dyn kernel::topics::TopicStore>, error::ApiError> {
-        self.topics
-            .as_ref()
-            .ok_or_else(|| error::ApiError::Unavailable("topic store unavailable".into()))
-    }
-
-    #[must_use]
-    pub fn with_decisions(mut self, store: Arc<dyn kernel::topics::DecisionStore>) -> Self {
-        self.decisions = Some(store);
-        self
-    }
-
-    pub(crate) fn decisions(
-        &self,
-    ) -> Result<&Arc<dyn kernel::topics::DecisionStore>, error::ApiError> {
-        self.decisions
-            .as_ref()
-            .ok_or_else(|| error::ApiError::Unavailable("decision store unavailable".into()))
-    }
-
-    #[must_use]
-    pub fn with_startup_memory(
-        mut self,
-        pages: Arc<dyn kernel::topics::TopicPageStore>,
-        kept: Arc<dyn kernel::topics::StartupStore>,
-    ) -> Self {
-        self.startup = Some(StartupMemory { pages, kept });
-        self
-    }
-
-    pub(crate) fn startup_memory(
-        &self,
-    ) -> Option<(
-        &dyn kernel::topics::TopicPageStore,
-        &dyn kernel::topics::StartupStore,
-    )> {
-        self.startup
-            .as_ref()
-            .map(|startup| (startup.pages.as_ref(), startup.kept.as_ref()))
-    }
-
-    pub(crate) fn memory_export(&self) -> Option<&Arc<dyn kernel::memory::MemoryExport>> {
-        self.memory_export.as_ref()
-    }
-
-    #[must_use]
     pub fn with_provider_health(mut self, providers: Vec<kernel::model::ProviderHealth>) -> Self {
         self.providers = providers;
         self
     }
 
     #[must_use]
-    pub fn with_tasks(mut self, api: Arc<routes::tasks::TasksApi>) -> Self {
-        self.tasks = Some(api);
-        self
-    }
-
-    #[must_use]
-    pub fn with_turn_runner(mut self, runner: Arc<dyn TurnRunner>) -> Self {
-        self.turn_runner = Some(runner);
+    pub fn with_tasks(mut self, tasks: Arc<tasks::Tasks>) -> Self {
+        self.tasks = Some(tasks);
         self
     }
 
@@ -459,6 +415,9 @@ impl Gateway {
     #[must_use]
     pub fn with_terminal(mut self, terminal: Arc<term::TerminalService>) -> Self {
         self.sessions = terminal.registry.clone();
+        if let Some(host) = &self.plugins {
+            terminal.attach_plugins(Arc::clone(host));
+        }
         self.terminal = Some(terminal);
         self
     }
@@ -489,8 +448,13 @@ impl Gateway {
         self
     }
 
-    pub(crate) fn tasks(&self) -> Option<&Arc<routes::tasks::TasksApi>> {
+    pub(crate) fn tasks(&self) -> Option<&Arc<tasks::Tasks>> {
         self.tasks.as_ref()
+    }
+
+    #[must_use]
+    pub fn has_tasks(&self) -> bool {
+        self.tasks.is_some()
     }
 
     pub(crate) fn uploads(&self) -> Option<&uploads::UploadService> {
@@ -525,6 +489,9 @@ impl Gateway {
     }
 
     pub async fn close(&self) {
+        if let Some(host) = &self.plugins {
+            host.close().await;
+        }
         if let Some(audio) = &self.audio {
             audio.shutdown().await;
         }
@@ -607,8 +574,8 @@ impl Gateway {
             .layer(MapRequestLayer::new(routes::rewrite_request))
             .service(mounted);
         let mut served = Router::new();
-        if let Some(api) = &self.tasks {
-            served = served.merge(routes::tasks::router(Arc::clone(api)));
+        if self.tasks.is_some() {
+            served = served.merge(routes::tasks::router().with_state(Arc::clone(self)));
         }
         served
             .fallback_service(rewritten)

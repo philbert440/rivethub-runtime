@@ -22,17 +22,6 @@ pub(crate) struct Listener {
 }
 
 impl Listener {
-    pub(crate) async fn connect(
-        pool: PgPool,
-        channels: &'static [&'static str],
-        name: &'static str,
-        cancel: CancellationToken,
-    ) -> Result<Self, sqlx::Error> {
-        let mut listener = Self::pending(pool, channels, name, cancel);
-        listener.inner = Some(open(&listener.pool, listener.channels).await?);
-        Ok(listener)
-    }
-
     pub(crate) async fn connect_resilient(
         pool: PgPool,
         channels: &'static [&'static str],

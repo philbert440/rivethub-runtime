@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT fingerprint FROM rh_tidy_proposals WHERE state IN ('pending', 'rejected')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fingerprint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_tidy_proposals",
+            "name": "fingerprint"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5e1b6488662f11e6e2a811afb5ee4d26e18320ba536c919caf70a6d577fc8d0c"
+}

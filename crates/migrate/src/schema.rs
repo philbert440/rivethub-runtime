@@ -10,7 +10,7 @@ use crate::error::Error;
 use crate::upgrade;
 use crate::version::SchemaVersion;
 
-const CURRENT: SchemaVersion = SchemaVersion::V18;
+const CURRENT: SchemaVersion = SchemaVersion::V27;
 
 const SCHEMA_SQL: &str = include_str!("schema/schema_v7.sql");
 
@@ -181,6 +181,30 @@ fn create_fresh(conn: &mut Connection) -> Result<(), Error> {
     tx.execute_batch(include_str!("schema/topic_decisions_v17.sql"))
         .map_err(Error::SqliteCreate)?;
     tx.execute_batch(include_str!("schema/topic_page_unbind_v18.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/topic_closed_v19.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/session_history_v19.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/topic_kinds_v20.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/entities_v20.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/conversation_filing_v21.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/suggestion_parent_v21.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/tidy_v22.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/conversation_node_v23.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/session_tombstones_v24.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/tasks_v25.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/trash_lookups_v26.sql"))
+        .map_err(Error::SqliteCreate)?;
+    tx.execute_batch(include_str!("schema/job_priority_v27.sql"))
         .map_err(Error::SqliteCreate)?;
     apply_tail_indexes(&tx)?;
     stamp_current(&tx)?;

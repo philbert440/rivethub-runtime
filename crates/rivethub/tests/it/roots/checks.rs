@@ -112,69 +112,6 @@ async fn mcp_check_rejects_a_relative_socket_and_a_missing_bearer() -> TestResul
 }
 
 #[tokio::test]
-async fn agent_check_accepts_an_unreachable_postgres_url() -> TestResult {
-    let home = tempfile::tempdir()?;
-    write_state(
-        home.path(),
-        &provider_config(home.path(), DEAD_POSTGRES, ""),
-    )?;
-    let output = run_rh(home.path(), &["agent", "--check"]).await?;
-    let text = stderr(&output);
-    assert!(output.status.success(), "{text}");
-    assert!(text.contains("agent configuration valid"), "{text}");
-    Ok(())
-}
-
-#[tokio::test]
-async fn agent_check_rejects_disabled_tasks_and_partial_pricing() -> TestResult {
-    let home = tempfile::tempdir()?;
-    write_state(
-        home.path(),
-        &provider_config(home.path(), DEAD_POSTGRES, "tasks:\n  enabled: false\n"),
-    )?;
-    let disabled = run_rh(home.path(), &["agent", "--check"]).await?;
-    let text = stderr(&disabled);
-    assert_eq!(disabled.status.code(), Some(1), "{text}");
-    assert!(text.contains("tasks are disabled"), "{text}");
-
-    write_state(
-        home.path(),
-        &provider_config(
-            home.path(),
-            DEAD_POSTGRES,
-            "tasks:\n  pricing:\n    m:\n      input_per_mtok: 1.5\n",
-        ),
-    )?;
-    let pricing = run_rh(home.path(), &["agent", "--check"]).await?;
-    let text = stderr(&pricing);
-    assert_eq!(pricing.status.code(), Some(1), "{text}");
-    assert!(
-        text.contains("pricing for m needs input_per_mtok and output_per_mtok"),
-        "{text}"
-    );
-    Ok(())
-}
-
-#[tokio::test]
-async fn agent_refuses_a_symlinked_preset_file_without_connecting() -> TestResult {
-    let home = tempfile::tempdir()?;
-    write_state(
-        home.path(),
-        &provider_config(home.path(), DEAD_POSTGRES, ""),
-    )?;
-    let state = home.path().join(".rivethub");
-    std::os::unix::fs::symlink(state.join("config.yaml"), state.join("agents.json"))?;
-    let output = run_rh(home.path(), &["agent"]).await?;
-    let text = stderr(&output);
-    assert_eq!(output.status.code(), Some(1), "{text}");
-    assert!(
-        text.contains("agents.json escapes the state directory"),
-        "{text}"
-    );
-    Ok(())
-}
-
-#[tokio::test]
 async fn gateway_check_succeeds_without_a_certificate_authority() -> TestResult {
     let home = tempfile::tempdir()?;
     write_state(

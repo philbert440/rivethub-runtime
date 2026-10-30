@@ -1,5 +1,6 @@
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::spoken_title;
 use rusqlite::OptionalExtension as _;
 use rusqlite::Transaction;
 use rusqlite::params;
@@ -40,6 +41,7 @@ struct PreparedBatch {
     title: Option<String>,
     settings: Option<String>,
     task_id: Option<String>,
+    node: Option<String>,
     finalize: bool,
     created_at: Stamp,
     updated_at: Stamp,
@@ -65,9 +67,10 @@ impl SqliteStore {
     pub async fn capture(
         &self,
         batch: CaptureBatchRequest,
+        node: Option<&str>,
         now: DateTime<Utc>,
     ) -> Result<CaptureResult, SqliteError> {
-        let prepared = PreparedBatch::new(batch)?;
+        let prepared = PreparedBatch::new(batch, node)?;
         let owner = self.owner.clone();
         let embed = self.embed_armed();
         let result = self
@@ -75,6 +78,13 @@ impl SqliteStore {
                 let tx = conn
                     .transaction()
                     .map_err(SqliteError::query("capture begin"))?;
+                if !crate::deletion::admits(&tx, &prepared.key.session_key, prepared.stamps())? {
+                    tracing::debug!(
+                        session_key = %prepared.key.session_key,
+                        "capture dropped for a deleted session"
+                    );
+                    return prepared.dropped();
+                }
                 let result = prepared.write(&tx, owner.as_deref(), now, embed)?;
                 tx.commit().map_err(SqliteError::query("capture commit"))?;
                 Ok(result)
@@ -88,7 +98,7 @@ impl SqliteStore {
 }
 
 impl PreparedBatch {
-    fn new(batch: CaptureBatchRequest) -> Result<Self, SqliteError> {
+    fn new(batch: CaptureBatchRequest, node: Option<&str>) -> Result<Self, SqliteError> {
         let created_at = crate::time::Stamp::from(batch.created_at);
         let updated_at = crate::time::Stamp::from(batch.updated_at);
         let settings = batch
@@ -107,13 +117,37 @@ impl PreparedBatch {
                 agent: batch.agent,
             },
             channel: batch.channel,
-            title: batch.title,
+            title: batch
+                .title
+                .as_deref()
+                .and_then(spoken_title)
+                .map(str::to_owned),
             settings,
             task_id: batch.task_id,
+            node: node.map(str::to_owned),
             finalize: batch.finalize == Some(true),
             created_at,
             updated_at,
             messages,
+        })
+    }
+
+    fn stamps(&self) -> Vec<Option<DateTime<Utc>>> {
+        self.messages
+            .iter()
+            .map(|message| match message.created_at {
+                Stamp::Source(at) => Some(at),
+                Stamp::CaptureTime => None,
+            })
+            .collect()
+    }
+
+    fn dropped(&self) -> Result<CaptureResult, SqliteError> {
+        Ok(CaptureResult {
+            ok: true,
+            conversation_id: String::new(),
+            inserted: 0,
+            skipped: u64::try_from(self.messages.len()).map_err(SqliteError::Count)?,
         })
     }
 
@@ -141,6 +175,14 @@ impl PreparedBatch {
             }
             .insert(tx)?,
         };
+        if let Some(node) = &self.node {
+            tx.execute(
+                "INSERT INTO rh_conversation_nodes (conversation_id, node) VALUES (?1, ?2)
+                 ON CONFLICT (conversation_id) DO NOTHING",
+                params![conversation.id, node],
+            )
+            .map_err(SqliteError::query("conversation node"))?;
+        }
         let channel = match &self.channel {
             Some(channel) => channel,
             None => &conversation.channel,

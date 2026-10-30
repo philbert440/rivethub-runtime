@@ -56,6 +56,8 @@ fn expected_events(input: JsonObject) -> Vec<SessionEvent> {
             tool_call_id: "fake-tool-1".to_owned(),
             status: ToolCallStatus::Completed,
             output: Some("build ok".to_owned()),
+            title: None,
+            input: None,
         }),
         SessionEvent::Plan(vec![PlanEntry {
             content: "measure the thing".to_owned(),
@@ -606,6 +608,32 @@ fn the_spec_model_and_effort_are_applied_at_new_session() {
                     text: "thought_level=low".to_owned(),
                 },
             ]
+        );
+    });
+}
+
+#[test]
+fn an_effort_is_left_to_a_harness_that_offers_no_effort_switch() {
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &["--effort-option", "absent"]));
+    run(async {
+        let cwd = tempdir().expect("cwd");
+        let session = adapter
+            .new_session(SessionSpec {
+                session: SessionId::new(HarnessId::Opencode, SESSION),
+                harness: HarnessId::Opencode,
+                model: Some("grok-5".to_owned()),
+                effort: Some(ThinkingLevel::High),
+                working_dir: Some(cwd.path().to_path_buf()),
+                startup_context: None,
+            })
+            .await
+            .expect("new session without an effort switch");
+        let mut events = adapter.events(&session).await.expect("events");
+        assert_eq!(
+            events.recv().await.expect("config event"),
+            SessionEvent::AgentMessageChunk {
+                text: "model=grok-5".to_owned(),
+            }
         );
     });
 }

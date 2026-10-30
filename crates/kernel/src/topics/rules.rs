@@ -4,28 +4,44 @@ use chrono::DateTime;
 use chrono::Utc;
 
 use super::Alias;
+use super::MAX_DEPTH;
 use super::Redirect;
 use super::Topic;
 use super::TopicError;
 use super::TopicId;
+use super::TopicKind;
+use super::TopicTree;
 
-pub fn check_parent(
-    child: TopicId,
-    child_has_subtopics: bool,
-    parent: &Topic,
-) -> Result<(), TopicError> {
-    if parent.id == child {
+pub fn check_parent(child: &Topic, parent: &Topic, tree: &TopicTree) -> Result<(), TopicError> {
+    if parent.id == child.id {
         return Err(TopicError::OwnParent);
     }
-    if parent.parent.is_some() {
-        return Err(TopicError::ParentIsSubtopic {
-            parent: parent.slug.clone(),
-        });
+    if !nests_under(child.kind, parent.kind) {
+        return Err(misplaced(child.kind));
     }
-    if child_has_subtopics {
-        return Err(TopicError::HasSubtopics);
+    if tree.within(parent.id, child.id) {
+        return Err(TopicError::IntoOwnSubtree);
+    }
+    if child.kind != TopicKind::Entity && tree.depth(parent.id) + tree.height(child.id) > MAX_DEPTH
+    {
+        return Err(TopicError::TooDeep { max: MAX_DEPTH });
     }
     Ok(())
+}
+
+const fn misplaced(kind: TopicKind) -> TopicError {
+    match kind {
+        TopicKind::Work => TopicError::WorkMisplaced,
+        TopicKind::Type => TopicError::TypeMisplaced,
+        TopicKind::Entity => TopicError::EntityMisplaced,
+    }
+}
+
+const fn nests_under(child: TopicKind, parent: TopicKind) -> bool {
+    matches!(
+        (child, parent),
+        (TopicKind::Work, TopicKind::Work) | (TopicKind::Type | TopicKind::Entity, TopicKind::Type)
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,24 +55,31 @@ pub struct MergePlan {
 }
 
 impl MergePlan {
-    pub fn new(source: &Topic, into: &Topic, subtopics: &[TopicId]) -> Result<Self, TopicError> {
+    pub fn new(source: &Topic, into: &Topic, tree: &TopicTree) -> Result<Self, TopicError> {
         if source.id == into.id {
             return Err(TopicError::SelfMerge);
         }
-        let into_parent = if into.parent == Some(source.id) {
-            source.parent
-        } else {
-            into.parent
-        };
-        let moved: Vec<TopicId> = subtopics
-            .iter()
-            .copied()
+        if source.kind != into.kind {
+            return Err(TopicError::MergeAcrossKinds);
+        }
+        let direct = into.parent == Some(source.id);
+        if !direct && tree.within(into.id, source.id) {
+            return Err(TopicError::IntoOwnSubtree);
+        }
+        let into_parent = if direct { source.parent } else { into.parent };
+        let moved: Vec<TopicId> = tree
+            .children(source.id)
+            .into_iter()
             .filter(|subtopic| *subtopic != into.id)
             .collect();
-        if !moved.is_empty() && into_parent.is_some() {
-            return Err(TopicError::MergeWouldNest {
-                into: into.slug.clone(),
-            });
+        let after = moved.iter().fold(
+            tree.clone().without(source.id).moved(into.id, into_parent),
+            |after, subtopic| after.moved(*subtopic, Some(into.id)),
+        );
+        if into.kind != TopicKind::Entity
+            && after.depth(into.id) + after.height(into.id) > MAX_DEPTH + 1
+        {
+            return Err(TopicError::TooDeep { max: MAX_DEPTH });
         }
         let taken: BTreeSet<String> = into.aliases.iter().map(Alias::key).collect();
         let aliases = source

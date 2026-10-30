@@ -335,8 +335,14 @@ fn crontab_and_task_lists_follow_the_roles() {
         Some("unchunked-sweep")
     );
     let summarizer = PostgresQueue::crontab(WorkerRole::Summarizer);
-    assert_eq!(summarizer.len(), 4);
-    assert_eq!(PostgresQueue::crontab(WorkerRole::Categorizer).len(), 0);
+    assert_eq!(summarizer.len(), 5);
+    assert_eq!(
+        PostgresQueue::crontab(WorkerRole::Categorizer)
+            .iter()
+            .map(|entry| (entry.identifier.as_str(), entry.schedule.as_str()))
+            .collect::<Vec<_>>(),
+        [("tidy-sweep", "0 * * * *")]
+    );
 
     assert_eq!(
         PostgresQueue::task_list(WorkerRole::Embedder),
@@ -356,4 +362,10 @@ fn crontab_and_task_lists_follow_the_roles() {
 async fn a_pending_sweep_is_queued_once(pool: PgPool) -> TestResult {
     common::install_graphile(&pool).await?;
     testkit::sweeps::a_pending_sweep_is_queued_once(&queue(&pool).await?).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_sweeps_run_before_an_older_backlog(pool: PgPool) -> TestResult {
+    common::install_graphile(&pool).await?;
+    testkit::sweeps::the_sweeps_run_before_an_older_backlog(&queue(&pool).await?).await
 }

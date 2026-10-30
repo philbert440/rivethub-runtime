@@ -12,7 +12,7 @@ pub mod validate;
 
 pub use enums::{
     DeploymentTarget, Effort, HarnessId, Isolation, LogLevel, MemoryBackend, ModelsMode,
-    ThinkingLevel, VerifierExecutor,
+    ThinkingLevel,
 };
 pub use environment::{
     AudioSwitch, CONFIG_PATH_VARIABLE, DEFAULT_UPLOAD_MAX_BYTES, DEFAULT_UPLOAD_TTL_MS,

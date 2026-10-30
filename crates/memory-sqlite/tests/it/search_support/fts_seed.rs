@@ -5,10 +5,10 @@ pub(crate) async fn seed_fts() -> TestResult<Fresh> {
     let now = instant(common::RECORDED_START)?;
     let deployed = fresh
         .store
-        .capture(deploy_batch("cli:sess-1", "rivet")?, now)
+        .capture(deploy_batch("cli:sess-1", "rivet")?, None, now)
         .await?;
-    let helper = fresh.store.capture(helper_batch()?, now).await?;
-    fresh.store.capture(rollback_batch()?, now).await?;
+    let helper = fresh.store.capture(helper_batch()?, None, now).await?;
+    fresh.store.capture(rollback_batch()?, None, now).await?;
     let sess1 = deployed.conversation_id;
     let sess2 = helper.conversation_id;
     fresh
@@ -129,7 +129,7 @@ fn insert_tag(
 
 pub(crate) async fn seed_tag_pool(store: &SqliteStore, now: DateTime<Utc>) -> TestResult {
     let tagged = store
-        .capture(one_message("tagged", TAGGED_NOTE), now)
+        .capture(one_message("tagged", TAGGED_NOTE), None, now)
         .await?;
     store
         .with_conn({
@@ -148,7 +148,11 @@ pub(crate) async fn seed_tag_pool(store: &SqliteStore, now: DateTime<Utc>) -> Te
         .await?;
     for index in 0..20 {
         store
-            .capture(one_message(&format!("short-{index}"), "rollback"), now)
+            .capture(
+                one_message(&format!("short-{index}"), "rollback"),
+                None,
+                now,
+            )
             .await?;
     }
     for index in 0..20 {
@@ -157,7 +161,7 @@ pub(crate) async fn seed_tag_pool(store: &SqliteStore, now: DateTime<Utc>) -> Te
             .collect::<Vec<_>>()
             .join(" ");
         store
-            .capture(one_message(&format!("pad-{index}"), &pad), now)
+            .capture(one_message(&format!("pad-{index}"), &pad), None, now)
             .await?;
     }
     Ok(())

@@ -71,12 +71,14 @@ fn session_of(event: &HarnessEvent) -> Option<&SessionId> {
         HarnessEvent::AssistantDelta { .. }
         | HarnessEvent::ReasoningDelta { .. }
         | HarnessEvent::ToolUse { .. }
+        | HarnessEvent::ToolUpdate { .. }
         | HarnessEvent::ToolResult { .. }
         | HarnessEvent::ApprovalRequest { .. }
         | HarnessEvent::ApprovalResolved { .. }
         | HarnessEvent::Plan { .. }
         | HarnessEvent::TurnComplete { .. }
         | HarnessEvent::Error { .. }
+        | HarnessEvent::Context { .. }
         | HarnessEvent::Transcript { .. }
         | HarnessEvent::Status(_)
         | HarnessEvent::Prompt { .. } => None,

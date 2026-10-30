@@ -4,6 +4,7 @@ use chrono::Utc;
 use kernel::memory::ConversationHead;
 use kernel::memory::ConversationWindow;
 use kernel::memory::NewSummary;
+use kernel::memory::PendingConversation;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummaryNode;
 use kernel::memory::SummaryStore;
@@ -37,22 +38,28 @@ const NODES_SQL: &str = "select id, kind, content, message_count, earliest_at, l
     where conversation_id = $1 and parent_id is null and kind = $2
     order by earliest_at, id";
 
-const PENDING_SQL: &str = "select c.id
-    from rh_conversations c
-    where c.session_key not like 'heartbeat:%'
-      and exists (
-        select 1 from rh_messages m
-        where m.conversation_id = c.id
-          and not exists (
+const PENDING_SQL: &str = "select c.id, pending.unsummarized,
+        (select max(m.created_at) from rh_messages m where m.conversation_id = c.id) as latest_at
+    from (
+        select m.conversation_id, count(*) as unsummarized
+        from rh_messages m
+        where not exists (
             select 1 from rh_summary_sources s where s.message_id = m.id
-          )
-      )
-    order by c.id";
+        )
+        group by m.conversation_id
+    ) pending
+    join rh_conversations c on c.id = pending.conversation_id
+    where c.session_key not like 'heartbeat:%'
+    order by latest_at desc nulls last, c.id";
 
 const INSERT_SQL: &str = "insert into rh_summaries (
         id, conversation_id, depth, content, kind, message_count,
         earliest_at, latest_at, model, created_at, pipeline_version
     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
+
+const NOTIFY_SQL: &str = "select pg_notify('rh_summary_written', json_build_object(
+        'id', $1::text, 'sessionKey', c.session_key, 'kind', $2::text, 'depth', $3::int)::text)
+    from rh_conversations c where c.id = $4";
 
 const SOURCE_SQL: &str = "insert into rh_summary_sources (summary_id, message_id, ordinal)
     values ($1, $2, $3)";
@@ -90,8 +97,10 @@ struct LatestRow {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-struct IdRow {
+struct PendingRow {
     id: Uuid,
+    unsummarized: i64,
+    latest_at: Option<DateTime<Utc>>,
 }
 
 #[async_trait]
@@ -103,23 +112,21 @@ impl SummaryStore for PostgresMemory {
         load_window(&self.pool, id).await
     }
 
-    async fn pending(&self) -> Result<Vec<ConversationWindow>, SummaryStoreError> {
-        let ids = sqlx::query_as::<_, IdRow>(PENDING_SQL)
+    async fn pending(&self) -> Result<Vec<PendingConversation>, SummaryStoreError> {
+        sqlx::query_as::<_, PendingRow>(PENDING_SQL)
             .fetch_all(&self.pool)
             .await
-            .map_err(|source| query_err("list pending conversations", source))?;
-        let mut windows = Vec::with_capacity(ids.len());
-        for row in ids {
-            match load_window(&self.pool, row.id).await? {
-                Some(window) => windows.push(window),
-                None => {
-                    return Err(SummaryStoreError::Missing {
-                        id: row.id.to_string(),
-                    });
-                }
-            }
-        }
-        Ok(windows)
+            .map_err(|source| query_err("list pending conversations", source))?
+            .into_iter()
+            .map(|row| {
+                Ok(PendingConversation {
+                    id: row.id,
+                    unsummarized: u32::try_from(row.unsummarized)
+                        .map_err(|_| SummaryStoreError::Count)?,
+                    latest_message_at: row.latest_at,
+                })
+            })
+            .collect()
     }
 
     async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError> {
@@ -189,6 +196,14 @@ impl SummaryStore for PostgresMemory {
         } else {
             SummaryWrite::Added
         };
+        sqlx::query(NOTIFY_SQL)
+            .bind(summary.id.to_string())
+            .bind(summary.kind.as_str())
+            .bind(summary.depth)
+            .bind(summary.conversation_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|source| query_err("announce summary", source))?;
         tx.commit()
             .await
             .map_err(|source| query_err("commit summary write", source))?;

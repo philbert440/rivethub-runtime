@@ -5,11 +5,35 @@ use wire::session_id::SessionId;
 use super::TopicId;
 use super::TopicName;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    strum::Display,
+    strum::EnumString,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum PlacementSource {
     You,
     Categorizer,
+}
+
+impl PlacementSource {
+    #[must_use]
+    pub fn keeps(self, incoming: Self) -> bool {
+        self == Self::You && incoming == Self::Categorizer
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lineage {
+    pub parent: SessionId,
+    pub task: uuid::Uuid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,12 +54,7 @@ impl Placement {
     #[must_use]
     pub fn admit(self, existing: Option<Self>) -> PlacementOutcome {
         match existing {
-            Some(current)
-                if current.by == PlacementSource::You
-                    && self.by == PlacementSource::Categorizer =>
-            {
-                PlacementOutcome::Kept(current)
-            }
+            Some(current) if current.by.keeps(self.by) => PlacementOutcome::Kept(current),
             Some(_) | None => PlacementOutcome::Placed(self),
         }
     }
@@ -58,6 +77,12 @@ impl PlacementOutcome {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryMark {
+    pub session: SessionId,
+    pub at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlacedSession {
     pub placement: Placement,
     pub last_active: Option<DateTime<Utc>>,
@@ -68,4 +93,5 @@ pub struct Suggestion {
     pub session: SessionId,
     pub name: TopicName,
     pub topic: Option<TopicId>,
+    pub parent: Option<TopicId>,
 }
