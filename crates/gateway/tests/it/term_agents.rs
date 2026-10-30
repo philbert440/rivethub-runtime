@@ -332,15 +332,30 @@ async fn stored_model_and_effort_are_validated() {
         .await,
         refused(400, "model must be a 1-64 token")
     );
+    for junk in ["/opus", "ds41//flash", "ds41/"] {
+        let mut bad = request("p-model");
+        bad.model = Some(junk.to_owned());
+        assert_eq!(
+            lab.refuse("/api/terminal", &bad).await,
+            refused(400, "model must be a 1-64 token"),
+            "{junk}"
+        );
+    }
     let mut fixed = request("p-model");
-    fixed.model = Some("opus".to_owned());
+    fixed.model = Some("local-27b/qwen-27b".to_owned());
     fixed.session = Some("fixed".to_owned());
     let (status, _) = lab.start("/api/terminal", &fixed).await;
     assert_eq!(status, 201);
+    let spawns = lab.spawns();
     assert!(
-        lab.spawns()
+        spawns
             .iter()
             .all(|(argv, _)| !argv.contains(&"bad model".to_owned()))
+    );
+    assert!(
+        spawns
+            .iter()
+            .any(|(argv, _)| argv.contains(&"local-27b/qwen-27b".to_owned()))
     );
 }
 

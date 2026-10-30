@@ -85,11 +85,16 @@ pub(crate) struct AgentLaunch {
 }
 
 impl AgentLaunch {
-    fn stored(&self, label: &str, value: &str) -> Result<Option<String>, ApiError> {
+    fn stored(
+        &self,
+        label: &str,
+        value: &str,
+        valid: fn(&str) -> bool,
+    ) -> Result<Option<String>, ApiError> {
         if value.is_empty() {
             return Ok(None);
         }
-        if valid_token(value) {
+        if valid(value) {
             Ok(Some(value.to_owned()))
         } else {
             Err(ApiError::BadRequest(format!(
@@ -222,17 +227,17 @@ impl TerminalService {
             .find(|command| command.id == key)
             .cloned()
             .ok_or_else(|| ApiError::UnknownCommand(key))?;
-        token("model", request.model.as_deref())?;
-        token("effort", request.effort.as_deref())?;
+        token("model", request.model.as_deref(), valid_model)?;
+        token("effort", request.effort.as_deref(), valid_token)?;
         let (model, effort) = match preset {
             Some(preset) => {
                 let model = match request.model {
                     Some(model) => Some(model),
-                    None => preset.stored("model", &preset.model)?,
+                    None => preset.stored("model", &preset.model, valid_model)?,
                 };
                 let effort = match request.effort {
                     Some(effort) => Some(effort),
-                    None => preset.stored("effort", &preset.effort)?,
+                    None => preset.stored("effort", &preset.effort, valid_token)?,
                 };
                 command.cwd = preset.directory;
                 (model, effort)
@@ -537,9 +542,9 @@ impl TerminalService {
     }
 }
 
-fn token(label: &str, value: Option<&str>) -> Result<(), ApiError> {
+fn token(label: &str, value: Option<&str>, valid: fn(&str) -> bool) -> Result<(), ApiError> {
     match value {
-        Some(value) if !valid_token(value) => Err(ApiError::BadRequest(format!(
+        Some(value) if !valid(value) => Err(ApiError::BadRequest(format!(
             "{label} must be a 1-64 token"
         ))),
         _ => Ok(()),
@@ -547,8 +552,15 @@ fn token(label: &str, value: Option<&str>) -> Result<(), ApiError> {
 }
 
 fn valid_token(value: &str) -> bool {
+    value.chars().count() <= 64 && token_part(value)
+}
+
+fn valid_model(value: &str) -> bool {
+    value.chars().count() <= 64 && value.split('/').all(token_part)
+}
+
+fn token_part(value: &str) -> bool {
     !value.is_empty()
-        && value.chars().count() <= 64
         && !value.contains("..")
         && value
             .chars()

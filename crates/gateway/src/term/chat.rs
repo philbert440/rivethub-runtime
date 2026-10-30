@@ -41,12 +41,12 @@ impl AgentLaunch {
     ) -> Result<ChatDefaults, ApiError> {
         let model = match model {
             Some(model) => Some(model),
-            None => self.stored("model", &self.model)?,
+            None => self.stored("model", &self.model, super::valid_model)?,
         };
         let effort = match effort {
             Some(effort) => Some(effort),
             None => self
-                .stored("effort", &self.effort)?
+                .stored("effort", &self.effort, super::valid_token)?
                 .map(|level| level.parse::<ThinkingLevel>())
                 .transpose()
                 .map_err(|_| {
