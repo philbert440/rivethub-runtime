@@ -1,3 +1,4 @@
+mod samples;
 mod upkeep;
 
 use std::collections::BTreeSet;
@@ -147,8 +148,11 @@ fn proposals(
         None => statement.query_map([], read),
     }
     .map_err(failed("tidy proposals"))?;
-    rows.map(|row| proposal(row.map_err(failed("tidy proposals"))?))
-        .collect()
+    let mut found = rows
+        .map(|row| proposal(row.map_err(failed("tidy proposals"))?))
+        .collect::<Result<Vec<_>, _>>()?;
+    samples::current_titles(conn, &mut found)?;
+    Ok(found)
 }
 
 fn batches(proposals: Vec<Proposal>) -> Vec<Batch> {

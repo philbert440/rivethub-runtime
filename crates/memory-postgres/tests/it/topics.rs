@@ -272,6 +272,11 @@ async fn an_approval_that_stopped_part_way_finishes_on_retry(pool: PgPool) -> Te
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn samples_show_each_session_s_current_title(pool: PgPool) -> TestResult {
+    testkit::tidy::samples_show_each_session_s_current_title(&PostgresMemory::new(pool)).await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn upkeep_counts_filings_entities_and_finished_jobs(pool: PgPool) -> TestResult {
     crate::common::install_graphile(&pool).await?;
     let memory = PostgresMemory::new(pool);
