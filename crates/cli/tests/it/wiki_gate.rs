@@ -199,17 +199,38 @@ async fn gate_keeps_pages_that_only_share_entities_apart(pool: PgPool) -> TestRe
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn gate_folds_a_session_shard_into_its_stem_parent(pool: PgPool) -> TestResult {
+async fn gate_folds_a_session_shard_into_its_stem_parent_as_a_note(pool: PgPool) -> TestResult {
     let wiki = tempfile::tempdir()?;
     let store = store_with_deploys(&pool, &wiki).await?;
-    let touched = apply(
-        &store,
-        &pool,
-        vec![proposal("acmekit-deploys-session-12", "Session twelve")],
+    let before: (String, String) = sqlx::query_as(
+        "SELECT current_state, article FROM rh_wiki_topics WHERE slug = 'acmekit-deploys'",
     )
+    .fetch_one(&pool)
     .await?;
+    let mut shard = proposal("acmekit-deploys-session-12", "Session twelve tagging");
+    shard.article = Some("# Session twelve tagging\nThe tagger reads its env prefix.".to_owned());
+    shard.entities = vec!["tool:tagger".to_owned()];
+    let touched = apply(&store, &pool, vec![shard]).await?;
     assert_eq!(touched, vec!["acmekit-deploys"]);
     assert_eq!(slugs(&pool).await?, vec!["acmekit-deploys"]);
+    let after: (String, String, String, Vec<String>) = sqlx::query_as(
+        "SELECT current_state, article, title, entities FROM rh_wiki_topics WHERE slug = 'acmekit-deploys'",
+    )
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!((after.0, after.1), before);
+    assert_eq!(after.2, "AcmeKit deploys");
+    assert_eq!(after.3, vec!["project:acmekit", "tool:deploy_script"]);
+    let page = std::fs::read_to_string(wiki.path().join("topics/acmekit-deploys.md"))?;
+    assert!(
+        page.contains("Session twelve tagging")
+            && page.contains("The tagger reads its env prefix.")
+    );
+    assert!(
+        aliases(&pool, "acmekit-deploys")
+            .await?
+            .contains(&"acmekit-deploys-session-12".to_owned())
+    );
     Ok(())
 }
 

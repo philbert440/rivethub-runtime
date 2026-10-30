@@ -51,13 +51,15 @@ async fn wiki_alias_updates_and_new_sources_commit_provenance(pool: PgPool) -> T
     )
     .fetch_one(&pool)
     .await?;
-    assert_eq!(row.0, format!("{}\n\n{}", patch().summary, update.summary));
+    assert_eq!(row.0, patch().summary);
     assert_eq!(
         row.1,
         wire::wiki::demote_h2_headings(&patch().article.expect("article"))
     );
-    assert_eq!(row.2, 1);
+    assert_eq!(row.2, 2);
     assert_eq!(row.3, None);
+    let page = std::fs::read_to_string(wiki.path().join("topics/acmekit-deploys.md"))?;
+    assert!(page.contains(&update.summary));
     let aliases: (Vec<String>,) = sqlx::query_as("SELECT aliases FROM rh_wiki_topics")
         .fetch_one(&pool)
         .await?;

@@ -16,7 +16,7 @@ pub(super) async fn apply(
     tx: &mut Transaction<'_, Postgres>,
     repository: &mut crate::wiki_writer::LockedRepository,
     source: &Source<'_>,
-    mut patch: WikiPatch,
+    patch: WikiPatch,
     now: DateTime<Utc>,
 ) -> Result<(String, String), WikiStoreError> {
     let Source {
@@ -37,35 +37,35 @@ pub(super) async fn apply(
     }
     lock_slug(tx, &gated.slug).await?;
     let slug = gated.slug;
-    let resolved = slug != patch.slug.as_ref();
-    if resolved {
-        patch.aliases.push(patch.slug);
-    }
-    let note = patch.history_entry.as_ref().map(|entry| entry.body.clone());
+    let note_entry = (slug != patch.slug.as_ref()).then(|| patch.note(date.date_naive()));
     let citation_note = patch
         .history_entry
         .as_ref()
         .map_or_else(|| patch.title.clone(), |entry| entry.title.clone());
     let summary_id = summary.id.to_string();
-    let page_patch = PagePatch {
+    let mut page_patch = PagePatch {
         action: gated.action,
         slug: slug.clone(),
         verified_at: now,
-        title: (!resolved).then_some(patch.title),
-        add_aliases: patch.aliases.into_iter().map(String::from).collect(),
-        add_tags: patch.tags,
-        add_entities: patch.entities,
+        title: Some(patch.title),
+        add_aliases: patch
+            .aliases
+            .iter()
+            .map(|alias| alias.as_ref().to_owned())
+            .collect(),
+        add_tags: patch.tags.clone(),
+        add_entities: patch.entities.clone(),
         add_related: patch
             .related
-            .into_iter()
+            .iter()
             .flatten()
-            .map(String::from)
+            .map(|slug| slug.as_ref().to_owned())
             .collect(),
-        summary_delta: Some(patch.summary),
+        summary_delta: Some(patch.summary.clone()),
         current_state: None,
-        article: patch.article,
+        article: patch.article.clone(),
         article_patches: Vec::new(),
-        history_entry: patch.history_entry,
+        history_entry: patch.history_entry.clone(),
         add_citations: vec![PageCitation {
             summary_id: summary_id.clone(),
             date: Some(date.date_naive()),
@@ -80,6 +80,19 @@ pub(super) async fn apply(
         }],
         allow_shrink: false,
     };
+    if let Some(entry) = note_entry {
+        page_patch.title = None;
+        page_patch.add_aliases = vec![patch.slug.as_ref().to_owned()];
+        page_patch.add_tags.clear();
+        page_patch.add_entities.clear();
+        page_patch.summary_delta = None;
+        page_patch.article = None;
+        page_patch.history_entry = Some(entry);
+    }
+    let note = page_patch
+        .history_entry
+        .as_ref()
+        .map(|entry| entry.body.clone());
     let applied = repository.apply(page_patch, &summary_id).await?;
     store_topic(tx, &applied.page, &applied.git_sha, now).await?;
     provenance(tx, &slug, summary, note, now).await?;
