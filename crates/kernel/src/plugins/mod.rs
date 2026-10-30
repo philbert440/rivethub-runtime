@@ -156,9 +156,18 @@ pub fn access(read: bool, path: &str) -> PluginAccess {
         (true, ["api", "harness-sessions" | "harnesses", ..] | ["api", "catalog"]) => {
             needs(Permission::SessionsRead)
         }
-        (false, ["api", "harness-sessions", ..]) => needs(Permission::SessionsControl),
-        (true, ["api", "topics" | "sessions", ..]) => needs(Permission::TopicsRead),
-        (false, ["api", "topics" | "sessions", ..]) => needs(Permission::TopicsWrite),
+        (false, ["api", "harness-sessions", ..] | ["api", "sessions", _, "messages"]) => {
+            needs(Permission::SessionsControl)
+        }
+        (
+            true,
+            ["api", "topics", ..]
+            | ["api", "sessions", "history"]
+            | ["api", "sessions", _, "placement"],
+        ) => needs(Permission::TopicsRead),
+        (false, ["api", "topics", ..] | ["api", "sessions", _, "placement" | "history"]) => {
+            needs(Permission::TopicsWrite)
+        }
         (true, ["api", "tasks", ..]) => needs(Permission::TasksRead),
         (false, ["api", "tasks"]) => needs(Permission::TasksDelegate),
         (true, ["api", "agents", ..]) => needs(Permission::AgentsRead),

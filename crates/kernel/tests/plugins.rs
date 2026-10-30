@@ -45,6 +45,18 @@ fn routes_need_the_permission_their_family_names() {
         PluginAccess::Needs(Permission::TopicsWrite)
     );
     assert_eq!(
+        access(false, "/api/sessions/abc/placement"),
+        PluginAccess::Needs(Permission::TopicsWrite)
+    );
+    assert_eq!(
+        access(true, "/api/sessions/history"),
+        PluginAccess::Needs(Permission::TopicsRead)
+    );
+    assert_eq!(
+        access(false, "/api/sessions/abc/messages"),
+        PluginAccess::Needs(Permission::SessionsControl)
+    );
+    assert_eq!(
         access(false, "/api/tasks"),
         PluginAccess::Needs(Permission::TasksDelegate)
     );
@@ -58,6 +70,8 @@ fn routes_need_the_permission_their_family_names() {
         (false, "/api/memory/tags"),
         (false, "/api/tasks/abc/kill"),
         (true, "/api/files/list"),
+        (false, "/api/sessions/abc/anything"),
+        (true, "/api/sessions/abc/messages"),
         (true, "/mesh.json"),
     ] {
         assert_eq!(

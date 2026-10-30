@@ -548,8 +548,11 @@ permissions on every plug-in API call: `memory.read` (`GET /api/memory/*`, `POST
 `memory_browse`, `memory_stats` and `memory_get_full`, `GET /api/wiki*`), `memory.write` (`POST
 /api/memory/tool/memory_append`, `POST /api/capture`), `sessions.read` (`GET` on `/api/harness-sessions*`,
 `/api/harnesses/*` and `/api/catalog`), `sessions.control` (`POST`, `PATCH` and `DELETE` on `/api/harness-sessions*`:
-create, turn, steer, cancel, answer an approval, retitle, delete), `topics.read` (`GET /api/topics*` and `GET
-/api/sessions/*`), `topics.write` (the other methods on those), `tasks.read` (`GET /api/tasks*`), `tasks.delegate`
+create, turn, steer, cancel, answer an approval, retitle, delete; and `POST /api/sessions/{session}/messages`, which
+sends a turn and can start a session), `topics.read` (`GET /api/topics*`, `GET /api/sessions/history` and `GET
+/api/sessions/{session}/placement`), `topics.write` (the other methods on `/api/topics*`, and `PUT` and `DELETE` on
+`/api/sessions/{session}/placement` and `/api/sessions/{session}/history`; no other `/api/sessions` route is open to
+a plug-in), `tasks.read` (`GET /api/tasks*`), `tasks.delegate`
 (`POST /api/tasks`), `agents.read` (`GET /api/agents*`) and `notifications.send` (`POST /api/plugin/notify`). Events
 need the permission of what they reveal (note 56). On Linux the process is confined (note 50): it reads and writes its
 own `data/` and `run/` folders; reads its install directory, the program it runs (and the installation around it when
