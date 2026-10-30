@@ -1,3 +1,4 @@
+pub mod grok;
 mod transcript_batch;
 
 use std::os::unix::fs::PermissionsExt as _;

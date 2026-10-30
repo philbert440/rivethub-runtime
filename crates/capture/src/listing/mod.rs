@@ -104,6 +104,13 @@ impl StoreSessionLister {
     }
 }
 
+pub(crate) async fn grok_title(
+    root: PathBuf,
+    id: String,
+) -> Result<Option<String>, TranscriptReaderError> {
+    blocking(move || grok::title(&root, &id)).await
+}
+
 fn list_harness(
     roots: &StoreRoots,
     spawns: &grok::SpawnIndex,

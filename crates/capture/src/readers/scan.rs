@@ -6,6 +6,7 @@ use super::message::line_number;
 use crate::store_path::Child;
 use crate::store_path::Root;
 use crate::transcript::read_capped;
+use crate::transcript::read_uncapped;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RawLine {
@@ -41,8 +42,23 @@ pub(crate) fn read_optional(
     root: &Root,
     path: &Path,
 ) -> Result<Option<String>, TranscriptReaderError> {
+    read_child(root, path, read_capped)
+}
+
+pub(crate) fn read_whole(
+    root: &Root,
+    path: &Path,
+) -> Result<Option<String>, TranscriptReaderError> {
+    read_child(root, path, read_uncapped)
+}
+
+fn read_child(
+    root: &Root,
+    path: &Path,
+    read: fn(&Path) -> Result<String, TranscriptReaderError>,
+) -> Result<Option<String>, TranscriptReaderError> {
     match root.classify(path)? {
-        Child::File => Ok(Some(read_capped(path)?)),
+        Child::File => Ok(Some(read(path)?)),
         Child::Absent => Ok(None),
         Child::Directory | Child::Ignored => {
             Err(crate::store_path::refused(path, "is not a regular file"))

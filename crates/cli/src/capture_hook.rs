@@ -1,12 +1,14 @@
 use std::time::Duration;
 
 use capture::hook::ClaudeHook;
+use capture::hook::grok::GrokHook;
 use capture::spool::CaptureSpool;
 use capture::writer::CaptureWriter;
 use capture::writer::HttpCaptureTransport;
 use chrono::DateTime;
 use chrono::Utc;
 use clap::Subcommand;
+use clap::ValueEnum;
 use config::Environment;
 use tokio::io::AsyncReadExt as _;
 
@@ -18,28 +20,59 @@ const POST_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Subcommand)]
 pub enum CaptureCommand {
-    #[command(about = "Capture one Claude Code hook payload read from stdin")]
-    Hook,
+    #[command(about = "Capture one harness hook payload read from stdin")]
+    Hook {
+        #[arg(long, value_enum, default_value_t = HookHarness::ClaudeCode)]
+        harness: HookHarness,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum HookHarness {
+    ClaudeCode,
+    GrokBuild,
 }
 
 pub(crate) async fn run(command: CaptureCommand, env: &Environment) -> Result<Report, Error> {
     match command {
-        CaptureCommand::Hook => {
+        CaptureCommand::Hook { harness } => {
             let mut stdin = String::new();
             tokio::io::stdin().read_to_string(&mut stdin).await?;
-            Ok(hook(env, &stdin, Utc::now()).await)
+            Ok(match harness {
+                HookHarness::ClaudeCode => hook(env, &stdin, Utc::now()).await,
+                HookHarness::GrokBuild => grok_hook(env, &stdin, Utc::now()).await,
+            })
         }
     }
 }
 
 pub async fn hook(env: &Environment, stdin: &str, now: DateTime<Utc>) -> Report {
-    let stderr = match claude_hook(env).await {
-        Ok(hook) => {
-            let run = hook.run(stdin, now, &capture::hook::ingest_key(now)).await;
-            run.stderr
+    let stderr = match writer(env).await {
+        Ok((writer, paths)) => {
+            ClaudeHook::new(writer, &paths)
+                .run(stdin, now, &capture::hook::ingest_key(now))
+                .await
+                .stderr
         }
         Err(error) => format!("capture hook is not configured: {error}"),
     };
+    report(stderr)
+}
+
+pub async fn grok_hook(env: &Environment, stdin: &str, now: DateTime<Utc>) -> Report {
+    let stderr = match writer(env).await {
+        Ok((writer, paths)) => {
+            match GrokHook::new(writer, &capture::listing::store_roots(env), &paths) {
+                Some(hook) => hook.run(stdin, now).await.stderr,
+                None => "capture hook has no grok home: HOME and GROK_HOME are unset".to_owned(),
+            }
+        }
+        Err(error) => format!("capture hook is not configured: {error}"),
+    };
+    report(stderr)
+}
+
+fn report(stderr: String) -> Report {
     Report {
         stdout: String::new(),
         stderr: if stderr.is_empty() {
@@ -52,7 +85,9 @@ pub async fn hook(env: &Environment, stdin: &str, now: DateTime<Utc>) -> Report 
     }
 }
 
-async fn claude_hook(env: &Environment) -> Result<ClaudeHook<HttpCaptureTransport>, Error> {
+async fn writer(
+    env: &Environment,
+) -> Result<(CaptureWriter<HttpCaptureTransport>, config::Paths), Error> {
     let loaded = db::load(env, None).await?;
     let paths = config::Paths::new(env)?;
     let Endpoint { url, client } = status::gateway(env, &loaded.config, POST_TIMEOUT).await?;
@@ -63,5 +98,5 @@ async fn claude_hook(env: &Environment) -> Result<ClaudeHook<HttpCaptureTranspor
         None,
         redaction,
     );
-    Ok(ClaudeHook::new(writer, &paths))
+    Ok((writer, paths))
 }
