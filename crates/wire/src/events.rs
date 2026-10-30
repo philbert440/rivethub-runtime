@@ -116,6 +116,14 @@ pub enum AgentEventKind {
         #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
         ts: Option<DateTime<Utc>>,
     },
+    #[serde(rename = "approval.wait", rename_all = "camelCase")]
+    ApprovalWait {
+        tool: String,
+        args: Option<JsonObject>,
+        #[serde(default)]
+        #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
+        ts: Option<DateTime<Utc>>,
+    },
     #[serde(rename = "turn.end")]
     TurnEnd {
         #[serde(default)]

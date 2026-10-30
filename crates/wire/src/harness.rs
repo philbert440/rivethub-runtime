@@ -12,6 +12,12 @@ use std::str::FromStr;
 use strum::{Display, EnumIter, EnumString};
 use thiserror::Error;
 
+mod driver;
+mod prompt;
+
+pub use driver::{SessionDriver, TerminalApproval};
+pub use prompt::{PromptKind, PromptOption, PromptQuestion, PromptResolution, PromptScreen};
+
 #[derive(
     Debug,
     Clone,
@@ -387,6 +393,14 @@ pub enum HarnessEvent {
     },
     Status(HarnessStatusFrame),
     #[serde(rename_all = "camelCase")]
+    Driver {
+        session_id: SessionId,
+        driver: Option<SessionDriver>,
+        busy: bool,
+        queued: Vec<String>,
+        approval: Option<TerminalApproval>,
+    },
+    #[serde(rename_all = "camelCase")]
     Prompt {
         session_id: SessionId,
         prompt_id: String,
@@ -396,48 +410,6 @@ pub enum HarnessEvent {
         resolved: Option<PromptResolution>,
         screen: Option<PromptScreen>,
     },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "kebab-case")]
-pub enum PromptKind {
-    AskUser,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptQuestion {
-    pub question: Option<String>,
-    pub header: Option<String>,
-    pub multi_select: bool,
-    pub free_text: Option<bool>,
-    pub options: Vec<PromptOption>,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptOption {
-    pub label: String,
-    pub description: Option<String>,
-}
-
-#[serde_as]
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptResolution {
-    #[serde_as(as = "serde_with::TimestampMilliSeconds")]
-    pub at: DateTime<Utc>,
-    pub answer_text: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PromptScreen {
-    pub current: u32,
-    pub total: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

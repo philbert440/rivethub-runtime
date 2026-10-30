@@ -81,6 +81,7 @@ fn session_of(event: &HarnessEvent) -> Option<&SessionId> {
         | HarnessEvent::Context { .. }
         | HarnessEvent::Transcript { .. }
         | HarnessEvent::Status(_)
+        | HarnessEvent::Driver { .. }
         | HarnessEvent::Prompt { .. } => None,
     }
 }
