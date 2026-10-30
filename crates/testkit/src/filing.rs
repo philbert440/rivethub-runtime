@@ -142,7 +142,7 @@ async fn corrections_follow_the_tree<S: TopicStore + FilingStore>(
     Ok(())
 }
 
-async fn capture<S: MemoryStore>(
+pub(crate) async fn capture<S: MemoryStore>(
     store: &S,
     key: &str,
     channel: &str,

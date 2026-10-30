@@ -190,7 +190,8 @@ impl SqliteStore {
     }
 
     pub async fn complete_job(&self, id: String) -> Result<(), SqliteError> {
-        self.with_conn(move |conn| delete_job(conn, &id)).await
+        let now = self.now();
+        self.with_conn(move |conn| delete_job(conn, &id, now)).await
     }
 
     pub async fn release_job(&self, id: String, now: DateTime<Utc>) -> Result<(), SqliteError> {
@@ -493,15 +494,26 @@ fn later(now: DateTime<Utc>, attempt: u32) -> Result<DateTime<Utc>, SqliteError>
         .ok_or(SqliteError::Clock)
 }
 
-fn delete_job(conn: &Connection, id: &str) -> Result<(), SqliteError> {
-    let deleted = conn
-        .execute("DELETE FROM ros_jobs WHERE id = ?1", [id])
+fn delete_job(conn: &mut Connection, id: &str, now: DateTime<Utc>) -> Result<(), SqliteError> {
+    let tx = conn
+        .transaction()
         .map_err(SqliteError::query("job complete"))?;
-    if deleted == 0 {
-        Err(SqliteError::MissingJob { id: id.to_owned() })
-    } else {
-        Ok(())
-    }
+    let task: Option<String> = tx
+        .query_row(
+            "DELETE FROM ros_jobs WHERE id = ?1 RETURNING task",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(SqliteError::query("job complete"))?;
+    let task = task.ok_or_else(|| SqliteError::MissingJob { id: id.to_owned() })?;
+    tx.execute(
+        "INSERT INTO rh_worker_runs (task, finished_at) VALUES (?1, ?2)
+         ON CONFLICT (task) DO UPDATE SET finished_at = excluded.finished_at",
+        params![task, time::stamp(now)],
+    )
+    .map_err(SqliteError::query("job finish"))?;
+    tx.commit().map_err(SqliteError::query("job complete"))
 }
 
 pub(crate) fn revive_one(

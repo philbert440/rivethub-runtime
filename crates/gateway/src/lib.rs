@@ -256,6 +256,8 @@ pub struct Gateway {
     filing: Option<Arc<dyn kernel::filing::FilingStore>>,
     decisions: Option<Arc<dyn kernel::topics::DecisionStore>>,
     startup: Option<StartupMemory>,
+    tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
+    upkeep: Option<Arc<dyn kernel::tidy::UpkeepStore>>,
 }
 
 struct StartupMemory {
@@ -304,6 +306,8 @@ impl Gateway {
             filing: None,
             decisions: None,
             startup: None,
+            tidy: None,
+            upkeep: None,
         }
     }
 
@@ -353,6 +357,29 @@ impl Gateway {
         self.topics
             .as_ref()
             .ok_or_else(|| error::ApiError::Unavailable("topic store unavailable".into()))
+    }
+
+    #[must_use]
+    pub fn with_tidy(
+        mut self,
+        tidy: Arc<dyn kernel::tidy::TidyStore>,
+        upkeep: Arc<dyn kernel::tidy::UpkeepStore>,
+    ) -> Self {
+        self.tidy = Some(tidy);
+        self.upkeep = Some(upkeep);
+        self
+    }
+
+    pub(crate) fn tidy(&self) -> Result<&Arc<dyn kernel::tidy::TidyStore>, error::ApiError> {
+        self.tidy
+            .as_ref()
+            .ok_or_else(|| error::ApiError::Unavailable("tidy store unavailable".into()))
+    }
+
+    pub(crate) fn upkeep(&self) -> Result<&Arc<dyn kernel::tidy::UpkeepStore>, error::ApiError> {
+        self.upkeep
+            .as_ref()
+            .ok_or_else(|| error::ApiError::Unavailable("upkeep store unavailable".into()))
     }
 
     #[must_use]

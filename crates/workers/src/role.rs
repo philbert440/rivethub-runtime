@@ -73,6 +73,7 @@ pub(crate) fn handler_ready(name: &JobName) -> bool {
                 | FixedJob::EnqueueStaleSummaries
                 | FixedJob::ReapDeadJobs
                 | FixedJob::FileConversation
+                | FixedJob::ProposeTidy
                 | FixedJob::ExtractWiki
                 | FixedJob::EnqueueWikiBackfill
                 | FixedJob::ConsolidateWiki

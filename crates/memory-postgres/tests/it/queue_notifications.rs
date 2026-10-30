@@ -4,7 +4,7 @@ use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue, WorkerRole};
 use memory_postgres::PostgresQueue;
 use sqlx::PgPool;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn subscribed_workers_observe_an_insert_from_another_connection(pool: PgPool) {
     sqlx::raw_sql(include_str!(
         "../../../rivethub/tests/fixtures/graphile_worker.txt"

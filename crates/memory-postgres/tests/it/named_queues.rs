@@ -24,7 +24,7 @@ async fn owner(pool: &PgPool, queue: &str) -> Result<Option<String>, sqlx::Error
     .await
 }
 
-#[sqlx::test(migrations = false)]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn concurrent_workers_serialize_each_named_queue_and_release_on_completion(
     pool: PgPool,
 ) -> TestResult {
@@ -77,7 +77,7 @@ async fn concurrent_workers_serialize_each_named_queue_and_release_on_completion
     Ok(())
 }
 
-#[sqlx::test(migrations = false)]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn failure_unlocks_the_queue_and_preserves_retry_metadata(pool: PgPool) -> TestResult {
     common::install_graphile(&pool).await?;
     let first = add(&pool, Some("serial")).await?;
@@ -118,7 +118,7 @@ async fn failure_unlocks_the_queue_and_preserves_retry_metadata(pool: PgPool) ->
     Ok(())
 }
 
-#[sqlx::test(migrations = false)]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn locked_queues_do_not_block_other_queues_or_unnamed_jobs(pool: PgPool) -> TestResult {
     common::install_graphile(&pool).await?;
     add(&pool, Some("busy")).await?;
@@ -167,7 +167,7 @@ async fn locked_queues_do_not_block_other_queues_or_unnamed_jobs(pool: PgPool) -
     Ok(())
 }
 
-#[sqlx::test(migrations = false)]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn expired_locks_are_reclaimed_and_old_workers_cannot_release_the_new_owner(
     pool: PgPool,
 ) -> TestResult {
@@ -212,7 +212,7 @@ async fn expired_locks_are_reclaimed_and_old_workers_cannot_release_the_new_owne
     Ok(())
 }
 
-#[sqlx::test(migrations = false)]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn task_and_worker_claims_share_named_queue_exclusion(pool: PgPool) -> TestResult {
     common::install_graphile(&pool).await?;
     let first = add(&pool, Some("serial")).await?;

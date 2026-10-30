@@ -19,5 +19,7 @@ pub use store::FilingStore;
 pub use store::Subject;
 pub use store::TopicLine;
 pub use target::Filable;
+pub use target::LeftOut;
 pub use target::Target;
+pub use target::bare_session_prefix;
 pub use target::conversation_keys;

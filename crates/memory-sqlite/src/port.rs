@@ -365,7 +365,10 @@ fn tasks_for(role: WorkerRole) -> Vec<JobName> {
             fixed(FixedJob::ReapDeadJobs),
             fixed(FixedJob::SyncTopicPage),
         ],
-        WorkerRole::Categorizer => vec![fixed(FixedJob::FileConversation)],
+        WorkerRole::Categorizer => vec![
+            fixed(FixedJob::FileConversation),
+            fixed(FixedJob::ProposeTidy),
+        ],
         WorkerRole::WikiBuilder => vec![
             fixed(FixedJob::ExtractWiki),
             fixed(FixedJob::EnqueueWikiBackfill),
@@ -401,6 +404,7 @@ fn fixed_attempts(fixed: FixedJob) -> u32 {
         | FixedJob::EnqueueStaleWiki
         | FixedJob::EnqueueStaleSummaries
         | FixedJob::ReapDeadJobs
+        | FixedJob::ProposeTidy
         | FixedJob::SyncTopicPage => 5,
     }
 }

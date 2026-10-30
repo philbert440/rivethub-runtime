@@ -2,6 +2,7 @@ mod decisions;
 mod done;
 mod filing;
 mod startup;
+mod tidy;
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -89,7 +90,8 @@ impl Api {
             gateway = gateway
                 .with_tenancy(Tenancy::local(UserId::new("owner".to_owned())?))
                 .with_topics(store.clone(), store.clone())
-                .with_decisions(store.clone());
+                .with_decisions(store.clone())
+                .with_tidy(store.clone(), store.clone());
         }
         Ok(Self {
             router: Arc::new(gateway).router(false),

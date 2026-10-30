@@ -207,7 +207,8 @@ fn ceiling(name: &JobName) -> i32 {
             | FixedJob::RecompileWiki
             | FixedJob::EnqueueStaleWiki
             | FixedJob::EnqueueStaleSummaries
-            | FixedJob::ReapDeadJobs => 25,
+            | FixedJob::ReapDeadJobs
+            | FixedJob::ProposeTidy => 25,
         },
         JobName::RunTaskOn { .. } | JobName::Heartbeat { .. } => 1,
     }

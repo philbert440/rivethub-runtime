@@ -5,6 +5,7 @@ use kernel::filing::FilingStore;
 use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
 use kernel::queue::JobQueue;
 use kernel::shutdown::Activities;
+use kernel::tidy::TidyStore;
 use kernel::topics::DecisionStore;
 use kernel::topics::TopicPageStore;
 use kernel::topics::TopicStore;
@@ -142,6 +143,7 @@ async fn run(
         let filing: Arc<dyn FilingStore> = memory.clone();
         let pages: Arc<dyn TopicPageStore> = memory.clone();
         let decisions: Arc<dyn DecisionStore> = memory.clone();
+        let tidy: Arc<dyn TidyStore> = memory.clone();
         let mut runner = build_runner(
             role,
             WorkerPorts {
@@ -154,6 +156,7 @@ async fn run(
                 filing,
                 pages,
                 decisions,
+                tidy,
                 lineage: session_lineage(env),
             },
             &config,
@@ -198,6 +201,7 @@ pub struct WorkerPorts<Q> {
     pub filing: Arc<dyn FilingStore>,
     pub pages: Arc<dyn TopicPageStore>,
     pub decisions: Arc<dyn DecisionStore>,
+    pub tidy: Arc<dyn TidyStore>,
     pub lineage: Arc<dyn SessionLister>,
 }
 
@@ -254,6 +258,7 @@ pub fn with_models<Q: JobQueue + 'static>(
         model,
     })
     .with_topic_pages(Arc::clone(&ports.topics), ports.pages, ports.decisions)
+    .with_tidy(ports.tidy)
     .with_session_topics(workers::SessionTopics {
         store: ports.topics,
         filing: ports.filing,
