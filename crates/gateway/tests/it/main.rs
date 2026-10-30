@@ -40,6 +40,7 @@ mod owner_only;
 mod parity;
 mod parity_play;
 mod phone;
+mod plugin_creator;
 mod plugin_security;
 mod plugin_support;
 mod plugins;

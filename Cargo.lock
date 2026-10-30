@@ -1455,6 +1455,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rustls",
+ "schemars 1.2.3",
  "serde",
  "serde_json",
  "serde_path_to_error",

@@ -13,7 +13,7 @@ use wire::plugin::action::{ViewAction, ViewActionRefusal, ViewActionRequest, Vie
 use wire::plugin::canvas::{CanvasEventRequest, CanvasResponse};
 use wire::plugin::host::PluginLogStream;
 use wire::plugin::process::PluginToolCall;
-use wire::plugin::view::{View, ViewBlock, ViewRequest};
+use wire::plugin::view::{View, ViewRequest};
 use wire::plugin::{PluginId, ToolName};
 
 use super::{PluginRouteError, host, plugin_id};
@@ -25,7 +25,6 @@ const REQUEST_LIMIT: usize = 16 * 1024 * 1024;
 const ANSWER_LIMIT: usize = 4 * 1024 * 1024;
 const TYPED_TIMEOUT: Duration = Duration::from_secs(30);
 const HTTP_FIRST_BYTE: Duration = Duration::from_secs(60);
-const SCENE_LIMIT: usize = 5000;
 const DETAIL_LIMIT: usize = 1024;
 const RESERVED_PREFIX: &str = "x-rivethub-";
 const PAGE_POLICY: &str = "sandbox allow-scripts allow-forms allow-popups allow-downloads";
@@ -92,17 +91,8 @@ async fn route(
     };
     match kind {
         Kind::Views => {
-            let answer = typed::<ViewRequest, View>(&target, request, |view| {
-                let items = canvas_items(&view.blocks);
-                if items > SCENE_LIMIT {
-                    Err(format!(
-                        "blocks: {items} canvas items, more than {SCENE_LIMIT}"
-                    ))
-                } else {
-                    Ok(())
-                }
-            })
-            .await?;
+            let answer =
+                typed::<ViewRequest, View>(&target, request, crate::plugins::check_view).await?;
             Ok(answer.into_response())
         }
         Kind::Actions => actions(&target, request).await,
@@ -134,6 +124,16 @@ impl Target<'_> {
             format!("refused the {} answer: {detail}", self.url),
         );
         PluginRouteError::Invalid(detail)
+    }
+
+    fn failed(&self, status: reqwest::StatusCode, bytes: &Bytes) -> PluginRouteError {
+        let error = unexpected(status, bytes);
+        self.host.log(
+            self.plugin,
+            PluginLogStream::Host,
+            format!("the {} answer failed: {error}", self.url),
+        );
+        error
     }
 }
 
@@ -245,7 +245,7 @@ where
     let asked: Asked = read_request(request).await?;
     let (status, bytes) = send(target, &asked).await?;
     if status != reqwest::StatusCode::OK {
-        return Err(unexpected(status, &bytes));
+        return Err(target.failed(status, &bytes));
     }
     let answer: Answer = crate::plugins::parse(&bytes).map_err(|detail| target.refused(detail))?;
     check(&answer).map_err(|detail| target.refused(detail))?;
@@ -267,7 +267,7 @@ async fn actions(target: &Target<'_>, request: Request) -> Result<Response, Plug
                 crate::plugins::parse(&bytes).map_err(|detail| target.refused(detail))?;
             Ok((StatusCode::UNPROCESSABLE_ENTITY, Json(refusal)).into_response())
         }
-        other => Err(unexpected(other, &bytes)),
+        other => Err(target.failed(other, &bytes)),
     }
 }
 
@@ -279,6 +279,7 @@ async fn tool(
 ) -> Result<Response, PluginRouteError> {
     let tool = ToolName::try_from(rest.to_owned())
         .map_err(|error| PluginRouteError::NotFound(error.to_string()))?;
+    host.record(plugin)?;
     let call: PluginToolCall = read_request(request).await?;
     match host.call(plugin, &tool, call, None).await {
         Ok(result) => Ok(Json(result).into_response()),
@@ -296,33 +297,6 @@ fn no_call(actions: &[ViewAction]) -> Result<(), String> {
         )),
         None => Ok(()),
     }
-}
-
-fn canvas_items(blocks: &[ViewBlock]) -> usize {
-    blocks
-        .iter()
-        .map(|block| match block {
-            ViewBlock::Canvas { scene, .. } => scene.items.len(),
-            ViewBlock::Section { blocks, .. } => canvas_items(blocks),
-            ViewBlock::Split {
-                primary, secondary, ..
-            } => canvas_items(primary) + canvas_items(secondary),
-            ViewBlock::Tabs { tabs, .. } => tabs.iter().map(|tab| canvas_items(&tab.blocks)).sum(),
-            ViewBlock::Text { .. }
-            | ViewBlock::Markdown { .. }
-            | ViewBlock::Code { .. }
-            | ViewBlock::Image { .. }
-            | ViewBlock::Properties { .. }
-            | ViewBlock::Progress { .. }
-            | ViewBlock::Notice { .. }
-            | ViewBlock::List { .. }
-            | ViewBlock::Table { .. }
-            | ViewBlock::Breadcrumbs { .. }
-            | ViewBlock::Actions { .. }
-            | ViewBlock::Form { .. }
-            | ViewBlock::WebPanel { .. } => 0,
-        })
-        .sum()
 }
 
 const HOP_BY_HOP: [HeaderName; 8] = [

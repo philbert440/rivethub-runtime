@@ -28,6 +28,11 @@ pub async fn start(gateway: &Arc<Gateway>) -> Result<(), HostError> {
     {
         tracing::debug!("plug-in host already knows the terminal service");
     }
+    if let Some(owner) = gateway.tenancy.local_user()
+        && host.owner.set(owner.clone()).is_err()
+    {
+        tracing::debug!("plug-in host already knows the node's owner");
+    }
     registry::private_folder(&host.settings.root).await?;
     let key = super::tools::issue(&host.tools_token()).await?;
     if host.tools_key.set(key).is_err() {

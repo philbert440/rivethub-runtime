@@ -44,6 +44,8 @@ async fn host(
         .collect();
     Ok(PluginHost::open(HostSettings {
         root: root(&settings.state_dir),
+        workshop: settings.state_dir.join("workshop"),
+        templates: settings.state_dir.join("plugin-templates"),
         node: settings.node.clone(),
         inherited,
         node_ports,

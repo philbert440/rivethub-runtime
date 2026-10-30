@@ -32,7 +32,7 @@ const CALLER_POLL: Duration = Duration::from_millis(50);
 impl PluginTools for PluginHost {
     async fn tools(&self) -> Result<PluginToolList, PluginToolError> {
         let version = *self.tools.borrow();
-        let tools = self
+        let running: Vec<PluginToolEntry> = self
             .entries
             .lock()
             .iter()
@@ -49,6 +49,7 @@ impl PluginTools for PluginHost {
                     })
             })
             .collect();
+        let tools = self.creator.iter().cloned().chain(running).collect();
         Ok(PluginToolList { version, tools })
     }
 
@@ -59,6 +60,9 @@ impl PluginTools for PluginHost {
         mut call: PluginToolCall,
         tool_use: Option<&str>,
     ) -> Result<PluginToolResult, PluginToolError> {
+        if plugin.as_ref() == super::creator::NAMESPACE {
+            return Ok(self.create(tool, &call.arguments, tool_use).await);
+        }
         let declared = self
             .peek(plugin, |entry| {
                 entry
@@ -137,7 +141,10 @@ impl PluginTools for PluginHost {
 }
 
 impl PluginHost {
-    async fn calling_session(&self, tool_use: &str) -> Option<wire::session_id::SessionId> {
+    pub(super) async fn calling_session(
+        &self,
+        tool_use: &str,
+    ) -> Option<wire::session_id::SessionId> {
         let terminal = self.terminal.get().and_then(std::sync::Weak::upgrade)?;
         let deadline = tokio::time::Instant::now() + CALLER_WAIT;
         loop {
