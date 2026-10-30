@@ -24,7 +24,6 @@ use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
 use wire::harness::SteerOutcome;
 use wire::session_id::SessionId;
-use wire::stream::LlmUsage;
 
 use crate::connection::AgentConnection;
 use crate::connection::SessionCommand;
@@ -50,7 +49,7 @@ struct SessionEntry {
     acp_session: acp::SessionId,
     permissions: Arc<PermissionRegistry>,
     options: Arc<SessionOptions>,
-    turn_end: mpsc::UnboundedSender<Option<LlmUsage>>,
+    turn_end: mpsc::UnboundedSender<crate::context::TurnEnd>,
     events: Option<Receiver<SessionEvent>>,
     exited: Arc<AtomicBool>,
     shutdown: CancellationToken,
@@ -70,7 +69,7 @@ struct SessionSnapshot {
     acp_session: acp::SessionId,
     permissions: Arc<PermissionRegistry>,
     options: Arc<SessionOptions>,
-    turn_end: mpsc::UnboundedSender<Option<LlmUsage>>,
+    turn_end: mpsc::UnboundedSender<crate::context::TurnEnd>,
     exited: Arc<AtomicBool>,
     images: bool,
     steering: bool,
@@ -385,6 +384,9 @@ impl HarnessAdapter for AcpHarnessAdapter {
         let agent = crate::connection::start_loaded(&command, &working_dir, &protocol_session)
             .await
             .map_err(port)?;
+        if let Some(known) = self.discoveries.advertised(native.harness()) {
+            agent.context.adopt(known.context());
+        }
         self.discoveries.remember(
             native.harness(),
             crate::discovery::Advertisement::from_agent(&agent),
@@ -413,10 +415,13 @@ impl HarnessAdapter for AcpHarnessAdapter {
             reply,
         })
         .await;
-        let usage = match responded {
+        let ended = match responded {
             Ok(response) => {
                 tracing::debug!(stop = ?response.stop_reason, "turn ended");
-                crate::events::turn_usage(&response).map_err(port)?
+                crate::context::TurnEnd {
+                    usage: crate::events::turn_usage(&response).map_err(port)?,
+                    last_call: crate::context::last_call(&response).map_err(port)?,
+                }
             }
             Err(failure) => {
                 let error = if snapshot.exited.load(Ordering::Acquire) {
@@ -429,7 +434,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
                 return Err(port(error));
             }
         };
-        if snapshot.turn_end.send(usage).is_err() {
+        if snapshot.turn_end.send(ended).is_err() {
             tracing::debug!("turn end had no listener");
         }
         Ok(())

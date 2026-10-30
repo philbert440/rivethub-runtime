@@ -47,9 +47,11 @@ pub(crate) fn session_event(update: acp::SessionUpdate) -> Result<Option<Session
         acp::SessionUpdate::CurrentModeUpdate(update) => Ok(SessionEvent::CurrentMode {
             mode: update.current_mode_id.to_string(),
         }),
+        acp::SessionUpdate::UsageUpdate(update) => {
+            Ok(SessionEvent::Context(crate::context::reported(&update)))
+        }
         acp::SessionUpdate::ConfigOptionUpdate(_)
         | acp::SessionUpdate::SessionInfoUpdate(_)
-        | acp::SessionUpdate::UsageUpdate(_)
         | acp::SessionUpdate::Notice(_)
         | acp::SessionUpdate::CompactionUpdate(_)
         | acp::SessionUpdate::CompactionSummaryChunk(_) => return Ok(None),

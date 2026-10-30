@@ -970,6 +970,22 @@ harness store; summaries and wiki provenance are indexed by conversation (migrat
 wiki citations and provenance). Nothing is deleted without a request naming it. The bodies are `wire::gateway::session_delete` in
 `contract/*.schema.json`; the verdict is `kernel::memory::trash_verdict`. The routes are new, with no TypeScript
 recording.
+(77) Session context (Phil, 2026-10-30): `HarnessEvent` gains `context`,
+`{ "type": "context", "sessionId", "used", "window"?, "source" }`: how many tokens a chat's context holds and, when the
+agent says, the size of its window. With `source` `harness` it is the ACP agent's own `session/update` `usage_update`
+(`used`, and `size` as `window`; a `size` of 0 sends none), forwarded as each one arrives; claude-agent-acp, OpenCode and
+dsh send one every turn, and claude-agent-acp sends another after a compaction with the tokens it kept. An agent that has
+sent no `usage_update` in its process gets one with `source` `last-call` at each turn's end, when its prompt result's
+`_meta` names its last model call (`inputTokens`, which counts cached input, plus `outputTokens`, as Grok Build sends);
+`window` is the `_meta.totalContextTokens` that the harness's latest `session/new` (a chat's own, or model discovery's,
+for a resumed chat) gave that call's `_meta.modelId` in `models.availableModels`, and is absent when it gave none. A
+turn's summed `usage` is never counted as context, and no window is assumed: a client shows `used` without a share when
+`window` is absent. A `models` that is not ACP's model state fails `session/new`. The gateway keeps each chat's latest `context` and sends it after the
+`transcript` a session socket opens or resyncs with. `turn-complete` gains `modelMs`, the milliseconds the model spent on
+the turn as the gateway saw its agent's events: from the prompt to the turn's end, less each wait between a tool call or
+permission request and the tool's result; it is absent when no time passed or the turn ran in a terminal. A client's
+tok/s is the turn's `usage.completionTokens` over `modelMs`, so a turn whose events arrive late or all at once keeps its
+real pace. Bodies are `wire::harness::HarnessEvent` and `wire::events::ContextUsageSource` in `contract/*.schema.json`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

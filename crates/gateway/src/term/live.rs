@@ -110,6 +110,9 @@ impl TerminalService {
     pub(crate) fn publish_harness(&self, key: &str, event: HarnessEvent) {
         self.follow(key, &event);
         self.hold_approvals(key, &event);
+        if matches!(event, HarnessEvent::Context { .. }) {
+            self.contexts.write().insert(key.to_owned(), event.clone());
+        }
         let sender = self.harness_events.read().get(key).cloned();
         if let Some(sender) = sender
             && sender.send(event).is_err()
@@ -120,6 +123,10 @@ impl TerminalService {
 
     pub(crate) fn pending_approvals(&self, key: &str) -> Vec<HarnessEvent> {
         self.approvals.read().get(key).cloned().unwrap_or_default()
+    }
+
+    pub(crate) fn held_context(&self, key: &str) -> Option<HarnessEvent> {
+        self.contexts.read().get(key).cloned()
     }
 
     fn hold_approvals(&self, key: &str, event: &HarnessEvent) {
@@ -154,6 +161,7 @@ impl TerminalService {
             | HarnessEvent::SessionCreated { .. }
             | HarnessEvent::Plan { .. }
             | HarnessEvent::SessionUpdated { .. }
+            | HarnessEvent::Context { .. }
             | HarnessEvent::Transcript { .. }
             | HarnessEvent::Status(_)
             | HarnessEvent::Prompt { .. } => {}
@@ -222,6 +230,7 @@ impl TerminalService {
             | HarnessEvent::SessionCreated { .. }
             | HarnessEvent::Plan { .. }
             | HarnessEvent::Error { .. }
+            | HarnessEvent::Context { .. }
             | HarnessEvent::Transcript { .. }
             | HarnessEvent::Status(_)
             | HarnessEvent::Prompt { .. } => return,
@@ -280,6 +289,7 @@ impl TerminalService {
             | HarnessEvent::ToolUpdate { .. }
             | HarnessEvent::SessionCreated { .. }
             | HarnessEvent::Plan { .. }
+            | HarnessEvent::Context { .. }
             | HarnessEvent::Transcript { .. }
             | HarnessEvent::Status(_)
             | HarnessEvent::Prompt { .. } => {}

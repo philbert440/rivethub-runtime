@@ -1,6 +1,10 @@
 use std::collections::BTreeMap;
+use std::time::Duration;
 
-use kernel::harness::{SessionEvent, ToolCallStatus, ToolCallUpdate};
+use kernel::harness::{
+    ContextUsage, ContextUsageSource, SessionEvent, ToolCallStatus, ToolCallUpdate,
+};
+use tokio::time::Instant;
 use wire::harness::HarnessEvent;
 use wire::session_id::SessionId;
 use wire::stream::LlmUsage;
@@ -9,6 +13,69 @@ use wire::stream::LlmUsage;
 pub(crate) struct ToolNames {
     names: BTreeMap<String, String>,
     usage: Option<LlmUsage>,
+    clock: ModelClock,
+}
+
+#[derive(Debug, Default)]
+struct ModelClock {
+    since: Option<Instant>,
+    spent: Duration,
+}
+
+impl ModelClock {
+    fn resume(&mut self) {
+        self.since.get_or_insert_with(Instant::now);
+    }
+
+    fn pause(&mut self) {
+        if let Some(since) = self.since.take() {
+            self.spent += since.elapsed();
+        }
+    }
+
+    fn stop(&mut self) -> Option<u64> {
+        self.pause();
+        let spent = std::mem::take(&mut self.spent);
+        let ms = spent
+            .as_secs()
+            .saturating_mul(1000)
+            .saturating_add(u64::from(spent.subsec_millis()));
+        (ms > 0).then_some(ms)
+    }
+
+    fn track(&mut self, event: &SessionEvent) {
+        match event {
+            SessionEvent::UserMessageChunk { .. }
+            | SessionEvent::AgentMessageChunk { .. }
+            | SessionEvent::AgentThoughtChunk { .. } => self.resume(),
+            SessionEvent::ToolCallUpdate(update) if update.status != ToolCallStatus::Running => {
+                self.resume();
+            }
+            SessionEvent::ToolCall(_) | SessionEvent::Permission(_) => self.pause(),
+            SessionEvent::ToolCallUpdate(_)
+            | SessionEvent::Usage { .. }
+            | SessionEvent::Context(_)
+            | SessionEvent::Plan(_)
+            | SessionEvent::AvailableCommands(_)
+            | SessionEvent::CurrentMode { .. }
+            | SessionEvent::TurnEnded
+            | SessionEvent::Exited { .. }
+            | SessionEvent::TerminalBytes { .. }
+            | SessionEvent::TerminalResize { .. } => {}
+        }
+    }
+}
+
+fn context_event(session_id: SessionId, context: &ContextUsage) -> HarnessEvent {
+    HarnessEvent::Context {
+        session_id,
+        used: context.used,
+        window: context.window,
+        source: match context.source {
+            ContextUsageSource::Harness => wire::events::ContextUsageSource::Harness,
+            ContextUsageSource::LastCall => wire::events::ContextUsageSource::LastCall,
+        },
+    }
 }
 
 impl ToolNames {
@@ -18,6 +85,7 @@ impl ToolNames {
         event: &SessionEvent,
     ) -> Option<HarnessEvent> {
         let session_id = session.clone();
+        self.clock.track(event);
         Some(match event {
             SessionEvent::AgentMessageChunk { text } => HarnessEvent::AssistantDelta {
                 session_id,
@@ -59,7 +127,9 @@ impl ToolNames {
                 turn_id: None,
                 stop_reason: None,
                 usage: self.usage.take(),
+                model_ms: self.clock.stop(),
             },
+            SessionEvent::Context(context) => context_event(session_id, context),
             SessionEvent::Plan(entries) => HarnessEvent::Plan {
                 session_id,
                 entries: entries.iter().map(plan_entry).collect(),
@@ -117,6 +187,8 @@ fn plan_entry(entry: &kernel::harness::PlanEntry) -> wire::harness::PlanEntry {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use kernel::harness::{SessionEvent, ToolCallInfo, ToolCallStatus, ToolCallUpdate};
     use wire::harness::{HarnessEvent, HarnessId};
     use wire::json::JsonObject;
@@ -166,5 +238,45 @@ mod tests {
             tools.harness_event(&session, &update(ToolCallStatus::Running, Some(input))),
             None
         );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_turn_reports_the_model_time_without_the_tool_time() {
+        let session = SessionId::new(HarnessId::GrokBuild, "native");
+        let mut tools = ToolNames::default();
+        let started = SessionEvent::ToolCall(ToolCallInfo {
+            tool_call_id: "call".to_owned(),
+            name: "Bash".to_owned(),
+            input: JsonObject::default(),
+        });
+        let steps = [
+            (
+                0,
+                SessionEvent::UserMessageChunk {
+                    text: "go".to_owned(),
+                },
+            ),
+            (4_000, started),
+            (60_000, update(ToolCallStatus::Completed, None)),
+            (
+                1_500,
+                SessionEvent::AgentMessageChunk {
+                    text: "done".to_owned(),
+                },
+            ),
+            (500, SessionEvent::TurnEnded),
+        ];
+        let mut ended = None;
+        for (after, event) in steps {
+            tokio::time::advance(Duration::from_millis(after)).await;
+            ended = tools.harness_event(&session, &event);
+        }
+        assert!(matches!(
+            ended,
+            Some(HarnessEvent::TurnComplete {
+                model_ms: Some(6_000),
+                ..
+            })
+        ));
     }
 }

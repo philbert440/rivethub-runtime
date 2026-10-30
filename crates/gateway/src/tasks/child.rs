@@ -226,6 +226,7 @@ impl Run<'_> {
             | HarnessEvent::SessionCreated { .. }
             | HarnessEvent::Plan { .. }
             | HarnessEvent::SessionUpdated { .. }
+            | HarnessEvent::Context { .. }
             | HarnessEvent::Transcript { .. }
             | HarnessEvent::Status(_)
             | HarnessEvent::Prompt { .. } => {}

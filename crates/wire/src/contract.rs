@@ -303,6 +303,7 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::events::Activity>,
     SchemaGenerator::subschema_for::<crate::events::AgentUsage>,
     SchemaGenerator::subschema_for::<crate::events::ContextSource>,
+    SchemaGenerator::subschema_for::<crate::events::ContextUsageSource>,
     SchemaGenerator::subschema_for::<crate::events::SessionSummary>,
     SchemaGenerator::subschema_for::<crate::events::SessionLogLine>,
     SchemaGenerator::subschema_for::<crate::events::SessionView>,

@@ -41,6 +41,7 @@ impl ChatActor {
                     turn_id: None,
                     stop_reason: None,
                     usage: None,
+                    model_ms: None,
                 },
             );
         }

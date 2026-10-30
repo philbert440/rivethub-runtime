@@ -181,6 +181,7 @@ pub enum SessionEvent {
     AgentMessageChunk { text: String },
     AgentThoughtChunk { text: String },
     Usage { usage: wire::stream::LlmUsage },
+    Context(ContextUsage),
     ToolCall(ToolCallInfo),
     ToolCallUpdate(ToolCallUpdate),
     Plan(Vec<PlanEntry>),
@@ -191,6 +192,19 @@ pub enum SessionEvent {
     Permission(PermissionRequest),
     TerminalBytes { data: Vec<u8> },
     TerminalResize { cols: u16, rows: u16 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContextUsage {
+    pub used: u64,
+    pub window: Option<u64>,
+    pub source: ContextUsageSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextUsageSource {
+    Harness,
+    LastCall,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

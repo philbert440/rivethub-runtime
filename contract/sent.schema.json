@@ -1,8 +1,8 @@
 {
-  "$id": "https://github.com/philbert440/rivethub-runtime/contract/0.1.0/sent.schema.json",
+  "$id": "https://github.com/philbert440/rivethub-runtime/contract/0.7.0/sent.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "RivetHub contract (sent by the runtime)",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "$defs": {
     "AgentPreset": {
       "type": "object",
@@ -9763,6 +9763,13 @@
         }
       ]
     },
+    "ContextUsageSource": {
+      "type": "string",
+      "enum": [
+        "harness",
+        "last-call"
+      ]
+    },
     "LiveSessionSummary": {
       "type": "object",
       "properties": {
@@ -12111,11 +12118,53 @@
                   "type": "null"
                 }
               ]
+            },
+            "modelMs": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
             }
           },
           "required": [
             "type",
             "sessionId"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "context"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "used": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "window": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "source": {
+              "$ref": "#/$defs/ContextUsageSource"
+            }
+          },
+          "required": [
+            "type",
+            "sessionId",
+            "used",
+            "source"
           ]
         },
         {

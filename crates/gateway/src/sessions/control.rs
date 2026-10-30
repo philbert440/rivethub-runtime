@@ -538,6 +538,7 @@ impl ChatActor {
             },
             SessionEvent::ToolCallUpdate(_)
             | SessionEvent::Usage { .. }
+            | SessionEvent::Context(_)
             | SessionEvent::AvailableCommands(_)
             | SessionEvent::CurrentMode { .. }
             | SessionEvent::TerminalBytes { .. }

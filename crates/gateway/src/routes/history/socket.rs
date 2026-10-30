@@ -233,6 +233,13 @@ impl Attached<'_> {
         for approval in &waiting {
             send(&mut self.socket, approval).await?;
         }
+        let held = self
+            .gateway
+            .terminal()
+            .and_then(|terminal| terminal.held_context(&resolved.native));
+        if let Some(context) = &held {
+            send(&mut self.socket, context).await?;
+        }
         Ok(())
     }
 }

@@ -31,6 +31,7 @@ pub(crate) struct Advertisement {
     capabilities: acp::AgentCapabilities,
     steering: bool,
     options: Arc<SessionOptions>,
+    context: Arc<crate::context::ContextWindows>,
     commands: Vec<Command>,
 }
 
@@ -40,8 +41,13 @@ impl Advertisement {
             capabilities: agent.capabilities.clone(),
             steering: agent.steering,
             options: Arc::clone(&agent.options),
+            context: Arc::clone(&agent.context),
             commands: Vec::new(),
         }
+    }
+
+    pub(crate) fn context(&self) -> &crate::context::ContextWindows {
+        &self.context
     }
 
     pub(crate) fn options(&self) -> Arc<SessionOptions> {
@@ -336,6 +342,7 @@ mod tests {
             capabilities: acp::AgentCapabilities::new(),
             steering: false,
             options,
+            context: Arc::default(),
             commands: Vec::new(),
         };
         for (mode, source, ids) in [
