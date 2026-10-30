@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::thread::JoinHandle;
 
 use async_trait::async_trait;
+use kernel::agent_presets;
 use kernel::agent_presets::AgentPresetStore;
 use kernel::agent_presets::AgentPresetStoreError;
 use parking_lot::Mutex;
@@ -9,9 +10,9 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use wire::gateway::agents::AgentPreset;
 use wire::gateway::agents::AgentPresetUpdate;
-use wire::gateway::agents::AgentStoreBackend;
 use wire::gateway::agents::AgentsFile;
 
+use super::body;
 use super::changes;
 use super::check;
 use super::error::AgentError;
@@ -122,39 +123,60 @@ impl FilePresets {
 
 #[async_trait]
 impl AgentPresetStore for FilePresets {
-    fn backend(&self) -> AgentStoreBackend {
-        AgentStoreBackend::File
+    fn backend(&self) -> agent_presets::AgentStoreBackend {
+        agent_presets::AgentStoreBackend::File
     }
 
-    async fn list(&self, node: Option<&str>) -> Result<Vec<AgentPreset>, AgentPresetStoreError> {
+    async fn list(
+        &self,
+        node: Option<&str>,
+    ) -> Result<Vec<agent_presets::AgentPreset>, AgentPresetStoreError> {
         let node = node.map(str::to_owned);
-        self.call(|reply| Command::List { node, reply }).await
+        self.call(|reply| Command::List { node, reply })
+            .await
+            .map(|agents| agents.into_iter().map(body::preset).collect())
     }
 
-    async fn get(&self, id: &str) -> Result<Option<AgentPreset>, AgentPresetStoreError> {
+    async fn get(
+        &self,
+        id: &str,
+    ) -> Result<Option<agent_presets::AgentPreset>, AgentPresetStoreError> {
         let id = id.to_owned();
-        self.call(|reply| Command::Get { id, reply }).await
+        self.call(|reply| Command::Get { id, reply })
+            .await
+            .map(|found| found.map(body::preset))
     }
 
-    async fn lookup(&self, id_or_name: &str) -> Result<Option<AgentPreset>, AgentPresetStoreError> {
+    async fn lookup(
+        &self,
+        id_or_name: &str,
+    ) -> Result<Option<agent_presets::AgentPreset>, AgentPresetStoreError> {
         let key = id_or_name.to_owned();
-        self.call(|reply| Command::Lookup { key, reply }).await
+        self.call(|reply| Command::Lookup { key, reply })
+            .await
+            .map(|found| found.map(body::preset))
     }
 
-    async fn create(&self, preset: AgentPreset) -> Result<AgentPreset, AgentPresetStoreError> {
-        let preset = Box::new(preset);
-        self.call(|reply| Command::Create { preset, reply }).await
+    async fn create(
+        &self,
+        preset: agent_presets::AgentPreset,
+    ) -> Result<agent_presets::AgentPreset, AgentPresetStoreError> {
+        let preset = Box::new(body::preset_body(preset));
+        self.call(|reply| Command::Create { preset, reply })
+            .await
+            .map(body::preset)
     }
 
     async fn update(
         &self,
         id: &str,
-        changes: AgentPresetUpdate,
-    ) -> Result<Option<AgentPreset>, AgentPresetStoreError> {
+        changes: agent_presets::AgentPresetUpdate,
+    ) -> Result<Option<agent_presets::AgentPreset>, AgentPresetStoreError> {
         let id = id.to_owned();
-        let changes = Box::new(changes);
+        let changes = Box::new(body::update_body(changes));
         self.call(|reply| Command::Update { id, changes, reply })
             .await
+            .map(|found| found.map(body::preset))
     }
 
     async fn delete(&self, id: &str) -> Result<bool, AgentPresetStoreError> {
