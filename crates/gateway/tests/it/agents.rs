@@ -8,6 +8,7 @@ use std::time::Duration;
 use axum::Router;
 use gateway::Gateway;
 use gateway::Settings;
+use gateway::tenancy::{Tenancy, UserId};
 use kernel::memory::MemoryStore;
 use testkit::FakeMemoryStore;
 use testkit::Request;
@@ -46,31 +47,40 @@ impl Sandbox {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a helper outside #[test] still has to fail the test when the owner id is refused"
+)]
 fn gateway_at(root: &Path, allowed: Option<Vec<HarnessId>>) -> Arc<Gateway> {
     let store = Arc::new(FakeMemoryStore::default());
     let handle: Arc<dyn MemoryStore> = store;
-    Arc::new(Gateway::new(
-        handle,
-        Settings {
-            hostname: "gold-host".to_owned(),
-            node: NODE.to_owned(),
-            allowed_origins: vec!["https://hub.example.test".to_owned()],
-            allowed_hosts: vec!["den.example.test".to_owned()],
-            files_root: None,
-            static_dir: None,
-            root_redirect: None,
-            state_dir: root.join("state"),
-            directory_root: root.join("agents"),
-            mesh_file: Some(root.join("absent-mesh.json")),
-            shared_dir: root.join("shared"),
-            legacy_mesh_dir: root.join("legacy"),
-            allowed_harnesses: allowed,
-            devices_enabled: false,
-            probe_timeout: Duration::from_millis(200),
-            mesh_cache_ttl: Duration::ZERO,
-            mesh_ca: None,
-        },
-    ))
+    Arc::new(
+        Gateway::new(
+            handle,
+            Settings {
+                hostname: "gold-host".to_owned(),
+                node: NODE.to_owned(),
+                allowed_origins: vec!["https://hub.example.test".to_owned()],
+                allowed_hosts: vec!["den.example.test".to_owned()],
+                files_root: None,
+                static_dir: None,
+                root_redirect: None,
+                state_dir: root.join("state"),
+                directory_root: root.join("agents"),
+                mesh_file: Some(root.join("absent-mesh.json")),
+                shared_dir: root.join("shared"),
+                legacy_mesh_dir: root.join("legacy"),
+                allowed_harnesses: allowed,
+                devices_enabled: false,
+                probe_timeout: Duration::from_millis(200),
+                mesh_cache_ttl: Duration::ZERO,
+                mesh_ca: None,
+            },
+        )
+        .with_tenancy(Tenancy::local(
+            UserId::new("owner".to_owned()).expect("owner id"),
+        )),
+    )
 }
 
 #[expect(

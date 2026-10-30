@@ -81,6 +81,9 @@ fn body_error(error: ApiError) -> TaskHttpError {
         ApiError::SessionForbidden => {
             TaskHttpError::Failed("session is owned by another user".to_owned())
         }
+        ApiError::OwnerRequired => {
+            TaskHttpError::Failed("only the node's owner can do this".to_owned())
+        }
         ApiError::Unauthorized => TaskHttpError::Failed("unauthorized".to_owned()),
         ApiError::ForbiddenOrigin => TaskHttpError::Failed("forbidden origin".to_owned()),
         ApiError::Internal => TaskHttpError::Failed("internal error".to_owned()),

@@ -60,9 +60,10 @@ impl From<ApiError> for CaRouteError {
             | ApiError::BodyMustBeObject
             | ApiError::Serialize(_) => Self::BadRequest,
             ApiError::BodyTooLarge => Self::BodyTooLarge,
-            ApiError::Unauthorized | ApiError::ForbiddenOrigin | ApiError::SessionForbidden => {
-                Self::Unauthorized
-            }
+            ApiError::Unauthorized
+            | ApiError::ForbiddenOrigin
+            | ApiError::SessionForbidden
+            | ApiError::OwnerRequired => Self::Unauthorized,
             ApiError::MethodNotAllowed => Self::MethodNotAllowed,
             ApiError::Unavailable(_)
             | ApiError::RequestTimeout

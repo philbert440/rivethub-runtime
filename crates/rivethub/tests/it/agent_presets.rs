@@ -10,6 +10,7 @@ use axum::http::StatusCode;
 use axum::http::header;
 use gateway::Gateway;
 use gateway::Settings;
+use gateway::tenancy::{Tenancy, UserId};
 use kernel::memory::MemoryStore;
 use memory_postgres::PostgresMemory;
 use rivethub::composition::agent_presets;
@@ -90,7 +91,12 @@ async fn a_migrated_database_serves_presets_from_postgres(pool: PgPool) -> TestR
     .await?;
     let root = tempfile::tempdir()?;
     let store: Arc<dyn MemoryStore> = Arc::new(testkit::FakeMemoryStore::default());
-    let gateway = Arc::new(Gateway::new(store, settings(root.path())).with_agent_presets(presets));
+    let owner = Tenancy::local(UserId::new("owner".to_owned())?);
+    let gateway = Arc::new(
+        Gateway::new(store, settings(root.path()))
+            .with_agent_presets(presets)
+            .with_tenancy(owner),
+    );
     let router = gateway.router(false);
 
     let (status, body) = call(&router, "POST", "/api/agents", r#"{"name":"Kit"}"#).await?;

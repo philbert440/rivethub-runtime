@@ -36,6 +36,7 @@ mod memory_api;
 mod mesh_channel;
 mod mesh_registry;
 mod mesh_replay;
+mod owner_only;
 mod parity;
 mod parity_play;
 mod phone;
