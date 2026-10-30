@@ -11,13 +11,6 @@ pub enum TagEntityType {
     Summary,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a tag's review state; wire::gateway::memory::TagState is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::Display, strum::EnumString,
 )]

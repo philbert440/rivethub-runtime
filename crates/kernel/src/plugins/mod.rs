@@ -14,13 +14,6 @@ const TOOL_SEPARATOR: char = '-';
 const FIRST_RESTART: Duration = Duration::from_secs(1);
 const LAST_RESTART: Duration = Duration::from_secs(60);
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns what a plug-in may do; wire::plugin::manifest::Permission is the manifest's copy, translated by the gateway's plug-in host"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::Display)]
 pub enum Permission {
     #[strum(serialize = "memory.read")]
@@ -53,13 +46,6 @@ pub enum Permission {
     HostExec,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns the events a plug-in subscribes to; wire::plugin::manifest::PluginEventKind is the manifest's copy, translated by the gateway's plug-in host"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventKind {
     SessionStarted,

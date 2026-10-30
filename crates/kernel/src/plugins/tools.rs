@@ -21,13 +21,6 @@ pub struct PluginTool {
     pub hints: Vec<PluginToolHint>,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns what a plug-in tool declares about itself; wire::plugin::manifest::PluginToolHint is the manifest's copy, translated by the plug-in host"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PluginToolHint {
     ReadOnly,

@@ -13,13 +13,6 @@ use super::TreeEdit;
 use crate::topics::TopicId;
 use crate::topics::TopicName;
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a proposal's state; wire::gateway::tidy::ProposalState is the contract's copy, translated by the gateway's tidy routes"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum ProposalState {

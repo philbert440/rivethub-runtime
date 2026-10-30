@@ -45,13 +45,6 @@ pub struct HarnessModelOption {
     pub efforts: Option<Vec<EffortOption>>,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns where a harness's model list came from; wire::harness::HarnessModelsSource is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HarnessModelsSource {
     Discovered,

@@ -149,13 +149,6 @@ pub fn distinct_aliases(aliases: Vec<Alias>) -> Vec<Alias> {
     kept
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns topic kinds; wire::gateway::topics::TopicKind is the contract's copy, translated by the gateway's topic routes"
-    )
-)]
 #[derive(
     Debug,
     Clone,

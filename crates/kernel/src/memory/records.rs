@@ -53,13 +53,6 @@ pub enum MemoryHitSource {
     Summary,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns what a memory search covers; wire::gateway::memory::MemoryScope is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MemoryScope {
@@ -68,13 +61,6 @@ pub enum MemoryScope {
     Both,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns how memory is searched; wire::gateway::memory::SearchMode is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(
     Debug,
     Clone,
@@ -99,13 +85,6 @@ pub enum SearchMode {
     Regex,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a summary's level; wire::gateway::memory::SummaryKind is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(
     Debug,
     Clone,
@@ -147,13 +126,6 @@ pub enum MemoryBrowseOrder {
     Desc,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns the named browse windows; wire::gateway::memory::BrowseWindow is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(
     Debug,
     Clone,
@@ -237,13 +209,6 @@ pub struct MemorySummaryNode {
     pub vector: VectorState,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a summary's embedding state; wire::gateway::memory::VectorState is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumString)]
 #[serde(rename_all = "camelCase")]
 #[strum(serialize_all = "camelCase")]

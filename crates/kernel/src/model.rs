@@ -73,13 +73,6 @@ pub enum LlmResponseKind {
     ToolCalls,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns why a model stopped; kernel::model::FinishReason is the OpenAI chunk's copy, translated by the providers"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FinishReason {
     Stop,

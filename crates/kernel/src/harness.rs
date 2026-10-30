@@ -21,13 +21,6 @@ pub struct SessionSwitches {
     pub effort: bool,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns how a permission request is answered; wire::harness::ApprovalDecision is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApprovalDecision {
     Allow,
@@ -35,13 +28,6 @@ pub enum ApprovalDecision {
     AllowSession,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns what steering a running turn did; wire::harness::SteerOutcome is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SteerOutcome {
     Steered,
@@ -49,13 +35,6 @@ pub enum SteerOutcome {
     PromptRequired,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a plan entry's progress; wire::harness::PlanStatus is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlanStatus {
     Pending,

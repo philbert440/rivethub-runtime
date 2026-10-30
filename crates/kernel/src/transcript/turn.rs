@@ -52,13 +52,6 @@ pub struct MessageUsage {
     pub cached_tokens: u64,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a turn's last block kind; wire::gateway::sessions::TranscriptBlock is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TranscriptBlock {
@@ -68,13 +61,6 @@ pub enum TranscriptBlock {
     ToolResult,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a transcript tool's status; wire::gateway::sessions::TranscriptToolStatus is the contract's copy, translated by the gateway"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TranscriptToolStatus {
