@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT c.id, c.session_key, c.agent, c.channel, c.title\n               FROM rh_messages m\n               JOIN rh_conversations c ON c.id = m.conversation_id\n               JOIN rh_conversations own ON own.id = $2\n              WHERE m.conversation_id <> $2\n                AND m.created_at BETWEEN own.created_at - interval '1 day'\n                                     AND own.created_at + interval '1 day'\n                AND (m.tool_result LIKE $1 OR m.content LIKE $1)\n              ORDER BY m.created_at\n              LIMIT 1",
+  "query": "WITH named AS (\n                 SELECT m.conversation_id, m.created_at FROM rh_messages m\n                  WHERE m.tool_result IS NOT NULL AND length(m.tool_result) > 0\n                    AND m.tool_result LIKE $1\n                 UNION ALL\n                 SELECT m.conversation_id, m.created_at FROM rh_messages m\n                  WHERE m.content LIKE $1\n             )\n             SELECT c.id, c.session_key, c.agent, c.channel, c.title\n               FROM named n\n               JOIN rh_conversations c ON c.id = n.conversation_id\n               JOIN rh_conversations own ON own.id = $2\n              WHERE n.conversation_id <> $2\n                AND n.created_at BETWEEN own.created_at - interval '1 day'\n                                     AND own.created_at + interval '1 day'\n              ORDER BY n.created_at\n              LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -73,5 +73,5 @@
       true
     ]
   },
-  "hash": "9351fce64693be79c77462749777ad7d56651c04365c41257919b07f13fc8780"
+  "hash": "89407ea66694887cdc98758c8d1cf56814f3a62990e98f693a01213074b7c6a3"
 }
