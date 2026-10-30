@@ -1,5 +1,6 @@
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::spoken_title;
 use wire::JsonObject;
 use wire::capture::CaptureBatchRequest;
 use wire::capture::CaptureMessage;
@@ -50,7 +51,8 @@ pub(super) fn build(
         transcript
             .iter()
             .filter(|line| is_prompt(line))
-            .find_map(Line::text)
+            .filter_map(Line::text)
+            .find_map(|text| spoken_title(&text).map(str::to_owned))
             .unwrap_or_else(|| FALLBACK_TITLE.to_owned()),
     );
     Ok(batch)

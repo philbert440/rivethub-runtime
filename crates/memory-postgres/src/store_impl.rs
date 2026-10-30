@@ -20,6 +20,7 @@ use kernel::memory::TagLookup;
 use kernel::memory::TagTaxonomyDecision;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use kernel::memory::spoken_title;
 use serde::Deserialize as _;
 use uuid::Uuid;
 use wire::capture::CaptureBatchRequest;
@@ -49,7 +50,7 @@ impl crate::PostgresMemory {
                 session_key: &batch.session_key,
                 agent: &batch.agent,
                 channel: Some(channel),
-                title: batch.title.as_deref(),
+                title: batch.title.as_deref().and_then(spoken_title),
                 settings: batch.settings.as_ref(),
                 task_id: batch.task_id.as_deref(),
                 owner_user_id: owner,
