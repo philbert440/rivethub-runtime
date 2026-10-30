@@ -159,6 +159,7 @@ fn evidence(evidence: Evidence) -> TidyEvidence {
             .map(|sample| TidySample {
                 id: sample.id,
                 title: sample.title,
+                last_active: sample.last_active,
             })
             .collect(),
     }

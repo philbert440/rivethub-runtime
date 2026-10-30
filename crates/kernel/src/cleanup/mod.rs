@@ -4,6 +4,7 @@ mod entity;
 mod filing;
 mod fold;
 mod names;
+mod review;
 mod snapshot;
 mod tree;
 
@@ -39,6 +40,7 @@ pub use names::Junk;
 pub use names::JunkReason;
 pub use names::JunkStage;
 pub use names::NameGuard;
+pub use review::TreeChange;
 pub use snapshot::EntitySection;
 pub use snapshot::KnowledgePage;
 pub use snapshot::Project;

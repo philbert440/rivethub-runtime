@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 
 use chrono::DateTime;
@@ -54,6 +55,18 @@ pub(super) struct ReportData {
     pub(super) junk: Vec<Junk>,
     pub(super) automated: Automated,
     pub(super) generic: Vec<String>,
+    pub(super) review: Vec<Junk>,
+    pub(super) fragmentation: Fragmentation,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct Fragmentation {
+    pub(super) topics: usize,
+    pub(super) roots: usize,
+    pub(super) crowded: usize,
+    pub(super) root_direct: usize,
+    pub(super) filed: usize,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -185,6 +198,13 @@ fn build(
         junk: junk(stage, filed, folds)?,
         automated: stage.automated.clone(),
         generic: filed.generic.iter().cloned().collect(),
+        review: tree
+            .junk
+            .iter()
+            .filter(|junk| junk.stage == JunkStage::Review)
+            .cloned()
+            .collect(),
+        fragmentation: fragmentation(stage, tree, &one_by_one),
     })
 }
 
@@ -348,8 +368,41 @@ fn fold_row(tree: &ProposedTree, folded: &Folded) -> FoldRow {
     }
 }
 
+fn fragmentation(stage: &Stage<'_>, tree: &ProposedTree, filings: &[&Filing]) -> Fragmentation {
+    let crowded = tree
+        .clusters(stage.guard)
+        .into_values()
+        .flatten()
+        .collect::<BTreeSet<TopicId>>()
+        .len();
+    let filed: Vec<TopicId> = filings.iter().filter_map(|filing| filing.topic).collect();
+    Fragmentation {
+        topics: tree.topics.len(),
+        roots: tree
+            .topics
+            .iter()
+            .filter(|topic| topic.parent.is_none())
+            .count(),
+        crowded,
+        root_direct: filed
+            .iter()
+            .filter(|topic| {
+                tree.topic(**topic)
+                    .is_some_and(|topic| topic.parent.is_none())
+            })
+            .count(),
+        filed: filed.len(),
+    }
+}
+
 fn junk(stage: &Stage<'_>, filed: &Filed, folds: &Folds) -> Result<Vec<Junk>, Error> {
-    let mut junk = filed.tree.junk.clone();
+    let mut junk: Vec<Junk> = filed
+        .tree
+        .junk
+        .iter()
+        .filter(|junk| junk.stage != JunkStage::Review)
+        .cloned()
+        .collect();
     for filing in &filed.filings {
         match &filing.how {
             FiledHow::Suggested { name } => {

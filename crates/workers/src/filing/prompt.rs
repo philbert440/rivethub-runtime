@@ -161,7 +161,7 @@ fn subject_lines(subject: &Subject, named: Option<TopicId>, tree: &Tree) -> Vec<
     }
     if let Some(reference) = named.and_then(|topic| tree.reference(topic)) {
         parts.push(format!(
-            "It names topic {reference}: pick {reference} or the one of its subtopics the work is about."
+            "It names topic {reference}, which has subtopics: file it under the subtopic the work is about, and under {reference} itself only when the work spans several of its subtopics or none of them fits."
         ));
     }
     parts.push("Summary:".to_owned());
