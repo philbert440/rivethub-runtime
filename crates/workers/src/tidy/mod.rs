@@ -12,11 +12,13 @@ use kernel::model::ModelProvider;
 use kernel::model::ModelRequest;
 use kernel::tidy::Batch;
 use kernel::tidy::Cluster;
+use kernel::tidy::Evidence;
 use kernel::tidy::Fingerprint;
 use kernel::tidy::Guard;
 use kernel::tidy::MIN_SESSIONS;
 use kernel::tidy::Proposer;
 use kernel::tidy::Reason;
+use kernel::tidy::Sample;
 use kernel::tidy::TidyStore;
 use kernel::tidy::TreeEdit;
 use kernel::tidy::WEEK;
@@ -28,8 +30,6 @@ use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use tokio_util::sync::CancellationToken;
-use wire::gateway::tidy::TidyEvidence;
-use wire::gateway::tidy::TidySample;
 use wire::message::Message;
 use wire::message::MessageContent;
 use wire::message::Role;
@@ -338,7 +338,7 @@ async fn evidence(
     env: &TidyEnv<'_>,
     change: &TreeEdit,
     cluster: Option<&Cluster>,
-) -> Result<TidyEvidence, WorkerError> {
+) -> Result<Evidence, WorkerError> {
     let topic = match change {
         TreeEdit::Merge { source: topic, .. }
         | TreeEdit::Move { topic, .. }
@@ -346,22 +346,22 @@ async fn evidence(
         | TreeEdit::Close { topic }
         | TreeEdit::Delete { topic } => *topic,
         TreeEdit::AddType { .. } | TreeEdit::MergePage { .. } | TreeEdit::RemovePage { .. } => {
-            return Ok(TidyEvidence::default());
+            return Ok(Evidence::default());
         }
         TreeEdit::FileInto { members, .. } => {
-            return Ok(TidyEvidence {
+            return Ok(Evidence {
                 sessions: u64::try_from(members.len()).map_err(|_| WorkerError::Count)?,
                 samples: Vec::new(),
             });
         }
         TreeEdit::CreateTopic { members, .. } => {
-            return Ok(TidyEvidence {
+            return Ok(Evidence {
                 sessions: u64::try_from(members.len()).map_err(|_| WorkerError::Count)?,
                 samples: cluster
                     .into_iter()
                     .flat_map(|cluster| cluster.sessions.iter())
                     .take(SAMPLES)
-                    .map(|suggested| TidySample {
+                    .map(|suggested| Sample {
                         id: suggested.session.as_str().to_owned(),
                         title: suggested.title.clone(),
                     })
@@ -372,13 +372,13 @@ async fn evidence(
     let mut filed = env.topics.filing.filed(topic).await?;
     let total = filed.sessions.len() + filed.conversations.len();
     filed.sessions.sort_by_key(|row| Reverse(row.last_active));
-    Ok(TidyEvidence {
+    Ok(Evidence {
         sessions: u64::try_from(total).map_err(|_| WorkerError::Count)?,
         samples: filed
             .sessions
             .into_iter()
             .take(SAMPLES)
-            .map(|row| TidySample {
+            .map(|row| Sample {
                 id: row.placement.session.as_str().to_owned(),
                 title: row.title,
             })

@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
+use serde::Deserialize;
+use serde::Serialize;
 use uuid::Uuid;
-use wire::gateway::tidy::TidyChange as WireChange;
 use wire::session_id::SessionId;
 
 use super::Fingerprint;
@@ -97,33 +98,90 @@ impl TreeEdit {
             Self::AddType { name, .. } => Fingerprint::of(&["type", slug(name)?.as_str()]),
         })
     }
+}
 
-    #[must_use]
-    pub fn to_wire(&self) -> WireChange {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum EditRecord {
+    Merge {
+        source: String,
+        into: String,
+    },
+    Move {
+        topic: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent: Option<String>,
+    },
+    Rename {
+        topic: String,
+        name: String,
+    },
+    Close {
+        topic: String,
+    },
+    Delete {
+        topic: String,
+    },
+    CreateTopic {
+        topic: String,
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        aliases: Vec<String>,
+        #[serde(default)]
+        sessions: Vec<SessionId>,
+        #[serde(default)]
+        conversations: Vec<String>,
+    },
+    FileInto {
+        topic: String,
+        #[serde(default)]
+        sessions: Vec<SessionId>,
+        #[serde(default)]
+        conversations: Vec<String>,
+    },
+    MergePage {
+        page: String,
+        into: String,
+    },
+    RemovePage {
+        page: String,
+    },
+    AddType {
+        topic: String,
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent: Option<String>,
+    },
+}
+
+impl From<&TreeEdit> for EditRecord {
+    fn from(edit: &TreeEdit) -> Self {
         let id = |topic: &TopicId| topic.to_string();
         let parent = |parent: &Option<TopicId>| parent.as_ref().map(id);
-        match self {
-            Self::Merge { source, into } => WireChange::Merge {
+        match edit {
+            TreeEdit::Merge { source, into } => Self::Merge {
                 source: id(source),
                 into: id(into),
             },
-            Self::Move { topic, parent: to } => WireChange::Move {
+            TreeEdit::Move { topic, parent: to } => Self::Move {
                 topic: id(topic),
                 parent: parent(to),
             },
-            Self::Rename { topic, name } => WireChange::Rename {
+            TreeEdit::Rename { topic, name } => Self::Rename {
                 topic: id(topic),
                 name: name.as_str().to_owned(),
             },
-            Self::Close { topic } => WireChange::Close { topic: id(topic) },
-            Self::Delete { topic } => WireChange::Delete { topic: id(topic) },
-            Self::CreateTopic {
+            TreeEdit::Close { topic } => Self::Close { topic: id(topic) },
+            TreeEdit::Delete { topic } => Self::Delete { topic: id(topic) },
+            TreeEdit::CreateTopic {
                 topic,
                 name,
                 parent: under,
                 aliases,
                 members,
-            } => WireChange::CreateTopic {
+            } => Self::CreateTopic {
                 topic: id(topic),
                 name: name.as_str().to_owned(),
                 parent: parent(under),
@@ -134,50 +192,54 @@ impl TreeEdit {
                 sessions: sessions(members),
                 conversations: conversations(members),
             },
-            Self::FileInto { topic, members } => WireChange::FileInto {
+            TreeEdit::FileInto { topic, members } => Self::FileInto {
                 topic: id(topic),
                 sessions: sessions(members),
                 conversations: conversations(members),
             },
-            Self::MergePage { page, into } => WireChange::MergePage {
+            TreeEdit::MergePage { page, into } => Self::MergePage {
                 page: page.as_ref().to_owned(),
                 into: into.as_ref().to_owned(),
             },
-            Self::RemovePage { page } => WireChange::RemovePage {
+            TreeEdit::RemovePage { page } => Self::RemovePage {
                 page: page.as_ref().to_owned(),
             },
-            Self::AddType {
+            TreeEdit::AddType {
                 topic,
                 name,
                 parent: under,
-            } => WireChange::AddType {
+            } => Self::AddType {
                 topic: id(topic),
                 name: name.as_str().to_owned(),
                 parent: parent(under),
             },
         }
     }
+}
 
-    pub fn from_wire(change: WireChange) -> Result<Self, TidyError> {
+impl TryFrom<EditRecord> for TreeEdit {
+    type Error = TidyError;
+
+    fn try_from(change: EditRecord) -> Result<Self, TidyError> {
         Ok(match change {
-            WireChange::Merge { source, into } => Self::Merge {
+            EditRecord::Merge { source, into } => Self::Merge {
                 source: topic(&source)?,
                 into: topic(&into)?,
             },
-            WireChange::Move {
+            EditRecord::Move {
                 topic: moved,
                 parent,
             } => Self::Move {
                 topic: topic(&moved)?,
                 parent: parent.as_deref().map(topic).transpose()?,
             },
-            WireChange::Rename { topic: id, name } => Self::Rename {
+            EditRecord::Rename { topic: id, name } => Self::Rename {
                 topic: topic(&id)?,
                 name: TopicName::new(&name)?,
             },
-            WireChange::Close { topic: id } => Self::Close { topic: topic(&id)? },
-            WireChange::Delete { topic: id } => Self::Delete { topic: topic(&id)? },
-            WireChange::CreateTopic {
+            EditRecord::Close { topic: id } => Self::Close { topic: topic(&id)? },
+            EditRecord::Delete { topic: id } => Self::Delete { topic: topic(&id)? },
+            EditRecord::CreateTopic {
                 topic: id,
                 name,
                 parent,
@@ -194,7 +256,7 @@ impl TreeEdit {
                     .collect::<Result<_, _>>()?,
                 members: members(sessions, &conversations)?,
             },
-            WireChange::FileInto {
+            EditRecord::FileInto {
                 topic: id,
                 sessions,
                 conversations,
@@ -202,14 +264,14 @@ impl TreeEdit {
                 topic: topic(&id)?,
                 members: members(sessions, &conversations)?,
             },
-            WireChange::MergePage { page, into } => Self::MergePage {
+            EditRecord::MergePage { page, into } => Self::MergePage {
                 page: wiki_slug(&page)?,
                 into: wiki_slug(&into)?,
             },
-            WireChange::RemovePage { page } => Self::RemovePage {
+            EditRecord::RemovePage { page } => Self::RemovePage {
                 page: wiki_slug(&page)?,
             },
-            WireChange::AddType {
+            EditRecord::AddType {
                 topic: id,
                 name,
                 parent,

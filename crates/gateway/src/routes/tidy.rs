@@ -12,20 +12,30 @@ use kernel::tidy::Batch;
 use kernel::tidy::BatchId;
 use kernel::tidy::BatchOutcome;
 use kernel::tidy::Decision;
+use kernel::tidy::EditRecord;
+use kernel::tidy::Evidence;
 use kernel::tidy::Proposal;
 use kernel::tidy::ProposalId;
+use kernel::tidy::ProposalState;
+use kernel::tidy::Proposer;
 use kernel::tidy::RoleActivity;
 use kernel::tidy::TidyError;
 use kernel::tidy::TidyPorts;
+use kernel::tidy::TreeEdit;
 use kernel::tidy::WEEK;
 use wire::gateway::tidy::EntityTypeCount;
 use wire::gateway::tidy::FilingUpkeep;
 use wire::gateway::tidy::MemoryUpkeep;
+use wire::gateway::tidy::ProposalState as ProposalStateBody;
+use wire::gateway::tidy::Proposer as ProposerBody;
 use wire::gateway::tidy::TidyBatch;
 use wire::gateway::tidy::TidyBatchDecision;
+use wire::gateway::tidy::TidyChange;
+use wire::gateway::tidy::TidyEvidence;
 use wire::gateway::tidy::TidyFailure;
 use wire::gateway::tidy::TidyPending;
 use wire::gateway::tidy::TidyProposal;
+use wire::gateway::tidy::TidySample;
 use wire::gateway::tidy::WikiUpkeep;
 use wire::gateway::tidy::WorkerActivity;
 use wire::gateway::tidy::WorkerUpkeep;
@@ -85,20 +95,94 @@ fn record(proposal: Proposal) -> TidyProposal {
     TidyProposal {
         id: proposal.id.to_string(),
         batch_id: proposal.batch.to_string(),
-        change: proposal.change.to_wire(),
+        change: change(&proposal.change),
         reason: proposal.reason.as_str().to_owned(),
-        evidence: proposal.evidence,
-        proposed_by: proposal.by,
+        evidence: evidence(proposal.evidence),
+        proposed_by: proposer(proposal.by),
         proposed_at: proposal.proposed_at,
-        state: proposal.state,
+        state: state(proposal.state),
         decided_at: proposal.decided_at,
+    }
+}
+
+fn change(edit: &TreeEdit) -> TidyChange {
+    match EditRecord::from(edit) {
+        EditRecord::Merge { source, into } => TidyChange::Merge { source, into },
+        EditRecord::Move { topic, parent } => TidyChange::Move { topic, parent },
+        EditRecord::Rename { topic, name } => TidyChange::Rename { topic, name },
+        EditRecord::Close { topic } => TidyChange::Close { topic },
+        EditRecord::Delete { topic } => TidyChange::Delete { topic },
+        EditRecord::CreateTopic {
+            topic,
+            name,
+            parent,
+            aliases,
+            sessions,
+            conversations,
+        } => TidyChange::CreateTopic {
+            topic,
+            name,
+            parent,
+            aliases,
+            sessions,
+            conversations,
+        },
+        EditRecord::FileInto {
+            topic,
+            sessions,
+            conversations,
+        } => TidyChange::FileInto {
+            topic,
+            sessions,
+            conversations,
+        },
+        EditRecord::MergePage { page, into } => TidyChange::MergePage { page, into },
+        EditRecord::RemovePage { page } => TidyChange::RemovePage { page },
+        EditRecord::AddType {
+            topic,
+            name,
+            parent,
+        } => TidyChange::AddType {
+            topic,
+            name,
+            parent,
+        },
+    }
+}
+
+fn evidence(evidence: Evidence) -> TidyEvidence {
+    TidyEvidence {
+        sessions: evidence.sessions,
+        samples: evidence
+            .samples
+            .into_iter()
+            .map(|sample| TidySample {
+                id: sample.id,
+                title: sample.title,
+            })
+            .collect(),
+    }
+}
+
+const fn proposer(by: Proposer) -> ProposerBody {
+    match by {
+        Proposer::Categorizer => ProposerBody::Categorizer,
+        Proposer::Backfill => ProposerBody::Backfill,
+    }
+}
+
+const fn state(state: ProposalState) -> ProposalStateBody {
+    match state {
+        ProposalState::Pending => ProposalStateBody::Pending,
+        ProposalState::Approved => ProposalStateBody::Approved,
+        ProposalState::Rejected => ProposalStateBody::Rejected,
     }
 }
 
 fn batch(batch: Batch) -> TidyBatch {
     TidyBatch {
         batch_id: batch.id.to_string(),
-        proposed_by: batch.by,
+        proposed_by: proposer(batch.by),
         proposed_at: batch.at,
         proposals: batch.proposals.into_iter().map(record).collect(),
     }

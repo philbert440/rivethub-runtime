@@ -5,8 +5,6 @@ use std::collections::HashMap;
 use chrono::DateTime;
 use chrono::Utc;
 use uuid::Uuid;
-use wire::gateway::tidy::TidyEvidence;
-use wire::gateway::tidy::TidySample;
 
 use super::Desk;
 use super::Fate;
@@ -18,8 +16,10 @@ use super::ProposedTree;
 use super::Snapshot;
 use crate::filing::Target;
 use crate::tidy::Batch;
+use crate::tidy::Evidence;
 use crate::tidy::Proposer;
 use crate::tidy::Reason;
+use crate::tidy::Sample;
 use crate::tidy::TidyError;
 use crate::tidy::TreeEdit;
 use crate::topics::Alias;
@@ -92,13 +92,13 @@ impl BackfillBatch<'_> {
                         merge.name,
                         self.tree.path(into)
                     ))?,
-                    TidyEvidence::default(),
+                    Evidence::default(),
                 );
             }
         }
         for page in self.pages {
             if let Some((edit, reason)) = page_edit(page)? {
-                batch.add(edit, Reason::new(&reason)?, TidyEvidence::default());
+                batch.add(edit, Reason::new(&reason)?, Evidence::default());
             }
         }
         Ok(batch)
@@ -205,18 +205,15 @@ fn page_edit(page: &Folded) -> Result<Option<(TreeEdit, String)>, TidyError> {
     })
 }
 
-fn evidence(
-    filed: &[(Target, Uuid)],
-    titles: &HashMap<Uuid, &str>,
-) -> Result<TidyEvidence, TidyError> {
-    Ok(TidyEvidence {
+fn evidence(filed: &[(Target, Uuid)], titles: &HashMap<Uuid, &str>) -> Result<Evidence, TidyError> {
+    Ok(Evidence {
         sessions: u64::try_from(filed.len()).map_err(|_| TidyError::Invalid {
             what: "a session count".to_owned(),
         })?,
         samples: filed
             .iter()
             .take(SAMPLES)
-            .map(|(target, conversation)| TidySample {
+            .map(|(target, conversation)| Sample {
                 id: match target {
                     Target::Session(session) => session.as_str().to_owned(),
                     Target::Conversation(id) => id.to_string(),

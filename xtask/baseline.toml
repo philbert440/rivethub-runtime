@@ -66,12 +66,6 @@ count = 1
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/cleanup/batch.rs"
-text = "wire"
-count = 2
-
-[[entry]]
-check = "KERNELWIRE"
 file = "crates/kernel/src/filing/target.rs"
 text = "wire"
 count = 2
@@ -200,19 +194,13 @@ count = 1
 check = "KERNELWIRE"
 file = "crates/kernel/src/tidy/edit.rs"
 text = "wire"
-count = 2
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/tidy/mod.rs"
-text = "wire"
-count = 2
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"
 file = "crates/kernel/src/tidy/proposal.rs"
 text = "wire"
-count = 2
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"

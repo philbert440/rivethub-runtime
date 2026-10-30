@@ -3,16 +3,54 @@ use std::str::FromStr;
 
 use chrono::DateTime;
 use chrono::Utc;
+use serde::Deserialize;
+use serde::Serialize;
 use uuid::Uuid;
-use wire::gateway::tidy::TidyEvidence;
 use wire::session_id::SessionId;
 
-use super::ProposalState;
-use super::Proposer;
 use super::TidyError;
 use super::TreeEdit;
 use crate::topics::TopicId;
 use crate::topics::TopicName;
+
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns a proposal's state; wire::gateway::tidy::ProposalState is the contract's copy, translated by the gateway's tidy routes"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "lowercase")]
+pub enum ProposalState {
+    Pending,
+    Approved,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "lowercase")]
+pub enum Proposer {
+    Categorizer,
+    Backfill,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sample {
+    pub id: String,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Evidence {
+    pub sessions: u64,
+    #[serde(default)]
+    pub samples: Vec<Sample>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ProposalId(Uuid);
@@ -118,7 +156,7 @@ pub struct Proposal {
     pub proposed_at: DateTime<Utc>,
     pub change: TreeEdit,
     pub reason: Reason,
-    pub evidence: TidyEvidence,
+    pub evidence: Evidence,
     pub state: ProposalState,
     pub decided_at: Option<DateTime<Utc>>,
 }
@@ -154,7 +192,7 @@ impl Batch {
         }
     }
 
-    pub fn add(&mut self, change: TreeEdit, reason: Reason, evidence: TidyEvidence) {
+    pub fn add(&mut self, change: TreeEdit, reason: Reason, evidence: Evidence) {
         self.proposals.push(Proposal {
             id: ProposalId(Uuid::new_v4()),
             batch: self.id,

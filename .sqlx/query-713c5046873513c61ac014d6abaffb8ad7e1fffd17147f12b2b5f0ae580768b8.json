@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT p.id, p.batch_id, b.proposed_by, b.proposed_at,\n                      p.change AS \"change: Json<WireChange>\", p.reason,\n                      p.evidence AS \"evidence: Json<TidyEvidence>\", p.state, p.decided_at\n                 FROM rh_tidy_proposals p\n                 JOIN rh_tidy_batches b ON b.id = p.batch_id\n                WHERE ($1 = false OR p.state = 'pending')\n                  AND ($2::uuid IS NULL OR p.id = $2)\n                  AND ($3::uuid IS NULL OR p.batch_id = $3)\n                ORDER BY b.proposed_at DESC, b.id, p.position",
+  "query": "SELECT p.id, p.batch_id, b.proposed_by, b.proposed_at,\n                      p.change AS \"change: Json<EditRecord>\", p.reason,\n                      p.evidence AS \"evidence: Json<Evidence>\", p.state, p.decided_at\n                 FROM rh_tidy_proposals p\n                 JOIN rh_tidy_batches b ON b.id = p.batch_id\n                WHERE ($1 = false OR p.state = 'pending')\n                  AND ($2::uuid IS NULL OR p.id = $2)\n                  AND ($3::uuid IS NULL OR p.batch_id = $3)\n                ORDER BY b.proposed_at DESC, b.id, p.position",
   "describe": {
     "columns": [
       {
@@ -49,7 +49,7 @@
       },
       {
         "ordinal": 4,
-        "name": "change: Json<WireChange>",
+        "name": "change: Json<EditRecord>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -71,7 +71,7 @@
       },
       {
         "ordinal": 6,
-        "name": "evidence: Json<TidyEvidence>",
+        "name": "evidence: Json<Evidence>",
         "type_info": "Jsonb",
         "origin": {
           "Table": {
@@ -122,5 +122,5 @@
       true
     ]
   },
-  "hash": "ac85d8d85c71dfc19cd41af0efe914b2e477af960fa65066799efc051d7b4928"
+  "hash": "713c5046873513c61ac014d6abaffb8ad7e1fffd17147f12b2b5f0ae580768b8"
 }

@@ -11,6 +11,7 @@ use kernel::queue::JobQueue;
 use kernel::queue::WorkerRole;
 use kernel::tidy::Batch;
 use kernel::tidy::Decision;
+use kernel::tidy::Evidence;
 use kernel::tidy::ProposalState;
 use kernel::tidy::Proposer;
 use kernel::tidy::Reason;
@@ -31,7 +32,6 @@ use kernel::topics::TopicName;
 use kernel::topics::TopicPageStore;
 use kernel::topics::TopicStore;
 use wire::JsonObject;
-use wire::gateway::tidy::TidyEvidence;
 
 use crate::filing::capture;
 use crate::topics::Outcome;
@@ -40,8 +40,8 @@ use crate::topics::new_topic;
 use crate::topics::same;
 use crate::topics::session;
 
-fn evidence(sessions: u64) -> TidyEvidence {
-    TidyEvidence {
+fn evidence(sessions: u64) -> Evidence {
+    Evidence {
         sessions,
         samples: Vec::new(),
     }

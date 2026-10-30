@@ -10,6 +10,8 @@ use chrono::Utc;
 use kernel::filing::conversation_keys;
 use kernel::tidy::Batch;
 use kernel::tidy::BatchId;
+use kernel::tidy::EditRecord;
+use kernel::tidy::Evidence;
 use kernel::tidy::Fingerprint;
 use kernel::tidy::Proposal;
 use kernel::tidy::ProposalId;
@@ -26,8 +28,6 @@ use kernel::topics::TopicId;
 use kernel::topics::TopicName;
 use sqlx::types::Json;
 use uuid::Uuid;
-use wire::gateway::tidy::TidyChange as WireChange;
-use wire::gateway::tidy::TidyEvidence;
 use wire::session_id::SessionId;
 
 use crate::Error;
@@ -38,9 +38,9 @@ struct ProposalRow {
     batch_id: Uuid,
     proposed_by: String,
     proposed_at: DateTime<Utc>,
-    change: Json<WireChange>,
+    change: Json<EditRecord>,
     reason: String,
-    evidence: Json<TidyEvidence>,
+    evidence: Json<Evidence>,
     state: String,
     decided_at: Option<DateTime<Utc>>,
 }
@@ -72,7 +72,7 @@ fn proposal(row: ProposalRow) -> Result<Proposal, TidyError> {
         by: Proposer::from_str(&row.proposed_by)
             .map_err(|error| stored("proposed_by")(Box::new(error)))?,
         proposed_at: row.proposed_at,
-        change: TreeEdit::from_wire(row.change.0)?,
+        change: TreeEdit::try_from(row.change.0)?,
         reason: Reason::new(&row.reason)?,
         evidence: row.evidence.0,
         state: ProposalState::from_str(&row.state)
@@ -107,8 +107,8 @@ impl PostgresMemory {
         sqlx::query_as!(
             ProposalRow,
             r#"SELECT p.id, p.batch_id, b.proposed_by, b.proposed_at,
-                      p.change AS "change: Json<WireChange>", p.reason,
-                      p.evidence AS "evidence: Json<TidyEvidence>", p.state, p.decided_at
+                      p.change AS "change: Json<EditRecord>", p.reason,
+                      p.evidence AS "evidence: Json<Evidence>", p.state, p.decided_at
                  FROM rh_tidy_proposals p
                  JOIN rh_tidy_batches b ON b.id = p.batch_id
                 WHERE ($1 = false OR p.state = 'pending')
@@ -155,7 +155,7 @@ impl TidyStore for PostgresMemory {
                 i32::try_from(position)
                     .map_err(|source| TidyError::Unavailable(Box::new(Error::Integer(source))))?,
                 fingerprint.as_str(),
-                Json(proposal.change.to_wire()) as _,
+                Json(EditRecord::from(&proposal.change)) as _,
                 proposal.reason.as_str(),
                 Json(&proposal.evidence) as _
             )

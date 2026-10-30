@@ -9,6 +9,8 @@ use chrono::Utc;
 use kernel::filing::conversation_keys;
 use kernel::tidy::Batch;
 use kernel::tidy::BatchId;
+use kernel::tidy::EditRecord;
+use kernel::tidy::Evidence;
 use kernel::tidy::Fingerprint;
 use kernel::tidy::Proposal;
 use kernel::tidy::ProposalId;
@@ -27,8 +29,6 @@ use rusqlite::Connection;
 use rusqlite::OptionalExtension;
 use rusqlite::params;
 use uuid::Uuid;
-use wire::gateway::tidy::TidyChange as WireChange;
-use wire::gateway::tidy::TidyEvidence;
 use wire::session_id::SessionId;
 
 use crate::SqliteStore;
@@ -98,14 +98,14 @@ fn uuid(text: &str, field: &'static str) -> Result<Uuid, TidyError> {
 
 fn proposal(columns: ProposalColumns) -> Result<Proposal, TidyError> {
     let (id, batch, by, proposed_at, change, reason, evidence, state, decided_at) = columns;
-    let change: WireChange = serde_json::from_str(&change).map_err(stored("change"))?;
-    let evidence: TidyEvidence = serde_json::from_str(&evidence).map_err(stored("evidence"))?;
+    let change: EditRecord = serde_json::from_str(&change).map_err(stored("change"))?;
+    let evidence: Evidence = serde_json::from_str(&evidence).map_err(stored("evidence"))?;
     Ok(Proposal {
         id: ProposalId::from_uuid(uuid(&id, "proposal id")?),
         batch: BatchId::from_uuid(uuid(&batch, "batch id")?),
         by: Proposer::from_str(&by).map_err(stored("proposed_by"))?,
         proposed_at: at(&proposed_at, "proposed_at")?,
-        change: TreeEdit::from_wire(change)?,
+        change: TreeEdit::try_from(change)?,
         reason: Reason::new(&reason)?,
         evidence,
         state: ProposalState::from_str(&state).map_err(stored("state"))?,
@@ -181,7 +181,8 @@ fn insert(conn: &Connection, batch: &Batch) -> Result<Vec<Proposal>, TidyError> 
     .map_err(failed("tidy batch"))?;
     let mut kept = Vec::new();
     for (position, proposal) in batch.proposals.iter().enumerate() {
-        let change = serde_json::to_string(&proposal.change.to_wire()).map_err(stored("change"))?;
+        let change =
+            serde_json::to_string(&EditRecord::from(&proposal.change)).map_err(stored("change"))?;
         let evidence = serde_json::to_string(&proposal.evidence).map_err(stored("evidence"))?;
         let inserted = conn
             .execute(
