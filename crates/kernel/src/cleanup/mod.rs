@@ -1,3 +1,5 @@
+mod automated;
+mod batch;
 mod entity;
 mod filing;
 mod fold;
@@ -10,6 +12,11 @@ use thiserror::Error;
 
 use crate::BoxError;
 
+pub use automated::Automated;
+pub use automated::TEMPLATE_RUNS;
+pub use automated::Template;
+pub use automated::seed_keys;
+pub use batch::BackfillBatch;
 pub use entity::EntityType;
 pub use filing::Desk;
 pub use filing::FiledHow;
@@ -23,12 +30,15 @@ pub use fold::FoldRule;
 pub use fold::Folded;
 pub use fold::Settled;
 pub use fold::cited_topics;
+pub use fold::clear_junk;
+pub use fold::code_name;
+pub use fold::fold_variants;
+pub use fold::guard_removal;
 pub use fold::settle_pages;
 pub use names::Junk;
 pub use names::JunkReason;
 pub use names::JunkStage;
 pub use names::NameGuard;
-pub use names::near_duplicate;
 pub use snapshot::EntitySection;
 pub use snapshot::KnowledgePage;
 pub use snapshot::Project;

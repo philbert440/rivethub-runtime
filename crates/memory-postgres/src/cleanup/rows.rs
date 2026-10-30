@@ -1,9 +1,16 @@
+use std::str::FromStr;
+
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::cleanup::SnapshotConversation;
 use kernel::cleanup::SnapshotCorrection;
 use kernel::cleanup::SnapshotHead;
+use kernel::tasks::TaskOrigin;
 use uuid::Uuid;
+
+use crate::Error;
+
+const OPENING_CHARS: usize = 2000;
 
 #[derive(Debug, sqlx::FromRow)]
 pub(super) struct ConversationRow {
@@ -15,11 +22,14 @@ pub(super) struct ConversationRow {
     cwd: Option<String>,
     summary: Option<String>,
     last_active: DateTime<Utc>,
+    opening: Option<String>,
+    user_turns: i64,
+    task_origin: Option<String>,
 }
 
 impl ConversationRow {
-    pub(super) fn conversation(self) -> SnapshotConversation {
-        SnapshotConversation {
+    pub(super) fn conversation(self) -> Result<SnapshotConversation, Error> {
+        Ok(SnapshotConversation {
             head: SnapshotHead {
                 id: self.id,
                 session_key: self.session_key,
@@ -31,7 +41,18 @@ impl ConversationRow {
             summary: self.summary,
             last_active: self.last_active,
             task_parent: None,
-        }
+            task_origin: self
+                .task_origin
+                .as_deref()
+                .map(TaskOrigin::from_str)
+                .transpose()
+                .map_err(|source| Error::stored("task origin", source))?,
+            opening: self
+                .opening
+                .map(|opening| opening.chars().take(OPENING_CHARS).collect()),
+            user_turns: u32::try_from(self.user_turns)?,
+            parent_session: None,
+        })
     }
 }
 

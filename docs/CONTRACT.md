@@ -426,27 +426,52 @@ every type with the entities directly under it) and `loosePages` (pages bound to
 role's task list, and how many of its jobs have failed at least once without succeeding since, dead ones included.
 Completing a job records its task's finish in `rh_worker_runs`, in the graphile completion statement or the SQLite
 completion transaction. `pendingProposals` counts pending proposals. Without the stores the route is `503`.
-(45) Cleanup dry run (Phil, 2026-10-29): `rh memory cleanup --dry-run --out DIR --model-url URL --model NAME` (optional
-`--batch N`, default 20; `--concurrency N`, default 2; `--timeout SECONDS`, default 900) plans the topic cleanup and
-changes nothing: without `--dry-run` it refuses. It reads memory over connections that set
-`default_transaction_read_only=on` and checks the setting before reading, works on the deployed schema and on 0032/0033
-(before 0032 the People, Hosts and Tools roots count as types and the topics under them as entities, as 0032 makes them),
-and reads the People, Hosts and Tools wiki pages without taking the writer lock. Stages are checkpointed in DIR
-(`snapshot.json`, `tree-chunks.jsonl`, `tree-drafts.jsonl`, `tree.json`, `filing-answers.jsonl`, `filings.json`,
-`fold-answers.jsonl`, `folds.json`, `timings.json`, `progress.log`), so a rerun resumes after the last finished job and a
-stage with failed jobs stops the run until it is rerun; writing a new tree drops the later stages. The tree pass asks the
-model for topics over batches of conversations seeded by the accepted `project:` tags (their aliases kept, "General" and
-rejected or deleted names refused) and the existing work topics, consolidates them into one tree of at most 4 levels,
-and refuses a new name that is a conversation title, a one-off task, a path, ticket, version, branch or id, a catch-all,
-a near-duplicate, or held by fewer than 3 conversations (estimated, then again after filing, when the filings of a dropped
-topic move to its parent). The filing pass runs (42)'s rules and prompt on that tree, one session or conversation at a
-time with the newest conversation standing for its session, delegated tasks after their parents, and the model's
-questions batched (one JSON object keyed by conversation ref per request). The fold pass gives each loose knowledge page
-and each old People, Hosts and Tools section one fate: merge into the most cited page of the same title, an entity of the
-type its own entity reference names, a section on the topic most of its cited conversations are filed in (a strict
-plurality), or, when those do not decide, the model's entity, section, new topic, merge or remove. `report.md` and
-`report.json` hold the tree with session counts and sample titles, filings per rule and "nothing fits", a sample of 60
-filings, the fold outcomes with samples, the junk names and the time each stage took.
+(45) Topic cleanup (Phil, 2026-10-29): `rh memory cleanup --dry-run --out DIR --model-url URL --model NAME` plans the
+cleanup and changes nothing; `--propose --database URL` runs the same stages against the database it names and then
+writes them as one tidy batch (`proposed_by: backfill`, note 43) for Phil to approve, refusing the node's live memory
+database (`RIVETHUB_PG_URL`, by database name before and after connecting). Optional `--database` (dry run: default
+`RIVETHUB_PG_URL`), `--batch N` (20), `--concurrency N` (2), `--timeout SECONDS` (900). Memory is read over connections
+that set `default_transaction_read_only=on` (checked before reading), on the deployed schema and on 0032/0033 (before
+0032 the People, Hosts and Tools roots count as types and the topics under them as entities); the People, Hosts and Tools
+wiki pages are read without the writer lock. Child sessions come from this node's harness stores and from claude-code
+`/subagents/` keys. Stages are checkpointed in DIR (`snapshot.json`, `tree-chunks.jsonl`, `tree-drafts.jsonl`,
+`tree.json`, `filing-answers.jsonl`, `filings.json`, `fold-answers.jsonl`, `folds.json`, `timings.json`,
+`progress.log`, `proposed.json`); a rerun resumes after the last finished job, a stage with failed jobs stops the run,
+and a new tree drops the later stages.
+Automated runs are left out like sandbox runs: task conversations started by a heartbeat or an eval, and conversations
+whose opening prompt (its letters, first 80) is shared by at least 20 conversations, at least 80% single-turn, unless
+the opening names a project or existing work topic.
+Tree: the model proposes topics over batches of conversations (automated runs left out) seeded by the accepted
+`project:` tags with their aliases and the existing work topics, then consolidates one tree; a project takes the casing
+of an existing topic of the same name. The kernel refuses a new name that is a conversation title, a task, an activity
+(review, fix, task, punch list, ops, operations, issue, resolution, triage, audit, smoke, chores), vague (den, program,
+initiative, stuff, things, workstream), a path or file name, ticket, version, branch or id, a catch-all, rejected or
+deleted, deeper than 4 levels, or held by fewer than 3 conversations (estimated, then again after filing, when a dropped
+topic's filings move to its parent). Two names are one area when the word stems of one, leaving out the projects' own
+words, lie within the other's; an existing root topic that shares a project's name word, and a new subtopic that merges
+such a topic, fold into that project.
+Filing runs note 42's rules, with this note's changes to them (live too): after the folder rule, a repo rule files work
+whose title, summary or directory refers to a repo (a `github.com/<owner>/<repo>` link, a path segment, `<repo> PR #n`,
+`<repo>#n`, `PR #n in <repo>`) that is exactly one root topic's name or alias; the name rule ignores names and aliases
+that occur in more than 5% of the conversations (measured in the backfill; none live), and when the one named topic has
+subtopics the model chooses between it and them (the prompt says which topic the conversation names); a suggestion is
+a path only when a word is a file name with a known extension, and a version is `v` with one or two digits or digits
+around a dot (so `families.app` and `V100` pass). Model questions go twenty at a time, one JSON object keyed by
+conversation ref.
+Fold: each loose page and old People, Hosts and Tools section gets one fate: merge into the most cited page of the same
+title; an entity of the type its own entity reference names, unless its title is a code name (camelCase, three humps of
+PascalCase, `_`, `(`, `:`, or "<Name> tool"); a section on the topic most of its cited conversations are filed in (a
+strict plurality); otherwise the model's entity, section, new topic, merge, keep or remove. Remove stands only for clear
+junk (a smoke, test, tmp, temp, scratch, dummy, placeholder or untitled word, an 8-digit run, or an empty uncited page);
+otherwise the page goes to its most cited topic or is kept. An entity whose name holds another entity's whole name merges
+into it (same type first, then the most extended name).
+Proposals: a project or new topic becomes `createTopic` with its non-generic aliases and the sessions and conversations
+the rules or the model filed there; an existing topic gets `move`, `rename` and `fileInto` (new: `{topic, sessions,
+conversations}`); a merged existing topic gets `merge`; a page merge `mergePage` (`{page, into}`, applied as a fold) and
+a removal `removePage` (`{page}`, which deletes the page and its file). `createTopic` gains optional `aliases`. Your
+placements, child sessions and automated runs are never proposed. `report.md` and `report.json` hold the left-out runs,
+the tree with session counts and samples, filings per rule, a sample of 60, the fold outcomes, the junk names and the
+time each stage took.
 (50) Plug-in host (Phil, 2026-10-29; notes 51–60 are proposed and await his review): RivetHub's core is the workspace
 and memory, plus delegation, notifications and tasks; everything else is a plug-in, a program that runs in its own
 process on one node, is described by a manifest and reaches rh only over B17. No plug-in code is loaded into rh, so

@@ -237,8 +237,20 @@ pub enum Error {
     WikiStore(#[from] kernel::wiki::builder::WikiStoreError),
     #[error(transparent)]
     JobQueue(#[from] kernel::queue::JobQueueError),
-    #[error("rh memory cleanup only plans for now; pass --dry-run")]
-    CleanupDryRun,
+    #[error("rh memory cleanup runs as --dry-run or --propose")]
+    CleanupMode,
+    #[error(
+        "rh memory cleanup --propose needs --database <url> naming the database to write the proposals to"
+    )]
+    CleanupDatabase,
+    #[error("refusing to write cleanup proposals to the node's live memory database")]
+    CleanupLive,
+    #[error("rh memory cleanup --propose needs RIVETHUB_PG_URL to know which database is live")]
+    CleanupLiveUnknown,
+    #[error(transparent)]
+    Lineage(#[from] kernel::transcript::TranscriptReaderError),
+    #[error(transparent)]
+    Tidy(#[from] kernel::tidy::TidyError),
     #[error("rh memory cleanup needs --out <dir> for its checkpoints and report")]
     CleanupOut,
     #[error("rh memory cleanup needs --model-url <url> and --model <name>")]

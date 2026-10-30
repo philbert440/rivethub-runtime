@@ -1,6 +1,7 @@
 mod answer;
 mod correction;
 mod decide;
+mod repo;
 mod store;
 mod target;
 
@@ -11,6 +12,8 @@ pub use correction::CorrectionExample;
 pub use decide::Evidence;
 pub use decide::Rule;
 pub use decide::Step;
+pub use repo::references;
+pub use repo::repo_topic;
 pub use store::ConversationPlacement;
 pub use store::Filed;
 pub use store::FiledConversation;

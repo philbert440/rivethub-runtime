@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::BuildHasher;
@@ -7,6 +8,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use uuid::Uuid;
 
+use super::Automated;
 use super::Lift;
 use super::ProposedTree;
 use super::Snapshot;
@@ -23,6 +25,7 @@ use crate::topics::Redirect;
 use crate::topics::TopicId;
 use crate::topics::TopicKind;
 use crate::topics::TopicListing;
+use crate::topics::generic_keys;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "how", rename_all = "kebab-case")]
@@ -37,6 +40,7 @@ pub enum FiledHow {
     Refused { name: String, refusal: Refusal },
     Nothing,
     Unanswered,
+    Automated,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,7 +79,7 @@ impl Filing {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Turn {
     Done(Filing),
-    Ask,
+    Ask { named: Option<TopicId> },
 }
 
 #[derive(Debug, Clone)]
@@ -84,11 +88,19 @@ pub struct Desk {
     redirects: Vec<Redirect>,
     placed: HashMap<Target, (PlacementSource, TopicId)>,
     corrected: HashSet<Target>,
+    generic: BTreeSet<String>,
+    automated: Automated,
 }
 
 impl Desk {
     #[must_use]
-    pub fn new(snapshot: &Snapshot, tree: &ProposedTree, listings: Vec<TopicListing>) -> Self {
+    pub fn new(
+        snapshot: &Snapshot,
+        tree: &ProposedTree,
+        listings: Vec<TopicListing>,
+        filable: &[&SnapshotConversation],
+        automated: Automated,
+    ) -> Self {
         let work: HashSet<TopicId> = snapshot
             .topics
             .iter()
@@ -111,12 +123,42 @@ impl Desk {
             .iter()
             .filter_map(super::SnapshotCorrection::target)
             .collect();
+        let redirects = tree.redirects(snapshot);
+        let corpus: Vec<Vec<&str>> = filable
+            .iter()
+            .map(|conversation| {
+                conversation
+                    .title()
+                    .into_iter()
+                    .chain(conversation.summary.as_deref())
+                    .collect()
+            })
+            .collect();
+        let generic = generic_keys(&listings, &redirects, &corpus);
         Self {
             listings,
-            redirects: tree.redirects(snapshot),
+            redirects,
             placed,
             corrected,
+            generic,
+            automated,
         }
+    }
+
+    #[must_use]
+    pub const fn generic(&self) -> &BTreeSet<String> {
+        &self.generic
+    }
+
+    #[must_use]
+    pub const fn automated(&self) -> &Automated {
+        &self.automated
+    }
+
+    #[must_use]
+    pub fn parent_session(conversation: &SnapshotConversation) -> Option<Target> {
+        let parent = conversation.parent_session.as_deref()?;
+        Target::stored(Some(parent), None)
     }
 
     #[must_use]
@@ -142,16 +184,20 @@ impl Desk {
         parent_topic: Option<TopicId>,
     ) -> Turn {
         let placed = self.placed.get(target).copied();
+        let id = conversation.head.id;
+        if placed.is_none() && self.automated.runs.contains(&id) {
+            return Turn::Done(Filing::new(id, None, FiledHow::Automated));
+        }
         let evidence = Evidence {
             placed: placed.map(|(by, _)| by),
             corrected: self.corrected.contains(target),
-            child: false,
+            child: conversation.parent_session.is_some(),
             parent_topic,
             cwd: conversation.cwd.as_deref(),
             title: conversation.title(),
             summary: conversation.summary.as_deref(),
+            generic: &self.generic,
         };
-        let id = conversation.head.id;
         match evidence.decide(&self.listings, &self.redirects) {
             Step::Placed(by) => Turn::Done(Filing::new(
                 id,
@@ -163,7 +209,7 @@ impl Desk {
             Step::File { topic, rule } => {
                 Turn::Done(Filing::new(id, Some(topic), FiledHow::Rule { rule }))
             }
-            Step::Ask => Turn::Ask,
+            Step::Ask { named } => Turn::Ask { named },
         }
     }
 

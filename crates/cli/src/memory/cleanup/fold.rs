@@ -9,7 +9,9 @@ use kernel::cleanup::Junk;
 use kernel::cleanup::JunkReason;
 use kernel::cleanup::JunkStage;
 use kernel::cleanup::cited_topics;
-use kernel::cleanup::near_duplicate;
+use kernel::cleanup::clear_junk;
+use kernel::cleanup::fold_variants;
+use kernel::cleanup::guard_removal;
 use kernel::cleanup::settle_pages;
 use kernel::filing::TopicLine;
 use kernel::topics::TopicId;
@@ -105,6 +107,7 @@ pub(super) async fn stage(stage: &Stage<'_>, filed: &Filed) -> Result<Folds, Err
     };
     let mut folded = settled.folded;
     folded.extend(ask_all(&context, open).await?);
+    fold_variants(&mut folded);
     let junk = junk(stage, filed, &folded)?;
     let (sections, pages) = folded
         .into_iter()
@@ -204,7 +207,12 @@ async fn ask(context: &Context<'_>, batch: Vec<Open<'_>>) -> Result<Vec<Folded>,
                     continue;
                 }
             },
-            Ok(FoldAnswer::Remove) => Fate::Remove,
+            Ok(FoldAnswer::Keep) => Fate::Keep,
+            Ok(FoldAnswer::Remove) => guard_removal(
+                Fate::Remove,
+                clear_junk(open.title, &open.lead, open.citations),
+                &open.cited,
+            ),
             Err(error) => {
                 tracing::warn!("cleanup fold answer skipped: {error}");
                 continue;
@@ -228,6 +236,7 @@ fn junk(stage: &Stage<'_>, filed: &Filed, folded: &[Folded]) -> Result<Vec<Junk>
         | Fate::Section { .. }
         | Fate::Merge { .. }
         | Fate::Remove
+        | Fate::Keep
         | Fate::Undecided => None,
     }) {
         let reason = match stage.guard.junk(&TopicName::new(name)?) {
@@ -236,7 +245,7 @@ fn junk(stage: &Stage<'_>, filed: &Filed, folded: &[Folded]) -> Result<Vec<Junk>
                 .tree
                 .topics
                 .iter()
-                .find(|topic| near_duplicate(&topic.name, name))
+                .find(|topic| stage.guard.twin(&topic.name, name))
                 .map(|topic| JunkReason::Duplicate {
                     of: filed.tree.path(topic.id),
                 }),

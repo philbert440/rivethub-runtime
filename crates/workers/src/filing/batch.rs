@@ -6,6 +6,7 @@ use kernel::filing::Subject;
 use kernel::filing::Target;
 use kernel::filing::TopicLine;
 use kernel::topics::Slug;
+use kernel::topics::TopicId;
 use kernel::topics::TopicListing;
 
 use super::FILING_SYSTEM_PROMPT;
@@ -22,6 +23,7 @@ const TOKENS_PER_ANSWER: u32 = 80;
 pub struct BatchItem {
     pub target: Target,
     pub subject: Subject,
+    pub named: Option<TopicId>,
 }
 
 pub async fn file_batch(
@@ -33,7 +35,10 @@ pub async fn file_batch(
     deleted: &BTreeSet<Slug>,
 ) -> Result<Vec<Result<FilingPlan, WorkerError>>, WorkerError> {
     let tree = prompt::Tree::of(listings, lines);
-    let subjects: Vec<&Subject> = items.iter().map(|item| &item.subject).collect();
+    let subjects: Vec<(&Subject, Option<TopicId>)> = items
+        .iter()
+        .map(|item| (&item.subject, item.named))
+        .collect();
     let budget = u32::try_from(items.len())
         .map_err(|_| WorkerError::Count)?
         .saturating_mul(TOKENS_PER_ANSWER)

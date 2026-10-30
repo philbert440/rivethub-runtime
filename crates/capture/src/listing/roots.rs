@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use capture::listing::StoreRoots;
+use super::StoreRoots;
 use config::Environment;
 
 fn setting<'a>(env: &'a Environment, name: &str) -> Option<&'a str> {
@@ -56,7 +56,7 @@ pub fn store_roots(env: &Environment) -> StoreRoots {
 }
 
 #[must_use]
-pub(super) fn claude_config_file(env: &Environment) -> Option<PathBuf> {
+pub fn claude_config_file(env: &Environment) -> Option<PathBuf> {
     setting(env, "CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
         .or_else(|| home(env).map(Path::to_path_buf))

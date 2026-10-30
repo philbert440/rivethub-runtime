@@ -16,6 +16,8 @@ pub enum JunkReason {
     Rejected,
     Title,
     Task,
+    Activity,
+    Vague,
     Refused { refusal: Refusal },
     Duplicate { of: String },
     TooDeep,
@@ -81,6 +83,51 @@ enum TaskVerb {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
 #[strum(serialize_all = "kebab-case", ascii_case_insensitive)]
+enum ActivityWord {
+    Review,
+    Reviews,
+    Fix,
+    Fixes,
+    Fixing,
+    Task,
+    Tasks,
+    Punchlist,
+    Punchlists,
+    Punch,
+    Ops,
+    Operations,
+    Issue,
+    Issues,
+    Resolution,
+    Triage,
+    Audit,
+    Audits,
+    Bugfix,
+    Bugfixes,
+    Smoke,
+    Chores,
+    Cleanup,
+    Maintenance,
+    Job,
+    Jobs,
+    Slice,
+    Slices,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
+#[strum(serialize_all = "kebab-case", ascii_case_insensitive)]
+enum VagueWord {
+    Den,
+    Program,
+    Programme,
+    Stuff,
+    Things,
+    Workstream,
+    Initiative,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
+#[strum(serialize_all = "kebab-case", ascii_case_insensitive)]
 enum FillerWord {
     A,
     An,
@@ -98,6 +145,7 @@ enum FillerWord {
 pub struct NameGuard {
     titles: BTreeSet<String>,
     rejected: BTreeSet<String>,
+    context: BTreeSet<String>,
 }
 
 impl NameGuard {
@@ -108,7 +156,45 @@ impl NameGuard {
         Self {
             titles: titles.into_iter().map(fold).collect(),
             rejected: rejected.into_iter().map(fold).collect(),
+            context: BTreeSet::new(),
         }
+    }
+
+    #[must_use]
+    pub fn with_context<'a>(mut self, names: impl IntoIterator<Item = &'a str>) -> Self {
+        self.context = names
+            .into_iter()
+            .map(fold)
+            .filter(|name| !name.is_empty() && !name.contains('-'))
+            .map(|name| stem(&name))
+            .collect();
+        self
+    }
+
+    #[must_use]
+    pub fn head(&self, name: &str) -> Option<String> {
+        fold(name)
+            .split('-')
+            .filter(|word| !word.is_empty() && word.parse::<FillerWord>().is_err())
+            .map(stem)
+            .find(|word| !self.context.contains(word))
+    }
+
+    #[must_use]
+    pub fn twin(&self, left: &str, right: &str) -> bool {
+        let distinct = |name: &str| -> BTreeSet<String> {
+            stems(name)
+                .into_iter()
+                .filter(|word| !self.context.contains(word))
+                .collect()
+        };
+        let (left, right) = (distinct(left), distinct(right));
+        let (small, large) = if left.len() <= right.len() {
+            (&left, &right)
+        } else {
+            (&right, &left)
+        };
+        !small.is_empty() && small.is_subset(large)
     }
 
     #[must_use]
@@ -131,14 +217,21 @@ impl NameGuard {
             .split_whitespace()
             .next()
             .is_some_and(|first| first.parse::<TaskVerb>().is_ok());
-        task.then_some(JunkReason::Task)
+        if task {
+            return Some(JunkReason::Task);
+        }
+        let words: Vec<&str> = folded.split('-').collect();
+        if words
+            .iter()
+            .any(|word| word.parse::<ActivityWord>().is_ok())
+        {
+            return Some(JunkReason::Activity);
+        }
+        words
+            .iter()
+            .any(|word| word.parse::<VagueWord>().is_ok())
+            .then_some(JunkReason::Vague)
     }
-}
-
-#[must_use]
-pub fn near_duplicate(left: &str, right: &str) -> bool {
-    let (left, right) = (stems(left), stems(right));
-    !left.is_empty() && left == right
 }
 
 fn stems(name: &str) -> BTreeSet<String> {
@@ -192,13 +285,20 @@ mod tests {
             })
         );
         assert_eq!(junk("AcmeKit Releases"), None);
+        assert_eq!(junk("Code Review Program"), Some(JunkReason::Activity));
+        assert_eq!(junk("Den Server API"), Some(JunkReason::Vague));
+        assert_eq!(junk("families.app"), None);
     }
 
     #[test]
-    fn near_duplicates_share_their_word_stems() {
-        assert!(near_duplicate("Model Benchmarks", "model benchmarking"));
-        assert!(near_duplicate("The Release Pipeline", "release pipelines"));
-        assert!(near_duplicate("Library Upgrades", "libraries upgrade"));
-        assert!(!near_duplicate("Release Pipeline", "Release Notes"));
+    fn twins_share_their_distinctive_word_stems() {
+        let guard = guard().with_context(["AcmeKit", "Desktop App", "app"]);
+        assert!(guard.twin("Model Benchmarks", "model benchmarking"));
+        assert!(guard.twin("Library Upgrades", "libraries upgrade"));
+        assert!(guard.twin("Memory System", "Memory Wiki System"));
+        assert!(guard.twin("AcmeKit Android App", "Android Client"));
+        assert!(!guard.twin("Release Pipeline", "Release Notes"));
+        assert!(!guard.twin("AcmeKit Desktop", "AcmeKit"));
+        assert!(!guard.twin("Local Mode", "Session Modes"));
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use chrono::DateTime;
 use chrono::TimeZone;
 use chrono::Utc;
@@ -27,6 +29,8 @@ use uuid::Uuid;
 use wire::session_id::SessionId;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+static NO_GENERIC: BTreeSet<String> = BTreeSet::new();
 
 const TASK: &str = "0199e2a0-7b3c-7a00-8000-0000000000a1";
 
@@ -85,6 +89,7 @@ fn evidence<'a>(title: Option<&'a str>, summary: &'a str) -> Evidence<'a> {
         cwd: None,
         title,
         summary: Some(summary),
+        generic: &NO_GENERIC,
     }
 }
 
@@ -189,7 +194,7 @@ fn filing_follows_placement_then_parent_then_folder_then_name() -> TestResult {
         }
     );
     let both = evidence(None, "Ran rivet capture against rivethub-desktop.");
-    assert_eq!(both.decide(&topics, &[]), Step::Ask);
+    assert_eq!(both.decide(&topics, &[]), Step::Ask { named: None });
     let renamed = Redirect {
         slug: Slug::fold("Tauri Shell")?,
         topic: desktop.id,
@@ -197,6 +202,43 @@ fn filing_follows_placement_then_parent_then_folder_then_name() -> TestResult {
     let redirected = evidence(None, "Moved the tauri shell window.");
     assert_eq!(
         redirected.decide(&topics, &[renamed]),
+        Step::File {
+            topic: desktop.id,
+            rule: Rule::Name
+        }
+    );
+    Ok(())
+}
+
+#[test]
+fn repos_decide_before_names_and_common_or_parent_names_leave_it_to_the_model() -> TestResult {
+    let acme = topic("AcmeKit", &["acme"], None)?;
+    let desktop = topic("Desktop App", &["acme-desktop"], None)?;
+    let mut nightly = topic("Nightly Builds", &[], None)?;
+    nightly.parent = Some(acme.id);
+    let topics = listed(&[&acme, &desktop, &nightly]);
+    let review = evidence(None, "Reviewed acme-desktop PR #41 for the AcmeKit team.");
+    assert_eq!(
+        review.decide(&topics, &[]),
+        Step::File {
+            topic: desktop.id,
+            rule: Rule::Repo
+        }
+    );
+    let parent = evidence(None, "Tuned the AcmeKit release notes.");
+    assert_eq!(
+        parent.decide(&topics, &[]),
+        Step::Ask {
+            named: Some(acme.id)
+        }
+    );
+    let generic = BTreeSet::from(["acme".to_owned(), "acmekit".to_owned()]);
+    let common = Evidence {
+        generic: &generic,
+        ..evidence(None, "The acme agent opened the Desktop App settings.")
+    };
+    assert_eq!(
+        common.decide(&topics, &[]),
         Step::File {
             topic: desktop.id,
             rule: Rule::Name
@@ -227,13 +269,16 @@ fn the_deepest_owned_directory_wins_and_a_tie_falls_through() -> TestResult {
     );
     assert_eq!(
         deeper.decide(&listed(&[&rivetos, &capture, &twin]), &[]),
-        Step::Ask
+        Step::Ask { named: None }
     );
     let prefix_only = Evidence {
         cwd: Some("/srv/shared/RivetOSX"),
         ..evidence(None, "")
     };
-    assert_eq!(prefix_only.decide(&listed(&[&rivetos]), &[]), Step::Ask);
+    assert_eq!(
+        prefix_only.decide(&listed(&[&rivetos]), &[]),
+        Step::Ask { named: None }
+    );
     Ok(())
 }
 
@@ -259,7 +304,10 @@ fn suggested_names_that_read_like_junk_are_refused() -> TestResult {
     assert_eq!(refused("Fix the build.", None)?, Some(Refusal::Title));
     assert_eq!(refused("rivet-shared/wiki", None)?, Some(Refusal::Path));
     assert_eq!(refused("chat.tsx", None)?, Some(Refusal::Path));
-    assert_eq!(refused("Qwen3.5 eval", None)?, Some(Refusal::Path));
+    assert_eq!(refused("Qwen3.5 eval", None)?, Some(Refusal::Version));
+    assert_eq!(refused("client-sync.mjs", None)?, Some(Refusal::Path));
+    assert_eq!(refused("families.app", None)?, None);
+    assert_eq!(refused("V100 GPU Cluster", None)?, None);
     assert_eq!(refused("PR 1145", None)?, Some(Refusal::Ticket));
     assert_eq!(refused("ENG-1203", None)?, Some(Refusal::Ticket));
     assert_eq!(refused("issue #971", None)?, Some(Refusal::Ticket));
