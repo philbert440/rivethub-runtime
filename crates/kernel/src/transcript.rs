@@ -9,6 +9,8 @@ use wire::harness::HarnessId;
 use wire::message::Role;
 use wire::session_id::SessionId;
 
+const SUBAGENTS: &str = "/subagents/";
+
 #[derive(Debug, Error)]
 pub enum TranscriptReaderError {
     #[error("transcript store is unavailable")]
@@ -100,6 +102,21 @@ pub fn linked_parent(harness: HarnessId, parent: &str) -> Option<SessionId> {
         && !parent.starts_with(char::is_whitespace)
         && !parent.ends_with(char::is_whitespace);
     linkable.then(|| SessionId::new(harness, parent))
+}
+
+pub async fn session_parent(
+    lineage: &dyn SessionLister,
+    session: &SessionId,
+) -> Result<Option<String>, TranscriptReaderError> {
+    if let Some((parent, _)) = session.native().split_once(SUBAGENTS)
+        && !parent.is_empty()
+    {
+        return Ok(Some(parent.to_owned()));
+    }
+    Ok(lineage
+        .describe(session.harness(), session.native(), None)
+        .await?
+        .and_then(|row| row.parent_session_id))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

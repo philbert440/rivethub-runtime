@@ -8,6 +8,7 @@ use wire::session_id::SessionId;
 
 use super::builder::DeferredWiki;
 use super::builder::ExtractWiki;
+use super::builder::HeldEntity;
 use super::builder::WikiBuilderStore;
 use super::builder::WikiRouting;
 use super::builder::WikiStoreError;
@@ -35,8 +36,10 @@ use crate::topics::root_page;
 use crate::transcript::SessionLister;
 use crate::transcript::TranscriptReaderError;
 use crate::transcript::linked_parent;
+use crate::transcript::session_parent;
 
 const DEFERRALS_PER_SWEEP: u32 = 50;
+const LINEAGE_DEPTH: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,6 +96,7 @@ struct Routed {
     written: Vec<WikiSlug>,
     cited: Vec<WikiSlug>,
     earlier: Vec<(Uuid, WikiSlug)>,
+    held: Vec<HeldEntity>,
     notes: Vec<WikiPatch>,
 }
 
@@ -215,9 +219,11 @@ impl WikiRouter<'_> {
             entity,
             patches,
             earlier,
+            held,
         }) = filing
             && let Some(page) = self.topics.target(&entity, self.now).await?
         {
+            routed.held.extend(held);
             routed
                 .earlier
                 .extend(earlier.into_iter().map(|id| (id, page.page_slug.clone())));
@@ -263,6 +269,9 @@ impl WikiRouter<'_> {
             .await?;
         for (earlier, page) in &routed.earlier {
             self.wiki.cite_wiki(*earlier, page, self.now).await?;
+        }
+        if !routed.held.is_empty() {
+            self.wiki.release_entity(&routed.held).await?;
         }
         touched.extend(routed.written.into_iter().map(String::from));
         touched.sort();
@@ -336,17 +345,23 @@ impl TopicPorts<'_> {
             },
             None => session(summary).map(Target::Session),
         };
-        let Some(Target::Session(session)) = filed else {
+        let Some(Target::Session(mut session)) = filed else {
             return Ok(filed);
         };
-        if self.topics.placement(&session).await?.is_some() {
-            return Ok(Some(Target::Session(session)));
+        for _ in 0..LINEAGE_DEPTH {
+            if self.topics.placement(&session).await?.is_some() {
+                break;
+            }
+            match self
+                .parent(&session)
+                .await
+                .map_err(|error| TopicPageError::ParentPlacement(error.into()))?
+            {
+                Some(parent) => session = parent,
+                None => break,
+            }
         }
-        let parent = self
-            .parent(&session)
-            .await
-            .map_err(|error| TopicPageError::ParentPlacement(error.into()))?;
-        Ok(Some(Target::Session(parent.unwrap_or(session))))
+        Ok(Some(Target::Session(session)))
     }
 
     async fn followed(
@@ -398,12 +413,8 @@ impl TopicPorts<'_> {
         &self,
         session: &SessionId,
     ) -> Result<Option<SessionId>, TranscriptReaderError> {
-        let described = self
-            .lineage
-            .describe(session.harness(), session.native(), None)
-            .await?;
-        Ok(described
-            .and_then(|row| row.parent_session_id)
+        Ok(session_parent(self.lineage, session)
+            .await?
             .and_then(|parent| linked_parent(session.harness(), &parent)))
     }
 

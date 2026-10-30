@@ -2099,6 +2099,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "serde_yaml_ng",
+ "sha2 0.10.9",
  "strum 0.27.2",
  "testkit",
  "thiserror 2.0.21",

@@ -38,6 +38,10 @@ pub(crate) fn hold(
         ],
     )
     .map_err(query)?;
+    candidates(conn, &held.key)
+}
+
+pub(crate) fn candidates(conn: &Connection, key: &Slug) -> Result<Vec<HeldEntity>, WikiStoreError> {
     let rows = conn
         .prepare(
             "SELECT source, summary_id, patch, held_at FROM rh_wiki_entity_candidates
@@ -45,7 +49,7 @@ pub(crate) fn hold(
         )
         .and_then(|mut statement| {
             statement
-                .query_map(params![held.key.as_str()], |row| {
+                .query_map(params![key.as_str()], |row| {
                     Ok((
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
@@ -59,7 +63,7 @@ pub(crate) fn hold(
     rows.into_iter()
         .map(|(source, summary_id, patch, at)| {
             Ok(HeldEntity {
-                key: held.key.clone(),
+                key: key.clone(),
                 source,
                 summary_id: uuid(&summary_id)?,
                 patch: serde_json::from_str(&patch).map_err(invalid)?,
@@ -69,13 +73,21 @@ pub(crate) fn hold(
         .collect()
 }
 
-pub(crate) fn release(conn: &Connection, key: &Slug) -> Result<(), WikiStoreError> {
-    conn.execute(
-        "DELETE FROM rh_wiki_entity_candidates WHERE key = ?1",
-        params![key.as_str()],
-    )
-    .map_err(query)?;
-    Ok(())
+pub(crate) fn release(conn: &mut Connection, held: &[HeldEntity]) -> Result<(), WikiStoreError> {
+    let tx = conn.transaction().map_err(query)?;
+    for mention in held {
+        tx.execute(
+            "DELETE FROM rh_wiki_entity_candidates
+              WHERE key = ?1 AND source = ?2 AND summary_id = ?3",
+            params![
+                mention.key.as_str(),
+                mention.source,
+                mention.summary_id.to_string()
+            ],
+        )
+        .map_err(query)?;
+    }
+    tx.commit().map_err(query)
 }
 
 pub(crate) fn defer(conn: &Connection, deferred: &DeferredWiki) -> Result<(), WikiStoreError> {

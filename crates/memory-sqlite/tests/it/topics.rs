@@ -230,6 +230,13 @@ async fn conversations_file_with_titles_and_corrections() -> TestResult {
 }
 
 #[tokio::test]
+async fn a_task_files_under_the_conversation_that_started_it() -> TestResult {
+    let (_directory, store) = store()?;
+    testkit::filing::a_task_files_under_the_conversation_that_started_it(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn editing_an_unwritten_entity_writes_its_page() -> TestResult {
     let (_directory, store) = store()?;
     topic_pages::editing_an_unwritten_entity_writes_its_page(pages(&store)).await?;
@@ -240,6 +247,13 @@ async fn editing_an_unwritten_entity_writes_its_page() -> TestResult {
 async fn proposals_are_decided_and_rejections_remembered() -> TestResult {
     let (_directory, store) = store()?;
     testkit::tidy::proposals_are_decided_and_rejections_remembered(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_approval_that_stopped_part_way_finishes_on_retry() -> TestResult {
+    let (_directory, store) = store()?;
+    testkit::tidy::an_approval_that_stopped_part_way_finishes_on_retry(&store).await?;
     Ok(())
 }
 

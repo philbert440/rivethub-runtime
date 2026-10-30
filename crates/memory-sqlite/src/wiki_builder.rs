@@ -68,9 +68,14 @@ impl WikiBuilderStore for SqliteStore {
         blocking(self, move |conn| wiki_held::hold(conn, &held)).await
     }
 
-    async fn release_entity(&self, key: &Slug) -> Result<(), WikiStoreError> {
+    async fn held_entities(&self, key: &Slug) -> Result<Vec<HeldEntity>, WikiStoreError> {
         let key = key.clone();
-        blocking(self, move |conn| wiki_held::release(conn, &key)).await
+        blocking(self, move |conn| wiki_held::candidates(conn, &key)).await
+    }
+
+    async fn release_entity(&self, held: &[HeldEntity]) -> Result<(), WikiStoreError> {
+        let held = held.to_vec();
+        blocking(self, move |conn| wiki_held::release(conn, &held)).await
     }
 
     async fn defer_wiki(&self, deferred: DeferredWiki) -> Result<(), WikiStoreError> {

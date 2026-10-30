@@ -108,69 +108,12 @@ impl SessionLister for NoParents {
     }
 }
 
-#[derive(Debug)]
-pub struct ChildOfParent;
-
-#[async_trait]
-impl SessionLister for ChildOfParent {
-    async fn list(&self, harnesses: &[HarnessId], limit: ListLimit) -> Vec<StoreSession> {
-        NoParents.list(harnesses, limit).await
-    }
-
-    async fn describe(
-        &self,
-        harness: HarnessId,
-        native: &str,
-        _parent: Option<&str>,
-    ) -> Result<Option<StoreSession>, TranscriptReaderError> {
-        let mut row = StoreSession::new(harness, native, 0);
-        row.parent_session_id = PARENT_KEY
-            .split_once(':')
-            .map(|(_, parent)| parent.to_owned());
-        Ok(Some(row))
-    }
-
-    async fn store_cwd(
-        &self,
-        harness: HarnessId,
-        native: &str,
-    ) -> Result<Option<String>, TranscriptReaderError> {
-        NoParents.store_cwd(harness, native).await
-    }
-
-    async fn transcript(
-        &self,
-        harness: HarnessId,
-        native: &str,
-    ) -> Result<TranscriptRead, TranscriptReaderError> {
-        NoParents.transcript(harness, native).await
-    }
-
-    async fn rename(
-        &self,
-        harness: HarnessId,
-        native: &str,
-        title: &str,
-    ) -> Result<StoreSession, SessionRenameError> {
-        NoParents.rename(harness, native, title).await
-    }
-
-    async fn tool_output(
-        &self,
-        harness: HarnessId,
-        native: &str,
-        tool_call_id: &str,
-    ) -> Result<ToolOutputRead, TranscriptReaderError> {
-        NoParents.tool_output(harness, native, tool_call_id).await
-    }
-}
-
 impl RouteStores<'_> {
     pub(crate) async fn place(&self, topic: &Topic) -> Outcome {
         self.place_as(SESSION_KEY, topic).await
     }
 
-    async fn place_as(&self, key: &str, topic: &Topic) -> Outcome {
+    pub(crate) async fn place_as(&self, key: &str, topic: &Topic) -> Outcome {
         self.pages
             .topics
             .place(Placement {
@@ -183,7 +126,7 @@ impl RouteStores<'_> {
         Ok(())
     }
 
-    fn router(&self) -> WikiRouter<'_> {
+    pub(crate) fn router(&self) -> WikiRouter<'_> {
         WikiRouter {
             wiki: self.wiki,
             topics: TopicPorts {
@@ -208,7 +151,7 @@ impl RouteStores<'_> {
         self.pages.settle().await
     }
 
-    async fn notes(&self, topic: &Topic) -> Found<Vec<(String, String)>> {
+    pub(crate) async fn notes(&self, topic: &Topic) -> Found<Vec<(String, String)>> {
         Ok(self
             .pages
             .page(topic)
@@ -256,7 +199,7 @@ impl RouteStores<'_> {
     }
 }
 
-fn patch(slug: &str, title: &str, summary: &str) -> Found<WikiPatch> {
+pub(crate) fn patch(slug: &str, title: &str, summary: &str) -> Found<WikiPatch> {
     Ok(WikiPatch {
         action: WikiAction::Create,
         slug: WikiSlug::try_from(slug.to_owned())?,

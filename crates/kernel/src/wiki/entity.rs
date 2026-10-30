@@ -27,6 +27,30 @@ pub struct Filed {
     pub entity: Topic,
     pub patches: Vec<WikiPatch>,
     pub earlier: Vec<Uuid>,
+    pub held: Vec<HeldEntity>,
+}
+
+impl Filed {
+    fn of(entity: Topic, summary: &WikiSummary, patch: WikiPatch, held: Vec<HeldEntity>) -> Self {
+        let own = source(summary);
+        let others: Vec<&HeldEntity> = held
+            .iter()
+            .filter(|mention| mention.source != own)
+            .collect();
+        let mut patches: Vec<WikiPatch> =
+            others.iter().map(|mention| mention.patch.clone()).collect();
+        patches.push(patch);
+        Self {
+            entity,
+            patches,
+            earlier: others
+                .iter()
+                .map(|mention| mention.summary_id)
+                .filter(|id| *id != summary.id)
+                .collect(),
+            held,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,12 +108,18 @@ impl Catalog {
         now: DateTime<Utc>,
     ) -> Result<Option<Filed>, TopicPageError> {
         let names = names(&patch);
-        if let Some(entity) = self.known(&names) {
-            return Ok(Some(Filed {
-                entity: entity.clone(),
-                patches: vec![patch],
-                earlier: Vec::new(),
-            }));
+        if let Some(entity) = self.known(&names).cloned() {
+            let keys: BTreeSet<Slug> = names.into_iter().chain(self.keys(&entity)).collect();
+            let mut held = Vec::new();
+            for key in &keys {
+                held.extend(wiki.held_entities(key).await?);
+            }
+            held.sort_by(|left, right| {
+                left.at
+                    .cmp(&right.at)
+                    .then_with(|| left.source.cmp(&right.source))
+            });
+            return Ok(Some(Filed::of(entity, summary, patch, held)));
         }
         for name in &names {
             if topics.tombstoned(TopicKind::Entity, name).await? {
@@ -101,10 +131,10 @@ impl Catalog {
         };
         let held = wiki
             .hold_entity(HeldEntity {
-                key: key.clone(),
+                key,
                 source: source(summary),
                 summary_id: summary.id,
-                patch,
+                patch: patch.clone(),
                 at: now,
             })
             .await?;
@@ -137,17 +167,8 @@ impl Catalog {
                 now,
             )?)
             .await?;
-        wiki.release_entity(&key).await?;
         self.entities.push(created.clone());
-        Ok(Some(Filed {
-            entity: created,
-            earlier: held
-                .iter()
-                .map(|mention| mention.summary_id)
-                .filter(|id| *id != summary.id)
-                .collect(),
-            patches: held.into_iter().map(|mention| mention.patch).collect(),
-        }))
+        Ok(Some(Filed::of(created, summary, patch, held)))
     }
 
     fn known(&self, names: &BTreeSet<Slug>) -> Option<&Topic> {
@@ -157,14 +178,35 @@ impl Catalog {
     }
 
     fn type_named(&self, named: &str) -> Option<&Topic> {
-        let last = named
-            .rsplit(['›', '>', '/'])
+        let path = named
+            .split(['›', '>', '/'])
             .map(str::trim)
-            .find(|part| !part.is_empty())?;
-        let key = Slug::of_heading(last)?;
-        self.types
-            .iter()
-            .find(|kind| self.keys(kind).any(|known| known == key))
+            .filter(|part| !part.is_empty())
+            .map(Slug::of_heading)
+            .collect::<Option<Vec<Slug>>>()?;
+        let (leaf, above) = path.split_last()?;
+        let tree = TopicTree::of(&self.types);
+        let mut found = self.types.iter().filter(|kind| {
+            self.named_by(kind, leaf) && (above.is_empty() || self.under(&tree, kind, above))
+        });
+        let first = found.next()?;
+        found.next().is_none().then_some(first)
+    }
+
+    fn under(&self, tree: &TopicTree, kind: &Topic, path: &[Slug]) -> bool {
+        let ancestors: Vec<&Topic> = tree
+            .ancestors(kind.id)
+            .filter_map(|above| self.types.iter().find(|known| known.id == above))
+            .collect();
+        ancestors.len() == path.len()
+            && ancestors
+                .iter()
+                .zip(path.iter().rev())
+                .all(|(above, slug)| self.named_by(above, slug))
+    }
+
+    fn named_by(&self, topic: &Topic, slug: &Slug) -> bool {
+        self.keys(topic).any(|key| key == *slug)
     }
 
     fn keys<'a>(&'a self, topic: &'a Topic) -> impl Iterator<Item = Slug> + 'a {

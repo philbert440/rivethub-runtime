@@ -12,6 +12,10 @@ use crate::common::execute;
 
 const CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c1";
 const SUMMARY: &str = "00000000-0000-4000-8000-0000000000d1";
+const EARLIER_CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c2";
+const EARLIER_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d2";
+const SUBAGENT_CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c3";
+const SUBAGENT_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d3";
 
 async fn seeded() -> TestResult<(TempDir, SqliteStore, ExtractWiki)> {
     let directory = tempfile::tempdir()?;
@@ -91,6 +95,40 @@ async fn an_entity_page_names_the_sessions_that_cite_it() -> TestResult {
 }
 
 #[tokio::test]
+async fn a_mention_held_before_its_entity_existed_still_lands() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    execute(
+        &store,
+        &format!(
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
+             VALUES ('{EARLIER_CONVERSATION}', '{}', 'rivet', 'Lab rack', '2026-10-10T11:00:00.000Z', '2026-10-10T11:00:00.000Z');
+             INSERT INTO ros_summaries (id, conversation_id, content, created_at)
+             VALUES ('{EARLIER_SUMMARY}', '{EARLIER_CONVERSATION}', 'Lab notes.', '2026-10-10T11:00:00.000Z');",
+            testkit::wiki_mentions::EARLIER_KEY
+        ),
+    )
+    .await?;
+    let earlier = ExtractWiki {
+        summary_id: Uuid::parse_str(EARLIER_SUMMARY)?,
+        conversation_id: Some(Uuid::parse_str(EARLIER_CONVERSATION)?),
+    };
+    testkit::wiki_mentions::a_mention_held_before_its_entity_existed_still_lands(
+        stores(&store),
+        &job,
+        &earlier,
+    )
+    .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_entity_type_is_found_by_its_whole_path() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    testkit::wiki_mentions::an_entity_type_is_found_by_its_whole_path(stores(&store), &job).await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn an_unfiled_session_waits_until_it_is_filed() -> TestResult {
     let (_directory, store, job) = seeded().await?;
     wiki_routes::an_unfiled_session_waits_until_it_is_filed(stores(&store), &job).await?;
@@ -101,8 +139,45 @@ async fn an_unfiled_session_waits_until_it_is_filed() -> TestResult {
 async fn a_child_session_waits_for_its_parent() -> TestResult {
     let (_directory, store, job) = seeded().await?;
     wiki_routes::a_child_session_waits_for_its_parent(
-        stores_in(&store, &wiki_routes::ChildOfParent),
+        stores_in(&store, &testkit::wiki_lineage::CHILD),
         &job,
+    )
+    .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    testkit::wiki_lineage::a_child_s_notes_land_on_its_filed_ancestor_s_topic(
+        stores_in(&store, &testkit::wiki_lineage::GRANDCHILD),
+        &job,
+    )
+    .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_subagent_key_s_notes_land_on_its_parent_s_topic() -> TestResult {
+    let (_directory, store, _job) = seeded().await?;
+    execute(
+        &store,
+        &format!(
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
+             VALUES ('{SUBAGENT_CONVERSATION}', '{}', 'rivet', 'Billing check', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z');
+             INSERT INTO ros_summaries (id, conversation_id, content, created_at)
+             VALUES ('{SUBAGENT_SUMMARY}', '{SUBAGENT_CONVERSATION}', 'Billing notes.', '2026-10-10T12:00:00.000Z');",
+            testkit::wiki_lineage::SUBAGENT_KEY
+        ),
+    )
+    .await?;
+    let subagent = ExtractWiki {
+        summary_id: Uuid::parse_str(SUBAGENT_SUMMARY)?,
+        conversation_id: Some(Uuid::parse_str(SUBAGENT_CONVERSATION)?),
+    };
+    testkit::wiki_lineage::a_child_s_notes_land_on_its_filed_ancestor_s_topic(
+        stores(&store),
+        &subagent,
     )
     .await?;
     Ok(())

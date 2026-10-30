@@ -350,13 +350,18 @@ share a name; a slug in a topic path names a work topic, so types and entities a
 deleted, the former People, Hosts and Tools category topics included, and deleting leaves a tombstone so the wiki builder
 never recreates that name. The wiki builder writes only to topic and entity pages: a patch about the session's topic lands
 on its page as before, a patch whose `type` names one of the types goes to that entity's own page (a type has no page), and
-any other patch becomes a note section on the session's topic page. A session that isn't filed yet keeps its notes until it
-is filed (a child session until its parent is, a conversation or delegated task until that conversation is), then
+any other patch becomes a note section on the session's topic page. A `type` with several names (`Software › Apps`)
+names the type at that path from the root; a single name names the one type with that name, alias or former name, and a
+name more than one type answers to names none, so the entity waits as a candidate. A session that isn't filed yet keeps its notes until it
+is filed (a child session until the nearest session above it is, walking up at most 8 parents, so a subagent of a
+subagent waits on the filed root and not on its unfiled parent; a conversation or delegated task until that conversation
+is), then
 they land on its topic page and cite its summary. A session's notes follow it: moved to another topic, by you or
 the categorizer, they leave the old topic's page for the new one (and so does the summary's citation, unless the summary
 also patched the old page itself), and taken out of a topic they wait until it is
 filed again; a child follows its parent, and a delegated task its parent unless you placed it; an entity named by one session waits as a candidate until
-a second session names it. `WikiPatch.kind` (person, host or tool) is replaced by `type`, and the extraction input lists
+a second session names it. A candidate is dropped only after its patch is written to the entity's page and its summary
+cited there, so a session that names an existing entity also writes and cites the candidates still held for it. `WikiPatch.kind` (person, host or tool) is replaced by `type`, and the extraction input lists
 the type paths as `types`. Postgres migration `0032_entities.sql` and SQLite schema 20 add the kind, the tombstones and the
 candidate and deferred tables; they make People and Hosts types, rename Tools to Software, turn the topics under them into
 entities (dropping the filings that pointed at them and unbinding the type pages), and seed the types Agents, Hardware,
@@ -372,10 +377,14 @@ entity or moves an entity, so what a person sets stays.
 (`{conversationId}`), which only the categorizer role runs, on the model of its config's default agent. The tag
 suggester (`suggest-tags`) and the folder rule that wrote `project:` tags are retired; tag storage and the tag routes
 stay. What is filed: a key that is a session id files that session; a bare uuid on the `claude-code` channel files
-`claude-code:<uuid>`; `task:<uuid>` files the conversation under the topic of the conversation whose messages name the
-task id (as a conversation when none is found or it is unfiled); any other key files as a conversation. Never filed:
+`claude-code:<uuid>`; `task:<uuid>` files the conversation under the topic of the conversation that started the task:
+the earliest whose tool output names the task id, else the earliest whose messages name it, however long before or after
+the task conversation was recorded (as a conversation when none is found or it is unfiled); any other key files as a
+conversation. Never filed:
 keys starting `grokbot-run-sand-subagent-` or `heartbeat`, and the channels `test-channel`, `env-test-channel` and
-`test`. Order: an existing placement is kept; a child session follows its parent on the client and is not filed; a
+`test`. Order: an existing placement is kept; a child session (one whose native id holds `/subagents/`, the parent
+being the part before it, or one whose harness store names a parent; the wiki and the cleanup use the same test)
+follows its parent on the client and is not filed; a
 task follows its parent; a working directory inside a topic's own directory (deepest wins, a tie decides nothing; a
 local directory matches by path, since conversations captured before (64) record no node) files it there; exactly one
 topic named in the title or first leaf files it there; otherwise the model answers file, suggest a name (with an
@@ -400,13 +409,18 @@ answers `{ batches: [{ batchId, proposedBy, proposedAt, proposals }] }`, pending
 each batch in proposal order. `POST /api/tidy/proposals/{proposal}/approve` applies the change through the topic
 operations (a merge leaves its redirect, a new topic files its members `by: "categorizer"`, so your placements stay) and
 answers the proposal approved; `POST …/reject` answers it rejected. A decided proposal is `409`, an unknown one `404`, an
-id that is not a uuid `400`; a change the topic rules refuse answers that topic error and stays pending.
+id that is not a uuid `400`; a change the topic rules refuse answers that topic error and stays pending. Approving again
+continues an approval that stopped part way: a new topic or type that already exists under the proposal's id is not
+created again and the members not yet filed are filed, and a merge whose source is gone and whose survivor holds a
+redirect, or a delete whose topic is gone, is approved as already applied.
 `POST /api/tidy/batches/{batch}/approve` and `…/reject` decide every pending proposal of the batch in order and answer
 `{ decided, failed: [{ proposalId, error }] }`, where a failed proposal stays pending; an unknown batch is `404`. Every
 change has a fingerprint (a merge's unordered pair; a move's topic and parent; a rename's topic and new slug; the topic
-of a close or delete; the folded name of a new topic or type), and a proposal whose fingerprint is pending or rejected is
-dropped when a batch is stored, so a rejected change is never proposed again; approvals are not remembered. The
-categorizer role claims `propose-tidy` (cron `tidy-sweep`, hourly; `rh local` also queues it at start), which does
+of a close or delete; the folded name of a new topic or type; a `fileInto`'s topic and a SHA-256 digest of its sorted
+session keys and conversation ids, so filing other members is another change; a `mergePage`'s page then the page it
+folds into, in that order, since the opposite fold leaves the other page), and a proposal whose fingerprint is
+pending or rejected is dropped when a batch is stored, so a rejected change is never proposed again; approvals are not
+remembered. The categorizer role claims `propose-tidy` (cron `tidy-sweep`, hourly; `rh local` also queues it at start), which does
 nothing until a week has passed since the categorizer's last batch. It reads the work tree and the types with session
 counts and the filings of the last 7 days, the clusters of pending session suggestions that share a folded name (3
 sessions or more), the pairs of same-kind topics that share a topic identity key, and the newest eight corrections; asks

@@ -48,11 +48,18 @@ pub(super) async fn hold(
     .execute(pool)
     .await
     .map_err(query_error)?;
+    candidates(pool, &held.key).await
+}
+
+pub(super) async fn candidates(
+    pool: &PgPool,
+    key: &Slug,
+) -> Result<Vec<HeldEntity>, WikiStoreError> {
     sqlx::query_as::<_, HeldRow>(
         "SELECT key, source, summary_id, patch::text AS patch, held_at
            FROM rh_wiki_entity_candidates WHERE key = $1 ORDER BY held_at, source",
     )
-    .bind(held.key.as_str())
+    .bind(key.as_str())
     .fetch_all(pool)
     .await
     .map_err(query_error)?
@@ -69,13 +76,21 @@ pub(super) async fn hold(
     .collect()
 }
 
-pub(super) async fn release(pool: &PgPool, key: &Slug) -> Result<(), WikiStoreError> {
-    sqlx::query("DELETE FROM rh_wiki_entity_candidates WHERE key = $1")
-        .bind(key.as_str())
-        .execute(pool)
+pub(super) async fn release(pool: &PgPool, held: &[HeldEntity]) -> Result<(), WikiStoreError> {
+    let mut tx = pool.begin().await.map_err(query_error)?;
+    for mention in held {
+        sqlx::query(
+            "DELETE FROM rh_wiki_entity_candidates
+              WHERE key = $1 AND source = $2 AND summary_id = $3",
+        )
+        .bind(mention.key.as_str())
+        .bind(&mention.source)
+        .bind(mention.summary_id)
+        .execute(&mut *tx)
         .await
         .map_err(query_error)?;
-    Ok(())
+    }
+    tx.commit().await.map_err(query_error)
 }
 
 pub(super) async fn defer(pool: &PgPool, deferred: DeferredWiki) -> Result<(), WikiStoreError> {

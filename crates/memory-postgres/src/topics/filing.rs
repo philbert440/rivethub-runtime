@@ -94,21 +94,18 @@ impl FilingStore for PostgresMemory {
         let row = sqlx::query_as!(
             HeadRow,
             "WITH named AS (
-                 SELECT m.conversation_id, m.created_at FROM rh_messages m
+                 SELECT m.conversation_id, m.created_at, true AS tool_output FROM rh_messages m
                   WHERE m.tool_result IS NOT NULL AND length(m.tool_result) > 0
                     AND m.tool_result LIKE $1
                  UNION ALL
-                 SELECT m.conversation_id, m.created_at FROM rh_messages m
+                 SELECT m.conversation_id, m.created_at, false FROM rh_messages m
                   WHERE m.content LIKE $1
              )
              SELECT c.id, c.session_key, c.agent, c.channel, c.title
                FROM named n
                JOIN rh_conversations c ON c.id = n.conversation_id
-               JOIN rh_conversations own ON own.id = $2
               WHERE n.conversation_id <> $2
-                AND n.created_at BETWEEN own.created_at - interval '1 day'
-                                     AND own.created_at + interval '1 day'
-              ORDER BY n.created_at
+              ORDER BY n.tool_output DESC, n.created_at, c.id
               LIMIT 1",
             named,
             conversation

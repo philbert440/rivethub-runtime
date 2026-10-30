@@ -32,6 +32,7 @@ use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
 use kernel::topics::TopicStore;
 use kernel::transcript::SessionLister;
+use kernel::transcript::session_parent;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use wire::JsonObject;
@@ -249,12 +250,9 @@ async fn child_session(env: &FilingEnv<'_>, filable: &Filable) -> Result<bool, W
     let Filable::Session(session) = filable else {
         return Ok(false);
     };
-    let described = env
-        .topics
-        .lineage
-        .describe(session.harness(), session.native(), None)
-        .await?;
-    Ok(described.is_some_and(|row| row.parent_session_id.is_some()))
+    Ok(session_parent(env.topics.lineage.as_ref(), session)
+        .await?
+        .is_some())
 }
 
 async fn task_topic(

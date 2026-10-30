@@ -117,8 +117,12 @@ impl WikiBuilderStore for PostgresMemory {
         held::hold(&self.pool, held).await
     }
 
-    async fn release_entity(&self, key: &Slug) -> Result<(), WikiStoreError> {
-        held::release(&self.pool, key).await
+    async fn held_entities(&self, key: &Slug) -> Result<Vec<HeldEntity>, WikiStoreError> {
+        held::candidates(&self.pool, key).await
+    }
+
+    async fn release_entity(&self, held: &[HeldEntity]) -> Result<(), WikiStoreError> {
+        held::release(&self.pool, held).await
     }
 
     async fn defer_wiki(&self, deferred: DeferredWiki) -> Result<(), WikiStoreError> {
