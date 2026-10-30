@@ -266,6 +266,22 @@ impl TaskStore for TaskMemory {
             task.alive_at.is_none_or(|alive| alive < stale_before)
         }))
     }
+
+    async fn expire(&self, now: DateTime<Utc>) -> Result<Vec<Uuid>, TaskError> {
+        let mut inner = self.inner.lock();
+        let mut expired = Vec::new();
+        for task in inner.tasks.values_mut() {
+            if task.unclaimed_past_deadline(now) {
+                task.status = TaskStatus::Timeout;
+                task.error = Some(kernel::tasks::UNCLAIMED_PAST_DEADLINE.to_owned());
+                task.completed_at = Some(now);
+                expired.push(task.id);
+            }
+        }
+        drop(inner);
+        self.changed_ids(expired.clone());
+        Ok(expired)
+    }
 }
 
 impl TaskMemory {

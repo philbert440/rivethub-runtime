@@ -112,6 +112,16 @@ impl Tasks {
                 Err(error) => tracing::warn!(%error, "stale tasks were not reaped"),
             }
         }
+        match self.store.expire(now).await {
+            Ok(expired) if !expired.is_empty() => {
+                tracing::warn!(
+                    count = expired.len(),
+                    "timed out queued tasks that no node started before their deadline"
+                );
+            }
+            Ok(_) => {}
+            Err(error) => tracing::warn!(%error, "unclaimed tasks were not timed out"),
+        }
     }
 
     async fn drain(

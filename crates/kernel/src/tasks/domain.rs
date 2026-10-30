@@ -10,6 +10,7 @@ use uuid::Uuid;
 pub const MAX_DEPTH: u8 = 3;
 pub const LIVENESS: Duration = Duration::from_secs(30);
 pub const REAP_AFTER_SECS: i64 = 90;
+pub const UNCLAIMED_PAST_DEADLINE: &str = "no node started it before its maxWallClockMs ran out";
 
 #[cfg_attr(
     dylint_lib = "rr_lints",
@@ -208,6 +209,21 @@ pub struct Task {
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub alive_at: Option<DateTime<Utc>>,
+}
+
+impl Task {
+    #[must_use]
+    pub fn unclaimed_past_deadline(&self, now: DateTime<Utc>) -> bool {
+        let waited = now
+            .signed_duration_since(self.created_at)
+            .num_milliseconds();
+        self.status == TaskStatus::Queued
+            && waited >= 0
+            && self
+                .budget
+                .wall_clock
+                .is_some_and(|wall| u128::from(waited.unsigned_abs()) >= wall.as_millis())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

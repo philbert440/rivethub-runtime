@@ -196,6 +196,13 @@ async fn a_running_task_is_reaped_only_when_its_liveness_goes_stale() -> TestRes
 }
 
 #[tokio::test]
+async fn a_queued_task_times_out_when_no_node_starts_it_by_its_deadline() -> TestResult {
+    let fixture = fixture()?;
+    testkit::tasks::a_queued_task_times_out_when_no_node_starts_it_by_its_deadline(&fixture.store)
+        .await
+}
+
+#[tokio::test]
 async fn a_delegated_child_is_filed_under_its_parents_topic() -> TestResult {
     let fixture = fixture()?;
     testkit::tasks::a_delegated_child_is_filed_under_its_parents_topic(

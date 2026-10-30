@@ -186,6 +186,10 @@ impl TaskStore for PostgresTasks {
         })
         .await
     }
+
+    async fn expire(&self, now: DateTime<Utc>) -> Result<Vec<Uuid>, TaskError> {
+        in_transaction(&self.pool, async |conn| rows::expire(conn, now).await).await
+    }
 }
 
 #[async_trait]
