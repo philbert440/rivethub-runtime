@@ -6,11 +6,12 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
-use wire::events::{AgentEvent, SessionBroadcast, SessionList, StateResponse};
+use wire::events::{AgentEvent, AgentEventKind, SessionBroadcast, SessionList, StateResponse};
 
 use crate::Gateway;
 use crate::error::ApiError;
 use crate::extract::{Body, Query};
+use crate::sessions::control::TerminalSignal;
 use crate::tenancy::UserId;
 
 #[derive(Debug, Deserialize)]
@@ -98,22 +99,40 @@ async fn events(
 }
 
 async fn ingest(gateway: &Gateway, user: &UserId, events: Vec<AgentEvent>) -> Result<(), ApiError> {
-    let ended: Vec<_> = events
-        .iter()
-        .filter(|event| matches!(event.kind, wire::events::AgentEventKind::TurnEnd { .. }))
-        .map(|event| event.session.clone())
-        .collect();
+    let signals: Vec<_> = events.iter().map(hook_signal).collect();
     if gateway.tenancy.local_user() == Some(user) {
         gateway.sessions.ingest_as_local(user, events)?;
     } else {
         gateway.sessions.ingest(user, events)?;
     }
     if let Some(terminal) = &gateway.terminal {
-        for session in ended {
-            terminal.terminal_turn_end(user, &session).await?;
+        for (session, signal) in signals {
+            terminal.terminal_hook(user, &session, signal).await?;
         }
     }
     Ok(())
+}
+
+fn hook_signal(event: &AgentEvent) -> (String, TerminalSignal) {
+    let signal = match &event.kind {
+        AgentEventKind::TurnEnd { .. } => TerminalSignal::TurnEnded,
+        AgentEventKind::ApprovalWait { tool, args, .. } => {
+            TerminalSignal::Approval(wire::harness::TerminalApproval {
+                tool: tool.clone(),
+                input: args.clone(),
+            })
+        }
+        AgentEventKind::SessionStart { .. }
+        | AgentEventKind::SessionEnd { .. }
+        | AgentEventKind::MessageUser { .. }
+        | AgentEventKind::MessageAgent { .. }
+        | AgentEventKind::ThinkingDelta { .. }
+        | AgentEventKind::ToolStart { .. }
+        | AgentEventKind::TaskPlan { .. }
+        | AgentEventKind::TaskCheck { .. }
+        | AgentEventKind::Activity { .. } => TerminalSignal::Progressed,
+    };
+    (event.session.clone(), signal)
 }
 
 async fn list(

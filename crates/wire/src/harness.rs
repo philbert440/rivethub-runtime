@@ -387,6 +387,14 @@ pub enum HarnessEvent {
     },
     Status(HarnessStatusFrame),
     #[serde(rename_all = "camelCase")]
+    Driver {
+        session_id: SessionId,
+        driver: Option<SessionDriver>,
+        busy: bool,
+        queued: Vec<String>,
+        approval: Option<TerminalApproval>,
+    },
+    #[serde(rename_all = "camelCase")]
     Prompt {
         session_id: SessionId,
         prompt_id: String,
@@ -396,6 +404,21 @@ pub enum HarnessEvent {
         resolved: Option<PromptResolution>,
         screen: Option<PromptScreen>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SessionDriver {
+    Chat,
+    Terminal,
+}
+
+#[serde_with::skip_serializing_none]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalApproval {
+    pub tool: String,
+    pub input: Option<JsonObject>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

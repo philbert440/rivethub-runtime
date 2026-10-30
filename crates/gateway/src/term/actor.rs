@@ -143,7 +143,7 @@ impl TerminalActor {
                             state.exit_code = Some(code);
                         }
                     });
-                    if current { self.permit.take(); self.service.forget_startup(&self.session).await; }
+                    if current { self.permit.take(); self.service.forget_startup(&self.session).await; self.service.terminal_exited(&self.session); }
                 }
             }
         }

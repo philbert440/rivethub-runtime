@@ -15,7 +15,7 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 | # | Boundary | Who observes it | Spec (inventory) | Pinned by (recording) | Acceptance test |
 |---|---|---|---|---|---|
 | B1 | Gateway HTTP + WS API (`/api/*`, `/files/*`, `/term`, `/event(s)`, `/sessions`, `/state`, `/layout`, `/healthz`, `/mesh.json`, static SPA, `/ws`, `/v1` OpenAI-compatible; the Topics routes `GET/POST /api/topics`, `GET /api/topics/search?q=`, `GET/PATCH/DELETE /api/topics/{id}` (note 29), `POST /api/topics/{id}/merge`, `GET /api/topics/{id}/sessions`, `GET /api/topics/filing` and `GET /api/sessions/suggestions` (note 70), `GET/PUT /api/topics/{id}/page` (note 63), `GET/POST /api/topics/{id}/decisions`, `PATCH /api/topics/{id}/decisions/{decision}`, `POST /api/topics/{id}/decisions/{decision}/supersede` (note 27) and `GET/PUT/DELETE /api/sessions/{session}/placement`; `POST /api/harness-sessions` with optional `topicId` and `prompt`, answering with optional `startupContext`, and `GET /api/harness-sessions/{session}/startup-context` (note 24); `POST /term` and `POST /api/terminal` with optional `topicId` (note 25); the tool output route `GET /api/harness-sessions/{session}/tools/{tool}/output`; the hub state route `GET/PUT /api/hub/state` and its `hub.state` notice on `/api/events/ws`; session deletion `DELETE /api/sessions/{session}`, `POST /api/sessions/delete` and `GET /api/sessions/trash` (note 75); the task routes `GET/POST /api/tasks`, `GET /api/tasks/{id}`, `GET /api/tasks/{id}/wait`, `POST /api/tasks/{id}/kill` and `GET /api/catalog/agents` (note 74)) | RivetHub web/Android/Electron, hooks, mesh peers, scripts | gateway-api.md §2–§17 (route table §4, aliases §5) | `golden/gateway/` (28 files, recorded traffic incl. startup refusals) + `golden/term/` (17) | replay every recorded exchange: same status, headers (names case-insensitive), body; WS frames in order |
-| B2 | Session event stream v1 (`AgentEvent`, `v: 1`) and the room/session snapshot; a `POST /events` batch skips the elements of a kind this node doesn't know, keeps an unknown activity as `thinking`, and keeps the rest (note 73) | RivetHub clients `/ws` clients, `POST /event(s)` producers | gateway-api.md §6, core-domain.md §1.10 | gateway + term recordings (events and snapshots) | accept/reject decisions and emitted snapshots identical on recorded inputs |
+| B2 | Session event stream v1 (`AgentEvent`, `v: 1`) and the room/session snapshot; a `POST /events` batch skips the elements of a kind this node doesn't know, keeps an unknown activity as `thinking`, and keeps the rest (note 73); `approval.wait` (note 81) | RivetHub clients `/ws` clients, `POST /event(s)` producers | gateway-api.md §6, core-domain.md §1.10 | gateway + term recordings (events and snapshots) | accept/reject decisions and emitted snapshots identical on recorded inputs |
 | B3 | Capture ingest: hook payloads from every harness → `POST /api/capture` batch body | 10 harness integration kits (claude, codex, grok, kimi, qwen, opencode, hermes, pi, cursor, cowork) | data-layer.md §3.1–§3.6; harness-control-plane.md §3 | `golden/capture/` (22: pg arms), `golden/capture-zod/` (batch validation) | same rows written for the same hook input; same validation errors |
 | B4 | Postgres schema and data (`rh_*` tables, migrations 0001–0020 including `0020_tag_removals`, then 0021 renames `ros_*` to `rh_*` with `ros_*` views over them, through 0028 `rh_session_startup` (note 24), 0029 `rh_session_startup.delivered_via` (note 25) and 0040 `rh_tasks_archive` and the new `rh_tasks` (note 74), views, triggers, graphile_worker jobs). Migrations are applied only by `rivethub-migrate postgres`, which then requires every migration file name in `_rivetos_migrations`; the runtime verifies one schema version (`memory_postgres::SCHEMA_VERSION`) at connect — equal ok, newer ok with one warning, no `_sqlx_migrations` table a `NotAdopted` error (one `rivethub-migrate postgres` adopts it, including a database whose history is only `_rivetos_migrations`), behind a `SchemaBehind` error naming the migrate command — and runs no DDL | the live datahub, the TypeScript workers during cutover, operators | data-layer.md §1–§2 | `golden/capture/pg/` (30 scenarios), `golden/memory/` | Rust migrates a 0001-era DB to the same schema; writes rows the TypeScript reads and vice versa; enqueues the same jobs with the same keys |
 | B5 | SQLite memory file (`memory.sqlite`, schema v7 and its upgrade ladder through cutover; schema v8 adds a sqlite-vec index afterwards). Creation and upgrades run only through `rivethub-migrate sqlite`, which copies the original file to `<file>.v<N>.bak` before any read-write connection and returns `BackupExists` when that path is already there; the runtime reads `user_version` on a read-only connection (0 → `NotInitialised`, below 7 → `SchemaBehind` naming the file, above 7 → `UnsupportedSchema`), a refused open leaves the file unchanged, and it never creates the file | standalone nodes, TypeScript nodes during cutover | data-layer.md §3; sqlite plugin | `golden/memory-sqlite/` (20 files incl. fixture DBs, upgrades, search results) | same `sqlite_master`, same rows, same search ranks; files open both ways |
@@ -986,6 +986,40 @@ the turn as the gateway saw its agent's events: from the prompt to the turn's en
 permission request and the tool's result; it is absent when no time passed or the turn ran in a terminal. A client's
 tok/s is the turn's `usage.completionTokens` over `modelMs`, so a turn whose events arrive late or all at once keeps its
 real pace. Bodies are `wire::harness::HarnessEvent` and `wire::events::ContextUsageSource` in `contract/*.schema.json`.
+(79) Session driver (Phil, 2026-10-30): a session's Chat (ACP) and Terminal (the harness's TUI) take turns holding it,
+and `HarnessEvent` gains `driver`, `{ "type": "driver", "sessionId", "driver"?, "busy", "queued", "approval"? }`, sent on
+the session's stream each time one of them changes and, held per session, after each `transcript` a session socket
+sends. `driver` is `chat` or `terminal`, whichever holds the session now, and is absent while neither does; `busy` says a
+turn is running as rh knows it (a chat turn in flight, or a prompt submitted in the terminal whose end has not been
+reported); `queued` is the text of each chat message waiting, oldest first. The view you type in takes the session: a
+chat message sent while the terminal holds it but is not busy stops the TUI and runs at once; one sent while the
+terminal is busy queues until the terminal's turn ends (the harness hook's `turn.end`, B2) or its TUI exits, and is
+never dropped. A terminal asked for while a chat turn runs opens when that turn ends, as before. rh counts a terminal
+as busy from the first input it forwards to the TUI that carries a carriage return (a keystroke over `/term` or a
+submitted `POST /term/inject`) until the hook's `turn.end` or the TUI's exit; a TUI rh just started, or one nobody has
+typed a prompt into since its last turn ended, is not busy. The TUI exiting on its own (the person quits it) hands the
+session back, so a queued chat message runs then. rh never reads a transcript to decide any of this. Bodies are
+`wire::harness::HarnessEvent` and `SessionDriver` in `contract/*.schema.json`.
+(80) Terminal turns in Chat (Phil, 2026-10-30): while the terminal holds a session (`driver` `terminal`, note 79), each
+harness session socket on it follows the session's transcript, as the store readers in capture read it for
+`GET /api/harness-sessions/{session}/transcript`, and sends a `transcript` (`from` 0, the whole read, then the waiting
+approvals, the held `context` and the held `driver`) whenever the read differs from the last one it sent: a terminal
+turn's prompt, replies, tool calls and results reach Chat as they are written, with or without a hook. It reads a
+second after it starts following and after each read that found a change, and backs off to one read every 5 s while
+nothing changes; a submitted prompt (`busy` turning true) brings it back to one a second, and it reads once more when
+the terminal stops holding the session. What a read shows is per harness: Claude Code and Grok Build carry messages,
+tool calls and their results; Codex, OpenCode, omp, Kimi Code, Hermes and Cursor carry message text only; dsh and
+Cowork have no transcript source and send none. Following only displays: it never changes who holds the session.
+(81) Terminal approvals (Phil, 2026-10-30): B2 gains the kind `approval.wait`, `{ "v": 1, "session", "type":
+"approval.wait", "tool", "args"?, "ts"? }`, which a hook kit sends when the harness's TUI shows a permission prompt
+(Claude Code's `PermissionRequest` hook). While the terminal holds the session (note 79), its `driver` event carries
+`approval` (`{ "tool", "input"? }`, the hook's `tool` and `args`) until the next event any hook sends for the session,
+the next input forwarded to its TUI, the terminal's `turn.end`, or the TUI's exit. A chat client shows it as waiting in
+the terminal, to be answered there; it is not an `approval-request` and `POST …/approvals` cannot answer it. On a
+session the terminal does not hold, `approval.wait` changes only the session view's `tool`. Only a harness whose hook
+reports the prompt shows it: Claude Code through `PermissionRequest`; Codex, OpenCode and omp have no hook or transcript
+record of a waiting prompt. Bodies are `wire::events::AgentEventKind` and `wire::harness::TerminalApproval` in
+`contract/*.schema.json`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

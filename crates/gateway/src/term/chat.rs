@@ -11,7 +11,7 @@ use wire::stream::ThinkingLevel;
 
 use super::{AgentLaunch, TerminalService};
 use crate::error::ApiError;
-use crate::sessions::control::{ChatActor, ChatHandle};
+use crate::sessions::control::{ChatActor, ChatHandle, TerminalSignal};
 use crate::tenancy::UserId;
 
 #[derive(Debug)]
@@ -325,13 +325,33 @@ impl TerminalService {
         wire::harness::HarnessSessionList { sessions }
     }
 
-    pub async fn terminal_turn_end(&self, user: &UserId, session: &str) -> Result<(), ApiError> {
+    pub(crate) async fn terminal_hook(
+        &self,
+        user: &UserId,
+        session: &str,
+        signal: TerminalSignal,
+    ) -> Result<(), ApiError> {
         let key = self.registry.authorize(user, session)?;
         let chat = self.chats.read().get(&key).cloned();
         if let Some(chat) = chat {
-            chat.turn_end().await?;
+            chat.signal(signal).await?;
         }
         Ok(())
+    }
+
+    pub(crate) async fn terminal_typed(&self, key: &str, bytes: &[u8]) -> Result<(), ApiError> {
+        let chat = self.chats.read().get(key).cloned();
+        if let Some(chat) = chat {
+            chat.signal(TerminalSignal::typed(bytes)).await?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn terminal_exited(&self, key: &str) {
+        let chat = self.chats.read().get(key).cloned();
+        if let Some(chat) = chat {
+            chat.try_signal(TerminalSignal::Exited);
+        }
     }
 }
 

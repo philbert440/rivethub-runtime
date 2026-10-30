@@ -128,6 +128,7 @@ pub struct TerminalService {
     activity: RwLock<BTreeMap<String, kernel::preview::LiveActivity>>,
     approvals: RwLock<BTreeMap<String, Vec<wire::harness::HarnessEvent>>>,
     contexts: RwLock<BTreeMap<String, wire::harness::HarnessEvent>>,
+    drivers: RwLock<BTreeMap<String, wire::harness::HarnessEvent>>,
     harness_events:
         RwLock<BTreeMap<String, tokio::sync::broadcast::Sender<wire::harness::HarnessEvent>>>,
     registry_events: tokio::sync::broadcast::Sender<live::RegistryEvent>,
@@ -169,6 +170,7 @@ impl TerminalService {
             activity: RwLock::new(BTreeMap::new()),
             approvals: RwLock::new(BTreeMap::new()),
             contexts: RwLock::new(BTreeMap::new()),
+            drivers: RwLock::new(BTreeMap::new()),
             harness_events: RwLock::new(BTreeMap::new()),
             registry_events: tokio::sync::broadcast::channel(live::REGISTRY_EVENT_BUFFER).0,
             injecting: tokio::sync::Mutex::new(()),
@@ -499,6 +501,7 @@ impl TerminalService {
         let chat = self.chats.write().remove(&key);
         self.summaries.write().remove(&key);
         self.contexts.write().remove(&key);
+        self.drivers.write().remove(&key);
         if let Some(chat) = chat {
             chat.close().await?;
         }

@@ -104,6 +104,10 @@ impl Projection {
                 }
                 ts
             }
+            AgentEventKind::ApprovalWait { tool, ts, .. } => {
+                self.view.tool = Some(tool.clone());
+                ts
+            }
             AgentEventKind::Activity { activity, ts } => {
                 self.view.activity = *activity;
                 ts
