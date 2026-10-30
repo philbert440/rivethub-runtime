@@ -59,7 +59,7 @@ async fn summarized(pool: &PgPool, key: &str) -> TestResult<ExtractWiki> {
         .execute(&mut *tx)
         .await?;
     sqlx::query(
-        "INSERT INTO rh_conversations (id, session_key, agent, title) VALUES ($1, $2, 'rivet', $3)",
+        "INSERT INTO rh_conversations (id, session_key, agent, title, owner_user_id) VALUES ($1, $2, 'rivet', $3, 'owner')",
     )
     .bind(conversation)
     .bind(key)
@@ -67,7 +67,7 @@ async fn summarized(pool: &PgPool, key: &str) -> TestResult<ExtractWiki> {
     .execute(&mut *tx)
     .await?;
     sqlx::query(
-        "INSERT INTO rh_summaries (id, conversation_id, content, kind) VALUES ($1, $2, 'AcmeKit notes.', 'leaf')",
+        "INSERT INTO rh_summaries (id, conversation_id, content, kind, owner_user_id) VALUES ($1, $2, 'AcmeKit notes.', 'leaf', 'owner')",
     )
     .bind(summary)
     .bind(conversation)

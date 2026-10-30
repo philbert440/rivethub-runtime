@@ -93,14 +93,14 @@ async fn seed(pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
             )],
         );
         memory
-            .capture_batch(&batch, &CaptureOptions::default())
+            .capture_batch(&batch, &CaptureOptions::owned_by(&testkit::owner()?))
             .await?;
     }
     let mut older = message("m-old", Role::Assistant, OLDER_AUTOMATION_MESSAGE);
     older.created_at = Some(stamp("2026-01-01T10:00:00Z")?);
     let older = batch("claude-code:seed", vec![older]);
     memory
-        .capture_batch(&older, &CaptureOptions::default())
+        .capture_batch(&older, &CaptureOptions::owned_by(&testkit::owner()?))
         .await?;
     let mut tx = testkit::capture_tx(pool).await?;
     let conversation: sqlx::types::Uuid = sqlx::query_scalar(
@@ -114,8 +114,8 @@ async fn seed(pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
         .chain([("branch", BRANCH_ANSWER)])
     {
         sqlx::query(
-            "INSERT INTO rh_summaries (conversation_id, depth, content, kind, message_count)
-             VALUES ($1, $2, $3, $4, 3)",
+            "INSERT INTO rh_summaries (conversation_id, depth, content, kind, message_count, owner_user_id)
+             VALUES ($1, $2, $3, $4, 3, 'owner')",
         )
         .bind(conversation)
         .bind(i32::from(kind == "branch"))
@@ -184,14 +184,17 @@ async fn append_is_idempotent_per_event_id(pool: PgPool) -> TestResult {
         created_at: None,
     };
     let first = memory
-        .append(vec![
-            entry("first entry", "e1"),
-            entry("second entry", "e2"),
-        ])
+        .append(
+            &testkit::owner()?,
+            vec![entry("first entry", "e1"), entry("second entry", "e2")],
+        )
         .await?;
     assert_eq!(first, 2);
     let replay = memory
-        .append(vec![entry("first entry", "e1"), entry("third entry", "e3")])
+        .append(
+            &testkit::owner()?,
+            vec![entry("first entry", "e1"), entry("third entry", "e3")],
+        )
         .await?;
     assert_eq!(replay, 1, "the replayed event id is skipped");
 
@@ -221,8 +224,10 @@ async fn the_capture_port_skips_resent_events_and_defaults_the_channel(pool: PgP
     );
     sent.channel = None;
     sent.title = Some("Resent".to_owned());
-    let first = memory.capture(sent.clone(), None).await?;
-    let second = memory.capture(sent, None).await?;
+    let first = memory
+        .capture(sent.clone(), &testkit::owner()?, None)
+        .await?;
+    let second = memory.capture(sent, &testkit::owner()?, None).await?;
     assert_eq!((first.inserted, first.skipped), (2, 0));
     assert_eq!((second.inserted, second.skipped), (0, 2));
     let row = sqlx::query(
@@ -361,7 +366,7 @@ async fn search_honours_mode_scope_agent_tag_and_limit(pool: PgPool) -> TestResu
         vec![message("t1", Role::User, "deploy checklist")],
     );
     memory
-        .capture_batch(&short, &CaptureOptions::default())
+        .capture_batch(&short, &CaptureOptions::owned_by(&testkit::owner()?))
         .await?;
     let trigram = memory
         .search(SearchQuery {
@@ -521,7 +526,7 @@ async fn browse_honours_every_filter_field(pool: PgPool) -> TestResult {
     b4.created_at = Some(stamp("2026-01-02T10:00:00Z")?);
     let batch = batch("claude-code:browse", vec![b1, b2, b3, b4]);
     memory
-        .capture_batch(&batch, &CaptureOptions::default())
+        .capture_batch(&batch, &CaptureOptions::owned_by(&testkit::owner()?))
         .await?;
     let conversation: sqlx::types::Uuid = sqlx::query_scalar(
         "SELECT id FROM rh_conversations WHERE session_key = 'claude-code:browse'",

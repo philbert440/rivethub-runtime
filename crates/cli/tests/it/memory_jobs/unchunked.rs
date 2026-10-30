@@ -39,8 +39,8 @@ async fn message(
     let offset = f64::from(id);
     let id = Uuid::from_u128(u128::from(id));
     sqlx::query(
-        "INSERT INTO rh_messages (id, conversation_id, agent, channel, role, content, tool_result, embed_status, created_at)
-         VALUES ($1, $2::uuid, 'test', 'test', 'user', $3, $4, $5, '2026-10-01T00:00:00Z'::timestamptz + make_interval(secs => $6))",
+        "INSERT INTO rh_messages (id, conversation_id, agent, channel, role, content, tool_result, embed_status, created_at, owner_user_id)
+         VALUES ($1, $2::uuid, 'test', 'test', 'user', $3, $4, $5, '2026-10-01T00:00:00Z'::timestamptz + make_interval(secs => $6), 'owner')",
     )
     .bind(id)
     .bind(CONVERSATION)
@@ -100,7 +100,7 @@ async fn unchunked_selection_follows_the_length_and_status_predicate(pool: PgPoo
     let pending = message(&pool, 111, &long, None, Some("pending")).await?;
     let capped = message(&pool, 112, "", Some(&"d".repeat(30)), None).await?;
     let lettered = message(&pool, 113, &format!("v{exact}"), None, None).await?;
-    sqlx::query("INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content) VALUES ($1, 0, 0, 21, 'x')")
+    sqlx::query("INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content, owner_user_id) VALUES ($1, 0, 0, 21, 'x', 'owner')")
         .bind(chunked)
         .execute(&pool)
         .await?;

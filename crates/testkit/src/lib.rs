@@ -160,3 +160,9 @@ where
 {
     serde_json::from_str(text).map_err(|error| Error::format(path, error.to_string()))
 }
+
+pub const OWNER: &str = "owner";
+
+pub fn owner() -> Result<kernel::owner::Owner, kernel::owner::InvalidOwner> {
+    kernel::owner::Owner::new(OWNER.to_owned())
+}

@@ -127,7 +127,10 @@ fn memory_store_roundtrip() {
         let store: Arc<dyn MemoryStore> = Arc::new(FakeMemoryStore::default());
         let now = Utc::now();
         let inserted = store
-            .append(vec![memory_entry("claude-code:abc", "hello world", now)])
+            .append(
+                &testkit::owner().unwrap(),
+                vec![memory_entry("claude-code:abc", "hello world", now)],
+            )
             .await
             .unwrap();
         assert_eq!(inserted, 1);
@@ -598,7 +601,10 @@ fn fake_memory_assigns_ids_and_timestamps_when_appending() {
         let mut entry = memory_entry("claude-code:fresh", "fresh", Utc::now());
         entry.id = None;
         entry.created_at = None;
-        store.append(vec![entry]).await.expect("append");
+        store
+            .append(&testkit::owner().unwrap(), vec![entry])
+            .await
+            .expect("append");
         let outcome = store.search(search_query("fresh")).await.expect("search");
         let result = outcome.results.first().expect("inserted entry");
         assert!(Uuid::parse_str(&result.id).is_ok());

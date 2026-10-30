@@ -259,6 +259,21 @@ fn pg_value_eq(rec: &Json, act: &Json, map: &mut BTreeMap<(String, String), Stri
     }
 }
 
+fn owned_by_the_caller(rows: &Json) -> Json {
+    let mut owned = rows.clone();
+    for table in ["ros_conversations", "ros_messages"] {
+        let rows = owned.get_mut(table).and_then(Json::as_array_mut);
+        for row in rows.into_iter().flatten() {
+            if let Some(row) = row.as_object_mut()
+                && row.get("owner_user_id") == Some(&Json::Null)
+            {
+                row.insert("owner_user_id".to_owned(), Json::from(crate::OWNER));
+            }
+        }
+    }
+    owned
+}
+
 fn compare_pg_step(
     id: &str,
     step: &StepRecord,
@@ -316,6 +331,7 @@ fn compare_pg_step(
             return Err(Mismatch::new(id, "unexpected rows"));
         }
         (Some(want_rows), Some(actual_rows)) => {
+            let want_rows = &owned_by_the_caller(want_rows);
             if !pg_value_eq(want_rows, actual_rows, map) {
                 return Err(Mismatch::new(
                     id,

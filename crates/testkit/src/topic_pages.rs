@@ -279,6 +279,10 @@ pub async fn syncing_twice_changes_nothing(stores: PageStores<'_>) -> Outcome {
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one topic deletion, from its page to its placed and sub-topic sessions"
+)]
 pub async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(
     stores: PageStores<'_>,
 ) -> Outcome {
@@ -297,6 +301,7 @@ pub async fn a_deleted_topic_leaves_its_sessions_forming_and_its_page_unbound(
             topic: topic.id,
             by: PlacementSource::You,
             at: at(11),
+            owner: Some(crate::owner()?),
         })
         .await?;
     let sub = stores
@@ -378,6 +383,7 @@ pub async fn editing_an_unwritten_entity_writes_its_page(stores: PageStores<'_>)
                 aliases: Vec::new(),
                 parent: Some(hosts.id),
                 directory: None,
+                owner: Some(crate::owner()?),
             },
             at(1),
         )?)

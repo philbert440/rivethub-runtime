@@ -99,7 +99,7 @@ async fn capture(pool: &PgPool, event_id: &str, content: &str) -> TestResult {
     unwired(pool)
         .capture_batch(
             &batch(event_id, content)?,
-            &memory_postgres::CaptureOptions::default(),
+            &memory_postgres::CaptureOptions::owned_by(&testkit::owner()?),
         )
         .await?;
     Ok(())
@@ -420,8 +420,8 @@ async fn the_chunk_arm_surfaces_and_merges_parents(pool: PgPool) -> TestResult {
                 .await?;
         let chunk: Vec<f32> = query_vector.iter().map(|value| value * scale).collect();
         sqlx::query(
-            "INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content, embedding)
-             VALUES ($1, 0, 0, 16, 'seed chunk', $2)",
+            "INSERT INTO rh_message_chunks (message_id, idx, char_start, char_end, content, embedding, owner_user_id)
+             VALUES ($1, 0, 0, 16, 'seed chunk', $2, 'owner')",
         )
         .bind(id)
         .bind(HalfVector::from_f32_slice(&chunk))

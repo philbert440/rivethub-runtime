@@ -54,8 +54,9 @@ const PENDING_SQL: &str = "select c.id, pending.unsummarized,
 
 const INSERT_SQL: &str = "insert into rh_summaries (
         id, conversation_id, depth, content, kind, message_count,
-        earliest_at, latest_at, model, created_at, pipeline_version
-    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
+        earliest_at, latest_at, model, created_at, pipeline_version, owner_user_id
+    ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+              (select owner_user_id from rh_conversations where id = $2))";
 
 const NOTIFY_SQL: &str = "select pg_notify('rh_summary_written', json_build_object(
         'id', $1::text, 'sessionKey', c.session_key, 'kind', $2::text, 'depth', $3::int)::text)

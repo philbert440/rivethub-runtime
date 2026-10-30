@@ -185,7 +185,7 @@ async fn scenario_inventory_is_covered(_pool: PgPool) -> TestResult {
         }
     }
     assert_eq!(total, 30, "recorded scenarios: {seen:?}");
-    assert_eq!(skipped.len(), 7);
+    assert_eq!(skipped.len(), 8);
     for (name, reason) in skipped {
         assert_ne!(reason, "");
         assert!(seen.contains(&name), "unknown exclusion: {name}");
@@ -215,7 +215,7 @@ async fn run_step(step: &capture_pg::PgStep, context: &mut StepContext<'_>) -> P
         "sql" => {
             if step.label == "another writer creates the conversation without task_id"
                 && let Err(error) = sqlx::query(
-                    "INSERT INTO rh_conversations (session_key, agent) VALUES ('claude-code:spawn-three', 'rivet-claude')",
+                    "INSERT INTO rh_conversations (session_key, agent, owner_user_id) VALUES ('claude-code:spawn-three', 'rivet-claude', 'owner')",
                 )
                 .execute(context.pool)
                 .await
@@ -405,16 +405,12 @@ fn parse_stamp(raw: &str) -> Option<chrono::DateTime<chrono::Utc>> {
         .map(|parsed| parsed.with_timezone(&chrono::Utc))
 }
 
-fn routed_user(opts: &Value) -> Option<String> {
-    let raw = opts
-        .get("env")
-        .and_then(|env| str_at(env, "RIVETOS_USER_ID"))?;
-    let trimmed = raw.trim().to_string();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed)
-    }
+fn routed_user(opts: &Value) -> String {
+    opts.get("env")
+        .and_then(|env| str_at(env, "RIVETOS_USER_ID"))
+        .map(|raw| raw.trim().to_string())
+        .filter(|trimmed| !trimmed.is_empty())
+        .unwrap_or_else(|| testkit::OWNER.to_owned())
 }
 
 fn task_id(opts: &Value) -> Option<String> {

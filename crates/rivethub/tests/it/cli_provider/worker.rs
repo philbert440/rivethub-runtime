@@ -36,7 +36,7 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
             created_at: Some(chrono::Utc::now()),
         })
         .collect();
-    store.append(messages).await?;
+    store.append(&testkit::owner()?, messages).await?;
     let id: String = sqlx::query_scalar(
         "SELECT id::text FROM rh_conversations WHERE session_key = 'cli:summary'",
     )

@@ -152,8 +152,8 @@ impl FilingStore for PostgresMemory {
         let kept = placement.clone().admit(existing);
         if kept == placement {
             sqlx::query!(
-                "INSERT INTO rh_conversation_placements (conversation_id, topic_id, placed_by, placed_at)
-                 VALUES ($1, $2, $3, $4)
+                "INSERT INTO rh_conversation_placements (conversation_id, topic_id, placed_by, placed_at, owner_user_id)
+                 VALUES ($1, $2, $3, $4, (SELECT owner_user_id FROM rh_conversations WHERE id = $1))
                  ON CONFLICT (conversation_id) DO UPDATE SET topic_id = EXCLUDED.topic_id,
                                                              placed_by = EXCLUDED.placed_by,
                                                              placed_at = EXCLUDED.placed_at",
@@ -192,7 +192,7 @@ impl FilingStore for PostgresMemory {
     async fn filed(&self, topic: TopicId) -> Result<Filed, TopicError> {
         let placed = sqlx::query_as!(
             PlacementRow,
-            "SELECT session_id, topic_id, placed_by, placed_at
+            "SELECT session_id, topic_id, placed_by, placed_at, owner_user_id
                FROM rh_session_placements WHERE topic_id = $1",
             topic.uuid()
         )

@@ -15,11 +15,12 @@ use kernel::memory::TagTaxonomyDecision;
 use kernel::memory::TagTaxonomyMerge;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use kernel::owner::Owner;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MemoryRequest {
-    Append(Vec<MemoryEntry>),
+    Append(Owner, Vec<MemoryEntry>),
     Search(SearchQuery),
     Browse(BrowseFilter),
     Stats,

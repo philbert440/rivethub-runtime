@@ -10,6 +10,7 @@ use super::page::WikiSlug;
 use super::page::WikiSlugError;
 use crate::BoxError;
 use crate::filing::Target;
+use crate::owner::Owner;
 use crate::topics::Slug;
 use crate::topics::TopicId;
 
@@ -48,6 +49,8 @@ pub struct WikiSummary {
     pub content: String,
     #[serde(skip)]
     pub session_key: Option<String>,
+    #[serde(skip)]
+    pub owner: Option<Owner>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -6,23 +6,28 @@ use std::net::SocketAddr;
 use axum::extract::ConnectInfo;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
+use kernel::owner::Owner;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 use crate::error::ApiError;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct UserId(String);
+pub struct UserId(Owner);
 
 impl UserId {
     pub fn new(id: String) -> Result<Self, ApiError> {
-        if id.is_empty() || id.chars().any(char::is_control) {
-            return Err(ApiError::BadRequest("invalid user id".into()));
-        }
-        Ok(Self(id))
+        Owner::new(id)
+            .map(Self)
+            .map_err(|_| ApiError::BadRequest("invalid user id".into()))
     }
 
     pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    #[must_use]
+    pub fn owner(&self) -> &Owner {
         &self.0
     }
 }

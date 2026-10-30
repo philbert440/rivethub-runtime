@@ -32,13 +32,14 @@ struct FilingRow {
     channel: Option<String>,
     last_active: Option<DateTime<Utc>>,
     node: Option<String>,
+    owner_user_id: Option<String>,
 }
 
 pub(super) async fn all_filed(pool: &PgPool) -> Result<AllFiled, TopicError> {
     let found = sqlx::query_as!(
         FilingRow,
         r#"WITH placed AS (
-               SELECT p.session_id, p.topic_id, p.placed_by, p.placed_at,
+               SELECT p.session_id, p.topic_id, p.placed_by, p.placed_at, p.owner_user_id,
                       CASE WHEN starts_with(p.session_id, $1)
                            THEN substr(p.session_id, length($1) + 1) END AS bare
                  FROM rh_session_placements p
@@ -46,7 +47,8 @@ pub(super) async fn all_filed(pool: &PgPool) -> Result<AllFiled, TopicError> {
            SELECT p.session_id AS "session_id?", NULL::uuid AS "conversation_id?",
                   p.topic_id AS "topic_id?", p.placed_by AS "placed_by?", p.placed_at AS "at!",
                   seen.title AS "title?", NULL::text AS "channel?",
-                  seen.last_active AS "last_active?", seen.node AS "node?"
+                  seen.last_active AS "last_active?", seen.node AS "node?",
+                  p.owner_user_id AS "owner_user_id?"
              FROM placed p
              LEFT JOIN LATERAL (
                  SELECT max(c.updated_at) AS last_active,
@@ -59,11 +61,11 @@ pub(super) async fn all_filed(pool: &PgPool) -> Result<AllFiled, TopicError> {
              ) seen ON true
            UNION ALL
            SELECT NULL, p.conversation_id, p.topic_id, p.placed_by, p.placed_at,
-                  c.title, c.channel, c.updated_at, c.node
+                  c.title, c.channel, c.updated_at, c.node, p.owner_user_id
              FROM rh_conversation_placements p
              JOIN rh_conversations c ON c.id = p.conversation_id
            UNION ALL
-           SELECT h.session_id, NULL, NULL, NULL, h.marked_at, NULL, NULL, NULL, NULL
+           SELECT h.session_id, NULL, NULL, NULL, h.marked_at, NULL, NULL, NULL, NULL, NULL
              FROM rh_session_history h
            ORDER BY 8 DESC NULLS LAST, 5 DESC, 1, 2"#,
         bare_session_prefix()
@@ -116,6 +118,7 @@ fn session_row(row: FilingRow, topic: Uuid) -> Result<FiledSession, TopicError> 
             topic_id: topic,
             placed_by: row.placed_by.ok_or_else(|| missing("placed_by"))?,
             placed_at: row.at,
+            owner_user_id: row.owner_user_id.ok_or_else(|| missing("owner_user_id"))?,
         })?,
         title: row.title,
         last_active: row.last_active,

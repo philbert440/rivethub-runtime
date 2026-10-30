@@ -64,6 +64,7 @@ fn topic(name: &str, aliases: &[&str], directory: Option<&str>) -> Result<Topic,
             directory: directory.map(|path| Root::Shared {
                 path: path.to_owned(),
             }),
+            owner: testkit::owner().ok(),
         },
         at(0),
     )

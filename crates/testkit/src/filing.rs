@@ -50,6 +50,7 @@ where
                 topic: desktop.id,
                 by: PlacementSource::Categorizer,
                 at: at(1),
+                owner: Some(crate::owner()?),
             })
             .await?;
     }
@@ -231,6 +232,7 @@ async fn record<S: MemoryStore>(
                 updated_at: created,
                 messages: vec![message],
             },
+            &crate::owner()?,
             None,
         )
         .await?;
@@ -267,6 +269,7 @@ pub async fn capture<S: MemoryStore>(
                     created_at: Some(at(0)),
                 }],
             },
+            &crate::owner()?,
             node,
         )
         .await?;

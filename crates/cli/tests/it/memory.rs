@@ -671,15 +671,15 @@ async fn seed_tool_message(pool: &PgPool) -> Uuid {
         .expect("defer");
     let conversation = Uuid::new_v4();
     let message = Uuid::new_v4();
-    sqlx::query("INSERT INTO rh_conversations (id, session_key, agent) VALUES ($1, $2, 'main')")
+    sqlx::query("INSERT INTO rh_conversations (id, session_key, agent, owner_user_id) VALUES ($1, $2, 'main', 'owner')")
         .bind(conversation)
         .bind(format!("tool:{conversation}"))
         .execute(&mut *transaction)
         .await
         .expect("conversation");
     sqlx::query(
-        "INSERT INTO rh_messages (id, conversation_id, agent, channel, role, content, tool_name)
-         VALUES ($1, $2, 'main', 'cli', 'assistant', '', 'shell')",
+        "INSERT INTO rh_messages (id, conversation_id, agent, channel, role, content, tool_name, owner_user_id)
+         VALUES ($1, $2, 'main', 'cli', 'assistant', '', 'shell', 'owner')",
     )
     .bind(message)
     .bind(conversation)
@@ -687,8 +687,8 @@ async fn seed_tool_message(pool: &PgPool) -> Uuid {
     .await
     .expect("empty");
     sqlx::query(
-        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content, tool_name)
-         VALUES ($1, 'main', 'cli', 'assistant', 'hello', 'shell')",
+        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content, tool_name, owner_user_id)
+         VALUES ($1, 'main', 'cli', 'assistant', 'hello', 'shell', 'owner')",
     )
     .bind(conversation)
     .execute(&mut *transaction)
@@ -776,14 +776,14 @@ async fn seed_round_trip(pool: &PgPool) -> Uuid {
         .await
         .expect("defer");
     let id = Uuid::new_v4();
-    sqlx::query("INSERT INTO rh_conversations (id, session_key, agent) VALUES ($1, $2, 'main')")
+    sqlx::query("INSERT INTO rh_conversations (id, session_key, agent, owner_user_id) VALUES ($1, $2, 'main', 'owner')")
         .bind(id)
         .bind(SESSION)
         .execute(&mut *transaction)
         .await
         .expect("conversation");
     sqlx::query(
-        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content) VALUES ($1, 'main', 'cli', 'user', $2)",
+        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content, owner_user_id) VALUES ($1, 'main', 'cli', 'user', $2, 'owner')",
     )
     .bind(id)
     .bind(BODY)

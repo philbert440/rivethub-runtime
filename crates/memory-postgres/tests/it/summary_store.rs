@@ -359,8 +359,8 @@ fn titled_leaf(conversation: Uuid, content: &str) -> NewSummary {
 async fn seed_untitled(pool: &PgPool, session: &str) -> Result<Uuid, sqlx::Error> {
     let mut tx = deferred(pool).await?;
     let id = sqlx::query_scalar(
-        "insert into rh_conversations (session_key, agent, channel)
-         values ($1, 'rivet', 'cli') returning id",
+        "insert into rh_conversations (session_key, agent, channel, owner_user_id)
+         values ($1, 'rivet', 'cli', 'owner') returning id",
     )
     .bind(session)
     .fetch_one(&mut *tx)
@@ -380,8 +380,8 @@ async fn stored_title(pool: &PgPool, id: Uuid) -> Result<Option<String>, sqlx::E
 async fn seed_conversation(pool: &PgPool, session: &str, title: &str) -> Result<Uuid, sqlx::Error> {
     let mut tx = deferred(pool).await?;
     let id = sqlx::query_scalar(
-        "insert into rh_conversations (session_key, agent, channel, title)
-         values ($1, 'rivet', 'cli', $2) returning id",
+        "insert into rh_conversations (session_key, agent, channel, title, owner_user_id)
+         values ($1, 'rivet', 'cli', $2, 'owner') returning id",
     )
     .bind(session)
     .bind(title)
@@ -399,8 +399,8 @@ async fn seed_message(
 ) -> Result<Uuid, sqlx::Error> {
     let mut tx = deferred(pool).await?;
     let id = sqlx::query_scalar(
-        "insert into rh_messages (conversation_id, agent, channel, role, content, created_at)
-         values ($1, 'rivet', 'cli', 'user', $2, $3) returning id",
+        "insert into rh_messages (conversation_id, agent, channel, role, content, created_at, owner_user_id)
+         values ($1, 'rivet', 'cli', 'user', $2, $3, 'owner') returning id",
     )
     .bind(conversation)
     .bind(content)

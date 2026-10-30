@@ -41,7 +41,7 @@ async fn native_suggestion_rows_match_the_recording() -> TestResult {
     let vocab: Vec<RecordedVocab> = table_rows(scenario, "ros_tag_taxonomy")?;
     let summary_id = Uuid::parse_str(&pending.entity_id)?;
     let conversation_id = Uuid::parse_str(&pending.conversation_id)?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed_native_rows(
         &fresh.store,
         summary_id,
@@ -75,7 +75,7 @@ async fn repeated_suggestions_leave_an_accepted_tag() -> TestResult {
     let vocab: Vec<RecordedVocab> = table_rows(scenario, "ros_tag_taxonomy")?;
     let summary_id = Uuid::parse_str(&pending.entity_id)?;
     let conversation_id = Uuid::parse_str(&pending.conversation_id)?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let at = instant(&pending.created_at)?;
     let store = fresh.store.clone().with_clock(move || at);
     seed_conversation(
@@ -130,7 +130,7 @@ async fn removal_rows_match_the_recording() -> TestResult {
     let scenario = named(&file, REMOVALS)?;
     let tags: Vec<RecordedTag> = table_rows(scenario, "ros_tags")?;
     let recorded = tags.first().ok_or("removal row")?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed_tag(&fresh.store, recorded, true).await?;
     let entity_id = Uuid::parse_str(&recorded.entity_id)?;
     let stored = fresh
@@ -197,7 +197,7 @@ async fn removal_rows_match_the_recording() -> TestResult {
 
 #[tokio::test]
 async fn removals_skip_tags_that_are_not_an_open_acceptance() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let at = instant(common::RECORDED_START)?;
     let conversation = Uuid::parse_str("00000000-0000-4000-8000-000000000002")?;
     seed_plain(&fresh.store, conversation, "manual", "accepted", None, "").await?;
@@ -265,7 +265,7 @@ async fn chat_release_notes_do_not_reset_the_first_suggestions() -> TestResult {
     let vocab: Vec<RecordedVocab> = table_rows(native, "ros_tag_taxonomy")?;
     let summary_id = Uuid::parse_str(&pending.entity_id)?;
     let conversation_id = Uuid::parse_str(&pending.conversation_id)?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     seed_conversation(
         &fresh.store,
         conversation_id,
@@ -322,7 +322,7 @@ async fn chat_release_notes_do_not_reset_the_first_suggestions() -> TestResult {
 
 #[tokio::test]
 async fn the_vocabulary_adds_accepted_tags_in_use() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let summary = Uuid::parse_str("00000000-0000-4000-8000-000000000041")?;
     let conversation = Uuid::parse_str("00000000-0000-4000-8000-000000000042")?;
     let at = "2026-01-01T00:00:00.000Z";
@@ -368,7 +368,7 @@ async fn the_vocabulary_adds_accepted_tags_in_use() -> TestResult {
 
 #[tokio::test]
 async fn missing_summaries_and_missing_tables_fail_closed() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let summary = assert_missing_summary_heads(&fresh.store).await?;
     assert_missing_tag_tables(&fresh.store, summary).await?;
     Ok(())
@@ -376,7 +376,7 @@ async fn missing_summaries_and_missing_tables_fail_closed() -> TestResult {
 
 #[tokio::test]
 async fn a_check_failure_rolls_the_suggestion_write_back() -> TestResult {
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let summary = Uuid::parse_str("00000000-0000-4000-8000-000000000040")?;
     let stored = fresh
         .store

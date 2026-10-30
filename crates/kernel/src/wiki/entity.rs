@@ -163,6 +163,7 @@ impl Catalog {
                     aliases: Vec::new(),
                     parent: Some(parent),
                     directory: None,
+                    owner: summary.owner.clone(),
                 },
                 now,
             )?)

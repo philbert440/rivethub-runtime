@@ -25,8 +25,8 @@ async fn seeded() -> TestResult<(TempDir, SqliteStore, ExtractWiki)> {
     execute(
         &store,
         &format!(
-            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
-             VALUES ('{CONVERSATION}', '{}', 'rivet', '{}', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z');
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at, owner_user_id)
+             VALUES ('{CONVERSATION}', '{}', 'rivet', '{}', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z', 'owner');
              INSERT INTO ros_summaries (id, conversation_id, content, created_at)
              VALUES ('{SUMMARY}', '{CONVERSATION}', 'AcmeKit notes.', '2026-10-10T12:00:00.000Z');",
             wiki_routes::SESSION_KEY,
@@ -100,8 +100,8 @@ async fn a_mention_held_before_its_entity_existed_still_lands() -> TestResult {
     execute(
         &store,
         &format!(
-            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
-             VALUES ('{EARLIER_CONVERSATION}', '{}', 'rivet', 'Lab rack', '2026-10-10T11:00:00.000Z', '2026-10-10T11:00:00.000Z');
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at, owner_user_id)
+             VALUES ('{EARLIER_CONVERSATION}', '{}', 'rivet', 'Lab rack', '2026-10-10T11:00:00.000Z', '2026-10-10T11:00:00.000Z', 'owner');
              INSERT INTO ros_summaries (id, conversation_id, content, created_at)
              VALUES ('{EARLIER_SUMMARY}', '{EARLIER_CONVERSATION}', 'Lab notes.', '2026-10-10T11:00:00.000Z');",
             testkit::wiki_mentions::EARLIER_KEY
@@ -163,8 +163,8 @@ async fn a_subagent_key_s_notes_land_on_its_parent_s_topic() -> TestResult {
     execute(
         &store,
         &format!(
-            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
-             VALUES ('{SUBAGENT_CONVERSATION}', '{}', 'rivet', 'Billing check', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z');
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at, owner_user_id)
+             VALUES ('{SUBAGENT_CONVERSATION}', '{}', 'rivet', 'Billing check', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z', 'owner');
              INSERT INTO ros_summaries (id, conversation_id, content, created_at)
              VALUES ('{SUBAGENT_SUMMARY}', '{SUBAGENT_CONVERSATION}', 'Billing notes.', '2026-10-10T12:00:00.000Z');",
             testkit::wiki_lineage::SUBAGENT_KEY

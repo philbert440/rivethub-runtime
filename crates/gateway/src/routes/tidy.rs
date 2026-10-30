@@ -42,6 +42,7 @@ use wire::gateway::tidy::WorkerUpkeep;
 
 use crate::Gateway;
 use crate::error::ApiError;
+use crate::tenancy::UserId;
 
 pub(super) fn router() -> Router<Arc<Gateway>> {
     Router::new()
@@ -213,12 +214,13 @@ fn batch_id(segment: &str) -> Result<BatchId, ApiError> {
         .map_err(|_| ApiError::BadRequest(format!("{segment} is not a batch id")))
 }
 
-fn ports(gateway: &Gateway) -> Result<TidyPorts<'_>, ApiError> {
+fn ports<'a>(gateway: &'a Gateway, user: &'a UserId) -> Result<TidyPorts<'a>, ApiError> {
     Ok(TidyPorts {
         tidy: gateway.tidy()?.as_ref(),
         topics: gateway.topics()?.as_ref(),
         filing: gateway.filing()?.as_ref(),
         pages: gateway.startup_memory().map(|(pages, _)| pages),
+        owner: user.owner(),
     })
 }
 
@@ -231,10 +233,11 @@ async fn pending(State(gateway): State<Arc<Gateway>>) -> Result<Json<TidyPending
 
 async fn approve(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     Path(segment): Path<String>,
 ) -> Result<Json<TidyProposal>, ApiError> {
     let id = proposal_id(&segment)?;
-    let approved = kernel::tidy::approve(&ports(&gateway)?, id, Utc::now())
+    let approved = kernel::tidy::approve(&ports(&gateway, &user)?, id, Utc::now())
         .await
         .map_err(error)?;
     Ok(Json(record(approved)))
@@ -253,25 +256,28 @@ async fn reject(
 
 async fn approve_batch(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     Path(segment): Path<String>,
 ) -> Result<Json<TidyBatchDecision>, ApiError> {
-    decide_batch(&gateway, &segment, Decision::Approve).await
+    decide_batch(&gateway, &user, &segment, Decision::Approve).await
 }
 
 async fn reject_batch(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     Path(segment): Path<String>,
 ) -> Result<Json<TidyBatchDecision>, ApiError> {
-    decide_batch(&gateway, &segment, Decision::Reject).await
+    decide_batch(&gateway, &user, &segment, Decision::Reject).await
 }
 
 async fn decide_batch(
     gateway: &Gateway,
+    user: &UserId,
     segment: &str,
     decision: Decision,
 ) -> Result<Json<TidyBatchDecision>, ApiError> {
     let id = batch_id(segment)?;
-    let decided = kernel::tidy::decide_batch(&ports(gateway)?, id, decision, Utc::now())
+    let decided = kernel::tidy::decide_batch(&ports(gateway, user)?, id, decision, Utc::now())
         .await
         .map_err(error)?;
     Ok(Json(outcome(decided)))

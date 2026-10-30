@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,\n                t.directory_path, t.created_at, t.updated_at, t.closed_at\n           FROM rh_topics t\n          WHERE t.kind = $2\n            AND (t.slug = $1\n                 OR t.id = (SELECT r.topic_id FROM rh_topic_redirects r WHERE r.slug = $1))\n          ORDER BY (t.slug = $1) DESC\n          LIMIT 1",
+  "query": "SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,\n                      t.directory_path, t.created_at, t.updated_at, t.closed_at, t.owner_user_id,\n                      (SELECT count(*) FROM rh_session_placements p WHERE p.topic_id = t.id)\n                        AS \"session_count!\",\n                      (SELECT max(c.updated_at)\n                         FROM rh_session_placements p\n                         JOIN rh_conversations c ON c.session_key = p.session_id\n                        WHERE p.topic_id = t.id) AS last_active\n                 FROM rh_topics t",
   "describe": {
     "columns": [
       {
@@ -123,13 +123,33 @@
             "name": "closed_at"
           }
         }
+      },
+      {
+        "ordinal": 11,
+        "name": "owner_user_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "owner_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "session_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "last_active",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
       }
     ],
     "parameters": {
-      "Left": [
-        "Text",
-        "Text"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -142,8 +162,11 @@
       true,
       false,
       false,
-      true
+      true,
+      true,
+      null,
+      null
     ]
   },
-  "hash": "ee7d25586e1c1519f195f3d7d10f6565c003155fea60de24079bacc080691433"
+  "hash": "0e2d96ee40bedc6fc588e684f637269380b946fd44f8ef1b401de8114f0e808d"
 }

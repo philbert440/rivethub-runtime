@@ -13,6 +13,7 @@ use uuid::Uuid;
 use values::Role;
 
 use crate::BoxError;
+use crate::owner::Owner;
 
 pub mod budget;
 mod capture;
@@ -401,10 +402,12 @@ pub trait MemoryStore: Send + Sync {
     async fn capture(
         &self,
         batch: CaptureBatchRequest,
+        owner: &Owner,
         node: Option<&str>,
     ) -> Result<CaptureResult, MemoryStoreError>;
 
-    async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError>;
+    async fn append(&self, owner: &Owner, batch: Vec<MemoryEntry>)
+    -> Result<u64, MemoryStoreError>;
 
     async fn search(&self, query: SearchQuery) -> Result<SearchOutcome, MemoryStoreError>;
 

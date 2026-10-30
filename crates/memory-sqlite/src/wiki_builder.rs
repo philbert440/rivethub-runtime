@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::owner::Owner;
 use kernel::topics::Slug;
 use kernel::wiki::builder::DeferredWiki;
 use kernel::wiki::builder::ExtractWiki;
@@ -255,7 +256,8 @@ pub(crate) fn load_summary(
 ) -> Result<WikiSummary, WikiStoreError> {
     let row = conn
         .query_row(
-            "SELECT s.id, s.conversation_id, s.content, c.session_key FROM ros_summaries s
+            "SELECT s.id, s.conversation_id, s.content, c.session_key, c.owner_user_id
+               FROM ros_summaries s
                LEFT JOIN ros_conversations c ON c.id = s.conversation_id WHERE s.id = ?1",
             params![job.summary_id.to_string()],
             |row| {
@@ -264,6 +266,7 @@ pub(crate) fn load_summary(
                     row.get::<_, Option<String>>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
                 ))
             },
         )
@@ -283,6 +286,11 @@ pub(crate) fn load_summary(
         conversation_id,
         content: row.2,
         session_key: row.3,
+        owner: row
+            .4
+            .map(Owner::new)
+            .transpose()
+            .map_err(|error| WikiStoreError::Query(Box::new(error)))?,
     })
 }
 

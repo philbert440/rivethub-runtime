@@ -45,6 +45,7 @@ where
                 topic,
                 by,
                 at: at(4),
+                owner: Some(crate::owner()?),
             })
             .await?;
     }
@@ -141,6 +142,7 @@ async fn captured<S: MemoryStore>(
                     created_at: Some(at(minute)),
                 }],
             },
+            &crate::owner()?,
             Some("node-a"),
         )
         .await?;

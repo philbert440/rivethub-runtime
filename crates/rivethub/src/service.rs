@@ -204,14 +204,17 @@ pub async fn connect(
     ))
 }
 
-pub fn compose(
+pub async fn compose(
     config: &Config,
     env: &Environment,
     store: Arc<dyn MemoryStore>,
 ) -> Result<Arc<Gateway>, StartupError> {
     let node = crate::identity::announce_resolved("gateway", config, env)?;
     let settings = Settings::from_config_in(config, env, node.hostname, node.name)?;
-    let gateway = Gateway::new(store, settings).with_uploads(uploads(env)?);
+    let identity = crate::composition::identities::load(config, env).await?;
+    let gateway = Gateway::new(store, settings)
+        .with_uploads(uploads(env)?)
+        .with_tenancy(identity.tenancy);
     let gateway = with_voice(gateway, env)?;
     Ok(Arc::new(gateway))
 }

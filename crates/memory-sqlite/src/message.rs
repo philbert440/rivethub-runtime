@@ -26,7 +26,7 @@ pub(crate) struct NewMessage<'a> {
     pub(crate) tool_result: Option<&'a str>,
     pub(crate) metadata: Option<&'a str>,
     pub(crate) created_at: DateTime<Utc>,
-    pub(crate) owner: Option<&'a str>,
+    pub(crate) owner: &'a str,
 }
 
 impl NewMessage<'_> {

@@ -1,3 +1,9 @@
+#[expect(
+    dead_code,
+    reason = "the harness module is included whole by every test binary and this one uses a subset"
+)]
+mod common;
+
 use migrate::POSTGRES;
 use sqlx::PgPool;
 use sqlx::Row as _;
@@ -19,10 +25,10 @@ async fn a_migration_missing_below_the_newest_is_pending_until_migrate_applies_i
         .await?;
 
     let gapped = migrate::postgres_status_pool(&pool).await?;
-    assert_eq!((gapped.current, gapped.pending), (41, 1));
+    assert_eq!((gapped.current, gapped.pending), (42, 1));
 
     let migrated = migrate::postgres_pool(&pool).await?;
-    assert_eq!((migrated.current, migrated.pending), (41, 0));
+    assert_eq!((migrated.current, migrated.pending), (42, 0));
     let index: Option<String> =
         sqlx::query_scalar("SELECT to_regclass('idx_rh_messages_unembedded')::text")
             .fetch_one(&pool)
@@ -38,12 +44,12 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 39);
+    assert_eq!(tracked.try_get::<i64, _>("n").unwrap(), 40);
 
     let applied = sqlx::query("SELECT count(*)::bigint AS n FROM _sqlx_migrations")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 39);
+    assert_eq!(applied.try_get::<i64, _>("n").unwrap(), 40);
 
     migrate::postgres_pool(&pool).await?;
 
@@ -172,7 +178,8 @@ async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
     }
 
     sqlx::query(
-        "INSERT INTO rh_conversations (session_key, agent) VALUES ('migrate:smoke', 'rivet')",
+        "INSERT INTO rh_conversations (session_key, agent, owner_user_id)
+         VALUES ('migrate:smoke', 'rivet', 'owner')",
     )
     .execute(&pool)
     .await?;
@@ -214,15 +221,15 @@ async fn rivetos_migrated_database_gets_only_0021(pool: PgPool) -> TestResult {
         "0020_tag_removals must have applied before 0021"
     );
 
-    POSTGRES.run(&pool).await?;
+    common::migrate_owned_by(&pool, testkit::OWNER).await?;
 
     let tracked = sqlx::query("SELECT count(*)::bigint AS n FROM _rivetos_migrations")
         .fetch_one(&pool)
         .await?;
     assert_eq!(
         tracked.try_get::<i64, _>("n").unwrap(),
-        39,
-        "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, 0025 adds topic suggestions, 0026 adds the hub state table, 0027 binds wiki pages to topics, 0028 keeps each session's startup context, 0029 records how it was delivered, 0030 adds topic decisions, 0031 records closed topics and sessions marked as history, 0032 adds topic kinds and entities, 0033 files conversations and keeps filing corrections, 0034 keeps tidy proposals and worker finishes, 0036 indexes the messages still waiting for an embedding, 0037 records the node that captured each conversation, 0039 adds the session tombstones, 0040 archives the old tasks, and 0041 indexes summaries and wiki provenance by conversation"
+        40,
+        "0021 renames the tables, 0022 adds the summaries trigram index, 0023 rewrites legacy summary kinds, 0024 adds topics, 0025 adds topic suggestions, 0026 adds the hub state table, 0027 binds wiki pages to topics, 0028 keeps each session's startup context, 0029 records how it was delivered, 0030 adds topic decisions, 0031 records closed topics and sessions marked as history, 0032 adds topic kinds and entities, 0033 files conversations and keeps filing corrections, 0034 keeps tidy proposals and worker finishes, 0036 indexes the messages still waiting for an embedding, 0037 records the node that captured each conversation, 0039 adds the session tombstones, 0040 archives the old tasks, 0041 indexes summaries and wiki provenance by conversation, and 0042 gives every row an owner"
     );
     let summaries_trgm =
         sqlx::query("SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_ros_summaries_trgm'")
@@ -332,7 +339,8 @@ async fn migration_0021_views_mirror_the_rh_tables(pool: PgPool) -> TestResult {
 
     let mut tx = testkit::capture_tx(&pool).await?;
     sqlx::query(
-        "INSERT INTO rh_conversations (session_key, agent, title) VALUES ('view:one', 'rivet', 't1')",
+        "INSERT INTO rh_conversations (session_key, agent, title, owner_user_id)
+         VALUES ('view:one', 'rivet', 't1', 'owner')",
     )
     .execute(&mut *tx)
     .await?;
@@ -341,8 +349,8 @@ async fn migration_0021_views_mirror_the_rh_tables(pool: PgPool) -> TestResult {
             .fetch_one(&mut *tx)
             .await?;
     sqlx::query(
-        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content)
-         VALUES ($1, 'rivet', 'cli', 'user', 'through the view')",
+        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content, owner_user_id)
+         VALUES ($1, 'rivet', 'cli', 'user', 'through the view', 'owner')",
     )
     .bind(conversation)
     .execute(&mut *tx)
@@ -366,14 +374,14 @@ async fn migration_0021_views_mirror_the_rh_tables(pool: PgPool) -> TestResult {
 
     let mut tx = testkit::capture_tx(&pool).await?;
     let insert_through_view: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO ros_conversations (session_key, agent, title)
-         VALUES ('view:two', 'rivet', 't2') RETURNING id",
+        "INSERT INTO ros_conversations (session_key, agent, title, owner_user_id)
+         VALUES ('view:two', 'rivet', 't2', 'owner') RETURNING id",
     )
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query(
-        "INSERT INTO ros_messages (conversation_id, agent, channel, role, content)
-         VALUES ($1, 'rivet', 'cli', 'user', 'job fires through the view')",
+        "INSERT INTO ros_messages (conversation_id, agent, channel, role, content, owner_user_id)
+         VALUES ($1, 'rivet', 'cli', 'user', 'job fires through the view', 'owner')",
     )
     .bind(insert_through_view)
     .execute(&mut *tx)

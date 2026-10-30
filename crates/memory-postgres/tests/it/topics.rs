@@ -158,6 +158,7 @@ async fn listings_count_sessions_and_take_last_activity_from_conversations(
                 topic,
                 by: PlacementSource::You,
                 at: topics::at(1),
+                owner: testkit::owner().ok(),
             })
             .await?;
     }
@@ -167,8 +168,8 @@ async fn listings_count_sessions_and_take_last_activity_from_conversations(
         (second.as_str(), "opus", "2026-10-01T09:00:00Z"),
     ] {
         sqlx::query(
-            "INSERT INTO rh_conversations (session_key, agent, created_at, updated_at)
-             VALUES ($1, $2, $3::timestamptz, $3::timestamptz)",
+            "INSERT INTO rh_conversations (session_key, agent, created_at, updated_at, owner_user_id)
+             VALUES ($1, $2, $3::timestamptz, $3::timestamptz, 'owner')",
         )
         .bind(key)
         .bind(agent)

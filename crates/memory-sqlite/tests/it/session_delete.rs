@@ -139,6 +139,7 @@ async fn place(store: &SqliteStore, sessions: &[&SessionId]) -> TestResult {
                 topic: topic.id,
                 by: PlacementSource::You,
                 at: at(3),
+                owner: testkit::owner().ok(),
             })
             .await?;
     }

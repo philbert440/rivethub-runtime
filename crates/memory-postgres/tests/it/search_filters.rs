@@ -38,46 +38,49 @@ fn entry(
 async fn seed(pool: &PgPool) -> TestResult<PostgresMemory> {
     let memory = PostgresMemory::new(pool.clone());
     memory
-        .append(vec![
-            entry(
-                "filters-ops",
-                "rivet",
-                Role::User,
-                None,
-                "the nightly backup disk is full and the job stopped",
-            )?,
-            entry(
-                "filters-ops",
-                "rivet",
-                Role::Assistant,
-                None,
-                "prune the oldest snapshots on the backup disk before the next run",
-            )?,
-            entry(
-                "filters-ops",
-                "rivet",
-                Role::Tool,
-                Some("Bash"),
-                "df -h reports the backup disk at one hundred percent used",
-            )?,
-            entry(
-                "filters-ops",
-                "rivet",
-                Role::Tool,
-                Some("Read"),
-                "backup.yaml keeps thirty snapshots on the backup disk volume",
-            )?,
-            entry(
-                "filters-side",
-                "helper",
-                Role::Tool,
-                Some("Bash"),
-                "du -sh lists the backup disk usage per snapshot folder",
-            )?,
-        ])
+        .append(
+            &testkit::owner()?,
+            vec![
+                entry(
+                    "filters-ops",
+                    "rivet",
+                    Role::User,
+                    None,
+                    "the nightly backup disk is full and the job stopped",
+                )?,
+                entry(
+                    "filters-ops",
+                    "rivet",
+                    Role::Assistant,
+                    None,
+                    "prune the oldest snapshots on the backup disk before the next run",
+                )?,
+                entry(
+                    "filters-ops",
+                    "rivet",
+                    Role::Tool,
+                    Some("Bash"),
+                    "df -h reports the backup disk at one hundred percent used",
+                )?,
+                entry(
+                    "filters-ops",
+                    "rivet",
+                    Role::Tool,
+                    Some("Read"),
+                    "backup.yaml keeps thirty snapshots on the backup disk volume",
+                )?,
+                entry(
+                    "filters-side",
+                    "helper",
+                    Role::Tool,
+                    Some("Bash"),
+                    "du -sh lists the backup disk usage per snapshot folder",
+                )?,
+            ],
+        )
         .await?;
     let mut tx = testkit::capture_tx(pool).await?;
-    sqlx::query("INSERT INTO rh_summaries (conversation_id, content, kind, depth, message_count, created_at) SELECT id, $1, 'leaf', 0, 4, '2026-10-12T00:00:00Z' FROM rh_conversations WHERE session_key = 'filters-ops'")
+    sqlx::query("INSERT INTO rh_summaries (conversation_id, content, kind, depth, message_count, created_at, owner_user_id) SELECT id, $1, 'leaf', 0, 4, '2026-10-12T00:00:00Z', owner_user_id FROM rh_conversations WHERE session_key = 'filters-ops'")
         .bind(SUMMARY)
         .execute(&mut *tx)
         .await?;

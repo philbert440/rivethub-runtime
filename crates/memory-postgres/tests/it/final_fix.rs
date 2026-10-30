@@ -43,10 +43,7 @@ async fn missing_channel_refuses_before_any_write_and_supplied_owner_is_preserve
     let store = PostgresMemory::new(pool.clone());
     let mut batch = batch("hello".to_owned())?;
     batch.channel = None;
-    let options = CaptureOptions {
-        owner_user_id: Some("owner".to_owned()),
-        node: None,
-    };
+    let options = CaptureOptions::owned_by(&testkit::owner()?);
     assert!(matches!(
         store.capture_batch(&batch, &options).await,
         Err(Error::MissingChannel)
@@ -80,7 +77,7 @@ async fn capture_caps_scalars_and_merges_provenance_without_losing_metadata(
     )?);
     message.tool_result = Some("😀".repeat(16_001));
     store
-        .capture_batch(&batch, &CaptureOptions::default())
+        .capture_batch(&batch, &CaptureOptions::owned_by(&testkit::owner()?))
         .await?;
     let (content, tool_result, metadata): (String, String, Json<JsonObject>) =
         sqlx::query_as("SELECT content, tool_result, metadata FROM rh_messages")
@@ -102,7 +99,7 @@ async fn capture_drops_nul_bytes_postgres_text_cannot_hold(pool: PgPool) -> Test
     let message = batch.messages.first_mut().ok_or("message")?;
     message.tool_result = Some("\0\0head\0".to_owned());
     store
-        .capture_batch(&batch, &CaptureOptions::default())
+        .capture_batch(&batch, &CaptureOptions::owned_by(&testkit::owner()?))
         .await?;
     let (content, tool_result): (String, String) =
         sqlx::query_as("SELECT content, tool_result FROM rh_messages")
@@ -132,14 +129,24 @@ async fn append_rejects_wrong_event_id_types_and_hashes_absent_ids_without_colli
         created_at: None,
     };
     assert!(matches!(
-        store.append(vec![entry.clone()]).await,
+        store.append(&testkit::owner()?, vec![entry.clone()]).await,
         Err(MemoryStoreError::InvalidRequest { .. })
     ));
     entry.metadata = None;
-    assert_eq!(store.append(vec![entry.clone()]).await?, 1);
-    assert_eq!(store.append(vec![entry.clone()]).await?, 0);
+    assert_eq!(
+        store
+            .append(&testkit::owner()?, vec![entry.clone()])
+            .await?,
+        1
+    );
+    assert_eq!(
+        store
+            .append(&testkit::owner()?, vec![entry.clone()])
+            .await?,
+        0
+    );
     entry.tool_name = Some(String::new());
-    assert_eq!(store.append(vec![entry]).await?, 1);
+    assert_eq!(store.append(&testkit::owner()?, vec![entry]).await?, 1);
     assert!(matches!(
         store.get_full("invalid uuid").await,
         Err(MemoryStoreError::InvalidRequest { .. })
@@ -155,7 +162,7 @@ async fn context_without_a_user_query_does_not_run_empty_semantic_search(
     let mut batch = batch("assistant only".to_owned())?;
     batch.messages.first_mut().ok_or("message")?.role = Role::Assistant;
     store
-        .capture_batch(&batch, &CaptureOptions::default())
+        .capture_batch(&batch, &CaptureOptions::owned_by(&testkit::owner()?))
         .await?;
     let context = store
         .context("final-fix", "2026-10-15T12:01:00Z".parse()?)
@@ -181,7 +188,7 @@ async fn caller_time_zone_controls_calendar_windows(pool: PgPool) -> TestResult 
         message.event_id = event.to_owned();
         message.created_at = Some(stamp(at)?);
         store
-            .capture_batch(&batch, &CaptureOptions::default())
+            .capture_batch(&batch, &CaptureOptions::owned_by(&testkit::owner()?))
             .await?;
     }
     let query = SearchQuery {
@@ -308,7 +315,7 @@ async fn capture_with_text_postgres_cannot_store_is_a_bad_request(pool: PgPool) 
     message.tool_name = Some("Write".to_owned());
     message.tool_args = Some(serde_json::from_str(r#"{ "content": "a\u0000b" }"#)?);
     let refused = store
-        .capture_batch(&batch, &CaptureOptions::default())
+        .capture_batch(&batch, &CaptureOptions::owned_by(&testkit::owner()?))
         .await
         .err()
         .ok_or("the insert went through")?;

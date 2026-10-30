@@ -52,6 +52,7 @@ use crate::extract::SinceParam;
 use crate::extract::TagFilter;
 use crate::extract::WindowParam;
 use crate::memory_body;
+use crate::tenancy::UserId;
 
 const SEARCH_LIMIT_DEFAULT: u32 = 20;
 const SEARCH_LIMIT_MAX: u32 = 50;
@@ -370,16 +371,20 @@ async fn tool_get_full(
 
 async fn tool_append(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     Body(args): Body<MemoryAppendToolArgs>,
 ) -> Result<Json<MemoryToolResponse>, ApiError> {
-    Ok(tool_response(append_tool(&gateway, args).await?))
+    Ok(tool_response(append_tool(&gateway, &user, args).await?))
 }
 
 async fn tool_ingest_session(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     Body(args): Body<MemoryIngestSessionToolArgs>,
 ) -> Result<Json<MemoryToolResponse>, ApiError> {
-    Ok(tool_response(ingest_session_tool(&gateway, args).await?))
+    Ok(tool_response(
+        ingest_session_tool(&gateway, &user, args).await?,
+    ))
 }
 
 fn tool_response(text: String) -> Json<MemoryToolResponse> {
@@ -511,7 +516,11 @@ fn truncated(metadata: Option<&JsonObject>) -> bool {
         .is_some_and(|value| matches!(serde_json::from_value::<bool>(value.clone()), Ok(true)))
 }
 
-async fn append_tool(gateway: &Gateway, args: MemoryAppendToolArgs) -> Result<String, ApiError> {
+async fn append_tool(
+    gateway: &Gateway,
+    user: &UserId,
+    args: MemoryAppendToolArgs,
+) -> Result<String, ApiError> {
     let entry = MemoryEntry {
         id: args.event_id,
         session_id: args.session_id,
@@ -525,12 +534,13 @@ async fn append_tool(gateway: &Gateway, args: MemoryAppendToolArgs) -> Result<St
         metadata: None,
         created_at: None,
     };
-    gateway.store().append(vec![entry]).await?;
+    gateway.store().append(user.owner(), vec![entry]).await?;
     serialize_tool(&OkReply { ok: true })
 }
 
 async fn ingest_session_tool(
     gateway: &Gateway,
+    user: &UserId,
     args: MemoryIngestSessionToolArgs,
 ) -> Result<String, ApiError> {
     let entries = args
@@ -550,7 +560,7 @@ async fn ingest_session_tool(
             created_at: None,
         })
         .collect();
-    let inserted = gateway.store().append(entries).await?;
+    let inserted = gateway.store().append(user.owner(), entries).await?;
     let reply = CaptureResult {
         ok: true,
         conversation_id: args.session_id,

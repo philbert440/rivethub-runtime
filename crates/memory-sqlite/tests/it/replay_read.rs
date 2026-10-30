@@ -115,18 +115,23 @@ async fn stats_replay_the_recorded_scenarios() -> TestResult {
             eprintln!("skipped scenario {name}: {reason}");
             continue;
         }
-        let fresh = fresh_store(None)?;
+        let fresh = fresh_store()?;
         let seeded_at = instant(common::RECORDED_START)?;
         match scenario.name.as_str() {
             "empty store" => {}
             "captured, no embedding endpoint" => {
                 fresh
                     .store
-                    .capture(deploy_batch("cli:sess-1", "rivet")?, None, seeded_at)
+                    .capture(
+                        deploy_batch("cli:sess-1", "rivet")?,
+                        &testkit::owner()?,
+                        None,
+                        seeded_at,
+                    )
                     .await?;
                 fresh
                     .store
-                    .capture(helper_batch()?, None, seeded_at)
+                    .capture(helper_batch()?, &testkit::owner()?, None, seeded_at)
                     .await?;
             }
             other => return Err(format!("no seed for stats scenario {other:?}").into()),
@@ -175,7 +180,12 @@ const LEAF: &str = "The team decided to deploy the AcmeKit service with a blue-g
 
 async fn seed_tools_store(store: &SqliteStore, now: DateTime<Utc>) -> TestResult<String> {
     let captured = store
-        .capture(deploy_batch("cli:sess-1", "rivet")?, None, now)
+        .capture(
+            deploy_batch("cli:sess-1", "rivet")?,
+            &testkit::owner()?,
+            None,
+            now,
+        )
         .await?;
     let conversation = captured.conversation_id;
     common::execute(
@@ -447,11 +457,16 @@ async fn replay_read_call(
 #[tokio::test]
 async fn read_tools_replay_browse_get_full_and_stats() -> TestResult {
     let recording: ToolsRecording = common::recording("tools.json")?;
-    let fresh = fresh_store(None)?;
+    let fresh = fresh_store()?;
     let now = instant(common::RECORDED_START)?;
     seed_tools_store(&fresh.store, now).await?;
     let mut ids = Ids::default();
-    let (conversations, messages) = seeded_rows(&recording)?;
+    let (mut conversations, mut messages) = seeded_rows(&recording)?;
+    for rows in [&mut conversations, &mut messages] {
+        if let Json::Array(rows) = rows {
+            common::owned_by_the_caller(rows);
+        }
+    }
     ids.same(
         &conversations,
         &Json::Array(common::table(&fresh.store, "ros_conversations").await?),

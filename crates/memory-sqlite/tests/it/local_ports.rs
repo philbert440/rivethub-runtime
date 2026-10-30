@@ -39,7 +39,14 @@ fn seed_summary(path: &Path, id: Uuid) -> TestResult {
     let conn = rusqlite::Connection::open(path)?;
     let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     conn.execute(
-        "INSERT INTO ros_summaries (id, content, created_at) VALUES (?1, ?2, ?3)",
+        "INSERT OR IGNORE INTO ros_conversations
+             (id, session_key, agent, created_at, updated_at, owner_user_id)
+         VALUES ('00000000-0000-4000-8000-0000000000c1', 'cli:local', 'rivet', ?1, ?1, 'owner')",
+        [&now],
+    )?;
+    conn.execute(
+        "INSERT INTO ros_summaries (id, conversation_id, content, created_at)
+         VALUES (?1, '00000000-0000-4000-8000-0000000000c1', ?2, ?3)",
         (id.to_string(), "AcmeKit deploys on Fridays.", now),
     )?;
     Ok(())

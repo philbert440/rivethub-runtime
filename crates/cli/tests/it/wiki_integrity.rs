@@ -377,7 +377,7 @@ async fn index_only_completion_is_rebuilt_as_a_page(pool: PgPool) -> TestResult 
     let wiki = tempfile::tempdir()?;
     let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
     let job = seed(&pool).await?;
-    sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, topics_touched) VALUES ($1, 'done', $2, ARRAY['acmekit-deploys'])")
+    sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, topics_touched, owner_user_id) VALUES ($1, 'done', $2, ARRAY['acmekit-deploys'], 'owner')")
         .bind(job.summary_id).bind(kernel::wiki::builder::WIKI_PIPELINE_VERSION).execute(&pool).await?;
     assert!(store.wiki_backfill(100).await?.contains(&job));
     assert!(matches!(

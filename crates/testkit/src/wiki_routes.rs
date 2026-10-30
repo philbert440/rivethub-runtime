@@ -121,6 +121,7 @@ impl RouteStores<'_> {
                 topic: topic.id,
                 by: PlacementSource::You,
                 at: at(1),
+                owner: Some(crate::owner()?),
             })
             .await?;
         Ok(())
@@ -477,6 +478,7 @@ pub async fn a_deleted_entity_is_not_recreated(
                 aliases: Vec::new(),
                 parent: Some(hosts.id),
                 directory: None,
+                owner: Some(crate::owner()?),
             },
             at(0),
         )?)

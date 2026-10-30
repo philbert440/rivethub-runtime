@@ -23,6 +23,7 @@ mod agents;
 mod auth;
 mod ca;
 mod capture;
+mod capture_owner;
 mod claude_trust;
 mod devices;
 mod extract;

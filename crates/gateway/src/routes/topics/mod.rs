@@ -43,6 +43,7 @@ use crate::Gateway;
 use crate::error::ApiError;
 use crate::extract::Body;
 use crate::extract::Query;
+use crate::tenancy::UserId;
 
 pub(super) use map::error as topic_error;
 pub(super) use startup::Started;
@@ -234,6 +235,7 @@ async fn show(
 
 async fn create(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     Body(request): Body<TopicCreateRequest>,
 ) -> Result<(StatusCode, Json<TopicRecord>), ApiError> {
     let store = gateway.topics()?;
@@ -241,12 +243,14 @@ async fn create(
         Some(key) => Some(resolve_id(store.as_ref(), key).await?),
         None => None,
     };
+    let kind = map::kind(request.kind);
     let new = NewTopic {
-        kind: map::kind(request.kind),
+        kind,
         name: TopicName::new(&request.name).map_err(map::error)?,
         aliases: map::aliases(&request.aliases)?,
         parent,
         directory: request.directory.map(map::root),
+        owner: (kind != TopicKind::Type).then(|| user.owner().clone()),
     };
     let topic = Topic::create(TopicId::random(), new, Utc::now()).map_err(map::error)?;
     let created = store.create(topic).await.map_err(map::error)?;
@@ -332,6 +336,7 @@ async fn placement(
 
 async fn place(
     State(gateway): State<Arc<Gateway>>,
+    user: UserId,
     Path(segment): Path<String>,
     Body(request): Body<PlacementRequest>,
 ) -> Result<Json<PlacementReply>, ApiError> {
@@ -346,6 +351,7 @@ async fn place(
             topic,
             by: PlacementSource::You,
             at: now,
+            owner: Some(user.owner().clone()),
         })
         .await
         .map_err(map::error)?;

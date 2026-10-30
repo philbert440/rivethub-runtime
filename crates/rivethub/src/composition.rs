@@ -1,5 +1,5 @@
 mod devices;
-mod identities;
+pub(crate) mod identities;
 mod mesh;
 mod models;
 pub(crate) mod plugins;
@@ -207,13 +207,6 @@ impl Composition {
     pub async fn validate_users(config: &Config, env: &Environment) -> Result<(), ComposeError> {
         identities::load(config, env).await?;
         Ok(())
-    }
-
-    pub(crate) async fn node_owner(
-        config: &Config,
-        env: &Environment,
-    ) -> Result<gateway::tenancy::UserId, ComposeError> {
-        Ok(identities::load(config, env).await?.owner)
     }
 
     pub async fn failed(&mut self) -> Result<(), ComposeError> {

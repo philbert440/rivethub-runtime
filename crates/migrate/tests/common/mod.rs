@@ -333,10 +333,23 @@ impl PartialEq for Cell {
 }
 
 pub(crate) fn assert_upgraded_pragmas(actual: &Pragmas, legacy: &Pragmas) {
-    assert_eq!(actual.user_version, migrate::SchemaVersion::V27.number());
+    assert_eq!(actual.user_version, migrate::SchemaVersion::V28.number());
     assert_eq!(legacy.user_version, 7);
     assert_eq!(actual.journal_mode, legacy.journal_mode);
     assert_eq!(actual.foreign_keys, legacy.foreign_keys);
     assert_eq!(actual.page_size, legacy.page_size);
     assert_eq!(actual.encoding, legacy.encoding);
+}
+
+pub(crate) async fn migrate_owned_by(pool: &sqlx::PgPool, owner: &str) -> TestResult<()> {
+    let mut conn = pool.acquire().await?;
+    sqlx::query("SELECT set_config('rh.store_owner', $1, false)")
+        .bind(owner)
+        .execute(&mut *conn)
+        .await?;
+    migrate::POSTGRES.run(&mut *conn).await?;
+    sqlx::query("RESET rh.store_owner")
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
 }
