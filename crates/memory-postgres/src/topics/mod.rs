@@ -47,7 +47,7 @@ impl TopicStore for PostgresMemory {
     async fn create(&self, topic: Topic) -> Result<Topic, TopicError> {
         let mut tx = self.pool.begin().await.map_err(failed("topic create"))?;
         if let Some(parent) = topic.parent {
-            let parent = rows::by_id(&mut tx, parent)
+            let parent = rows::visible(&mut tx, parent)
                 .await?
                 .ok_or_else(|| not_found(parent))?;
             check_parent(&topic, &parent, &write::tree(&mut tx).await?)?;
@@ -76,7 +76,7 @@ impl TopicStore for PostgresMemory {
         let before = current.clone();
         let updated = current.apply(changes, now)?;
         if let Some(parent) = updated.parent {
-            let parent = rows::by_id(&mut tx, parent)
+            let parent = rows::visible(&mut tx, parent)
                 .await?
                 .ok_or_else(|| not_found(parent))?;
             check_parent(&updated, &parent, &write::tree(&mut tx).await?)?;
@@ -154,7 +154,7 @@ impl TopicStore for PostgresMemory {
     async fn find(&self, key: &TopicKey) -> Result<Option<Topic>, TopicError> {
         let mut conn = self.pool.acquire().await.map_err(failed("topic read"))?;
         match key {
-            TopicKey::Id(id) => rows::by_id(&mut conn, *id).await,
+            TopicKey::Id(id) => rows::visible(&mut conn, *id).await,
             TopicKey::Slug(kind, slug) => rows::by_slug(&mut conn, *kind, slug).await,
         }
     }
@@ -163,6 +163,7 @@ impl TopicStore for PostgresMemory {
         let topics = sqlx::query!(
             r#"SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,
                       t.directory_path, t.created_at, t.updated_at, t.closed_at, t.owner_user_id,
+                      t.visibility, t.visibility_mark,
                       (SELECT count(*) FROM rh_session_placements p WHERE p.topic_id = t.id)
                         AS "session_count!",
                       (SELECT max(c.updated_at)
@@ -200,6 +201,8 @@ impl TopicStore for PostgresMemory {
                         updated_at: row.updated_at,
                         closed_at: row.closed_at,
                         owner_user_id: row.owner_user_id,
+                        visibility: row.visibility,
+                        visibility_mark: row.visibility_mark,
                     },
                     own,
                 )?;

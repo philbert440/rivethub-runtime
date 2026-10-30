@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use kernel::tenancy::Scope;
 use parking_lot::Mutex;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -46,7 +47,7 @@ impl AccessLog {
             idle
         };
         if start {
-            tokio::spawn(Arc::clone(self).drain(pool.clone()));
+            tokio::spawn(Scope::Maintenance.run(Arc::clone(self).drain(pool.clone())));
         }
     }
 

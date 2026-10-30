@@ -435,3 +435,22 @@ pub(crate) fn hit_uuids(
         })
         .collect()
 }
+
+const ITERATIVE_SCAN: &str = "SELECT set_config('hnsw.iterative_scan', 'strict_order', true) \
+     WHERE (SELECT string_to_array(extversion, '.')::int[] FROM pg_extension WHERE extname = 'vector') \
+           >= ARRAY[0, 8]";
+
+pub(crate) async fn tune_hnsw(tx: &mut sqlx::PgConnection, ef_search: u64) -> Result<(), Error> {
+    sqlx::query_scalar!(
+        r#"select set_config('hnsw.ef_search', $1, true) as "ok!""#,
+        ef_search.to_string()
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|source| Error::operation("vector search", source))?;
+    sqlx::query(ITERATIVE_SCAN)
+        .execute(&mut *tx)
+        .await
+        .map_err(|source| Error::operation("vector search", source))?;
+    Ok(())
+}

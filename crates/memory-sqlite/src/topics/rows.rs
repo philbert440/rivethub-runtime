@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use kernel::owner::Owner;
+use kernel::tenancy::Visibility;
 use kernel::topics::Alias;
 use kernel::topics::PlacedSession;
 use kernel::topics::Placement;
@@ -28,7 +29,7 @@ use crate::time;
 
 const TOPIC_COLUMNS: &str = "t.id, t.slug, t.name, t.parent_id, t.directory_kind, \
      t.directory_node, t.directory_path, t.created_at, t.updated_at, t.closed_at, t.kind, \
-     t.owner_user_id";
+     t.owner_user_id, t.visibility, t.visibility_mark";
 
 pub(super) const PLACEMENT_COLUMNS: &str =
     "p.session_id, p.topic_id, p.placed_by, p.placed_at, p.owner_user_id";
@@ -46,6 +47,8 @@ pub(super) struct TopicRow {
     closed_at: Option<String>,
     kind: String,
     owner_user_id: Option<String>,
+    visibility: String,
+    visibility_mark: Option<String>,
 }
 
 pub(super) struct PlacementRow {
@@ -95,6 +98,8 @@ fn read_topic(row: &rusqlite::Row<'_>) -> rusqlite::Result<TopicRow> {
         closed_at: row.get(9)?,
         kind: row.get(10)?,
         owner_user_id: row.get(11)?,
+        visibility: row.get(12)?,
+        visibility_mark: row.get(13)?,
     })
 }
 
@@ -140,7 +145,13 @@ fn topic(row: TopicRow, aliases: Vec<Alias>) -> Result<Topic, TopicError> {
             .map(|text| timestamp(text, "closed_at"))
             .transpose()?,
         owner: row.owner_user_id.map(owner).transpose()?,
+        visibility: visibility(&row.visibility)?,
+        visibility_mark: row.visibility_mark.as_deref().map(visibility).transpose()?,
     })
+}
+
+fn visibility(text: &str) -> Result<Visibility, TopicError> {
+    Visibility::parse(text).map_err(|error| stored("visibility")(Box::new(error)))
 }
 
 pub(super) fn placement(row: PlacementRow) -> Result<Placement, TopicError> {
@@ -227,8 +238,8 @@ pub(super) fn listings(conn: &Connection) -> Result<Vec<TopicListing>, TopicErro
                 .query_map([], |row| {
                     Ok((
                         read_topic(row)?,
-                        row.get::<_, i64>(12)?,
-                        row.get::<_, Option<String>>(13)?,
+                        row.get::<_, i64>(14)?,
+                        row.get::<_, Option<String>>(15)?,
                     ))
                 })?
                 .collect::<Result<Vec<_>, _>>()

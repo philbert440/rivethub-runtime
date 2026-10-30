@@ -91,10 +91,10 @@ pub(super) fn serve(
 ) {
     let gateway = Arc::clone(gateway);
     let token = shutdown.child_token();
-    background.spawn(async move {
+    background.spawn(kernel::tenancy::Scope::carry(async move {
         gateway::tasks::serve(gateway, token).await;
         Ok(())
-    });
+    }));
 }
 
 fn local_agents(config: &Config) -> BTreeMap<String, LocalAgent> {

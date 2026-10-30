@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,\n                      t.directory_path, t.created_at, t.updated_at, t.closed_at, t.owner_user_id,\n                      (SELECT count(*) FROM rh_session_placements p WHERE p.topic_id = t.id)\n                        AS \"session_count!\",\n                      (SELECT max(c.updated_at)\n                         FROM rh_session_placements p\n                         JOIN rh_conversations c ON c.session_key = p.session_id\n                        WHERE p.topic_id = t.id) AS last_active\n                 FROM rh_topics t",
+  "query": "SELECT t.id, t.kind, t.slug, t.name, t.parent_id, t.directory_kind, t.directory_node,\n                      t.directory_path, t.created_at, t.updated_at, t.closed_at, t.owner_user_id,\n                      t.visibility, t.visibility_mark,\n                      (SELECT count(*) FROM rh_session_placements p WHERE p.topic_id = t.id)\n                        AS \"session_count!\",\n                      (SELECT max(c.updated_at)\n                         FROM rh_session_placements p\n                         JOIN rh_conversations c ON c.session_key = p.session_id\n                        WHERE p.topic_id = t.id) AS last_active\n                 FROM rh_topics t",
   "describe": {
     "columns": [
       {
@@ -137,12 +137,34 @@
       },
       {
         "ordinal": 12,
+        "name": "visibility",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "visibility"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "visibility_mark",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_topics",
+            "name": "visibility_mark"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
         "name": "session_count!",
         "type_info": "Int8",
         "origin": "Expression"
       },
       {
-        "ordinal": 13,
+        "ordinal": 15,
         "name": "last_active",
         "type_info": "Timestamptz",
         "origin": "Expression"
@@ -164,9 +186,11 @@
       false,
       true,
       true,
+      false,
+      true,
       null,
       null
     ]
   },
-  "hash": "0e2d96ee40bedc6fc588e684f637269380b946fd44f8ef1b401de8114f0e808d"
+  "hash": "ab1bf9897e558738cf08a5e6f3b72d0411346aea7c02bb4fe0ad23cc061a8806"
 }

@@ -170,7 +170,11 @@ pub(super) async fn aliases(conn: &mut PgConnection, topic: &Topic) -> Result<()
 }
 
 pub(super) async fn tree(conn: &mut PgConnection) -> Result<TopicTree, TopicError> {
-    let edges = sqlx::query!("SELECT id, parent_id, kind FROM rh_topics ORDER BY id FOR UPDATE")
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('rh_topics tree'))")
+        .execute(&mut *conn)
+        .await
+        .map_err(failed("topic tree lock"))?;
+    let edges = sqlx::query!("SELECT id, parent_id, kind FROM rh_topics ORDER BY id")
         .fetch_all(&mut *conn)
         .await
         .map_err(failed("topic tree read"))?;

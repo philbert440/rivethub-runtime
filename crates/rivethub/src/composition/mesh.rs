@@ -36,13 +36,13 @@ pub(super) async fn start(
     for (id, binding) in agents {
         let (send, receive) = mpsc::channel(32);
         mailboxes.insert(id.clone(), send);
-        tasks.spawn(listen(
+        tasks.spawn(kernel::tenancy::Scope::carry(listen(
             id,
             binding.model,
             binding.runner,
             receive,
             shutdown.child_token(),
-        ));
+        )));
     }
     let channel_port = settings.agent_channel_port;
     let channel = AgentChannel::bind(settings, mailboxes, shutdown.child_token())
@@ -159,7 +159,12 @@ async fn listen(
             },
             call = calls.recv() => {
                 let Some(call) = call else { break };
-                turns.spawn(run_call(id.clone(), model.clone(), runner.clone(), call));
+                turns.spawn(kernel::tenancy::Scope::carry(run_call(
+                    id.clone(),
+                    model.clone(),
+                    runner.clone(),
+                    call,
+                )));
             }
         }
     }

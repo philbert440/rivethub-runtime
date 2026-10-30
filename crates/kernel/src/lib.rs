@@ -15,6 +15,7 @@ pub mod preview;
 pub mod queue;
 pub mod shutdown;
 pub mod tasks;
+pub mod tenancy;
 pub mod terminal;
 pub mod tidy;
 pub mod tool;

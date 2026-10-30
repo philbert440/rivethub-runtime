@@ -6,6 +6,7 @@ mod history;
 pub mod mesh;
 pub mod plugins;
 pub mod routes;
+mod scope;
 pub mod server;
 pub mod sessions;
 pub mod tasks;
@@ -255,6 +256,7 @@ pub struct Gateway {
     providers: Vec<kernel::model::ProviderHealth>,
     memory_export: Option<Arc<dyn kernel::memory::MemoryExport>>,
     topics: Option<Arc<dyn kernel::topics::TopicStore>>,
+    tenancy_store: Option<Arc<dyn kernel::tenancy::TenancyStore>>,
     filing: Option<Arc<dyn kernel::filing::FilingStore>>,
     decisions: Option<Arc<dyn kernel::topics::DecisionStore>>,
     startup: Option<StartupMemory>,
@@ -307,6 +309,7 @@ impl Gateway {
             providers: Vec::new(),
             memory_export: None,
             topics: None,
+            tenancy_store: None,
             filing: None,
             decisions: None,
             startup: None,
@@ -579,6 +582,10 @@ impl Gateway {
         }
         served
             .fallback_service(rewritten)
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(self),
+                scope::scope_request,
+            ))
             .layer(middleware::from_fn_with_state(guard_state, auth::guard))
     }
 }

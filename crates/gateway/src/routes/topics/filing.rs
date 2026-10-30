@@ -47,12 +47,15 @@ pub(super) fn router() -> Router<Arc<Gateway>> {
 
 pub(super) async fn sessions(
     State(gateway): State<Arc<Gateway>>,
+    user: crate::tenancy::UserId,
     Path(key): Path<String>,
 ) -> Result<Json<TopicSessionList>, ApiError> {
     let topic = resolve_id(gateway.topics()?.as_ref(), &key).await?;
     let filed = gateway.filing()?.filed(topic).await.map_err(map::error)?;
+    let mut sessions: Vec<_> = filed.sessions.into_iter().map(map::filed_session).collect();
+    super::visibility::decorate(&gateway, &gateway.tenancy.viewer(&user), &mut sessions).await?;
     Ok(Json(TopicSessionList {
-        sessions: filed.sessions.into_iter().map(map::filed_session).collect(),
+        sessions,
         conversations: filed
             .conversations
             .into_iter()
@@ -61,10 +64,15 @@ pub(super) async fn sessions(
     }))
 }
 
-async fn all(State(gateway): State<Arc<Gateway>>) -> Result<Json<TopicFiling>, ApiError> {
+async fn all(
+    State(gateway): State<Arc<Gateway>>,
+    user: crate::tenancy::UserId,
+) -> Result<Json<TopicFiling>, ApiError> {
     let filed = gateway.filing()?.all_filed().await.map_err(map::error)?;
+    let mut sessions: Vec<_> = filed.sessions.into_iter().map(map::filed_session).collect();
+    super::visibility::decorate(&gateway, &gateway.tenancy.viewer(&user), &mut sessions).await?;
     Ok(Json(TopicFiling {
-        sessions: filed.sessions.into_iter().map(map::filed_session).collect(),
+        sessions,
         conversations: filed
             .conversations
             .into_iter()

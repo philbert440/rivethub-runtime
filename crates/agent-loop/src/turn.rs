@@ -259,10 +259,10 @@ impl AgentLoop {
             let hooks = Arc::clone(&self.hooks);
             let base = turn.context.clone();
             let context = turn.tool_context.clone();
-            tasks.spawn(async move {
+            tasks.spawn(kernel::tenancy::Scope::carry(async move {
                 let completed = execute(tool, permitted, hooks, base, context, call).await?;
                 Ok::<_, Error>((index, completed))
-            });
+            }));
         }
         let mut completed = BTreeMap::new();
         while let Some(result) = tasks.join_next().await {

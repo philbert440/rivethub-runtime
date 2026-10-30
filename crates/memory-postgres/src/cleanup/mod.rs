@@ -45,13 +45,14 @@ impl PostgresMemory {
         let options = PgConnectOptions::from_str(url)
             .map_err(Error::Connection)?
             .options([(READ_ONLY_SETTING, "on")]);
-        let pool = PgPoolOptions::new()
-            .max_connections(READ_ONLY_CONNECTIONS)
-            .acquire_timeout(ACQUIRE_TIMEOUT)
-            .test_before_acquire(true)
-            .connect_with(options)
-            .await
-            .map_err(Error::Connection)?;
+        let pool = crate::scoped(
+            PgPoolOptions::new()
+                .max_connections(READ_ONLY_CONNECTIONS)
+                .acquire_timeout(ACQUIRE_TIMEOUT),
+        )
+        .connect_with(options)
+        .await
+        .map_err(Error::Connection)?;
         Ok(Self::new(pool))
     }
 

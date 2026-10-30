@@ -11,6 +11,8 @@ pub struct UsersRegistry {
     pub unmapped_is_owner: bool,
     pub local_stores: Option<bool>,
     pub users: BTreeMap<String, UserRecord>,
+    #[serde(default)]
+    pub spaces: Option<BTreeMap<String, crate::gateway::tenancy::SpaceConfig>>,
 }
 
 #[cfg_attr(
@@ -27,6 +29,7 @@ impl Default for UsersRegistry {
             unmapped_is_owner: false,
             local_stores: None,
             users: BTreeMap::new(),
+            spaces: None,
         }
     }
 }

@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use super::TopicError;
 use crate::owner::Owner;
+use crate::tenancy::Visibility;
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
@@ -241,6 +242,8 @@ pub struct Topic {
     pub updated_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
     pub owner: Option<Owner>,
+    pub visibility: Visibility,
+    pub visibility_mark: Option<Visibility>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,6 +299,8 @@ impl Topic {
             updated_at: now,
             closed_at: None,
             owner: new.owner,
+            visibility: Visibility::Private,
+            visibility_mark: None,
         })
     }
 
