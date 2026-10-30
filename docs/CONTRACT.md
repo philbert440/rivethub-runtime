@@ -1088,7 +1088,12 @@ policy in place of the `sandbox` policy rh puts on `panel` and `http` answers: `
 only from files on the plug-in's own routes, never inline; forms submit to script only; pop-ups, downloads, dialogs and
 navigating away from the page do nothing. A message longer than 256 KiB, or one that does not parse as `PanelMessage`, is
 dropped; `resize` heights are kept between 48 and 2400. Colour roles become CSS names by kebab-casing their contract
-names, so `surfaceContainerHigh` is `--rh-color-surface-container-high` and `category1` is `--rh-color-category1`.
+names, so `surfaceContainerHigh` is `--rh-color-surface-container-high` and `category1` is `--rh-color-category1`. The
+desktop serves the app's own fonts at the page's origin under `/.rivethub/fonts/`, answered by the client and never sent
+to the plug-in, with `@font-face` rules for the families `--rh-font-family` and `--rh-font-mono` name, so a page can use
+them; `/.rivethub/` is therefore not a path a page can reach on its plug-in. Tab past the page's last focusable element
+(Shift+Tab past its first) gives the keyboard back to the client, which moves it on as its own Tab would. A page whose
+process stops is started again, twice a minute at most; after that the client shows it stopped and offers to restart it.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice
