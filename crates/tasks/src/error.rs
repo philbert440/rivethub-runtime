@@ -95,7 +95,7 @@ pub enum Error {
     FilesRootRequired,
     #[error("unauthorized")]
     Unauthorized,
-    #[error("gateway returned {status}")]
+    #[error("gateway returned {status}{}", gateway_reason(.error.as_deref()))]
     Rejected {
         status: u16,
         error: Option<Box<GatewayError>>,
@@ -178,5 +178,12 @@ impl From<TaskError> for Error {
             TaskError::Conflict { id, status, action } => Self::Conflict { id, status, action },
             TaskError::Clock => Self::Clock,
         }
+    }
+}
+
+fn gateway_reason(error: Option<&GatewayError>) -> String {
+    match error {
+        Some(error) => format!(": {}", error.error),
+        None => String::new(),
     }
 }
