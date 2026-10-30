@@ -60,12 +60,6 @@ count = 3
 
 [[entry]]
 check = "KERNELWIRE"
-file = "crates/kernel/src/ca.rs"
-text = "wire"
-count = 1
-
-[[entry]]
-check = "KERNELWIRE"
 file = "crates/kernel/src/filing/target.rs"
 text = "wire"
 count = 2
