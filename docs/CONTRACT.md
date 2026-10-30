@@ -350,7 +350,9 @@ share a name; a slug in a topic path names a work topic, so types and entities a
 deleted, the former People, Hosts and Tools category topics included, and deleting leaves a tombstone so the wiki builder
 never recreates that name. The wiki builder writes only to topic and entity pages: a patch about the session's topic lands
 on its page as before, a patch whose `type` names one of the types goes to that entity's own page (a type has no page), and
-any other patch becomes a note section on the session's topic page. A session that isn't filed yet keeps its notes until it
+any other patch becomes a note section on the session's topic page. A `type` with several names (`Software › Apps`)
+names the type at that path from the root; a single name names the one type with that name, alias or former name, and a
+name more than one type answers to names none, so the entity waits as a candidate. A session that isn't filed yet keeps its notes until it
 is filed (a child session until the nearest session above it is, walking up at most 8 parents, so a subagent of a
 subagent waits on the filed root and not on its unfiled parent; a conversation or delegated task until that conversation
 is), then

@@ -1,6 +1,8 @@
+use kernel::topics::Alias;
 use kernel::topics::NewTopic;
 use kernel::topics::Slug;
 use kernel::topics::Topic;
+use kernel::topics::TopicChanges;
 use kernel::topics::TopicId;
 use kernel::topics::TopicKind;
 use kernel::topics::TopicName;
@@ -16,6 +18,7 @@ use crate::wiki_routes::RouteStores;
 use crate::wiki_routes::SESSION_KEY;
 use crate::wiki_routes::SESSION_TITLE;
 use crate::wiki_routes::host;
+use crate::wiki_routes::patch;
 
 pub const EARLIER_KEY: &str = "claude-code:00000000-0000-4000-8000-000000000043";
 
@@ -146,6 +149,39 @@ pub async fn a_mention_held_before_its_entity_existed_still_lands(
         stores.wiki.held_entities(&key).await?,
         Vec::new(),
     )?;
+    Ok(())
+}
+
+pub async fn an_entity_type_is_found_by_its_whole_path(
+    stores: RouteStores<'_>,
+    job: &ExtractWiki,
+) -> Outcome {
+    let agents = stores
+        .named(TopicKind::Type, "Agents")
+        .await?
+        .ok_or("the Agents type is seeded")?;
+    let apps = stores
+        .named(TopicKind::Type, "Apps")
+        .await?
+        .ok_or("the Apps type is seeded")?;
+    let changes = TopicChanges {
+        aliases: Some(vec![Alias::new("Apps")?]),
+        ..TopicChanges::default()
+    };
+    stores
+        .pages
+        .topics
+        .update(agents.id, changes, at(1))
+        .await?;
+    let mut app = patch("acmekit-desktop", "AcmeKit Desktop", "The desktop client.")?;
+    app.entity_type = Some("Software › Apps".to_owned());
+    stores.mentioned_elsewhere(job, &app).await?;
+    stores.route(job, vec![app]).await?;
+    let entity = stores
+        .named(TopicKind::Entity, "AcmeKit Desktop")
+        .await?
+        .ok_or("the second mention creates the entity")?;
+    same("the type its path names", entity.parent, Some(apps.id))?;
     Ok(())
 }
 

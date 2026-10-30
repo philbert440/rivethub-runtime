@@ -131,6 +131,13 @@ async fn a_mention_held_before_its_entity_existed_still_lands(pool: PgPool) -> T
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn an_entity_type_is_found_by_its_whole_path(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool).await?;
+    testkit::wiki_mentions::an_entity_type_is_found_by_its_whole_path(seeded.stores(), &seeded.job)
+        .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn an_unfiled_session_waits_until_it_is_filed(pool: PgPool) -> TestResult {
     let seeded = Seeded::new(pool).await?;
     wiki_routes::an_unfiled_session_waits_until_it_is_filed(seeded.stores(), &seeded.job).await

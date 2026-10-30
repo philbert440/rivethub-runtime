@@ -178,14 +178,35 @@ impl Catalog {
     }
 
     fn type_named(&self, named: &str) -> Option<&Topic> {
-        let last = named
-            .rsplit(['›', '>', '/'])
+        let path = named
+            .split(['›', '>', '/'])
             .map(str::trim)
-            .find(|part| !part.is_empty())?;
-        let key = Slug::of_heading(last)?;
-        self.types
-            .iter()
-            .find(|kind| self.keys(kind).any(|known| known == key))
+            .filter(|part| !part.is_empty())
+            .map(Slug::of_heading)
+            .collect::<Option<Vec<Slug>>>()?;
+        let (leaf, above) = path.split_last()?;
+        let tree = TopicTree::of(&self.types);
+        let mut found = self.types.iter().filter(|kind| {
+            self.named_by(kind, leaf) && (above.is_empty() || self.under(&tree, kind, above))
+        });
+        let first = found.next()?;
+        found.next().is_none().then_some(first)
+    }
+
+    fn under(&self, tree: &TopicTree, kind: &Topic, path: &[Slug]) -> bool {
+        let ancestors: Vec<&Topic> = tree
+            .ancestors(kind.id)
+            .filter_map(|above| self.types.iter().find(|known| known.id == above))
+            .collect();
+        ancestors.len() == path.len()
+            && ancestors
+                .iter()
+                .zip(path.iter().rev())
+                .all(|(above, slug)| self.named_by(above, slug))
+    }
+
+    fn named_by(&self, topic: &Topic, slug: &Slug) -> bool {
+        self.keys(topic).any(|key| key == *slug)
     }
 
     fn keys<'a>(&'a self, topic: &'a Topic) -> impl Iterator<Item = Slug> + 'a {
