@@ -214,7 +214,7 @@ pub(super) async fn plan(config: &Config, env: &Environment) -> Result<Plan, Age
         worker,
         postgres: require_postgres(config, env)?,
         gateway: endpoint.url,
-        files_root: settings.files_root,
+        files_root: task_root(settings.files_root, config),
         allowed: settings.allowed_harnesses,
         pricing: pricing(config)?,
         api_token: api_token(config)?,
@@ -261,7 +261,7 @@ pub(super) async fn standalone(
         settings: tasks::Settings {
             node,
             worker,
-            files_root: gateway_settings.files_root,
+            files_root: task_root(gateway_settings.files_root, config),
             pricing: pricing(config)?,
             api_token: api_token(config)?,
         },
@@ -526,4 +526,13 @@ async fn load_nodes(config: &Config, env: &Environment) -> Result<Vec<MeshNode>,
         Some(file) => Ok(file.nodes.into_values().collect()),
         None => Ok(Vec::new()),
     }
+}
+
+fn task_root(files_root: Option<PathBuf>, config: &Config) -> Option<PathBuf> {
+    files_root.or_else(|| {
+        config
+            .runtime
+            .as_ref()
+            .and_then(|runtime| runtime.workspace.clone())
+    })
 }
