@@ -959,12 +959,15 @@ failed"}` per session; one session's failure never fails the batch. `GET /api/se
 lists show and, because the store listers leave out sessions that never had a user turn (such as the ones model
 discovery opens), every session remembered with no messages (at most 500, newest first) whose harness store still
 describes it on this node and whose harness this node runs. A candidate is visible, not tombstoned, not live, not a
-child session, last updated over an hour ago, has no tool rows, attachments, task, topic or conversation filing, or
-wiki-cited summary, its transcript reads (an unreadable transcript, or a memory key that is not a canonical session id,
+child session, last updated over an hour ago, holds at most 3 messages in memory (memory reads no further, and reads
+the filings and citations below only for a session within that bound), has no tool rows, attachments, task, topic or
+conversation filing, or wiki-cited summary, its transcript reads (an unreadable transcript, or a memory key that is not a canonical session id,
 is never a candidate), and both memory and the transcript agree that it is `empty` (no user or assistant turn, and a
 title that does not name the session under note 72, or is its id) or a `one-word-reply` (one user turn of at most 280
 characters, at most one assistant turn whose non-blank text is a single word once whitespace and punctuation are
-trimmed). Nothing is deleted without a request naming it. The bodies are `wire::gateway::session_delete` in
+trimmed). Transcripts are read up to 32 at a time; the remembered sessions are described in one pass over each
+harness store; summaries and wiki provenance are indexed by conversation (migration 0041; SQLite schema v26 indexes
+wiki citations and provenance). Nothing is deleted without a request naming it. The bodies are `wire::gateway::session_delete` in
 `contract/*.schema.json`; the verdict is `kernel::memory::trash_verdict`. The routes are new, with no TypeScript
 recording.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.

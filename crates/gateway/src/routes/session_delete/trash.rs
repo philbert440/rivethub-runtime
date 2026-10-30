@@ -1,12 +1,12 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
 use chrono::{DateTime, Utc};
 use kernel::memory::{
-    EMPTY_SESSIONS_MAX, SessionActivity, SessionDeletion, Speaker, SpokenTurn, TrashReason,
-    TrashSignals, trash_verdict,
+    EMPTY_SESSIONS_MAX, SessionActivity, Speaker, SpokenTurn, TrashReason, TrashSignals,
+    trash_verdict,
 };
 use kernel::transcript::{ListLimit, StoreSession};
 use wire::gateway::session_delete::{SessionTrashCandidate, SessionTrashList, SessionTrashReason};
@@ -14,11 +14,15 @@ use wire::gateway::sessions::{HarnessTranscriptTurn, SessionMessageRole};
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 
-use super::{deletions, live, resolved, visible};
+use futures::StreamExt as _;
+
+use super::{deletions, live, resolved};
 use crate::Gateway;
 use crate::error::ApiError;
 use crate::routes::terminal::require;
 use crate::tenancy::UserId;
+
+const TRANSCRIPT_READS: usize = 32;
 
 struct Considered {
     row: StoreSession,
@@ -36,26 +40,24 @@ fn considered(row: StoreSession, now: DateTime<Utc>) -> Option<Considered> {
     })
 }
 
-async fn listed(gateway: &Gateway, user: &UserId, roster: &[HarnessId]) -> Vec<StoreSession> {
-    let rows = match gateway.session_lister() {
+async fn listed(gateway: &Gateway, roster: &[HarnessId]) -> Vec<StoreSession> {
+    match gateway.session_lister() {
         Some(lister) => lister.list(roster, ListLimit::most()).await,
         None => Vec::new(),
-    };
-    crate::routes::history::visible_rows(gateway, user, rows)
+    }
 }
 
-async fn unlisted_empty(
+async fn described(
     gateway: &Gateway,
-    user: &UserId,
-    deletions: &dyn SessionDeletion,
     roster: &[HarnessId],
     shown: &BTreeSet<SessionId>,
+    empty: Vec<String>,
 ) -> Result<Vec<StoreSession>, ApiError> {
     let Some(lister) = gateway.session_lister() else {
         return Ok(Vec::new());
     };
-    let mut rows = Vec::new();
-    for key in deletions.empty_sessions(EMPTY_SESSIONS_MAX).await? {
+    let mut wanted: BTreeMap<HarnessId, Vec<String>> = BTreeMap::new();
+    for key in empty {
         #[cfg_attr(
             dylint_lib = "rr_lints",
             expect(
@@ -66,18 +68,16 @@ async fn unlisted_empty(
         let Ok(session) = key.parse::<SessionId>() else {
             continue;
         };
-        if shown.contains(&session)
-            || !roster.contains(&session.harness())
-            || !visible(gateway, user, &session).await?
-        {
-            continue;
+        if !shown.contains(&session) && roster.contains(&session.harness()) {
+            wanted
+                .entry(session.harness())
+                .or_default()
+                .push(session.native().to_owned());
         }
-        if let Some(row) = lister
-            .describe(session.harness(), session.native(), None)
-            .await?
-        {
-            rows.push(row);
-        }
+    }
+    let mut rows = Vec::new();
+    for (harness, natives) in wanted {
+        rows.extend(lister.describe_many(harness, &natives).await?);
     }
     Ok(rows)
 }
@@ -89,13 +89,16 @@ pub(super) async fn trash(
     let deletions = deletions(&gateway)?;
     let roster = require(&gateway)?.roster();
     let now = Utc::now();
-    let mut rows = listed(&gateway, &user, &roster).await;
-    let seen: BTreeSet<SessionId> = rows
+    let (mut rows, empty) = tokio::join!(
+        listed(&gateway, &roster),
+        deletions.empty_sessions(EMPTY_SESSIONS_MAX)
+    );
+    let shown: BTreeSet<SessionId> = rows
         .iter()
         .map(|row| SessionId::new(row.harness, &row.id))
         .collect();
-    rows.extend(unlisted_empty(&gateway, &user, deletions, &roster, &seen).await?);
-    let rows: Vec<Considered> = rows
+    rows.extend(described(&gateway, &roster, &shown, empty?).await?);
+    let rows: Vec<Considered> = crate::routes::history::visible_rows(&gateway, &user, rows)
         .into_iter()
         .filter_map(|row| considered(row, now))
         .filter(|row| !live(&gateway, &row.session))
@@ -104,24 +107,27 @@ pub(super) async fn trash(
         .iter()
         .map(|row| row.session.as_str().to_owned())
         .collect();
-    let deleted = deletions.tombstones(&keys).await?;
-    let activity = deletions.session_activity(&keys).await?;
-    let mut candidates = Vec::new();
-    for row in rows {
-        let key = row.session.as_str();
-        if deleted.contains_key(key) {
-            continue;
-        }
-        let Some(memory) = activity.get(key) else {
-            continue;
-        };
-        if memory.kept() || memory.user_messages > 1 || memory.assistant_messages > 1 {
-            continue;
-        }
-        if let Some(candidate) = judged(&gateway, &row, memory, now).await {
-            candidates.push(candidate);
-        }
-    }
+    let (deleted, activity) = tokio::join!(
+        deletions.tombstones(&keys),
+        deletions.session_activity(&keys)
+    );
+    let (deleted, activity) = (deleted?, activity?);
+    let open: Vec<(Considered, SessionActivity)> = rows
+        .into_iter()
+        .filter(|row| !deleted.contains_key(row.session.as_str()))
+        .filter_map(|row| {
+            let memory = activity.get(row.session.as_str())?;
+            let brief =
+                !memory.kept() && memory.user_messages <= 1 && memory.assistant_messages <= 1;
+            brief.then(|| (row, memory.clone()))
+        })
+        .collect();
+    let candidates: Vec<SessionTrashCandidate> = futures::stream::iter(open)
+        .map(|(row, memory)| judged(&gateway, row, memory, now))
+        .buffered(TRANSCRIPT_READS)
+        .filter_map(std::future::ready)
+        .collect()
+        .await;
     Ok(Json(SessionTrashList { candidates }))
 }
 
@@ -149,8 +155,8 @@ const fn reason(reason: TrashReason) -> SessionTrashReason {
 
 async fn judged(
     gateway: &Gateway,
-    row: &Considered,
-    memory: &SessionActivity,
+    row: Considered,
+    memory: SessionActivity,
     now: DateTime<Utc>,
 ) -> Option<SessionTrashCandidate> {
     let read = gateway
@@ -171,7 +177,7 @@ async fn judged(
         title,
         updated_at: row.updated_at,
         now,
-        activity: memory,
+        activity: &memory,
         transcript: &transcript,
     })?;
     Some(SessionTrashCandidate {

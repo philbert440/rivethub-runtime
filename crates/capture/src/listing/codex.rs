@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -90,18 +92,34 @@ pub(crate) fn describe(
     root: &Path,
     id: &str,
 ) -> Result<Option<StoreSession>, TranscriptReaderError> {
+    Ok(describe_many(root, &[id.to_owned()])?.pop())
+}
+
+pub(crate) fn describe_many(
+    root: &Path,
+    ids: &[String],
+) -> Result<Vec<StoreSession>, TranscriptReaderError> {
     let Some(store) = sessions(root)? else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
-    let newest = rollouts(&store)
+    let wanted: BTreeSet<&str> = ids.iter().map(String::as_str).collect();
+    let mut newest: BTreeMap<String, Rollout> = BTreeMap::new();
+    for rollout in rollouts(&store)
         .into_iter()
-        .filter(|rollout| rollout.id == id)
-        .fold(None::<Rollout>, |newest, candidate| match newest {
-            Some(current) if current.times.mtime >= candidate.times.mtime => Some(current),
-            Some(_) | None => Some(candidate),
-        });
+        .filter(|rollout| wanted.contains(rollout.id.as_str()))
+    {
+        match newest.get(&rollout.id) {
+            Some(current) if current.times.mtime >= rollout.times.mtime => {}
+            Some(_) | None => {
+                newest.insert(rollout.id.clone(), rollout);
+            }
+        }
+    }
     let names = thread_names(root);
-    Ok(newest.as_ref().map(|rollout| rollout_row(rollout, &names)))
+    Ok(newest
+        .values()
+        .map(|rollout| rollout_row(rollout, &names))
+        .collect())
 }
 
 #[derive(Debug, Deserialize)]

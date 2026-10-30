@@ -7,6 +7,7 @@ use kernel::memory::DeletedSession;
 use kernel::memory::MemoryStoreError;
 use kernel::memory::SessionActivity;
 use kernel::memory::SessionDeletion;
+use kernel::memory::TRASH_MESSAGES_MAX;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
@@ -211,35 +212,89 @@ struct ActivityRow {
     reply: Option<String>,
 }
 
+const ACTIVITY: &str = "
+WITH conv AS (
+    SELECT c.id, c.session_key, c.task_id,
+           (SELECT count(*) FROM (
+                SELECT 1 FROM ros_messages m WHERE m.conversation_id = c.id LIMIT ?2 + 1
+            )) AS probed
+      FROM ros_conversations c
+     WHERE c.session_key IN (SELECT value FROM json_each(?1))
+), sessions AS (
+    SELECT session_key, count(*) AS conversations, sum(probed) AS messages,
+           max(task_id IS NOT NULL) AS tasked
+      FROM conv
+     GROUP BY session_key
+), talk AS (
+    SELECT conv.session_key,
+           count(*) FILTER (WHERE m.role = 'user' AND trim(m.content, ' ' || char(9, 10, 13)) <> '') AS user_messages,
+           count(*) FILTER (WHERE m.role = 'assistant') AS assistant_messages,
+           count(*) FILTER (
+               WHERE m.role = 'tool' OR m.tool_name IS NOT NULL
+                  OR m.tool_args IS NOT NULL OR m.tool_result IS NOT NULL
+           ) AS tool_rows,
+           count(*) FILTER (
+               WHERE json_type(m.metadata, '$.attachments') IS NOT NULL
+                  OR json_type(m.metadata, '$.images') IS NOT NULL
+           ) AS attachments,
+           (SELECT r.content FROM ros_messages r
+              JOIN ros_conversations rc ON rc.id = r.conversation_id
+             WHERE rc.session_key = conv.session_key AND r.role = 'assistant'
+             ORDER BY r.created_at, r.id LIMIT 1) AS reply
+      FROM conv
+      JOIN sessions ON sessions.session_key = conv.session_key
+      JOIN ros_messages m ON m.conversation_id = conv.id
+     WHERE sessions.messages <= ?2 AND NOT sessions.tasked
+     GROUP BY conv.session_key
+)
+SELECT s.session_key, s.conversations, s.messages,
+       coalesce(t.user_messages, 0), coalesce(t.assistant_messages, 0),
+       coalesce(t.tool_rows, 0), coalesce(t.attachments, 0), s.tasked, t.reply
+  FROM sessions s
+  LEFT JOIN talk t ON t.session_key = s.session_key";
+
+const CITED: &str = "
+WITH conv AS (
+    SELECT id, session_key FROM ros_conversations
+     WHERE session_key IN (SELECT value FROM json_each(?1))
+), sums AS (
+    SELECT s.id, conv.session_key FROM ros_summaries s JOIN conv ON conv.id = s.conversation_id
+)
+SELECT sums.session_key FROM sums
+ WHERE EXISTS (SELECT 1 FROM ros_wiki_citations w WHERE w.summary_id = sums.id)
+    OR EXISTS (
+           SELECT 1 FROM ros_wiki_provenance p
+            WHERE p.source_kind = 'summary' AND p.source_id = sums.id
+       )
+UNION
+SELECT conv.session_key FROM conv
+ WHERE EXISTS (SELECT 1 FROM ros_wiki_provenance p WHERE p.conversation_id = conv.id)
+    OR EXISTS (
+           SELECT 1 FROM ros_wiki_provenance p
+            WHERE p.source_kind = 'conversation' AND p.source_id = conv.id
+       )
+UNION
+SELECT conv.session_key
+  FROM ros_wiki_provenance p
+  JOIN ros_messages m ON m.id = p.source_id
+  JOIN conv ON conv.id = m.conversation_id
+ WHERE p.source_kind = 'message'";
+
+const PLACED: &str = "
+SELECT session_id FROM rh_session_placements
+ WHERE session_id IN (SELECT value FROM json_each(?1))
+UNION
+SELECT c.session_key FROM rh_conversation_placements p
+  JOIN ros_conversations c ON c.id = p.conversation_id
+ WHERE c.session_key IN (SELECT value FROM json_each(?1))";
+
 fn activity_rows(conn: &Connection, keys: &str) -> Result<Vec<ActivityRow>, SqliteError> {
     let mut statement = conn
-        .prepare(
-            "SELECT c.session_key,
-                    count(DISTINCT c.id),
-                    count(m.id),
-                    count(m.id) FILTER (WHERE m.role = 'user' AND trim(m.content, ' ' || char(9, 10, 13)) <> ''),
-                    count(m.id) FILTER (WHERE m.role = 'assistant'),
-                    count(m.id) FILTER (
-                        WHERE m.role = 'tool' OR m.tool_name IS NOT NULL
-                           OR m.tool_args IS NOT NULL OR m.tool_result IS NOT NULL
-                    ),
-                    count(m.id) FILTER (
-                        WHERE json_type(m.metadata, '$.attachments') IS NOT NULL
-                           OR json_type(m.metadata, '$.images') IS NOT NULL
-                    ),
-                    max(c.task_id IS NOT NULL),
-                    (SELECT r.content FROM ros_messages r
-                       JOIN ros_conversations rc ON rc.id = r.conversation_id
-                      WHERE rc.session_key = c.session_key AND r.role = 'assistant'
-                      ORDER BY r.created_at, r.id LIMIT 1)
-               FROM ros_conversations c
-               LEFT JOIN ros_messages m ON m.conversation_id = c.id
-              WHERE c.session_key IN (SELECT value FROM json_each(?1))
-              GROUP BY c.session_key",
-        )
+        .prepare(ACTIVITY)
         .map_err(SqliteError::query("session activity"))?;
+    let most = i64::try_from(TRASH_MESSAGES_MAX).map_err(SqliteError::Count)?;
     let rows = statement
-        .query_map([keys], |row| {
+        .query_map(params![keys, most], |row| {
             Ok(ActivityRow {
                 session_key: row.get(0)?,
                 conversations: row.get(1)?,
@@ -262,40 +317,6 @@ fn activity(
     sessions: &[String],
     keys: &str,
 ) -> Result<BTreeMap<String, SessionActivity>, SqliteError> {
-    let placed = found_keys(
-        conn,
-        "SELECT session_id FROM rh_session_placements
-          WHERE session_id IN (SELECT value FROM json_each(?1))
-         UNION
-         SELECT c.session_key FROM rh_conversation_placements p
-           JOIN ros_conversations c ON c.id = p.conversation_id
-          WHERE c.session_key IN (SELECT value FROM json_each(?1))",
-        keys,
-    )?;
-    let cited = found_keys(
-        conn,
-        "SELECT DISTINCT c.session_key FROM ros_conversations c
-              WHERE c.session_key IN (SELECT value FROM json_each(?1))
-                AND (
-                    EXISTS (
-                        SELECT 1 FROM ros_summaries s
-                          JOIN ros_wiki_citations w ON w.summary_id = s.id
-                         WHERE s.conversation_id = c.id
-                    )
-                    OR EXISTS (
-                        SELECT 1 FROM ros_wiki_provenance p
-                         WHERE p.conversation_id = c.id
-                            OR (p.source_kind = 'conversation' AND p.source_id = c.id)
-                            OR (p.source_kind = 'summary' AND p.source_id IN (
-                                SELECT s.id FROM ros_summaries s WHERE s.conversation_id = c.id
-                            ))
-                            OR (p.source_kind = 'message' AND p.source_id IN (
-                                SELECT m.id FROM ros_messages m WHERE m.conversation_id = c.id
-                            ))
-                    )
-                )",
-        keys,
-    )?;
     let mut activity: BTreeMap<String, SessionActivity> = sessions
         .iter()
         .map(|session| (session.clone(), SessionActivity::default()))
@@ -317,6 +338,14 @@ fn activity(
             },
         );
     }
+    let open: Vec<String> = activity
+        .iter()
+        .filter(|(_, entry)| !entry.kept())
+        .map(|(key, _)| key.clone())
+        .collect();
+    let open = json_keys(&open)?;
+    let placed = found_keys(conn, PLACED, &open)?;
+    let cited = found_keys(conn, CITED, &open)?;
     for (session, entry) in &mut activity {
         entry.placed = placed.contains(session);
         entry.cited = cited.contains(session);
@@ -354,15 +383,14 @@ fn empty(conn: &Connection, limit: u32) -> Result<Vec<String>, SqliteError> {
     let mut statement = conn
         .prepare(
             "SELECT c.session_key FROM ros_conversations c
-              WHERE NOT EXISTS (
-                        SELECT 1 FROM ros_messages m
-                          JOIN ros_conversations o ON o.id = m.conversation_id
-                         WHERE o.session_key = c.session_key
-                    )
+              WHERE NOT EXISTS (SELECT 1 FROM ros_messages m WHERE m.conversation_id = c.id)
                 AND NOT EXISTS (
                         SELECT 1 FROM rh_session_tombstones t WHERE t.session_key = c.session_key
                     )
               GROUP BY c.session_key
+             HAVING count(*) = (
+                        SELECT count(*) FROM ros_conversations o WHERE o.session_key = c.session_key
+                    )
               ORDER BY max(julianday(c.updated_at)) DESC
               LIMIT ?1",
         )

@@ -211,6 +211,20 @@ pub trait SessionLister: Send + Sync {
         parent: Option<&str>,
     ) -> Result<Option<StoreSession>, TranscriptReaderError>;
 
+    async fn describe_many(
+        &self,
+        harness: HarnessId,
+        natives: &[String],
+    ) -> Result<Vec<StoreSession>, TranscriptReaderError> {
+        let mut rows = Vec::with_capacity(natives.len());
+        for native in natives {
+            if let Some(row) = self.describe(harness, native, None).await? {
+                rows.push(row);
+            }
+        }
+        Ok(rows)
+    }
+
     async fn store_cwd(
         &self,
         harness: HarnessId,

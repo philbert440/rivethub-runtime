@@ -14,6 +14,7 @@ const TRASH_REPLY_MAX_CHARS: usize = 80;
 const TRASH_PROMPT_MAX_CHARS: usize = 280;
 pub const TOMBSTONE_PURGE_BATCH: u32 = 100;
 pub const EMPTY_SESSIONS_MAX: u32 = 500;
+pub const TRASH_MESSAGES_MAX: u64 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct DeletedSession {
@@ -52,7 +53,12 @@ impl SessionActivity {
 
     #[must_use]
     pub fn kept(&self) -> bool {
-        self.tool_rows > 0 || self.attachments > 0 || self.tasked || self.placed || self.cited
+        self.messages > TRASH_MESSAGES_MAX
+            || self.tool_rows > 0
+            || self.attachments > 0
+            || self.tasked
+            || self.placed
+            || self.cited
     }
 }
 

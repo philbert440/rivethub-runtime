@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -218,7 +220,7 @@ struct Scan {
     updates: Vec<PathBuf>,
 }
 
-fn scan(store: &Root, only: Option<&str>) -> Scan {
+fn scan(store: &Root, only: Option<&BTreeSet<&str>>) -> Scan {
     let mut scan = Scan {
         rows: Vec::new(),
         updates: Vec::new(),
@@ -229,7 +231,7 @@ fn scan(store: &Root, only: Option<&str>) -> Scan {
             if regular_file(store, &updates) {
                 scan.updates.push(updates);
             }
-            if only.is_some_and(|id| id != session.name) {
+            if only.is_some_and(|ids| !ids.contains(session.name.as_str())) {
                 continue;
             }
             let summary = session.path.join("summary.json");
@@ -337,20 +339,36 @@ pub(crate) fn describe(
     spawns: &SpawnIndex,
     id: &str,
 ) -> Result<Option<StoreSession>, TranscriptReaderError> {
-    if id.is_empty() || id.contains('/') || id.contains("..") {
-        return Ok(None);
+    Ok(describe_many(root, spawns, &[id.to_owned()])?.pop())
+}
+
+pub(crate) fn describe_many(
+    root: &Path,
+    spawns: &SpawnIndex,
+    ids: &[String],
+) -> Result<Vec<StoreSession>, TranscriptReaderError> {
+    let wanted: BTreeSet<&str> = ids
+        .iter()
+        .map(String::as_str)
+        .filter(|id| !id.is_empty() && !id.contains('/') && !id.contains(".."))
+        .collect();
+    if wanted.is_empty() {
+        return Ok(Vec::new());
     }
     let Some(store) = sessions(root)? else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
-    let scan = scan(&store, Some(id));
-    let rows = stamp(scan.rows, &spawns.parents(&scan.updates));
-    Ok(rows
-        .into_iter()
-        .fold(None, |best: Option<StoreSession>, row| match best {
-            Some(current) if current.updated_at >= row.updated_at => Some(current),
-            Some(_) | None => Some(row),
-        }))
+    let scan = scan(&store, Some(&wanted));
+    let mut newest: BTreeMap<String, StoreSession> = BTreeMap::new();
+    for row in stamp(scan.rows, &spawns.parents(&scan.updates)) {
+        match newest.get(&row.id) {
+            Some(current) if current.updated_at >= row.updated_at => {}
+            Some(_) | None => {
+                newest.insert(row.id.clone(), row);
+            }
+        }
+    }
+    Ok(newest.into_values().collect())
 }
 
 pub(crate) fn rename(

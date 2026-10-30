@@ -7,6 +7,7 @@ use kernel::memory::DeletedSession;
 use kernel::memory::MemoryStoreError;
 use kernel::memory::SessionActivity;
 use kernel::memory::SessionDeletion;
+use kernel::memory::TRASH_MESSAGES_MAX;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
@@ -223,31 +224,57 @@ impl PostgresMemory {
     }
 
     async fn activity_rows(&self, keys: &[String]) -> Result<Vec<ActivityRow>, Error> {
+        let most = i64::try_from(TRASH_MESSAGES_MAX)?;
         sqlx::query_as!(
             ActivityRow,
-            r#"SELECT c.session_key AS "session_key!",
-                      count(DISTINCT c.id) AS "conversations!",
-                      count(m.id) AS "messages!",
-                      count(m.id) FILTER (
-                          WHERE m.role = 'user' AND m.content ~ '[^[:space:]]'
-                      ) AS "user_messages!",
-                      count(m.id) FILTER (WHERE m.role = 'assistant') AS "assistant_messages!",
-                      count(m.id) FILTER (
-                          WHERE m.role = 'tool' OR m.tool_name IS NOT NULL
-                             OR m.tool_args IS NOT NULL OR m.tool_result IS NOT NULL
-                      ) AS "tool_rows!",
-                      count(m.id) FILTER (
-                          WHERE m.metadata ? 'attachments'
-                             OR m.metadata ? 'images'
-                      ) AS "attachments!",
-                      bool_or(c.task_id IS NOT NULL) AS "tasked!",
-                      (array_agg(m.content ORDER BY m.created_at, m.id)
-                          FILTER (WHERE m.role = 'assistant'))[1] AS reply
-                 FROM rh_conversations c
-                 LEFT JOIN rh_messages m ON m.conversation_id = c.id
-                WHERE c.session_key = ANY($1)
-                GROUP BY c.session_key"#,
-            keys
+            r#"WITH conv AS (
+                   SELECT c.id, c.session_key, c.task_id,
+                          (SELECT count(*) FROM (
+                               SELECT 1 FROM rh_messages m WHERE m.conversation_id = c.id LIMIT $2::bigint + 1
+                           ) probed) AS probed
+                     FROM rh_conversations c
+                    WHERE c.session_key = ANY($1)
+               ), sessions AS (
+                   SELECT session_key,
+                          count(*) AS conversations,
+                          sum(probed)::bigint AS messages,
+                          bool_or(task_id IS NOT NULL) AS tasked
+                     FROM conv
+                    GROUP BY session_key
+               ), talk AS (
+                   SELECT conv.session_key,
+                          count(*) FILTER (
+                              WHERE m.role = 'user' AND m.content ~ '[^[:space:]]'
+                          ) AS user_messages,
+                          count(*) FILTER (WHERE m.role = 'assistant') AS assistant_messages,
+                          count(*) FILTER (
+                              WHERE m.role = 'tool' OR m.tool_name IS NOT NULL
+                                 OR m.tool_args IS NOT NULL OR m.tool_result IS NOT NULL
+                          ) AS tool_rows,
+                          count(*) FILTER (
+                              WHERE m.metadata ? 'attachments' OR m.metadata ? 'images'
+                          ) AS attachments,
+                          (array_agg(m.content ORDER BY m.created_at, m.id)
+                              FILTER (WHERE m.role = 'assistant'))[1] AS reply
+                     FROM conv
+                     JOIN sessions ON sessions.session_key = conv.session_key
+                     JOIN rh_messages m ON m.conversation_id = conv.id
+                    WHERE sessions.messages <= $2::bigint AND NOT sessions.tasked
+                    GROUP BY conv.session_key
+               )
+               SELECT s.session_key AS "session_key!",
+                      s.conversations AS "conversations!",
+                      s.messages AS "messages!",
+                      coalesce(t.user_messages, 0) AS "user_messages!",
+                      coalesce(t.assistant_messages, 0) AS "assistant_messages!",
+                      coalesce(t.tool_rows, 0) AS "tool_rows!",
+                      coalesce(t.attachments, 0) AS "attachments!",
+                      s.tasked AS "tasked!",
+                      t.reply
+                 FROM sessions s
+                 LEFT JOIN talk t ON t.session_key = s.session_key"#,
+            keys,
+            most
         )
         .fetch_all(&self.pool)
         .await
@@ -271,27 +298,32 @@ impl PostgresMemory {
 
     async fn cited_keys(&self, keys: &[String]) -> Result<Vec<String>, Error> {
         sqlx::query_scalar!(
-            r#"SELECT DISTINCT c.session_key AS "session_key!"
-                 FROM rh_conversations c
-                WHERE c.session_key = ANY($1)
-                  AND (
-                      EXISTS (
-                          SELECT 1 FROM rh_summaries s
-                            JOIN rh_wiki_citations w ON w.summary_id = s.id
-                           WHERE s.conversation_id = c.id
-                      )
-                      OR EXISTS (
+            r#"WITH conv AS (
+                   SELECT id, session_key FROM rh_conversations WHERE session_key = ANY($1)
+               ), sums AS (
+                   SELECT s.id, conv.session_key
+                     FROM rh_summaries s
+                     JOIN conv ON conv.id = s.conversation_id
+               )
+               SELECT sums.session_key AS "session_key!" FROM sums
+                WHERE EXISTS (SELECT 1 FROM rh_wiki_citations w WHERE w.summary_id = sums.id)
+                   OR EXISTS (
                           SELECT 1 FROM rh_wiki_provenance p
-                           WHERE p.conversation_id = c.id
-                              OR (p.source_kind = 'conversation' AND p.source_id = c.id)
-                              OR (p.source_kind = 'summary' AND p.source_id IN (
-                                  SELECT s.id FROM rh_summaries s WHERE s.conversation_id = c.id
-                              ))
-                              OR (p.source_kind = 'message' AND p.source_id IN (
-                                  SELECT m.id FROM rh_messages m WHERE m.conversation_id = c.id
-                              ))
+                           WHERE p.source_kind = 'summary' AND p.source_id = sums.id
                       )
-                  )"#,
+               UNION
+               SELECT conv.session_key FROM conv
+                WHERE EXISTS (SELECT 1 FROM rh_wiki_provenance p WHERE p.conversation_id = conv.id)
+                   OR EXISTS (
+                          SELECT 1 FROM rh_wiki_provenance p
+                           WHERE p.source_kind = 'conversation' AND p.source_id = conv.id
+                      )
+               UNION
+               SELECT conv.session_key
+                 FROM rh_wiki_provenance p
+                 JOIN rh_messages m ON m.id = p.source_id
+                 JOIN conv ON conv.id = m.conversation_id
+                WHERE p.source_kind = 'message'"#,
             keys
         )
         .fetch_all(&self.pool)
@@ -300,14 +332,11 @@ impl PostgresMemory {
     }
 
     async fn activity(&self, keys: &[String]) -> Result<BTreeMap<String, SessionActivity>, Error> {
-        let rows = self.activity_rows(keys).await?;
-        let placed = self.placed_keys(keys).await?;
-        let cited = self.cited_keys(keys).await?;
         let mut activity: BTreeMap<String, SessionActivity> = keys
             .iter()
             .map(|key| (key.clone(), SessionActivity::default()))
             .collect();
-        for row in rows {
+        for row in self.activity_rows(keys).await? {
             activity.insert(
                 row.session_key,
                 SessionActivity {
@@ -324,6 +353,13 @@ impl PostgresMemory {
                 },
             );
         }
+        let open: Vec<String> = activity
+            .iter()
+            .filter(|(_, entry)| !entry.kept())
+            .map(|(key, _)| key.clone())
+            .collect();
+        let placed = self.placed_keys(&open).await?;
+        let cited = self.cited_keys(&open).await?;
         for (key, entry) in &mut activity {
             entry.placed = placed.contains(key);
             entry.cited = cited.contains(key);
@@ -335,15 +371,14 @@ impl PostgresMemory {
         sqlx::query_scalar!(
             r#"SELECT c.session_key AS "session_key!"
                  FROM rh_conversations c
-                WHERE NOT EXISTS (
-                          SELECT 1 FROM rh_messages m
-                            JOIN rh_conversations o ON o.id = m.conversation_id
-                           WHERE o.session_key = c.session_key
-                      )
+                WHERE NOT EXISTS (SELECT 1 FROM rh_messages m WHERE m.conversation_id = c.id)
                   AND NOT EXISTS (
                           SELECT 1 FROM rh_session_tombstones t WHERE t.session_key = c.session_key
                       )
                 GROUP BY c.session_key
+               HAVING count(*) = (
+                          SELECT count(*) FROM rh_conversations o WHERE o.session_key = c.session_key
+                      )
                 ORDER BY max(c.updated_at) DESC
                 LIMIT $1"#,
             i64::from(limit)

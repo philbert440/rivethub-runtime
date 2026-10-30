@@ -206,7 +206,7 @@ async fn a_summary_cited_by_a_wiki_page_marks_the_session_cited(pool: PgPool) ->
     crate::common::install_graphile(&pool).await?;
     let memory = PostgresMemory::new(pool.clone());
     let (deleted, sibling) = session_delete::seed(&memory).await?;
-    let summaries = seed_related(&pool, &deleted).await?;
+    let summaries = seed_related(&pool, &sibling).await?;
     sqlx::query("INSERT INTO rh_wiki_topics (slug, title) VALUES ('release', 'Release')")
         .execute(&pool)
         .await?;
@@ -218,11 +218,11 @@ async fn a_summary_cited_by_a_wiki_page_marks_the_session_cited(pool: PgPool) ->
         .session_activity(&[deleted.as_str().to_owned(), sibling.as_str().to_owned()])
         .await?;
     assert_eq!(
-        activity.get(deleted.as_str()).map(|entry| entry.cited),
+        activity.get(sibling.as_str()).map(|entry| entry.cited),
         Some(true)
     );
     assert_eq!(
-        activity.get(sibling.as_str()).map(|entry| entry.cited),
+        activity.get(deleted.as_str()).map(|entry| entry.cited),
         Some(false)
     );
     Ok(())

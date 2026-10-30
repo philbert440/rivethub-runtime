@@ -225,7 +225,7 @@ async fn a_summary_cited_by_a_wiki_page_marks_the_session_cited() -> TestResult 
     let (directory, store) = store()?;
     let (deleted, sibling) = session_delete::seed(&store).await?;
     let conn = connection(&directory)?;
-    seed_related(&conn, &deleted, "d")?;
+    seed_related(&conn, &sibling, "s")?;
     conn.execute(
         "INSERT INTO ros_wiki_topics (slug, title, created_at, updated_at)
          VALUES ('release', 'Release', '2026-10-27T12:00:00.000Z', '2026-10-27T12:00:00.000Z')",
@@ -233,18 +233,18 @@ async fn a_summary_cited_by_a_wiki_page_marks_the_session_cited() -> TestResult 
     )?;
     conn.execute(
         "INSERT INTO ros_wiki_citations (topic_slug, summary_id, cited_at)
-         VALUES ('release', 'd-summary-0', '2026-10-27T12:00:00.000Z')",
+         VALUES ('release', 's-summary-0', '2026-10-27T12:00:00.000Z')",
         [],
     )?;
     let activity = store
         .session_activity(&[deleted.as_str().to_owned(), sibling.as_str().to_owned()])
         .await?;
     assert_eq!(
-        activity.get(deleted.as_str()).map(|entry| entry.cited),
+        activity.get(sibling.as_str()).map(|entry| entry.cited),
         Some(true)
     );
     assert_eq!(
-        activity.get(sibling.as_str()).map(|entry| entry.cited),
+        activity.get(deleted.as_str()).map(|entry| entry.cited),
         Some(false)
     );
     Ok(())

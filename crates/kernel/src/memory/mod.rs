@@ -48,6 +48,7 @@ pub use deletion::SessionDeletion;
 pub use deletion::Speaker;
 pub use deletion::SpokenTurn;
 pub use deletion::TOMBSTONE_PURGE_BATCH;
+pub use deletion::TRASH_MESSAGES_MAX;
 pub use deletion::TrashReason;
 pub use deletion::TrashSignals;
 pub use deletion::TrashVerdict;
