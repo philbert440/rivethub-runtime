@@ -64,6 +64,9 @@ pub struct HostSettings {
     pub inherited: Vec<(OsString, OsString)>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PairedDevice;
+
 #[derive(Debug, thiserror::Error)]
 pub enum HostError {
     #[error("{0}")]
@@ -76,6 +79,8 @@ pub enum HostError {
     Unavailable(String),
     #[error("{0}")]
     Unconfinable(String),
+    #[error("approving permissions needs a paired device certificate")]
+    DeviceRequired,
     #[error(transparent)]
     Approval(#[from] kernel::plugins::ApprovalError),
     #[error(transparent)]

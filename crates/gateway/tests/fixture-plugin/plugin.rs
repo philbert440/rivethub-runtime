@@ -48,6 +48,22 @@ fn main() {
         say("the plug-in contract variables are missing");
         return;
     };
+    if environment.text("FIXTURE_IGNORE_SIGTERM") == Some("1") {
+        let mut stubborn = nix::sys::signal::SigSet::empty();
+        stubborn.add(nix::sys::signal::Signal::SIGTERM);
+        if let Err(error) = nix::sys::signal::sigprocmask(
+            nix::sys::signal::SigmaskHow::SIG_BLOCK,
+            Some(&stubborn),
+            None,
+        ) {
+            say(&format!("SIGTERM not blocked: {error}"));
+        }
+        std::thread::spawn(move || {
+            while let Ok(signal) = stubborn.wait() {
+                say(&format!("ignored {signal}"));
+            }
+        });
+    }
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

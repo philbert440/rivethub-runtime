@@ -578,9 +578,11 @@ the field, and an id already installed is `409` (from the same directory the mes
 /api/plugins/{id}/enable` takes `{approve}` (`{}` when nothing is pending), which must name exactly the `pending`
 permissions (`409` `permissions_unapproved` listing them, `400` `not_pending` for one not pending, `409`
 `sandbox_unavailable` for a `host.*` permission on a kernel without Landlock, note 50); it grants them, starts the
-process and answers the record. While anything is pending, only a caller presenting a paired device
-certificate (a device certificate the node maps to its owner) can enable: a node or agent certificate, a bearer token or
-a loopback caller is `403` `device_certificate_required`. This one check sits apart from the owner check
+process and answers the record. An enable that grants a permission the plug-in does not hold yet needs a caller
+presenting a paired device certificate (a device certificate the node maps to its owner): a node or agent certificate, a
+bearer token or a loopback caller is `403` `device_certificate_required`. rh checks it under the lock that orders
+enable, reload and the other changes, against exactly the permissions that call grants, so a reload queued ahead of it
+cannot swap in permissions the check never saw. The device is read apart from the owner check
 (`routes/plugins/approval.rs`) until the approval identity is decided. `POST …/disable` stops it and keeps its grants,
 settings and data. `POST …/reload` reads the manifest again: an invalid one is `400` and changes nothing; fewer
 permissions narrow the grant at once; more stop the process in `awaitingApproval` with the new ones `pending` until
