@@ -38,11 +38,7 @@ pub(crate) fn agents(directory: &AgentDirectory) -> Result<String, Error> {
 }
 
 pub(crate) fn task(outcome: &DelegateOutcome, elapsed: std::time::Duration) -> String {
-    let status = if outcome.timed_out {
-        "timeout".to_owned()
-    } else {
-        outcome.status.to_string()
-    };
+    let status = outcome.status.to_string();
     let mut meta = vec![format!("{}ms", elapsed.as_millis())];
     if let Some(total) = outcome
         .result
@@ -65,6 +61,12 @@ pub(crate) fn task(outcome: &DelegateOutcome, elapsed: std::time::Duration) -> S
             })
             .unwrap_or_else(|| "[no response from remote agent]".to_owned());
         return format!("{response}{meta_line}");
+    }
+    if outcome.timed_out {
+        return format!(
+            "[{status}] task {} is still {status}; the wait ended and the task keeps running.{meta_line}",
+            outcome.id
+        );
     }
     let reason = outcome
         .error

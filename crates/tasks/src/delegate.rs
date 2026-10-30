@@ -304,7 +304,9 @@ where
         if cancel.is_cancelled() {
             return Err(DelegationError::Cancelled);
         }
-        let millis = wall_ms(request.timeout).map_err(classify)?;
+        if request.timeout.is_zero() {
+            return Err(classify(Error::TimeoutRange));
+        }
         let directory = self.directory().await.map_err(classify)?;
         let target = directory
             .delegation_target(&request.target, request.node.as_deref())
@@ -315,7 +317,7 @@ where
         } else {
             TaskOrigin::Tool
         };
-        let created = task_request(&request, target, millis, directory.local_node());
+        let created = task_request(&request, target, directory.local_node());
         let id = self
             .submit(NewTask {
                 request: created,
@@ -324,30 +326,19 @@ where
             .await
             .map_err(classify)?;
         if cancel.is_cancelled() {
-            return self.abort(id).await;
+            return Err(DelegationError::Cancelled);
         }
         self.wait(id, request.timeout, cancel).await
     }
 }
 
-fn wall_ms(timeout: Duration) -> Result<u64, Error> {
-    if timeout.is_zero() {
-        return Err(Error::TimeoutRange);
-    }
-    u64::try_from(timeout.as_millis()).map_err(|_| Error::TimeoutRange)
-}
-
 fn task_request(
     request: &DelegateRequest,
     target: DelegationTarget,
-    millis: u64,
     local_node: &str,
 ) -> TaskCreateRequest {
     let input = target.input;
-    let budget = TaskBudget {
-        max_wall_clock_ms: Some(millis),
-        ..TaskBudget::default()
-    };
+    let budget = TaskBudget::default();
     let mut overrides = TaskOverrides {
         model: request.model.clone(),
         exclude_tools: Some(vec!["delegate_task".to_owned()]),
@@ -405,7 +396,7 @@ where
             }
             tokio::select! {
                 biased;
-                () = cancel.cancelled() => return self.abort(id).await,
+                () = cancel.cancelled() => return Err(DelegationError::Cancelled),
                 () = tokio::time::sleep_until(deadline) => {
                     let record = self.load(id).await.map_err(classify)?;
                     let done = terminal(record.status);
@@ -415,17 +406,6 @@ where
                     changed.map_err(|error| DelegationError::Failed(Box::new(error)))?;
                 }
             }
-        }
-    }
-
-    async fn abort(&self, id: uuid::Uuid) -> Result<DelegateOutcome, DelegationError> {
-        match self.kill(id).await {
-            Ok(_status) => {
-                self.publish(id);
-                Err(DelegationError::Cancelled)
-            }
-            Err(Error::Conflict { .. } | Error::Cancelled) => Err(DelegationError::Cancelled),
-            Err(error) => Err(classify(error)),
         }
     }
 }

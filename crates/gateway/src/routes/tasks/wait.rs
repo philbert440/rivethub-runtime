@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use chrono::Utc;
 use kernel::tasks::ApprovalError;
-use kernel::tasks::ConflictAction;
-use kernel::tasks::TaskError;
 use uuid::Uuid;
 use wire::task::TaskApprovalRequest;
 use wire::task::TaskWire;
@@ -18,7 +15,7 @@ use super::present::to_wire;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum OnTimeout {
-    Kill,
+    Report,
     Leave,
 }
 
@@ -112,23 +109,11 @@ async fn deadline_hit(
 ) -> Result<WaitHit, TaskHttpError> {
     match policy {
         OnTimeout::Leave => Ok(WaitHit::Deadline(None)),
-        OnTimeout::Kill => kill_and_load(api, id).await,
+        OnTimeout::Report => current(api, id).await,
     }
 }
 
-async fn kill_and_load(api: &TasksApi, id: Uuid) -> Result<WaitHit, TaskHttpError> {
-    let outcome = api.store.kill(id, Utc::now()).await;
-    if let Err(error) = &outcome
-        && !matches!(
-            error,
-            TaskError::Conflict {
-                action: ConflictAction::Kill,
-                ..
-            }
-        )
-    {
-        return Err(store_error(error));
-    }
+async fn current(api: &TasksApi, id: Uuid) -> Result<WaitHit, TaskHttpError> {
     let task = api
         .store
         .load(id)

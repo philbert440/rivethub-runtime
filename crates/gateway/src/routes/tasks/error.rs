@@ -8,7 +8,6 @@ use wire::task::TaskWaitTimeoutResponse;
 use wire::task::TaskWire;
 
 pub(super) const WAIT_LEFT: &str = "wait deadline exceeded";
-pub(super) const WAIT_KILLED: &str = "wait deadline exceeded — task killed";
 
 #[derive(Debug, thiserror::Error)]
 pub(super) enum TaskHttpError {
@@ -45,10 +44,10 @@ impl TaskHttpError {
         }
     }
 
-    pub(super) fn wait_killed(task: Option<TaskWire>) -> Self {
+    pub(super) fn wait_running(task: Option<TaskWire>) -> Self {
         Self::WaitExceeded {
             task: task.map(Box::new),
-            message: WAIT_KILLED,
+            message: WAIT_LEFT,
         }
     }
 }
