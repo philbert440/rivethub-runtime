@@ -19,6 +19,7 @@ use crate::listing::grok_title;
 use crate::listing::opencode_title;
 use crate::readers::TranscriptSlice;
 use crate::readers::codex::CodexTranscriptReader;
+use crate::readers::dsh::DshTranscriptReader;
 use crate::readers::grok::GrokTranscriptReader;
 use crate::readers::opencode::OpencodeTranscriptReader;
 use crate::writer::CaptureTransport;
@@ -30,6 +31,7 @@ pub enum StoreHarness {
     GrokBuild,
     Opencode,
     Codex,
+    Dsh,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,6 +72,13 @@ impl StoreHarness {
                 source: "codex-hook",
                 log: "codex-capture.log",
             },
+            Self::Dsh => Profile {
+                harness: HarnessId::Dsh,
+                agent: "rivet-deepseek",
+                channel: "dsh",
+                source: "dsh-hook",
+                log: "dsh-capture.log",
+            },
         }
     }
 
@@ -78,7 +87,9 @@ impl StoreHarness {
             (Self::GrokBuild, "Stop" | "PreCompact")
             | (Self::Opencode, "session.idle" | "session.error")
             | (Self::Codex, "Stop") => Some(Trigger::Capture),
-            (Self::GrokBuild | Self::Codex, "SessionEnd") => Some(Trigger::Finalize),
+            (Self::GrokBuild | Self::Codex, "SessionEnd") | (Self::Dsh, "turn/end") => {
+                Some(Trigger::Finalize)
+            }
             _ => None,
         }
     }
@@ -88,6 +99,7 @@ impl StoreHarness {
             Self::GrokBuild => roots.grok.clone(),
             Self::Opencode => roots.opencode.clone(),
             Self::Codex => roots.codex.clone(),
+            Self::Dsh => roots.dsh.clone(),
         }
     }
 }
@@ -97,6 +109,7 @@ enum Reader {
     Grok(GrokTranscriptReader),
     Opencode(OpencodeTranscriptReader),
     Codex(CodexTranscriptReader),
+    Dsh(DshTranscriptReader),
 }
 
 impl Reader {
@@ -108,6 +121,7 @@ impl Reader {
             Self::Grok(reader) => reader.capture(session).await,
             Self::Opencode(reader) => reader.capture(session).await,
             Self::Codex(reader) => reader.capture(session).await,
+            Self::Dsh(reader) => reader.capture(session).await,
         }
     }
 }
@@ -153,6 +167,7 @@ impl<T: CaptureTransport> StoreHook<T> {
                 Reader::Opencode(OpencodeTranscriptReader::new(store.clone()))
             }
             StoreHarness::Codex => Reader::Codex(CodexTranscriptReader::new(store.clone())),
+            StoreHarness::Dsh => Reader::Dsh(DshTranscriptReader::new(store.clone())),
         };
         Some(Self {
             harness,
@@ -237,6 +252,9 @@ impl<T: CaptureTransport> StoreHook<T> {
             StoreHarness::GrokBuild => grok_title(self.store.clone(), native.to_owned()).await,
             StoreHarness::Opencode => opencode_title(self.store.clone(), native.to_owned()).await,
             StoreHarness::Codex => codex_session_title(self.store.clone(), native.to_owned()).await,
+            StoreHarness::Dsh => {
+                crate::readers::dsh::title(self.store.clone(), native.to_owned()).await
+            }
         };
         match found {
             Ok(title) => title,

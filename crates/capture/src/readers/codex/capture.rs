@@ -15,8 +15,10 @@ use wire::message::Role;
 
 use super::super::message::StoreRole;
 use super::super::message::TranscriptSlice;
+use super::super::message::lenient;
 use super::super::message::line_number;
 use super::super::message::parse_json;
+use super::super::message::tool_input;
 use crate::listing::codex::injected;
 
 const SOURCE: &str = "codex-rollout";
@@ -90,21 +92,11 @@ struct Block {
     text: Option<String>,
 }
 
-#[serde_as]
-#[derive(Debug, Deserialize)]
-#[serde(transparent, bound = "T: Deserialize<'de>")]
-struct Lenient<T>(#[serde_as(as = "DefaultOnError")] Option<T>);
-
 #[derive(Debug, Serialize)]
 struct Pointer<'a> {
     source: &'static str,
     session_jsonl_path: &'a str,
     session_jsonl_line: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct Wrapped<'a> {
-    input: &'a RawValue,
 }
 
 struct Row {
@@ -207,7 +199,7 @@ fn fold(
                 tools.insert(id, name.clone());
             }
             let raw = payload.input.as_deref().or(payload.arguments.as_deref());
-            let tool_args = raw.map(arguments).transpose()?;
+            let tool_args = raw.map(tool_input).transpose()?;
             Some(Row {
                 role: Role::Tool,
                 content: format!("[tool] {name}"),
@@ -262,14 +254,6 @@ fn tool_name(payload: &Payload) -> String {
         .unwrap_or_else(|| "unknown".to_owned())
 }
 
-fn lenient<T: for<'de> Deserialize<'de>>(
-    raw: &RawValue,
-) -> Result<Option<T>, TranscriptReaderError> {
-    serde_json::from_str::<Lenient<T>>(raw.get())
-        .map(|lenient| lenient.0)
-        .map_err(encoding)
-}
-
 fn message_text(
     raw: Option<&RawValue>,
     wanted: &str,
@@ -307,26 +291,6 @@ fn reasoning_text(payload: &Payload) -> Result<Option<String>, TranscriptReaderE
         }
     }
     Ok((!joined.is_empty()).then_some(joined))
-}
-
-fn arguments(raw: &RawValue) -> Result<JsonObject, TranscriptReaderError> {
-    if let Some(object) = lenient::<JsonObject>(raw)? {
-        return Ok(object);
-    }
-    if let Some(text) = lenient::<String>(raw)? {
-        #[cfg_attr(
-            dylint_lib = "rr_lints",
-            expect(
-                fallback,
-                reason = "CONTRACT B3: a tool input that is not a JSON object is kept whole as the call's input, as the kit keeps it"
-            )
-        )]
-        let parsed = serde_json::from_str::<JsonObject>(&text).ok();
-        if let Some(object) = parsed {
-            return Ok(object);
-        }
-    }
-    JsonObject::from_serialize(&Wrapped { input: raw }).map_err(encoding)
 }
 
 fn failure(raw: &RawValue) -> bool {

@@ -60,6 +60,7 @@ pub struct StoreRoots {
     pub omp: Option<PathBuf>,
     pub cursor: Option<PathBuf>,
     pub cowork: Vec<PathBuf>,
+    pub dsh: Option<PathBuf>,
 }
 
 impl StoreRoots {
