@@ -358,7 +358,7 @@ impl Composition {
             .with_identity_required()
             .with_client_certificate_required(bind.require_client)
             .with_sessions(sessions.clone());
-        gateway = crate::service::with_voice_and_audio(gateway, config, env)?;
+        gateway = crate::service::with_voice(gateway, env)?;
         gateway = with_backing(with_session_stores(gateway, env), &backing);
         gateway = devices::attach(gateway, config, env, &identity.owner, shutdown).await?;
         let tracker = tokio_util::task::TaskTracker::new();

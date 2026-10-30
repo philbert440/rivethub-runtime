@@ -13,13 +13,18 @@ use wire::gateway::GatewayError;
 const REPLAYED: &[&str] = &[
     "plain-main/event-empty-body",
     "plain-main/event-invalid-json",
-    "plain-main/layout-post-invalid-json",
 ];
 
-const SKIPPED: &[(&str, &str)] = &[(
-    "plain-main/event-json-string",
-    "B2: a JSON string is a typed object-shape error (body must be a JSON object), not the legacy collapsed 422 not a valid v1 AgentEvent",
-)];
+const SKIPPED: &[(&str, &str)] = &[
+    (
+        "plain-main/event-json-string",
+        "B2: a JSON string is a typed object-shape error (body must be a JSON object), not the legacy collapsed 422 not a valid v1 AgentEvent",
+    ),
+    (
+        "plain-main/layout-post-invalid-json",
+        "B1: note 90 removed /layout; its recorded body still drives the /event invalid-JSON check",
+    ),
+];
 
 #[test]
 fn recorded_bad_json_bodies_match() {

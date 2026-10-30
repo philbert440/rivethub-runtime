@@ -29,12 +29,10 @@ use tower::util::MapRequestLayer;
 use wire::harness::HarnessId;
 
 use crate::auth::DenialLog;
-use crate::routes::audio::AudioBridge;
-use crate::routes::audio::VoiceProxy;
+use crate::routes::voice::VoiceProxy;
 
-pub use crate::routes::audio::AudioConfig;
-pub use crate::routes::audio::VoiceConfigError;
-pub use crate::routes::audio::VoiceSettings;
+pub use crate::routes::voice::VoiceConfigError;
+pub use crate::routes::voice::VoiceSettings;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const REVISION: Option<&str> = option_env!("RIVETHUB_BUILD_REVISION");
@@ -249,7 +247,6 @@ pub struct Gateway {
     certificate_authority: Option<Arc<dyn kernel::ca::CertificateAuthority>>,
     devices: routes::devices::DeviceRuntime,
     mesh_cache: routes::MeshCache,
-    audio: Option<AudioBridge>,
     voice: VoiceProxy,
     tasks: Option<Arc<tasks::Tasks>>,
     providers: Vec<kernel::model::ProviderHealth>,
@@ -301,7 +298,6 @@ impl Gateway {
             certificate_authority: None,
             devices: routes::devices::DeviceRuntime::unconfigured(),
             mesh_cache: routes::MeshCache::default(),
-            audio: None,
             voice: VoiceProxy::unconfigured(),
             tasks: None,
             providers: Vec::new(),
@@ -422,12 +418,6 @@ impl Gateway {
         self
     }
 
-    #[must_use]
-    pub fn with_audio(mut self, config: AudioConfig) -> Self {
-        self.audio = Some(AudioBridge::start(config));
-        self
-    }
-
     pub fn with_voice(mut self, settings: VoiceSettings) -> Result<Self, VoiceConfigError> {
         self.voice = VoiceProxy::from_settings(settings)?;
         Ok(self)
@@ -492,9 +482,6 @@ impl Gateway {
         if let Some(host) = &self.plugins {
             host.close().await;
         }
-        if let Some(audio) = &self.audio {
-            audio.shutdown().await;
-        }
         if let Some(terminal) = &self.terminal {
             terminal.close().await;
         }
@@ -502,10 +489,6 @@ impl Gateway {
             uploads.close().await;
         }
         self.sessions.close().await;
-    }
-
-    pub(crate) fn audio(&self) -> Option<&AudioBridge> {
-        self.audio.as_ref()
     }
 
     pub(crate) fn voice(&self) -> &VoiceProxy {

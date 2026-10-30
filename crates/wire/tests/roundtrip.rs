@@ -147,11 +147,6 @@ fn success_payload(
                 label, body,
             ));
         }
-        "/api/capabilities" => {
-            errors.push_result(roundtrip_as::<wire::gateway::devices::NodeCapabilities>(
-                label, body,
-            ));
-        }
         "/api/phone-pairing" => {
             errors.push_result(roundtrip_as::<
                 wire::gateway::devices::PhonePairingAvailability,
@@ -162,7 +157,7 @@ fn success_payload(
                 errors.push_result(roundtrip_as::<wire::gateway::GatewayError>(label, body));
             }
         }
-        "/session" | "/layout" => {
+        "/session" => {
             if status == 200 && ok_body {
                 errors.push_result(roundtrip_as::<wire::gateway::OkReply>(label, body));
             }
