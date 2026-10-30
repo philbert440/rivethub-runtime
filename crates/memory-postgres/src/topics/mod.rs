@@ -2,6 +2,7 @@ mod bulk;
 mod decisions;
 mod filing;
 mod history;
+mod inherited;
 mod mentions;
 mod rows;
 mod startup;

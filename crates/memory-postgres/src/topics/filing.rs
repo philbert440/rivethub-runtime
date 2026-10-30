@@ -236,9 +236,11 @@ impl FilingStore for PostgresMemory {
                     last_active: found.iter().filter_map(|row| row.last_active).max(),
                     node: found.iter().find_map(|row| row.node.clone()),
                     placement,
+                    lineage: None,
                 }
             })
             .collect();
+        sessions.extend(super::inherited::sessions(&self.pool, Some(topic)).await?);
         sessions.sort_by_key(|filed| Reverse(filed.last_active));
         let mut conversations = filed_conversations(&self.pool, topic).await?;
         conversations.sort_by_key(|filed| Reverse(filed.last_active));
@@ -270,6 +272,17 @@ impl FilingStore for PostgresMemory {
         .fetch_one(&self.pool)
         .await
         .map_err(failed("filing corrected"))
+    }
+
+    async fn delegated(&self, target: &Target) -> Result<bool, TopicError> {
+        let Target::Session(session) = target else {
+            return Ok(false);
+        };
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM rh_tasks WHERE child_session_id = $1)")
+            .bind(session.as_str())
+            .fetch_one(&self.pool)
+            .await
+            .map_err(failed("delegated session"))
     }
 
     async fn correct(&self, correction: Correction) -> Result<(), TopicError> {

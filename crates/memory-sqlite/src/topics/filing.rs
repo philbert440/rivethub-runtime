@@ -204,6 +204,22 @@ impl FilingStore for SqliteStore {
         .await
     }
 
+    async fn delegated(&self, target: &Target) -> Result<bool, TopicError> {
+        let Target::Session(session) = target else {
+            return Ok(false);
+        };
+        let session = session.as_str().to_owned();
+        self.topics("delegated session", move |conn| {
+            conn.query_row(
+                "SELECT EXISTS (SELECT 1 FROM rh_tasks WHERE child_session_id = ?1)",
+                params![session],
+                |row| row.get(0),
+            )
+            .map_err(failed("delegated session"))
+        })
+        .await
+    }
+
     async fn correct(&self, correction: Correction) -> Result<(), TopicError> {
         self.topics("filing correction", move |conn| {
             let (session, conversation) = match &correction.target {
@@ -435,8 +451,10 @@ fn filed_sessions(conn: &Connection, topic: TopicId) -> Result<Vec<FiledSession>
             last_active,
             node: found.iter().find_map(|row| row.node.clone()),
             placement,
+            lineage: None,
         });
     }
+    sessions.extend(super::inherited::sessions(conn, Some(topic))?);
     sessions.sort_by_key(|filed| Reverse(filed.last_active));
     Ok(sessions)
 }

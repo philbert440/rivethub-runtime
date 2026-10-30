@@ -41,6 +41,7 @@ pub use page_edit::PageEdit;
 pub use page_edit::edit_topic_page;
 pub use page_sync::SyncTopicPage;
 pub use placement::HistoryMark;
+pub use placement::Lineage;
 pub use placement::PlacedSession;
 pub use placement::Placement;
 pub use placement::PlacementOutcome;

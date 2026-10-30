@@ -8,6 +8,7 @@ use super::CorrectionExample;
 use super::Target;
 use crate::memory::ConversationHead;
 use crate::topics::HistoryMark;
+use crate::topics::Lineage;
 use crate::topics::Placement;
 use crate::topics::PlacementSource;
 use crate::topics::TopicError;
@@ -47,6 +48,7 @@ pub struct FiledSession {
     pub title: Option<String>,
     pub last_active: Option<DateTime<Utc>>,
     pub node: Option<String>,
+    pub lineage: Option<Lineage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +135,8 @@ pub trait FilingStore: Send + Sync {
     async fn corrections(&self, limit: u32) -> Result<Vec<CorrectionExample>, TopicError>;
 
     async fn corrected(&self, target: &Target) -> Result<bool, TopicError>;
+
+    async fn delegated(&self, target: &Target) -> Result<bool, TopicError>;
 
     async fn topic_lines(&self) -> Result<Vec<TopicLine>, TopicError>;
 }

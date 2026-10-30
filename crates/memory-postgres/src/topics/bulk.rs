@@ -87,6 +87,9 @@ pub(super) async fn all_filed(pool: &PgPool) -> Result<AllFiled, TopicError> {
             (None, Some(_)) => return Err(missing("topic_id")),
         }
     }
+    filed
+        .sessions
+        .extend(super::inherited::sessions(pool, None).await?);
     Ok(filed)
 }
 
@@ -117,6 +120,7 @@ fn session_row(row: FilingRow, topic: Uuid) -> Result<FiledSession, TopicError> 
         title: row.title,
         last_active: row.last_active,
         node: row.node,
+        lineage: None,
     })
 }
 

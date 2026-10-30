@@ -104,6 +104,9 @@ pub(super) fn all_filed(conn: &Connection) -> Result<AllFiled, TopicError> {
             (None, Some(_)) => return Err(missing("topic_id")),
         }
     }
+    filed
+        .sessions
+        .extend(super::inherited::sessions(conn, None)?);
     Ok(filed)
 }
 
@@ -138,6 +141,7 @@ fn session_row(row: FilingRow, topic: String) -> Result<FiledSession, TopicError
         title: row.title,
         last_active: last_active(row.last_active.as_deref())?,
         node: row.node,
+        lineage: None,
     })
 }
 

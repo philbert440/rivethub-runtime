@@ -8764,6 +8764,22 @@
             "string",
             "null"
           ]
+        },
+        "parentSessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "taskId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

@@ -190,6 +190,10 @@ pub struct TopicSession {
     pub last_active: Option<DateTime<Utc>>,
     #[serde(default)]
     pub node: Option<String>,
+    #[serde(default)]
+    pub parent_session_id: Option<SessionId>,
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 #[serde_as]

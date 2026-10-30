@@ -250,9 +250,17 @@ async fn child_session(env: &FilingEnv<'_>, filable: &Filable) -> Result<bool, W
     let Filable::Session(session) = filable else {
         return Ok(false);
     };
-    Ok(session_parent(env.topics.lineage.as_ref(), session)
+    if session_parent(env.topics.lineage.as_ref(), session)
         .await?
-        .is_some())
+        .is_some()
+    {
+        return Ok(true);
+    }
+    Ok(env
+        .topics
+        .filing
+        .delegated(&Target::Session(session.clone()))
+        .await?)
 }
 
 async fn task_topic(

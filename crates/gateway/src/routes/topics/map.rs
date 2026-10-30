@@ -173,6 +173,8 @@ pub(super) fn filed_session(filed: FiledSession) -> TopicSession {
         title: filed.title,
         last_active: filed.last_active,
         node: filed.node,
+        parent_session_id: filed.lineage.as_ref().map(|lineage| lineage.parent.clone()),
+        task_id: filed.lineage.map(|lineage| lineage.task.to_string()),
     }
 }
 

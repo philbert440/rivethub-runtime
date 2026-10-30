@@ -1,3 +1,4 @@
+use memory_postgres::PostgresMemory;
 use memory_postgres::PostgresTasks;
 use sqlx::PgPool;
 use testkit::tasks;
@@ -17,5 +18,16 @@ async fn a_running_task_is_reaped_only_when_its_liveness_goes_stale(pool: PgPool
     tasks::a_running_task_is_reaped_only_when_its_liveness_goes_stale(&PostgresTasks::from_pool(
         pool,
     ))
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_delegated_child_is_filed_under_its_parents_topic(pool: PgPool) -> TestResult {
+    let memory = PostgresMemory::new(pool.clone());
+    tasks::a_delegated_child_is_filed_under_its_parents_topic(
+        &PostgresTasks::from_pool(pool),
+        &memory,
+        &memory,
+    )
     .await
 }

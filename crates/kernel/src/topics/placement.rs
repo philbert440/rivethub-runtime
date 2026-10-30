@@ -31,6 +31,12 @@ impl PlacementSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lineage {
+    pub parent: SessionId,
+    pub task: uuid::Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Placement {
     pub session: SessionId,
     pub topic: TopicId,
