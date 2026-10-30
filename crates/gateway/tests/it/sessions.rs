@@ -438,6 +438,18 @@ async fn submit_in_terminal(fixture: &Fixture) -> tokio_util::sync::Cancellation
     stop
 }
 
+async fn held(harness: &session_support::harness::Harness, prompt: &str) {
+    let ran = tokio::time::timeout(
+        std::time::Duration::from_millis(200),
+        harness.traced(prompt),
+    );
+    assert!(
+        ran.await.is_err(),
+        "{prompt} ran while the terminal was busy"
+    );
+    assert_eq!(*harness.trace.borrow(), Vec::<String>::new());
+}
+
 #[tokio::test]
 async fn an_idle_terminal_hands_the_session_to_chat_at_once() {
     let harness = Arc::new(session_support::harness::Harness::default());
@@ -459,8 +471,7 @@ async fn a_terminal_that_exits_mid_turn_runs_the_queued_chat() {
     chat.prompt("later".into(), None, Vec::new(), Vec::new())
         .await
         .expect("queued");
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    assert_eq!(*harness.trace.borrow(), Vec::<String>::new());
+    held(&harness, "prompt:later").await;
     fixture.mux.exit(&TerminalId::new("pty-1"), 0);
     harness.traced("prompt:later").await;
     assert!(!fixture.mux.calls.borrow().contains(&Call::Kill));
@@ -477,8 +488,7 @@ async fn terminal_first_session_queues_chat_until_the_hook_and_delete_releases_c
     chat.prompt("queued".into(), None, Vec::new(), Vec::new())
         .await
         .expect("queued");
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    assert_eq!(*harness.trace.borrow(), Vec::<String>::new());
+    held(&harness, "prompt:queued").await;
     chat.turn_end().await.expect("hook");
     harness.traced("prompt:queued").await;
     fixture
