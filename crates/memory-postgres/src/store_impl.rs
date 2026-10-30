@@ -45,6 +45,9 @@ impl crate::PostgresMemory {
         let channel = batch.channel.as_deref().ok_or(Error::MissingChannel)?;
         let owner = options.owner_user_id.as_deref();
         let mut writer = CaptureWriter::begin(&self.pool, &batch.session_key).await?;
+        if let Some(dropped) = dropped_when_deleted(&mut writer, batch).await? {
+            return Ok(dropped);
+        }
         let conversation_id = writer
             .upsert_conversation(&ConversationUpsert {
                 session_key: &batch.session_key,
@@ -194,6 +197,32 @@ fn append_event_id(entry: &MemoryEntry) -> Result<String, Error> {
     Ok(hex::encode(sha2::Sha256::digest(serde_json::to_vec(
         &input,
     )?)))
+}
+
+async fn dropped_when_deleted(
+    writer: &mut CaptureWriter<'_>,
+    batch: &CaptureBatchRequest,
+) -> Result<Option<CaptureResult>, Error> {
+    let Some(deleted_at) =
+        crate::deletion::tombstone_at(&mut writer.tx, &batch.session_key).await?
+    else {
+        return Ok(None);
+    };
+    let stamps = batch.messages.iter().map(|message| message.created_at);
+    if kernel::memory::used_since(deleted_at, stamps) {
+        crate::deletion::lift(&mut writer.tx, &batch.session_key).await?;
+        return Ok(None);
+    }
+    tracing::debug!(
+        session_key = %batch.session_key,
+        "capture dropped for a deleted session"
+    );
+    Ok(Some(CaptureResult {
+        ok: true,
+        conversation_id: String::new(),
+        inserted: 0,
+        skipped: u64::try_from(batch.messages.len())?,
+    }))
 }
 
 #[async_trait]

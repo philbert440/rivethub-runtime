@@ -13,6 +13,7 @@ pub mod memory;
 mod memory_archive;
 mod notifications;
 mod plugins;
+mod session_delete;
 pub mod sessions;
 pub mod tags;
 pub mod tasks;
@@ -55,6 +56,7 @@ pub(crate) fn router() -> axum::Router<Arc<Gateway>> {
         .merge(tidy::router())
         .merge(hub_state::router())
         .merge(plugins::router())
+        .merge(session_delete::router())
 }
 
 pub(crate) fn mount(router: Router<Arc<Gateway>>) -> Router<Arc<Gateway>> {

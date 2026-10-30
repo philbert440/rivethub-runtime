@@ -135,6 +135,7 @@ struct Backing<'tasks> {
     startup: Option<(Arc<dyn TopicPageStore>, Arc<dyn StartupStore>)>,
     tidy: Option<(Arc<dyn TidyStore>, Arc<dyn UpkeepStore>)>,
     summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
+    deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
     tasks: Option<&'tasks crate::agent::LocalTasks>,
 }
 
@@ -182,6 +183,10 @@ fn with_backing(gateway: Gateway, backing: &Backing<'_>) -> Gateway {
     };
     let gateway = match backing.summaries.clone() {
         Some(watch) => gateway.with_summary_watch(watch),
+        None => gateway,
+    };
+    let gateway = match backing.deletions.clone() {
+        Some(deletions) => gateway.with_session_deletion(deletions),
         None => gateway,
     };
     match backing.startup.clone() {
@@ -276,6 +281,7 @@ impl Composition {
             decisions: Some(memory.clone()),
             startup: Some((memory.clone(), memory.clone())),
             tidy: Some((memory.clone(), memory.clone())),
+            deletions: Some(memory.clone()),
             summaries: Some(memory.clone()),
             tasks: None,
         };
@@ -308,6 +314,7 @@ impl Composition {
             decisions: Some(store.clone()),
             startup: Some((store.clone(), store.clone())),
             tidy: Some((store.clone(), store.clone())),
+            deletions: Some(store.clone()),
             summaries: Some(store.clone()),
             tasks,
         };

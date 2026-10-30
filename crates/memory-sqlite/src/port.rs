@@ -364,6 +364,7 @@ fn tasks_for(role: WorkerRole) -> Vec<JobName> {
             fixed(FixedJob::EnqueueStaleSummaries),
             fixed(FixedJob::ReapDeadJobs),
             fixed(FixedJob::SyncTopicPage),
+            fixed(FixedJob::PurgeDeletedSessions),
         ],
         WorkerRole::Categorizer => vec![
             fixed(FixedJob::FileConversation),
@@ -405,6 +406,7 @@ fn fixed_attempts(fixed: FixedJob) -> u32 {
         | FixedJob::EnqueueStaleSummaries
         | FixedJob::ReapDeadJobs
         | FixedJob::ProposeTidy
-        | FixedJob::SyncTopicPage => 5,
+        | FixedJob::SyncTopicPage
+        | FixedJob::PurgeDeletedSessions => 5,
     }
 }

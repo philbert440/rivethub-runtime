@@ -32,6 +32,7 @@ use wire::message::Role;
 use crate::BoxError;
 
 pub mod budget;
+mod deletion;
 mod embed;
 mod export;
 mod origin;
@@ -40,6 +41,18 @@ mod suggest;
 mod summary;
 mod title;
 
+pub use deletion::DeletedSession;
+pub use deletion::EMPTY_SESSIONS_MAX;
+pub use deletion::SessionActivity;
+pub use deletion::SessionDeletion;
+pub use deletion::Speaker;
+pub use deletion::SpokenTurn;
+pub use deletion::TOMBSTONE_PURGE_BATCH;
+pub use deletion::TrashReason;
+pub use deletion::TrashSignals;
+pub use deletion::TrashVerdict;
+pub use deletion::trash_verdict;
+pub use deletion::used_since;
 pub use embed::EmbedModelMismatch;
 pub use embed::EmbedTable;
 pub use embed::EmbedTarget;

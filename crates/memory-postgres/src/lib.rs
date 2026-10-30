@@ -4,6 +4,7 @@ mod agent_presets;
 pub mod capture;
 mod cleanup;
 mod conversation;
+mod deletion;
 pub mod dump;
 pub mod embed;
 mod embedding_store;
@@ -65,7 +66,7 @@ pub use queue::PostgresQueue;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-pub const SCHEMA_VERSION: i64 = 37;
+pub const SCHEMA_VERSION: i64 = 39;
 pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]

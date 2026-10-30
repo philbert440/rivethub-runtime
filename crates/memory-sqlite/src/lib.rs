@@ -2,6 +2,7 @@ mod append;
 pub mod capture;
 mod context;
 mod conversation;
+mod deletion;
 mod embed_store;
 pub mod error;
 pub mod export;
@@ -92,7 +93,7 @@ impl SharedClock {
     }
 }
 
-pub const SCHEMA_VERSION: i64 = 23;
+pub const SCHEMA_VERSION: i64 = 24;
 
 const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
@@ -356,7 +357,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(state, (crate::SCHEMA_VERSION, 62));
+        assert_eq!(state, (crate::SCHEMA_VERSION, 63));
     }
 
     #[tokio::test]

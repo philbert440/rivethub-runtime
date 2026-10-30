@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.session_key AS \"session_key!\"\n                 FROM rh_conversations c\n                WHERE NOT EXISTS (\n                          SELECT 1 FROM rh_messages m\n                            JOIN rh_conversations o ON o.id = m.conversation_id\n                           WHERE o.session_key = c.session_key\n                      )\n                  AND NOT EXISTS (\n                          SELECT 1 FROM rh_session_tombstones t WHERE t.session_key = c.session_key\n                      )\n                GROUP BY c.session_key\n                ORDER BY max(c.updated_at) DESC\n                LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_key!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "rh_conversations",
+            "name": "session_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6f4aac0aaf37816c01e148c5145a38f30e01372838d33093c7099d12265d4d5b"
+}

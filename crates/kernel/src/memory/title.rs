@@ -1,6 +1,5 @@
 pub const SUMMARY_TITLE_MAX_CHARS: usize = 80;
 
-const UNTITLED: &str = "untitled";
 const SESSION_SUFFIX: &str = " session";
 const IMPORTED_SUFFIX: &str = " session (imported)";
 const AGENTS_HEADER: &str = "# AGENTS.md instructions";
@@ -16,6 +15,19 @@ enum PlaceholderHarness {
     Opencode,
     Pi,
     QwenCode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
+#[strum(ascii_case_insensitive)]
+enum DefaultTitle {
+    #[strum(serialize = "untitled")]
+    Untitled,
+    #[strum(serialize = "new session")]
+    NewSession,
+    #[strum(serialize = "new chat")]
+    NewChat,
+    #[strum(serialize = "new conversation")]
+    NewConversation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString)]
@@ -79,6 +91,9 @@ pub fn summary_title(content: &str) -> Option<String> {
 
 fn placeholder(title: &str) -> bool {
     let folded = collapsed(title).to_lowercase();
+    if folded.parse::<DefaultTitle>().is_ok() {
+        return true;
+    }
     if let Some(name) = folded.strip_suffix(IMPORTED_SUFFIX) {
         return !name.is_empty() && !name.contains(' ');
     }
@@ -144,9 +159,7 @@ fn framing(heading: &str) -> bool {
 }
 
 fn titles(text: &str) -> bool {
-    text.chars().any(char::is_alphabetic)
-        && !text.eq_ignore_ascii_case(UNTITLED)
-        && names_session(text)
+    text.chars().any(char::is_alphabetic) && names_session(text)
 }
 
 fn prose_title(content: &str) -> Option<String> {
@@ -217,6 +230,8 @@ mod tests {
             "kimi code  session",
             "Claude Code session",
             "dsh session",
+            "Untitled",
+            "new  chat",
             "opus session (imported)",
             "<recommended_plugins> Here is a list of plugins that are",
             "# AGENTS.md instructions <INSTRUCTIONS> # CODEX.md",

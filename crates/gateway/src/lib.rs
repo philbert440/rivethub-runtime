@@ -262,6 +262,7 @@ pub struct Gateway {
     upkeep: Option<Arc<dyn kernel::tidy::UpkeepStore>>,
     plugins: Option<Arc<plugins::PluginHost>>,
     summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
+    deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
 }
 
 struct StartupMemory {
@@ -314,6 +315,7 @@ impl Gateway {
             upkeep: None,
             plugins: None,
             summaries: None,
+            deletions: None,
         }
     }
 

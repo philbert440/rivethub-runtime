@@ -11,7 +11,7 @@ use config::{Config, Environment, ServiceSwitch};
 use gateway::server::ServeOptions;
 use kernel::filing::FilingStore;
 use kernel::memory::jobs::UnembeddedStore;
-use kernel::memory::{EmbeddingStore, MemoryStore, SummaryStore};
+use kernel::memory::{EmbeddingStore, MemoryStore, SessionDeletion, SummaryStore};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::shutdown::Activities;
 use kernel::tasks::Delegation;
@@ -513,6 +513,9 @@ async fn build_runners(
                 .runner
                 .with_unembedded(Arc::clone(store) as Arc<dyn UnembeddedStore>);
         }
+        runner.runner = runner
+            .runner
+            .with_session_deletion(Arc::clone(store) as Arc<dyn SessionDeletion>);
         if matches!(
             role,
             ProcessRole::Embedder | ProcessRole::Summarizer | ProcessRole::Categorizer

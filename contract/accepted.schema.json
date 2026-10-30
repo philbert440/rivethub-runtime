@@ -4869,6 +4869,167 @@
         "cmd"
       ]
     },
+    "SessionDeleted": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "session": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "conversations": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "messages": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "summaries": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "ok",
+        "session",
+        "conversations",
+        "messages",
+        "summaries"
+      ]
+    },
+    "SessionDeleteRequest": {
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionId"
+          }
+        }
+      },
+      "required": [
+        "sessions"
+      ]
+    },
+    "SessionDeleteError": {
+      "type": "string",
+      "enum": [
+        "session is live",
+        "not found",
+        "delete failed"
+      ]
+    },
+    "SessionDeleteRefused": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "error": {
+          "$ref": "#/$defs/SessionDeleteError"
+        }
+      },
+      "required": [
+        "session",
+        "ok",
+        "error"
+      ]
+    },
+    "SessionDeleteResult": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SessionDeleted"
+        },
+        {
+          "$ref": "#/$defs/SessionDeleteRefused"
+        }
+      ]
+    },
+    "SessionDeleteResults": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionDeleteResult"
+          }
+        }
+      },
+      "required": [
+        "results"
+      ]
+    },
+    "SessionTrashReason": {
+      "type": "string",
+      "enum": [
+        "empty",
+        "one-word-reply"
+      ]
+    },
+    "SessionTrashCandidate": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "$ref": "#/$defs/SessionId"
+        },
+        "harness": {
+          "$ref": "#/$defs/HarnessId"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "reason": {
+          "$ref": "#/$defs/SessionTrashReason"
+        },
+        "userTurns": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reply": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session",
+        "harness",
+        "updatedAt",
+        "reason",
+        "userTurns"
+      ]
+    },
+    "SessionTrashList": {
+      "type": "object",
+      "properties": {
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SessionTrashCandidate"
+          }
+        }
+      },
+      "required": [
+        "candidates"
+      ]
+    },
     "TranscriptTurn": {
       "type": "object",
       "properties": {

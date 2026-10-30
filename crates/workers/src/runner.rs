@@ -91,6 +91,7 @@ pub struct Runner<Q> {
     topics: Option<crate::SessionTopics>,
     topic_pages: Option<crate::topic_page::TopicPages>,
     tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
+    deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
     queue: Arc<Q>,
     targets: Arc<dyn EmbeddingStore>,
     summaries: Arc<dyn SummaryStore>,
@@ -124,6 +125,7 @@ where
             topics: None,
             topic_pages: None,
             tidy: None,
+            deletions: None,
             queue,
             targets: deps.targets,
             summaries: deps.summaries,
@@ -198,6 +200,15 @@ where
     #[must_use]
     pub fn with_wiki_builder(mut self, deps: WikiBuilderDeps) -> Self {
         self.wiki = Some(deps);
+        self
+    }
+
+    #[must_use]
+    pub fn with_session_deletion(
+        mut self,
+        deletions: Arc<dyn kernel::memory::SessionDeletion>,
+    ) -> Self {
+        self.deletions = Some(deletions);
         self
     }
 
@@ -403,6 +414,7 @@ where
             topics: self.topics.clone(),
             topic_pages: self.topic_pages.clone(),
             tidy: self.tidy.clone(),
+            deletions: self.deletions.clone(),
         };
         let wake = Arc::clone(&self.wake);
         let open = Arc::clone(&self.open);

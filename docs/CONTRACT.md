@@ -14,7 +14,7 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 
 | # | Boundary | Who observes it | Spec (inventory) | Pinned by (recording) | Acceptance test |
 |---|---|---|---|---|---|
-| B1 | Gateway HTTP + WS API (`/api/*`, `/files/*`, `/term`, `/event(s)`, `/sessions`, `/state`, `/layout`, `/healthz`, `/mesh.json`, static SPA, `/ws`, `/v1` OpenAI-compatible; the Topics routes `GET/POST /api/topics`, `GET /api/topics/search?q=`, `GET/PATCH/DELETE /api/topics/{id}` (note 29), `POST /api/topics/{id}/merge`, `GET /api/topics/{id}/sessions`, `GET /api/topics/filing` and `GET /api/sessions/suggestions` (note 70), `GET/PUT /api/topics/{id}/page` (note 63), `GET/POST /api/topics/{id}/decisions`, `PATCH /api/topics/{id}/decisions/{decision}`, `POST /api/topics/{id}/decisions/{decision}/supersede` (note 27) and `GET/PUT/DELETE /api/sessions/{session}/placement`; `POST /api/harness-sessions` with optional `topicId` and `prompt`, answering with optional `startupContext`, and `GET /api/harness-sessions/{session}/startup-context` (note 24); `POST /term` and `POST /api/terminal` with optional `topicId` (note 25); the tool output route `GET /api/harness-sessions/{session}/tools/{tool}/output`; the hub state route `GET/PUT /api/hub/state` and its `hub.state` notice on `/api/events/ws`) | RivetHub web/Android/Electron, hooks, mesh peers, scripts | gateway-api.md §2–§17 (route table §4, aliases §5) | `golden/gateway/` (28 files, recorded traffic incl. startup refusals) + `golden/term/` (17) | replay every recorded exchange: same status, headers (names case-insensitive), body; WS frames in order |
+| B1 | Gateway HTTP + WS API (`/api/*`, `/files/*`, `/term`, `/event(s)`, `/sessions`, `/state`, `/layout`, `/healthz`, `/mesh.json`, static SPA, `/ws`, `/v1` OpenAI-compatible; the Topics routes `GET/POST /api/topics`, `GET /api/topics/search?q=`, `GET/PATCH/DELETE /api/topics/{id}` (note 29), `POST /api/topics/{id}/merge`, `GET /api/topics/{id}/sessions`, `GET /api/topics/filing` and `GET /api/sessions/suggestions` (note 70), `GET/PUT /api/topics/{id}/page` (note 63), `GET/POST /api/topics/{id}/decisions`, `PATCH /api/topics/{id}/decisions/{decision}`, `POST /api/topics/{id}/decisions/{decision}/supersede` (note 27) and `GET/PUT/DELETE /api/sessions/{session}/placement`; `POST /api/harness-sessions` with optional `topicId` and `prompt`, answering with optional `startupContext`, and `GET /api/harness-sessions/{session}/startup-context` (note 24); `POST /term` and `POST /api/terminal` with optional `topicId` (note 25); the tool output route `GET /api/harness-sessions/{session}/tools/{tool}/output`; the hub state route `GET/PUT /api/hub/state` and its `hub.state` notice on `/api/events/ws`; session deletion `DELETE /api/sessions/{session}`, `POST /api/sessions/delete` and `GET /api/sessions/trash` (note 75)) | RivetHub web/Android/Electron, hooks, mesh peers, scripts | gateway-api.md §2–§17 (route table §4, aliases §5) | `golden/gateway/` (28 files, recorded traffic incl. startup refusals) + `golden/term/` (17) | replay every recorded exchange: same status, headers (names case-insensitive), body; WS frames in order |
 | B2 | Session event stream v1 (`AgentEvent`, `v: 1`) and the room/session snapshot; a `POST /events` batch skips the elements of a kind this node doesn't know, keeps an unknown activity as `thinking`, and keeps the rest (note 73) | RivetHub clients `/ws` clients, `POST /event(s)` producers | gateway-api.md §6, core-domain.md §1.10 | gateway + term recordings (events and snapshots) | accept/reject decisions and emitted snapshots identical on recorded inputs |
 | B3 | Capture ingest: hook payloads from every harness → `POST /api/capture` batch body | 10 harness integration kits (claude, codex, grok, kimi, qwen, opencode, hermes, pi, cursor, cowork) | data-layer.md §3.1–§3.6; harness-control-plane.md §3 | `golden/capture/` (22: pg arms), `golden/capture-zod/` (batch validation) | same rows written for the same hook input; same validation errors |
 | B4 | Postgres schema and data (`rh_*` tables, migrations 0001–0020 including `0020_tag_removals`, then 0021 renames `ros_*` to `rh_*` with `ros_*` views over them, through 0028 `rh_session_startup` (note 24) and 0029 `rh_session_startup.delivered_via` (note 25), views, triggers, graphile_worker jobs). Migrations are applied only by `rivethub-migrate postgres`, which then requires every migration file name in `_rivetos_migrations`; the runtime verifies one schema version (`memory_postgres::SCHEMA_VERSION`) at connect — equal ok, newer ok with one warning, no `_sqlx_migrations` table a `NotAdopted` error (one `rivethub-migrate postgres` adopts it, including a database whose history is only `_rivetos_migrations`), behind a `SchemaBehind` error naming the migrate command — and runs no DDL | the live datahub, the TypeScript workers during cutover, operators | data-layer.md §1–§2 | `golden/capture/pg/` (30 scenarios), `golden/memory/` | Rust migrates a 0001-era DB to the same schema; writes rows the TypeScript reads and vice versa; enqueues the same jobs with the same keys |
@@ -849,8 +849,8 @@ awaiting approval says that a person approves it in the app (Settings › Plug-i
 call from a session rh can tell (note 57) whose owner is not the node's owner is refused. Answers are text results; a
 refusal or a failure is `isError`.
 (72) Session titles (Phil, 2026-10-30): a conversation title names its session unless it is blank, a harness
-placeholder (`<harness> session` for Claude Code, Codex, Grok Build, Kimi Code, dsh, OpenCode, Pi and Qwen Code, or
-`<name> session (imported)`), or starts with an injected context block (an XML-style `<tag>…</tag>`, or an
+placeholder (`<harness> session` for Claude Code, Codex, Grok Build, Kimi Code, dsh, OpenCode, Pi and Qwen Code,
+`<name> session (imported)`, or a default such as `Untitled`, `New session`, `New chat` or `New conversation`), or starts with an injected context block (an XML-style `<tag>…</tag>`, or an
 `# AGENTS.md instructions` header). `POST /api/capture` keeps a batch's `title` as the words after any leading injected
 blocks, and only when they name the session, so a placeholder or an injected block never replaces a stored title and a
 new conversation without one stays untitled; a later batch with the person's words replaces a placeholder. When a leaf
@@ -869,6 +869,39 @@ batch is ingested and `ingested` counts what was kept. Each batch logs its skipp
 their counts at debug, and each unknown kind or value is logged once at warn. An element of a known kind that does not
 validate otherwise still refuses the whole batch with `422 {"error": "event[i] is not a valid v1 AgentEvent"}`, as
 recorded; so does a batch that is not an array of 1–100 elements. `POST /event` is unchanged.
+(75) Session deletion (Phil, 2026-10-27): deleting a session removes its memory and hides it from the session lists;
+the harness's own transcript on disk is kept, so resume keeps working. `DELETE /api/sessions/{session}` takes the
+base64url session segment (as the placement route does) or the percent-encoded canonical `harness:native` id. A session
+the user cannot see, or one with neither a harness store row nor memory rows, is `404 {"error":"not found"}`; a live
+session (a chat, a summary that has not ended, or a running PTY) is `409 {"error":"session is live"}` and is never
+stopped. Otherwise every agent's conversation for that session key is deleted in one transaction, under the capture
+lock: its tags, deferred wiki notes and held entity candidates, its summaries (sources and wiki extractions cascade),
+its placement, suggestion, startup context, history mark and session filing corrections, then the conversations
+(messages, chunks and conversation filings cascade); wiki provenance, citations and topic decisions are left. The
+answer is `{"ok":true,"session","conversations","messages","summaries"}`. A tombstone (`rh_session_tombstones`,
+migration 0039; SQLite schema v24) is written in the same transaction and holds only until the session is used again.
+While it holds, both session lists omit the session unless its harness store row was updated after `deleted_at` (a
+resumed session is listed again; the read does not lift the tombstone), capture and append drop batches whose messages
+are all at or before `deleted_at` (a message without a timestamp counts as old; logged at debug, answered `ok` with
+nothing inserted), and the summarizer's 15-minute `deleted-session-sweep` (`purge-deleted-sessions`) deletes rows that
+writers outside rh add later. A capture or append batch with any message newer than `deleted_at` lifts the tombstone in
+its transaction and is captured whole; the sweep lifts the tombstone instead of purging when memory holds a message
+created after `deleted_at`. Tombstones that cannot be read leave the lists showing every session, logged at warn.
+`POST /api/sessions/delete` takes `{"sessions":[ids]}` (1 to 200 after removing duplicates) and answers
+`{"results":[...]}` with one deleted body or `{"session","ok":false,"error":"session is live"|"not found"|"delete
+failed"}` per session; one session's failure never fails the batch. `GET /api/sessions/trash` answers
+`{"candidates":[{"session","harness","title","updatedAt","reason","userTurns","reply"}]}`. It considers the sessions the
+lists show and, because the store listers leave out sessions that never had a user turn (such as the ones model
+discovery opens), every session remembered with no messages (at most 500, newest first) whose harness store still
+describes it on this node and whose harness this node runs. A candidate is visible, not tombstoned, not live, not a
+child session, last updated over an hour ago, has no tool rows, attachments, task, topic or conversation filing, or
+wiki-cited summary, its transcript reads (an unreadable transcript, or a memory key that is not a canonical session id,
+is never a candidate), and both memory and the transcript agree that it is `empty` (no user or assistant turn, and a
+title that does not name the session under note 72, or is its id) or a `one-word-reply` (one user turn of at most 280
+characters, at most one assistant turn whose non-blank text is a single word once whitespace and punctuation are
+trimmed). Nothing is deleted without a request naming it. The bodies are `wire::gateway::session_delete` in
+`contract/*.schema.json`; the verdict is `kernel::memory::trash_verdict`. The routes are new, with no TypeScript
+recording.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

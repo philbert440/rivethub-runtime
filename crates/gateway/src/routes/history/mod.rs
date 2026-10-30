@@ -9,7 +9,7 @@ use std::sync::Arc;
 use axum::extract::{Path, RawQuery, State};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use kernel::transcript::{ListLimit, SessionRenameError, StoreSession};
 use wire::gateway::sessions::{
     HarnessSessionResponse, HarnessSessionTitleRequest, HarnessSessionTranscriptResponse,
@@ -18,6 +18,7 @@ use wire::gateway::sessions::{
 use wire::harness::{
     HarnessCode, HarnessId, HarnessSessionList, HarnessSessionSummary, HarnessStoreSessionList,
 };
+use wire::session_id::SessionId;
 
 use super::terminal::require;
 use crate::Gateway;
@@ -73,10 +74,26 @@ pub(super) fn first_param(query: Option<&str>, name: &str) -> Result<Option<Stri
 }
 
 async fn listed(gateway: &Gateway, harnesses: &[HarnessId], limit: ListLimit) -> Vec<StoreSession> {
-    match gateway.session_lister() {
+    let rows = match gateway.session_lister() {
         Some(lister) => lister.list(harnesses, limit).await,
         None => Vec::new(),
-    }
+    };
+    let keys: Vec<String> = rows
+        .iter()
+        .map(|row| SessionId::new(row.harness, &row.id).as_str().to_owned())
+        .collect();
+    let deleted = super::session_delete::tombstoned(gateway, &keys).await;
+    rows.into_iter()
+        .zip(keys)
+        .filter(|(row, key)| {
+            !super::session_delete::hidden(
+                &deleted,
+                key,
+                DateTime::from_timestamp_millis(row.updated_at),
+            )
+        })
+        .map(|(row, _)| row)
+        .collect()
 }
 
 fn row_id(row: &StoreSession) -> &str {
@@ -87,7 +104,11 @@ fn row_parent(row: &StoreSession) -> Option<&str> {
     row.parent_session_id.as_deref()
 }
 
-fn visible_rows(gateway: &Gateway, user: &UserId, rows: Vec<StoreSession>) -> Vec<StoreSession> {
+pub(super) fn visible_rows(
+    gateway: &Gateway,
+    user: &UserId,
+    rows: Vec<StoreSession>,
+) -> Vec<StoreSession> {
     let registry = gateway.sessions();
     registry.stamp_nested(&rows, row_id, row_parent);
     registry.filter(user, rows, row_id, row_parent)
@@ -143,8 +164,20 @@ async fn plane(
         sessions.push(store_summary(&gateway, row, current).await);
         stored.insert(row.id.clone());
     }
+    let live_keys: Vec<String> = live
+        .iter()
+        .map(|(_, summary)| summary.session_id.as_str().to_owned())
+        .collect();
+    let deleted = super::session_delete::tombstoned(&gateway, &live_keys).await;
     for (key, summary) in live {
-        if !stored.contains(&key) && gateway.sessions().visible(&user, &key, None)? {
+        if !stored.contains(&key)
+            && !super::session_delete::hidden(
+                &deleted,
+                summary.session_id.as_str(),
+                Some(summary.updated_at),
+            )
+            && gateway.sessions().visible(&user, &key, None)?
+        {
             sessions.push(summary);
         }
     }

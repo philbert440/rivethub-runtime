@@ -28,10 +28,29 @@ impl SqliteStore {
             let tx = conn
                 .transaction()
                 .map_err(SqliteError::query("append begin"))?;
-            let ids = entries
-                .iter()
-                .map(|entry| append_one(&tx, entry, owner.as_deref(), now))
-                .collect::<Result<Vec<_>, _>>()?;
+            let mut admitted = std::collections::BTreeMap::new();
+            for entry in &entries {
+                if admitted.contains_key(&entry.session_id) {
+                    continue;
+                }
+                let stamps = entries
+                    .iter()
+                    .filter(|other| other.session_id == entry.session_id)
+                    .map(|other| other.created_at);
+                let admits = crate::deletion::admits(&tx, &entry.session_id, stamps)?;
+                admitted.insert(entry.session_id.clone(), admits);
+            }
+            let mut ids = Vec::with_capacity(entries.len());
+            for entry in &entries {
+                if admitted.get(&entry.session_id) == Some(&false) {
+                    tracing::debug!(
+                        session_key = %entry.session_id,
+                        "append dropped for a deleted session"
+                    );
+                    continue;
+                }
+                ids.push(append_one(&tx, entry, owner.as_deref(), now)?);
+            }
             tx.commit().map_err(SqliteError::query("append commit"))?;
             Ok(ids)
         })

@@ -411,7 +411,8 @@ pub(crate) fn attempts_for(name: &JobName) -> i32 {
             | FixedJob::EnqueueStaleWiki
             | FixedJob::EnqueueStaleSummaries
             | FixedJob::ReapDeadJobs
-            | FixedJob::ProposeTidy => 25,
+            | FixedJob::ProposeTidy
+            | FixedJob::PurgeDeletedSessions => 25,
         },
         JobName::RunTaskOn { .. } | JobName::Heartbeat { .. } => 1,
     }

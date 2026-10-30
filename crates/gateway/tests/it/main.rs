@@ -47,6 +47,7 @@ mod plugins;
 mod remote_client_auth;
 mod server;
 mod serving;
+mod session_delete;
 mod session_history;
 mod session_owners;
 mod session_replay;
