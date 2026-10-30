@@ -10,6 +10,7 @@ use testkit::fakes::FakeJobQueue;
 use tokio_util::sync::CancellationToken;
 use wiki_support::{TestResult, fixture, now, patch, provider, seed, seed_recording};
 use wire::message::MessageContent;
+use wire::stream::openai::FinishReason;
 use workers::wiki_builder::{
     WikiBuilderEnv, extract_wiki_job, handle_extract_wiki, handle_wiki_backfill,
 };
@@ -274,5 +275,43 @@ async fn wiki_backfill_requeues_old_done_and_failed_but_preserves_current_and_sk
         |cron| cron.task == JobName::Fixed(FixedJob::EnqueueWikiBackfill)
             && cron.schedule == "*/10 * * * *"
     ));
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn wiki_extraction_constrains_the_model_and_reads_loose_slugs_and_dates(
+    pool: PgPool,
+) -> TestResult {
+    let wiki = tempfile::tempdir()?;
+    let store = PostgresMemory::new(pool.clone()).with_wiki_directory(wiki.path().to_path_buf());
+    let job = seed(&pool).await?;
+    let answer = r#"[{"action":"create","slug":"AcmeKit/Deploys","title":"AcmeKit deploys","aliases":["","acmekit rollout"],"tags":["deploy"],"entities":[],"summary":"Deploys go blue-green.","article":null,"related":null,"history_entry":{"date":"2026-10-03T04:24:00Z","title":"Blue-green adopted","body":"Decided to deploy blue-green."},"kind":null}]"#;
+    let model = wiki_support::raw_provider(answer, FinishReason::Stop);
+    let queue = FakeJobQueue::default();
+    let cancel = CancellationToken::new();
+    let env = WikiBuilderEnv {
+        store: &store,
+        provider: &model,
+        queue: &queue,
+        model: "fake-chat",
+        now: now(),
+        cancel: &cancel,
+        topics: None,
+    };
+    let topics = handle_extract_wiki(&env, &extract_wiki_job(&job)?.payload).await?;
+    assert_eq!(topics, vec!["acmekit-deploys"]);
+    let calls = model.chat_requests().await;
+    let request = calls.first().ok_or("one request")?;
+    let MessageContent::Text(system) = &request.messages.first().ok_or("system")?.content else {
+        return Err("a text system prompt".into());
+    };
+    assert!(system.contains(r#""pattern":"^[a-z0-9]+(-[a-z0-9]+)*$""#));
+    assert!(system.contains(r#""format":"date""#));
+    let constraint = request
+        .options
+        .json_schema
+        .as_ref()
+        .ok_or("a response schema")?;
+    assert!(system.contains(&serde_json::to_string(constraint)?));
     Ok(())
 }

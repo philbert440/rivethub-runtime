@@ -6,7 +6,9 @@ use wire::message::Role;
 use wire::stream::openai::ChatCompletionRequest;
 use wire::stream::openai::ChatTemplateKwargs;
 use wire::stream::openai::FunctionDef;
+use wire::stream::openai::JsonSchemaFormat;
 use wire::stream::openai::MessageToolCall;
+use wire::stream::openai::ResponseFormat;
 use wire::stream::openai::StreamOptions;
 use wire::stream::openai::Tool;
 
@@ -144,6 +146,28 @@ pub fn chat_body(
                 _ => None,
             }),
         think: None,
+        response_format: request
+            .options
+            .json_schema
+            .as_ref()
+            .map(response_format)
+            .transpose()?,
+    })
+}
+
+fn response_format(schema: &impl serde::Serialize) -> Result<ResponseFormat, ModelProviderError> {
+    let schema =
+        wire::JsonObject::from_serialize(schema).map_err(|source| ModelProviderError::Request {
+            message: "the response schema does not serialize".to_owned(),
+            source: Box::new(source),
+        })?;
+    Ok(ResponseFormat {
+        kind: "json_schema".to_owned(),
+        json_schema: JsonSchemaFormat {
+            name: "response".to_owned(),
+            schema,
+            strict: true,
+        },
     })
 }
 

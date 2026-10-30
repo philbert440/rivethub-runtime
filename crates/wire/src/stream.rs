@@ -276,6 +276,21 @@ pub mod openai {
         pub stream_options: Option<StreamOptions>,
         pub chat_template_kwargs: Option<ChatTemplateKwargs>,
         pub think: Option<bool>,
+        pub response_format: Option<ResponseFormat>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+    pub struct ResponseFormat {
+        #[serde(rename = "type")]
+        pub kind: String,
+        pub json_schema: JsonSchemaFormat,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+    pub struct JsonSchemaFormat {
+        pub name: String,
+        pub schema: crate::JsonObject,
+        pub strict: bool,
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

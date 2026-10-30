@@ -180,6 +180,7 @@ async fn the_request_max_tokens_overrides_the_model_server_default() {
         options: kernel::model::ModelOptions {
             temperature: Some(0.2),
             enable_thinking: Some(false),
+            json_schema: Some(kernel::wiki::builder::extraction_schema()),
         },
         model: "test-model".to_owned(),
         messages: Vec::new(),
@@ -205,5 +206,15 @@ async fn the_request_max_tokens_overrides_the_model_server_default() {
         Some(wire::stream::openai::ChatTemplateKwargs {
             enable_thinking: false
         })
+    );
+    let format = sent.response_format.expect("a response format");
+    assert_eq!(
+        (format.kind.as_str(), format.json_schema.strict),
+        ("json_schema", true)
+    );
+    assert_eq!(
+        format.json_schema.schema,
+        wire::JsonObject::from_serialize(&kernel::wiki::builder::extraction_schema())
+            .expect("schema")
     );
 }
