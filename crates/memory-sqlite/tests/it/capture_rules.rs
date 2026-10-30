@@ -175,3 +175,53 @@ async fn a_queued_tool_job_stays_when_the_result_arrives() -> TestResult {
     assert_eq!(job.get("attempts").and_then(testkit::Json::as_i64), Some(0));
     Ok(())
 }
+
+async fn stored_title(store: &memory_sqlite::SqliteStore) -> TestResult<Option<String>> {
+    let rows = table(store, "ros_conversations").await?;
+    let row = rows.first().ok_or("one conversation")?;
+    Ok(row
+        .get("title")
+        .and_then(testkit::Json::as_str)
+        .map(str::to_owned))
+}
+
+#[tokio::test]
+async fn a_placeholder_title_never_replaces_the_person_s_words() -> TestResult {
+    let fresh = fresh_store(None)?;
+    let now = instant(common::RECORDED_START)?;
+    let titled = |title: &str| {
+        let mut capture = batch("cli:titled", "rivet", "cli");
+        capture.title = Some(title.to_owned());
+        capture
+    };
+    fresh
+        .store
+        .capture(titled("Kimi Code session"), None, now)
+        .await?;
+    assert_eq!(stored_title(&fresh.store).await?, None);
+    fresh
+        .store
+        .capture(
+            titled("<user_instructions>be brief</user_instructions>\nport the parser"),
+            None,
+            now,
+        )
+        .await?;
+    assert_eq!(
+        stored_title(&fresh.store).await?.as_deref(),
+        Some("port the parser")
+    );
+    fresh
+        .store
+        .capture(titled("Kimi Code session"), None, now)
+        .await?;
+    fresh
+        .store
+        .capture(titled("<recommended_plugins> Here is a list"), None, now)
+        .await?;
+    assert_eq!(
+        stored_title(&fresh.store).await?.as_deref(),
+        Some("port the parser")
+    );
+    Ok(())
+}

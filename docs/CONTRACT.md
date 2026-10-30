@@ -848,6 +848,18 @@ The tools never enable a plug-in or grant a permission: a new plug-in stays off,
 awaiting approval says that a person approves it in the app (Settings › Plug-ins › the plug-in) on a paired device. A
 call from a session rh can tell (note 57) whose owner is not the node's owner is refused. Answers are text results; a
 refusal or a failure is `isError`.
+(72) Session titles (Phil, 2026-10-30): a conversation title names its session unless it is blank, a harness
+placeholder (`<harness> session` for Claude Code, Codex, Grok Build, Kimi Code, dsh, OpenCode, Pi and Qwen Code, or
+`<name> session (imported)`), or starts with an injected context block (an XML-style `<tag>…</tag>`, or an
+`# AGENTS.md instructions` header). `POST /api/capture` keeps a batch's `title` as the words after any leading injected
+blocks, and only when they name the session, so a placeholder or an injected block never replaces a stored title and a
+new conversation without one stays untitled; a later batch with the person's words replaces a placeholder. When a leaf
+summary is stored and the title still does not name the session, the title comes from the earliest leaf that gives one:
+a leaf that opens with a heading gives its first heading that names the session (skipping a heading that only frames
+the batch, such as `Session metadata` or `Recommended plugins`), any other leaf its first sentence, at most 80
+characters. `rh memory backfill-titles [--dry-run]` applies the same to every summarized conversation on Postgres and
+SQLite. Tidy proposals (43) answer each evidence sample with its conversation's current title, the stored one only when
+no conversation matches. The rule is `kernel::memory::{names_session, spoken_title, summary_title}`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

@@ -1,3 +1,4 @@
+mod samples;
 mod upkeep;
 
 use std::collections::BTreeMap;
@@ -104,7 +105,7 @@ impl PostgresMemory {
         proposal: Option<Uuid>,
         batch: Option<Uuid>,
     ) -> Result<Vec<Proposal>, TidyError> {
-        sqlx::query_as!(
+        let mut proposals = sqlx::query_as!(
             ProposalRow,
             r#"SELECT p.id, p.batch_id, b.proposed_by, b.proposed_at,
                       p.change AS "change: Json<EditRecord>", p.reason,
@@ -124,7 +125,9 @@ impl PostgresMemory {
         .map_err(failed("tidy proposals"))?
         .into_iter()
         .map(self::proposal)
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+        self.current_titles(&mut proposals).await?;
+        Ok(proposals)
     }
 }
 

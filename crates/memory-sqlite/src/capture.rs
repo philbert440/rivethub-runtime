@@ -1,5 +1,6 @@
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::spoken_title;
 use rusqlite::OptionalExtension as _;
 use rusqlite::Transaction;
 use rusqlite::params;
@@ -109,7 +110,11 @@ impl PreparedBatch {
                 agent: batch.agent,
             },
             channel: batch.channel,
-            title: batch.title,
+            title: batch
+                .title
+                .as_deref()
+                .and_then(spoken_title)
+                .map(str::to_owned),
             settings,
             task_id: batch.task_id,
             node: node.map(str::to_owned),

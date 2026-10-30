@@ -1,4 +1,5 @@
 use kernel::memory::SummaryKind;
+use kernel::memory::names_session;
 use kernel::memory::summary_title;
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -6,9 +7,8 @@ use uuid::Uuid;
 use crate::PostgresMemory;
 use crate::error::Error;
 
-const UNTITLED_SQL: &str = "select c.id from rh_conversations c
-    where (c.title is null or btrim(c.title) = '')
-      and exists (
+const SUMMARIZED_SQL: &str = "select c.id, c.title from rh_conversations c
+    where exists (
         select 1 from rh_summaries s where s.conversation_id = c.id and s.kind = $1
       )
     order by c.id";
@@ -20,11 +20,12 @@ const LEAVES_SQL: &str = "select content from rh_summaries
     order by earliest_at, id";
 
 const SET_SQL: &str = "update rh_conversations set title = $1
-    where id = $2 and (title is null or btrim(title) = '')";
+    where id = $2 and title is not distinct from $3";
 
 #[derive(Debug, sqlx::FromRow)]
-struct IdRow {
+struct TitledRow {
     id: Uuid,
+    title: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -37,6 +38,11 @@ struct ContentRow {
     content: String,
 }
 
+struct Retitle {
+    current: Option<String>,
+    title: String,
+}
+
 impl PostgresMemory {
     pub async fn backfill_titles(&self, dry_run: bool) -> Result<u64, Error> {
         let mut tx = self
@@ -44,15 +50,18 @@ impl PostgresMemory {
             .begin()
             .await
             .map_err(|source| Error::operation("title backfill begin", source))?;
-        let ids = sqlx::query_as::<_, IdRow>(UNTITLED_SQL)
+        let rows = sqlx::query_as::<_, TitledRow>(SUMMARIZED_SQL)
             .bind(SummaryKind::Leaf.as_str())
             .fetch_all(&mut *tx)
             .await
-            .map_err(|source| Error::operation("untitled conversations", source))?;
+            .map_err(|source| Error::operation("summarized conversations", source))?;
         let mut titled = 0u64;
-        for row in ids {
+        for row in rows {
+            if row.title.as_deref().is_some_and(names_session) {
+                continue;
+            }
             let changed = if dry_run {
-                derived_title(&mut tx, row.id).await?.is_some()
+                retitle(&mut tx, row.id).await?.is_some()
             } else {
                 title_from_first_leaf(&mut tx, row.id).await?
             };
@@ -71,28 +80,30 @@ pub(crate) async fn title_from_first_leaf(
     conn: &mut PgConnection,
     id: Uuid,
 ) -> Result<bool, Error> {
-    let Some(title) = derived_title(conn, id).await? else {
+    let Some(retitle) = retitle(conn, id).await? else {
         return Ok(false);
     };
     let updated = sqlx::query(SET_SQL)
-        .bind(title)
+        .bind(retitle.title)
         .bind(id)
+        .bind(retitle.current)
         .execute(&mut *conn)
         .await
         .map_err(|source| Error::operation("set summary title", source))?;
     Ok(updated.rows_affected() == 1)
 }
 
-async fn derived_title(conn: &mut PgConnection, id: Uuid) -> Result<Option<String>, Error> {
+async fn retitle(conn: &mut PgConnection, id: Uuid) -> Result<Option<Retitle>, Error> {
     let current = sqlx::query_as::<_, TitleRow>(CURRENT_SQL)
         .bind(id)
         .fetch_optional(&mut *conn)
         .await
         .map_err(|source| Error::operation("conversation title", source))?;
-    match current {
-        None => return Ok(None),
-        Some(TitleRow { title: Some(title) }) if !title.trim().is_empty() => return Ok(None),
-        Some(_) => {}
+    let Some(TitleRow { title: current }) = current else {
+        return Ok(None);
+    };
+    if current.as_deref().is_some_and(names_session) {
+        return Ok(None);
     }
     let leaves = sqlx::query_as::<_, ContentRow>(LEAVES_SQL)
         .bind(id)
@@ -100,5 +111,8 @@ async fn derived_title(conn: &mut PgConnection, id: Uuid) -> Result<Option<Strin
         .fetch_all(&mut *conn)
         .await
         .map_err(|source| Error::operation("leaf contents", source))?;
-    Ok(leaves.iter().find_map(|leaf| summary_title(&leaf.content)))
+    Ok(leaves
+        .iter()
+        .find_map(|leaf| summary_title(&leaf.content))
+        .map(|title| Retitle { current, title }))
 }

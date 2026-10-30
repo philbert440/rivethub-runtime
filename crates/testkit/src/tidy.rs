@@ -16,6 +16,7 @@ use kernel::tidy::ProposalState;
 use kernel::tidy::Proposer;
 use kernel::tidy::Reason;
 use kernel::tidy::RoleActivity;
+use kernel::tidy::Sample;
 use kernel::tidy::TidyPorts;
 use kernel::tidy::TidyStore;
 use kernel::tidy::TreeEdit;
@@ -401,6 +402,54 @@ where
         "the embedder finished one job and has one failing",
         (embedder.last_finished.is_some(), embedder.failing),
         (true, 1),
+    )?;
+    Ok(())
+}
+
+pub async fn samples_show_each_session_s_current_title<S>(store: &S) -> Outcome
+where
+    S: TidyStore + TopicStore + MemoryStore,
+{
+    let spike = store.create(new_topic("Old Spike", &[], None)?).await?;
+    let renamed = session("00000000-0000-4000-8000-000000000081")?;
+    capture(
+        store,
+        renamed.as_str(),
+        "claude-code",
+        "Port the parser",
+        None,
+    )
+    .await?;
+    let sample = |id: &str| Sample {
+        id: id.to_owned(),
+        title: Some("Claude Code session".to_owned()),
+        last_active: None,
+    };
+    let mut batch = Batch::new(Proposer::Backfill, at(1));
+    batch.add(
+        TreeEdit::Close { topic: spike.id },
+        Reason::new("idle for months")?,
+        Evidence {
+            sessions: 2,
+            samples: vec![sample(renamed.as_str()), sample("claude-code:gone")],
+        },
+    );
+    store.propose(batch).await?;
+    let titles: Vec<Option<String>> = store
+        .pending()
+        .await?
+        .iter()
+        .flat_map(|batch| &batch.proposals)
+        .flat_map(|proposal| &proposal.evidence.samples)
+        .map(|sample| sample.title.clone())
+        .collect();
+    same(
+        "samples read the conversation's title now",
+        titles,
+        vec![
+            Some("Port the parser".to_owned()),
+            Some("Claude Code session".to_owned()),
+        ],
     )?;
     Ok(())
 }

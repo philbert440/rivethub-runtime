@@ -202,13 +202,14 @@ async fn a_written_summary_is_announced_to_watchers(pool: PgPool) -> TestResult 
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
-async fn the_first_leaf_titles_only_untitled_conversations(pool: PgPool) -> TestResult {
+async fn the_first_leaf_titles_only_conversations_without_a_real_title(pool: PgPool) -> TestResult {
     if !testkit::queue_present(&pool).await? {
         return Ok(());
     }
     let memory = PostgresMemory::new(pool.clone());
     let untitled = seed_untitled(&pool, "cli:untitled").await?;
     let named = seed_conversation(&pool, "cli:named", "Named by the hook").await?;
+    let placeholder = seed_conversation(&pool, "cli:placeholder", "dsh session").await?;
     let first = memory
         .write_summary(titled_leaf(
             untitled,
@@ -231,16 +232,31 @@ async fn the_first_leaf_titles_only_untitled_conversations(pool: PgPool) -> Test
         stored_title(&pool, named).await?.as_deref(),
         Some("Named by the hook")
     );
+    memory
+        .write_summary(titled_leaf(placeholder, "### Port the parser"))
+        .await?;
+    assert_eq!(
+        stored_title(&pool, placeholder).await?.as_deref(),
+        Some("Port the parser")
+    );
     sqlx::query("update rh_conversations set title = null where id = $1")
         .bind(untitled)
         .execute(&pool)
         .await?;
-    assert_eq!(memory.backfill_titles(true).await?, 1);
+    sqlx::query("update rh_conversations set title = 'dsh session' where id = $1")
+        .bind(placeholder)
+        .execute(&pool)
+        .await?;
+    assert_eq!(memory.backfill_titles(true).await?, 2);
     assert_eq!(stored_title(&pool, untitled).await?, None);
-    assert_eq!(memory.backfill_titles(false).await?, 1);
+    assert_eq!(memory.backfill_titles(false).await?, 2);
     assert_eq!(
         stored_title(&pool, untitled).await?.as_deref(),
         Some("Moved the build to the new host.")
+    );
+    assert_eq!(
+        stored_title(&pool, placeholder).await?.as_deref(),
+        Some("Port the parser")
     );
     assert_eq!(memory.backfill_titles(false).await?, 0);
     Ok(())
