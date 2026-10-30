@@ -200,11 +200,18 @@ where
     let filed = session("00000000-0000-4000-8000-000000000071")?;
     let yours = session("00000000-0000-4000-8000-000000000072")?;
     let bare = "00000000-0000-4000-8000-000000000073";
-    capture(store, filed.as_str(), "claude-code", "Rail polish").await?;
-    capture(store, yours.as_str(), "claude-code", "Counting").await?;
-    capture(store, bare, "claude-code", "Older capture").await?;
-    capture(store, "grokbot-run-sand-subagent-4", "grokbot", "Routine").await?;
-    capture(store, "qwen-code:9", "qwen-code", "Quantised bench").await?;
+    capture(store, filed.as_str(), "claude-code", "Rail polish", None).await?;
+    capture(store, yours.as_str(), "claude-code", "Counting", None).await?;
+    capture(store, bare, "claude-code", "Older capture", None).await?;
+    capture(
+        store,
+        "grokbot-run-sand-subagent-4",
+        "grokbot",
+        "Routine",
+        None,
+    )
+    .await?;
+    capture(store, "qwen-code:9", "qwen-code", "Quantised bench", None).await?;
     for (placed, by) in [
         (filed.clone(), PlacementSource::Categorizer),
         (yours, PlacementSource::You),

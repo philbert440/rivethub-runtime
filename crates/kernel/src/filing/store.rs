@@ -44,6 +44,7 @@ pub struct FiledSession {
     pub placement: Placement,
     pub title: Option<String>,
     pub last_active: Option<DateTime<Utc>>,
+    pub node: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +53,7 @@ pub struct FiledConversation {
     pub title: Option<String>,
     pub channel: String,
     pub last_active: Option<DateTime<Utc>>,
+    pub node: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

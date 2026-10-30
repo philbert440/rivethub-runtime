@@ -75,9 +75,10 @@ impl MemoryStore for SqliteStore {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
         let now = self.now();
-        Self::capture(self, batch, now)
+        Self::capture(self, batch, node, now)
             .await
             .map_err(MemoryStoreError::from)
     }

@@ -154,6 +154,7 @@ pub(super) fn filed_session(filed: FiledSession) -> TopicSession {
         placement: placement(filed.placement),
         title: filed.title,
         last_active: filed.last_active,
+        node: filed.node,
     }
 }
 
@@ -174,6 +175,7 @@ pub(super) fn filed_conversation(filed: FiledConversation) -> TopicConversation 
         channel: filed.channel,
         title: filed.title,
         last_active: filed.last_active,
+        node: filed.node,
     }
 }
 

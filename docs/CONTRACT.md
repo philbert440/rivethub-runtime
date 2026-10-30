@@ -376,7 +376,7 @@ task id (as a conversation when none is found or it is unfiled); any other key f
 keys starting `grokbot-run-sand-subagent-` or `heartbeat`, and the channels `test-channel`, `env-test-channel` and
 `test`. Order: an existing placement is kept; a child session follows its parent on the client and is not filed; a
 task follows its parent; a working directory inside a topic's own directory (deepest wins, a tie decides nothing; a
-local directory matches by path, since captured conversations do not record their node) files it there; exactly one
+local directory matches by path, since conversations captured before (64) record no node) files it there; exactly one
 topic named in the title or first leaf files it there; otherwise the model answers file, suggest a name (with an
 optional parent) or nothing. A suggestion that matches a topic's slug or alias files there; one that repeats the title
 or reads like a sentence, path, file, ticket, PR, version, branch or id, or names a deleted topic, is refused; the rest is kept for sessions as the
@@ -443,6 +443,12 @@ own fields.
 hasn't, so an entity the builder hasn't written a page for yet can be edited, and answers `TopicPage` as the GET does. The
 commit, history entry and user source are as (41) says. A type has no page (`409`, "A type has no page"); an unknown topic
 is `404`; wiki pages not configured is `503`.
+(64) Conversation nodes (Phil, 2026-10-29): `POST /api/capture` records the receiving node's name (`mesh.node_name`,
+as `/healthz` reports it) on a conversation it creates or captures into, the first node to capture it winning.
+Postgres migration `0037_conversation_node.sql` adds the nullable `rh_conversations.node`; SQLite schema 25 keeps it in
+`rh_conversation_nodes` so the legacy `ros_conversations` table is unchanged. `TopicSession` (the newest node across the
+session's conversation keys) and `TopicConversation` on `GET /api/topics/{topic}/sessions` carry an optional `node`.
+Conversations captured before 0037, appended through `memory_append`, or imported, have none.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

@@ -466,22 +466,24 @@ async fn replay(scenario: &mut Scenario, plan: Plan) -> TestResult<Vec<String>> 
         let now = instant(&step.at)?;
         let at = format!("{} / {label}", scenario.name);
         match action {
-            Action::Capture(request) => match (store.capture(request, now).await, &step.error) {
-                (Ok(result), None) => {
-                    let actual: Json = serde_json::to_value(&result)?;
-                    let expected = step.result.clone().unwrap_or(Json::Null);
-                    ids.same(&expected, &actual, &at)?;
+            Action::Capture(request) => {
+                match (store.capture(request, None, now).await, &step.error) {
+                    (Ok(result), None) => {
+                        let actual: Json = serde_json::to_value(&result)?;
+                        let expected = step.result.clone().unwrap_or(Json::Null);
+                        ids.same(&expected, &actual, &at)?;
+                    }
+                    (Err(error), Some(recorded)) => {
+                        assert_eq!(error.to_string(), recorded.message, "{at}");
+                    }
+                    (outcome, recorded) => {
+                        return Err(format!(
+                            "{at}: outcome {outcome:?} vs recorded error {recorded:?}"
+                        )
+                        .into());
+                    }
                 }
-                (Err(error), Some(recorded)) => {
-                    assert_eq!(error.to_string(), recorded.message, "{at}");
-                }
-                (outcome, recorded) => {
-                    return Err(format!(
-                        "{at}: outcome {outcome:?} vs recorded error {recorded:?}"
-                    )
-                    .into());
-                }
-            },
+            }
             Action::Append(entry) => {
                 let appended = store.append_entries(vec![entry], now).await?;
                 let actual = Json::Array(appended.into_iter().map(Json::String).collect());

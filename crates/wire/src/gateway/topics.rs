@@ -188,6 +188,8 @@ pub struct TopicSession {
     #[serde(default)]
     #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
     pub last_active: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub node: Option<String>,
 }
 
 #[serde_as]
@@ -214,6 +216,8 @@ pub struct TopicConversation {
     #[serde(default)]
     #[serde_as(as = "Option<serde_with::TimestampMilliSeconds>")]
     pub last_active: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub node: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

@@ -8802,6 +8802,12 @@
             "null"
           ],
           "format": "int64"
+        },
+        "node": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -8864,6 +8870,12 @@
             "null"
           ],
           "format": "int64"
+        },
+        "node": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

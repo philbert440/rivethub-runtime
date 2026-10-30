@@ -178,6 +178,7 @@ impl MemoryStore for FailingStore {
     async fn capture(
         &self,
         _batch: wire::capture::CaptureBatchRequest,
+        _node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
         unavailable()
     }
@@ -388,8 +389,9 @@ impl MemoryStore for GatedStore {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
-        self.inner.capture(batch).await
+        self.inner.capture(batch, node).await
     }
 
     async fn append(&self, batch: Vec<wire::memory::MemoryEntry>) -> Result<u64, MemoryStoreError> {

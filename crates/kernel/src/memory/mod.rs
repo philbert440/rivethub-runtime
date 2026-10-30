@@ -378,6 +378,7 @@ pub trait MemoryStore: Send + Sync {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError>;
 
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError>;

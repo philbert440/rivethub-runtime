@@ -253,6 +253,7 @@ impl MemoryStore for FakeMemoryStore {
     async fn capture(
         &self,
         batch: wire::capture::CaptureBatchRequest,
+        _node: Option<&str>,
     ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
         let mut entries = batch.entries();
         self.record(MemoryRequest::Append(entries.clone())).await;
