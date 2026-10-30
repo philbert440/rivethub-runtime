@@ -110,7 +110,9 @@ pub trait WikiBuilderStore: Send + Sync {
 
     async fn hold_entity(&self, held: HeldEntity) -> Result<Vec<HeldEntity>, WikiStoreError>;
 
-    async fn release_entity(&self, key: &Slug) -> Result<(), WikiStoreError>;
+    async fn held_entities(&self, key: &Slug) -> Result<Vec<HeldEntity>, WikiStoreError>;
+
+    async fn release_entity(&self, held: &[HeldEntity]) -> Result<(), WikiStoreError>;
 
     async fn defer_wiki(&self, deferred: DeferredWiki) -> Result<(), WikiStoreError>;
 

@@ -12,6 +12,8 @@ use crate::common::execute;
 
 const CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c1";
 const SUMMARY: &str = "00000000-0000-4000-8000-0000000000d1";
+const EARLIER_CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c2";
+const EARLIER_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d2";
 
 async fn seeded() -> TestResult<(TempDir, SqliteStore, ExtractWiki)> {
     let directory = tempfile::tempdir()?;
@@ -87,6 +89,33 @@ async fn an_entity_page_names_the_sessions_that_cite_it() -> TestResult {
     let (_directory, store, job) = seeded().await?;
     testkit::wiki_mentions::an_entity_page_names_the_sessions_that_cite_it(stores(&store), &job)
         .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_mention_held_before_its_entity_existed_still_lands() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    execute(
+        &store,
+        &format!(
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
+             VALUES ('{EARLIER_CONVERSATION}', '{}', 'rivet', 'Lab rack', '2026-10-10T11:00:00.000Z', '2026-10-10T11:00:00.000Z');
+             INSERT INTO ros_summaries (id, conversation_id, content, created_at)
+             VALUES ('{EARLIER_SUMMARY}', '{EARLIER_CONVERSATION}', 'Lab notes.', '2026-10-10T11:00:00.000Z');",
+            testkit::wiki_mentions::EARLIER_KEY
+        ),
+    )
+    .await?;
+    let earlier = ExtractWiki {
+        summary_id: Uuid::parse_str(EARLIER_SUMMARY)?,
+        conversation_id: Some(Uuid::parse_str(EARLIER_CONVERSATION)?),
+    };
+    testkit::wiki_mentions::a_mention_held_before_its_entity_existed_still_lands(
+        stores(&store),
+        &job,
+        &earlier,
+    )
+    .await?;
     Ok(())
 }
 

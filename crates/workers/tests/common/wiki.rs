@@ -81,7 +81,11 @@ impl WikiBuilderStore for WikiStore {
         Ok(vec![held])
     }
 
-    async fn release_entity(&self, _key: &Slug) -> Result<(), WikiStoreError> {
+    async fn held_entities(&self, _key: &Slug) -> Result<Vec<HeldEntity>, WikiStoreError> {
+        Ok(Vec::new())
+    }
+
+    async fn release_entity(&self, _held: &[HeldEntity]) -> Result<(), WikiStoreError> {
         Ok(())
     }
 

@@ -356,7 +356,8 @@ they land on its topic page and cite its summary. A session's notes follow it: m
 the categorizer, they leave the old topic's page for the new one (and so does the summary's citation, unless the summary
 also patched the old page itself), and taken out of a topic they wait until it is
 filed again; a child follows its parent, and a delegated task its parent unless you placed it; an entity named by one session waits as a candidate until
-a second session names it. `WikiPatch.kind` (person, host or tool) is replaced by `type`, and the extraction input lists
+a second session names it. A candidate is dropped only after its patch is written to the entity's page and its summary
+cited there, so a session that names an existing entity also writes and cites the candidates still held for it. `WikiPatch.kind` (person, host or tool) is replaced by `type`, and the extraction input lists
 the type paths as `types`. Postgres migration `0032_entities.sql` and SQLite schema 20 add the kind, the tombstones and the
 candidate and deferred tables; they make People and Hosts types, rename Tools to Software, turn the topics under them into
 entities (dropping the filings that pointed at them and unbinding the type pages), and seed the types Agents, Hardware,

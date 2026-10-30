@@ -8,6 +8,7 @@ use wire::session_id::SessionId;
 
 use super::builder::DeferredWiki;
 use super::builder::ExtractWiki;
+use super::builder::HeldEntity;
 use super::builder::WikiBuilderStore;
 use super::builder::WikiRouting;
 use super::builder::WikiStoreError;
@@ -93,6 +94,7 @@ struct Routed {
     written: Vec<WikiSlug>,
     cited: Vec<WikiSlug>,
     earlier: Vec<(Uuid, WikiSlug)>,
+    held: Vec<HeldEntity>,
     notes: Vec<WikiPatch>,
 }
 
@@ -215,9 +217,11 @@ impl WikiRouter<'_> {
             entity,
             patches,
             earlier,
+            held,
         }) = filing
             && let Some(page) = self.topics.target(&entity, self.now).await?
         {
+            routed.held.extend(held);
             routed
                 .earlier
                 .extend(earlier.into_iter().map(|id| (id, page.page_slug.clone())));
@@ -263,6 +267,9 @@ impl WikiRouter<'_> {
             .await?;
         for (earlier, page) in &routed.earlier {
             self.wiki.cite_wiki(*earlier, page, self.now).await?;
+        }
+        if !routed.held.is_empty() {
+            self.wiki.release_entity(&routed.held).await?;
         }
         touched.extend(routed.written.into_iter().map(String::from));
         touched.sort();
