@@ -1,3 +1,4 @@
+pub(crate) mod body;
 mod context;
 mod offering;
 mod preview;
@@ -6,9 +7,9 @@ mod rows;
 use std::collections::HashMap;
 
 use chrono::Utc;
+use kernel::transcript::HarnessToolOutput;
 use kernel::transcript::{StoreSession, StoreTranscript, ToolOutputRead, TranscriptRead};
 use parking_lot::RwLock;
-use wire::gateway::sessions::HarnessToolOutput;
 use wire::harness::{HarnessCode, HarnessId, HarnessOffering, HarnessSessionSummary};
 use wire::session_id::{SessionId, SessionRef, decode_segment};
 

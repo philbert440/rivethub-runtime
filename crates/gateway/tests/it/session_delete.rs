@@ -10,6 +10,9 @@ use chrono::{TimeDelta, Utc};
 use gateway::sessions::{SessionRegistry, owners_file};
 use kernel::memory::SessionActivity;
 use kernel::transcript::{
+    HarnessTranscriptTool, HarnessTranscriptTurn, SessionMessageRole, TranscriptToolStatus,
+};
+use kernel::transcript::{
     ListLimit, SessionLister, SessionRenameError, StoreSession, StoreTranscript, ToolOutputRead,
     TranscriptRead, TranscriptReaderError,
 };
@@ -20,9 +23,6 @@ use wire::gateway::GatewayError;
 use wire::gateway::session_delete::{
     SessionDeleteError, SessionDeleteResult, SessionDeleteResults, SessionDeleted,
     SessionTrashList, SessionTrashReason,
-};
-use wire::gateway::sessions::{
-    HarnessTranscriptTool, HarnessTranscriptTurn, SessionMessageRole, TranscriptToolStatus,
 };
 use wire::harness::{
     HarnessId, HarnessSessionList, HarnessSessionSummary, HarnessStoreSessionList,

@@ -1,5 +1,5 @@
+use crate::transcript::{HarnessTranscriptTurn, SessionMessageRole};
 use thiserror::Error;
-use wire::gateway::sessions::{HarnessTranscriptTurn, SessionMessageRole};
 
 use crate::preview::tool_label;
 
@@ -100,7 +100,7 @@ fn block(turn: &HarnessTranscriptTurn) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use wire::gateway::sessions::{HarnessTranscriptTurn, SessionMessageRole};
+    use crate::transcript::{HarnessTranscriptTurn, SessionMessageRole};
 
     use super::{ForkError, kept, render};
 

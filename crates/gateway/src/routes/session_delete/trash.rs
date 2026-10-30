@@ -8,9 +8,9 @@ use kernel::memory::{
     EMPTY_SESSIONS_MAX, SessionActivity, Speaker, SpokenTurn, TrashReason, TrashSignals,
     trash_verdict,
 };
+use kernel::transcript::{HarnessTranscriptTurn, SessionMessageRole};
 use kernel::transcript::{ListLimit, StoreSession};
 use wire::gateway::session_delete::{SessionTrashCandidate, SessionTrashList, SessionTrashReason};
-use wire::gateway::sessions::{HarnessTranscriptTurn, SessionMessageRole};
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 

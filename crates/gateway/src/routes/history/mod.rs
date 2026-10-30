@@ -254,7 +254,7 @@ async fn transcript(
     Ok(Json(HarnessSessionTranscriptResponse {
         session_id: resolved.session,
         harness_id: resolved.harness,
-        turns: read.read.turns,
+        turns: crate::history::body::turns(read.read.turns),
         context_window: read.stamp.window,
         compact_at: read.stamp.compact_at,
         context_source: read.stamp.source,
@@ -317,6 +317,7 @@ async fn tool_output(
         gateway
             .history()
             .tool_output(&gateway, &resolved, &tool)
-            .await?,
+            .await
+            .map(crate::history::body::harness_tool_output_body)?,
     ))
 }

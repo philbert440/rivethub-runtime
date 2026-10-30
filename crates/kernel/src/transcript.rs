@@ -6,8 +6,13 @@ use thiserror::Error;
 use values::HarnessId;
 use values::Role;
 use values::SessionId;
-use wire::gateway::sessions::HarnessToolOutput;
-use wire::gateway::sessions::HarnessTranscriptTurn;
+
+mod turn;
+
+pub use turn::{
+    HarnessToolOutput, HarnessTranscriptTool, HarnessTranscriptTurn, MessageUsage,
+    SessionMessageRole, TranscriptAttachment, TranscriptBlock, TranscriptToolStatus,
+};
 
 const SUBAGENTS: &str = "/subagents/";
 
