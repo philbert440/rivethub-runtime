@@ -58,8 +58,8 @@ fn step(conn: &mut Connection, to: SchemaVersion, now: DateTime<Utc>) -> Result<
         SchemaVersion::V22 => in_transaction(conn, to, |tx| {
             tx.execute_batch(include_str!("schema/tidy_v22.sql"))
         }),
-        SchemaVersion::V25 => in_transaction(conn, to, |tx| {
-            tx.execute_batch(include_str!("schema/conversation_node_v25.sql"))
+        SchemaVersion::V23 => in_transaction(conn, to, |tx| {
+            tx.execute_batch(include_str!("schema/conversation_node_v23.sql"))
         }),
     }
 }

@@ -355,7 +355,7 @@ async fn the_process_is_confined_to_its_folders(host: &Harness, root: &Path) -> 
         .await?;
     let logs: PluginLogs = serde_json::from_slice(&bytes)?;
     let confined = logs.lines.iter().any(|line| {
-        line.stream == PluginLogStream::Host && line.text.ends_with("confined by Landlock")
+        line.stream == PluginLogStream::Host && line.text.contains("confined by Landlock")
     });
     let other = host.tool("read", read(&outside)?).await?;
     assert_eq!(other.is_error, confined, "{}", other.text);

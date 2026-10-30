@@ -67,7 +67,7 @@ async fn sqlite_doctor_checks_current_and_behind_without_migrating() {
     assert_eq!(memory(&report).status, CheckStatus::Fail);
     assert_eq!(
         memory(&report).message,
-        "Schema 0 is not current; required 25, pending 25. Run rivethub-migrate explicitly."
+        "Schema 0 is not current; required 23, pending 23. Run rivethub-migrate explicitly."
     );
     assert!(!path.exists(), "doctor must not create missing stores");
     migrate::sqlite(&path).expect("test schema");
@@ -75,7 +75,7 @@ async fn sqlite_doctor_checks_current_and_behind_without_migrating() {
     let (exit, report) = doctor(&env).await;
     assert_eq!(exit, Exit::Ok, "{report:?}");
     assert_eq!(memory(&report).status, CheckStatus::Pass);
-    assert_eq!(memory(&report).message, "Schema 25 is current.");
+    assert_eq!(memory(&report).message, "Schema 23 is current.");
     assert_eq!(std::fs::read(&path).expect("after"), before);
     let connection = rusqlite::Connection::open(&path).expect("fixture database");
     connection
@@ -88,7 +88,7 @@ async fn sqlite_doctor_checks_current_and_behind_without_migrating() {
     assert_eq!(memory(&report).status, CheckStatus::Fail);
     assert_eq!(
         memory(&report).message,
-        "Schema 6 is not current; required 25, pending 19. Run rivethub-migrate explicitly."
+        "Schema 6 is not current; required 23, pending 17. Run rivethub-migrate explicitly."
     );
     assert_eq!(std::fs::read(&path).expect("after old schema"), before);
 }

@@ -401,6 +401,7 @@ impl Gateway {
             .ok_or_else(|| error::ApiError::Unavailable("upkeep store unavailable".into()))
     }
 
+    #[must_use]
     pub fn with_summary_watch(mut self, watch: Arc<dyn kernel::memory::SummaryWatch>) -> Self {
         self.summaries = Some(watch);
         self

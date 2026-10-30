@@ -740,7 +740,7 @@ commit, history entry and user source are as (41) says. A type has no page (`409
 is `404`; wiki pages not configured is `503`.
 (64) Conversation nodes (Phil, 2026-10-29): `POST /api/capture` records the receiving node's name (`mesh.node_name`,
 as `/healthz` reports it) on a conversation it creates or captures into, the first node to capture it winning.
-Postgres migration `0037_conversation_node.sql` adds the nullable `rh_conversations.node`; SQLite schema 25 keeps it in
+Postgres migration `0037_conversation_node.sql` adds the nullable `rh_conversations.node`; SQLite schema 23 keeps it in
 `rh_conversation_nodes` so the legacy `ros_conversations` table is unchanged. `TopicSession` (the newest node across the
 session's conversation keys) and `TopicConversation` on `GET /api/topics/{topic}/sessions` carry an optional `node`.
 Conversations captured before 0037, appended through `memory_append`, or imported, have none.

@@ -43,13 +43,16 @@ pub async fn postgres_status(url: &str) -> Result<Status, Error> {
 pub async fn postgres_status_pool(pool: &PgPool) -> Result<Status, Error> {
     let required = required()?;
     let current = newest_applied(pool).await?;
+    let applied = applied_versions(pool).await?;
     Ok(Status {
         current,
         required,
         pending: POSTGRES
             .migrations
             .iter()
-            .filter(|migration| migration.version > current)
+            .filter(|migration| {
+                migration.migration_type.is_up_migration() && !applied.contains(&migration.version)
+            })
             .count(),
     })
 }
@@ -102,6 +105,17 @@ async fn tracked_names(pool: &PgPool) -> Result<BTreeSet<String>, Error> {
         .await
     {
         Ok(names) => Ok(names.into_iter().collect()),
+        Err(source) if relation_missing(&source) => Ok(BTreeSet::new()),
+        Err(source) => Err(Error::PostgresVersion(source)),
+    }
+}
+
+async fn applied_versions(pool: &PgPool) -> Result<BTreeSet<i64>, Error> {
+    match sqlx::query_scalar!("select version from _sqlx_migrations where success")
+        .fetch_all(pool)
+        .await
+    {
+        Ok(versions) => Ok(versions.into_iter().collect()),
         Err(source) if relation_missing(&source) => Ok(BTreeSet::new()),
         Err(source) => Err(Error::PostgresVersion(source)),
     }

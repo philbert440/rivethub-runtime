@@ -5,6 +5,33 @@ use sqlx::Row as _;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_migration_missing_below_the_newest_is_pending_until_migrate_applies_it(
+    pool: PgPool,
+) -> TestResult {
+    sqlx::query("DROP INDEX idx_rh_messages_unembedded")
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM _rivetos_migrations WHERE name = '0036_unembedded_messages.sql'")
+        .execute(&pool)
+        .await?;
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 36")
+        .execute(&pool)
+        .await?;
+
+    let gapped = migrate::postgres_status_pool(&pool).await?;
+    assert_eq!((gapped.current, gapped.pending), (37, 1));
+
+    let migrated = migrate::postgres_pool(&pool).await?;
+    assert_eq!((migrated.current, migrated.pending), (37, 0));
+    let index: Option<String> =
+        sqlx::query_scalar("SELECT to_regclass('idx_rh_messages_unembedded')::text")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(index.as_deref(), Some("idx_rh_messages_unembedded"));
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn empty_database_reaches_the_recorded_shape(pool: PgPool) -> TestResult {
     POSTGRES.run(&pool).await?;
 
