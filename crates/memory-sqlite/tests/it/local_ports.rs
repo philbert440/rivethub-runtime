@@ -118,7 +118,7 @@ async fn apply_wiki_stores_the_topic_and_a_repeat_returns_it() -> TestResult {
 }
 
 #[tokio::test]
-async fn apply_wiki_keeps_the_title_of_the_page_a_patch_resolves_to() -> TestResult {
+async fn apply_wiki_adds_a_resolved_patch_as_a_note() -> TestResult {
     let fixture = fixture()?;
     let first = summary_id()?;
     let second = Uuid::parse_str("0199e2a0-7b3c-7a00-8000-000000000002")?;
@@ -136,6 +136,7 @@ async fn apply_wiki_keeps_the_title_of_the_page_a_patch_resolves_to() -> TestRes
     let other = WikiPatch {
         slug: WikiSlug::try_from("label-printer-jam".to_owned())?,
         title: "Label printer jam".to_owned(),
+        summary: "The label printer jams on Mondays.".to_owned(),
         aliases: vec![WikiSlug::try_from("acmekit-deploys".to_owned())?],
         ..patch()?
     };
@@ -155,6 +156,12 @@ async fn apply_wiki_keeps_the_title_of_the_page_a_patch_resolves_to() -> TestRes
         "acmekit-deploys",
     )?;
     assert_eq!(title, "AcmeKit deploys");
+    let state = cell(
+        &fixture.path,
+        "SELECT current_state FROM ros_wiki_topics WHERE slug = ?1",
+        "acmekit-deploys",
+    )?;
+    assert_eq!(state, "AcmeKit deploys on Fridays.");
     Ok(())
 }
 

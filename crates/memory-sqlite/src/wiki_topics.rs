@@ -40,28 +40,29 @@ pub(crate) fn apply(
     let aliases = alias_list(patch, &slug);
     let at = time::stamp(now);
     let existing = load(conn, &slug)?;
-    let title = match &existing {
-        Some(row) if slug != patch.slug.as_ref() => row.title.clone(),
-        _ => patch.title.clone(),
-    };
+    if let Some(row) = existing.as_ref().filter(|_| slug != patch.slug.as_ref()) {
+        note(conn, summary, patch, &slug, row, now)?;
+        return Ok(Some(slug));
+    }
     let article = stored_article(patch.article.as_deref(), existing.as_ref());
     let related = stored_related(patch.related.as_ref(), existing.as_ref())?;
     let aliases_json = json(&aliases)?;
     let tags_json = json(&patch.tags)?;
     let entities_json = json(&patch.entities)?;
     let search = search_text(
-        patch,
-        &title,
-        &aliases,
-        patch.article.as_deref(),
-        existing.as_ref(),
+        &patch.title,
+        &patch.summary,
+        [aliases.as_slice(), &patch.tags, &patch.entities],
+        patch
+            .article
+            .as_deref()
+            .or_else(|| existing.as_ref().map(|row| row.article.as_str())),
     );
     let changed = write_topic(
         conn,
         &slug,
         patch,
         &TopicWrite {
-            title,
             aliases: aliases_json,
             tags: tags_json,
             entities: entities_json,
@@ -97,7 +98,6 @@ pub(crate) fn cite(
 }
 
 struct TopicWrite {
-    title: String,
     aliases: String,
     tags: String,
     entities: String,
@@ -142,7 +142,7 @@ fn unchanged(
         return Ok(false);
     };
     let state_matches = row.current_state == patch.summary;
-    Ok(row.title == write.title
+    Ok(row.title == patch.title
         && row.aliases == write.aliases
         && row.tags == write.tags
         && row.entities == write.entities
@@ -164,7 +164,7 @@ fn insert_topic(
          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11, ?11)",
         params![
             slug,
-            write.title,
+            patch.title,
             write.aliases,
             write.tags,
             write.entities,
@@ -193,7 +193,7 @@ fn update_topic(
          WHERE slug = ?1",
         params![
             slug,
-            write.title,
+            patch.title,
             write.aliases,
             write.tags,
             write.entities,
@@ -423,28 +423,55 @@ fn stored_related(
     }
 }
 
-fn search_text(
-    patch: &WikiPatch,
-    title: &str,
-    aliases: &[String],
-    article: Option<&str>,
-    existing: Option<&Existing>,
-) -> String {
-    let prefix = format!(
-        "{}\n{}\n{}\n{}\n{}",
-        title,
-        patch.summary,
-        aliases.join(" "),
-        patch.tags.join(" "),
-        patch.entities.join(" ")
-    );
+fn search_text(title: &str, state: &str, lists: [&[String]; 3], article: Option<&str>) -> String {
+    let [aliases, tags, entities] = lists.map(|list| list.join(" "));
+    let prefix = format!("{title}\n{state}\n{aliases}\n{tags}\n{entities}");
     match article {
         Some(text) => format!("{prefix}\n{text}"),
-        None => match existing {
-            Some(row) => format!("{prefix}\n{}", row.article),
-            None => prefix,
-        },
+        None => prefix,
     }
+}
+
+fn note(
+    conn: &Connection,
+    summary: &WikiSummary,
+    patch: &WikiPatch,
+    slug: &str,
+    row: &Existing,
+    now: DateTime<Utc>,
+) -> Result<(), WikiStoreError> {
+    let proposed = patch.slug.as_ref().to_owned();
+    let mut aliases = list(&row.aliases)?;
+    if !aliases.contains(&proposed) {
+        aliases.push(proposed.clone());
+    }
+    let search = search_text(
+        &row.title,
+        &row.current_state,
+        [aliases.as_slice(), &list(&row.tags)?, &list(&row.entities)?],
+        Some(&row.article),
+    );
+    let at = time::stamp(now);
+    conn.execute(
+        "UPDATE ros_wiki_topics SET aliases = ?2, search_text = ?3, history_count = history_count + 1,
+            last_verified_at = ?4, updated_at = ?4,
+            embedding = NULL, embed_status = NULL, embed_failures = 0, embed_error = NULL
+         WHERE slug = ?1",
+        params![slug, json(&aliases)?, search, at],
+    )
+    .map_err(query)?;
+    redirects(conn, slug, std::slice::from_ref(&proposed), &at)?;
+    provenance(
+        conn,
+        slug,
+        summary,
+        Some(&patch.note(now.date_naive()).body),
+        &at,
+    )
+}
+
+fn list(text: &str) -> Result<Vec<String>, WikiStoreError> {
+    serde_json::from_str(text).map_err(|source| WikiStoreError::Query(Box::new(source)))
 }
 
 fn json(values: &[String]) -> Result<String, WikiStoreError> {
