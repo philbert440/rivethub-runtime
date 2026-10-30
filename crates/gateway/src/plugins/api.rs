@@ -163,9 +163,15 @@ async fn attribute(
         .map_err(|error| Unattributed::TooLarge(error.to_string()))?;
     let agent = format!("plugin:{}", plugin.as_ref());
     let rewritten = if capture {
-        rewrite::<CaptureBatchRequest>(&bytes, |batch| batch.agent = agent)
+        rewrite::<CaptureBatchRequest>(&bytes, |batch| {
+            batch.session_key = owned_key(&agent, &batch.session_key);
+            batch.agent = agent;
+        })
     } else {
-        rewrite::<MemoryAppendToolArgs>(&bytes, |args| args.agent = Some(agent))
+        rewrite::<MemoryAppendToolArgs>(&bytes, |args| {
+            args.session_id = owned_key(&agent, &args.session_id);
+            args.agent = Some(agent);
+        })
     };
     let rewritten = rewritten.map_err(Unattributed::Invalid)?;
     parts
@@ -175,6 +181,15 @@ async fn attribute(
         parts,
         axum::body::Body::from(rewritten),
     ))
+}
+
+fn owned_key(agent: &str, given: &str) -> String {
+    let prefix = format!("{agent}:");
+    if given.starts_with(&prefix) {
+        given.to_owned()
+    } else {
+        format!("{prefix}{given}")
+    }
 }
 
 fn rewrite<T>(bytes: &Bytes, stamp: impl FnOnce(&mut T)) -> Result<Vec<u8>, String>

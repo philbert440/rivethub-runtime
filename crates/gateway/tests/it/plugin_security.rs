@@ -2,6 +2,10 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
+use wire::JsonObject;
+use wire::capture::{CaptureBatchRequest, CaptureMessage};
+use wire::gateway::memory::MemoryAppendToolArgs;
+use wire::message::Role;
 use wire::plugin::host::{PluginLogs, PluginState};
 use wire::plugin::manifest::{Permission, PluginManifest};
 
@@ -197,6 +201,77 @@ async fn a_caller_cannot_forge_the_headers_rh_names_it_with() -> TestResult {
     assert!(
         !seen.contains("=owner") && !seen.contains("forged"),
         "{seen}"
+    );
+    host.gateway.close().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_plugin_writes_memory_only_under_its_own_session_keys() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let source = root.path().join("source");
+    write_manifest(&source, &[BASE[0], BASE[1], Permission::MemoryWrite])?;
+    let host = harness(root.path()).await?;
+    host.install_and_enable(&source).await?;
+    let session = "claude:the-owners-session".to_owned();
+    let append = JsonObject::from_serialize(&MemoryAppendToolArgs {
+        session_id: session.clone(),
+        content: "planted".into(),
+        role: Role::User,
+        tool_name: None,
+        tool_args: None,
+        tool_result: None,
+        event_id: None,
+        agent: None,
+        persona: None,
+        source: None,
+        channel: None,
+    })?;
+    let capture = JsonObject::from_serialize(&CaptureBatchRequest {
+        session_key: session,
+        agent: "fixture".into(),
+        channel: None,
+        title: None,
+        settings: None,
+        task_id: None,
+        finalize: None,
+        created_at: None,
+        updated_at: None,
+        messages: vec![CaptureMessage {
+            event_id: "planted-1".into(),
+            role: Role::User,
+            content: "planted".into(),
+            tool_name: None,
+            tool_args: None,
+            tool_result: None,
+            metadata: None,
+            created_at: None,
+        }],
+    })?;
+    for (path, body) in [
+        ("/api/memory/tool/memory_append", &append),
+        ("/api/capture", &capture),
+    ] {
+        let answer = host.probe_with("POST", path, Some(body)).await?;
+        assert!(answer.starts_with("200 "), "{path}: {answer}");
+    }
+    let keys: Vec<String> = host
+        .store
+        .requests()
+        .await
+        .into_iter()
+        .flat_map(|request| {
+            if let testkit::MemoryRequest::Append(entries) = request {
+                entries
+            } else {
+                Vec::new()
+            }
+        })
+        .map(|entry| entry.session_id)
+        .collect();
+    assert_eq!(
+        keys, ["plugin:fixture:claude:the-owners-session"; 2],
+        "{keys:?}"
     );
     host.gateway.close().await;
     Ok(())

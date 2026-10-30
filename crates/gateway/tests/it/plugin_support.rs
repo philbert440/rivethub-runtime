@@ -58,6 +58,8 @@ pub(crate) fn invalid_manifest() -> String {
 struct Probe<'a> {
     method: &'a str,
     path: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    body: Option<&'a JsonObject>,
 }
 
 pub(crate) struct Answer {
@@ -69,6 +71,7 @@ pub(crate) struct Answer {
 pub(crate) struct Harness {
     pub(crate) app: Router,
     pub(crate) gateway: Arc<Gateway>,
+    pub(crate) store: Arc<testkit::FakeMemoryStore>,
 }
 
 impl Harness {
@@ -169,7 +172,16 @@ impl Harness {
     }
 
     pub(crate) async fn probe_body(&self, method: &str, path: &str) -> Result<String, Failure> {
-        let probe = Probe { method, path };
+        self.probe_with(method, path, None).await
+    }
+
+    pub(crate) async fn probe_with(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&JsonObject>,
+    ) -> Result<String, Failure> {
+        let probe = Probe { method, path, body };
         Ok(self
             .tool("api", JsonObject::from_serialize(&probe)?)
             .await?
@@ -258,15 +270,20 @@ pub(crate) async fn harness_with(root: &Path, tenancy: Tenancy) -> Result<Harnes
         inherited: Vec::new(),
     })
     .await?;
+    let store = Arc::new(testkit::FakeMemoryStore::default());
     let gateway = Arc::new(
-        Gateway::new(Arc::new(testkit::FakeMemoryStore::default()), settings)
-            .with_tenancy(tenancy)
-            .with_plugins(host),
+        Gateway::new(
+            Arc::clone(&store) as Arc<dyn kernel::memory::MemoryStore>,
+            settings,
+        )
+        .with_tenancy(tenancy)
+        .with_plugins(host),
     );
     gateway::plugins::start(&gateway).await?;
     Ok(Harness {
         app: gateway.router(false),
         gateway,
+        store,
     })
 }
 

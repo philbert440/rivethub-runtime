@@ -540,8 +540,9 @@ plugin, views}` on every `/api/events/ws` socket, so a client showing one of tho
 nothing); and `POST /api/plugin/notify` (`notifications.send`) takes `{title, text?, tone?, action?}` and sends `{kind:
 "plugin.notification", plugin, node, title, text?, tone?, action?, ts}` on every `/api/notifications/ws` socket, a
 client running `action` when the person opens it. Memory a plug-in writes through `POST /api/capture` and the
-`memory_append` tool route is attributed to agent `plugin:<id>`: rh rewrites the body's `agent` before the route sees
-it.
+`memory_append` tool route is attributed to agent `plugin:<id>` and kept under session keys that start
+`plugin:<id>:`: rh rewrites the body's `agent` and puts that prefix on its `session_key` (`session_id` for the tool)
+before the route sees it, so a plug-in cannot write into another conversation.
 (54) Plug-in permissions (proposed 2026-10-29): a plug-in asks for permissions in its manifest; a person approves them
 at enable (note 55), and any later increase is approved again before the process runs with it. rh checks the B1
 permissions on every plug-in API call: `memory.read` (`GET /api/memory/*`, `POST /api/memory/tool/memory_search`,

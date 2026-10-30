@@ -30,6 +30,7 @@ struct Fixture {
 struct ApiProbe {
     method: String,
     path: String,
+    body: Option<wire::JsonObject>,
 }
 
 #[derive(Deserialize)]
@@ -94,7 +95,7 @@ fn say(line: &str) {
 }
 
 async fn serve(fixture: Arc<Fixture>, socket: String) -> std::io::Result<()> {
-    let own = probe(&fixture, "GET", "/api/plugin/self").await;
+    let own = probe(&fixture, "GET", "/api/plugin/self", None).await;
     say(&format!("started; /api/plugin/self answered {own}"));
     let listener = tokio::net::UnixListener::bind(socket)?;
     let router = Router::new()
@@ -113,9 +114,16 @@ async fn serve(fixture: Arc<Fixture>, socket: String) -> std::io::Result<()> {
     axum::serve(listener, router).await
 }
 
-async fn probe(fixture: &Fixture, method: &str, path: &str) -> String {
+async fn probe(
+    fixture: &Fixture,
+    method: &str,
+    path: &str,
+    body: Option<&wire::JsonObject>,
+) -> String {
     let url = format!("http://rivethub{path}");
-    let request = if method == "POST" {
+    let request = if let Some(body) = body {
+        fixture.api.post(url).json(body)
+    } else if method == "POST" {
         let views = match RouteName::try_from("status".to_owned()) {
             Ok(view) => vec![view],
             Err(error) => return error.to_string(),
@@ -226,7 +234,7 @@ async fn tool(
             Err(error) => Err(error.to_string()),
         },
         "api" => match call.arguments.deserialize::<ApiProbe>() {
-            Ok(asked) => Ok(probe(&fixture, &asked.method, &asked.path).await),
+            Ok(asked) => Ok(probe(&fixture, &asked.method, &asked.path, asked.body.as_ref()).await),
             Err(error) => Err(error.to_string()),
         },
         other => Err(format!("no tool {other}")),
