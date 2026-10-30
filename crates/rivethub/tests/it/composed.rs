@@ -197,7 +197,7 @@ async fn composed_binary_serves_tls_memory_and_websocket(pool: sqlx::PgPool) -> 
         .await?;
     assert_eq!(legacy_stats.messages, 0);
     drop(legacy);
-    process::provider::turns(&client, address, channel_port).await?;
+    process::provider::channel_turn(&client, channel_port).await?;
     let agent_list: wire::mesh_channel::AgentList = client
         .get(format!("https://127.0.0.1:{channel_port}/agents"))
         .send()

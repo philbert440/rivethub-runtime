@@ -124,16 +124,12 @@ fn redirect(target: &str) -> Result<Response, ApiError> {
 async fn fallback(State(gateway): State<Arc<Gateway>>, request: Request) -> Response {
     let path = request.uri().path().to_owned();
     let method = request.method().clone();
-    if delegated(&path) || (method != Method::GET && method != Method::HEAD) {
-        return super::not_found(State(gateway), request).await;
+    if method != Method::GET && method != Method::HEAD {
+        return super::not_found().await.into_response();
     }
     assets::serve(&gateway, &method, &path)
         .await
         .into_response()
-}
-
-fn delegated(path: &str) -> bool {
-    blocked_prefix(path, "/v1") || blocked_prefix(path, "/api/conversations")
 }
 
 pub(super) fn static_blocked(path: &str) -> bool {

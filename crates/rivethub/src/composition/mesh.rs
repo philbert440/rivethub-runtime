@@ -13,6 +13,13 @@ use wire::mesh::{MeshNode, MeshNodeStatus};
 
 use super::ComposeError;
 
+pub(super) fn enabled(config: &Config) -> bool {
+    config
+        .mesh
+        .as_ref()
+        .is_some_and(|mesh| mesh.enabled == Some(true))
+}
+
 pub(super) async fn start(
     config: &Config,
     env: &Environment,
@@ -21,11 +28,7 @@ pub(super) async fn start(
     shutdown: &CancellationToken,
 ) -> Result<JoinSet<Result<(), ComposeError>>, ComposeError> {
     let mut tasks = JoinSet::new();
-    if config
-        .mesh
-        .as_ref()
-        .is_none_or(|mesh| mesh.enabled != Some(true))
-    {
+    if !enabled(config) {
         return Ok(tasks);
     }
     let (port, settings, name) = channel_settings(config, env).await?;

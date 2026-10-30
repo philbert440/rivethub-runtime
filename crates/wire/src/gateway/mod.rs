@@ -13,7 +13,6 @@ pub mod tidy;
 pub mod topics;
 pub mod uploads;
 pub mod users;
-pub mod v1;
 pub mod wiki;
 
 use crate::harness::HarnessId;

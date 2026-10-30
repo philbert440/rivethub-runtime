@@ -59,8 +59,6 @@ pub enum ComposeError {
     Agent(#[from] agent_loop::Error),
     #[error(transparent)]
     Hook(#[from] agent_loop::hooks::HookError),
-    #[error(transparent)]
-    V1(#[from] gateway::routes::v1::Error),
     #[error("gateway configuration JSON is invalid: {0}")]
     Json(#[from] serde_json::Error),
     #[error(transparent)]
@@ -108,7 +106,6 @@ pub async fn hub_state(
 )]
 pub struct Composition {
     gateway: Arc<Gateway>,
-    v1: Option<Arc<gateway::routes::v1::Service>>,
     audit_tasks: JoinSet<Result<(), agent_loop::hooks::HookError>>,
     audit_cancel: CancellationToken,
     tasks: JoinSet<Result<(), ComposeError>>,
@@ -366,14 +363,10 @@ impl Composition {
         }
         let audit_cancel = shutdown.child_token();
         let mut audit_tasks = JoinSet::new();
-        let configured =
-            models::build(config, env, factory, &audit_cancel, &mut audit_tasks).await?;
-        let mut agents = std::collections::BTreeMap::new();
-        let v1 = if let Some(configured) = configured {
-            agents = configured.agents;
-            Some(configured.service)
+        let agents = if mesh::enabled(config) {
+            models::build(config, env, factory, &audit_cancel, &mut audit_tasks).await?
         } else {
-            None
+            std::collections::BTreeMap::new()
         };
         let mut background = mesh::start(config, env, agents, identity.tenancy, shutdown).await?;
         let delegating = backing.tasks.is_some();
@@ -388,7 +381,6 @@ impl Composition {
         }
         Ok(Self {
             gateway,
-            v1,
             audit_tasks,
             audit_cancel,
             tasks: background,
@@ -404,18 +396,12 @@ impl Composition {
     }
 
     pub fn router(&self, secure: bool) -> axum::Router {
-        match &self.v1 {
-            Some(service) => service.router(&self.gateway, secure),
-            None => self.gateway.router(secure),
-        }
+        self.gateway.router(secure)
     }
 
     pub async fn close(mut self) -> Result<(), ComposeError> {
         self.cancel.cancel();
         self.gateway.close().await;
-        if let Some(service) = &self.v1 {
-            service.shutdown().await;
-        }
         self.audit_cancel.cancel();
         while let Some(result) = self.audit_tasks.join_next().await {
             result??;
