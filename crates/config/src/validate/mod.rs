@@ -247,6 +247,24 @@ fn removed_key_finding(
                 &RemovedEmbedKey::iter().find(|candidate| candidate.to_string() == *key)?,
             ))
         }
+        [Segment::Key(head), Segment::Key(key), ..] if head == "tasks" && key == "pricing" => {
+            Some(Finding::warning(
+                path.to_string(),
+                "\"tasks.pricing\" is no longer used: maxUsd budgets were removed. Delete it.",
+            ))
+        }
+        [Segment::Key(head), Segment::Key(key), ..] if head == "tasks" && key == "eval" => {
+            Some(Finding::warning(
+                path.to_string(),
+                "\"tasks.eval\" is no longer used: task evals were removed. Delete it.",
+            ))
+        }
+        [Segment::Key(head), Segment::Key(key), ..] if head == "runtime" && key == "heartbeats" => {
+            Some(Finding::warning(
+                path.to_string(),
+                "\"runtime.heartbeats\" is no longer used: scheduled heartbeat tasks were removed. Delete it.",
+            ))
+        }
         _ => None,
     }
 }
@@ -369,12 +387,6 @@ fn ignored_message(config: &Config, segments: &[Segment]) -> Option<String> {
 fn runtime_message(rest: &[Segment]) -> Option<String> {
     match rest {
         [Segment::Key(key)] => Some(format!("Unknown runtime key \"{key}\"")),
-        [Segment::Key(parent), Segment::Key(key)] if parent.starts_with("heartbeats[") => {
-            Some(format!("Unknown heartbeat key \"{key}\""))
-        }
-        [Segment::Key(parent), Segment::Index(_), Segment::Key(key)] if parent == "heartbeats" => {
-            Some(format!("Unknown heartbeat key \"{key}\""))
-        }
         _ => None,
     }
 }
@@ -466,9 +478,6 @@ fn gateway_message(rest: &[Segment]) -> Option<String> {
 fn tasks_message(rest: &[Segment]) -> Option<String> {
     match rest {
         [Segment::Key(key)] => Some(format!("Unknown tasks key \"{key}\"")),
-        [Segment::Key(parent), Segment::Key(key)] if parent == "eval" => {
-            Some(format!("Unknown tasks.eval key \"{key}\""))
-        }
         [Segment::Key(parent), Segment::Key(_id), Segment::Key(key)] if parent == "harnesses" => {
             Some(format!("Unknown key \"{key}\""))
         }
@@ -518,23 +527,6 @@ fn cross_references(config: &Config, out: &mut ValidationResult) {
     }
     if let Some(memory) = &config.memory {
         memory::embed_provider_references(out, memory, config.providers.as_ref());
-    }
-    if let Some(runtime) = &config.runtime {
-        for (index, heartbeat) in runtime.heartbeats.iter().enumerate() {
-            let Some(agent) = heartbeat.agent.as_deref() else {
-                continue;
-            };
-            if agent.is_empty() || agent_names.contains(&agent) {
-                continue;
-            }
-            out.error(
-                format!("runtime.heartbeats[{index}].agent"),
-                format!(
-                    "Heartbeat agent \"{agent}\" is not defined in [agents]. Available: {}",
-                    available_list(&agent_names)
-                ),
-            );
-        }
     }
 }
 

@@ -139,8 +139,8 @@ fn removed_provider_ids(input: &serde_yaml_ng::Value) -> Vec<(String, RemovedPro
 
 const DECISION_15_WARNING: &str = "memory.capture.redaction is validated but not yet injected into harness hook processes; set RIVETOS_CAPTURE_REDACTION or pass CaptureWriterOptions.redaction to enable at runtime";
 
-const REMOVED_BY_DECISION_ROWS: usize = 17_842;
-const REMOVED_BY_DECISION_CASES: usize = 5_478;
+const REMOVED_BY_DECISION_ROWS: usize = 24_395;
+const REMOVED_BY_DECISION_CASES: usize = 5_698;
 
 fn decision_replacements(input: &serde_yaml_ng::Value) -> Vec<(String, bool, String, String)> {
     let mut replacements = Vec::new();
@@ -222,6 +222,7 @@ enum RemovedByDecision {
     ProviderKey(RemovedProviderKey),
     EmbedKey(RemovedEmbedKey),
     GoneAutoMigrate,
+    RetiredTaskKey,
 }
 
 fn key_warning(path: String, key: &str) -> Finding {
@@ -335,12 +336,45 @@ fn auto_migrate_deltas(input: &serde_yaml_ng::Value, deltas: &mut RemovedDeltas)
     }
 }
 
+fn retired_task_deltas(input: &serde_yaml_ng::Value, deltas: &mut RemovedDeltas) {
+    for (section, key, why) in [
+        ("tasks", "pricing", "maxUsd budgets were removed"),
+        ("tasks", "eval", "task evals were removed"),
+        (
+            "runtime",
+            "heartbeats",
+            "scheduled heartbeat tasks were removed",
+        ),
+    ] {
+        let present = section_value(input, section)
+            .and_then(serde_yaml_ng::Value::as_mapping)
+            .is_some_and(|mapping| mapping.get(key).is_some());
+        if present {
+            let path = format!("{section}.{key}");
+            deltas.push(
+                &path,
+                RemovedByDecision::RetiredTaskKey,
+                Finding::warning(
+                    path.clone(),
+                    format!("\"{path}\" is no longer used: {why}. Delete it."),
+                ),
+            );
+        }
+    }
+}
+
 fn removed_by_decision(input: &serde_yaml_ng::Value) -> RemovedDeltas {
     let mut deltas = RemovedDeltas::default();
     provider_key_deltas(input, &mut deltas);
     embed_key_deltas(input, &mut deltas);
     auto_migrate_deltas(input, &mut deltas);
+    retired_task_deltas(input, &mut deltas);
     deltas
+}
+
+fn under(path: &str, removed: &str) -> bool {
+    path.strip_prefix(removed)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('.') || rest.starts_with('['))
 }
 
 fn gateway_finding(mut finding: Finding) -> Finding {
@@ -496,7 +530,13 @@ fn replay_case(case: &Replay) -> Result<(), String> {
             .collect(),
         None => case.contract.clone(),
     };
-    expected_findings.retain(|finding| !case.removed.paths.contains(&finding.path));
+    expected_findings.retain(|finding| {
+        !case
+            .removed
+            .paths
+            .iter()
+            .any(|removed| under(&finding.path, removed))
+    });
     expected_findings.extend(
         case.removed
             .findings

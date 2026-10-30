@@ -4,6 +4,10 @@ The final naming sweep changes the `memory.postgres.review_endpoint` removal
 message from "compaction" to "the summarizer". The replay applies that contract
 change to the expected finding only; fixture bytes remain unchanged.
 
+The tasks refactor retires `tasks.pricing`, `tasks.eval` and `runtime.heartbeats`
+(CONTRACT note 74). The replay drops recorded findings at or under those paths and
+expects the one warning that names each retired key.
+
 The `den` section is now named `gateway` (`den` is read as a deprecated alias).
 The replay renames recorded `den` paths and messages to `gateway` on the
 expected side only; fixture bytes remain unchanged.
@@ -35,11 +39,11 @@ not reproduced verbatim. They are pinned as data in
 findings that replace the recorded ones); `deviations_are_documented` asserts
 the per-file counts against this document. Every well-typed case replays
 against the recorded findings adjusted only by the CONTRACT decisions (Decision
-11 above) and the config prune (below); 5,478 of the 6,008 validate cases
+11 above) and the config prune (below); 5,698 of the 6,008 validate cases
 carry `RemovedByDecision` table rows. The remaining divergences
 fall into the four classes below.
 
-## Accepted-but-rejected (115 cases)
+## Accepted-but-rejected (114 cases)
 
 TS validated provider/plugin-side config keys only for presence and shape of
 the section; it never type-checked individual values (plugin `ctx.pluginConfig`
@@ -53,7 +57,7 @@ document is type-confused. CONTRACT §2 puts these inputs outside the boundary
 - `validate_config_den.jsonl` — 2 accepted-but-rejected; ids: validate_config_den.jsonl:164, validate_config_den.jsonl:753
 - `validate_config_memory.jsonl` — 26 accepted-but-rejected; ids: validate_config_memory.jsonl:58, validate_config_memory.jsonl:94, validate_config_memory.jsonl:201, validate_config_memory.jsonl:245, validate_config_memory.jsonl:291
 - `validate_config_mesh_channels_misc.jsonl` — 24 accepted-but-rejected; ids: validate_config_mesh_channels_misc.jsonl:9, validate_config_mesh_channels_misc.jsonl:18, validate_config_mesh_channels_misc.jsonl:57, validate_config_mesh_channels_misc.jsonl:60, validate_config_mesh_channels_misc.jsonl:135
-- `validate_config_runtime.jsonl` — 36 accepted-but-rejected; ids: validate_config_runtime.jsonl:2, validate_config_runtime.jsonl:24, validate_config_runtime.jsonl:44, validate_config_runtime.jsonl:51, validate_config_runtime.jsonl:85
+- `validate_config_runtime.jsonl` — 35 accepted-but-rejected; ids: validate_config_runtime.jsonl:2, validate_config_runtime.jsonl:24, validate_config_runtime.jsonl:44, validate_config_runtime.jsonl:51, validate_config_runtime.jsonl:85
 - `validate_config_tasks_workflows.jsonl` — 6 accepted-but-rejected; ids: validate_config_tasks_workflows.jsonl:37, validate_config_tasks_workflows.jsonl:179, validate_config_tasks_workflows.jsonl:335, validate_config_tasks_workflows.jsonl:395, validate_config_tasks_workflows.jsonl:412
 
 `validate_config_untyped.jsonl` has none. Examples of the class: a string
@@ -61,7 +65,7 @@ document is type-confused. CONTRACT §2 puts these inputs outside the boundary
 a string under `memory.sqlite.workers`. Every affected case carries at least
 one typed Rust error; none loses a recorded warning without a replacement.
 
-## Order-only "Available" lists (58 cases)
+## Order-only "Available" lists (60 cases)
 
 The `Provider … referenced by agent … is not defined` / `Default agent … is not
 defined in [agents]` / `Heartbeat agent …` messages embed the agent or provider
@@ -73,7 +77,7 @@ differs. Five examples per file:
 
 - `validate_config.jsonl` — 13 order-only Available lists; ids: validate_config.jsonl:31, validate_config.jsonl:65, validate_config.jsonl:88, validate_config.jsonl:336, validate_config.jsonl:339
 - `validate_config_agents_providers.jsonl` — 26 order-only Available lists; ids: validate_config_agents_providers.jsonl:71, validate_config_agents_providers.jsonl:97, validate_config_agents_providers.jsonl:114, validate_config_agents_providers.jsonl:126, validate_config_agents_providers.jsonl:175
-- `validate_config_runtime.jsonl` — 20 order-only Available lists; ids: validate_config_runtime.jsonl:54, validate_config_runtime.jsonl:68, validate_config_runtime.jsonl:143, validate_config_runtime.jsonl:209, validate_config_runtime.jsonl:211
+- `validate_config_runtime.jsonl` — 22 order-only Available lists; ids: validate_config_runtime.jsonl:54, validate_config_runtime.jsonl:68, validate_config_runtime.jsonl:143, validate_config_runtime.jsonl:209, validate_config_runtime.jsonl:211
 
 ## Sequence-shaped sections and entries (3 cases)
 
