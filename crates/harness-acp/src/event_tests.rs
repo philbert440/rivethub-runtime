@@ -106,6 +106,19 @@ fn a_tool_update_carries_the_title_and_input_it_brings() {
     assert_eq!(command, Some("cargo test"));
 }
 
+#[test]
+fn a_tool_call_is_named_by_its_tool_when_the_agent_says_so() {
+    let named = |call: acp::ToolCall| match session_event(acp::SessionUpdate::ToolCall(call)) {
+        Ok(Some(SessionEvent::ToolCall(call))) => call.name,
+        other => panic!("tool call: {other:?}"),
+    };
+    assert_eq!(
+        named(acp::ToolCall::new("call", "Terminal").name("Bash".to_owned())),
+        "Bash"
+    );
+    assert_eq!(named(acp::ToolCall::new("call", "Terminal")), "Terminal");
+}
+
 #[tokio::test]
 async fn config_notifications_refresh_the_current_model() {
     let options = crate::options::SessionOptions::default();

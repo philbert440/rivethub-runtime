@@ -6064,6 +6064,19 @@
         "title"
       ]
     },
+    "HarnessSessionForkRequest": {
+      "type": "object",
+      "properties": {
+        "prompts": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "prompts"
+      ]
+    },
     "HarnessToolOutput": {
       "type": "object",
       "properties": {
@@ -11785,6 +11798,37 @@
             "sessionId",
             "toolCallId",
             "name",
+            "input"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tool-update"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "toolCallId": {
+              "type": "string"
+            },
+            "input": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "turnId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "sessionId",
+            "toolCallId",
             "input"
           ]
         },

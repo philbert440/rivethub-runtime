@@ -26,7 +26,10 @@ pub(crate) fn session_event(update: acp::SessionUpdate) -> Result<Option<Session
         }),
         acp::SessionUpdate::ToolCall(call) => Ok(SessionEvent::ToolCall(ToolCallInfo {
             tool_call_id: call.tool_call_id.0.to_string(),
-            name: call.title,
+            name: call
+                .name
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or(call.title),
             input: object_input(call.raw_input)?,
         })),
         acp::SessionUpdate::ToolCallUpdate(update) => tool_update(&update),

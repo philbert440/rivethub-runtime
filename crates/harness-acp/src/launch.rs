@@ -211,12 +211,13 @@ fn entry_for(config: &Config, harness: HarnessId) -> LaunchEntry {
             "grok",
             vec!["agent".to_owned(), "stdio".to_owned()],
         ))),
-        HarnessId::ClaudeCode => LaunchEntry::Launch(AcpLaunch::Adapter(acp_command(
-            config,
-            harness,
-            "claude-agent-acp",
-            Vec::new(),
-        ))),
+        HarnessId::ClaudeCode => {
+            let mut command = acp_command(config, harness, "claude-agent-acp", Vec::new());
+            command
+                .env
+                .push(("CLAUDE_CODE_ENABLE_TODO_TOOLS".to_owned(), "1".to_owned()));
+            LaunchEntry::Launch(AcpLaunch::Adapter(command))
+        }
         HarnessId::Codex => LaunchEntry::Launch(AcpLaunch::Adapter(acp_command(
             config,
             harness,

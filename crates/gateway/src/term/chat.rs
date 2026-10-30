@@ -20,6 +20,7 @@ pub(crate) struct ChatStart {
     pub(crate) model: Option<String>,
     pub(crate) effort: Option<ThinkingLevel>,
     pub(crate) cwd: Option<std::path::PathBuf>,
+    pub(crate) inherited_cwd: Option<std::path::PathBuf>,
     pub(crate) agent: Option<AgentLaunch>,
     pub(crate) startup_context: Option<String>,
 }
@@ -77,6 +78,7 @@ impl TerminalService {
                 model,
                 effort: None,
                 cwd,
+                inherited_cwd: None,
                 agent: None,
                 startup_context: None,
             },
@@ -94,6 +96,7 @@ impl TerminalService {
             model,
             effort,
             cwd,
+            inherited_cwd,
             agent,
             startup_context,
         } = start;
@@ -102,9 +105,10 @@ impl TerminalService {
             .clone()
             .ok_or_else(|| ApiError::Unavailable("chat harness unavailable".into()))?;
         let home = self.chat_home(harness_id)?;
-        let (directory, model, effort, agent_name) = match agent {
-            Some(agent) => agent.chat_defaults(model, effort)?,
-            None => (self.chat_directory(cwd, &home).await?, model, effort, None),
+        let (directory, model, effort, agent_name) = match (agent, inherited_cwd) {
+            (Some(agent), _) => agent.chat_defaults(model, effort)?,
+            (None, Some(directory)) => (existing_directory(directory).await?, model, effort, None),
+            (None, None) => (self.chat_directory(cwd, &home).await?, model, effort, None),
         };
         let spec = SessionSpec {
             session: SessionId::new(harness_id, &uuid::Uuid::new_v4().to_string()),
@@ -306,5 +310,17 @@ impl TerminalService {
             chat.turn_end().await?;
         }
         Ok(())
+    }
+}
+
+async fn existing_directory(directory: std::path::PathBuf) -> Result<std::path::PathBuf, ApiError> {
+    let found = tokio::task::spawn_blocking(move || directory.canonicalize())
+        .await
+        .map_err(ApiError::Task)?;
+    match found {
+        Ok(directory) if directory.is_dir() => Ok(directory),
+        Ok(_) | Err(_) => Err(ApiError::BadRequest(
+            "the session's working directory is gone".into(),
+        )),
     }
 }

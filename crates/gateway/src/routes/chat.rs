@@ -135,6 +135,7 @@ async fn create(
         model: request.model,
         effort: None,
         cwd: request.cwd.map(std::path::PathBuf::from),
+        inherited_cwd: None,
         agent,
         startup_context: rendered,
     };
@@ -328,6 +329,7 @@ async fn delegated(
             model: request.model,
             effort: request.thinking,
             cwd: request.working_dir.map(std::path::PathBuf::from),
+            inherited_cwd: None,
             agent: None,
             startup_context: None,
         },

@@ -2,6 +2,7 @@ pub mod agent;
 pub mod agent_presets;
 pub mod ca;
 pub mod filing;
+pub mod fork;
 pub mod harness;
 pub mod hub_state;
 pub mod memory;

@@ -92,7 +92,7 @@ fn gist(input: &JsonObject) -> Option<&str> {
 }
 
 pub fn tool_label(name: &str, input: &JsonObject) -> String {
-    match gist(input) {
+    match gist(input).filter(|gist| !name.contains(gist)) {
         Some(gist) => format!("{name}: {gist}"),
         None => name.to_owned(),
     }
@@ -244,6 +244,10 @@ mod tests {
         activity.tool_started("t1", "Terminal", &input("{}"), now);
         activity.tool_started("t2", "Terminal", &input("{}"), now);
         assert_eq!(tool_label("Edit", &input(r#"{"new_string":"x"}"#)), "Edit");
+        assert_eq!(
+            tool_label("ls -la /tmp", &input(r#"{"command":"ls -la /tmp"}"#)),
+            "ls -la /tmp"
+        );
         activity.tool_updated("t1", Some("`ls -la`"), None);
         activity.tool_updated(
             "t2",
