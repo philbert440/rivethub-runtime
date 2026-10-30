@@ -73,6 +73,11 @@ fn error(error: TidyError) -> ApiError {
             tracing::error!("tidy store failed: {source}");
             ApiError::Unavailable("tidy store unavailable".into())
         }
+        TidyError::PagesUnavailable => ApiError::Unavailable(error.to_string()),
+        TidyError::Wiki(source) => {
+            tracing::error!("tidy wiki change failed: {source}");
+            ApiError::Unavailable("wiki pages unavailable".into())
+        }
     }
 }
 
@@ -128,6 +133,7 @@ fn ports(gateway: &Gateway) -> Result<TidyPorts<'_>, ApiError> {
         tidy: gateway.tidy()?.as_ref(),
         topics: gateway.topics()?.as_ref(),
         filing: gateway.filing()?.as_ref(),
+        pages: gateway.startup_memory().map(|(pages, _)| pages),
     })
 }
 

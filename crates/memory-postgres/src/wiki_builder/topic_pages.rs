@@ -111,6 +111,25 @@ impl TopicPageStore for PostgresMemory {
         };
         self.fold_wiki(&fold, now).await.map(drop)
     }
+
+    async fn remove_page(&self, slug: &WikiSlug) -> Result<(), WikiStoreError> {
+        let message = format!("wiki({}): removed after a tidy review", slug.as_ref());
+        let removed = {
+            let mut repository = self.repository().await?;
+            let removed = repository
+                .remove(&[slug.as_ref().to_owned()], &message)
+                .await
+                .map_err(WikiStoreError::from);
+            settle(removed, repository.release().await)
+        };
+        removed?;
+        sqlx::query("DELETE FROM rh_wiki_topics WHERE slug = $1")
+            .bind(slug.as_ref())
+            .execute(&self.pool)
+            .await
+            .map_err(query_error)?;
+        Ok(())
+    }
 }
 
 impl PostgresMemory {

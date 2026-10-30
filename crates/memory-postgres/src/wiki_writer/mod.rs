@@ -69,6 +69,14 @@ impl LockedRepository {
         fold_locked(&self.root, page, removed, message).await
     }
 
+    pub async fn remove(
+        &mut self,
+        removed: &[String],
+        message: &str,
+    ) -> Result<String, WikiWriteError> {
+        remove_locked(&self.root, removed, message).await
+    }
+
     pub async fn release(self) -> Result<(), WikiWriteError> {
         self.lock.release().await
     }
@@ -158,6 +166,22 @@ async fn fold_locked(
 ) -> Result<String, WikiWriteError> {
     sync(root).await?;
     let mut paths = vec![store_page(root, page).await?];
+    paths.extend(remove_files(root, removed).await?);
+    commit(root, &paths, message).await
+}
+
+async fn remove_locked(
+    root: &Path,
+    removed: &[String],
+    message: &str,
+) -> Result<String, WikiWriteError> {
+    sync(root).await?;
+    let paths = remove_files(root, removed).await?;
+    commit(root, &paths, message).await
+}
+
+async fn remove_files(root: &Path, removed: &[String]) -> Result<Vec<String>, WikiWriteError> {
+    let mut paths = Vec::new();
     for slug in removed {
         let slug = WikiSlug::try_from(normalize_slug(slug))?;
         let relative = topic_path(&slug);
@@ -174,7 +198,7 @@ async fn fold_locked(
         }
         paths.push(relative);
     }
-    commit(root, &paths, message).await
+    Ok(paths)
 }
 
 async fn sync(root: &Path) -> Result<(), WikiWriteError> {

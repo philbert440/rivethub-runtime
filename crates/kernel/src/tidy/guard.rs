@@ -135,7 +135,10 @@ impl<'a> Guard<'a> {
             TreeEdit::Merge { .. }
             | TreeEdit::Move { .. }
             | TreeEdit::Close { .. }
-            | TreeEdit::Delete { .. } => return None,
+            | TreeEdit::Delete { .. }
+            | TreeEdit::FileInto { .. }
+            | TreeEdit::MergePage { .. }
+            | TreeEdit::RemovePage { .. } => return None,
         };
         Some((kind, Slug::of_heading(name.as_str())?))
     }
@@ -192,6 +195,11 @@ impl<'a> Guard<'a> {
                 self.fits_under(TopicKind::Work, *parent)?;
                 self.fresh(TopicKind::Work, name)
             }
+            TreeEdit::FileInto { topic, .. } => {
+                self.topic(*topic)?;
+                Ok(())
+            }
+            TreeEdit::MergePage { .. } | TreeEdit::RemovePage { .. } => Ok(()),
             TreeEdit::AddType { name, parent, .. } => {
                 self.fits_under(TopicKind::Type, *parent)?;
                 self.fresh(TopicKind::Type, name)

@@ -7956,6 +7956,12 @@
                 "null"
               ]
             },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "sessions": {
               "type": "array",
               "items": {
@@ -7975,6 +7981,72 @@
             "kind",
             "topic",
             "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "fileInto"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "sessions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SessionId"
+              },
+              "default": []
+            },
+            "conversations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "kind",
+            "topic"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "mergePage"
+            },
+            "page": {
+              "type": "string"
+            },
+            "into": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "page",
+            "into"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "removePage"
+            },
+            "page": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "page"
           ]
         },
         {

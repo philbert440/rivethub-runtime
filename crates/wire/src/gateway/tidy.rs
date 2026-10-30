@@ -72,10 +72,26 @@ pub enum TidyChange {
         name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        aliases: Vec<String>,
         #[serde(default)]
         sessions: Vec<SessionId>,
         #[serde(default)]
         conversations: Vec<String>,
+    },
+    FileInto {
+        topic: String,
+        #[serde(default)]
+        sessions: Vec<SessionId>,
+        #[serde(default)]
+        conversations: Vec<String>,
+    },
+    MergePage {
+        page: String,
+        into: String,
+    },
+    RemovePage {
+        page: String,
     },
     AddType {
         topic: String,

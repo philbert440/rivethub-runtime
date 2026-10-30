@@ -28,6 +28,7 @@ use kernel::topics::TopicId;
 use kernel::topics::TopicKey;
 use kernel::topics::TopicKind;
 use kernel::topics::TopicName;
+use kernel::topics::TopicPageStore;
 use kernel::topics::TopicStore;
 use wire::JsonObject;
 use wire::gateway::tidy::TidyEvidence;
@@ -48,7 +49,7 @@ fn evidence(sessions: u64) -> TidyEvidence {
 
 pub async fn proposals_are_decided_and_rejections_remembered<S>(store: &S) -> Outcome
 where
-    S: TidyStore + TopicStore + FilingStore,
+    S: TidyStore + TopicStore + FilingStore + TopicPageStore,
 {
     let app = store.create(new_topic("Desktop App", &[], None)?).await?;
     let client = store
@@ -75,6 +76,7 @@ where
             topic: created,
             name: TopicName::new("Release Tooling")?,
             parent: None,
+            aliases: Vec::new(),
             members: members.iter().cloned().map(Target::Session).collect(),
         },
         Reason::new("three sessions suggested it")?,
@@ -93,7 +95,7 @@ async fn decided_and_remembered<S>(
     created: TopicId,
 ) -> Outcome
 where
-    S: TidyStore + TopicStore + FilingStore,
+    S: TidyStore + TopicStore + FilingStore + TopicPageStore,
 {
     let ids: Vec<_> = stored
         .proposals
@@ -120,6 +122,7 @@ where
         tidy: store,
         topics: store,
         filing: store,
+        pages: Some(store),
     };
     let [merge, rejected, create] = ids.as_slice() else {
         return Err("three proposals were kept".into());
