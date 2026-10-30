@@ -25,7 +25,20 @@ pub struct ExtractWiki {
 
 #[must_use]
 pub fn extraction_schema() -> schemars::Schema {
-    schemars::schema_for!(Vec<WikiPatch>)
+    let mut schema = schemars::schema_for!(Vec<WikiPatch>);
+    let constraints = [
+        ("/$defs/WikiSlug", "pattern", "^[a-z0-9]+(-[a-z0-9]+)*$"),
+        ("/$defs/WikiHistoryEntry/properties/date", "format", "date"),
+    ];
+    for (pointer, keyword, value) in constraints {
+        if let Some(object) = schema
+            .pointer_mut(pointer)
+            .and_then(|value| value.as_object_mut())
+        {
+            object.insert(keyword.to_owned(), value.into());
+        }
+    }
+    schema
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

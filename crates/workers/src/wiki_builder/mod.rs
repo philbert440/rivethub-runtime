@@ -183,9 +183,13 @@ async fn extract_and_apply(
 pub const WIKI_EXTRACT_MAX_TOKENS: u32 = 32_000;
 
 async fn extract(env: &WikiBuilderEnv<'_>, user: String) -> Result<Vec<WikiPatch>, WorkerError> {
-    let schema = serde_json::to_string(&extraction_schema()).map_err(WorkerError::WikiJson)?;
+    let constraint = extraction_schema();
+    let schema = serde_json::to_string(&constraint).map_err(WorkerError::WikiJson)?;
     let request = ModelRequest {
-        options: kernel::model::ModelOptions::default(),
+        options: kernel::model::ModelOptions {
+            json_schema: Some(constraint),
+            ..kernel::model::ModelOptions::default()
+        },
         model: env.model.to_owned(),
         messages: vec![
             message(
