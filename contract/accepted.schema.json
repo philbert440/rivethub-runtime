@@ -9178,73 +9178,8 @@
       ]
     },
     "SessionBroadcast": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/snapshot"
-        },
-        {
-          "$ref": "#/$defs/session.removed"
-        },
-        {
-          "$ref": "#/$defs/hub.state"
-        },
-        {
-          "$ref": "#/$defs/plugin.changed"
-        },
-        {
-          "$ref": "#/$defs/plugin.views"
-        },
-        {
-          "$ref": "#/$defs/AgentEvent"
-        }
-      ]
-    },
-    "plugin.changed": {
       "type": "object",
-      "properties": {
-        "v": {
-          "$ref": "#/$defs/ProtocolVersion"
-        },
-        "plugin": {
-          "$ref": "#/$defs/PluginId"
-        }
-      },
-      "required": [
-        "v",
-        "plugin"
-      ]
-    },
-    "PluginId": {
-      "type": "string",
-      "pattern": "^[a-z](-?[a-z0-9])+$",
-      "maxLength": 24
-    },
-    "plugin.views": {
-      "type": "object",
-      "properties": {
-        "v": {
-          "$ref": "#/$defs/ProtocolVersion"
-        },
-        "plugin": {
-          "$ref": "#/$defs/PluginId"
-        },
-        "views": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/RouteName"
-          }
-        }
-      },
-      "required": [
-        "v",
-        "plugin",
-        "views"
-      ]
-    },
-    "RouteName": {
-      "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9_-]*$",
-      "maxLength": 64
+      "additionalProperties": true
     },
     "CaptureBatchRequest": {
       "type": "object",
@@ -13718,10 +13653,20 @@
         "createdAt"
       ]
     },
+    "PluginId": {
+      "type": "string",
+      "pattern": "^[a-z](-?[a-z0-9])+$",
+      "maxLength": 24
+    },
     "ToolName": {
       "type": "string",
       "pattern": "^[a-z](_?[a-z0-9])*$",
       "maxLength": 24
+    },
+    "RouteName": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "maxLength": 64
     },
     "PluginManifest": {
       "type": "object",
@@ -16988,6 +16933,43 @@
       "additionalProperties": false,
       "required": [
         "values"
+      ]
+    },
+    "plugin.changed": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "plugin": {
+          "$ref": "#/$defs/PluginId"
+        }
+      },
+      "required": [
+        "v",
+        "plugin"
+      ]
+    },
+    "plugin.views": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "plugin": {
+          "$ref": "#/$defs/PluginId"
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RouteName"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "plugin",
+        "views"
       ]
     },
     "PluginToolList": {

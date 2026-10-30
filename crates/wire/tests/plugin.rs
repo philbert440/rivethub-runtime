@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use wire::events::SessionBroadcast;
 use wire::plugin::action::{ViewActionRefusal, ViewActionRequest, ViewActionResult};
 use wire::plugin::canvas::{CanvasEventRequest, CanvasResponse};
 use wire::plugin::host::{
@@ -98,6 +99,8 @@ fn host_routes_and_notices_fit_the_contract() -> Result<(), String> {
     roundtrip::<PluginSettingsUpdate>(&host, "settingsUpdates")?;
     roundtrip::<PluginChangedNotice>(&host, "changedNotices")?;
     roundtrip::<PluginViewsNotice>(&host, "viewsNotices")?;
+    roundtrip::<SessionBroadcast>(&host, "changedNotices")?;
+    roundtrip::<SessionBroadcast>(&host, "viewsNotices")?;
     roundtrip::<PluginSelf>(&host, "selves")?;
     roundtrip::<PluginViewsChanged>(&host, "viewsChanged")?;
     roundtrip::<PluginNotify>(&host, "notifies")?;
