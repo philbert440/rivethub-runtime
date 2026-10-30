@@ -14,9 +14,11 @@ use super::HookRun;
 use super::append_log;
 use super::iso_at;
 use crate::listing::StoreRoots;
+use crate::listing::codex_session_title;
 use crate::listing::grok_title;
 use crate::listing::opencode_title;
 use crate::readers::TranscriptSlice;
+use crate::readers::codex::CodexTranscriptReader;
 use crate::readers::grok::GrokTranscriptReader;
 use crate::readers::opencode::OpencodeTranscriptReader;
 use crate::writer::CaptureTransport;
@@ -27,6 +29,7 @@ use crate::writer::Totals;
 pub enum StoreHarness {
     GrokBuild,
     Opencode,
+    Codex,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,14 +63,22 @@ impl StoreHarness {
                 source: "opencode-hook",
                 log: "opencode-capture.log",
             },
+            Self::Codex => Profile {
+                harness: HarnessId::Codex,
+                agent: "rivet-gpt",
+                channel: "codex",
+                source: "codex-hook",
+                log: "codex-capture.log",
+            },
         }
     }
 
     fn trigger(self, event: &str) -> Option<Trigger> {
         match (self, event) {
             (Self::GrokBuild, "Stop" | "PreCompact")
-            | (Self::Opencode, "session.idle" | "session.error") => Some(Trigger::Capture),
-            (Self::GrokBuild, "SessionEnd") => Some(Trigger::Finalize),
+            | (Self::Opencode, "session.idle" | "session.error")
+            | (Self::Codex, "Stop") => Some(Trigger::Capture),
+            (Self::GrokBuild | Self::Codex, "SessionEnd") => Some(Trigger::Finalize),
             _ => None,
         }
     }
@@ -76,6 +87,7 @@ impl StoreHarness {
         match self {
             Self::GrokBuild => roots.grok.clone(),
             Self::Opencode => roots.opencode.clone(),
+            Self::Codex => roots.codex.clone(),
         }
     }
 }
@@ -84,6 +96,7 @@ impl StoreHarness {
 enum Reader {
     Grok(GrokTranscriptReader),
     Opencode(OpencodeTranscriptReader),
+    Codex(CodexTranscriptReader),
 }
 
 impl Reader {
@@ -94,6 +107,7 @@ impl Reader {
         match self {
             Self::Grok(reader) => reader.capture(session).await,
             Self::Opencode(reader) => reader.capture(session).await,
+            Self::Codex(reader) => reader.capture(session).await,
         }
     }
 }
@@ -138,6 +152,7 @@ impl<T: CaptureTransport> StoreHook<T> {
             StoreHarness::Opencode => {
                 Reader::Opencode(OpencodeTranscriptReader::new(store.clone()))
             }
+            StoreHarness::Codex => Reader::Codex(CodexTranscriptReader::new(store.clone())),
         };
         Some(Self {
             harness,
@@ -221,6 +236,7 @@ impl<T: CaptureTransport> StoreHook<T> {
         let found = match self.harness {
             StoreHarness::GrokBuild => grok_title(self.store.clone(), native.to_owned()).await,
             StoreHarness::Opencode => opencode_title(self.store.clone(), native.to_owned()).await,
+            StoreHarness::Codex => codex_session_title(self.store.clone(), native.to_owned()).await,
         };
         match found {
             Ok(title) => title,

@@ -1,6 +1,6 @@
 mod ancestors;
 mod claude;
-mod codex;
+pub(crate) mod codex;
 pub(crate) mod cowork;
 mod cursor;
 mod databases;
@@ -117,6 +117,18 @@ pub(crate) async fn opencode_title(
 ) -> Result<Option<String>, TranscriptReaderError> {
     blocking(move || {
         Ok(databases::opencode_describe(&root, &id)?
+            .map(|row| row.title)
+            .filter(|title| *title != id))
+    })
+    .await
+}
+
+pub(crate) async fn codex_session_title(
+    root: PathBuf,
+    id: String,
+) -> Result<Option<String>, TranscriptReaderError> {
+    blocking(move || {
+        Ok(codex::describe(&root, &id)?
             .map(|row| row.title)
             .filter(|title| *title != id))
     })

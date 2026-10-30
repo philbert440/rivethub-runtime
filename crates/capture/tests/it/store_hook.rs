@@ -312,3 +312,101 @@ async fn an_idle_opencode_session_posts_its_parts_under_their_part_ids() -> Test
     );
     Ok(())
 }
+
+const CODEX_SESSION: &str = "01a18e31-2073-7cc2-be8a-8e36c42f8948";
+
+const ROLLOUT: &str = r#"{"timestamp":"2026-10-30T15:00:00.000Z","type":"session_meta","payload":{"id":"01a18e31-2073-7cc2-be8a-8e36c42f8948","cwd":"/work/codex"}}
+{"timestamp":"2026-10-30T15:00:01.000Z","type":"response_item","payload":{"type":"message","role":"developer","id":"msg_dev","content":[{"type":"input_text","text":"rules"}]}}
+{"timestamp":"2026-10-30T15:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","id":"msg_env","content":[{"type":"input_text","text":"<environment_context>cwd</environment_context>"}]}}
+{"timestamp":"2026-10-30T15:00:03.000Z","type":"response_item","payload":{"type":"message","role":"user","id":"msg_user","content":[{"type":"input_text","text":"  apply the patch  "}]}}
+{"timestamp":"2026-10-30T15:00:04.000Z","type":"response_item","payload":{"type":"reasoning","id":"rs_1","summary":[{"type":"summary_text","text":"Patch "},{"type":"summary_text","text":"first."}],"content":null}}
+{"timestamp":"2026-10-30T15:00:05.000Z","type":"response_item","payload":{"type":"custom_tool_call","id":"ctc_1","call_id":"call_1","name":"apply_patch","input":"*** Begin Patch"}}
+{"timestamp":"2026-10-30T15:00:06.000Z","type":"response_item","payload":{"type":"custom_tool_call_output","id":"ctco_1","call_id":"call_1","output":"Done!"}}
+{"timestamp":"2026-10-30T15:00:07.000Z","type":"response_item","payload":{"type":"function_call","call_id":"call_2","name":"shell","arguments":"{\"command\":[\"ls\"]}"}}
+{"timestamp":"2026-10-30T15:00:08.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_9","output":{"error":"no"},"error":"denied"}}
+{"timestamp":"2026-10-30T15:00:09.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Applied."}}
+{"timestamp":"2026-10-30T15:00:10.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Applied."}]}}
+"#;
+
+#[tokio::test]
+async fn a_codex_turn_end_posts_rollout_items_under_the_kits_ids() -> TestResult {
+    let home = tempfile::tempdir()?;
+    let day = home.path().join(".codex/sessions/2026/10/30");
+    std::fs::create_dir_all(&day)?;
+    std::fs::write(
+        day.join(format!("rollout-2026-10-30T15-00-00-{CODEX_SESSION}.jsonl")),
+        ROLLOUT,
+    )?;
+    let env =
+        config::Environment::from_vars([("HOME".to_owned(), home.path().display().to_string())]);
+    let transport = FakeTransport::default();
+    let writer = CaptureWriter::new(
+        transport.clone(),
+        CaptureSpool::new(home.path().join("spool")),
+        None,
+        None,
+    );
+    let hook = StoreHook::new(
+        StoreHarness::Codex,
+        writer,
+        &store_roots(&env),
+        &config::Paths::new(&env)?,
+    )
+    .ok_or("codex store")?;
+    let now: DateTime<Utc> = NOW_TEXT.parse()?;
+    let payload = |event: &str| {
+        format!(
+            r#"{{"session_id":"{CODEX_SESSION}","hook_event_name":"{event}","cwd":"/work/codex"}}"#
+        )
+    };
+    for event in ["UserPromptSubmit", "Stop", "SessionEnd"] {
+        assert_eq!(hook.run(&payload(event), now).await.stderr, "");
+    }
+    let posts = transport.posts.lock().clone();
+    let [stop, end] = posts.as_slice() else {
+        return Err(format!("expected two posts, got {}", posts.len()).into());
+    };
+    let batch: Json = serde_json::from_str(stop)?;
+    assert_eq!(
+        at(&batch, "/session_key").as_str(),
+        Some(format!("codex:{CODEX_SESSION}").as_str())
+    );
+    assert_eq!(at(&batch, "/agent"), "rivet-gpt");
+    assert_eq!(at(&batch, "/channel"), "codex");
+    assert_eq!(at(&batch, "/title"), "apply the patch");
+    assert!(at(&batch, "/finalize").is_null());
+    let rows: Vec<(&str, &str, &str)> = at(&batch, "/messages")
+        .as_array()
+        .ok_or("messages")?
+        .iter()
+        .filter_map(|message| {
+            Some((
+                at(message, "/event_id").as_str()?,
+                at(message, "/role").as_str()?,
+                at(message, "/content").as_str()?,
+            ))
+        })
+        .collect();
+    let line = format!("codex:{CODEX_SESSION}:line:10");
+    assert_eq!(
+        rows,
+        [
+            ("msg_user", "user", "apply the patch"),
+            ("rs_1", "assistant", "[thinking] Patch first."),
+            ("ctc_1", "tool", "[tool] apply_patch"),
+            ("ctco_1", "tool", "[tool-result] apply_patch"),
+            ("call_2", "tool", "[tool] shell"),
+            ("call_9", "tool", "[tool-failure] unknown"),
+            (line.as_str(), "assistant", "Applied."),
+        ]
+    );
+    let messages = at(&batch, "/messages");
+    assert_eq!(at(messages, "/2/tool_args/input"), "*** Begin Patch");
+    assert_eq!(at(messages, "/3/tool_result"), "Done!");
+    assert_eq!(at(messages, "/4/tool_args/command/0"), "ls");
+    assert_eq!(at(messages, "/5/tool_result"), r#"{"error":"no"}"#);
+    assert_eq!(at(messages, "/0/metadata/session_jsonl_line"), 3);
+    let end: Json = serde_json::from_str(end)?;
+    assert_eq!(at(&end, "/finalize"), true);
+    Ok(())
+}

@@ -33,6 +33,7 @@ pub enum HookHarness {
     ClaudeCode,
     GrokBuild,
     Opencode,
+    Codex,
 }
 
 pub(crate) async fn run(command: CaptureCommand, env: &Environment) -> Result<Report, Error> {
@@ -47,6 +48,9 @@ pub(crate) async fn run(command: CaptureCommand, env: &Environment) -> Result<Re
                 }
                 HookHarness::Opencode => {
                     store_hook(env, &stdin, Utc::now(), StoreHarness::Opencode).await
+                }
+                HookHarness::Codex => {
+                    store_hook(env, &stdin, Utc::now(), StoreHarness::Codex).await
                 }
             })
         }

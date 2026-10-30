@@ -1,3 +1,5 @@
+mod capture;
+
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -32,6 +34,7 @@ use super::message::tool_turn;
 use super::message::unknown;
 use super::scan::lines;
 use super::scan::read_optional;
+use super::scan::read_whole;
 use crate::store_path::DirState;
 use crate::store_path::Root;
 use crate::store_path::dir_state;
@@ -63,6 +66,33 @@ impl CodexTranscriptReader {
         let root = self.root.clone();
         let session = session.clone();
         let slice = blocking(move || load(&root, &session, &native_id, offset)).await?;
+        report(FORMAT, &slice.skipped);
+        Ok(slice)
+    }
+
+    pub async fn capture(
+        &self,
+        session: &SessionId,
+    ) -> Result<TranscriptSlice, TranscriptReaderError> {
+        let Some(native_id) = native(session, HarnessId::Codex).map(str::to_owned) else {
+            return Ok(TranscriptSlice::empty(0));
+        };
+        let root = self.root.clone();
+        let slice = blocking(move || {
+            session_component(&native_id)?;
+            let root = Root::open(&root)?;
+            let Some((_, path)) = rollout_files(&root)?
+                .into_iter()
+                .find(|(id, _)| *id == native_id)
+            else {
+                return Ok(TranscriptSlice::empty(0));
+            };
+            match read_whole(&root, &path)? {
+                Some(text) => capture::map_rollout(&native_id, &path, &text),
+                None => Ok(TranscriptSlice::empty(0)),
+            }
+        })
+        .await?;
         report(FORMAT, &slice.skipped);
         Ok(slice)
     }
