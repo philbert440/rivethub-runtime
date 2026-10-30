@@ -23,6 +23,7 @@ const HEARTBEAT: Duration = Duration::from_secs(30);
 const SYNC_INTERVAL: Duration = Duration::from_secs(2);
 const SEND_BUFFER: usize = 1024 * 1024;
 const FOLLOW_FAST: Duration = Duration::from_secs(1);
+const FOLLOW_BUSY: Duration = Duration::from_secs(2);
 const FOLLOW_SLOW: Duration = Duration::from_secs(5);
 
 pub(super) async fn upgrade(
@@ -159,10 +160,11 @@ impl Follow {
     }
 
     fn read(&mut self, changed: bool) {
+        let slowest = if self.busy { FOLLOW_BUSY } else { FOLLOW_SLOW };
         self.gap = if changed {
             FOLLOW_FAST
         } else {
-            (self.gap * 2).min(FOLLOW_SLOW)
+            (self.gap * 2).min(slowest)
         };
         self.due = Instant::now() + self.gap;
     }

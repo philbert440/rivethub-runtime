@@ -1005,9 +1005,10 @@ harness session socket on it follows the session's transcript, as the store read
 `GET /api/harness-sessions/{session}/transcript`, and sends a `transcript` (`from` 0, the whole read, then the waiting
 approvals, the held `context` and the held `driver`) whenever the read differs from the last one it sent: a terminal
 turn's prompt, replies, tool calls and results reach Chat as they are written, with or without a hook. It reads a
-second after it starts following and after each read that found a change, and backs off to one read every 5 s while
-nothing changes; a submitted prompt (`busy` turning true) brings it back to one a second, and it reads once more when
-the terminal stops holding the session. What a read shows is per harness: Claude Code and Grok Build carry messages,
+second after it starts following and after each read that found a change, and while nothing changes backs off to one
+read every 2 s while `busy` and every 5 s otherwise; a submitted prompt (`busy` turning true) brings it back to one a
+second, and it reads once more when the terminal stops holding the session. A harness that buffers its transcript
+shows its turn as late as it writes: Claude Code appends each record about 3 s after it happens. What a read shows is per harness: Claude Code and Grok Build carry messages,
 tool calls and their results; Codex, OpenCode, omp, Kimi Code, Hermes and Cursor carry message text only; dsh and
 Cowork have no transcript source and send none. Following only displays: it never changes who holds the session.
 (81) Terminal approvals (Phil, 2026-10-30): B2 gains the kind `approval.wait`, `{ "v": 1, "session", "type":
