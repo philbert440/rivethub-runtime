@@ -1,17 +1,17 @@
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::wiki::WikiFilter;
+use kernel::wiki::WikiGapsResponse;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::WikiPageResponse;
+use kernel::wiki::WikiRedLink;
+use kernel::wiki::WikiSource;
+use kernel::wiki::WikiTopic;
+use kernel::wiki::WikiTopicList;
 use kernel::wiki::page::WikiSlug;
 use sqlx::Postgres;
 use sqlx::QueryBuilder;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiGapsResponse;
-use wire::gateway::wiki::WikiPageResponse;
-use wire::gateway::wiki::WikiRedLink;
-use wire::gateway::wiki::WikiSource;
-use wire::gateway::wiki::WikiTopic;
-use wire::gateway::wiki::WikiTopicList;
 
 use crate::Error;
 use crate::PostgresMemory;
@@ -170,7 +170,7 @@ impl PostgresMemory {
                 Ok(WikiSource {
                     kind: row
                         .source_kind
-                        .parse::<wire::gateway::wiki::WikiSourceKind>()
+                        .parse::<kernel::wiki::page::WikiSourceKind>()
                         .map_err(|source| {
                             Error::operation(
                                 "wiki source kind",

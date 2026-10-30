@@ -2,11 +2,11 @@
 
 use kernel::hub_state::HubStateStore;
 use kernel::hub_state::HubStateWrite;
+use kernel::hub_state::Versioned;
 use memory_postgres::PostgresHubState;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use wire::gateway::hub_state::HubState;
-use wire::gateway::hub_state::HubStateResponse;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -35,10 +35,10 @@ async fn a_database_without_the_table_is_not_a_hub_state_store(pool: PgPool) -> 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn versions_advance_and_stale_writes_conflict(pool: PgPool) -> TestResult {
     let hub = store(&pool).await?;
-    assert_eq!(hub.load("owner").await?, HubStateResponse::default());
+    assert_eq!(hub.load("owner").await?, Versioned::default());
 
     let first = hub.replace("owner", 0, pinned(KEY)).await?;
-    let saved = HubStateResponse {
+    let saved = Versioned {
         version: 1,
         state: pinned(KEY),
     };
@@ -57,12 +57,12 @@ async fn versions_advance_and_stale_writes_conflict(pool: PgPool) -> TestResult 
     let second = hub.replace("owner", 1, HubState::default()).await?;
     assert_eq!(
         second,
-        HubStateWrite::Saved(HubStateResponse {
+        HubStateWrite::Saved(Versioned {
             version: 2,
             state: HubState::default(),
         })
     );
-    assert_eq!(hub.load("alice").await?, HubStateResponse::default());
+    assert_eq!(hub.load("alice").await?, Versioned::default());
     Ok(())
 }
 

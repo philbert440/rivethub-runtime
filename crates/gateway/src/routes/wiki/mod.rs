@@ -93,14 +93,18 @@ async fn topics(
     State(gateway): State<Arc<Gateway>>,
     Query(query): Query<WikiQuery>,
 ) -> Result<Json<WikiTopicList>, ApiError> {
-    Ok(Json(gateway.store().wiki_topics(filter(query)).await?))
+    Ok(Json(crate::memory_body::wiki_topic_list_body(
+        gateway.store().wiki_topics(filter(query)).await?,
+    )))
 }
 
 async fn gaps(
     State(gateway): State<Arc<Gateway>>,
     Query(query): Query<WikiQuery>,
 ) -> Result<Json<WikiGapsResponse>, ApiError> {
-    Ok(Json(gateway.store().wiki_gaps(filter(query).limit).await?))
+    Ok(Json(crate::memory_body::wiki_gaps_response_body(
+        gateway.store().wiki_gaps(filter(query).limit).await?,
+    )))
 }
 
 async fn page(
@@ -129,11 +133,13 @@ async fn index(
     Query(query): Query<WikiQuery>,
 ) -> Result<Response, WikiError> {
     let filter = filter(query);
-    let topics = gateway
-        .store()
-        .wiki_topics(filter.clone())
-        .await
-        .map_err(ApiError::from)?;
+    let topics = crate::memory_body::wiki_topic_list_body(
+        gateway
+            .store()
+            .wiki_topics(filter.clone())
+            .await
+            .map_err(ApiError::from)?,
+    );
     Ok(html::response(
         StatusCode::OK,
         html::index(&topics, &filter)?,
@@ -196,13 +202,18 @@ async fn respond(gateway: &Gateway, slug: WikiSlug, format: Format) -> Result<Re
         .map_err(ApiError::from)?
     {
         WikiLookup::Page(page) => match format {
-            Format::Json => Ok(Json(*page).into_response()),
+            Format::Json => {
+                Ok(Json(crate::memory_body::wiki_page_response_body(*page)).into_response())
+            }
             Format::Raw => Ok((
                 [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],
                 page.markdown,
             )
                 .into_response()),
-            Format::Html => Ok(html::response(StatusCode::OK, html::article(&page)?)),
+            Format::Html => Ok(html::response(
+                StatusCode::OK,
+                html::article(&crate::memory_body::wiki_page_response_body(*page))?,
+            )),
         },
         WikiLookup::Redirect(target) => {
             let target = WikiSlug::try_from(target)?;

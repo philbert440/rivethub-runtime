@@ -3,18 +3,18 @@ use std::io::BufRead as _;
 use std::io::BufReader;
 use std::path::Path;
 
+use kernel::transcript::HarnessToolOutput;
+use kernel::transcript::HarnessTranscriptTool;
+use kernel::transcript::HarnessTranscriptTurn;
+use kernel::transcript::MessageUsage;
+use kernel::transcript::SessionMessageRole;
 use kernel::transcript::StoreTranscript;
+use kernel::transcript::TranscriptAttachment;
+use kernel::transcript::TranscriptBlock;
 use kernel::transcript::TranscriptReaderError;
+use kernel::transcript::TranscriptToolStatus;
 use serde::Deserialize;
 use wire::JsonObject;
-use wire::gateway::sessions::HarnessToolOutput;
-use wire::gateway::sessions::HarnessTranscriptTool;
-use wire::gateway::sessions::HarnessTranscriptTurn;
-use wire::gateway::sessions::MessageUsage;
-use wire::gateway::sessions::SessionMessageRole;
-use wire::gateway::sessions::TranscriptAttachment;
-use wire::gateway::sessions::TranscriptBlock;
-use wire::gateway::sessions::TranscriptToolStatus;
 
 use super::super::claude::transcript_file;
 use super::super::field::Field;

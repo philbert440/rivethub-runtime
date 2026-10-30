@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use agent_client_protocol::schema::v1 as acp;
+use kernel::harness::ApprovalDecision;
 use parking_lot::Mutex;
 use tokio::sync::oneshot;
-use wire::harness::ApprovalDecision;
 
 use crate::error::AcpError;
 

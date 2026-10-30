@@ -186,7 +186,7 @@ async fn run_call(id: String, model: String, runner: Arc<dyn TurnRunner>, call: 
             thinking: None,
             max_tokens: None,
         },
-        context: wire::hooks::HookContextBase {
+        context: kernel::agent::TurnContext {
             agent_id: Some(id.clone()),
             session_id: session.clone(),
             timestamp: Utc::now(),

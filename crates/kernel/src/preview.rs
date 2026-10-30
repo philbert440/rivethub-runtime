@@ -1,9 +1,9 @@
+use crate::transcript::HarnessTranscriptTurn;
+use crate::transcript::SessionMessageRole;
 use chrono::DateTime;
 use chrono::Utc;
 use strum::IntoEnumIterator as _;
 use values::JsonObject;
-use wire::gateway::sessions::HarnessTranscriptTurn;
-use wire::gateway::sessions::SessionMessageRole;
 
 pub const PREVIEW_CHARS: usize = 200;
 const WRITING_CHARS: usize = 600;
@@ -34,13 +34,6 @@ pub fn is_prompt_tool(name: &str) -> bool {
     name.trim().to_lowercase().parse::<PromptTool>().is_ok()
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns what a session preview shows; wire::gateway::sessions::SessionPreviewKind is the contract's copy, translated by the gateway's preview route"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewKind {
     Running,

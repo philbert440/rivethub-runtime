@@ -1,13 +1,13 @@
 use crate::common;
 
+use kernel::memory::MemoryScope;
 use kernel::memory::jobs::MemoryJobStore as _;
 use kernel::memory::{Limit, MemoryStore as _, SearchMode, SearchQuery};
 use kernel::queue::{ClaimSelector, JobQueue as _, WorkerRole};
+use kernel::wiki::WikiRedLink;
 use memory_postgres::{PostgresMemory, PostgresQueue};
 use sqlx::PgPool;
 use uuid::Uuid;
-use wire::gateway::memory::MemoryScope;
-use wire::gateway::wiki::WikiRedLink;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

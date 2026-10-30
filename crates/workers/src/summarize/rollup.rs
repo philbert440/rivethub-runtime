@@ -2,8 +2,8 @@ use kernel::memory::ConversationWindow;
 use kernel::memory::NewSummary;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummaryNode;
+use kernel::model::FinishReason;
 use uuid::Uuid;
-use wire::stream::openai::FinishReason;
 
 use super::SummarizeEnv;
 use super::leaf::count_of;

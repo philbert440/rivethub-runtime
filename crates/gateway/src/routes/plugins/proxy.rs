@@ -6,7 +6,6 @@ use axum::body::Bytes;
 use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use kernel::plugins::PluginTools as _;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use wire::plugin::action::{ViewAction, ViewActionRefusal, ViewActionRequest, ViewActionResult};
@@ -281,7 +280,7 @@ async fn tool(
         .map_err(|error| PluginRouteError::NotFound(error.to_string()))?;
     host.record(plugin)?;
     let call: PluginToolCall = read_request(request).await?;
-    match host.call(plugin, &tool, call, None).await {
+    match host.called(plugin, &tool, call, None).await {
         Ok(result) => Ok(Json(result).into_response()),
         Err(error) => Ok(crate::plugins::tool_error(&error)),
     }

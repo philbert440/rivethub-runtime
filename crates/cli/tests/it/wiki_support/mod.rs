@@ -3,6 +3,8 @@
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use kernel::model::FinishReason;
+use kernel::model::{LlmResponse, LlmResponseKind};
 use kernel::topics::{
     NewTopic, Placement, PlacementSource, Slug, Topic, TopicId, TopicKey, TopicKind, TopicName,
     TopicStore,
@@ -17,8 +19,6 @@ use sqlx::PgPool;
 use testkit::fakes::{FakeProvider, Script};
 use uuid::Uuid;
 use wire::session_id::SessionId;
-use wire::stream::openai::FinishReason;
-use wire::stream::{LlmResponse, LlmResponseKind};
 
 pub(crate) type TestResult = Result<(), Box<dyn std::error::Error>>;
 

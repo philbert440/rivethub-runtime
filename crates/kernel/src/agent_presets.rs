@@ -1,10 +1,51 @@
 use async_trait::async_trait;
+use chrono::DateTime;
+use chrono::Utc;
 use thiserror::Error;
-use wire::gateway::agents::AgentPreset;
-use wire::gateway::agents::AgentPresetUpdate;
-use wire::gateway::agents::AgentStoreBackend;
+use values::Extra;
+use values::HarnessId;
 
 use crate::BoxError;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentPreset {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    pub harness_id: Option<HarnessId>,
+    pub model: String,
+    pub effort: String,
+    pub system_prompt: String,
+    pub node: Option<String>,
+    pub directory: Option<String>,
+    pub shared_link: Option<bool>,
+    pub node_base_url: Option<String>,
+    pub sort_order: Option<u32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub extra: Extra,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AgentPresetUpdate {
+    pub name: Option<String>,
+    pub color: Option<String>,
+    pub harness_id: Option<Option<HarnessId>>,
+    pub model: Option<String>,
+    pub effort: Option<String>,
+    pub system_prompt: Option<String>,
+    pub node: Option<String>,
+    pub directory: Option<String>,
+    pub shared_link: Option<bool>,
+    pub node_base_url: Option<String>,
+    pub sort_order: Option<Option<u32>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentStoreBackend {
+    Postgres,
+    File,
+}
 
 #[derive(Debug, Error)]
 pub enum AgentPresetStoreError {

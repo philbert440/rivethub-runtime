@@ -2,17 +2,17 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use kernel::memory::MemoryStoreError;
+use kernel::memory::TagState;
 use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyEntry;
+use kernel::memory::TagTaxonomyMerge;
+use kernel::memory::TagTaxonomyMergeResult;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params_from_iter;
 use rusqlite::types::Value;
-use wire::gateway::memory::TagState;
-use wire::gateway::memory::TagTaxonomyEntry;
-use wire::gateway::memory::TagTaxonomyMerge;
-use wire::gateway::memory::TagTaxonomyMergeResult;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;

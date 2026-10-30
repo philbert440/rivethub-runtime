@@ -2,8 +2,14 @@ use crate::embed::EmbedAttempt;
 use crate::error::Error;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::MemoryChunkMatch;
+use kernel::memory::MemoryFallback;
+use kernel::memory::MemoryHitSource;
+use kernel::memory::MemoryScope;
 use kernel::memory::SearchMode;
+use kernel::memory::SummaryKind;
 use kernel::memory::TagLiteral;
+use kernel::memory::TagWire;
 use kernel::memory_core::FusionItem;
 use kernel::memory_core::HYBRID_RRF_K;
 use kernel::memory_core::fusion_score;
@@ -12,10 +18,6 @@ use kernel::memory_core::passes_fusion_gate;
 use kernel::memory_core::reciprocal_rank_fusion;
 use kernel::memory_core::should_trigram_fallback;
 use uuid::Uuid;
-use wire::gateway::memory::MemoryFallback;
-use wire::gateway::memory::MemoryHitSource;
-use wire::gateway::memory::MemoryScope;
-use wire::gateway::memory::MemorySearchHit;
 use wire::message::Role;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +53,24 @@ impl SearchOptions {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct MemorySearchHit {
+    pub chunk: Option<MemoryChunkMatch>,
+    pub id: String,
+    pub source: MemoryHitSource,
+    pub content: String,
+    pub created_at: DateTime<Utc>,
+    pub score: f64,
+    pub role: Option<Role>,
+    pub agent: Option<String>,
+    pub kind: Option<SummaryKind>,
+    pub tool_name: Option<String>,
+    pub conversation_id: Option<String>,
+    pub session_id: Option<String>,
+    pub fallback: Option<MemoryFallback>,
+    pub tags: Option<Vec<TagWire>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SearchOutcome {
     pub hits: Vec<MemorySearchHit>,
     pub degraded: Option<String>,
@@ -59,7 +79,7 @@ pub struct SearchOutcome {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ArmRow {
-    pub(crate) chunk: Option<wire::memory::MemoryChunkMatch>,
+    pub(crate) chunk: Option<kernel::memory::MemoryChunkMatch>,
     pub(crate) id: String,
     pub(crate) source: MemoryHitSource,
     pub(crate) content: String,

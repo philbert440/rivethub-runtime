@@ -7,22 +7,22 @@ use std::sync::atomic::Ordering;
 use agent_client_protocol::schema::v1 as acp;
 use async_trait::async_trait;
 use config::Config;
+use kernel::harness::ApprovalDecision;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::HarnessAdapterError;
 use kernel::harness::HarnessCommands;
 use kernel::harness::SessionEvent;
 use kernel::harness::SessionOption;
 use kernel::harness::SessionSpec;
+use kernel::harness::SessionSwitches;
+use kernel::harness::SteerOutcome;
 use kernel::harness::SystemPromptSupport;
 use kernel::harness::TurnInput;
 use parking_lot::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 use tokio_util::sync::CancellationToken;
-use wire::gateway::sessions::SessionSwitches;
-use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
-use wire::harness::SteerOutcome;
 use wire::session_id::SessionId;
 
 use crate::connection::AgentConnection;
@@ -541,7 +541,9 @@ impl HarnessAdapter for AcpHarnessAdapter {
         receiver.ok_or_else(|| HarnessAdapterError::EventStreamTaken(session.clone()))
     }
 
-    async fn offerings(&self) -> Result<Vec<wire::harness::HarnessOffering>, HarnessAdapterError> {
+    async fn offerings(
+        &self,
+    ) -> Result<Vec<kernel::harness::HarnessOffering>, HarnessAdapterError> {
         let facts = self.launch.facts();
         let search = self.search_paths.clone();
         let installed = tokio::task::spawn_blocking(move || probe(&facts, &search))

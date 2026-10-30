@@ -15,12 +15,13 @@ use common::message;
 use common::object;
 use kernel::memory::BrowseFilter;
 use kernel::memory::Limit;
+use kernel::memory::MemoryBrowseOrder;
+use kernel::memory::MemoryEntry;
+use kernel::memory::MemoryStatsResponse;
 use memory_sqlite::SqliteStore;
 use serde::Deserialize;
 use testkit::Json;
 use wire::gateway::memory::MemoryBrowseToolArgs;
-use wire::gateway::memory::MemoryStatsResponse;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 const SKIPPED_STATS_SCENARIOS: [(&str, &str); 2] = [
@@ -79,7 +80,7 @@ const SKIPPED_TOOL_LABELS: [(&str, &str); 6] = [
     ),
 ];
 
-fn helper_batch() -> TestResult<wire::capture::CaptureBatchRequest> {
+fn helper_batch() -> TestResult<kernel::memory::CaptureBatchRequest> {
     let mut helper = batch("cli:sess-2", "helper", "cli");
     helper.title = Some("Helper session".to_owned());
     let mut read_call = message("h1", Role::Assistant, "reading the deploy notes");
@@ -286,11 +287,17 @@ fn browse_filter(args: &Json) -> TestResult<BrowseFilter> {
         role: None,
         tool_name: None,
         tag: None,
-        window: args.window,
+        window: args
+            .window
+            .map(|window| window.to_string().parse())
+            .transpose()?,
         since: None,
         before: None,
         include_tools: args.include_tools == Some(true),
-        order: args.order.unwrap_or_default(),
+        order: match args.order.unwrap_or_default() {
+            wire::gateway::memory::MemoryBrowseOrder::Asc => MemoryBrowseOrder::Asc,
+            wire::gateway::memory::MemoryBrowseOrder::Desc => MemoryBrowseOrder::Desc,
+        },
         limit: Limit::clamped(args.limit, 50, 1..=200),
     })
 }

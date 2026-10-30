@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
+use kernel::harness::{ApprovalDecision, HarnessOffering};
 use kernel::harness::{
     HarnessAdapter, HarnessAdapterError, SessionEvent, SessionOption, SessionSpec, TurnInput,
 };
 use tokio::sync::{Mutex, mpsc};
-use wire::harness::{ApprovalDecision, HarnessOffering};
 use wire::session_id::SessionId;
 
 struct Session {

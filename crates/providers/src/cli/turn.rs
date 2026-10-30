@@ -2,13 +2,13 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 
+use kernel::harness::ApprovalDecision;
 use kernel::harness::{
     HarnessAdapter, HarnessAdapterError, SessionEvent, SessionOption, SessionSpec, TurnInput,
 };
 use kernel::model::{ModelChunk, ModelStreamItem};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_util::sync::CancellationToken;
-use wire::harness::ApprovalDecision;
 use wire::session_id::SessionId;
 
 use super::CliError;

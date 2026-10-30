@@ -2,6 +2,7 @@
 
 use crate::wiki_support;
 
+use kernel::model::FinishReason;
 use kernel::queue::{FixedJob, JobName, JobQueue, WorkerRole};
 use kernel::wiki::builder::{ExtractWiki, WIKI_PIPELINE_VERSION, WikiBuilderStore, WikiWork};
 use memory_postgres::{PostgresMemory, PostgresQueue};
@@ -10,7 +11,6 @@ use testkit::fakes::FakeJobQueue;
 use tokio_util::sync::CancellationToken;
 use wiki_support::{TestResult, fixture, now, patch, provider, seed, seed_recording};
 use wire::message::MessageContent;
-use wire::stream::openai::FinishReason;
 use workers::wiki_builder::{
     WikiBuilderEnv, extract_wiki_job, handle_extract_wiki, handle_wiki_backfill,
 };

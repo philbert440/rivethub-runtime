@@ -15,8 +15,10 @@ use axum::routing;
 use kernel::hub_state::HubStateStore;
 use kernel::hub_state::HubStateStoreError;
 use kernel::hub_state::HubStateWrite;
+use kernel::hub_state::Versioned;
 use serde_json::error::Category;
 use wire::JsonObject;
+use wire::gateway::hub_state::HubState;
 use wire::gateway::hub_state::HubStatePutRequest;
 use wire::gateway::hub_state::HubStateResponse;
 
@@ -42,7 +44,7 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
 }
 
-pub(crate) fn open(settings: &crate::Settings) -> Arc<dyn HubStateStore> {
+pub(crate) fn open(settings: &crate::Settings) -> Arc<dyn HubStateStore<HubState>> {
     Arc::new(FileHubState::new(&settings.state_dir))
 }
 
@@ -55,7 +57,7 @@ async fn load(
         .load(user.as_str())
         .await
         .map_err(|error| unavailable(&error))?;
-    Ok(Json(current))
+    Ok(Json(document_body(current)))
 }
 
 async fn replace(
@@ -74,10 +76,10 @@ async fn replace(
     match written {
         HubStateWrite::Saved(saved) => {
             gateway.sessions.hub_state_changed(&user, saved.version);
-            Ok(Json(saved).into_response())
+            Ok(Json(document_body(saved)).into_response())
         }
         HubStateWrite::Conflict(current) => {
-            Ok((StatusCode::CONFLICT, Json(current)).into_response())
+            Ok((StatusCode::CONFLICT, Json(document_body(current))).into_response())
         }
     }
 }
@@ -98,6 +100,13 @@ async fn read_request(request: Request) -> Result<HubStatePutRequest, ApiError> 
             invalid_json()
         }
     })
+}
+
+fn document_body(document: Versioned<HubState>) -> HubStateResponse {
+    HubStateResponse {
+        version: document.version,
+        state: document.state,
+    }
 }
 
 fn without_location(message: &str) -> String {

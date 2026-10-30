@@ -6,8 +6,8 @@ use kernel::memory::SummaryNode;
 use kernel::memory::SummarySource;
 use kernel::memory::SummaryWrite;
 use kernel::memory::WindowMessage;
+use kernel::model::FinishReason;
 use uuid::Uuid;
-use wire::stream::openai::FinishReason;
 
 use super::SummarizeEnv;
 use super::llm::chat;

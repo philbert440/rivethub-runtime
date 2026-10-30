@@ -5,12 +5,12 @@ use std::path::Path;
 
 use capture::listing::StoreRoots;
 use capture::listing::StoreSessionLister;
+use kernel::transcript::HarnessTranscriptTurn;
 use kernel::transcript::SessionLister;
 use kernel::transcript::StoreTranscript;
+use kernel::transcript::TranscriptBlock;
 use kernel::transcript::TranscriptRead;
-use wire::gateway::sessions::HarnessTranscriptTurn;
-use wire::gateway::sessions::TranscriptBlock;
-use wire::gateway::sessions::TranscriptToolStatus;
+use kernel::transcript::TranscriptToolStatus;
 use wire::harness::HarnessId;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -63,7 +63,7 @@ async fn claude_turns(lines: &[&str]) -> Vec<HarnessTranscriptTurn> {
         .turns
 }
 
-fn first_tool(turns: &[HarnessTranscriptTurn]) -> wire::gateway::sessions::HarnessTranscriptTool {
+fn first_tool(turns: &[HarnessTranscriptTurn]) -> kernel::transcript::HarnessTranscriptTool {
     turns
         .first()
         .and_then(|turn| turn.tools.as_ref())

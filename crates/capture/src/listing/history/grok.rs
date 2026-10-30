@@ -1,13 +1,13 @@
 use std::path::Path;
 
+use kernel::transcript::HarnessTranscriptTool;
+use kernel::transcript::HarnessTranscriptTurn;
+use kernel::transcript::SessionMessageRole;
 use kernel::transcript::StoreTranscript;
+use kernel::transcript::TranscriptBlock;
 use kernel::transcript::TranscriptReaderError;
+use kernel::transcript::TranscriptToolStatus;
 use wire::JsonObject;
-use wire::gateway::sessions::HarnessTranscriptTool;
-use wire::gateway::sessions::HarnessTranscriptTurn;
-use wire::gateway::sessions::SessionMessageRole;
-use wire::gateway::sessions::TranscriptBlock;
-use wire::gateway::sessions::TranscriptToolStatus;
 
 use super::display::tail_chars;
 use super::tools::RESULT_CHARS;

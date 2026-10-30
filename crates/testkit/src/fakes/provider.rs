@@ -1,9 +1,9 @@
 use async_trait::async_trait;
+use kernel::model::LlmResponse;
 use kernel::model::{
     Embedding, ModelChunk, ModelProvider, ModelProviderError, ModelRequest, ModelStreamItem,
 };
 use tokio::sync::{Mutex, mpsc::Receiver};
-use wire::stream::LlmResponse;
 #[derive(Debug, Clone)]
 pub enum Script {
     Chat(LlmResponse),

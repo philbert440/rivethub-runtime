@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
+use kernel::memory::MemoryEntry;
 use kernel::memory::MemoryStore;
 use kernel::memory::SessionActivity;
 use kernel::memory::SessionDeletion;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
 use kernel::topics::TopicStore;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 use wire::session_id::SessionId;
 

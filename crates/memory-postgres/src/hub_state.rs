@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use kernel::hub_state::HubStateStore;
 use kernel::hub_state::HubStateStoreError;
 use kernel::hub_state::HubStateWrite;
+use kernel::hub_state::Versioned;
 use sqlx::PgPool;
 use sqlx::types::Json;
 use wire::gateway::hub_state::HubState;
-use wire::gateway::hub_state::HubStateResponse;
 
 use crate::Error;
 use crate::PostgresMemory;
@@ -46,13 +46,13 @@ impl PostgresHubState {
         Ok(present.then_some(Self { pool }))
     }
 
-    async fn current(&self, user: &str) -> Result<HubStateResponse, HubStateStoreError> {
+    async fn current(&self, user: &str) -> Result<Versioned<HubState>, HubStateStoreError> {
         let row = sqlx::query_as::<_, StoredRow>(LOAD)
             .bind(user)
             .fetch_optional(&self.pool)
             .await
             .map_err(|source| failed("hub state load", source))?;
-        row.map_or_else(|| Ok(HubStateResponse::default()), stored)
+        row.map_or_else(|| Ok(Versioned::default()), stored)
     }
 }
 
@@ -68,8 +68,8 @@ impl PostgresMemory {
 }
 
 #[async_trait]
-impl HubStateStore for PostgresHubState {
-    async fn load(&self, user: &str) -> Result<HubStateResponse, HubStateStoreError> {
+impl HubStateStore<HubState> for PostgresHubState {
+    async fn load(&self, user: &str) -> Result<Versioned<HubState>, HubStateStoreError> {
         self.current(user).await
     }
 
@@ -78,7 +78,7 @@ impl HubStateStore for PostgresHubState {
         user: &str,
         base_version: u64,
         state: HubState,
-    ) -> Result<HubStateWrite, HubStateStoreError> {
+    ) -> Result<HubStateWrite<HubState>, HubStateStoreError> {
         let base = i64::try_from(base_version)
             .map_err(|error| HubStateStoreError::Unavailable(Box::new(error)))?;
         let query = if base == 0 {
@@ -102,10 +102,10 @@ impl HubStateStore for PostgresHubState {
     }
 }
 
-fn stored(row: StoredRow) -> Result<HubStateResponse, HubStateStoreError> {
+fn stored(row: StoredRow) -> Result<Versioned<HubState>, HubStateStoreError> {
     let version = u64::try_from(row.version)
         .map_err(|_| HubStateStoreError::Unavailable(Box::new(VersionRange(row.version))))?;
-    Ok(HubStateResponse {
+    Ok(Versioned {
         version,
         state: row.state.0,
     })

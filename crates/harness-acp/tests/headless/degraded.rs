@@ -5,8 +5,8 @@ use std::time::Duration;
 use config::provider::CliProvider;
 use harness_acp::{AcpError, Retry};
 use kernel::harness::{HarnessAdapter, HarnessAdapterError, SessionSpec};
+use kernel::model::ProviderRecovery;
 use kernel::model::ProviderStatus;
-use wire::gateway::ProviderRecovery;
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 

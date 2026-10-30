@@ -4,11 +4,11 @@ use kernel::memory::{
     BrowseFilter, Limit, SearchMode, SearchQuery, TagCountsQuery, TagListQuery, TagLookup,
     TagTaxonomyQuery,
 };
+use kernel::memory::{BrowseWindow, MemoryBrowseOrder, MemoryScope, TagState};
 use mcp::Server;
 use std::sync::Arc;
 use testkit::{FakeMemoryStore, MemoryRequest};
 use tokio_util::sync::CancellationToken;
-use wire::gateway::memory::{BrowseWindow, MemoryBrowseOrder, MemoryScope, TagState};
 use wire::message::Role;
 
 pub mod support;
@@ -194,8 +194,8 @@ async fn explicitly_authorized_tag_writes_reach_port() {
 
 #[tokio::test]
 async fn memory_results_preserve_content_and_enabled_write_annotations() {
+    use kernel::memory::MemoryEntry;
     use kernel::memory::MemoryStore;
-    use wire::memory::MemoryEntry;
     use wire::message::Role;
     let (server, store) = setup(true);
     let entry = MemoryEntry {
@@ -283,7 +283,7 @@ async fn browse_explicit_time_bounds_reach_kernel_unchanged() {
 async fn search_forwards_every_argument_and_preserves_the_outcome() {
     let (server, store) = setup(false);
     let outcome = kernel::memory::SearchOutcome {
-        degraded: Some(wire::gateway::memory::MemoryDegraded {
+        degraded: Some(kernel::memory::MemoryDegraded {
             reason: "http 503".into(),
             effect: "Keyword / FTS ranking only — not meaning-based.".into(),
         }),
@@ -364,8 +364,8 @@ async fn search_accepts_windows_and_false_flags_but_rejects_wrong_types() {
 
 #[tokio::test]
 async fn tool_previews_count_characters_and_reject_malformed_capture_metadata() {
+    use kernel::memory::MemoryEntry;
     use kernel::memory::MemoryStore;
-    use wire::memory::MemoryEntry;
     let (server, store) = setup(false);
     let mut entry = MemoryEntry {
         id: Some("unicode-tool".into()),

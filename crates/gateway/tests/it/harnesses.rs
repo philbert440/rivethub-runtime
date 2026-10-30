@@ -8,14 +8,15 @@ use std::time::Duration;
 use gateway::tenancy::Tenancy;
 use gateway::uploads::{UploadOptions, UploadService};
 use gateway::{Gateway, Settings};
+use kernel::harness::{
+    EffortOption, HarnessCapabilities, HarnessControlCapabilities, HarnessModelOption,
+    HarnessModelsSource, HarnessObservationCapabilities, HarnessOffering,
+};
 use serde::{Deserialize, Serialize};
 use session_support::{Fixture, user};
 use wire::gateway::GatewayError;
 use wire::gateway::uploads::{UploadCreated, UploadList};
-use wire::harness::{
-    EffortOption, HarnessCapabilities, HarnessControlCapabilities, HarnessId, HarnessModelOption,
-    HarnessModelsSource, HarnessObservationCapabilities, HarnessOffering, HarnessOfferingList,
-};
+use wire::harness::{HarnessId, HarnessOfferingList};
 
 const READ_LIMIT: usize = 4 * 1024 * 1024;
 

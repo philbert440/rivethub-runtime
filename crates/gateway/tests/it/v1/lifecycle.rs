@@ -5,6 +5,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
+use kernel::model::LlmResponse;
 use kernel::model::{Embedding, ModelProvider, ModelProviderError, ModelRequest, ModelStreamItem};
 use parking_lot::Mutex;
 use testkit::{FakeProvider, Script};
@@ -12,7 +13,6 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt as _;
 use wire::gateway::v1::{Conversation, Conversations};
-use wire::stream::LlmResponse;
 
 use super::support::{Harness, REQUEST, chunks, json, request};
 

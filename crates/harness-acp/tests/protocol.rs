@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
 use harness_acp::AcpHarnessAdapter;
+use kernel::harness::ApprovalDecision;
 use kernel::harness::Command;
 use kernel::harness::HarnessAdapter;
 use kernel::harness::PlanEntry;
 use kernel::harness::PlanPriority;
+use kernel::harness::PlanStatus;
 use kernel::harness::SessionEvent;
 use kernel::harness::SessionOption;
 use kernel::harness::SessionSpec;
+use kernel::harness::SteerOutcome;
 use kernel::harness::ToolCallInfo;
 use kernel::harness::ToolCallStatus;
 use kernel::harness::ToolCallUpdate;
@@ -16,10 +19,7 @@ use kernel::harness::TurnInput;
 use serde::Deserialize;
 use serde::Serialize;
 use tempfile::tempdir;
-use wire::harness::ApprovalDecision;
 use wire::harness::HarnessId;
-use wire::harness::PlanStatus;
-use wire::harness::SteerOutcome;
 use wire::json::JsonObject;
 use wire::session_id::SessionId;
 use wire::stream::LlmUsage;

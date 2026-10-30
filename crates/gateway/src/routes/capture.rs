@@ -15,7 +15,10 @@ pub(crate) async fn ingest(
     let session_key = batch.session_key.clone();
     let captured = gateway
         .store()
-        .capture(batch, Some(&gateway.settings().node))
+        .capture(
+            crate::memory_body::capture_batch_request(batch),
+            Some(&gateway.settings().node),
+        )
         .await?;
     Ok(Json(CaptureResult {
         ok: true,

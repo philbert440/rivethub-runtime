@@ -11,9 +11,9 @@ use common::fresh_store;
 use common::instant;
 use common::message;
 use common::object;
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::MemoryEntry;
 use testkit::Json;
-use wire::capture::CaptureBatchRequest;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 const SKIPPED_SCENARIOS: [(&str, &str); 2] = [

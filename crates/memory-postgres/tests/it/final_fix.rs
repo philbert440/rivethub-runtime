@@ -1,9 +1,9 @@
+use kernel::memory::MemoryEntry;
+use kernel::memory::{CaptureBatchRequest, CaptureMessage};
 use kernel::memory::{MemoryStore, MemoryStoreError};
 use memory_postgres::{CaptureOptions, Error, PostgresMemory};
 use sqlx::{PgPool, types::Json};
 use wire::JsonObject;
-use wire::capture::{CaptureBatchRequest, CaptureMessage};
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -168,7 +168,7 @@ async fn context_without_a_user_query_does_not_run_empty_semantic_search(
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn caller_time_zone_controls_calendar_windows(pool: PgPool) -> TestResult {
     use kernel::memory::{BrowseFilter, Limit, SearchMode, SearchQuery};
-    use wire::gateway::memory::{BrowseWindow, MemoryBrowseOrder, MemoryScope};
+    use kernel::memory::{BrowseWindow, MemoryBrowseOrder, MemoryScope};
 
     let store = PostgresMemory::new(pool.clone());
     let mut batch = batch("release".to_owned())?;
@@ -248,11 +248,11 @@ async fn caller_time_zone_controls_calendar_windows(pool: PgPool) -> TestResult 
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn missing_chunk_schema_is_a_query_error(pool: PgPool) -> TestResult {
+    use kernel::memory::MemoryScope;
     use kernel::memory::{Limit, SearchMode, SearchQuery};
     use kernel::model::Embedding;
     use std::sync::Arc;
     use testkit::{FakeProvider, Script};
-    use wire::gateway::memory::MemoryScope;
 
     let store =
         PostgresMemory::new(pool.clone()).with_query_embed(memory_postgres::QueryEmbed::new(

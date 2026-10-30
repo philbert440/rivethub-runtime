@@ -2,12 +2,12 @@ use std::str::FromStr as _;
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::MemoryEntry;
 use rusqlite::Row;
 use rusqlite::Transaction;
 use rusqlite::types::Type;
 use uuid::Uuid;
 use wire::JsonObject;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 use crate::error::SqliteError;

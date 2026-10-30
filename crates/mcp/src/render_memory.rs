@@ -3,9 +3,9 @@ use std::fmt::Write as _;
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use kernel::memory::BrowseFilter;
+use kernel::memory::MemoryEntry;
+use kernel::memory::{MemoryBrowseOrder, TagWire};
 use serde::Deserialize;
-use wire::gateway::memory::{MemoryBrowseOrder, TagWire};
-use wire::memory::MemoryEntry;
 
 use crate::Error;
 
@@ -199,7 +199,7 @@ pub(crate) fn get_full(id: &str, entry: Option<&MemoryEntry>) -> Result<String, 
     Ok(text)
 }
 
-pub(crate) fn stats(stats: &wire::gateway::memory::MemoryStatsResponse) -> Result<String, Error> {
+pub(crate) fn stats(stats: &kernel::memory::MemoryStatsResponse) -> Result<String, Error> {
     let mut text = format!(
         "## Memory System Health\n\n**Messages:** {}\n\n**Conversations:** {}\n\n**Summaries:** {}\n\n**Embedding queue:** {}\n**Embedded messages:** {}\n**Failed embeddings:** {}",
         stats.messages,

@@ -1,11 +1,11 @@
 use crate::Error;
 use crate::catalog::ToolInput as _;
 use chrono::{DateTime, Utc};
-use kernel::memory::{BrowseFilter, Limit, MemoryStore, SearchMode, SearchQuery};
+use kernel::memory::{BrowseFilter, Limit, MemoryStore, SearchQuery};
 use rmcp::model::CallToolResult;
 use serde::Deserialize;
 use uuid::Uuid;
-use wire::gateway::memory::{BrowseWindow, MemoryBrowseOrder, MemoryScope};
+use wire::gateway::memory::{BrowseWindow, MemoryBrowseOrder, MemoryScope, SearchMode};
 use wire::message::Role;
 
 #[derive(schemars::JsonSchema, Debug, Deserialize)]
@@ -179,12 +179,12 @@ pub async fn search(
         SearchQuery {
             since: args.since,
             before: args.before,
-            window: args.window,
+            window: args.window.map(window),
             expand: args.expand,
             synthesize: args.synthesize,
             text: args.query,
-            mode: args.mode,
-            scope,
+            mode: search_mode(args.mode),
+            scope: scope_of(scope),
             agent: args.agent,
             role: args.role,
             exclude_roles: Vec::new(),
@@ -201,7 +201,7 @@ pub async fn search(
     for hit in outcome
         .results
         .iter()
-        .filter(|hit| hit.source == wire::gateway::memory::MemoryHitSource::Message)
+        .filter(|hit| hit.source == kernel::memory::MemoryHitSource::Message)
     {
         let entry = store.get_full(&hit.id).await?.ok_or_else(|| {
             Error::Invalid(format!("message {} disappeared during search", hit.id))
@@ -219,7 +219,7 @@ pub async fn search(
                     .collect::<std::collections::BTreeSet<_>>()
                     .into_iter()
                     .collect(),
-                states: vec![wire::gateway::memory::TagState::Accepted],
+                states: vec![kernel::memory::TagState::Accepted],
             })
             .await?
     };
@@ -260,11 +260,11 @@ pub async fn browse(
             tag: args.tag.map(|tag| tag.parse()).transpose().map_err(
                 |error: kernel::memory::TagLiteralError| Error::Invalid(error.to_string()),
             )?,
-            window: args.window,
+            window: args.window.map(window),
             since: args.since,
             before: args.before,
             include_tools: args.include_tools,
-            order: args.order,
+            order: order(args.order),
             limit: limit(Browse::NAME, args.limit, 50, 200)?,
         }
         .resolve_window(chrono::Utc::now(), &chrono::Local);
@@ -280,12 +280,12 @@ pub async fn browse(
                     .collect::<std::collections::BTreeSet<_>>()
                     .into_iter()
                     .collect(),
-                states: vec![wire::gateway::memory::TagState::Accepted],
+                states: vec![kernel::memory::TagState::Accepted],
             })
             .await?
     };
     let mut display_filter = filter;
-    display_filter.window = args.window;
+    display_filter.window = args.window.map(window);
     Ok(crate::text(crate::render_memory::browse(
         &entries,
         &display_filter,
@@ -314,4 +314,41 @@ pub async fn get_full(store: &dyn MemoryStore, args: GetFull) -> Result<CallTool
         &args.id,
         store.get_full(&args.id).await?.as_ref(),
     )?))
+}
+
+const fn search_mode(mode: SearchMode) -> kernel::memory::SearchMode {
+    match mode {
+        SearchMode::Hybrid => kernel::memory::SearchMode::Hybrid,
+        SearchMode::Fts => kernel::memory::SearchMode::Fts,
+        SearchMode::Vector => kernel::memory::SearchMode::Vector,
+        SearchMode::Trigram => kernel::memory::SearchMode::Trigram,
+        SearchMode::Regex => kernel::memory::SearchMode::Regex,
+    }
+}
+
+const fn scope_of(scope: MemoryScope) -> kernel::memory::MemoryScope {
+    match scope {
+        MemoryScope::Messages => kernel::memory::MemoryScope::Messages,
+        MemoryScope::Summaries => kernel::memory::MemoryScope::Summaries,
+        MemoryScope::Both => kernel::memory::MemoryScope::Both,
+    }
+}
+
+const fn window(window: BrowseWindow) -> kernel::memory::BrowseWindow {
+    match window {
+        BrowseWindow::Today => kernel::memory::BrowseWindow::Today,
+        BrowseWindow::Yesterday => kernel::memory::BrowseWindow::Yesterday,
+        BrowseWindow::ThisMorning => kernel::memory::BrowseWindow::ThisMorning,
+        BrowseWindow::ThisWeek => kernel::memory::BrowseWindow::ThisWeek,
+        BrowseWindow::Last24h => kernel::memory::BrowseWindow::Last24h,
+        BrowseWindow::Last7d => kernel::memory::BrowseWindow::Last7d,
+        BrowseWindow::Last14d => kernel::memory::BrowseWindow::Last14d,
+    }
+}
+
+const fn order(order: MemoryBrowseOrder) -> kernel::memory::MemoryBrowseOrder {
+    match order {
+        MemoryBrowseOrder::Asc => kernel::memory::MemoryBrowseOrder::Asc,
+        MemoryBrowseOrder::Desc => kernel::memory::MemoryBrowseOrder::Desc,
+    }
 }

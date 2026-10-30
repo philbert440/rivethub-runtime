@@ -11,7 +11,7 @@ use axum::routing::MethodRouter;
 use kernel::memory::BrowseFilter;
 use kernel::memory::EmbedModelMismatch;
 use kernel::memory::Limit;
-use kernel::memory::SearchMode;
+use kernel::memory::MemoryEntry;
 use kernel::memory::SearchQuery;
 use kernel::memory::TagLiteral;
 use serde::Deserialize;
@@ -23,7 +23,6 @@ use wire::gateway::memory::EmbedHealth;
 use wire::gateway::memory::EmbedStatus;
 use wire::gateway::memory::MemoryAppendToolArgs;
 use wire::gateway::memory::MemoryBrowseMessage;
-use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryBrowseResponse;
 use wire::gateway::memory::MemoryBrowseToolArgs;
 use wire::gateway::memory::MemoryGetFullToolArgs;
@@ -36,8 +35,8 @@ use wire::gateway::memory::MemorySearchResponse;
 use wire::gateway::memory::MemorySearchToolArgs;
 use wire::gateway::memory::MemoryStatsResponse;
 use wire::gateway::memory::MemoryToolResponse;
+use wire::gateway::memory::SearchMode;
 use wire::json::JsonObject;
-use wire::memory::MemoryEntry;
 use wire::message::ToolResult;
 
 use crate::Gateway;
@@ -52,6 +51,7 @@ use crate::extract::ScopeParam;
 use crate::extract::SinceParam;
 use crate::extract::TagFilter;
 use crate::extract::WindowParam;
+use crate::memory_body;
 
 const SEARCH_LIMIT_DEFAULT: u32 = 20;
 const SEARCH_LIMIT_MAX: u32 = 50;
@@ -171,15 +171,17 @@ async fn search(
     let query = SearchQuery {
         since: params.since.map(SinceParam::get),
         before: params.before.map(BeforeParam::get),
-        window: params.window.map(WindowParam::get),
+        window: params
+            .window
+            .map(|window| memory_body::browse_window(window.get())),
         expand: params.expand,
         synthesize: params.synthesize,
         text: text.clone(),
-        mode: match params.mode {
+        mode: memory_body::search_mode(match params.mode {
             Some(mode) => mode,
             None => SearchMode::Hybrid,
-        },
-        scope,
+        }),
+        scope: memory_body::memory_scope(scope),
         agent: params.agent,
         role: params.role.map(RoleParam::get),
         exclude_roles: params
@@ -201,19 +203,23 @@ async fn search(
     Ok(Json(MemorySearchResponse {
         query: text,
         scope,
-        degraded: results.degraded,
-        fallback: results.fallback,
-        expanded: results.expanded,
+        degraded: results.degraded.map(memory_body::memory_degraded_body),
+        fallback: results.fallback.map(memory_body::memory_fallback_body),
+        expanded: results
+            .expanded
+            .into_iter()
+            .map(memory_body::memory_entry_body)
+            .collect(),
         synthesis: results.synthesis,
         results: results.results.into_iter().map(search_hit).collect(),
     }))
 }
 
-fn search_hit(result: wire::memory::MemorySearchResult) -> MemorySearchHit {
+fn search_hit(result: kernel::memory::MemorySearchResult) -> MemorySearchHit {
     MemorySearchHit {
-        chunk: result.chunk,
+        chunk: result.chunk.map(memory_body::memory_chunk_match_body),
         id: result.id,
-        source: result.source,
+        source: memory_body::memory_hit_source_body(result.source),
         content: result.content,
         created_at: result.created_at,
         score: result.relevance_score,
@@ -238,11 +244,13 @@ async fn browse(
         role: params.role.map(RoleParam::get),
         tool_name: params.tool_name,
         tag: params.tag.map(TagFilter::get),
-        window: params.window.map(WindowParam::get),
+        window: params
+            .window
+            .map(|window| memory_body::browse_window(window.get())),
         since: params.since.map(SinceParam::get),
         before: params.before.map(BeforeParam::get),
         include_tools: false,
-        order: MemoryBrowseOrder::Desc,
+        order: kernel::memory::MemoryBrowseOrder::Desc,
         limit: Limit::clamped(
             params.limit.map(RawLimit::get),
             BROWSE_LIMIT_DEFAULT,
@@ -273,7 +281,9 @@ fn browse_message(entry: MemoryEntry) -> MemoryBrowseMessage {
 }
 
 async fn stats(State(gateway): State<Arc<Gateway>>) -> Result<Json<MemoryStatsResponse>, ApiError> {
-    Ok(Json(gateway.store().stats().await?))
+    Ok(Json(memory_body::memory_stats_response_body(
+        gateway.store().stats().await?,
+    )))
 }
 
 async fn health(
@@ -346,7 +356,9 @@ async fn tool_stats(
     State(gateway): State<Arc<Gateway>>,
 ) -> Result<Json<MemoryToolResponse>, ApiError> {
     let stats = gateway.store().stats().await?;
-    Ok(tool_response(serialize_tool(&stats)?))
+    Ok(tool_response(serialize_tool(
+        &memory_body::memory_stats_response_body(stats),
+    )?))
 }
 
 async fn tool_get_full(
@@ -395,12 +407,12 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
     let query = SearchQuery {
         since: args.since,
         before: args.before,
-        window: args.window,
+        window: args.window.map(memory_body::browse_window),
         expand: args.expand,
         synthesize: args.synthesize,
         text: args.query.clone(),
-        mode,
-        scope,
+        mode: memory_body::search_mode(mode),
+        scope: memory_body::memory_scope(scope),
         agent: args.agent,
         role: args.role,
         exclude_roles: Vec::new(),
@@ -415,9 +427,13 @@ async fn search_tool(gateway: &Gateway, args: MemorySearchToolArgs) -> Result<St
     let response = MemorySearchResponse {
         query: args.query,
         scope,
-        degraded: results.degraded,
-        fallback: results.fallback,
-        expanded: results.expanded,
+        degraded: results.degraded.map(memory_body::memory_degraded_body),
+        fallback: results.fallback.map(memory_body::memory_fallback_body),
+        expanded: results
+            .expanded
+            .into_iter()
+            .map(memory_body::memory_entry_body)
+            .collect(),
         synthesis: results.synthesis,
         results: results.results.into_iter().map(search_hit).collect(),
     };
@@ -443,11 +459,11 @@ async fn browse_tool(gateway: &Gateway, args: MemoryBrowseToolArgs) -> Result<St
         role: None,
         tool_name: None,
         tag,
-        window: args.window,
+        window: args.window.map(memory_body::browse_window),
         since: args.since,
         before: args.before,
         include_tools: args.include_tools.unwrap_or(false),
-        order: args.order.unwrap_or_default(),
+        order: memory_body::memory_browse_order(args.order.unwrap_or_default()),
         limit: Limit::clamped(args.limit, BROWSE_LIMIT_DEFAULT, 1..=BROWSE_LIMIT_MAX),
     };
     let entries = gateway

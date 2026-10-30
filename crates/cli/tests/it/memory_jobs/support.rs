@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use kernel::model::{LlmResponse, LlmResponseKind};
 use kernel::queue::{
     ClaimSelector, ClaimedJob, Job, JobId, JobName, JobNotifications, JobQueue, JobQueueError,
     StoredJob, WorkerRole,
@@ -9,7 +10,6 @@ use parking_lot::Mutex;
 use sqlx::PgPool;
 use testkit::{FakeProvider, Script};
 use uuid::Uuid;
-use wire::stream::{LlmResponse, LlmResponseKind};
 
 pub(super) type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 

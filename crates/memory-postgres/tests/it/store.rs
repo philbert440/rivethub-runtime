@@ -1,15 +1,15 @@
 use kernel::memory::BrowseFilter;
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
 use kernel::memory::Limit;
+use kernel::memory::MemoryBrowseOrder;
+use kernel::memory::MemoryEntry;
+use kernel::memory::MemoryHitSource;
+use kernel::memory::MemoryScope;
 use kernel::memory::MemoryStore as _;
 use kernel::memory::SearchMode;
 use kernel::memory::SearchQuery;
 use memory_postgres::CaptureOptions;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
-use wire::gateway::memory::MemoryBrowseOrder;
-use wire::gateway::memory::MemoryHitSource;
-use wire::gateway::memory::MemoryScope;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 use sqlx::PgPool;
@@ -128,7 +128,7 @@ async fn seed(pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn contents(results: &[wire::memory::MemorySearchResult]) -> Vec<String> {
+fn contents(results: &[kernel::memory::MemorySearchResult]) -> Vec<String> {
     results.iter().map(|hit| hit.content.clone()).collect()
 }
 
@@ -623,7 +623,7 @@ async fn browse_honours_every_filter_field(pool: PgPool) -> TestResult {
     assert_eq!(memory.browse(before).await?.len(), 3);
 
     let mut window = base();
-    window.window = Some(wire::gateway::memory::BrowseWindow::Last14d);
+    window.window = Some(kernel::memory::BrowseWindow::Last14d);
     let recent = memory
         .browse(window.resolve_window("2026-10-15T12:00:00Z".parse()?, &chrono::Utc))
         .await?;

@@ -33,7 +33,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use kernel::memory::MemoryStoreError;
-use kernel::model::{ProviderHealth, ProviderStatus};
+use kernel::model::{ProviderHealth, ProviderRecovery, ProviderStatus};
 use wire::gateway::{DegradedProvider, HealthzResponse};
 
 use crate::Gateway;
@@ -118,11 +118,18 @@ fn degraded_providers(providers: &[ProviderHealth]) -> Vec<DegradedProvider> {
             ProviderStatus::Ready => None,
             ProviderStatus::Degraded(degradation) => Some(DegradedProvider {
                 id: provider.id.clone(),
-                recovery: degradation.recovery,
+                recovery: recovery_body(degradation.recovery),
                 reason: degradation.cause.to_string(),
             }),
         })
         .collect()
+}
+
+const fn recovery_body(recovery: ProviderRecovery) -> wire::gateway::ProviderRecovery {
+    match recovery {
+        ProviderRecovery::Retrying => wire::gateway::ProviderRecovery::Retrying,
+        ProviderRecovery::Permanent => wire::gateway::ProviderRecovery::Permanent,
+    }
 }
 
 fn degraded_reason(error: &MemoryStoreError) -> String {

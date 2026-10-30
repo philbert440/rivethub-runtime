@@ -157,7 +157,7 @@ impl MemoryStore for FailingStore {
     async fn wiki_topics(
         &self,
         _filter: kernel::wiki::WikiFilter,
-    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError> {
+    ) -> Result<kernel::wiki::WikiTopicList, MemoryStoreError> {
         unavailable()
     }
 
@@ -171,21 +171,21 @@ impl MemoryStore for FailingStore {
     async fn wiki_gaps(
         &self,
         _limit: u32,
-    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
+    ) -> Result<kernel::wiki::WikiGapsResponse, MemoryStoreError> {
         unavailable()
     }
 
     async fn capture(
         &self,
-        _batch: wire::capture::CaptureBatchRequest,
+        _batch: kernel::memory::CaptureBatchRequest,
         _node: Option<&str>,
-    ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
+    ) -> Result<kernel::memory::CaptureResult, MemoryStoreError> {
         unavailable()
     }
 
     async fn append(
         &self,
-        _batch: Vec<wire::memory::MemoryEntry>,
+        _batch: Vec<kernel::memory::MemoryEntry>,
     ) -> Result<u64, MemoryStoreError> {
         unavailable()
     }
@@ -200,18 +200,18 @@ impl MemoryStore for FailingStore {
     async fn browse(
         &self,
         _filter: kernel::memory::BrowseFilter,
-    ) -> Result<Vec<wire::memory::MemoryEntry>, MemoryStoreError> {
+    ) -> Result<Vec<kernel::memory::MemoryEntry>, MemoryStoreError> {
         unavailable()
     }
 
-    async fn stats(&self) -> Result<wire::gateway::memory::MemoryStatsResponse, MemoryStoreError> {
+    async fn stats(&self) -> Result<kernel::memory::MemoryStatsResponse, MemoryStoreError> {
         unavailable()
     }
 
     async fn get_full(
         &self,
         _id: &str,
-    ) -> Result<Option<wire::memory::MemoryEntry>, MemoryStoreError> {
+    ) -> Result<Option<kernel::memory::MemoryEntry>, MemoryStoreError> {
         unavailable()
     }
 
@@ -233,28 +233,28 @@ impl MemoryStore for FailingStore {
     async fn list_tags(
         &self,
         _query: kernel::memory::TagListQuery,
-    ) -> Result<Vec<wire::gateway::memory::TagWire>, MemoryStoreError> {
+    ) -> Result<Vec<kernel::memory::TagWire>, MemoryStoreError> {
         unavailable()
     }
 
     async fn pending_tags(
         &self,
         _limit: kernel::memory::Limit,
-    ) -> Result<Vec<wire::gateway::memory::PendingTagWire>, MemoryStoreError> {
+    ) -> Result<Vec<kernel::memory::PendingTagWire>, MemoryStoreError> {
         unavailable()
     }
 
     async fn tag_counts(
         &self,
         _query: kernel::memory::TagCountsQuery,
-    ) -> Result<Vec<wire::gateway::memory::TagCount>, MemoryStoreError> {
+    ) -> Result<Vec<kernel::memory::TagCount>, MemoryStoreError> {
         unavailable()
     }
 
     async fn list_tag_taxonomy(
         &self,
         _query: kernel::memory::TagTaxonomyQuery,
-    ) -> Result<Vec<wire::gateway::memory::TagTaxonomyEntry>, MemoryStoreError> {
+    ) -> Result<Vec<kernel::memory::TagTaxonomyEntry>, MemoryStoreError> {
         unavailable()
     }
 
@@ -279,24 +279,22 @@ impl MemoryStore for FailingStore {
     async fn add_tag(
         &self,
         _add: kernel::memory::TagAdd,
-    ) -> Result<wire::gateway::memory::TagWire, MemoryStoreError> {
+    ) -> Result<kernel::memory::TagWire, MemoryStoreError> {
         unavailable()
     }
 
     async fn lookup_tags(
         &self,
         _lookup: kernel::memory::TagLookup,
-    ) -> Result<
-        std::collections::BTreeMap<String, Vec<wire::gateway::memory::TagWire>>,
-        MemoryStoreError,
-    > {
+    ) -> Result<std::collections::BTreeMap<String, Vec<kernel::memory::TagWire>>, MemoryStoreError>
+    {
         unavailable()
     }
 
     async fn upsert_tag_taxonomy(
         &self,
         _upsert: kernel::memory::TagTaxonomyUpsert,
-    ) -> Result<wire::gateway::memory::TagTaxonomyEntry, MemoryStoreError> {
+    ) -> Result<kernel::memory::TagTaxonomyEntry, MemoryStoreError> {
         unavailable()
     }
 
@@ -309,8 +307,8 @@ impl MemoryStore for FailingStore {
 
     async fn merge_tag_taxonomy(
         &self,
-        _merge: wire::gateway::memory::TagTaxonomyMerge,
-    ) -> Result<wire::gateway::memory::TagTaxonomyMergeResult, MemoryStoreError> {
+        _merge: kernel::memory::TagTaxonomyMerge,
+    ) -> Result<kernel::memory::TagTaxonomyMergeResult, MemoryStoreError> {
         unavailable()
     }
 
@@ -368,7 +366,7 @@ impl MemoryStore for GatedStore {
     async fn wiki_topics(
         &self,
         filter: kernel::wiki::WikiFilter,
-    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError> {
+    ) -> Result<kernel::wiki::WikiTopicList, MemoryStoreError> {
         self.inner.wiki_topics(filter).await
     }
 
@@ -382,19 +380,22 @@ impl MemoryStore for GatedStore {
     async fn wiki_gaps(
         &self,
         limit: u32,
-    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
+    ) -> Result<kernel::wiki::WikiGapsResponse, MemoryStoreError> {
         self.inner.wiki_gaps(limit).await
     }
 
     async fn capture(
         &self,
-        batch: wire::capture::CaptureBatchRequest,
+        batch: kernel::memory::CaptureBatchRequest,
         node: Option<&str>,
-    ) -> Result<wire::capture::CaptureResult, MemoryStoreError> {
+    ) -> Result<kernel::memory::CaptureResult, MemoryStoreError> {
         self.inner.capture(batch, node).await
     }
 
-    async fn append(&self, batch: Vec<wire::memory::MemoryEntry>) -> Result<u64, MemoryStoreError> {
+    async fn append(
+        &self,
+        batch: Vec<kernel::memory::MemoryEntry>,
+    ) -> Result<u64, MemoryStoreError> {
         self.inner.append(batch).await
     }
 
@@ -410,18 +411,18 @@ impl MemoryStore for GatedStore {
     async fn browse(
         &self,
         filter: BrowseFilter,
-    ) -> Result<Vec<wire::memory::MemoryEntry>, MemoryStoreError> {
+    ) -> Result<Vec<kernel::memory::MemoryEntry>, MemoryStoreError> {
         self.inner.browse(filter).await
     }
 
-    async fn stats(&self) -> Result<wire::gateway::memory::MemoryStatsResponse, MemoryStoreError> {
+    async fn stats(&self) -> Result<kernel::memory::MemoryStatsResponse, MemoryStoreError> {
         self.inner.stats().await
     }
 
     async fn get_full(
         &self,
         id: &str,
-    ) -> Result<Option<wire::memory::MemoryEntry>, MemoryStoreError> {
+    ) -> Result<Option<kernel::memory::MemoryEntry>, MemoryStoreError> {
         self.inner.get_full(id).await
     }
 
@@ -443,28 +444,28 @@ impl MemoryStore for GatedStore {
     async fn list_tags(
         &self,
         query: TagListQuery,
-    ) -> Result<Vec<wire::gateway::memory::TagWire>, MemoryStoreError> {
+    ) -> Result<Vec<kernel::memory::TagWire>, MemoryStoreError> {
         self.inner.list_tags(query).await
     }
 
     async fn pending_tags(
         &self,
         limit: Limit,
-    ) -> Result<Vec<wire::gateway::memory::PendingTagWire>, MemoryStoreError> {
+    ) -> Result<Vec<kernel::memory::PendingTagWire>, MemoryStoreError> {
         self.inner.pending_tags(limit).await
     }
 
     async fn tag_counts(
         &self,
         query: TagCountsQuery,
-    ) -> Result<Vec<wire::gateway::memory::TagCount>, MemoryStoreError> {
+    ) -> Result<Vec<kernel::memory::TagCount>, MemoryStoreError> {
         self.inner.tag_counts(query).await
     }
 
     async fn list_tag_taxonomy(
         &self,
         query: TagTaxonomyQuery,
-    ) -> Result<Vec<wire::gateway::memory::TagTaxonomyEntry>, MemoryStoreError> {
+    ) -> Result<Vec<kernel::memory::TagTaxonomyEntry>, MemoryStoreError> {
         self.inner.list_tag_taxonomy(query).await
     }
 
@@ -488,27 +489,22 @@ impl MemoryStore for GatedStore {
             .await
     }
 
-    async fn add_tag(
-        &self,
-        add: TagAdd,
-    ) -> Result<wire::gateway::memory::TagWire, MemoryStoreError> {
+    async fn add_tag(&self, add: TagAdd) -> Result<kernel::memory::TagWire, MemoryStoreError> {
         self.inner.add_tag(add).await
     }
 
     async fn lookup_tags(
         &self,
         lookup: TagLookup,
-    ) -> Result<
-        std::collections::BTreeMap<String, Vec<wire::gateway::memory::TagWire>>,
-        MemoryStoreError,
-    > {
+    ) -> Result<std::collections::BTreeMap<String, Vec<kernel::memory::TagWire>>, MemoryStoreError>
+    {
         self.inner.lookup_tags(lookup).await
     }
 
     async fn upsert_tag_taxonomy(
         &self,
         upsert: TagTaxonomyUpsert,
-    ) -> Result<wire::gateway::memory::TagTaxonomyEntry, MemoryStoreError> {
+    ) -> Result<kernel::memory::TagTaxonomyEntry, MemoryStoreError> {
         self.inner.upsert_tag_taxonomy(upsert).await
     }
 
@@ -521,8 +517,8 @@ impl MemoryStore for GatedStore {
 
     async fn merge_tag_taxonomy(
         &self,
-        merge: wire::gateway::memory::TagTaxonomyMerge,
-    ) -> Result<wire::gateway::memory::TagTaxonomyMergeResult, MemoryStoreError> {
+        merge: kernel::memory::TagTaxonomyMerge,
+    ) -> Result<kernel::memory::TagTaxonomyMergeResult, MemoryStoreError> {
         self.inner.merge_tag_taxonomy(merge).await
     }
 

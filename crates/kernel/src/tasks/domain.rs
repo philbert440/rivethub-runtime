@@ -12,13 +12,6 @@ pub const LIVENESS: Duration = Duration::from_secs(30);
 pub const REAP_AFTER_SECS: i64 = 90;
 pub const UNCLAIMED_PAST_DEADLINE: &str = "no node started it before its maxWallClockMs ran out";
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a task's lifecycle; wire::task::TaskStatus is the contract's copy, translated by the gateway's task routes"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "kebab-case")]
 pub enum TaskStatus {
@@ -57,13 +50,6 @@ impl TaskStatus {
     }
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns how a task ended; wire::task::TaskVerdict is the contract's copy, translated by the gateway's task routes"
-    )
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Verdict {

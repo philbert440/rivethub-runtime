@@ -149,13 +149,6 @@ pub struct WikiHistoryEntry {
     pub body: String,
 }
 
-#[cfg_attr(
-    dylint_lib = "rr_lints",
-    expect(
-        duptype,
-        reason = "KERNELWIRE: the kernel owns a page's source kinds; wire::gateway::wiki::WikiSourceKind is the contract's copy, translated where a page becomes a response"
-    )
-)]
 #[derive(
     Debug,
     Clone,

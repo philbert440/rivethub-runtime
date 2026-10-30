@@ -2,14 +2,14 @@
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::MemoryMessageTally;
 use kernel::memory::MemoryStore as _;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryKind;
 use kernel::memory::SummaryOwner;
+use kernel::memory::VectorState;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
-use wire::gateway::memory::MemoryMessageTally;
-use wire::gateway::memory::SummaryKind;
-use wire::gateway::memory::VectorState;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

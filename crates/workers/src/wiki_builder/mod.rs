@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use kernel::memory::{EmbedTable, EmbedTarget};
+use kernel::model::FinishReason;
 use kernel::model::{ModelProvider, ModelProviderError, ModelRequest};
 use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
 use kernel::topics::TopicPageError;
@@ -17,7 +18,6 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 use wire::JsonObject;
 use wire::message::{Message, MessageContent, Role};
-use wire::stream::openai::FinishReason;
 
 use crate::{WorkerError, embed_key};
 

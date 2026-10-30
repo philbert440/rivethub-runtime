@@ -11,37 +11,24 @@ use chrono::Utc;
 use thiserror::Error;
 use uuid::Uuid;
 use values::Role;
-use wire::gateway::memory::BrowseWindow;
-use wire::gateway::memory::MemoryBrowseOrder;
-use wire::gateway::memory::MemoryMessageTally;
-use wire::gateway::memory::MemoryScope;
-use wire::gateway::memory::MemoryStatsResponse;
-use wire::gateway::memory::MemorySummaryNode;
-use wire::gateway::memory::PendingTagWire;
-pub use wire::gateway::memory::SearchMode;
-use wire::gateway::memory::TagCount;
-use wire::gateway::memory::TagEntityType;
-use wire::gateway::memory::TagEntryPair;
-use wire::gateway::memory::TagState;
-use wire::gateway::memory::TagTaxonomyEntry;
-use wire::gateway::memory::TagTaxonomyMerge;
-use wire::gateway::memory::TagTaxonomyMergeResult;
-use wire::gateway::memory::TagWire;
-use wire::memory::MemoryEntry;
 
 use crate::BoxError;
 
 pub mod budget;
+mod capture;
 mod deletion;
 mod embed;
 mod export;
 mod model_title;
 mod origin;
+mod records;
 mod search;
 mod suggest;
 mod summary;
+mod tags;
 mod title;
 
+pub use capture::{CaptureBatchRequest, CaptureMessage, CaptureResult};
 pub use deletion::DeletedSession;
 pub use deletion::EMPTY_SESSIONS_MAX;
 pub use deletion::SessionActivity;
@@ -72,6 +59,12 @@ pub use model_title::title_schema;
 pub use model_title::wants_model_title;
 pub use origin::DumpOrigin;
 pub use origin::DumpSource;
+pub use records::{
+    BrowseWindow, BrowseWindowError, MemoryBrowseOrder, MemoryChunkMatch, MemoryDegraded,
+    MemoryEntry, MemoryFallback, MemoryHitSource, MemoryMessageTally, MemoryScope,
+    MemorySearchResult, MemoryStatsResponse, MemorySummaryNode, RecentSession, SearchMode,
+    SummaryKind, TopTool, VectorState,
+};
 pub use search::SearchOutcome;
 pub use search::{SummaryDetail, SummaryExcerpt};
 pub use suggest::TagJobContext;
@@ -87,7 +80,6 @@ pub use summary::ConversationWindow;
 pub use summary::HEARTBEAT_SESSION_PREFIX;
 pub use summary::NewSummary;
 pub use summary::PendingConversation;
-pub use summary::SummaryKind;
 pub use summary::SummaryNode;
 pub use summary::SummarySource;
 pub use summary::SummaryStore;
@@ -96,6 +88,10 @@ pub use summary::SummaryWatch;
 pub use summary::SummaryWrite;
 pub use summary::WindowMessage;
 pub use summary::WrittenSummary;
+pub use tags::{
+    PendingTagAction, PendingTagWire, TagCount, TagEntityType, TagEntryPair, TagState,
+    TagTaxonomyEntry, TagTaxonomyMerge, TagTaxonomyMergeResult, TagWire,
+};
 pub use title::SUMMARY_TITLE_MAX_CHARS;
 pub use title::names_session;
 pub use title::needs_title;
@@ -390,7 +386,7 @@ pub trait MemoryStore: Send + Sync {
     async fn wiki_topics(
         &self,
         filter: crate::wiki::WikiFilter,
-    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError>;
+    ) -> Result<crate::wiki::WikiTopicList, MemoryStoreError>;
 
     async fn wiki_page(
         &self,
@@ -400,13 +396,13 @@ pub trait MemoryStore: Send + Sync {
     async fn wiki_gaps(
         &self,
         limit: u32,
-    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError>;
+    ) -> Result<crate::wiki::WikiGapsResponse, MemoryStoreError>;
 
     async fn capture(
         &self,
-        batch: wire::capture::CaptureBatchRequest,
+        batch: CaptureBatchRequest,
         node: Option<&str>,
-    ) -> Result<wire::capture::CaptureResult, MemoryStoreError>;
+    ) -> Result<CaptureResult, MemoryStoreError>;
 
     async fn append(&self, batch: Vec<MemoryEntry>) -> Result<u64, MemoryStoreError>;
 

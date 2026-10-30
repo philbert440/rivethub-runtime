@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
+use kernel::transcript::{HarnessTranscriptTurn, SessionMessageRole};
 use parking_lot::RwLock;
 use strum::IntoEnumIterator;
 use wire::events::ContextSource;
-use wire::gateway::sessions::{HarnessTranscriptTurn, SessionMessageRole};
 use wire::harness::HarnessId;
 use wire::session_id::SessionId;
 

@@ -27,8 +27,8 @@ use kernel::topics::TopicStore;
 use kernel::topics::edit_topic_page;
 use kernel::topics::sync_topic_page;
 use kernel::wiki::WikiLookup;
+use kernel::wiki::WikiPageResponse;
 use kernel::wiki::page::WikiSlug;
-use wire::gateway::wiki::WikiPageResponse;
 
 use crate::topics::Outcome;
 use crate::topics::at;

@@ -4,12 +4,12 @@ use std::path::PathBuf;
 
 use capture::listing::StoreRoots;
 use capture::listing::StoreSessionLister;
+use kernel::transcript::HarnessTranscriptTool;
+use kernel::transcript::HarnessTranscriptTurn;
 use kernel::transcript::SessionLister;
+use kernel::transcript::SessionMessageRole;
 use kernel::transcript::TranscriptRead;
-use wire::gateway::sessions::HarnessTranscriptTool;
-use wire::gateway::sessions::HarnessTranscriptTurn;
-use wire::gateway::sessions::SessionMessageRole;
-use wire::gateway::sessions::TranscriptToolStatus;
+use kernel::transcript::TranscriptToolStatus;
 use wire::harness::HarnessId;
 
 const SESSION: &str = "33333333-3333-3333-3333-333333333333";

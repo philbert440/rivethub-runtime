@@ -53,12 +53,12 @@ fn recorded_metadata_removes_only_generated_metadata_recursively() {
 
 #[test]
 fn recorded_search_mode_order_preserves_variants_and_moves_vector_last() {
-    let mut schema = inline_schema::<kernel::memory::SearchMode>();
+    let mut schema = inline_schema::<wire::gateway::memory::SearchMode>();
     search_mode_order(&mut schema);
     let variants: Vec<String> =
         serde_json::from_value(schema.get("enum").expect("enum").clone()).expect("strings");
     assert_eq!(variants, ["hybrid", "fts", "trigram", "regex", "vector"]);
-    let mut expected = inline_schema::<kernel::memory::SearchMode>();
+    let mut expected = inline_schema::<wire::gateway::memory::SearchMode>();
     expected.insert("enum".into(), serde_json::to_value(variants).expect("enum"));
     assert_eq!(schema, expected);
 }

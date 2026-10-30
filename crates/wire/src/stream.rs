@@ -1,5 +1,4 @@
 use crate::JsonObject;
-use crate::message::ToolCall;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -70,25 +69,6 @@ pub struct DelegationResult {
     pub usage: Option<TokenUsage>,
     pub tools_used: Option<Vec<String>>,
     pub duration_ms: Option<u64>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum LlmResponseKind {
-    Text,
-    ToolCalls,
-}
-
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct LlmResponse {
-    pub r#type: LlmResponseKind,
-    pub content: Option<String>,
-    pub tool_calls: Option<Vec<ToolCall>>,
-    pub usage: Option<LlmUsage>,
-    #[serde(default)]
-    pub finish_reason: Option<openai::FinishReason>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

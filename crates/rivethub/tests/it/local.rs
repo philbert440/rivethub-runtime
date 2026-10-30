@@ -22,6 +22,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use kernel::ToolContext;
+use kernel::memory::MemoryEntry;
 use kernel::tool::Tool;
 use mcp::client::Client;
 use rmcp::transport::StreamableHttpClientTransport;
@@ -31,7 +32,6 @@ use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 use wire::gateway::HealthzResponse;
 use wire::gateway::memory::MemoryBrowseResponse;
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 const SUMMARY_ID: &str = "0199e2a0-7b3c-7a00-8000-000000000001";

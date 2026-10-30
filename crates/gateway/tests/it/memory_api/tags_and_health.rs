@@ -498,7 +498,7 @@ fn a_message_hit_carries_its_session() {
 fn search_reports_store_degradation() {
     let (store, app) = seeded().expect("seed store");
     block_on(store.set_search_outcome(kernel::memory::SearchOutcome {
-        degraded: Some(wire::gateway::memory::MemoryDegraded {
+        degraded: Some(kernel::memory::MemoryDegraded {
             reason: "embedding endpoint not configured".to_owned(),
             effect: "Keyword / FTS ranking only — not meaning-based.".to_owned(),
         }),

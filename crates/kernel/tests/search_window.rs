@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use chrono_tz::America::New_York;
+use kernel::memory::{BrowseWindow, MemoryScope};
 use kernel::memory::{Limit, SearchMode, SearchQuery};
 use kernel::memory_core::TimeRange;
-use wire::gateway::memory::{BrowseWindow, MemoryScope};
 
 fn query() -> SearchQuery {
     SearchQuery {

@@ -3,6 +3,7 @@ pub mod auth;
 pub mod error;
 pub mod extract;
 mod history;
+mod memory_body;
 pub mod mesh;
 pub mod plugins;
 pub mod routes;
@@ -243,7 +244,7 @@ pub struct Gateway {
     history: history::History,
     uploads: Option<uploads::UploadService>,
     presets: routes::agents::AgentRegistry,
-    hub_state: Arc<dyn kernel::hub_state::HubStateStore>,
+    hub_state: Arc<dyn kernel::hub_state::HubStateStore<wire::gateway::hub_state::HubState>>,
     certificate_authority: Option<Arc<dyn kernel::ca::CertificateAuthority>>,
     devices: routes::devices::DeviceRuntime,
     mesh_cache: routes::MeshCache,
@@ -324,12 +325,17 @@ impl Gateway {
     }
 
     #[must_use]
-    pub fn with_hub_state(mut self, store: Arc<dyn kernel::hub_state::HubStateStore>) -> Self {
+    pub fn with_hub_state(
+        mut self,
+        store: Arc<dyn kernel::hub_state::HubStateStore<wire::gateway::hub_state::HubState>>,
+    ) -> Self {
         self.hub_state = store;
         self
     }
 
-    pub(crate) fn hub_state(&self) -> &dyn kernel::hub_state::HubStateStore {
+    pub(crate) fn hub_state(
+        &self,
+    ) -> &dyn kernel::hub_state::HubStateStore<wire::gateway::hub_state::HubState> {
         self.hub_state.as_ref()
     }
 
