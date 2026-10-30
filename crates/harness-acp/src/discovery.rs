@@ -5,15 +5,23 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
+use agent_client_protocol::Agent;
+use agent_client_protocol::ConnectionTo;
 use agent_client_protocol::schema::v1 as acp;
 use kernel::harness::Command;
 use kernel::harness::SessionEvent;
 use parking_lot::Mutex;
+use serde::Deserialize;
+use serde::Serialize;
+use tokio::sync::mpsc;
 use wire::harness::HarnessId;
 use wire::harness::HarnessModelsSource;
 use wire::harness::HarnessOffering;
 
 use crate::connection::AgentConnection;
+use crate::connection::SessionCommand;
+use crate::connection::port_failure;
+use crate::connection::request;
 use crate::error::AcpError;
 use crate::launch::AcpCommand;
 use crate::options::SessionOptions;
@@ -42,6 +50,27 @@ impl Advertisement {
 
     pub(crate) fn commands(&self) -> &[Command] {
         &self.commands
+    }
+
+    fn observe(&mut self, event: SessionEvent) {
+        if let SessionEvent::AvailableCommands(commands) = event {
+            self.commands = commands;
+        }
+    }
+
+    async fn observing<T>(
+        &mut self,
+        events: &mut mpsc::Receiver<SessionEvent>,
+        work: impl Future<Output = T>,
+    ) -> T {
+        tokio::pin!(work);
+        loop {
+            tokio::select! {
+                biased;
+                done = &mut work => return done,
+                Some(event) = events.recv() => self.observe(event),
+            }
+        }
     }
 
     pub(crate) fn apply(
@@ -150,7 +179,7 @@ impl Discoveries {
             }
             let discoveries = Arc::clone(self);
             tokio::spawn(async move {
-                match discover(&command, &cwd, DEFAULT_DISCOVERY_TIMEOUT).await {
+                match discover(harness, &command, &cwd, DEFAULT_DISCOVERY_TIMEOUT).await {
                     Ok(found) => {
                         discoveries.record(harness, found);
                         discoveries.attempts.lock().remove(&harness);
@@ -166,6 +195,7 @@ impl Discoveries {
 }
 
 pub(crate) async fn discover(
+    harness: HarnessId,
     command: &AcpCommand,
     cwd: &Path,
     timeout: Duration,
@@ -180,8 +210,22 @@ pub(crate) async fn discover(
         .await
         .map_err(|_| AcpError::DiscoveryTimeout { timeout })??;
     let mut advertised = Advertisement::from_agent(&agent);
-    agent.shutdown.cancel();
     let mut events = agent.events_rx;
+    if let Some(deletion) = Deletion::offered(harness, &agent.capabilities) {
+        let deleted = request(&agent.commands, |reply| SessionCommand::Delete {
+            acp_session: agent.acp_session.clone(),
+            deletion,
+            reply,
+        });
+        let outcome = tokio::time::timeout(timeout, advertised.observing(&mut events, deleted))
+            .await
+            .map_err(|_| AcpError::DiscoveryTimeout { timeout })
+            .and_then(|done| done.map_err(|failure| port_failure(failure, deletion.method())));
+        if let Err(error) = outcome {
+            tracing::debug!(%harness, %error, "harness discovery could not delete its session");
+        }
+    }
+    agent.shutdown.cancel();
     agent
         .reaped
         .await
@@ -194,11 +238,73 @@ pub(crate) async fn discover(
         })?;
     agent.tasks.wait().await;
     while let Ok(event) = events.try_recv() {
-        if let SessionEvent::AvailableCommands(commands) = event {
-            advertised.commands = commands;
-        }
+        advertised.observe(event);
     }
     Ok(advertised)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Deletion {
+    Standard,
+    Grok,
+}
+
+impl Deletion {
+    fn offered(harness: HarnessId, capabilities: &acp::AgentCapabilities) -> Option<Self> {
+        if capabilities.session_capabilities.delete.is_some() {
+            Some(Self::Standard)
+        } else if harness == HarnessId::GrokBuild {
+            Some(Self::Grok)
+        } else {
+            None
+        }
+    }
+
+    const fn method(self) -> &'static str {
+        match self {
+            Self::Standard => "session/delete",
+            Self::Grok => "_x.ai/session/delete",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, agent_client_protocol::JsonRpcRequest)]
+#[request(method = "_x.ai/session/delete", response = GrokDeleted)]
+#[serde(rename_all = "camelCase")]
+struct GrokDelete {
+    session_id: acp::SessionId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, agent_client_protocol::JsonRpcResponse)]
+struct GrokDeleted {
+    success: bool,
+}
+
+pub(crate) async fn delete(
+    connection: &ConnectionTo<Agent>,
+    acp_session: acp::SessionId,
+    deletion: Deletion,
+) -> Result<(), acp::Error> {
+    match deletion {
+        Deletion::Standard => connection
+            .send_request(acp::DeleteSessionRequest::new(acp_session))
+            .block_task()
+            .await
+            .map(drop),
+        Deletion::Grok => {
+            let deleted = connection
+                .send_request(GrokDelete {
+                    session_id: acp_session,
+                })
+                .block_task()
+                .await?;
+            if deleted.success {
+                Ok(())
+            } else {
+                Err(acp::Error::internal_error().data("grok did not delete the session"))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
