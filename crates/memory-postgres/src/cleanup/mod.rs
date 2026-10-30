@@ -30,6 +30,13 @@ use rows::PlacementRow;
 use rows::RedirectRow;
 use rows::TaxonomyRow;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatabaseIdentity {
+    pub cluster: i64,
+    pub oid: i64,
+    pub name: String,
+}
+
 const READ_ONLY_SETTING: &str = "default_transaction_read_only";
 const READ_ONLY_CONNECTIONS: u32 = 2;
 
@@ -48,11 +55,15 @@ impl PostgresMemory {
         Ok(Self::new(pool))
     }
 
-    pub async fn database(&self) -> Result<String, Error> {
-        sqlx::query_scalar::<_, String>("SELECT current_database()")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|source| Error::operation("database name", source))
+    pub async fn identity(&self) -> Result<DatabaseIdentity, Error> {
+        let (cluster, oid, name) = sqlx::query_as::<_, (i64, i64, String)>(
+            "SELECT (SELECT system_identifier FROM pg_control_system()), d.oid::bigint, d.datname::text \
+             FROM pg_database d WHERE d.datname = current_database()",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|source| Error::operation("database identity", source))?;
+        Ok(DatabaseIdentity { cluster, oid, name })
     }
 
     async fn ensure_read_only(&self) -> Result<(), Error> {

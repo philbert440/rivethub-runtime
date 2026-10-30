@@ -429,7 +429,8 @@ completion transaction. `pendingProposals` counts pending proposals. Without the
 (45) Topic cleanup (Phil, 2026-10-29): `rh memory cleanup --dry-run --out DIR --model-url URL --model NAME` plans the
 cleanup and changes nothing; `--propose --database URL` runs the same stages against the database it names and then
 writes them as one tidy batch (`proposed_by: backfill`, note 43) for Phil to approve, refusing the node's live memory
-database (`RIVETHUB_PG_URL`, by database name before and after connecting). Optional `--database` (dry run: default
+database (`RIVETHUB_PG_URL`): before any stage and again before writing it connects to both and compares the server's
+cluster `system_identifier` and the database's oid, so another URL for the same database is refused too. Optional `--database` (dry run: default
 `RIVETHUB_PG_URL`), `--batch N` (20), `--concurrency N` (2), `--timeout SECONDS` (900). Memory is read over connections
 that set `default_transaction_read_only=on` (checked before reading), on the deployed schema and on 0032/0033 (before
 0032 the People, Hosts and Tools roots count as types and the topics under them as entities); the People, Hosts and Tools
