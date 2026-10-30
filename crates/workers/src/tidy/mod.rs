@@ -191,6 +191,7 @@ fn create(cluster: &Cluster, name: TopicName, parent: Option<TopicId>) -> TreeEd
         topic: TopicId::random(),
         name,
         parent,
+        aliases: Vec::new(),
         members: cluster
             .sessions
             .iter()
@@ -344,7 +345,15 @@ async fn evidence(
         | TreeEdit::Rename { topic, .. }
         | TreeEdit::Close { topic }
         | TreeEdit::Delete { topic } => *topic,
-        TreeEdit::AddType { .. } => return Ok(TidyEvidence::default()),
+        TreeEdit::AddType { .. } | TreeEdit::MergePage { .. } | TreeEdit::RemovePage { .. } => {
+            return Ok(TidyEvidence::default());
+        }
+        TreeEdit::FileInto { members, .. } => {
+            return Ok(TidyEvidence {
+                sessions: u64::try_from(members.len()).map_err(|_| WorkerError::Count)?,
+                samples: Vec::new(),
+            });
+        }
         TreeEdit::CreateTopic { members, .. } => {
             return Ok(TidyEvidence {
                 sessions: u64::try_from(members.len()).map_err(|_| WorkerError::Count)?,

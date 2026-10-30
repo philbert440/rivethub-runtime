@@ -20,7 +20,9 @@ use crate::topics::TopicChanges;
 use crate::topics::TopicId;
 use crate::topics::TopicKind;
 use crate::topics::TopicName;
+use crate::topics::TopicPageStore;
 use crate::topics::TopicStore;
+use wire::wiki::FoldMark;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Decision {
@@ -36,6 +38,7 @@ pub struct TidyPorts<'a> {
     pub tidy: &'a dyn TidyStore,
     pub topics: &'a dyn TopicStore,
     pub filing: &'a dyn FilingStore,
+    pub pages: Option<&'a dyn TopicPageStore>,
 }
 
 #[derive(Debug)]
@@ -142,12 +145,39 @@ async fn apply(
             topic,
             name,
             parent,
+            aliases,
             members,
         } => {
-            create(topics, *topic, TopicKind::Work, name, *parent, now).await?;
+            let new = NewTopic {
+                kind: TopicKind::Work,
+                name: name.clone(),
+                aliases: aliases.clone(),
+                parent: *parent,
+                directory: None,
+            };
+            topics.create(Topic::create(*topic, new, now)?).await?;
             for member in members {
                 file(ports, member, *topic, now).await?;
             }
+        }
+        TreeEdit::FileInto { topic, members } => {
+            for member in members {
+                file(ports, member, *topic, now).await?;
+            }
+        }
+        TreeEdit::MergePage { page, into } => {
+            ports
+                .pages
+                .ok_or(TidyError::PagesUnavailable)?
+                .fold_page(page, into, FoldMark::Merged, now)
+                .await?;
+        }
+        TreeEdit::RemovePage { page } => {
+            ports
+                .pages
+                .ok_or(TidyError::PagesUnavailable)?
+                .remove_page(page)
+                .await?;
         }
         TreeEdit::AddType {
             topic,

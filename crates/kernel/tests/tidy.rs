@@ -60,6 +60,7 @@ fn create(name: &str, count: u8) -> TestResult<TreeEdit> {
         topic: TopicId::random(),
         name: TopicName::new(name)?,
         parent: None,
+        aliases: Vec::new(),
         members: members(count),
     })
 }
@@ -76,6 +77,7 @@ fn fingerprints_ignore_merge_order_and_a_new_topic_s_parent() -> TestResult {
         topic: TopicId::random(),
         name: TopicName::new("Release tooling").unwrap(),
         parent: Some(a),
+        aliases: Vec::new(),
         members: Vec::new(),
     };
     assert_eq!(

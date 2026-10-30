@@ -182,6 +182,8 @@ pub trait TopicPageStore: Send + Sync {
         mark: FoldMark,
         now: DateTime<Utc>,
     ) -> Result<(), WikiStoreError>;
+
+    async fn remove_page(&self, slug: &WikiSlug) -> Result<(), WikiStoreError>;
 }
 
 #[derive(Debug, Error)]

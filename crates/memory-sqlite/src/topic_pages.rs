@@ -138,6 +138,22 @@ impl TopicPageStore for SqliteStore {
         };
         self.fold_wiki(&fold, now).await.map(drop)
     }
+
+    async fn remove_page(&self, slug: &WikiSlug) -> Result<(), WikiStoreError> {
+        let slug = slug.as_ref().to_owned();
+        blocking(self, move |conn| {
+            for statement in [
+                "DELETE FROM ros_wiki_citations WHERE topic_slug = ?1",
+                "DELETE FROM ros_wiki_provenance WHERE topic_slug = ?1",
+                "DELETE FROM ros_wiki_redirects WHERE to_slug = ?1",
+                "DELETE FROM ros_wiki_topics WHERE slug = ?1",
+            ] {
+                conn.execute(statement, params![slug]).map_err(query)?;
+            }
+            Ok(())
+        })
+        .await
+    }
 }
 
 fn read(conn: &Connection, slug: &WikiSlug) -> Result<Option<TopicPage>, WikiStoreError> {

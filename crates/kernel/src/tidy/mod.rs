@@ -64,6 +64,10 @@ pub enum TidyError {
     Invalid { what: String },
     #[error(transparent)]
     Topic(#[from] TopicError),
+    #[error(transparent)]
+    Wiki(#[from] crate::wiki::builder::WikiStoreError),
+    #[error("wiki pages are not configured")]
+    PagesUnavailable,
     #[error("tidy store is unavailable")]
     Unavailable(#[source] BoxError),
 }

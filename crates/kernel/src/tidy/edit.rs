@@ -2,10 +2,13 @@ use std::str::FromStr;
 
 use uuid::Uuid;
 use wire::gateway::tidy::TidyChange as WireChange;
+use wire::gateway::wiki::WikiSlug;
+use wire::session_id::SessionId;
 
 use super::Fingerprint;
 use super::TidyError;
 use crate::filing::Target;
+use crate::topics::Alias;
 use crate::topics::Slug;
 use crate::topics::TopicId;
 use crate::topics::TopicName;
@@ -36,7 +39,19 @@ pub enum TreeEdit {
         topic: TopicId,
         name: TopicName,
         parent: Option<TopicId>,
+        aliases: Vec<Alias>,
         members: Vec<Target>,
+    },
+    FileInto {
+        topic: TopicId,
+        members: Vec<Target>,
+    },
+    MergePage {
+        page: WikiSlug,
+        into: WikiSlug,
+    },
+    RemovePage {
+        page: WikiSlug,
     },
     AddType {
         topic: TopicId,
@@ -67,6 +82,18 @@ impl TreeEdit {
             Self::Close { topic } => Fingerprint::of(&["close", &topic.to_string()]),
             Self::Delete { topic } => Fingerprint::of(&["delete", &topic.to_string()]),
             Self::CreateTopic { name, .. } => Fingerprint::of(&["create", slug(name)?.as_str()]),
+            Self::FileInto { topic, members } => {
+                Fingerprint::of(&["file", &topic.to_string(), &members.len().to_string()])
+            }
+            Self::MergePage { page, into } => {
+                let (low, high) = if page.as_ref() < into.as_ref() {
+                    (page, into)
+                } else {
+                    (into, page)
+                };
+                Fingerprint::of(&["merge-page", low.as_ref(), high.as_ref()])
+            }
+            Self::RemovePage { page } => Fingerprint::of(&["remove-page", page.as_ref()]),
             Self::AddType { name, .. } => Fingerprint::of(&["type", slug(name)?.as_str()]),
         })
     }
@@ -94,21 +121,30 @@ impl TreeEdit {
                 topic,
                 name,
                 parent: under,
+                aliases,
                 members,
             } => WireChange::CreateTopic {
                 topic: id(topic),
                 name: name.as_str().to_owned(),
                 parent: parent(under),
-                sessions: members
+                aliases: aliases
                     .iter()
-                    .filter_map(Target::session)
-                    .cloned()
+                    .map(|alias| alias.as_str().to_owned())
                     .collect(),
-                conversations: members
-                    .iter()
-                    .filter_map(Target::conversation)
-                    .map(|conversation| conversation.to_string())
-                    .collect(),
+                sessions: sessions(members),
+                conversations: conversations(members),
+            },
+            Self::FileInto { topic, members } => WireChange::FileInto {
+                topic: id(topic),
+                sessions: sessions(members),
+                conversations: conversations(members),
+            },
+            Self::MergePage { page, into } => WireChange::MergePage {
+                page: page.as_ref().to_owned(),
+                into: into.as_ref().to_owned(),
+            },
+            Self::RemovePage { page } => WireChange::RemovePage {
+                page: page.as_ref().to_owned(),
             },
             Self::AddType {
                 topic,
@@ -145,22 +181,33 @@ impl TreeEdit {
                 topic: id,
                 name,
                 parent,
+                aliases,
                 sessions,
                 conversations,
             } => Self::CreateTopic {
                 topic: topic(&id)?,
                 name: TopicName::new(&name)?,
                 parent: parent.as_deref().map(topic).transpose()?,
-                members: sessions
-                    .into_iter()
-                    .map(Target::Session)
-                    .map(Ok)
-                    .chain(conversations.iter().map(|text| {
-                        Uuid::parse_str(text)
-                            .map(Target::Conversation)
-                            .map_err(|_| invalid(text))
-                    }))
-                    .collect::<Result<_, TidyError>>()?,
+                aliases: aliases
+                    .iter()
+                    .map(|alias| Alias::new(alias))
+                    .collect::<Result<_, _>>()?,
+                members: members(sessions, &conversations)?,
+            },
+            WireChange::FileInto {
+                topic: id,
+                sessions,
+                conversations,
+            } => Self::FileInto {
+                topic: topic(&id)?,
+                members: members(sessions, &conversations)?,
+            },
+            WireChange::MergePage { page, into } => Self::MergePage {
+                page: wiki_slug(&page)?,
+                into: wiki_slug(&into)?,
+            },
+            WireChange::RemovePage { page } => Self::RemovePage {
+                page: wiki_slug(&page)?,
             },
             WireChange::AddType {
                 topic: id,
@@ -173,6 +220,39 @@ impl TreeEdit {
             },
         })
     }
+}
+
+fn sessions(members: &[Target]) -> Vec<SessionId> {
+    members
+        .iter()
+        .filter_map(Target::session)
+        .cloned()
+        .collect()
+}
+
+fn conversations(members: &[Target]) -> Vec<String> {
+    members
+        .iter()
+        .filter_map(Target::conversation)
+        .map(|conversation| conversation.to_string())
+        .collect()
+}
+
+fn members(sessions: Vec<SessionId>, conversations: &[String]) -> Result<Vec<Target>, TidyError> {
+    sessions
+        .into_iter()
+        .map(Target::Session)
+        .map(Ok)
+        .chain(conversations.iter().map(|text| {
+            Uuid::parse_str(text)
+                .map(Target::Conversation)
+                .map_err(|_| invalid(text))
+        }))
+        .collect()
+}
+
+fn wiki_slug(text: &str) -> Result<WikiSlug, TidyError> {
+    WikiSlug::try_from(text.to_owned()).map_err(|_| invalid(text))
 }
 
 fn slug(name: &TopicName) -> Result<Slug, TidyError> {
