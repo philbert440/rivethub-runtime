@@ -344,6 +344,7 @@ impl HarnessAdapter for AcpHarnessAdapter {
             return Err(error);
         }
         if let Some(effort) = spec.effort
+            && self.switches(&canonical).effort
             && let Err(error) = self
                 .set_option(&canonical, SessionOption::Effort(effort))
                 .await

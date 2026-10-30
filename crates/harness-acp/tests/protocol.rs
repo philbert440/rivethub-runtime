@@ -613,6 +613,32 @@ fn the_spec_model_and_effort_are_applied_at_new_session() {
 }
 
 #[test]
+fn an_effort_is_left_to_a_harness_that_offers_no_effort_switch() {
+    let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &["--effort-option", "absent"]));
+    run(async {
+        let cwd = tempdir().expect("cwd");
+        let session = adapter
+            .new_session(SessionSpec {
+                session: SessionId::new(HarnessId::Opencode, SESSION),
+                harness: HarnessId::Opencode,
+                model: Some("grok-5".to_owned()),
+                effort: Some(ThinkingLevel::High),
+                working_dir: Some(cwd.path().to_path_buf()),
+                startup_context: None,
+            })
+            .await
+            .expect("new session without an effort switch");
+        let mut events = adapter.events(&session).await.expect("events");
+        assert_eq!(
+            events.recv().await.expect("config event"),
+            SessionEvent::AgentMessageChunk {
+                text: "model=grok-5".to_owned(),
+            }
+        );
+    });
+}
+
+#[test]
 fn port_refusals_are_typed() {
     let adapter = AcpHarnessAdapter::with_launch_table(launch(&[], &[]));
     run(async {

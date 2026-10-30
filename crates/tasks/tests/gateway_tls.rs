@@ -344,9 +344,11 @@ async fn presenting_the_node_certificate_is_unauthorized() {
         ),
         "{error}"
     );
+    let loaded = engine.load(id).await.expect("load");
+    assert_eq!(loaded.status, TaskStatus::Failed);
     assert_eq!(
-        engine.load(id).await.expect("load").status,
-        TaskStatus::Failed
+        loaded.error.as_deref(),
+        Some("gateway returned 401: unauthorized")
     );
     assert_eq!(peer.observed.hits.load(Ordering::SeqCst), 2);
     peer.shutdown().await;
