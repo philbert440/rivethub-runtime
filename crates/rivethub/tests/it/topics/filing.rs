@@ -126,6 +126,9 @@ async fn file_all(api: &Api, conversations: [Uuid; 4]) -> TestResult<Vec<FilingP
     for conversation in conversations {
         plans.push(workers::handle_file(&env, conversation).await?);
     }
+    for request in provider.chat_requests().await {
+        assert_eq!(request.options.enable_thinking, Some(false));
+    }
     Ok(plans)
 }
 
