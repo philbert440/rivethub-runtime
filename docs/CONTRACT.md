@@ -426,6 +426,27 @@ every type with the entities directly under it) and `loosePages` (pages bound to
 role's task list, and how many of its jobs have failed at least once without succeeding since, dead ones included.
 Completing a job records its task's finish in `rh_worker_runs`, in the graphile completion statement or the SQLite
 completion transaction. `pendingProposals` counts pending proposals. Without the stores the route is `503`.
+(45) Cleanup dry run (Phil, 2026-10-29): `rh memory cleanup --dry-run --out DIR --model-url URL --model NAME` (optional
+`--batch N`, default 20; `--concurrency N`, default 2; `--timeout SECONDS`, default 900) plans the topic cleanup and
+changes nothing: without `--dry-run` it refuses. It reads memory over connections that set
+`default_transaction_read_only=on` and checks the setting before reading, works on the deployed schema and on 0032/0033
+(before 0032 the People, Hosts and Tools roots count as types and the topics under them as entities, as 0032 makes them),
+and reads the People, Hosts and Tools wiki pages without taking the writer lock. Stages are checkpointed in DIR
+(`snapshot.json`, `tree-chunks.jsonl`, `tree-drafts.jsonl`, `tree.json`, `filing-answers.jsonl`, `filings.json`,
+`fold-answers.jsonl`, `folds.json`, `timings.json`, `progress.log`), so a rerun resumes after the last finished job and a
+stage with failed jobs stops the run until it is rerun; writing a new tree drops the later stages. The tree pass asks the
+model for topics over batches of conversations seeded by the accepted `project:` tags (their aliases kept, "General" and
+rejected or deleted names refused) and the existing work topics, consolidates them into one tree of at most 4 levels,
+and refuses a new name that is a conversation title, a one-off task, a path, ticket, version, branch or id, a catch-all,
+a near-duplicate, or held by fewer than 3 conversations (estimated, then again after filing, when the filings of a dropped
+topic move to its parent). The filing pass runs (42)'s rules and prompt on that tree, one session or conversation at a
+time with the newest conversation standing for its session, delegated tasks after their parents, and the model's
+questions batched (one JSON object keyed by conversation ref per request). The fold pass gives each loose knowledge page
+and each old People, Hosts and Tools section one fate: merge into the most cited page of the same title, an entity of the
+type its own entity reference names, a section on the topic most of its cited conversations are filed in (a strict
+plurality), or, when those do not decide, the model's entity, section, new topic, merge or remove. `report.md` and
+`report.json` hold the tree with session counts and sample titles, filings per rule and "nothing fits", a sample of 60
+filings, the fold outcomes with samples, the junk names and the time each stage took.
 (50) Plug-in host (Phil, 2026-10-29; notes 51–60 are proposed and await his review): RivetHub's core is the workspace
 and memory, plus delegation, notifications and tasks; everything else is a plug-in, a program that runs in its own
 process on one node, is described by a manifest and reaches rh only over B17. No plug-in code is loaded into rh, so

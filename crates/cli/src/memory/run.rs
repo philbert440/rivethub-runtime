@@ -73,6 +73,7 @@ pub(super) async fn run(
             dry_run,
             json,
         } => consolidate_wiki(limit, dry_run, json, env).await,
+        MemoryCommand::Cleanup(args) => super::cleanup::run(args, env, shutdown).await,
     }
 }
 
@@ -369,7 +370,7 @@ async fn publish(out: Option<PathBuf>, bytes: Vec<u8>, tty: bool) -> Result<Repo
     })
 }
 
-fn postgres_url(env: &Environment) -> Result<String, Error> {
+pub(super) fn postgres_url(env: &Environment) -> Result<String, Error> {
     match resolve(env, None, Kind::Postgres)? {
         Target::Postgres(url) => Ok(url),
         Target::Sqlite(_) => Err(Error::PostgresUrlRequired),
