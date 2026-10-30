@@ -289,7 +289,11 @@ async fn pulls_only_while_the_branch_tracks_a_remote() -> TestResult {
     let wiki = root.join("wiki");
     upstream_commit(&root.join("other"), "second").await?;
     apply(&wiki, patch("release")).await?;
-    assert!(git(&wiki, &["log", "--format=%s"]).await?.contains("second"));
+    assert!(
+        git(&wiki, &["log", "--format=%s"])
+            .await?
+            .contains("second")
+    );
     git(&wiki, &["branch", "--unset-upstream"]).await?;
     upstream_commit(&root.join("other"), "third").await?;
     apply(&wiki, patch("later")).await?;
