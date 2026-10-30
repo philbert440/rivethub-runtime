@@ -49,7 +49,7 @@ pub(crate) use prompt::correction_line;
 use crate::error::WorkerError;
 use crate::summarize::llm_error;
 
-const MAX_FILING_TOKENS: u32 = 200;
+const MAX_FILING_TOKENS: u32 = 8_192;
 const CORRECTION_EXAMPLES: u32 = 8;
 
 #[expect(
@@ -364,10 +364,7 @@ fn existing(name: &TopicName, listings: &[TopicListing]) -> Option<TopicId> {
 async fn chat(env: &FilingEnv<'_>, user: &str) -> Result<String, WorkerError> {
     cancelled(env)?;
     let request = ModelRequest {
-        options: ModelOptions {
-            temperature: None,
-            enable_thinking: Some(false),
-        },
+        options: ModelOptions::default(),
         model: env.model.to_owned(),
         messages: vec![
             text_message(Role::System, FILING_SYSTEM_PROMPT),

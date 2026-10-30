@@ -15,9 +15,9 @@ pub(super) const MIN_BRANCHES_FOR_ROOT: u32 = 3;
 pub(super) const IDLE_MINUTES: u32 = 15;
 pub(super) const STALE_MINUTES: u32 = 5_760;
 pub(super) const STALE_MIN_BATCH: u32 = 2;
-const LEAF_MAX_TOKENS: u32 = 7_000;
-const BRANCH_MAX_TOKENS: u32 = 14_000;
-const ROOT_MAX_TOKENS: u32 = 20_000;
+const LEAF_MAX_TOKENS: u32 = 16_384;
+const BRANCH_MAX_TOKENS: u32 = 24_576;
+const ROOT_MAX_TOKENS: u32 = 32_768;
 pub const DEAD_REST: TimeDelta = TimeDelta::minutes(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

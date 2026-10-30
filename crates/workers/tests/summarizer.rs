@@ -212,7 +212,6 @@ struct Captured {
     user: String,
     max_tokens: Option<u32>,
     model: String,
-    thinking: Option<bool>,
 }
 
 struct Scripted {
