@@ -72,9 +72,8 @@ async fn a_full_window_summarizes_once() {
     let job = jobs.only().await;
     assert_eq!(job.key.as_deref(), Some(format!("compact-{id}").as_str()));
     assert_eq!(job.key_mode, JobKeyMode::Replace);
-    assert_eq!(job.priority, 0);
+    assert_eq!(job.priority, -20);
     assert_eq!(read_trigger(&job.payload), SummaryTrigger::SessionIdle);
-    assert_eq!(job.priority, 0);
     assert_eq!(job.max_attempts, Some(3));
     let outcome = handle_summarize(&env, &job.payload)
         .await

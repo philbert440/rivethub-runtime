@@ -363,3 +363,9 @@ async fn a_pending_sweep_is_queued_once(pool: PgPool) -> TestResult {
     common::install_graphile(&pool).await?;
     testkit::sweeps::a_pending_sweep_is_queued_once(&queue(&pool).await?).await
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn the_sweeps_run_before_an_older_backlog(pool: PgPool) -> TestResult {
+    common::install_graphile(&pool).await?;
+    testkit::sweeps::the_sweeps_run_before_an_older_backlog(&queue(&pool).await?).await
+}

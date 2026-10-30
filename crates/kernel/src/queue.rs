@@ -167,6 +167,8 @@ impl From<JobName> for String {
     }
 }
 
+pub const MAINTENANCE_PRIORITY: i16 = -100;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobKeyMode {
     KeepRunAt,

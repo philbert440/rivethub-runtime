@@ -80,6 +80,7 @@ pub use summary::ConversationHead;
 pub use summary::ConversationWindow;
 pub use summary::HEARTBEAT_SESSION_PREFIX;
 pub use summary::NewSummary;
+pub use summary::PendingConversation;
 pub use summary::SummaryKind;
 pub use summary::SummaryNode;
 pub use summary::SummarySource;

@@ -275,7 +275,7 @@ async fn cron_registration_and_due_jobs_follow_roles_and_wiki_switch(pool: PgPoo
         payload: JsonObject::default(),
         key: Some(key.to_owned()),
         key_mode: JobKeyMode::KeepRunAt,
-        priority: 0,
+        priority: kernel::queue::MAINTENANCE_PRIORITY,
         run_at: None,
         max_attempts: Some(25),
     })

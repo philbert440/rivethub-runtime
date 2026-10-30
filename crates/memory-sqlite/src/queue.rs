@@ -13,6 +13,10 @@ use wire::JsonObject;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;
+use crate::job_rank::DueRow;
+use crate::job_rank::rank;
+use crate::job_rank::rank_key;
+use crate::job_rank::select_due;
 use crate::time;
 
 pub(crate) const EMBED_TASK: &str = "embed-target";
@@ -74,6 +78,7 @@ pub struct JobInsert {
     pub task: String,
     pub key: Option<String>,
     pub payload: String,
+    pub priority: i16,
     pub run_at: DateTime<Utc>,
     pub max_attempts: u32,
     pub now: DateTime<Utc>,
@@ -86,6 +91,7 @@ impl JobInsert {
             task: task.into(),
             key: None,
             payload,
+            priority: 0,
             run_at: now,
             max_attempts: EMBED_MAX_ATTEMPTS,
             now,
@@ -123,14 +129,6 @@ struct EmbedJob<'a> {
 enum ClaimKind {
     Inherent,
     Port,
-}
-
-struct DueRow {
-    id: String,
-    task: String,
-    key: Option<String>,
-    payload: String,
-    max_attempts: i64,
 }
 
 #[must_use]
@@ -259,7 +257,7 @@ pub(crate) fn enqueue_embed_due(
 
 pub(crate) fn enqueue_in(conn: &Connection, job: &JobInsert) -> Result<(), SqliteError> {
     match (insert_job(conn, job)?, &job.key) {
-        (None, Some(key)) => replace(conn, key, &job.payload, job.run_at, job.now),
+        (None, Some(key)) => replace(conn, key, job),
         _ => Ok(()),
     }
 }
@@ -278,7 +276,8 @@ pub(crate) fn insert_job(
          ) VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, 'queued', ?7, ?7)",
         params![id, job.task, job.key, job.payload, run_at, max_attempts, stamped],
     ) {
-        Ok(_) => Ok(Some(id)),
+        Ok(_) if job.priority == 0 => Ok(Some(id)),
+        Ok(_) => rank(conn, &id, job.priority).map(|()| Some(id)),
         Err(error) if duplicate_key(&error) => Ok(None),
         Err(error) => Err(SqliteError::query("job enqueue")(error)),
     }
@@ -321,49 +320,6 @@ fn claim_one(
     tx.commit()
         .map_err(SqliteError::query("job claim commit"))?;
     Ok(Some(claimed))
-}
-
-fn select_due(
-    conn: &Connection,
-    tasks: &[String],
-    only_id: Option<&str>,
-    now: DateTime<Utc>,
-) -> Result<Option<DueRow>, SqliteError> {
-    let sql = due_sql(tasks.len());
-    let stamped = time::stamp(now);
-    let pinned = only_id.map(str::to_owned);
-    let mut bound: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(tasks.len().saturating_add(2));
-    bound.push(&stamped);
-    for task in tasks {
-        bound.push(task);
-    }
-    bound.push(&pinned);
-    conn.query_row(&sql, bound.as_slice(), read_due)
-        .optional()
-        .map_err(SqliteError::query("job claim"))
-}
-
-fn due_sql(count: usize) -> String {
-    let slots = (0..count)
-        .map(|index| format!("?{}", index.saturating_add(2)))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let pin = count.saturating_add(2);
-    format!(
-        "SELECT id, task, job_key, payload, max_attempts FROM ros_jobs \
-         WHERE state = 'queued' AND run_at <= ?1 AND task IN ({slots}) \
-         AND (?{pin} IS NULL OR id = ?{pin}) ORDER BY run_at, rowid LIMIT 1"
-    )
-}
-
-fn read_due(row: &rusqlite::Row<'_>) -> rusqlite::Result<DueRow> {
-    Ok(DueRow {
-        id: row.get(0)?,
-        task: row.get(1)?,
-        key: row.get(2)?,
-        payload: row.get(3)?,
-        max_attempts: row.get(4)?,
-    })
 }
 
 fn accepted_payload(row: &DueRow, kind: ClaimKind) -> Result<JobPayload, SqliteError> {
@@ -591,13 +547,7 @@ fn count_row(task: String, state: String, count: i64) -> Result<JobCount, Sqlite
     })
 }
 
-pub(crate) fn replace(
-    conn: &Connection,
-    key: &str,
-    payload: &str,
-    run_at: DateTime<Utc>,
-    now: DateTime<Utc>,
-) -> Result<(), SqliteError> {
+pub(crate) fn replace(conn: &Connection, key: &str, job: &JobInsert) -> Result<(), SqliteError> {
     let changed = conn
         .execute(
             "UPDATE ros_jobs
@@ -608,13 +558,18 @@ pub(crate) fn replace(
                     state = CASE WHEN state = 'dead' THEN 'queued' ELSE state END,
                     locked_at = CASE WHEN state = 'dead' THEN NULL ELSE locked_at END
               WHERE job_key = ?1",
-            params![key, payload, time::stamp(run_at), time::stamp(now)],
+            params![
+                key,
+                job.payload,
+                time::stamp(job.run_at),
+                time::stamp(job.now)
+            ],
         )
         .map_err(SqliteError::query("job replace"))?;
     if changed == 0 {
         Err(SqliteError::MissingJob { id: key.to_owned() })
     } else {
-        Ok(())
+        rank_key(conn, key, job.priority)
     }
 }
 

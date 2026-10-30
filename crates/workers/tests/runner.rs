@@ -476,7 +476,7 @@ impl kernel::memory::SummaryStore for IdleSummaries {
 
     async fn pending(
         &self,
-    ) -> Result<Vec<kernel::memory::ConversationWindow>, kernel::memory::SummaryStoreError> {
+    ) -> Result<Vec<kernel::memory::PendingConversation>, kernel::memory::SummaryStoreError> {
         Err(kernel::memory::SummaryStoreError::Closed)
     }
 

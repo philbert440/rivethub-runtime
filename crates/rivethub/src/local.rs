@@ -12,7 +12,7 @@ use gateway::server::ServeOptions;
 use kernel::filing::FilingStore;
 use kernel::memory::jobs::UnembeddedStore;
 use kernel::memory::{EmbeddingStore, MemoryStore, SessionDeletion, SummaryStore};
-use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue};
+use kernel::queue::{FixedJob, Job, JobKeyMode, JobName, JobQueue, MAINTENANCE_PRIORITY};
 use kernel::shutdown::Activities;
 use kernel::tasks::Delegation;
 use kernel::tidy::TidyStore;
@@ -306,7 +306,7 @@ impl NodeBoot<'_> {
                 self.store,
                 FixedJob::EnqueueUnembedded,
                 "unembedded-sweep",
-                0,
+                MAINTENANCE_PRIORITY,
             )
             .await?;
         }
@@ -315,7 +315,7 @@ impl NodeBoot<'_> {
                 self.store,
                 FixedJob::EnqueueWikiBackfill,
                 "wiki-backfill",
-                5,
+                MAINTENANCE_PRIORITY,
             )
             .await?;
             enqueue_sweep(self.store, FixedJob::ConsolidateWiki, "wiki-consolidate", 5).await?;

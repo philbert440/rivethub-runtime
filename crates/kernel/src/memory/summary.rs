@@ -49,6 +49,13 @@ pub struct ConversationWindow {
     pub latest_message_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PendingConversation {
+    pub id: Uuid,
+    pub unsummarized: u32,
+    pub latest_message_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SummarySource {
     pub message_id: Uuid,
@@ -113,7 +120,7 @@ pub trait SummaryStore: Send + Sync {
     async fn conversation(&self, id: Uuid)
     -> Result<Option<ConversationWindow>, SummaryStoreError>;
 
-    async fn pending(&self) -> Result<Vec<ConversationWindow>, SummaryStoreError>;
+    async fn pending(&self) -> Result<Vec<PendingConversation>, SummaryStoreError>;
 
     async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError>;
 }
