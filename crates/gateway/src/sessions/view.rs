@@ -75,18 +75,7 @@ impl Projection {
                 ts
             }
             AgentEventKind::ThinkingDelta { text, ts } => {
-                self.view.activity = Activity::Thinking;
-                self.view.thought.push_str(text);
-                self.view.thought = self
-                    .view
-                    .thought
-                    .chars()
-                    .rev()
-                    .take(8_000)
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .collect();
+                self.think(text);
                 ts
             }
             AgentEventKind::ToolStart { tool, ts, .. } => {
@@ -122,6 +111,21 @@ impl Projection {
             Some(ts) => *ts,
             None => now,
         });
+    }
+
+    fn think(&mut self, text: &str) {
+        self.view.activity = Activity::Thinking;
+        self.view.thought.push_str(text);
+        self.view.thought = self
+            .view
+            .thought
+            .chars()
+            .rev()
+            .take(8_000)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
     }
 
     fn log(&mut self, who: &str, text: &str) {
