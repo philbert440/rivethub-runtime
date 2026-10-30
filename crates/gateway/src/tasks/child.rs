@@ -229,6 +229,7 @@ impl Run<'_> {
             | HarnessEvent::Context { .. }
             | HarnessEvent::Transcript { .. }
             | HarnessEvent::Status(_)
+            | HarnessEvent::Driver { .. }
             | HarnessEvent::Prompt { .. } => {}
         }
         None

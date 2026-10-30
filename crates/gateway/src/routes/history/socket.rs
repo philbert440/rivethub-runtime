@@ -6,10 +6,11 @@ use axum::extract::{FromRequestParts, RawQuery, State, WebSocketUpgrade};
 use axum::response::{IntoResponse, Response};
 use tokio::sync::broadcast;
 use tokio::time::{Instant, MissedTickBehavior};
+use wire::gateway::sessions::HarnessTranscriptTurn;
 use wire::gateway::sessions::{
     HarnessSocketMessage, HarnessSocketRefusal, HarnessSocketRefusalCode,
 };
-use wire::harness::{HarnessCode, HarnessEvent, RosterCommand};
+use wire::harness::{HarnessCode, HarnessEvent, RosterCommand, SessionDriver};
 
 use super::first_param;
 use crate::Gateway;
@@ -21,6 +22,9 @@ use crate::tenancy::UserId;
 const HEARTBEAT: Duration = Duration::from_secs(30);
 const SYNC_INTERVAL: Duration = Duration::from_secs(2);
 const SEND_BUFFER: usize = 1024 * 1024;
+const FOLLOW_FAST: Duration = Duration::from_secs(1);
+const FOLLOW_BUSY: Duration = Duration::from_secs(2);
+const FOLLOW_SLOW: Duration = Duration::from_secs(5);
 
 pub(super) async fn upgrade(
     State(gateway): State<Arc<Gateway>>,
@@ -73,6 +77,7 @@ async fn attach(
         gateway: &gateway,
         resolved: &resolved,
         rev: 0,
+        last: None,
     }
     .stream(events)
     .await;
@@ -115,6 +120,54 @@ struct Attached<'a> {
     gateway: &'a Gateway,
     resolved: &'a Resolved,
     rev: u64,
+    last: Option<Vec<HarnessTranscriptTurn>>,
+}
+
+struct Follow {
+    terminal: bool,
+    busy: bool,
+    gap: Duration,
+    due: Instant,
+}
+
+impl Follow {
+    fn new(driver: Option<&HarnessEvent>) -> Self {
+        let mut follow = Self {
+            terminal: false,
+            busy: false,
+            gap: FOLLOW_FAST,
+            due: Instant::now() + FOLLOW_FAST,
+        };
+        if let Some(driver) = driver {
+            follow.driver(driver);
+        }
+        follow
+    }
+
+    fn driver(&mut self, event: &HarnessEvent) -> bool {
+        let HarnessEvent::Driver { driver, busy, .. } = event else {
+            return false;
+        };
+        let terminal = *driver == Some(SessionDriver::Terminal);
+        if terminal && (!self.terminal || (*busy && !self.busy)) {
+            self.gap = FOLLOW_FAST;
+            self.due = Instant::now() + FOLLOW_FAST;
+        }
+        let left = self.terminal && !terminal;
+        self.terminal = terminal;
+        self.busy = *busy;
+        left
+    }
+
+    fn read(&mut self, changed: bool) {
+        let slowest = if self.busy { FOLLOW_BUSY } else { FOLLOW_SLOW };
+        self.gap = if changed {
+            FOLLOW_FAST
+        } else {
+            (self.gap * 2).min(slowest)
+        };
+        self.due = Instant::now() + self.gap;
+    }
 }
 
 async fn next_event(
@@ -135,6 +188,12 @@ impl Attached<'_> {
         heartbeat.set_missed_tick_behavior(MissedTickBehavior::Delay);
         let mut awaiting_pong = false;
         let mut last_sync: Option<Instant> = None;
+        let mut follow = Follow::new(
+            self.gateway
+                .terminal()
+                .and_then(|terminal| terminal.held_driver(&self.resolved.native))
+                .as_ref(),
+        );
         loop {
             tokio::select! {
                 () = self.gateway.sessions().shutdown.cancelled() => {
@@ -163,12 +222,19 @@ impl Attached<'_> {
                     awaiting_pong = true;
                     self.socket.send(Message::Ping(Vec::new().into())).await?;
                 }
+                () = tokio::time::sleep_until(follow.due), if follow.terminal => {
+                    let changed = self.read(true).await?;
+                    follow.read(changed);
+                }
                 event = next_event(&mut events) => match event {
                     Ok(event) => {
+                        let left = follow.driver(&event);
                         let committed = matches!(event, HarnessEvent::TurnComplete { .. });
                         send(&mut self.socket, &event).await?;
                         if committed {
                             self.snapshot().await?;
+                        } else if left {
+                            self.read(true).await?;
                         }
                     }
                     Err(broadcast::error::RecvError::Closed) => events = None,
@@ -179,6 +245,10 @@ impl Attached<'_> {
     }
 
     async fn snapshot(&mut self) -> Result<(), SocketError> {
+        self.read(false).await.map(|_| ())
+    }
+
+    async fn read(&mut self, follow: bool) -> Result<bool, SocketError> {
         let resolved = self.resolved;
         let read = match self
             .gateway
@@ -187,14 +257,18 @@ impl Attached<'_> {
             .await
         {
             Ok(read) => read,
-            Err(ApiError::Code(HarnessCode::CapabilityUnsupported, _)) => return Ok(()),
+            Err(ApiError::Code(HarnessCode::CapabilityUnsupported, _)) => return Ok(false),
+            Err(error) if follow => {
+                tracing::debug!(%error, "a followed transcript could not be read");
+                return Ok(false);
+            }
             Err(error) => {
                 let code = if let ApiError::Code(code, _) = &error {
                     *code
                 } else {
                     HarnessCode::BadRequest
                 };
-                return send(
+                send(
                     &mut self.socket,
                     &HarnessEvent::Error {
                         session_id: resolved.session.clone(),
@@ -204,11 +278,16 @@ impl Attached<'_> {
                         retryable: None,
                     },
                 )
-                .await;
+                .await?;
+                return Ok(false);
             }
         };
-        self.rev += 1;
         let turns = read.read.turns;
+        if follow && self.last.as_ref() == Some(&turns) {
+            return Ok(false);
+        }
+        self.rev += 1;
+        self.last = Some(turns.clone());
         let waiting = self
             .gateway
             .terminal()
@@ -233,13 +312,17 @@ impl Attached<'_> {
         for approval in &waiting {
             send(&mut self.socket, approval).await?;
         }
-        let held = self
-            .gateway
-            .terminal()
-            .and_then(|terminal| terminal.held_context(&resolved.native));
-        if let Some(context) = &held {
-            send(&mut self.socket, context).await?;
+        let held = self.gateway.terminal().map(|terminal| {
+            (
+                terminal.held_context(&resolved.native),
+                terminal.held_driver(&resolved.native),
+            )
+        });
+        if let Some((context, driver)) = held {
+            for event in context.iter().chain(driver.iter()) {
+                send(&mut self.socket, event).await?;
+            }
         }
-        Ok(())
+        Ok(true)
     }
 }

@@ -59,7 +59,7 @@ impl TerminalService {
         running || self.chats.read().contains_key(key) || self.pty_running(key)
     }
 
-    fn pty_running(&self, key: &str) -> bool {
+    pub(crate) fn pty_running(&self, key: &str) -> bool {
         let spawned = self.entries.read().get(key).is_some_and(|handle| {
             handle
                 .state
@@ -113,6 +113,9 @@ impl TerminalService {
         if matches!(event, HarnessEvent::Context { .. }) {
             self.contexts.write().insert(key.to_owned(), event.clone());
         }
+        if matches!(event, HarnessEvent::Driver { .. }) {
+            self.drivers.write().insert(key.to_owned(), event.clone());
+        }
         let sender = self.harness_events.read().get(key).cloned();
         if let Some(sender) = sender
             && sender.send(event).is_err()
@@ -127,6 +130,14 @@ impl TerminalService {
 
     pub(crate) fn held_context(&self, key: &str) -> Option<HarnessEvent> {
         self.contexts.read().get(key).cloned()
+    }
+
+    pub(crate) fn held_driver(&self, key: &str) -> Option<HarnessEvent> {
+        self.drivers.read().get(key).cloned()
+    }
+
+    pub(crate) fn forget_driver(&self, key: &str) {
+        self.drivers.write().remove(key);
     }
 
     fn hold_approvals(&self, key: &str, event: &HarnessEvent) {
@@ -164,6 +175,7 @@ impl TerminalService {
             | HarnessEvent::Context { .. }
             | HarnessEvent::Transcript { .. }
             | HarnessEvent::Status(_)
+            | HarnessEvent::Driver { .. }
             | HarnessEvent::Prompt { .. } => {}
         }
     }
@@ -233,6 +245,7 @@ impl TerminalService {
             | HarnessEvent::Context { .. }
             | HarnessEvent::Transcript { .. }
             | HarnessEvent::Status(_)
+            | HarnessEvent::Driver { .. }
             | HarnessEvent::Prompt { .. } => return,
         };
         host.publish(&lifecycle);
@@ -292,6 +305,7 @@ impl TerminalService {
             | HarnessEvent::Context { .. }
             | HarnessEvent::Transcript { .. }
             | HarnessEvent::Status(_)
+            | HarnessEvent::Driver { .. }
             | HarnessEvent::Prompt { .. } => {}
         }
     }

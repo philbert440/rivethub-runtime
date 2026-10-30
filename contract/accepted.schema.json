@@ -9391,6 +9391,36 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "approval.wait"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "args": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "ts": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          "required": [
+            "type",
+            "tool"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "turn.end"
             },
             "ts": {
@@ -9693,6 +9723,36 @@
           "required": [
             "type",
             "activity"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "approval.wait"
+            },
+            "tool": {
+              "type": "string"
+            },
+            "args": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "ts": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          "required": [
+            "type",
+            "tool"
           ]
         },
         {
@@ -12232,6 +12292,53 @@
           "properties": {
             "type": {
               "type": "string",
+              "const": "driver"
+            },
+            "sessionId": {
+              "$ref": "#/$defs/SessionId"
+            },
+            "driver": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SessionDriver"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "busy": {
+              "type": "boolean"
+            },
+            "queued": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "approval": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TerminalApproval"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "sessionId",
+            "busy",
+            "queued"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
               "const": "prompt"
             },
             "sessionId": {
@@ -12554,6 +12661,31 @@
         "sessionId",
         "status",
         "since"
+      ]
+    },
+    "SessionDriver": {
+      "type": "string",
+      "enum": [
+        "chat",
+        "terminal"
+      ]
+    },
+    "TerminalApproval": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "type": "string"
+        },
+        "input": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "tool"
       ]
     },
     "PromptKind": {

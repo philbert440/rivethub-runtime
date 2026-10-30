@@ -20,7 +20,7 @@ impl TerminalService {
         user: &UserId,
         request: TermInjectRequest,
     ) -> Result<String, ApiError> {
-        let (_, handle) = self.find(user, None, Some(&request.session))?;
+        let (key, handle) = self.find(user, None, Some(&request.session))?;
         let state = handle
             .state
             .borrow()
@@ -35,9 +35,11 @@ impl TerminalService {
         }
         let text = request.text.replace('\u{1b}', "");
         if request.submit == Some(false) {
+            self.terminal_typed(&key, text.as_bytes()).await?;
             self.mux.input(&id, text.into_bytes()).await?;
             return Ok(state.id);
         }
+        self.terminal_typed(&key, SUBMIT).await?;
         let mut pasted = PASTE_START.to_vec();
         pasted.extend_from_slice(text.as_bytes());
         pasted.extend_from_slice(PASTE_END);
