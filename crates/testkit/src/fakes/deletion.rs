@@ -16,6 +16,7 @@ type Tombstone = (DateTime<Utc>, Option<String>);
 pub struct FakeSessionDeletion {
     activity: Mutex<BTreeMap<String, SessionActivity>>,
     tombstones: Mutex<BTreeMap<String, Tombstone>>,
+    keeps: Mutex<BTreeMap<String, DateTime<Utc>>>,
 }
 
 impl FakeSessionDeletion {
@@ -31,6 +32,12 @@ impl FakeSessionDeletion {
         self.tombstones
             .lock()
             .insert(session.as_str().to_owned(), (deleted_at, None));
+    }
+
+    pub fn keep(&self, session: &SessionId, kept_at: DateTime<Utc>) {
+        self.keeps
+            .lock()
+            .insert(session.as_str().to_owned(), kept_at);
     }
 
     #[must_use]
@@ -115,5 +122,26 @@ impl SessionDeletion for FakeSessionDeletion {
 
     async fn purge_tombstoned(&self, _limit: u32) -> Result<DeletedSession, MemoryStoreError> {
         Ok(DeletedSession::default())
+    }
+
+    async fn keep_session(
+        &self,
+        session_key: &str,
+        _kept_by: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> Result<(), MemoryStoreError> {
+        self.keeps.lock().insert(session_key.to_owned(), now);
+        Ok(())
+    }
+
+    async fn kept(
+        &self,
+        session_keys: &[String],
+    ) -> Result<BTreeMap<String, DateTime<Utc>>, MemoryStoreError> {
+        let keeps = self.keeps.lock();
+        Ok(session_keys
+            .iter()
+            .filter_map(|key| keeps.get(key).map(|kept_at| (key.clone(), *kept_at)))
+            .collect())
     }
 }

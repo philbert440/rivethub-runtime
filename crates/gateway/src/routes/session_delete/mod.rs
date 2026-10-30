@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use kernel::memory::{DeletedSession, SessionActivity, SessionDeletion};
@@ -37,6 +37,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route(
             "/api/sessions/{session}",
             delete(delete_one).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/sessions/{session}/keep",
+            put(trash::keep).fallback(super::method_not_allowed),
         )
 }
 

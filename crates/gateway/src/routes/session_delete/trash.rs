@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::State;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use kernel::memory::{
     EMPTY_SESSIONS_MAX, SessionActivity, Speaker, SpokenTurn, TrashReason, TrashSignals,
@@ -16,7 +17,7 @@ use wire::session_id::SessionId;
 
 use futures::StreamExt as _;
 
-use super::{deletions, live, resolved};
+use super::{NOT_FOUND, deletions, hidden, known, live, resolved, segment_session, visible};
 use crate::Gateway;
 use crate::error::ApiError;
 use crate::routes::terminal::require;
@@ -107,14 +108,16 @@ pub(super) async fn trash(
         .iter()
         .map(|row| row.session.as_str().to_owned())
         .collect();
-    let (deleted, activity) = tokio::join!(
+    let (deleted, kept, activity) = tokio::join!(
         deletions.tombstones(&keys),
+        deletions.kept(&keys),
         deletions.session_activity(&keys)
     );
-    let (deleted, activity) = (deleted?, activity?);
+    let (deleted, kept, activity) = (deleted?, kept?, activity?);
     let open: Vec<(Considered, SessionActivity)> = rows
         .into_iter()
         .filter(|row| !deleted.contains_key(row.session.as_str()))
+        .filter(|row| !hidden(&kept, row.session.as_str(), Some(row.updated_at)))
         .filter_map(|row| {
             let memory = activity.get(row.session.as_str())?;
             let brief =
@@ -129,6 +132,23 @@ pub(super) async fn trash(
         .collect()
         .await;
     Ok(Json(SessionTrashList { candidates }))
+}
+
+pub(super) async fn keep(
+    State(gateway): State<Arc<Gateway>>,
+    user: UserId,
+    Path(segment): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let session = segment_session(&segment)?;
+    let deletions = deletions(&gateway)?;
+    if !visible(&gateway, &user, &session).await? || !known(&gateway, deletions, &session).await? {
+        return Err(ApiError::NotFound(NOT_FOUND));
+    }
+    deletions
+        .keep_session(session.as_str(), Some(user.as_str()), Utc::now())
+        .await?;
+    tracing::info!(session = %session, "session kept out of the trash review");
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn spoken(turn: &HarnessTranscriptTurn) -> SpokenTurn<'_> {

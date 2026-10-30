@@ -327,3 +327,9 @@ async fn a_deleted_session_used_again_comes_back(pool: PgPool) -> TestResult {
     let memory = PostgresMemory::new(pool);
     session_delete::a_deleted_session_used_again_comes_back(&memory, &memory).await
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_kept_session_is_remembered_from_its_latest_keep(pool: PgPool) -> TestResult {
+    let memory = PostgresMemory::new(pool);
+    session_delete::a_kept_session_is_remembered_from_its_latest_keep(&memory).await
+}
