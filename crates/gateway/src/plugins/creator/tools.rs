@@ -29,7 +29,7 @@ pub(super) struct TemplatesArgs {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ScaffoldArgs {
-    #[schemars(description = "The template's name, as plugins__templates lists it")]
+    #[schemars(description = "The template's name, as plugins-templates lists it")]
     pub(super) template: String,
     #[schemars(
         description = "The plug-in's id and folder name: 2 to 24 of a-z, 0-9 and single hyphens, starting with a letter"
@@ -74,14 +74,14 @@ const DEFINITIONS: [Definition; 4] = [
     Definition {
         tool: Tool::Templates,
         title: "List plug-in templates",
-        description: "List the plug-in templates this node holds: working example plug-ins that plugins__scaffold copies to start a new one. The first step when someone asks for a RivetHub plug-in.",
+        description: "List the plug-in templates this node holds: working example plug-ins that plugins-scaffold copies to start a new one. The first step when someone asks for a RivetHub plug-in.",
         hints: READ_ONLY,
         schema: schema::<TemplatesArgs>,
     },
     Definition {
         tool: Tool::Scaffold,
         title: "Start a RivetHub plug-in",
-        description: "Start building a RivetHub plug-in on this node: copies a template into a new folder in the node's plug-in workshop, its manifest carrying this id, name and description. Read the GUIDE.md it holds, rewrite the example into what was asked for, then call plugins__install. Answers the folder's absolute path.",
+        description: "Start building a RivetHub plug-in on this node: copies a template into a new folder in the node's plug-in workshop, its manifest carrying this id, name and description. Read the GUIDE.md it holds, rewrite the example into what was asked for, then call plugins-install. Answers the folder's absolute path.",
         hints: &[],
         schema: schema::<ScaffoldArgs>,
     },

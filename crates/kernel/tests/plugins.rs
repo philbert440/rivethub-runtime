@@ -124,11 +124,14 @@ fn approval_names_exactly_the_pending_permissions() {
 }
 
 #[test]
-fn tool_names_join_and_split_on_a_double_underscore() {
-    let (plugin, tool) = split_tool_name("workflows__start_run").unwrap();
-    assert_eq!(tool_name(&plugin, &tool), "workflows__start_run");
+fn tool_names_join_and_split_on_the_last_hyphen() {
+    let (plugin, tool) = split_tool_name("daily-notes-start_run").unwrap();
+    assert_eq!(plugin.as_ref(), "daily-notes");
+    assert_eq!(tool.as_ref(), "start_run");
+    assert_eq!(tool_name(&plugin, &tool), "daily-notes-start_run");
     assert!(split_tool_name("memory_search").is_err());
-    assert!(split_tool_name("Bad__x").is_err());
+    assert!(split_tool_name("workflows__start_run").is_err());
+    assert!(split_tool_name("Bad-x").is_err());
 }
 
 #[test]

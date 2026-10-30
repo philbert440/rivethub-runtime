@@ -662,15 +662,19 @@ trigger, scheduledAt?}` (`trigger` `schedule` or `manual`), answered by `{outcom
 within `timeoutMs` (default 600000; else the run failed, "timed out"). A job runs once at a time, so a tick while it
 runs is skipped, and ticks missed while rh was down are not made up. Each job's last run is on the plug-in record.
 (57) Plug-in tools in MCP (proposed 2026-10-29): `rh mcp` lists, after B7's nine, the plug-in creator's four tools (note
-70) and then, in manifest order, the tools of every running plug-in on its node, named `<id>__<tool>` (neither part can hold a double underscore, and the name is at
-most 50 characters so harness prefixes stay inside 64), with the manifest's `title`, `description` and `inputSchema`,
-and the `hints` as MCP `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, each `true`
+71) and then, in manifest order, the tools of every running plug-in on its node, named `<id>-<tool>` with a single
+hyphen (Grok refuses a name holding `__`). A tool name holds no hyphen (note 51), so the last hyphen splits a name into
+the id and the tool: no two plug-in tools can share a name, and none can take one of B7's, which hold no hyphen. The
+name is at most 49 characters of `a-z`, `0-9`, `-` and `_`, inside the `^[a-zA-Z0-9_-]{1,64}$` every harness accepts,
+with 15 left for a harness's own prefix (Claude Code's `mcp__<server>__`). Each has the manifest's `title`,
+`description` and `inputSchema`, and the `hints` as MCP
+`annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, each `true`
 when listed and `false` otherwise). B7's nine tools are unchanged. `rh local` serves MCP in the gateway process and
 reads the set from the host directly; a separate `rh mcp` reaches the node's gateway on the local socket
 `<state>/plugins/tools.sock` (mode 0600, in the mode 0700 `<state>/plugins` folder). Each request carries `Authorization:
 Bearer` the token rh writes to `<state>/plugins/tools.token` (mode 0600) at each start, which a confined plug-in cannot
 read; any other request is `401`. `GET /tools?after=<version>` answers `PluginToolList` `{version, tools}`,
-waiting up to 60 s while the version still equals `after`, and `POST /tools/<id>__<tool>` takes a call. Either way the
+waiting up to 60 s while the version still equals `after`, and `POST /tools/<id>-<tool>` takes a call. Either way the
 server sends `notifications/tools/list_changed` when the version moves. A call carries `{arguments, sessionId?}` (the
 calling harness session when rh can tell it: a `tools/call` whose
 `_meta` holds `claudecode/toolUseId`, as Claude Code sends, names the session rh is driving whose running tool call has
@@ -829,8 +833,8 @@ id order. Each route is one store query on Postgres and on SQLite. As with `sear
 route, not a topic slug; a topic whose slug is `filing` is still reached by its id. Bodies are
 `wire::gateway::topics::TopicFiling` and `SessionSuggestionList`; the routes are new, with no TypeScript recording.
 (71) Plug-in creator (proposed 2026-10-30): an agent builds a plug-in on its own node with four tools of the host's,
-which `rh mcp` lists as note 57 says under the reserved id `plugins`: `plugins__templates` `{}`, `plugins__scaffold`
-`{template, id, name, description}`, `plugins__install` `{id}` and `plugins__status` `{id?, lines?}` (default 40, at most
+which `rh mcp` lists as note 57 says under the reserved id `plugins`: `plugins-templates` `{}`, `plugins-scaffold`
+`{template, id, name, description}`, `plugins-install` `{id}` and `plugins-status` `{id?, lines?}` (default 40, at most
 200). They read templates only from the node's `<state>/plugin-templates/` and build only in its plug-in workshop
 `<state>/workshop/` (B11). rh carries no template and fetches none: each real folder in `<state>/plugin-templates/` is
 one, a working plug-in whose manifest is checked as note 51 does, written there by rivethub-plugins' `npm run

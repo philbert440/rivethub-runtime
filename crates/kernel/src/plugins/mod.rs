@@ -6,7 +6,7 @@ use wire::plugin::host::PluginToolList;
 use wire::plugin::process::{PluginToolCall, PluginToolResult};
 use wire::plugin::{PluginId, PluginNameError, ToolName};
 
-const TOOL_SEPARATOR: &str = "__";
+const TOOL_SEPARATOR: char = '-';
 const FIRST_RESTART: Duration = Duration::from_secs(1);
 const LAST_RESTART: Duration = Duration::from_secs(60);
 
@@ -116,7 +116,7 @@ pub fn tool_name(plugin: &PluginId, tool: &ToolName) -> String {
 
 pub fn split_tool_name(name: &str) -> Result<(PluginId, ToolName), PluginToolError> {
     let (plugin, tool) = name
-        .split_once(TOOL_SEPARATOR)
+        .rsplit_once(TOOL_SEPARATOR)
         .ok_or_else(|| PluginToolError::NotPluginTool(name.to_owned()))?;
     Ok((
         PluginId::try_from(plugin.to_owned())?,

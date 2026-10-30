@@ -82,7 +82,7 @@ pub(super) async fn write(
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             return Err(format!(
-                "{} already exists: edit it and call plugins__install, or choose another id",
+                "{} already exists: edit it and call plugins-install, or choose another id",
                 folder.display()
             ));
         }
@@ -110,7 +110,7 @@ pub(super) async fn write(
 
 pub(super) async fn folder(workshop: &Path, id: &PluginId) -> Result<PathBuf, String> {
     let folder = root(workshop).await?.join(id.as_ref());
-    real_folder(&folder, "start a plug-in with plugins__scaffold").await?;
+    real_folder(&folder, "start a plug-in with plugins-scaffold").await?;
     Ok(folder)
 }
 
@@ -120,7 +120,7 @@ async fn template_folder(templates: &Path, template: &str) -> Result<PathBuf, St
     let folder = templates.join(name.as_ref());
     real_folder(
         &folder,
-        "plugins__templates lists the templates this node holds",
+        "plugins-templates lists the templates this node holds",
     )
     .await?;
     Ok(folder)

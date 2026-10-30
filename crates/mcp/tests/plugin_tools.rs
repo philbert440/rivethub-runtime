@@ -60,7 +60,7 @@ async fn plugin_tools_follow_the_nine_and_answer_calls() {
     let list = PluginToolList {
         version: 1,
         tools: vec![PluginToolEntry {
-            plugin: PluginId::try_from("fixture".to_owned()).expect("id"),
+            plugin: PluginId::try_from("fixture-kit".to_owned()).expect("id"),
             tool,
         }],
     };
@@ -72,13 +72,13 @@ async fn plugin_tools_follow_the_nine_and_answer_calls() {
     .plugins(Arc::new(FixturePlugin { list }))
     .build()
     .expect("server");
-    let answered = support::call(&server, "fixture__echo", r#"{"say": "hi"}"#).await;
+    let answered = support::call(&server, "fixture-kit-echo", r#"{"say": "hi"}"#).await;
     let [block] = answered.content.as_slice() else {
         panic!("one result block")
     };
     assert_eq!(
         block.as_text().expect("text").text,
-        r#"fixture/echo {"say":"hi"}"#
+        r#"fixture-kit/echo {"say":"hi"}"#
     );
     assert_eq!(answered.is_error, Some(false));
 
@@ -111,12 +111,12 @@ async fn plugin_tools_follow_the_nine_and_answer_calls() {
         .iter()
         .map(|tool| tool.definition().name.to_string())
         .collect();
-    assert_eq!(names.last().map(String::as_str), Some("fixture__echo"));
+    assert_eq!(names.last().map(String::as_str), Some("fixture-kit-echo"));
     assert!(names.contains(&"memory_search".to_owned()));
     let listed = client.tools().await.expect("tools");
     let echo = listed
         .iter()
-        .find(|tool| tool.definition().name == "fixture__echo")
+        .find(|tool| tool.definition().name == "fixture-kit-echo")
         .expect("echo")
         .definition();
     assert_eq!(

@@ -44,7 +44,7 @@ pub(super) fn templates(
             Err(problem) => writeln!(text, "- {}: not usable: {problem}", template.name)?,
         }
     }
-    write!(text, "Call plugins__scaffold with one of these names.")?;
+    write!(text, "Call plugins-scaffold with one of these names.")?;
     Ok(text)
 }
 
@@ -65,7 +65,7 @@ pub(super) fn scaffolded(made: &Made, id: &PluginId) -> Result<String, fmt::Erro
     }
     write!(
         text,
-        " the example into what was asked for, then call plugins__install with the id {}.",
+        " the example into what was asked for, then call plugins-install with the id {}.",
         id.as_ref()
     )?;
     Ok(text)
@@ -105,7 +105,7 @@ pub(super) fn installed(
             )?,
             Err(detail) => writeln!(
                 text,
-                "Page {} (view {view}): {detail}. The app shows an error there instead; fix it and call plugins__install again.",
+                "Page {} (view {view}): {detail}. The app shows an error there instead; fix it and call plugins-install again.",
                 page.title
             )?,
         }
@@ -143,7 +143,7 @@ pub(super) fn listed(list: &PluginList, workshop: &Path) -> Result<String, fmt::
     if list.plugins.is_empty() {
         write!(
             text,
-            "No plug-in is installed on node {}. Start one with plugins__scaffold; it goes in the workshop {}.",
+            "No plug-in is installed on node {}. Start one with plugins-scaffold; it goes in the workshop {}.",
             list.node,
             workshop.display()
         )?;
@@ -167,7 +167,7 @@ pub(super) fn listed(list: &PluginList, workshop: &Path) -> Result<String, fmt::
     }
     write!(
         text,
-        "Call plugins__status with an id to read that plug-in's log."
+        "Call plugins-status with an id to read that plug-in's log."
     )?;
     Ok(text)
 }
@@ -182,24 +182,24 @@ fn standing(record: &PluginRecord) -> String {
     match record.state {
         PluginState::Running => "It is running.".to_owned(),
         PluginState::Starting => {
-            "It is still starting; call plugins__status in a moment to see how it went.".to_owned()
+            "It is still starting; call plugins-status in a moment to see how it went.".to_owned()
         }
         PluginState::Disabled if record.pending.is_empty() => format!(
-            "It is off. A person has to turn it on {place} (Turn on). You cannot do that: tell them, and call plugins__status once they have."
+            "It is off. A person has to turn it on {place} (Turn on). You cannot do that: tell them, and call plugins-status once they have."
         ),
         PluginState::Disabled => format!(
-            "It is off and asks for {}. A person has to approve that and turn it on {place} (Approve and turn on). You cannot approve permissions: tell them, and call plugins__status once they have.",
+            "It is off and asks for {}. A person has to approve that and turn it on {place} (Approve and turn on). You cannot approve permissions: tell them, and call plugins-status once they have.",
             names(&record.pending)
         ),
         PluginState::AwaitingApproval => format!(
-            "It is stopped: the manifest now asks for {}, which a person has to approve {place} (Approve and turn on). Tell them, or take the new permissions out of the manifest and call plugins__install again.",
+            "It is stopped: the manifest now asks for {}, which a person has to approve {place} (Approve and turn on). Tell them, or take the new permissions out of the manifest and call plugins-install again.",
             names(&record.pending)
         ),
         PluginState::Backoff => format!(
-            "It is not running: {error}. Fix what the log shows and call plugins__install again."
+            "It is not running: {error}. Fix what the log shows and call plugins-install again."
         ),
         PluginState::Invalid => format!(
-            "Its manifest is no longer valid: {error}. Fix that field and call plugins__install again."
+            "Its manifest is no longer valid: {error}. Fix that field and call plugins-install again."
         ),
     }
 }

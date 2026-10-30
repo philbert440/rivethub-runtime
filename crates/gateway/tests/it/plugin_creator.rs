@@ -60,7 +60,7 @@ impl Creator {
         Ok(list
             .tools
             .iter()
-            .map(|entry| format!("{}__{}", entry.plugin.as_ref(), entry.tool.name.as_ref()))
+            .map(|entry| kernel::plugins::tool_name(&entry.plugin, &entry.tool.name))
             .collect())
     }
 
@@ -75,7 +75,7 @@ impl Creator {
         };
         Ok(self
             .client
-            .post(format!("http://plugins/tools/plugins__{tool}"))
+            .post(format!("http://plugins/tools/plugins-{tool}"))
             .bearer_auth(&self.token)
             .json(&call)
             .send()
@@ -109,10 +109,10 @@ async fn the_creator_builds_and_reloads_but_only_a_paired_device_turns_a_plugin_
     let creator = Creator::open(root.path())?;
     let names = creator.names().await?;
     for tool in [
-        "plugins__templates",
-        "plugins__scaffold",
-        "plugins__install",
-        "plugins__status",
+        "plugins-templates",
+        "plugins-scaffold",
+        "plugins-install",
+        "plugins-status",
     ] {
         assert!(names.contains(&tool.to_owned()), "{names:?}");
     }
