@@ -4,11 +4,11 @@ use std::str::FromStr;
 
 use kernel::filing::Filable;
 use kernel::memory::ConversationHead;
+use kernel::wiki::WikiCitation;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params;
 use uuid::Uuid;
-use wire::gateway::wiki::WikiCitation;
 use wire::session_id::SessionId;
 
 use crate::error::SqliteError;

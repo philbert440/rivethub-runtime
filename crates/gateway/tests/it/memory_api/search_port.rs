@@ -1,6 +1,6 @@
 use super::*;
-use kernel::memory::{SearchMode, SearchOutcome};
-use wire::gateway::memory::{BrowseWindow, MemoryDegraded, MemoryScope};
+use kernel::memory::{MemoryDegraded, SearchOutcome};
+use wire::gateway::memory::{BrowseWindow, MemoryScope, SearchMode};
 
 #[test]
 fn search_routes_forward_every_argument_and_preserve_runtime_degradation() {
@@ -36,7 +36,10 @@ fn search_routes_forward_every_argument_and_preserve_runtime_degradation() {
     assert_eq!(http.status, 200);
     let http_result: MemorySearchResponse = serde_json::from_slice(&http.body).expect("result");
     assert_eq!(http_result, tool_result);
-    assert_eq!(http_result.degraded, outcome.degraded);
+    assert_eq!(
+        serde_json::to_string(&http_result.degraded).expect("degraded"),
+        serde_json::to_string(&outcome.degraded).expect("degraded")
+    );
     assert_eq!(http_result.synthesis, outcome.synthesis);
     let requests = block_on(store.requests());
     let searches = recorded_searches(&requests);
@@ -45,8 +48,8 @@ fn search_routes_forward_every_argument_and_preserve_runtime_degradation() {
     };
     assert_eq!(query, second);
     assert_eq!(query.text, args.query);
-    assert_eq!(query.mode, SearchMode::Vector);
-    assert_eq!(query.scope, MemoryScope::Both);
+    assert_eq!(query.mode, kernel::memory::SearchMode::Vector);
+    assert_eq!(query.scope, kernel::memory::MemoryScope::Both);
     assert_eq!(query.agent, args.agent);
     assert_eq!(query.role, Some(wire::message::Role::Tool));
     assert_eq!(query.tool_name.as_deref(), Some("Bash"));

@@ -1,15 +1,15 @@
 use std::collections::HashSet;
 
+use crate::memory::MemoryHitSource;
+use crate::memory::MemoryScope;
+use crate::memory::MemorySearchResult;
+use crate::memory::SummaryKind;
 use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
 use values::SessionId;
-use wire::gateway::memory::MemoryHitSource;
-use wire::gateway::memory::MemoryScope;
-use wire::gateway::memory::SummaryKind;
-use wire::memory::MemorySearchResult;
 
 use super::PlacedSession;
 use super::Topic;

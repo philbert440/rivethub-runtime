@@ -1,15 +1,14 @@
 use std::collections::BTreeMap;
 
+use crate::search::MemorySearchHit;
 use chrono::{DateTime, Utc};
+use kernel::memory::MemoryEntry;
 use kernel::memory::{
     Limit, MemoryStore, MemoryStoreError, SearchQuery, SummaryDetail, SummaryExcerpt, TagListQuery,
 };
+use kernel::memory::{MemoryHitSource, SummaryKind, TagEntityType, TagState};
 use sqlx::types::Json;
 use uuid::Uuid;
-use wire::gateway::memory::{
-    MemoryHitSource, MemorySearchHit, SummaryKind, TagEntityType, TagState,
-};
-use wire::memory::MemoryEntry;
 
 use crate::{Error, PostgresMemory, read::MessageEntryRow};
 

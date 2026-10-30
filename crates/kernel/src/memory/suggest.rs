@@ -1,8 +1,8 @@
+use super::TagEntityType;
+use super::TagState;
 use chrono::DateTime;
 use chrono::Utc;
 use uuid::Uuid;
-use wire::gateway::memory::TagEntityType;
-use wire::gateway::memory::TagState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TagVocabulary {

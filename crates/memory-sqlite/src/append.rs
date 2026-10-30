@@ -1,9 +1,9 @@
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::MemoryEntry;
 use rusqlite::Transaction;
 use rusqlite::params;
 use uuid::Uuid;
-use wire::memory::MemoryEntry;
 
 use crate::SqliteStore;
 use crate::capture::encode;

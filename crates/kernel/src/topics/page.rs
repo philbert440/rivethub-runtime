@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
-use wire::gateway::wiki::WikiPageResponse;
 
 use super::DECISIONS_HEADING;
 use super::DecisionStore;
@@ -157,7 +156,7 @@ pub async fn bound_page(
     topics: &dyn TopicStore,
     memory: &dyn MemoryStore,
     topic: &Topic,
-) -> Result<Option<WikiPageResponse>, TopicPageError> {
+) -> Result<Option<crate::wiki::WikiPageResponse>, TopicPageError> {
     let Some(owner) = page_owner(topics, topic).await? else {
         return Ok(None);
     };

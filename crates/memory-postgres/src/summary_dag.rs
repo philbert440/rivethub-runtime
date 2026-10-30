@@ -1,13 +1,13 @@
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::MemoryMessageTally;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::MemorySummaryNode;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryKind;
 use kernel::memory::SummaryOwner;
+use kernel::memory::VectorState;
 use uuid::Uuid;
-use wire::gateway::memory::MemoryMessageTally;
-use wire::gateway::memory::MemorySummaryNode;
-use wire::gateway::memory::SummaryKind;
-use wire::gateway::memory::VectorState;
 
 use crate::PostgresMemory;
 use crate::error::Error;

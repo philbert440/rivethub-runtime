@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use kernel::memory::MemoryEntry;
+use kernel::memory::{MemoryDegraded, MemoryHitSource};
 use kernel::memory::{MemoryStoreError, SearchOutcome, SearchQuery};
 use kernel::model::{ModelProvider, ModelRequest};
 use tokio_util::sync::CancellationToken;
-use wire::gateway::memory::{MemoryDegraded, MemoryHitSource};
-use wire::memory::MemoryEntry;
 use wire::message::{Message, MessageContent, Role};
 
 use crate::error::Error;
@@ -158,7 +158,7 @@ impl crate::PostgresMemory {
             results: outcome
                 .hits
                 .into_iter()
-                .map(|hit| wire::memory::MemorySearchResult {
+                .map(|hit| kernel::memory::MemorySearchResult {
                     chunk: hit.chunk,
                     id: hit.id,
                     source: hit.source,
@@ -186,7 +186,7 @@ impl crate::PostgresMemory {
 
     async fn expand_summaries(
         &self,
-        hits: &[wire::gateway::memory::MemorySearchHit],
+        hits: &[crate::search::MemorySearchHit],
         query: &SearchQuery,
     ) -> Result<Vec<MemoryEntry>, Error> {
         let ids = crate::search::hit_uuids(hits, MemoryHitSource::Summary)?;

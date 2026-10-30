@@ -210,7 +210,7 @@ async fn conversation(
     };
     let captured = MemoryStore::capture(
         api.store.as_ref(),
-        CaptureBatchRequest {
+        kernel::memory::CaptureBatchRequest {
             session_key: key.to_owned(),
             agent: "rivet".to_owned(),
             channel: Some(channel.to_owned()),
@@ -220,7 +220,7 @@ async fn conversation(
             finalize: None,
             created_at: None,
             updated_at: None,
-            messages: vec![CaptureMessage {
+            messages: vec![kernel::memory::CaptureMessage {
                 event_id: format!("{key}-1"),
                 role: Role::User,
                 content: title.to_owned(),

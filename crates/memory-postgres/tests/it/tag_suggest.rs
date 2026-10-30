@@ -3,8 +3,12 @@
 use chrono::DateTime;
 use chrono::TimeZone;
 use chrono::Utc;
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
 use kernel::memory::MemoryStore as _;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::TagEntityType;
+use kernel::memory::TagState;
 use kernel::memory::TagSuggestKind;
 use kernel::memory::TagSuggestionRow;
 use kernel::memory::TagSuggestionStored;
@@ -13,10 +17,6 @@ use kernel::memory::TagVocabularyProposal;
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
 use uuid::Uuid;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
-use wire::gateway::memory::TagEntityType;
-use wire::gateway::memory::TagState;
 use wire::message::Role;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

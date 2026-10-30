@@ -1,9 +1,9 @@
+use super::{
+    MemoryDegraded, MemoryEntry, MemoryFallback, MemorySearchResult, SummaryKind, TagWire,
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use wire::gateway::memory::{MemoryDegraded, MemoryFallback};
-use wire::gateway::memory::{SummaryKind, TagWire};
-use wire::memory::{MemoryEntry, MemorySearchResult};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SummaryDetail {

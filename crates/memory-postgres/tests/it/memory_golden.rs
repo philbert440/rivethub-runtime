@@ -3,11 +3,11 @@ use crate::common;
 use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Utc};
+use kernel::memory::{CaptureBatchRequest, CaptureResult};
 use memory_postgres::{CaptureOptions, Error, PostgresMemory};
 use serde::Deserialize;
 use sqlx::{PgPool, types::Json};
 use wire::JsonObject;
-use wire::capture::{CaptureBatchRequest, CaptureResult};
 use wire::message::Role;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

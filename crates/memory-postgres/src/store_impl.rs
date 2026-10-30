@@ -8,31 +8,31 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use chrono::Utc;
 use kernel::memory::BrowseFilter;
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
+use kernel::memory::CaptureResult;
+use kernel::memory::MemoryEntry;
 use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::PendingTagWire;
 use kernel::memory::SearchQuery;
 use kernel::memory::TagAdd;
+use kernel::memory::TagCount;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
 use kernel::memory::TagId;
 use kernel::memory::TagListQuery;
 use kernel::memory::TagLookup;
 use kernel::memory::TagTaxonomyDecision;
+use kernel::memory::TagTaxonomyEntry;
+use kernel::memory::TagTaxonomyMerge;
+use kernel::memory::TagTaxonomyMergeResult;
 use kernel::memory::TagTaxonomyQuery;
 use kernel::memory::TagTaxonomyUpsert;
+use kernel::memory::TagWire;
 use kernel::memory::spoken_title;
 use serde::Deserialize as _;
 use uuid::Uuid;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
-use wire::capture::CaptureResult;
-use wire::gateway::memory::PendingTagWire;
-use wire::gateway::memory::TagCount;
-use wire::gateway::memory::TagTaxonomyEntry;
-use wire::gateway::memory::TagTaxonomyMerge;
-use wire::gateway::memory::TagTaxonomyMergeResult;
-use wire::gateway::memory::TagWire;
-use wire::memory::MemoryEntry;
 
 const UNKNOWN_CHANNEL: &str = "unknown";
 
@@ -251,7 +251,7 @@ impl MemoryStore for crate::PostgresMemory {
     async fn wiki_topics(
         &self,
         filter: kernel::wiki::WikiFilter,
-    ) -> Result<wire::gateway::wiki::WikiTopicList, MemoryStoreError> {
+    ) -> Result<kernel::wiki::WikiTopicList, MemoryStoreError> {
         self.read_wiki_topics(filter).await.map_err(Into::into)
     }
 
@@ -265,7 +265,7 @@ impl MemoryStore for crate::PostgresMemory {
     async fn wiki_gaps(
         &self,
         limit: u32,
-    ) -> Result<wire::gateway::wiki::WikiGapsResponse, MemoryStoreError> {
+    ) -> Result<kernel::wiki::WikiGapsResponse, MemoryStoreError> {
         self.read_wiki_gaps(limit).await.map_err(Into::into)
     }
 
@@ -312,7 +312,7 @@ impl MemoryStore for crate::PostgresMemory {
             .map_err(MemoryStoreError::from)
     }
 
-    async fn stats(&self) -> Result<wire::gateway::memory::MemoryStatsResponse, MemoryStoreError> {
+    async fn stats(&self) -> Result<kernel::memory::MemoryStatsResponse, MemoryStoreError> {
         self.memory_stats().await.map_err(MemoryStoreError::from)
     }
 

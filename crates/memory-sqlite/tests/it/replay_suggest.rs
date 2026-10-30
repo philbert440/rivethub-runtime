@@ -11,8 +11,10 @@ use common::recording;
 use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
 use kernel::memory::TagDecision;
+use kernel::memory::TagEntityType;
 use kernel::memory::TagId;
 use kernel::memory::TagListQuery;
+use kernel::memory::TagState;
 use kernel::memory::TagSuggestKind;
 use kernel::memory::TagSuggestionRow;
 use kernel::memory::TagSuggestionStored;
@@ -24,8 +26,6 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use testkit::Json;
 use uuid::Uuid;
-use wire::gateway::memory::TagEntityType;
-use wire::gateway::memory::TagState;
 
 const NATIVE: &str = "native tagger request shape";
 const REMOVALS: &str = "protected removals allowed";
@@ -979,7 +979,7 @@ async fn listed(
     entity: Uuid,
     key: &str,
     value: &str,
-) -> TestResult<wire::gateway::memory::TagWire> {
+) -> TestResult<kernel::memory::TagWire> {
     let rows = store
         .list_tags(TagListQuery {
             entity_type: Some(TagEntityType::Summary),

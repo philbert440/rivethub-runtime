@@ -4,6 +4,8 @@ use crate::search::ArmRow;
 use crate::search::SearchOptions;
 use crate::search::TagFilter;
 use chrono::Utc;
+use kernel::memory::MemoryHitSource;
+use kernel::memory::MemoryScope;
 use kernel::memory_core::HYBRID_MIN_CONTENT_LEN;
 use kernel::memory_core::hybrid_pool;
 use kernel::memory_core::recency_boost;
@@ -12,8 +14,6 @@ use pgvector::HalfVector;
 use sqlx::QueryBuilder;
 use std::collections::BTreeMap;
 use std::str::FromStr as _;
-use wire::gateway::memory::MemoryHitSource;
-use wire::gateway::memory::MemoryScope;
 use wire::message::Role;
 
 const CHUNK_POOL_MULTIPLIER: i64 = 4;
@@ -222,7 +222,7 @@ fn push_literal_match(
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 struct ArmSqlRow {
-    chunk: Option<sqlx::types::Json<wire::memory::MemoryChunkMatch>>,
+    chunk: Option<sqlx::types::Json<kernel::memory::MemoryChunkMatch>>,
     id: String,
     content: String,
     role_or_kind: Option<String>,

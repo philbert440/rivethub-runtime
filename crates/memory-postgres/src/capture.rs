@@ -1,12 +1,12 @@
 use crate::error::Error;
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::CaptureMessage;
 use sqlx::PgPool;
 use sqlx::Transaction;
 use sqlx::postgres::Postgres;
 use uuid::Uuid;
 use wire::JsonObject;
-use wire::capture::CaptureMessage;
 use wire::message::Role;
 
 pub const MAX_CONTENT_CHARS: usize = 16_000;

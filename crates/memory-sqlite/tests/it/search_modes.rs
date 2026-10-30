@@ -2,12 +2,12 @@ use crate::search_support;
 
 use chrono::{FixedOffset, TimeZone as _, Utc};
 use kernel::memory::SearchMode;
+use kernel::memory::{BrowseWindow, MemoryScope};
 use kernel::model::Embedding;
 use memory_sqlite::SqliteError;
 use search_support::{TestResult, failed, query, store};
 use std::sync::Arc;
 use testkit::fakes::{FakeProvider, Script};
-use wire::gateway::memory::{BrowseWindow, MemoryScope};
 
 async fn seeded(
     provider: Option<Arc<FakeProvider>>,

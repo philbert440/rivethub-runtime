@@ -15,11 +15,11 @@ use kernel::cleanup::SnapshotPlacement;
 use kernel::cleanup::SnapshotRedirect;
 use kernel::filing::Filable;
 use kernel::filing::FilingStore as _;
+use kernel::memory::TagState;
 use kernel::topics::PlacementSource;
 use kernel::topics::TopicId;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::postgres::PgPoolOptions;
-use wire::gateway::memory::TagState;
 
 use crate::ACQUIRE_TIMEOUT;
 use crate::Error;

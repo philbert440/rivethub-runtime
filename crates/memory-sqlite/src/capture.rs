@@ -1,14 +1,14 @@
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
+use kernel::memory::CaptureResult;
 use kernel::memory::spoken_title;
 use rusqlite::OptionalExtension as _;
 use rusqlite::Transaction;
 use rusqlite::params;
 use serde::Serialize;
 use wire::JsonObject;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
-use wire::capture::CaptureResult;
 use wire::message::Role;
 
 use crate::SqliteStore;

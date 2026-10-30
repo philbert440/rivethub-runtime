@@ -1,6 +1,10 @@
+use kernel::memory::MemoryMessageTally;
 use kernel::memory::MemoryStoreError;
+use kernel::memory::MemorySummaryNode;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryKind;
 use kernel::memory::SummaryOwner;
+use kernel::memory::VectorState;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension as _;
 use rusqlite::Row;
@@ -8,10 +12,6 @@ use rusqlite::Statement;
 use rusqlite::params_from_iter;
 use rusqlite::types::Type;
 use rusqlite::types::Value;
-use wire::gateway::memory::MemoryMessageTally;
-use wire::gateway::memory::MemorySummaryNode;
-use wire::gateway::memory::SummaryKind;
-use wire::gateway::memory::VectorState;
 
 use crate::SqliteStore;
 use crate::error::SqliteError;

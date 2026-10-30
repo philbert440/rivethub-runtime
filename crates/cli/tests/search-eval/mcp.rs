@@ -4,6 +4,7 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::time::Instant;
 
+use kernel::memory::MemoryScope;
 use kernel::memory::SearchMode;
 use rmcp::ServiceExt as _;
 use rmcp::model::CallToolRequestParams;
@@ -13,7 +14,6 @@ use rmcp::service::RoleClient;
 use rmcp::service::RunningService;
 use rmcp::transport::TokioChildProcess;
 use serde::Serialize;
-use wire::gateway::memory::MemoryScope;
 
 use crate::Failure;
 use crate::score::Scored;

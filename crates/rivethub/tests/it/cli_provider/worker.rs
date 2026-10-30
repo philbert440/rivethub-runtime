@@ -22,7 +22,7 @@ async fn composed_summarizer_runs_cli_model_without_embedder(pool: sqlx::PgPool)
     let (config, _) = configured(home.path(), config::ProviderType::ClaudeCli, "")?;
     let store = Arc::new(memory_postgres::PostgresMemory::new(pool.clone()));
     let messages = (0..10)
-        .map(|index| wire::memory::MemoryEntry {
+        .map(|index| kernel::memory::MemoryEntry {
             id: None,
             session_id: "cli:summary".into(),
             agent: "main".into(),

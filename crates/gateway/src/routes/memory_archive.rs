@@ -34,8 +34,12 @@ pub(crate) async fn summaries(
         .await?;
     Ok(Json(MemorySummaryDagResponse {
         session_id: session,
-        summaries: dag.summaries,
-        messages: dag.messages,
+        summaries: dag
+            .summaries
+            .into_iter()
+            .map(crate::memory_body::memory_summary_node_body)
+            .collect(),
+        messages: crate::memory_body::memory_message_tally_body(dag.messages),
     }))
 }
 
@@ -54,8 +58,12 @@ pub(crate) async fn conversation_summaries(
         .ok_or_else(|| ApiError::Missing(format!("unknown conversation {segment}")))?;
     Ok(Json(MemorySummaryDagResponse {
         session_id,
-        summaries: dag.summaries,
-        messages: dag.messages,
+        summaries: dag
+            .summaries
+            .into_iter()
+            .map(crate::memory_body::memory_summary_node_body)
+            .collect(),
+        messages: crate::memory_body::memory_message_tally_body(dag.messages),
     }))
 }
 

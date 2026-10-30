@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
+use crate::memory::MemoryHitSource;
 use regex::Regex;
-use wire::gateway::memory::MemoryHitSource;
 
 pub const HYBRID_RRF_K: f64 = 20.0;
 const SUMMARY_FUSION_BONUS: f64 = 1.3;
@@ -105,7 +105,7 @@ mod tests {
     use super::passes_fusion_gate;
     use super::reciprocal_rank_fusion;
     use super::should_trigram_fallback;
-    use wire::gateway::memory::MemoryHitSource;
+    use crate::memory::MemoryHitSource;
 
     const TOLERANCE: f64 = 1e-12;
 

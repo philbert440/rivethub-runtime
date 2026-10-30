@@ -1,15 +1,15 @@
+use kernel::memory::MemoryFallback;
 use kernel::memory_core::{
     FusionItem, HYBRID_MIN_CONTENT_LEN, HYBRID_RRF_K, composite_score, fusion_score, hybrid_pool,
     literal_scan, passes_fusion_gate, recency_boost, reciprocal_rank_fusion,
     should_trigram_fallback,
 };
-use wire::gateway::memory::MemoryFallback;
 
 use super::{
     Candidate, Kind, Plan, SearchMode, SearchOutcome, SqliteError, bump, fetch, hit_limit,
 };
+use kernel::memory::{MemoryHitSource, MemoryScope};
 use rusqlite::Connection;
-use wire::gateway::memory::{MemoryHitSource, MemoryScope};
 
 #[derive(Debug, Clone)]
 struct ArmRow {

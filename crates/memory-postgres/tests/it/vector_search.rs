@@ -2,7 +2,10 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Instant;
 
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
 use kernel::memory::Limit;
+use kernel::memory::MemoryScope;
 use kernel::memory::MemoryStore as _;
 use kernel::memory::SearchMode;
 use kernel::memory::SearchQuery;
@@ -14,9 +17,6 @@ use pgvector::HalfVector;
 use sqlx::PgPool;
 use testkit::FakeProvider;
 use testkit::Script;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
-use wire::gateway::memory::MemoryScope;
 use wire::message::Role;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -63,7 +63,7 @@ fn query(text: &str, mode: SearchMode) -> SearchQuery {
     }
 }
 
-fn contents(hits: &[wire::gateway::memory::MemorySearchHit]) -> Vec<String> {
+fn contents(hits: &[memory_postgres::search::MemorySearchHit]) -> Vec<String> {
     hits.iter().map(|hit| hit.content.clone()).collect()
 }
 
@@ -459,7 +459,7 @@ async fn the_chunk_arm_surfaces_and_merges_parents(pool: PgPool) -> TestResult {
     );
     assert_eq!(
         rollback_hit.chunk,
-        Some(wire::memory::MemoryChunkMatch {
+        Some(kernel::memory::MemoryChunkMatch {
             index: 0,
             total: 1,
             char_start: 0,

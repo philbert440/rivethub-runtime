@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use kernel::memory::MemoryEntry;
+use kernel::memory::{BrowseWindow, MemoryHitSource, MemoryScope};
 use kernel::memory::{Limit, MemoryStore, SearchMode, SearchQuery};
 use kernel::model::Embedding;
 use memory_postgres::{PostgresMemory, QueryEmbed, SearchSynthesis};
@@ -7,8 +9,6 @@ use pgvector::HalfVector;
 use sqlx::PgPool;
 use testkit::{FakeProvider, Script};
 use tokio_util::sync::CancellationToken;
-use wire::gateway::memory::{BrowseWindow, MemoryHitSource, MemoryScope};
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

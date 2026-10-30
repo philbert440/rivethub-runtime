@@ -4,6 +4,8 @@ use std::fs;
 
 use chrono::DateTime;
 use chrono::Utc;
+use kernel::memory::CaptureBatchRequest;
+use kernel::memory::CaptureMessage;
 use memory_sqlite::SqliteError;
 use memory_sqlite::SqliteStore;
 use serde::Deserialize;
@@ -13,8 +15,6 @@ use sha2::Sha256;
 use tempfile::TempDir;
 use testkit::Json;
 use wire::JsonObject;
-use wire::capture::CaptureBatchRequest;
-use wire::capture::CaptureMessage;
 use wire::message::Role;
 
 pub(crate) type TestError = Box<dyn std::error::Error>;

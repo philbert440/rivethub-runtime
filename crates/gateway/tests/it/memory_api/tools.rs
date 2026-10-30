@@ -51,12 +51,9 @@ fn search_scope_and_filters_reach_the_port() {
     let searches = recorded_searches(&requests);
     assert_eq!(searches.len(), 2);
     let first_query = searches.first().expect("first search");
-    assert_eq!(
-        first_query.scope,
-        wire::gateway::memory::MemoryScope::Summaries
-    );
+    assert_eq!(first_query.scope, kernel::memory::MemoryScope::Summaries);
     let second_query = searches.get(1).expect("second search");
-    assert_eq!(second_query.scope, wire::gateway::memory::MemoryScope::Both);
+    assert_eq!(second_query.scope, kernel::memory::MemoryScope::Both);
     assert_eq!(second_query.agent.as_deref(), Some("rivet-claude"));
     assert_eq!(
         second_query.tag,
@@ -131,7 +128,7 @@ fn browse_rejects_bad_filters() {
     );
     assert_eq!(filter.window, None);
     let today = kernel::memory_core::resolve_window(
-        wire::gateway::memory::BrowseWindow::Today,
+        kernel::memory::BrowseWindow::Today,
         chrono::Utc::now(),
         &chrono::Local,
     );
@@ -381,7 +378,7 @@ fn browse_tool_carries_filters_to_the_port() {
     assert!(since <= chrono::Utc::now() - chrono::Duration::days(7));
     assert_eq!(filter.before, None);
     assert!(filter.include_tools);
-    assert_eq!(filter.order, wire::gateway::memory::MemoryBrowseOrder::Asc);
+    assert_eq!(filter.order, kernel::memory::MemoryBrowseOrder::Asc);
     assert_eq!(
         filter.conversation_id.map(|id| id.to_string()).as_deref(),
         Some("00000000-0000-4000-8000-000000000009")

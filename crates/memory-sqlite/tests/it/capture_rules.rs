@@ -5,8 +5,8 @@ use common::batch;
 use common::fresh_store;
 use common::instant;
 use common::table;
+use kernel::memory::CaptureBatchRequest;
 use testkit::Json;
-use wire::capture::CaptureBatchRequest;
 use wire::message::Role;
 
 async fn stored_updated_at(store: &memory_sqlite::SqliteStore) -> TestResult<String> {

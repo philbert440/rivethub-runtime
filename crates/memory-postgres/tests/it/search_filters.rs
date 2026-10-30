@@ -1,10 +1,10 @@
 use std::collections::BTreeSet;
 
+use kernel::memory::MemoryEntry;
 use kernel::memory::{Limit, MemoryStore, SearchMode, SearchQuery};
+use kernel::memory::{MemoryHitSource, MemoryScope};
 use memory_postgres::PostgresMemory;
 use sqlx::PgPool;
-use wire::gateway::memory::{MemoryHitSource, MemoryScope};
-use wire::memory::MemoryEntry;
 use wire::message::Role;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

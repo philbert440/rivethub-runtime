@@ -9,7 +9,7 @@ use crate::BoxError;
 
 pub const HEARTBEAT_SESSION_PREFIX: &str = "heartbeat:";
 
-pub use wire::gateway::memory::SummaryKind;
+use super::SummaryKind;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConversationHead {
