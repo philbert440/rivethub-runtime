@@ -390,7 +390,7 @@ struct FixtureJob {
     queue: Option<&'static str>,
 }
 
-#[sqlx::test(migrations = false)]
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn job_claims_follow_the_previous_priority_order_and_reclaim_stale_locks(
     pool: PgPool,
 ) -> TestResult {

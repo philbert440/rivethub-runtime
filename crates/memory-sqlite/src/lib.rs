@@ -27,6 +27,7 @@ mod task_rows;
 mod task_store;
 mod task_watch;
 mod taxonomy;
+mod tidy;
 mod time;
 mod title;
 mod topic_pages;
@@ -91,7 +92,7 @@ impl SharedClock {
     }
 }
 
-pub const SCHEMA_VERSION: i64 = 21;
+pub const SCHEMA_VERSION: i64 = 22;
 
 const FILE_PRAGMAS: &str = "PRAGMA journal_mode = wal;\nPRAGMA foreign_keys = ON;";
 
@@ -352,7 +353,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(state, (crate::SCHEMA_VERSION, 58));
+        assert_eq!(state, (crate::SCHEMA_VERSION, 61));
     }
 
     #[tokio::test]

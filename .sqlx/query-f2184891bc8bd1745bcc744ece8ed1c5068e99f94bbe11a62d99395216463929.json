@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT topic_id AS \"topic_id!\", count(*) AS \"count!\"\n                 FROM (SELECT topic_id FROM rh_session_placements WHERE placed_at >= $1\n                       UNION ALL\n                       SELECT topic_id FROM rh_conversation_placements WHERE placed_at >= $1) f\n                GROUP BY topic_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "topic_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "f2184891bc8bd1745bcc744ece8ed1c5068e99f94bbe11a62d99395216463929"
+}

@@ -78,6 +78,10 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::get(health).fallback(super::method_not_allowed),
         )
         .route(
+            "/upkeep",
+            routing::get(super::tidy::upkeep).fallback(super::method_not_allowed),
+        )
+        .route(
             "/summaries/{session}",
             routing::get(super::memory_archive::summaries).fallback(super::method_not_allowed),
         )

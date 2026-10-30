@@ -119,7 +119,7 @@ pub(super) fn user_prompt(
     parts.join("\n")
 }
 
-fn correction_line(correction: &CorrectionExample) -> String {
+pub(crate) fn correction_line(correction: &CorrectionExample) -> String {
     let title = correction.title.as_deref().unwrap_or("A conversation");
     let moved = match &correction.to {
         Some(to) => format!("the user moved it to {}", to.as_str()),

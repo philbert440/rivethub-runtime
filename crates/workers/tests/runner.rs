@@ -67,7 +67,7 @@ fn roles_match_the_kernel_task_lists() {
     );
     assert_eq!(
         names(WorkerRole::Categorizer),
-        vec!["file-conversation".to_owned()]
+        vec!["file-conversation".to_owned(), "propose-tidy".to_owned()]
     );
     assert_eq!(
         names(WorkerRole::WikiBuilder),

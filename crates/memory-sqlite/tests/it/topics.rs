@@ -235,3 +235,17 @@ async fn editing_an_unwritten_entity_writes_its_page() -> TestResult {
     topic_pages::editing_an_unwritten_entity_writes_its_page(pages(&store)).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn proposals_are_decided_and_rejections_remembered() -> TestResult {
+    let (_directory, store) = store()?;
+    testkit::tidy::proposals_are_decided_and_rejections_remembered(&store).await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn upkeep_counts_filings_entities_and_finished_jobs() -> TestResult {
+    let (_directory, store) = store()?;
+    testkit::tidy::upkeep_counts_filings_entities_and_finished_jobs(&store, &store).await?;
+    Ok(())
+}

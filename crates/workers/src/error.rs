@@ -111,6 +111,10 @@ pub enum WorkerError {
     Memory(#[source] MemoryStoreError),
     #[error("topic page sync failed: {0}")]
     TopicPage(#[from] kernel::topics::TopicPageError),
+    #[error("the tidy store failed: {0}")]
+    Tidy(#[from] kernel::tidy::TidyError),
+    #[error("{message}")]
+    TidyAnswer { message: String },
 }
 
 impl WorkerError {

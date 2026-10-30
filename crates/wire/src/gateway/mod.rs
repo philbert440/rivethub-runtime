@@ -8,6 +8,7 @@ pub mod notifications;
 pub mod roster;
 pub mod sessions;
 pub mod term;
+pub mod tidy;
 pub mod topics;
 pub mod uploads;
 pub mod users;

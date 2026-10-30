@@ -26,7 +26,7 @@ use wire::gateway::topics::TopicSummary;
 
 use crate::error::ApiError;
 
-pub(super) fn error(error: TopicError) -> ApiError {
+pub(crate) fn error(error: TopicError) -> ApiError {
     match error {
         TopicError::EmptyName
         | TopicError::EmptyAlias

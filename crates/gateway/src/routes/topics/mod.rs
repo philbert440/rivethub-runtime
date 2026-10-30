@@ -44,6 +44,7 @@ use crate::error::ApiError;
 use crate::extract::Body;
 use crate::extract::Query;
 
+pub(super) use map::error as topic_error;
 pub(super) use startup::Started;
 pub(super) use startup::begin;
 pub(super) use startup::prepare;

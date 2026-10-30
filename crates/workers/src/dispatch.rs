@@ -30,6 +30,7 @@ pub(crate) struct JobEnv {
     pub(crate) summary: SummarySettings,
     pub(crate) topics: Option<SessionTopics>,
     pub(crate) topic_pages: Option<crate::topic_page::TopicPages>,
+    pub(crate) tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
 }
 
 pub(crate) async fn dispatch<Q: JobQueue>(
@@ -92,6 +93,7 @@ pub(crate) async fn dispatch<Q: JobQueue>(
         }
         JobName::Fixed(FixedJob::ReapDeadJobs) => handle_reap(&summarize).await.map(|_| ()),
         JobName::Fixed(FixedJob::FileConversation) => dispatch_file(env, job, cancel).await,
+        JobName::Fixed(FixedJob::ProposeTidy) => dispatch_tidy(env, cancel).await,
         JobName::Fixed(FixedJob::ConsolidateWiki) => {
             dispatch_consolidate(queue, env, job, cancel).await
         }
@@ -124,6 +126,23 @@ async fn dispatch_file(
         cancel,
     };
     handle_file(&filing, conversation).await.map(|_| ())
+}
+
+async fn dispatch_tidy(env: &JobEnv, cancel: &CancellationToken) -> Result<(), WorkerError> {
+    let (Some(topics), Some(tidy)) = (&env.topics, &env.tidy) else {
+        return Err(WorkerError::MissingDependencies {
+            role: ProcessRole::Categorizer,
+        });
+    };
+    let run = crate::tidy::TidyEnv {
+        topics,
+        tidy: tidy.as_ref(),
+        provider: env.provider.as_ref(),
+        model: &env.summary.model,
+        now: Utc::now(),
+        cancel,
+    };
+    crate::tidy::handle_tidy(&run).await.map(|_| ())
 }
 
 async fn dispatch_topic_page(

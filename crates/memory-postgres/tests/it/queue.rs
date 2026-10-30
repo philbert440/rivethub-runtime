@@ -336,7 +336,13 @@ fn crontab_and_task_lists_follow_the_roles() {
     );
     let summarizer = PostgresQueue::crontab(WorkerRole::Summarizer);
     assert_eq!(summarizer.len(), 4);
-    assert_eq!(PostgresQueue::crontab(WorkerRole::Categorizer).len(), 0);
+    assert_eq!(
+        PostgresQueue::crontab(WorkerRole::Categorizer)
+            .iter()
+            .map(|entry| (entry.identifier.as_str(), entry.schedule.as_str()))
+            .collect::<Vec<_>>(),
+        [("tidy-sweep", "0 * * * *")]
+    );
 
     assert_eq!(
         PostgresQueue::task_list(WorkerRole::Embedder),
