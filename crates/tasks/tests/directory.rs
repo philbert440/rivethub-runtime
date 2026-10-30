@@ -21,7 +21,6 @@ mod mesh_support;
 use chrono::DateTime;
 use chrono::Utc;
 use common::node;
-use kernel::queue::FixedJob;
 use kernel::queue::JobName;
 use tasks::Directory;
 use tasks::Error;
@@ -94,7 +93,9 @@ fn a_local_agent_stays_on_this_node() {
         Prepared {
             node: "local".to_string(),
             remote: false,
-            job_name: JobName::Fixed(FixedJob::RunTask),
+            job_name: JobName::RunTaskOn {
+                node: "local".to_string(),
+            },
         }
     );
     let resolved = directory
@@ -153,7 +154,7 @@ fn an_unknown_agent_is_refused() {
 }
 
 #[test]
-fn an_offline_or_unlisted_mesh_agent_is_refused() {
+fn an_offline_node_or_an_unlisted_runtime_agent_is_refused() {
     let mut directory = fresh();
     directory.preset(preset("worker", Some("edge"), "high", None));
     mesh(
@@ -184,7 +185,6 @@ fn an_offline_or_unlisted_mesh_agent_is_refused() {
         Error::MeshUnavailable { .. }
     ));
     let mut directory = fresh();
-    directory.preset(preset("worker", Some("edge"), "high", None));
     directory.mesh_node(node(
         "edge",
         "203.0.113.9",
@@ -192,12 +192,23 @@ fn an_offline_or_unlisted_mesh_agent_is_refused() {
         &["other"],
         MeshNodeStatus::Online,
     ));
+    directory.set_mesh_identity(Some(mesh_support::sample()));
+    let mut pinned = input(TaskExecutorKind::ChatLoop, "worker");
+    pinned.node_affinity = Some("edge".to_string());
     assert!(matches!(
-        directory
-            .prepare(&input(TaskExecutorKind::ChatLoop, "worker"))
-            .expect_err("roster"),
+        directory.prepare(&pinned).expect_err("roster"),
         Error::MeshAgent { .. }
     ));
+    directory.preset(preset("worker", Some("edge"), "high", None));
+    let prepared = directory
+        .prepare(&input(TaskExecutorKind::ChatLoop, "worker"))
+        .expect("a preset needs only its node online");
+    assert_eq!(
+        prepared.job_name,
+        JobName::RunTaskOn {
+            node: "edge".to_string(),
+        }
+    );
 }
 
 #[test]
@@ -309,7 +320,12 @@ fn a_mesh_executor_needs_a_node_and_a_local_node_stays_a_local_job() {
     let mut mesh_input = input(TaskExecutorKind::Mesh, "worker");
     mesh_input.executor_target = Some("local".to_string());
     let prepared = directory.prepare(&mesh_input).expect("prepare");
-    assert_eq!(prepared.job_name, JobName::Fixed(FixedJob::RunTask));
+    assert_eq!(
+        prepared.job_name,
+        JobName::RunTaskOn {
+            node: "local".to_string(),
+        }
+    );
     let resolved = directory.resolve(&mesh_input).expect("resolve");
     assert_eq!(resolved.mesh, Some(mesh_support::sample()));
     assert_eq!(resolved.base.as_str(), "https://127.0.0.1:9/");

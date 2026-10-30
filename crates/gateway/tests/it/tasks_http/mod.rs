@@ -31,6 +31,7 @@ use kernel::tasks::TaskListFilter;
 use kernel::tasks::TaskOrigin;
 use kernel::tasks::TaskQuery;
 use kernel::tasks::TaskRecord;
+use kernel::tasks::TaskRoute;
 use parking_lot::Mutex;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -120,8 +121,18 @@ struct Agents {
 
 #[async_trait]
 impl TaskAgents for Agents {
-    async fn contains(&self, agent_id: &str) -> Result<bool, TaskError> {
-        Ok(self.ids.iter().any(|id| id == agent_id))
+    async fn route(
+        &self,
+        agent_id: &str,
+        node: Option<&str>,
+    ) -> Result<Option<TaskRoute>, TaskError> {
+        Ok(self.ids.iter().any(|id| id == agent_id).then(|| TaskRoute {
+            agent_id: agent_id.to_owned(),
+            node: node
+                .filter(|node| !node.is_empty())
+                .unwrap_or("local")
+                .to_owned(),
+        }))
     }
 }
 

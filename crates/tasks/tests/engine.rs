@@ -266,6 +266,31 @@ async fn an_embed_target_job_stays_unclaimed() {
 }
 
 #[tokio::test]
+async fn an_unscoped_task_job_is_claimed_by_no_node() {
+    let base = url::Url::parse("http://127.0.0.1/").expect("url");
+    let (engine, memory) = engine_with(
+        common::directory(base),
+        settings(None, std::collections::BTreeMap::new()),
+    );
+    memory
+        .enqueue(Job {
+            name: JobName::Fixed(FixedJob::RunTask),
+            payload: wire::JsonObject::from_serialize(&TaskJobPayload {
+                task_id: uuid::Uuid::now_v7().to_string(),
+            })
+            .expect("payload"),
+            key: None,
+            key_mode: JobKeyMode::Replace,
+            priority: 0,
+            run_at: None,
+            max_attempts: Some(1),
+        })
+        .await
+        .expect("enqueue");
+    assert_eq!(engine.run_one().await.expect("idle"), RunOutcome::Idle);
+}
+
+#[tokio::test]
 async fn a_remote_job_is_left_for_the_other_node() {
     let base = url::Url::parse("http://127.0.0.1/").expect("url");
     let mut directory = common::directory(base.clone());
