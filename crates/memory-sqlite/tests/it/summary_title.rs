@@ -88,9 +88,18 @@ async fn the_backfill_titles_summarized_conversations_from_their_earliest_leaf()
     let untitled = Uuid::new_v4();
     let named = Uuid::new_v4();
     let bare = Uuid::new_v4();
+    let placeholder = Uuid::new_v4();
     seed_conversation(&fresh.store, untitled, None).await?;
     seed_conversation(&fresh.store, named, Some("Kept")).await?;
     seed_conversation(&fresh.store, bare, None).await?;
+    seed_conversation(&fresh.store, placeholder, Some("Grok Build session")).await?;
+    raw_leaf(
+        &fresh.store,
+        placeholder,
+        "**Session metadata**\n- Two messages.\n\n**Billing timeout fix**\n- Fixed.",
+        "2026-10-10T12:00:00.000Z",
+    )
+    .await?;
     raw_leaf(
         &fresh.store,
         untitled,
@@ -106,12 +115,16 @@ async fn the_backfill_titles_summarized_conversations_from_their_earliest_leaf()
     )
     .await?;
     raw_leaf(&fresh.store, named, FIRST_LEAF, "2026-10-10T12:00:00.000Z").await?;
-    assert_eq!(fresh.store.backfill_titles(true).await?, 1);
+    assert_eq!(fresh.store.backfill_titles(true).await?, 2);
     assert_eq!(title(&fresh.store, untitled).await?, None);
-    assert_eq!(fresh.store.backfill_titles(false).await?, 1);
+    assert_eq!(fresh.store.backfill_titles(false).await?, 2);
     assert_eq!(
         title(&fresh.store, untitled).await?.as_deref(),
         Some("Investigated the billing timeout on the payment host.")
+    );
+    assert_eq!(
+        title(&fresh.store, placeholder).await?.as_deref(),
+        Some("Billing timeout fix")
     );
     assert_eq!(title(&fresh.store, named).await?.as_deref(), Some("Kept"));
     assert_eq!(title(&fresh.store, bare).await?, None);
