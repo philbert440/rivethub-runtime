@@ -2,6 +2,7 @@ mod decisions;
 mod done;
 mod filing;
 mod map;
+mod page;
 mod startup;
 
 use std::sync::Arc;
@@ -27,14 +28,12 @@ use kernel::topics::TopicKind;
 use kernel::topics::TopicName;
 use kernel::topics::TopicQuery;
 use kernel::topics::TopicStore;
-use kernel::topics::bound_page;
 use serde::Deserialize;
 use wire::gateway::topics::PlacementReply;
 use wire::gateway::topics::PlacementRequest;
 use wire::gateway::topics::TopicCreateRequest;
 use wire::gateway::topics::TopicList;
 use wire::gateway::topics::TopicMergeRequest;
-use wire::gateway::topics::TopicPage;
 use wire::gateway::topics::TopicRecord;
 use wire::gateway::topics::TopicUpdate;
 use wire::session_id::SessionId;
@@ -85,7 +84,9 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         )
         .route(
             "/api/topics/{topic}/page",
-            routing::get(page).fallback(super::method_not_allowed),
+            routing::get(page::page)
+                .put(page::edit)
+                .fallback(super::method_not_allowed),
         )
         .route(
             "/api/topics/{topic}/decisions",
@@ -314,21 +315,6 @@ async fn merge(
         .await
         .map_err(map::error)?;
     Ok(Json(map::record(merged)))
-}
-
-async fn page(
-    State(gateway): State<Arc<Gateway>>,
-    Path(key): Path<String>,
-) -> Result<Json<TopicPage>, ApiError> {
-    let store = gateway.topics()?;
-    let topic = resolve(store.as_ref(), &key).await?;
-    let page = bound_page(store.as_ref(), gateway.store().as_ref(), &topic)
-        .await
-        .map_err(map::page_error)?;
-    Ok(Json(TopicPage {
-        topic: map::record(topic),
-        page,
-    }))
 }
 
 async fn placement(

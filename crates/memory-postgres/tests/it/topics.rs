@@ -240,3 +240,16 @@ async fn conversations_file_with_titles_and_corrections(pool: PgPool) -> TestRes
     testkit::filing::conversations_file_with_titles_and_corrections(&PostgresMemory::new(pool))
         .await
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn editing_an_unwritten_entity_writes_its_page(pool: PgPool) -> TestResult {
+    let (_directory, memory, queue) = page_stores(pool).await?;
+    topic_pages::editing_an_unwritten_entity_writes_its_page(PageStores {
+        topics: &memory,
+        pages: &memory,
+        decisions: &memory,
+        wiki: &memory,
+        queue: &queue,
+    })
+    .await
+}
