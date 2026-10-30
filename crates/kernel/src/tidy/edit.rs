@@ -1,7 +1,10 @@
+use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use serde::Deserialize;
 use serde::Serialize;
+use sha2::Digest as _;
+use sha2::Sha256;
 use uuid::Uuid;
 use wire::session_id::SessionId;
 
@@ -84,7 +87,7 @@ impl TreeEdit {
             Self::Delete { topic } => Fingerprint::of(&["delete", &topic.to_string()]),
             Self::CreateTopic { name, .. } => Fingerprint::of(&["create", slug(name)?.as_str()]),
             Self::FileInto { topic, members } => {
-                Fingerprint::of(&["file", &topic.to_string(), &members.len().to_string()])
+                Fingerprint::of(&["file", &topic.to_string(), &member_digest(members)])
             }
             Self::MergePage { page, into } => {
                 let (low, high) = if page.as_ref() < into.as_ref() {
@@ -282,6 +285,18 @@ impl TryFrom<EditRecord> for TreeEdit {
             },
         })
     }
+}
+
+fn member_digest(members: &[Target]) -> String {
+    let ids: BTreeSet<String> = members
+        .iter()
+        .map(|member| match member {
+            Target::Session(session) => session.as_str().to_owned(),
+            Target::Conversation(conversation) => conversation.to_string(),
+        })
+        .collect();
+    let joined: Vec<&str> = ids.iter().map(String::as_str).collect();
+    format!("{:x}", Sha256::digest(joined.join("\n").as_bytes()))
 }
 
 fn sessions(members: &[Target]) -> Vec<SessionId> {

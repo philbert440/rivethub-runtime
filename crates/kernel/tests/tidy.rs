@@ -88,6 +88,21 @@ fn fingerprints_ignore_merge_order_and_a_new_topic_s_parent() -> TestResult {
 }
 
 #[test]
+fn a_filing_s_fingerprint_is_its_set_of_members() {
+    let topic = TopicId::random();
+    let file = |members: Vec<Target>| TreeEdit::FileInto { topic, members }.fingerprint();
+    let six = members(6);
+    let (first, second) = six.split_at(3);
+    assert_ne!(
+        file(first.to_vec()).unwrap(),
+        file(second.to_vec()).unwrap()
+    );
+    let mut reordered = first.to_vec();
+    reordered.reverse();
+    assert_eq!(file(first.to_vec()).unwrap(), file(reordered).unwrap());
+}
+
+#[test]
 fn the_guard_refuses_small_titled_tombstoned_and_known_changes() -> TestResult {
     let app = listing("Desktop App", TopicKind::Work, None, 4)?;
     let closed = {
