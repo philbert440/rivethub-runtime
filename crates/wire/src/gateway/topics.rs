@@ -228,6 +228,28 @@ pub struct TopicSessionList {
     pub conversations: Vec<TopicConversation>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopicFiling {
+    pub sessions: Vec<TopicSession>,
+    pub conversations: Vec<TopicConversation>,
+    pub history: Vec<SessionHistoryMark>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSuggestion {
+    pub session_id: SessionId,
+    #[serde(flatten)]
+    pub suggestion: TopicSuggestion,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSuggestionList {
+    pub sessions: Vec<SessionSuggestion>,
+}
+
 #[serde_with::skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]

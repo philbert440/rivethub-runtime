@@ -162,7 +162,7 @@ pub fn access(read: bool, path: &str) -> PluginAccess {
         (
             true,
             ["api", "topics", ..]
-            | ["api", "sessions", "history"]
+            | ["api", "sessions", "history" | "suggestions"]
             | ["api", "sessions", _, "placement"],
         ) => needs(Permission::TopicsRead),
         (false, ["api", "topics", ..] | ["api", "sessions", _, "placement" | "history"]) => {

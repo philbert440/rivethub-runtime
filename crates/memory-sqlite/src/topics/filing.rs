@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use async_trait::async_trait;
+use kernel::filing::AllFiled;
 use kernel::filing::ConversationPlacement;
 use kernel::filing::Correction;
 use kernel::filing::CorrectionExample;
@@ -172,6 +173,10 @@ impl FilingStore for SqliteStore {
             })
         })
         .await
+    }
+
+    async fn all_filed(&self) -> Result<AllFiled, TopicError> {
+        self.topics("all filed", super::bulk::all_filed).await
     }
 
     async fn mentions(&self, topics: &[TopicId], limit: u32) -> Result<Vec<Mention>, TopicError> {
@@ -356,7 +361,7 @@ fn placement_of(
     .transpose()
 }
 
-fn conversation_placement(
+pub(super) fn conversation_placement(
     (conversation, topic, by, at): (String, String, String, String),
 ) -> Result<ConversationPlacement, TopicError> {
     Ok(ConversationPlacement {

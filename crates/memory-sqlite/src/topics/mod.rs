@@ -1,3 +1,4 @@
+mod bulk;
 mod decisions;
 mod filing;
 mod history;
@@ -253,6 +254,10 @@ impl TopicStore for SqliteStore {
             rows::suggestion_of(conn, &session)
         })
         .await
+    }
+
+    async fn suggestions(&self) -> Result<Vec<Suggestion>, TopicError> {
+        self.topics("session suggestions", bulk::suggestions).await
     }
 
     async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError> {

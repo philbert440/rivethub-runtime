@@ -15,6 +15,9 @@ use kernel::topics::TopicId;
 use uuid::Uuid;
 use wire::gateway::topics::ConversationPlacementReply;
 use wire::gateway::topics::PlacementRequest;
+use wire::gateway::topics::SessionSuggestion;
+use wire::gateway::topics::SessionSuggestionList;
+use wire::gateway::topics::TopicFiling;
 use wire::gateway::topics::TopicSessionList;
 
 use super::map;
@@ -24,13 +27,22 @@ use crate::error::ApiError;
 use crate::extract::Body;
 
 pub(super) fn router() -> Router<Arc<Gateway>> {
-    Router::new().route(
-        "/api/conversations/{id}/placement",
-        routing::get(placement)
-            .put(place)
-            .delete(unplace)
-            .fallback(super::super::method_not_allowed),
-    )
+    Router::new()
+        .route(
+            "/api/topics/filing",
+            routing::get(all).fallback(super::super::method_not_allowed),
+        )
+        .route(
+            "/api/sessions/suggestions",
+            routing::get(suggestions).fallback(super::super::method_not_allowed),
+        )
+        .route(
+            "/api/conversations/{id}/placement",
+            routing::get(placement)
+                .put(place)
+                .delete(unplace)
+                .fallback(super::super::method_not_allowed),
+        )
 }
 
 pub(super) async fn sessions(
@@ -45,6 +57,34 @@ pub(super) async fn sessions(
             .conversations
             .into_iter()
             .map(map::filed_conversation)
+            .collect(),
+    }))
+}
+
+async fn all(State(gateway): State<Arc<Gateway>>) -> Result<Json<TopicFiling>, ApiError> {
+    let filed = gateway.filing()?.all_filed().await.map_err(map::error)?;
+    Ok(Json(TopicFiling {
+        sessions: filed.sessions.into_iter().map(map::filed_session).collect(),
+        conversations: filed
+            .conversations
+            .into_iter()
+            .map(map::filed_conversation)
+            .collect(),
+        history: filed.history.into_iter().map(map::history_mark).collect(),
+    }))
+}
+
+async fn suggestions(
+    State(gateway): State<Arc<Gateway>>,
+) -> Result<Json<SessionSuggestionList>, ApiError> {
+    let found = gateway.topics()?.suggestions().await.map_err(map::error)?;
+    Ok(Json(SessionSuggestionList {
+        sessions: found
+            .iter()
+            .map(|suggestion| SessionSuggestion {
+                session_id: suggestion.session.clone(),
+                suggestion: map::suggestion(suggestion),
+            })
             .collect(),
     }))
 }

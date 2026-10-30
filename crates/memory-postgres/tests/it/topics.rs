@@ -278,3 +278,8 @@ async fn upkeep_counts_filings_entities_and_finished_jobs(pool: PgPool) -> TestR
     let queue = memory.queue().await?;
     testkit::tidy::upkeep_counts_filings_entities_and_finished_jobs(&memory, &queue).await
 }
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn every_topic_s_filing_reads_at_once(pool: PgPool) -> TestResult {
+    testkit::filing_bulk::every_topic_s_filing_reads_at_once(&PostgresMemory::new(pool)).await
+}

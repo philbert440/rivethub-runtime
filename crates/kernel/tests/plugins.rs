@@ -53,6 +53,10 @@ fn routes_need_the_permission_their_family_names() {
         PluginAccess::Needs(Permission::TopicsRead)
     );
     assert_eq!(
+        access(true, "/api/sessions/suggestions"),
+        PluginAccess::Needs(Permission::TopicsRead)
+    );
+    assert_eq!(
         access(false, "/api/sessions/abc/messages"),
         PluginAccess::Needs(Permission::SessionsControl)
     );

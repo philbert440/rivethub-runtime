@@ -1,3 +1,4 @@
+mod bulk;
 mod decisions;
 mod done;
 mod filing;

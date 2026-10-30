@@ -263,3 +263,10 @@ async fn upkeep_counts_filings_entities_and_finished_jobs() -> TestResult {
     testkit::tidy::upkeep_counts_filings_entities_and_finished_jobs(&store, &store).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn every_topic_s_filing_reads_at_once() -> TestResult {
+    let (_directory, store) = store()?;
+    testkit::filing_bulk::every_topic_s_filing_reads_at_once(&store).await?;
+    Ok(())
+}

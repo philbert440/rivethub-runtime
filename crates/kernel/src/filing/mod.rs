@@ -14,6 +14,7 @@ pub use decide::Rule;
 pub use decide::Step;
 pub use repo::references;
 pub use repo::repo_topic;
+pub use store::AllFiled;
 pub use store::ConversationPlacement;
 pub use store::Filed;
 pub use store::FiledConversation;

@@ -184,6 +184,8 @@ pub trait TopicStore: Send + Sync {
 
     async fn suggestion(&self, session: &SessionId) -> Result<Option<Suggestion>, TopicError>;
 
+    async fn suggestions(&self) -> Result<Vec<Suggestion>, TopicError>;
+
     async fn page_slug(&self, topic: TopicId) -> Result<Option<WikiSlug>, TopicError>;
 
     async fn tombstoned(&self, kind: TopicKind, slug: &Slug) -> Result<bool, TopicError>;

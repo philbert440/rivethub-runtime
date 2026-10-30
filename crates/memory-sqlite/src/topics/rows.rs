@@ -45,11 +45,13 @@ pub(super) struct TopicRow {
 }
 
 pub(super) struct PlacementRow {
-    session_id: String,
-    topic_id: String,
-    placed_by: String,
-    placed_at: String,
+    pub(super) session_id: String,
+    pub(super) topic_id: String,
+    pub(super) placed_by: String,
+    pub(super) placed_at: String,
 }
+
+pub(super) type SuggestionColumns = (String, String, Option<String>, Option<String>);
 
 pub(super) fn failed(operation: &'static str) -> impl FnOnce(rusqlite::Error) -> TopicError {
     move |source| TopicError::Unavailable(Box::new(SqliteError::Query { operation, source }))
@@ -306,16 +308,19 @@ pub(super) fn suggestion_of(
         )
         .optional()
         .map_err(failed("session suggestion read"))?;
-    row.map(|(session_id, name, topic, parent)| {
-        Ok(Suggestion {
-            session: SessionId::try_from(session_id)
-                .map_err(|error| stored("session_id")(Box::new(error)))?,
-            name: TopicName::new(&name)?,
-            topic: topic.as_deref().map(topic_id).transpose()?,
-            parent: parent.as_deref().map(topic_id).transpose()?,
-        })
+    row.map(suggestion).transpose()
+}
+
+pub(super) fn suggestion(
+    (session_id, name, topic, parent): SuggestionColumns,
+) -> Result<Suggestion, TopicError> {
+    Ok(Suggestion {
+        session: SessionId::try_from(session_id)
+            .map_err(|error| stored("session_id")(Box::new(error)))?,
+        name: TopicName::new(&name)?,
+        topic: topic.as_deref().map(topic_id).transpose()?,
+        parent: parent.as_deref().map(topic_id).transpose()?,
     })
-    .transpose()
 }
 
 pub(super) fn placed_in(conn: &Connection, id: TopicId) -> Result<Vec<PlacedSession>, TopicError> {
