@@ -3,7 +3,6 @@ use chrono::Utc;
 use strum::IntoEnumIterator as _;
 use wire::gateway::sessions::HarnessTranscriptTurn;
 use wire::gateway::sessions::SessionMessageRole;
-use wire::gateway::sessions::SessionPreviewKind;
 use wire::json::JsonObject;
 
 pub const PREVIEW_CHARS: usize = 200;
@@ -35,20 +34,35 @@ pub fn is_prompt_tool(name: &str) -> bool {
     name.trim().to_lowercase().parse::<PromptTool>().is_ok()
 }
 
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns what a session preview shows; wire::gateway::sessions::SessionPreviewKind is the contract's copy, translated by the gateway's preview route"
+    )
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviewKind {
+    Running,
+    Asking,
+    Approval,
+    Said,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Preview {
-    pub kind: SessionPreviewKind,
+    pub kind: PreviewKind,
     pub text: String,
     pub at: DateTime<Utc>,
 }
 
 impl Preview {
-    pub fn new(kind: SessionPreviewKind, text: &str, at: DateTime<Utc>) -> Option<Self> {
+    pub fn new(kind: PreviewKind, text: &str, at: DateTime<Utc>) -> Option<Self> {
         one_line(text).map(|text| Self { kind, text, at })
     }
 
     pub fn said(reply: &str, at: DateTime<Utc>) -> Option<Self> {
-        Self::new(SessionPreviewKind::Said, last_line(reply)?, at)
+        Self::new(PreviewKind::Said, last_line(reply)?, at)
     }
 
     pub fn from_transcript(
@@ -213,16 +227,16 @@ impl LiveActivity {
 
     pub fn preview(&self) -> Option<Preview> {
         if let Some(approval) = &self.approval {
-            return Preview::new(SessionPreviewKind::Approval, &approval.label, approval.at);
+            return Preview::new(PreviewKind::Approval, &approval.label, approval.at);
         }
         if let Some(asking) = &self.asking {
-            return Preview::new(SessionPreviewKind::Asking, &asking.label, asking.at);
+            return Preview::new(PreviewKind::Asking, &asking.label, asking.at);
         }
         if let Some(tool) = self.tools.last() {
-            return Preview::new(SessionPreviewKind::Running, &tool.label, tool.at);
+            return Preview::new(PreviewKind::Running, &tool.label, tool.at);
         }
         Preview::new(
-            SessionPreviewKind::Running,
+            PreviewKind::Running,
             last_line(&self.writing)?,
             self.wrote_at?,
         )
@@ -237,7 +251,7 @@ mod tests {
         serde_json::from_str(raw).unwrap_or_default()
     }
 
-    fn shown(activity: &LiveActivity) -> Option<(SessionPreviewKind, String)> {
+    fn shown(activity: &LiveActivity) -> Option<(PreviewKind, String)> {
         activity
             .preview()
             .map(|preview| (preview.kind, preview.text))
@@ -262,12 +276,12 @@ mod tests {
         );
         assert_eq!(
             shown(&activity),
-            Some((SessionPreviewKind::Running, "Terminal: cargo test".into()))
+            Some((PreviewKind::Running, "Terminal: cargo test".into()))
         );
         activity.tool_finished("t2");
         assert_eq!(
             shown(&activity),
-            Some((SessionPreviewKind::Running, "ls -la".into()))
+            Some((PreviewKind::Running, "ls -la".into()))
         );
     }
 
@@ -280,7 +294,7 @@ mod tests {
         activity.wrote("lints now", now);
         assert_eq!(
             shown(&activity),
-            Some((SessionPreviewKind::Running, "Running the lints now".into()))
+            Some((PreviewKind::Running, "Running the lints now".into()))
         );
         activity.tool_started(
             "t1",
@@ -291,7 +305,7 @@ mod tests {
         assert_eq!(
             shown(&activity),
             Some((
-                SessionPreviewKind::Running,
+                PreviewKind::Running,
                 "Bash: cargo clippy --workspace".into()
             ))
         );
@@ -303,10 +317,7 @@ mod tests {
         );
         assert_eq!(
             shown(&activity),
-            Some((
-                SessionPreviewKind::Asking,
-                "Push to main or open a PR?".into()
-            ))
+            Some((PreviewKind::Asking, "Push to main or open a PR?".into()))
         );
         activity.approval_requested(
             "r1",
@@ -316,17 +327,14 @@ mod tests {
         );
         assert_eq!(
             shown(&activity),
-            Some((
-                SessionPreviewKind::Approval,
-                "Bash: cargo build --release".into()
-            ))
+            Some((PreviewKind::Approval, "Bash: cargo build --release".into()))
         );
         activity.approval_resolved("r1");
         activity.tool_finished("t2");
         assert_eq!(
             shown(&activity),
             Some((
-                SessionPreviewKind::Running,
+                PreviewKind::Running,
                 "Bash: cargo clippy --workspace".into()
             ))
         );
@@ -364,11 +372,7 @@ mod tests {
         let said = Preview::from_transcript(&turns, now);
         assert_eq!(
             said.map(|said| (said.kind, said.text, said.at.timestamp_millis())),
-            Some((
-                SessionPreviewKind::Said,
-                "All four checks pass.".into(),
-                1_000
-            ))
+            Some((PreviewKind::Said, "All four checks pass.".into(), 1_000))
         );
         let long = "x".repeat(PREVIEW_CHARS + 50);
         let clipped = Preview::said(&long, now)

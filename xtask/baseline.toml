@@ -152,7 +152,7 @@ count = 3
 check = "KERNELWIRE"
 file = "crates/kernel/src/preview.rs"
 text = "wire"
-count = 4
+count = 3
 
 [[entry]]
 check = "KERNELWIRE"
@@ -236,7 +236,7 @@ count = 5
 check = "KERNELWIRE"
 file = "crates/kernel/src/transcript.rs"
 text = "wire"
-count = 10
+count = 5
 
 [[entry]]
 check = "KERNELWIRE"
@@ -285,12 +285,6 @@ check = "KERNELWIRE"
 file = "crates/kernel/tests/search_window.rs"
 text = "wire"
 count = 1
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/tests/session_listing.rs"
-text = "wire"
-count = 3
 
 [[entry]]
 check = "KERNELWIRE"

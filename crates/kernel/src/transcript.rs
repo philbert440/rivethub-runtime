@@ -6,10 +6,6 @@ use thiserror::Error;
 use wire::gateway::sessions::HarnessToolOutput;
 use wire::gateway::sessions::HarnessTranscriptTurn;
 use wire::harness::HarnessId;
-use wire::harness::HarnessSessionStatus;
-use wire::harness::HarnessSessionSummary;
-use wire::harness::HarnessStoreSession;
-use wire::harness::RosterCommand;
 use wire::message::Role;
 use wire::session_id::SessionId;
 
@@ -94,59 +90,10 @@ impl StoreSession {
             task_id: None,
         }
     }
-
-    #[must_use]
-    pub fn legacy_row(&self) -> HarnessStoreSession {
-        HarnessStoreSession {
-            id: self.id.clone(),
-            command: RosterCommand::from(self.harness),
-            title: self.title.clone(),
-            updated_at: epoch_ms(self.updated_at),
-            created_at: self.created_at.map(epoch_ms),
-            parent_session_id: self.parent_session_id.clone(),
-            agent_name: self.agent_name.clone(),
-            model: self.model.clone(),
-            task_id: self.task_id.clone(),
-        }
-    }
-
-    #[must_use]
-    pub fn summary(&self, cwd: Option<String>, now: DateTime<Utc>) -> HarnessSessionSummary {
-        let updated_at = if self.updated_at == 0 {
-            now
-        } else {
-            epoch_ms(self.updated_at)
-        };
-        HarnessSessionSummary {
-            session_id: SessionId::new(self.harness, &self.id),
-            harness_id: self.harness,
-            title: (self.title != self.id).then(|| self.title.clone()),
-            cwd,
-            created_at: epoch_ms(self.created_at.unwrap_or(self.updated_at)),
-            updated_at,
-            status: HarnessSessionStatus::Ended,
-            blocked: None,
-            supersedes: None,
-            model: self.model.clone(),
-            parent_session_id: self
-                .parent_session_id
-                .as_deref()
-                .and_then(|parent| linked_parent(self.harness, parent)),
-            agent_name: self.agent_name.clone(),
-            task_id: self.task_id.clone(),
-            effort: None,
-            transport: None,
-            startup_context: None,
-            extra: wire::Extra::default(),
-        }
-    }
 }
 
-fn epoch_ms(ms: i64) -> DateTime<Utc> {
-    DateTime::from_timestamp_millis(ms).unwrap_or(DateTime::UNIX_EPOCH)
-}
-
-pub(crate) fn linked_parent(harness: HarnessId, parent: &str) -> Option<SessionId> {
+#[must_use]
+pub fn linked_parent(harness: HarnessId, parent: &str) -> Option<SessionId> {
     let linkable = !parent.is_empty()
         && !parent.contains('/')
         && !parent.contains("..")

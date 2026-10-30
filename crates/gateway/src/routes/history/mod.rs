@@ -103,7 +103,7 @@ async fn legacy(
     let rows = listed(&gateway, &terminal.roster(), limit).await;
     let sessions = visible_rows(&gateway, &user, rows)
         .iter()
-        .map(StoreSession::legacy_row)
+        .map(crate::history::legacy_row)
         .collect();
     Ok(Json(HarnessStoreSessionList { sessions }))
 }

@@ -1,5 +1,6 @@
 mod context;
 mod preview;
+mod rows;
 
 use std::collections::HashMap;
 
@@ -12,6 +13,7 @@ use wire::session_id::{SessionId, SessionRef, decode_segment};
 
 pub(crate) use context::ContextStamp;
 use context::Stamps;
+pub(crate) use rows::legacy_row;
 
 use crate::Gateway;
 use crate::error::ApiError;
@@ -270,7 +272,7 @@ pub(crate) async fn store_summary(
         Some(cwd) => Some(cwd),
         None => recorded_cwd(gateway, row).await,
     };
-    let mut summary = row.summary(cwd, Utc::now());
+    let mut summary = rows::summary(row, cwd, Utc::now());
     if let Some(live) = live {
         summary.status = live.status;
         summary.blocked = live.blocked;
