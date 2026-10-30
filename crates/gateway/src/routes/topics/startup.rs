@@ -7,9 +7,14 @@ use chrono::Utc;
 use kernel::BoxError;
 use kernel::topics::Placement;
 use kernel::topics::PlacementSource;
+use kernel::topics::DeliveredVia;
 use kernel::topics::StartupContext;
+use kernel::topics::StartupKind;
+use kernel::topics::StartupSection;
+use kernel::topics::StartupSource;
 use kernel::topics::Topic;
 use kernel::topics::startup_context;
+use wire::gateway::topics as dto;
 use wire::gateway::topics::StartupContext as StartupBody;
 use wire::session_id::SessionId;
 
@@ -96,7 +101,7 @@ pub(crate) async fn begin(
         None => return Ok(None),
     };
     match kept {
-        Ok(()) => Ok(Some((&context).into())),
+        Ok(()) => Ok(Some(body(&context))),
         Err(error) => {
             tracing::warn!(%session, "startup context was not kept: {error}");
             Ok(None)
@@ -112,7 +117,7 @@ pub(super) async fn preview(
     let context = build(&gateway, &topic, None).await.map_err(|error| {
         ApiError::Unavailable(format!("startup context for {}: {error}", topic.slug))
     })?;
-    Ok(Json((&context).into()))
+    Ok(Json(body(&context)))
 }
 
 pub(super) async fn kept(
@@ -128,5 +133,38 @@ pub(super) async fn kept(
         .await
         .map_err(map::error)?
         .ok_or_else(|| ApiError::Missing(format!("no startup context for {session}")))?;
-    Ok(Json((&context).into()))
+    Ok(Json(body(&context)))
+}
+
+fn body(context: &StartupContext) -> StartupBody {
+    StartupBody {
+        topic_id: context.topic.to_string(),
+        sections: context.sections.iter().map(section).collect(),
+        tokens: context.tokens,
+        delivered_via: match context.delivered_via {
+            DeliveredVia::MetaAppend => dto::DeliveredVia::MetaAppend,
+            DeliveredVia::CliFlag => dto::DeliveredVia::CliFlag,
+            DeliveredVia::None => dto::DeliveredVia::None,
+        },
+    }
+}
+
+fn section(section: &StartupSection) -> dto::StartupSection {
+    dto::StartupSection {
+        kind: match section.kind {
+            StartupKind::Topic => dto::StartupKind::Topic,
+            StartupKind::Recent => dto::StartupKind::Recent,
+            StartupKind::Relevant => dto::StartupKind::Relevant,
+        },
+        title: section.title.clone(),
+        text: section.text.clone(),
+        sources: section
+            .sources
+            .iter()
+            .map(|source| match source {
+                StartupSource::Session(id) => dto::StartupSource::Session(id.clone()),
+                StartupSource::Wiki(slug) => dto::StartupSource::Wiki(slug.clone()),
+            })
+            .collect(),
+    }
 }

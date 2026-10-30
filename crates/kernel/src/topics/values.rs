@@ -149,7 +149,36 @@ pub fn distinct_aliases(aliases: Vec<Alias>) -> Vec<Alias> {
     kept
 }
 
-pub use wire::gateway::topics::TopicKind;
+#[cfg_attr(
+    dylint_lib = "rr_lints",
+    expect(
+        duptype,
+        reason = "KERNELWIRE: the kernel owns topic kinds; wire::gateway::topics::TopicKind is the contract's copy, translated by the gateway's topic routes"
+    )
+)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+    strum::Display,
+    strum::EnumString,
+)]
+#[serde(rename_all = "camelCase")]
+#[strum(serialize_all = "lowercase")]
+pub enum TopicKind {
+    #[default]
+    Work,
+    Type,
+    Entity,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]

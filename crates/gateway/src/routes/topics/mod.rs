@@ -242,7 +242,7 @@ async fn create(
         None => None,
     };
     let new = NewTopic {
-        kind: request.kind,
+        kind: map::kind(request.kind),
         name: TopicName::new(&request.name).map_err(map::error)?,
         aliases: map::aliases(&request.aliases)?,
         parent,

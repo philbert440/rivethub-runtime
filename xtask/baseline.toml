@@ -266,13 +266,7 @@ count = 1
 check = "KERNELWIRE"
 file = "crates/kernel/src/topics/startup.rs"
 text = "wire"
-count = 9
-
-[[entry]]
-check = "KERNELWIRE"
-file = "crates/kernel/src/topics/values.rs"
-text = "wire"
-count = 1
+count = 6
 
 [[entry]]
 check = "KERNELWIRE"

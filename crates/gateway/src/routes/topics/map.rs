@@ -10,6 +10,7 @@ use kernel::topics::Root;
 use kernel::topics::Suggestion;
 use kernel::topics::Topic;
 use kernel::topics::TopicError;
+use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicPageError;
 use wire::gateway::topics::ConversationPlacement;
@@ -18,6 +19,7 @@ use wire::gateway::topics::SessionHistoryMark;
 use wire::gateway::topics::TopicConversation;
 use wire::gateway::topics::TopicDecision;
 use wire::gateway::topics::TopicDirectory;
+use wire::gateway::topics::TopicKind as TopicKindBody;
 use wire::gateway::topics::TopicPlacement;
 use wire::gateway::topics::TopicRecord;
 use wire::gateway::topics::TopicSession;
@@ -77,6 +79,22 @@ pub(super) fn aliases(texts: &[String]) -> Result<Vec<Alias>, ApiError> {
         .collect()
 }
 
+pub(super) const fn kind(kind: TopicKindBody) -> TopicKind {
+    match kind {
+        TopicKindBody::Work => TopicKind::Work,
+        TopicKindBody::Type => TopicKind::Type,
+        TopicKindBody::Entity => TopicKind::Entity,
+    }
+}
+
+const fn kind_body(kind: TopicKind) -> TopicKindBody {
+    match kind {
+        TopicKind::Work => TopicKindBody::Work,
+        TopicKind::Type => TopicKindBody::Type,
+        TopicKind::Entity => TopicKindBody::Entity,
+    }
+}
+
 pub(super) fn root(directory: TopicDirectory) -> Root {
     match directory {
         TopicDirectory::Local { node, path } => Root::Local { node, path },
@@ -101,7 +119,7 @@ const fn placed_by(source: PlacementSource) -> PlacedBy {
 pub(super) fn record(topic: Topic) -> TopicRecord {
     TopicRecord {
         id: topic.id.to_string(),
-        kind: topic.kind,
+        kind: kind_body(topic.kind),
         slug: topic.slug.to_string(),
         name: topic.name.as_str().to_owned(),
         aliases: topic
