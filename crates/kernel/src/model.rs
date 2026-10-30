@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::watch;
+use values::LlmUsage;
+use values::Message;
+use values::ThinkingLevel;
 use wire::gateway::ProviderRecovery;
-use wire::message::Message;
-use wire::stream::LlmUsage;
-use wire::stream::ThinkingLevel;
 
 #[derive(Debug, Error)]
 pub enum ModelProviderError {

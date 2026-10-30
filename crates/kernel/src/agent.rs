@@ -4,8 +4,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use values::Message;
 use wire::hooks::{HookContextBase, HookUsage};
-use wire::message::Message;
 
 use crate::model::{ModelChunk, ModelRequest};
 use crate::{BoxError, ToolContext};

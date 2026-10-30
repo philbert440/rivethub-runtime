@@ -3,7 +3,8 @@ use crate::message::ToolCall;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use strum::{Display, EnumIter, EnumString};
+
+pub use values::{LlmUsage, ThinkingLevel};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -71,18 +72,6 @@ pub struct DelegationResult {
     pub duration_ms: Option<u64>,
 }
 
-#[serde_with::skip_serializing_none]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct LlmUsage {
-    pub prompt_tokens: u64,
-    pub completion_tokens: u64,
-    pub reasoning_tokens: Option<u64>,
-    pub cached_tokens: Option<u64>,
-    pub cache_creation_tokens: Option<u64>,
-    pub cache_read_tokens: Option<u64>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmResponseKind {
@@ -135,29 +124,6 @@ pub struct LlmChunk {
     pub usage: Option<LlmUsage>,
     pub citations: Option<Vec<String>>,
     pub error: Option<String>,
-}
-
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    schemars::JsonSchema,
-    Display,
-    EnumString,
-    EnumIter,
-)]
-#[serde(rename_all = "camelCase")]
-#[strum(serialize_all = "camelCase")]
-pub enum ThinkingLevel {
-    Off,
-    Low,
-    Medium,
-    High,
-    Xhigh,
 }
 
 #[serde_as]

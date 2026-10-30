@@ -50,7 +50,7 @@ count = 1
 check = "KERNELWIRE"
 file = "crates/kernel/src/agent.rs"
 text = "wire"
-count = 2
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"
@@ -68,7 +68,7 @@ count = 2
 check = "KERNELWIRE"
 file = "crates/kernel/src/harness.rs"
 text = "wire"
-count = 7
+count = 5
 
 [[entry]]
 check = "KERNELWIRE"
@@ -80,7 +80,7 @@ count = 2
 check = "KERNELWIRE"
 file = "crates/kernel/src/memory/mod.rs"
 text = "wire"
-count = 22
+count = 21
 
 [[entry]]
 check = "KERNELWIRE"
@@ -98,7 +98,7 @@ count = 2
 check = "KERNELWIRE"
 file = "crates/kernel/src/memory/summary.rs"
 text = "wire"
-count = 2
+count = 1
 
 [[entry]]
 check = "KERNELWIRE"
@@ -116,7 +116,7 @@ count = 2
 check = "KERNELWIRE"
 file = "crates/kernel/src/model.rs"
 text = "wire"
-count = 5
+count = 2
 
 [[entry]]
 check = "KERNELWIRE"
@@ -146,7 +146,7 @@ count = 4
 check = "KERNELWIRE"
 file = "crates/kernel/src/transcript.rs"
 text = "wire"
-count = 3
+count = 2
 
 [[entry]]
 check = "KERNELWIRE"

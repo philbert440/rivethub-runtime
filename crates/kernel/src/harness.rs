@@ -6,11 +6,11 @@ use tokio::sync::mpsc::Receiver;
 use values::HarnessId;
 use values::JsonObject;
 use values::SessionId;
+use values::ThinkingLevel;
 use wire::gateway::sessions::SessionSwitches;
 use wire::harness::ApprovalDecision;
 use wire::harness::PlanStatus;
 use wire::harness::SteerOutcome;
-use wire::stream::ThinkingLevel;
 
 #[derive(Debug, Error)]
 pub enum HarnessAdapterError {
@@ -180,7 +180,7 @@ pub enum SessionEvent {
     UserMessageChunk { text: String },
     AgentMessageChunk { text: String },
     AgentThoughtChunk { text: String },
-    Usage { usage: wire::stream::LlmUsage },
+    Usage { usage: values::LlmUsage },
     Context(ContextUsage),
     ToolCall(ToolCallInfo),
     ToolCallUpdate(ToolCallUpdate),

@@ -3,7 +3,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
 use uuid::Uuid;
-use wire::message::Role;
+use values::Role;
 
 use crate::BoxError;
 

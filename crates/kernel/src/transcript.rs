@@ -4,10 +4,10 @@ use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
 use values::HarnessId;
+use values::Role;
 use values::SessionId;
 use wire::gateway::sessions::HarnessToolOutput;
 use wire::gateway::sessions::HarnessTranscriptTurn;
-use wire::message::Role;
 
 const SUBAGENTS: &str = "/subagents/";
 

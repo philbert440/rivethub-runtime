@@ -10,6 +10,7 @@ use chrono::DateTime;
 use chrono::Utc;
 use thiserror::Error;
 use uuid::Uuid;
+use values::Role;
 use wire::gateway::memory::BrowseWindow;
 use wire::gateway::memory::MemoryBrowseOrder;
 use wire::gateway::memory::MemoryMessageTally;
@@ -27,7 +28,6 @@ use wire::gateway::memory::TagTaxonomyMerge;
 use wire::gateway::memory::TagTaxonomyMergeResult;
 use wire::gateway::memory::TagWire;
 use wire::memory::MemoryEntry;
-use wire::message::Role;
 
 use crate::BoxError;
 
