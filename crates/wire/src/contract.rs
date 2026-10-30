@@ -341,6 +341,8 @@ const ROOTS: &[Root] = &[
     SchemaGenerator::subschema_for::<crate::harness::PlanEntry>,
     SchemaGenerator::subschema_for::<crate::harness::PlanStatus>,
     SchemaGenerator::subschema_for::<crate::harness::ApprovalOption>,
+    SchemaGenerator::subschema_for::<crate::harness::SessionDriver>,
+    SchemaGenerator::subschema_for::<crate::harness::TerminalApproval>,
     SchemaGenerator::subschema_for::<crate::harness::HarnessStatusFrame>,
     SchemaGenerator::subschema_for::<crate::harness::StatusTool>,
     SchemaGenerator::subschema_for::<crate::harness::HarnessCapabilities>,
