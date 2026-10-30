@@ -430,7 +430,7 @@ fn watching(
 }
 
 #[tokio::test]
-async fn a_cancelled_call_kills_the_row() {
+async fn a_cancelled_call_leaves_the_row_running() {
     let (engine, mut inserted) = watching(common::directory(
         Url::parse("http://127.0.0.1:9/").expect("url"),
     ));
@@ -458,8 +458,8 @@ async fn a_cancelled_call_kills_the_row() {
         .expect_err("cancelled");
     assert!(matches!(error, DelegationError::Cancelled));
     let loaded = engine.load(id).await.expect("load");
-    assert_eq!(loaded.status, TaskStatus::Killed);
-    assert_eq!(loaded.error.as_deref(), Some("Killed by parent"));
+    assert_eq!(loaded.status, TaskStatus::Queued);
+    assert_eq!(loaded.error, None);
 }
 
 #[tokio::test]
@@ -510,7 +510,7 @@ async fn a_deadline_returns_the_queued_row_without_killing_it() {
     let loaded = engine.load(outcome.id).await.expect("load");
     assert_eq!(loaded.status, TaskStatus::Queued);
     assert_eq!(loaded.origin, TaskOrigin::Tool);
-    assert_eq!(loaded.budget.max_wall_clock_ms, Some(40));
+    assert_eq!(loaded.budget.max_wall_clock_ms, None);
 }
 
 #[tokio::test]
@@ -571,7 +571,7 @@ async fn a_served_delegation_returns_the_model_and_the_reply() {
     let loaded = engine.load(outcome.id).await.expect("load");
     assert_eq!(loaded.spec.model.as_deref(), Some("demo-model"));
     assert_eq!(loaded.executor, TaskExecutorKind::ChatLoop);
-    assert_eq!(loaded.budget.max_wall_clock_ms, Some(30_000));
+    assert_eq!(loaded.budget.max_wall_clock_ms, None);
     cancel.cancel();
     tokio::time::timeout(Duration::from_secs(15), worker)
         .await

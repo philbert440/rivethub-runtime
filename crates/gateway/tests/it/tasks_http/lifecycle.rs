@@ -468,7 +468,11 @@ async fn get_wait_returns_a_terminal_task_or_times_out() {
     assert_eq!(status, 504, "{}", String::from_utf8_lossy(&bytes));
     let timed: TaskWaitTimeoutResponse = parse(&bytes);
     assert_eq!(timed.error, "wait deadline exceeded");
-    assert_eq!(timed.task, None);
+    let task = timed.task.expect("task");
+    assert_eq!(
+        (task.id, task.status),
+        (low.to_string(), TaskStatus::Queued)
+    );
     let stored = setup.memory.load(low).await.expect("load");
     assert_eq!(stored.status, TaskStatus::Queued);
     let missing = Uuid::from_u128(8);
@@ -522,7 +526,7 @@ async fn get_wait_returns_an_approval_only_for_the_exact_flag() {
     assert_eq!(status, 504, "{}", String::from_utf8_lossy(&bytes));
     let timed: TaskWaitTimeoutResponse = parse(&bytes);
     assert_eq!(timed.error, "wait deadline exceeded");
-    assert_eq!(timed.task, None);
+    assert_eq!(timed.task.expect("task").status, TaskStatus::Queued);
     assert_eq!(
         setup.memory.load(id).await.expect("load").status,
         TaskStatus::Queued

@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use chrono::Utc;
 use kernel::tasks::ApprovalError;
-use kernel::tasks::ConflictAction;
-use kernel::tasks::TaskError;
 use uuid::Uuid;
 use wire::task::TaskApprovalRequest;
 use wire::task::TaskWire;
@@ -16,17 +13,11 @@ use super::body::store_error;
 use super::error::TaskHttpError;
 use super::present::to_wire;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum OnTimeout {
-    Kill,
-    Leave,
-}
-
 #[derive(Debug)]
 pub(super) enum WaitHit {
     Task(TaskWire),
     Approval(TaskApprovalRequest),
-    Deadline(Option<TaskWire>),
+    Deadline(TaskWire),
 }
 
 pub(super) fn wait_limit(raw: Option<&str>) -> Result<Duration, TaskHttpError> {
@@ -51,7 +42,6 @@ pub(super) async fn wait_until(
     id: Uuid,
     timeout: Duration,
     on_approval: bool,
-    policy: OnTimeout,
 ) -> Result<WaitHit, TaskHttpError> {
     let deadline = tokio::time::Instant::now() + timeout;
     let mut receiver = api.watch.subscribe();
@@ -61,7 +51,8 @@ pub(super) async fn wait_until(
         }
         tokio::select! {
             () = tokio::time::sleep_until(deadline) => {
-                return deadline_hit(api, id, policy).await;
+                let task = load(api, id).await?;
+                return Ok(WaitHit::Deadline(to_wire(&task, &[])?));
             }
             changed = receiver.changed() => {
                 if changed.is_err() {
@@ -77,11 +68,7 @@ async fn ready(
     id: Uuid,
     on_approval: bool,
 ) -> Result<Option<WaitHit>, TaskHttpError> {
-    let task = api
-        .store
-        .load(id)
-        .await
-        .map_err(|error| store_error(&error))?;
+    let task = load(api, id).await?;
     if kernel::tasks::terminal(task.status) {
         return Ok(Some(WaitHit::Task(to_wire(&task, &[])?)));
     }
@@ -105,36 +92,11 @@ async fn first_approval(
     Ok(pending.into_iter().next())
 }
 
-async fn deadline_hit(
-    api: &TasksApi,
-    id: Uuid,
-    policy: OnTimeout,
-) -> Result<WaitHit, TaskHttpError> {
-    match policy {
-        OnTimeout::Leave => Ok(WaitHit::Deadline(None)),
-        OnTimeout::Kill => kill_and_load(api, id).await,
-    }
-}
-
-async fn kill_and_load(api: &TasksApi, id: Uuid) -> Result<WaitHit, TaskHttpError> {
-    let outcome = api.store.kill(id, Utc::now()).await;
-    if let Err(error) = &outcome
-        && !matches!(
-            error,
-            TaskError::Conflict {
-                action: ConflictAction::Kill,
-                ..
-            }
-        )
-    {
-        return Err(store_error(error));
-    }
-    let task = api
-        .store
+async fn load(api: &TasksApi, id: Uuid) -> Result<kernel::tasks::TaskRecord, TaskHttpError> {
+    api.store
         .load(id)
         .await
-        .map_err(|error| store_error(&error))?;
-    Ok(WaitHit::Deadline(Some(to_wire(&task, &[])?)))
+        .map_err(|error| store_error(&error))
 }
 
 fn approval_failed(error: &ApprovalError) -> TaskHttpError {

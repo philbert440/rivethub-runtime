@@ -35,7 +35,6 @@ use super::body::store_error;
 use super::error::TaskHttpError;
 use super::job::new_job;
 use super::present::to_wire;
-use super::wait::OnTimeout;
 use super::wait::WaitHit;
 use super::wait::wait_limit;
 use super::wait::wait_until;
@@ -390,11 +389,11 @@ async fn respond(
         let task = to_wire(&record, &[])?;
         return Ok((StatusCode::CREATED, Json(TaskResponse { task })).into_response());
     }
-    match wait_until(api, record.id, timeout, false, OnTimeout::Kill).await? {
+    match wait_until(api, record.id, timeout, false).await? {
         WaitHit::Task(task) => Ok((StatusCode::OK, Json(TaskResponse { task })).into_response()),
         WaitHit::Approval(_) => Err(TaskHttpError::Failed(
             "approval was not requested".to_owned(),
         )),
-        WaitHit::Deadline(task) => Err(TaskHttpError::wait_killed(task)),
+        WaitHit::Deadline(task) => Err(TaskHttpError::wait_left(task)),
     }
 }
