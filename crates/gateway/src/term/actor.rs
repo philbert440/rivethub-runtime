@@ -236,6 +236,11 @@ impl TerminalActor {
         self.status.send_replace(Some(state));
         self.permit = Some(permit);
         self.register(&launch.command, &id)?;
+        match self.service.mux.turn_ends(&id).await {
+            Ok(ends) => self.service.follow_turn_ends(self.session.clone(), ends),
+            Err(kernel::terminal::TerminalMuxError::Unsupported(_)) => {}
+            Err(error) => tracing::debug!(%error, "the terminal's turn ends are not followed"),
+        }
         let mux = self.service.mux.clone();
         exits.spawn(async move {
             let code = mux.wait(&id).await?;

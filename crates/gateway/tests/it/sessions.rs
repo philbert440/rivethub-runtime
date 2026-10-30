@@ -481,6 +481,23 @@ async fn a_terminal_that_exits_mid_turn_runs_the_queued_chat() {
 }
 
 #[tokio::test]
+async fn a_terminal_turn_end_the_mux_reports_runs_the_queued_chat() {
+    let harness = Arc::new(session_support::harness::Harness::default());
+    let (fixture, chat) = terminal_first(&harness).await;
+    let stop = submit_in_terminal(&fixture).await;
+    chat.prompt("after".into(), None, Vec::new(), Vec::new())
+        .await
+        .expect("queued");
+    held(&harness, "prompt:after").await;
+    fixture.mux.turn_ended(&TerminalId::new("pty-1")).await;
+    harness.traced("prompt:after").await;
+    assert!(fixture.mux.calls.borrow().contains(&Call::Kill));
+    harness.finish.add_permits(1);
+    stop.cancel();
+    fixture.gateway.close().await;
+}
+
+#[tokio::test]
 async fn terminal_first_session_queues_chat_until_the_hook_and_delete_releases_chat() {
     let harness = Arc::new(session_support::harness::Harness::default());
     let (fixture, chat) = terminal_first(&harness).await;

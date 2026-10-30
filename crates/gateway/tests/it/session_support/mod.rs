@@ -49,6 +49,7 @@ struct Terminal {
 #[derive(Debug)]
 pub(crate) struct Mux {
     terminals: Mutex<BTreeMap<TerminalId, Terminal>>,
+    turns: Mutex<BTreeMap<TerminalId, mpsc::Sender<()>>>,
     pub(crate) calls: watch::Sender<Vec<Call>>,
     pub(crate) tasks: tokio_util::task::TaskTracker,
 }
@@ -57,6 +58,7 @@ impl Default for Mux {
     fn default() -> Self {
         Self {
             terminals: Mutex::new(BTreeMap::new()),
+            turns: Mutex::new(BTreeMap::new()),
             calls: watch::channel(Vec::new()).0,
             tasks: tokio_util::task::TaskTracker::new(),
         }
@@ -79,6 +81,15 @@ impl Mux {
             .expect("terminal exists")
             .exit
             .send_replace(Some(code));
+    }
+
+    pub(crate) async fn turn_ended(&self, id: &TerminalId) {
+        let turns = self.turns.lock().get(id).cloned();
+        turns
+            .expect("the terminal's turn ends are followed")
+            .send(())
+            .await
+            .expect("turn end delivered");
     }
 
     pub(crate) async fn called(&self, predicate: impl Fn(&[Call]) -> bool) {
@@ -132,6 +143,12 @@ impl TerminalMux for Mux {
 
     async fn attach(&self, id: &TerminalId) -> Result<mpsc::Receiver<Vec<u8>>, TerminalMuxError> {
         Ok(self.open(id).await?.output)
+    }
+
+    async fn turn_ends(&self, id: &TerminalId) -> Result<mpsc::Receiver<()>, TerminalMuxError> {
+        let (sender, ends) = mpsc::channel(4);
+        self.turns.lock().insert(id.clone(), sender);
+        Ok(ends)
     }
 
     async fn inspect(&self, id: &TerminalId) -> Result<TerminalDetails, TerminalMuxError> {

@@ -87,6 +87,10 @@ pub trait TerminalMux: Send + Sync {
     async fn wait(&self, _id: &TerminalId) -> Result<i32, TerminalMuxError> {
         Err(TerminalMuxError::Unsupported("wait"))
     }
+
+    async fn turn_ends(&self, _id: &TerminalId) -> Result<Receiver<()>, TerminalMuxError> {
+        Err(TerminalMuxError::Unsupported("turn_ends"))
+    }
     async fn spawn(
         &self,
         session: &SessionId,

@@ -2,6 +2,7 @@ pub mod client;
 pub mod codec;
 pub mod namespace;
 pub mod paths;
+pub mod turns;
 pub mod ui;
 
 use serde::Deserialize;
@@ -69,6 +70,13 @@ pub enum AgentKind {
     Qodercli,
     Qwen,
     Maki,
+}
+
+impl AgentKind {
+    #[must_use]
+    pub const fn reports_turns(self) -> bool {
+        matches!(self, Self::Codex | Self::Opencode)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -272,20 +280,6 @@ impl HerdrSession {
                         timeout_ms: PANE_READY_TIMEOUT_MS,
                     })
                     .await?;
-                client
-                    .events_subscribe(codec::EventsSubscribeParams {
-                        subscriptions: vec![
-                            codec::SubscriptionParams {
-                                event: HerdrEventKind::PaneAgentStatusChanged,
-                                pane_id: DEFAULT_PANE.to_owned(),
-                            },
-                            codec::SubscriptionParams {
-                                event: HerdrEventKind::PaneAgentDetected,
-                                pane_id: DEFAULT_PANE.to_owned(),
-                            },
-                        ],
-                    })
-                    .await?;
             }
             PaneKind::Plain => {
                 client
@@ -296,6 +290,20 @@ impl HerdrSession {
                     .await?;
             }
         }
+        client
+            .events_subscribe(codec::EventsSubscribeParams {
+                subscriptions: vec![
+                    codec::SubscriptionParams {
+                        event: HerdrEventKind::PaneAgentStatusChanged,
+                        pane_id: DEFAULT_PANE.to_owned(),
+                    },
+                    codec::SubscriptionParams {
+                        event: HerdrEventKind::PaneAgentDetected,
+                        pane_id: DEFAULT_PANE.to_owned(),
+                    },
+                ],
+            })
+            .await?;
         Ok(Self {
             cli,
             config_home: setup.config_home.clone(),

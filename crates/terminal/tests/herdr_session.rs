@@ -297,23 +297,27 @@ fn agent_pane_steps(name: &str) -> Vec<FakeStep> {
             }),
             ACK_PLAIN,
         ),
-        fake_step(
-            RpcMethod::EventsSubscribe,
-            RequestParams::EventsSubscribe(codec::EventsSubscribeParams {
-                subscriptions: vec![
-                    codec::SubscriptionParams {
-                        event: HerdrEventKind::PaneAgentStatusChanged,
-                        pane_id: "w1:p1".to_owned(),
-                    },
-                    codec::SubscriptionParams {
-                        event: HerdrEventKind::PaneAgentDetected,
-                        pane_id: "w1:p1".to_owned(),
-                    },
-                ],
-            }),
-            ACK_SUBSCRIPTION,
-        ),
+        status_subscription(),
     ]
+}
+
+fn status_subscription() -> FakeStep {
+    fake_step(
+        RpcMethod::EventsSubscribe,
+        RequestParams::EventsSubscribe(codec::EventsSubscribeParams {
+            subscriptions: vec![
+                codec::SubscriptionParams {
+                    event: HerdrEventKind::PaneAgentStatusChanged,
+                    pane_id: "w1:p1".to_owned(),
+                },
+                codec::SubscriptionParams {
+                    event: HerdrEventKind::PaneAgentDetected,
+                    pane_id: "w1:p1".to_owned(),
+                },
+            ],
+        }),
+        ACK_SUBSCRIPTION,
+    )
 }
 
 async fn agent_panes_run_the_recorded_setup_sequence() -> Result<(), Failed> {
@@ -379,6 +383,7 @@ async fn stop_reports_success_only_after_the_server_is_gone() -> Result<(), Fail
                 }),
                 ACK_PLAIN,
             ),
+            status_subscription(),
         ],
         closed_tx,
     ));
@@ -437,6 +442,7 @@ async fn plain_panes_are_started_with_send_text() -> Result<(), Failed> {
                 }),
                 ACK_PLAIN,
             ),
+            status_subscription(),
         ],
     ));
     let setup = mux::HerdrSetup {

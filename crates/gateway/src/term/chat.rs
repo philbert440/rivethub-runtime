@@ -347,6 +347,32 @@ impl TerminalService {
         Ok(())
     }
 
+    pub(crate) fn follow_turn_ends(
+        self: &Arc<Self>,
+        key: String,
+        mut ends: tokio::sync::mpsc::Receiver<()>,
+    ) {
+        let service = Arc::clone(self);
+        self.track(async move {
+            loop {
+                tokio::select! {
+                    () = service.shutdown.cancelled() => return,
+                    end = ends.recv() => {
+                        if end.is_none() {
+                            return;
+                        }
+                        let chat = service.chats.read().get(&key).cloned();
+                        if let Some(chat) = chat
+                            && let Err(error) = chat.signal(TerminalSignal::TurnEnded).await
+                        {
+                            tracing::debug!(%error, "a terminal turn ended after its session actor stopped");
+                        }
+                    }
+                }
+            }
+        });
+    }
+
     pub(crate) fn terminal_exited(&self, key: &str) {
         let chat = self.chats.read().get(key).cloned();
         if let Some(chat) = chat {
