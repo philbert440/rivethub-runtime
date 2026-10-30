@@ -294,9 +294,9 @@ impl MemoryStore for crate::PostgresMemory {
 
     async fn summary_dag(
         &self,
-        session: &str,
+        owner: &kernel::memory::SummaryOwner,
     ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
-        self.read_summary_dag(session).await
+        self.read_summary_dag(owner).await
     }
 
     async fn list_tags(&self, query: TagListQuery) -> Result<Vec<TagWire>, MemoryStoreError> {

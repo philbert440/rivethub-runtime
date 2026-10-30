@@ -82,6 +82,11 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
             routing::get(super::memory_archive::summaries).fallback(super::method_not_allowed),
         )
         .route(
+            "/conversations/{id}/summaries",
+            routing::get(super::memory_archive::conversation_summaries)
+                .fallback(super::method_not_allowed),
+        )
+        .route(
             "/export",
             routing::get(super::memory_archive::export).fallback(super::method_not_allowed),
         )

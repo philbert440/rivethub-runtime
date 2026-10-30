@@ -6,8 +6,10 @@ use axum::extract::State;
 use axum::http::header;
 use axum::response::IntoResponse;
 use axum::response::Response;
+use kernel::memory::SummaryOwner;
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 use wire::gateway::memory::MemorySummaryDagResponse;
 
 use crate::Gateway;
@@ -26,9 +28,32 @@ pub(crate) async fn summaries(
     State(gateway): State<Arc<Gateway>>,
     Path(session): Path<String>,
 ) -> Result<Json<MemorySummaryDagResponse>, ApiError> {
-    let dag = gateway.store().summary_dag(&session).await?;
+    let dag = gateway
+        .store()
+        .summary_dag(&SummaryOwner::Session(session.clone()))
+        .await?;
     Ok(Json(MemorySummaryDagResponse {
         session_id: session,
+        summaries: dag.summaries,
+        messages: dag.messages,
+    }))
+}
+
+pub(crate) async fn conversation_summaries(
+    State(gateway): State<Arc<Gateway>>,
+    Path(segment): Path<String>,
+) -> Result<Json<MemorySummaryDagResponse>, ApiError> {
+    let conversation = Uuid::parse_str(&segment)
+        .map_err(|_| ApiError::BadRequest(format!("{segment} is not a conversation id")))?;
+    let dag = gateway
+        .store()
+        .summary_dag(&SummaryOwner::Conversation(conversation))
+        .await?;
+    let session_id = dag
+        .session_key
+        .ok_or_else(|| ApiError::Missing(format!("unknown conversation {segment}")))?;
+    Ok(Json(MemorySummaryDagResponse {
+        session_id,
         summaries: dag.summaries,
         messages: dag.messages,
     }))

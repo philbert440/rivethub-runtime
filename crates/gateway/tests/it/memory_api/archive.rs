@@ -4,6 +4,7 @@ use chrono::Utc;
 use kernel::memory::MemoryExport;
 use kernel::memory::MemoryStoreError;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryOwner;
 use tokio_util::sync::CancellationToken;
 use wire::gateway::memory::MemoryMessageTally;
 use wire::gateway::memory::MemorySummaryDagResponse;
@@ -93,6 +94,7 @@ fn summaries_route_returns_the_session_dag_root_first() {
     let (gateway, store) = common::gateway();
     let branch = "00000000-0000-4000-8000-000000000001";
     let dag = SummaryDag {
+        session_key: Some(SESSION.to_owned()),
         summaries: vec![
             node(branch, None, 1, SummaryKind::Branch, VectorState::Embedded),
             node(
@@ -115,7 +117,7 @@ fn summaries_route_returns_the_session_dag_root_first() {
             skipped: 0,
         },
     };
-    block_on(store.script_summary_dag(SESSION.to_owned(), dag.clone()));
+    block_on(store.script_summary_dag(SummaryOwner::Session(SESSION.to_owned()), dag.clone()));
     let app = gateway.router(false);
     let response = get(&app, &format!("/api/memory/summaries/{SESSION}"));
     assert_eq!(response.status, 200);
@@ -125,7 +127,11 @@ fn summaries_route_returns_the_session_dag_root_first() {
     assert_eq!(parsed.summaries, dag.summaries);
     assert_eq!(parsed.messages, dag.messages);
     let requests = block_on(store.requests());
-    assert!(requests.contains(&testkit::MemoryRequest::SummaryDag(SESSION.to_owned())));
+    assert!(
+        requests.contains(&testkit::MemoryRequest::SummaryDag(SummaryOwner::Session(
+            SESSION.to_owned()
+        )))
+    );
 
     let response = get(&app, "/api/memory/summaries/unknown-session");
     assert_eq!(response.status, 200);
@@ -134,6 +140,46 @@ fn summaries_route_returns_the_session_dag_root_first() {
     assert_eq!(parsed.session_id, "unknown-session");
     assert_eq!(parsed.summaries.len(), 0);
     assert_eq!(parsed.messages, MemoryMessageTally::default());
+}
+
+#[test]
+fn a_conversation_answers_its_summary_dag_under_its_own_key() {
+    let (gateway, store) = common::gateway();
+    let conversation = uuid::uuid!("00000000-0000-4000-8000-000000000061");
+    let dag = SummaryDag {
+        session_key: Some("discord:00000000-0000-4000-8000-000000000062".to_owned()),
+        summaries: vec![node(
+            "00000000-0000-4000-8000-000000000063",
+            None,
+            0,
+            SummaryKind::Leaf,
+            VectorState::Embedded,
+        )],
+        messages: MemoryMessageTally::default(),
+    };
+    block_on(store.script_summary_dag(SummaryOwner::Conversation(conversation), dag.clone()));
+    let app = gateway.router(false);
+    let response = get(
+        &app,
+        &format!("/api/memory/conversations/{conversation}/summaries"),
+    );
+    assert_eq!(response.status, 200);
+    let parsed: MemorySummaryDagResponse =
+        serde_json::from_slice(&response.body).expect("conversation summary dag");
+    assert_eq!(
+        parsed.session_id,
+        "discord:00000000-0000-4000-8000-000000000062"
+    );
+    assert_eq!(parsed.summaries, dag.summaries);
+    let unknown = get(
+        &app,
+        "/api/memory/conversations/00000000-0000-4000-8000-000000000064/summaries",
+    );
+    assert_eq!(unknown.status, 404);
+    assert_eq!(
+        get(&app, "/api/memory/conversations/not-an-id/summaries").status,
+        400
+    );
 }
 
 #[test]

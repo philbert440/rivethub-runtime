@@ -387,6 +387,10 @@ shown to the model as examples. `GET /api/topics/{topic}/sessions` answers `sess
 `lastActive` across the session's conversation keys, so rows need no harness list) and `conversations`
 (`conversationId`, `topicId`, `by`, `at`, `channel`, optional `title` and `lastActive`). Merges move conversation
 placements and suggestion parents; deleting a topic drops its conversation placements and the corrections that name it.
+(61) Conversation summaries (Phil, 2026-10-29): `GET /api/memory/conversations/{id}/summaries` answers one
+conversation's summary DAG by its id, as `MemorySummaryDagResponse` with `sessionId` set to the conversation's own key,
+so a conversation filed in a topic that is no harness session shows its summaries. A segment that isn't a uuid is `400`
+and an unknown conversation is `404`. `GET /api/memory/summaries/{session}` is unchanged.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

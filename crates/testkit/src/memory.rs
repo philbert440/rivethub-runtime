@@ -12,6 +12,7 @@ use kernel::memory::MemoryStore;
 use kernel::memory::MemoryStoreError;
 use kernel::memory::SearchQuery;
 use kernel::memory::SummaryDag;
+use kernel::memory::SummaryOwner;
 use kernel::memory::TagAdd;
 use kernel::memory::TagCountsQuery;
 use kernel::memory::TagDecision;
@@ -52,7 +53,7 @@ pub struct FakeMemoryStore {
     tag_context: Mutex<Option<TagJobContext>>,
     tag_entities: Mutex<BTreeMap<String, Uuid>>,
     embeddings_armed: std::sync::atomic::AtomicBool,
-    summary_dags: Mutex<BTreeMap<String, SummaryDag>>,
+    summary_dags: Mutex<BTreeMap<SummaryOwner, SummaryDag>>,
     embed_mismatch: Mutex<Option<EmbedModelMismatch>>,
 }
 
@@ -86,8 +87,8 @@ impl FakeMemoryStore {
         self.wiki_redirects.lock().await.insert(from, to);
     }
 
-    pub async fn script_summary_dag(&self, session: String, dag: SummaryDag) {
-        self.summary_dags.lock().await.insert(session, dag);
+    pub async fn script_summary_dag(&self, owner: SummaryOwner, dag: SummaryDag) {
+        self.summary_dags.lock().await.insert(owner, dag);
     }
 
     pub async fn requests(&self) -> Vec<MemoryRequest> {
@@ -393,14 +394,13 @@ impl MemoryStore for FakeMemoryStore {
             .join("\n"))
     }
 
-    async fn summary_dag(&self, session: &str) -> Result<SummaryDag, MemoryStoreError> {
-        self.record(MemoryRequest::SummaryDag(session.to_owned()))
-            .await;
+    async fn summary_dag(&self, owner: &SummaryOwner) -> Result<SummaryDag, MemoryStoreError> {
+        self.record(MemoryRequest::SummaryDag(owner.clone())).await;
         Ok(self
             .summary_dags
             .lock()
             .await
-            .get(session)
+            .get(owner)
             .cloned()
             .unwrap_or_default())
     }

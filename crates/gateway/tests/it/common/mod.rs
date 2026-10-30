@@ -224,7 +224,7 @@ impl MemoryStore for FailingStore {
 
     async fn summary_dag(
         &self,
-        _session: &str,
+        _owner: &kernel::memory::SummaryOwner,
     ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
         unavailable()
     }
@@ -433,9 +433,9 @@ impl MemoryStore for GatedStore {
 
     async fn summary_dag(
         &self,
-        session: &str,
+        owner: &kernel::memory::SummaryOwner,
     ) -> Result<kernel::memory::SummaryDag, MemoryStoreError> {
-        self.inner.summary_dag(session).await
+        self.inner.summary_dag(owner).await
     }
 
     async fn list_tags(

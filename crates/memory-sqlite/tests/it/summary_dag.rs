@@ -8,6 +8,7 @@ use kernel::memory::MemoryStore;
 use kernel::memory::NewSummary;
 use kernel::memory::SummaryDag;
 use kernel::memory::SummaryKind;
+use kernel::memory::SummaryOwner;
 use kernel::memory::SummarySource;
 use kernel::memory::SummaryStore;
 use memory_sqlite::SqliteStore;
@@ -159,7 +160,10 @@ fn shape(nodes: &[MemorySummaryNode]) -> Vec<Shape<'_>> {
 #[tokio::test]
 async fn an_ended_session_walks_its_summary_dag_and_tallies_its_messages() -> TestResult {
     let fresh = seeded().await?;
-    let dag = fresh.store.summary_dag("cli:dag").await?;
+    let dag = fresh
+        .store
+        .summary_dag(&SummaryOwner::Session("cli:dag".to_owned()))
+        .await?;
     assert_eq!(
         shape(&dag.summaries),
         vec![
@@ -226,10 +230,16 @@ async fn an_ended_session_walks_its_summary_dag_and_tallies_its_messages() -> Te
 async fn the_summary_dag_is_empty_for_a_session_without_a_conversation() -> TestResult {
     let fresh = seeded().await?;
     assert_eq!(
-        fresh.store.summary_dag("cli:missing").await?,
+        fresh
+            .store
+            .summary_dag(&SummaryOwner::Session("cli:missing".to_owned()))
+            .await?,
         SummaryDag::default()
     );
-    let other = fresh.store.summary_dag("cli:other").await?;
+    let other = fresh
+        .store
+        .summary_dag(&SummaryOwner::Session("cli:other".to_owned()))
+        .await?;
     assert_eq!(
         shape(&other.summaries),
         vec![(OTHER_LEAF, None, 0, SummaryKind::Leaf, VectorState::Pending)]
@@ -245,11 +255,36 @@ async fn an_active_conversation_wins_over_a_newer_ended_one() -> TestResult {
         "UPDATE ros_conversations SET active = 1 WHERE id = '00000000-0000-4000-8000-000000000002'",
     )
     .await?;
-    let dag = fresh.store.summary_dag("cli:dag").await?;
+    let dag = fresh
+        .store
+        .summary_dag(&SummaryOwner::Session("cli:dag".to_owned()))
+        .await?;
     assert_eq!(
         shape(&dag.summaries),
         vec![(STALE_LEAF, None, 0, SummaryKind::Leaf, VectorState::Pending)]
     );
     assert_eq!(dag.messages, MemoryMessageTally::default());
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_conversation_reads_its_own_summary_dag_by_id() -> TestResult {
+    let fresh = seeded().await?;
+    let stale = fresh
+        .store
+        .summary_dag(&SummaryOwner::Conversation(Uuid::parse_str(STALE)?))
+        .await?;
+    assert_eq!(stale.session_key.as_deref(), Some("cli:dag"));
+    assert_eq!(
+        shape(&stale.summaries),
+        vec![(STALE_LEAF, None, 0, SummaryKind::Leaf, VectorState::Pending)]
+    );
+    assert_eq!(
+        fresh
+            .store
+            .summary_dag(&SummaryOwner::Conversation(Uuid::nil()))
+            .await?,
+        SummaryDag::default()
+    );
     Ok(())
 }
