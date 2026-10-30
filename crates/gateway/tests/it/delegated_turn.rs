@@ -206,11 +206,13 @@ async fn the_usage_a_harness_reports_for_the_turn_is_on_the_reply() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_waited_turn_for_a_cli_agent_runs_its_harness_and_answers_approvals_by_its_mode() {
     let harness = Arc::new(Harness::default());
+    let home = tempfile::tempdir().expect("agent workspace");
     let delegates = std::collections::BTreeMap::from([(
         "worker".to_owned(),
         Delegate {
             harness: HarnessId::ClaudeCode,
             model: Some("opus".to_owned()),
+            cwd: Some(home.path().to_path_buf()),
             permission_mode: Some("bypassPermissions".to_owned()),
         },
     )]);
@@ -243,16 +245,10 @@ async fn a_waited_turn_for_a_cli_agent_runs_its_harness_and_answers_approvals_by
         }
     });
     harness.traced("prompt:ship it").await;
-    let session = harness
-        .specs
-        .lock()
-        .first()
-        .expect("session")
-        .session
-        .clone();
+    let spec = harness.specs.lock().first().cloned().expect("spec");
     harness
         .emit(
-            &session,
+            &spec.session,
             SessionEvent::Permission(PermissionRequest {
                 request_id: "ask-1".into(),
                 tool_call_id: None,
@@ -268,10 +264,13 @@ async fn a_waited_turn_for_a_cli_agent_runs_its_harness_and_answers_approvals_by
     assert_eq!(status, 200, "{}", String::from_utf8_lossy(&reply));
     let reply: SessionPostReply = serde_json::from_slice(&reply).expect("reply");
     assert_eq!(reply.message.text, "answer");
-    let spec = harness.specs.lock().first().cloned().expect("spec");
     assert_eq!(
-        (spec.harness, spec.model.as_deref()),
-        (HarnessId::ClaudeCode, Some("opus"))
+        (
+            spec.harness,
+            spec.model.as_deref(),
+            spec.working_dir.as_deref()
+        ),
+        (HarnessId::ClaudeCode, Some("opus"), Some(home.path()))
     );
     assert!(
         harness

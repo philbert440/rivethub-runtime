@@ -367,4 +367,10 @@ fn an_invalid_preset_effort_is_refused() {
         .resolve(&input(TaskExecutorKind::ChatLoop, "worker"))
         .expect_err("effort");
     assert!(matches!(error, Error::Stored(_)));
+    let mut directory = fresh();
+    directory.preset(preset("worker", None, "", Some("/srv/agents/worker")));
+    let resolved = directory
+        .resolve(&input(TaskExecutorKind::ChatLoop, "worker"))
+        .expect("an empty effort is unset");
+    assert_eq!(resolved.effort, None);
 }

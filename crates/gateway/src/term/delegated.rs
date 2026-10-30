@@ -30,6 +30,7 @@ pub(crate) struct DelegatedTurn {
 pub struct Delegate {
     pub harness: HarnessId,
     pub model: Option<String>,
+    pub cwd: Option<std::path::PathBuf>,
     pub permission_mode: Option<String>,
 }
 
