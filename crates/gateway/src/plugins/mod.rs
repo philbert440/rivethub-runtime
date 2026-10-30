@@ -1,4 +1,5 @@
 mod api;
+mod creator;
 mod events;
 mod jobs;
 mod launch;
@@ -11,14 +12,16 @@ mod sandbox;
 mod settings;
 mod supervisor;
 mod tools;
+mod views;
 
 pub(crate) use api::PluginCaller;
 pub(crate) use tools::tool_error;
+pub(crate) use views::check as check_view;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -32,13 +35,14 @@ use tokio_util::task::TaskTracker;
 use wire::events::{ProtocolVersion, SessionBroadcast};
 use wire::plugin::host::{
     PluginChangedNotice, PluginExit, PluginJobRun, PluginJobStatus, PluginList, PluginLogLine,
-    PluginLogStream, PluginRecord, PluginState, PluginViewsNotice,
+    PluginLogStream, PluginRecord, PluginState, PluginToolEntry, PluginViewsNotice,
 };
 use wire::plugin::manifest::{Permission, PluginJob};
 use wire::plugin::process::{PluginEvent, PluginNotification, PluginSelf};
 use wire::plugin::{PluginId, RouteName};
 
 use crate::sessions::SessionRegistry;
+use crate::tenancy::UserId;
 
 pub use manage::start;
 
@@ -60,6 +64,8 @@ pub(crate) fn parse<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, String> {
 #[derive(Debug, Clone)]
 pub struct HostSettings {
     pub root: PathBuf,
+    pub workshop: PathBuf,
+    pub templates: PathBuf,
     pub node: String,
     pub inherited: Vec<(OsString, OsString)>,
     pub node_ports: Vec<u16>,
@@ -142,7 +148,10 @@ struct Prepared {
 
 #[derive(Debug)]
 pub struct PluginHost {
+    me: Weak<Self>,
     settings: HostSettings,
+    creator: Vec<PluginToolEntry>,
+    owner: OnceLock<UserId>,
     entries: Mutex<BTreeMap<PluginId, Entry>>,
     operations: tokio::sync::Mutex<()>,
     logs: logs::LogSink,
@@ -159,6 +168,7 @@ pub struct PluginHost {
 impl PluginHost {
     pub async fn open(settings: HostSettings) -> Result<Arc<Self>, HostError> {
         let stored = registry::load(&settings.root).await?;
+        let creator = creator::entries()?;
         let tasks = TaskTracker::new();
         let shutdown = CancellationToken::new();
         let entries = stored
@@ -173,9 +183,12 @@ impl PluginHost {
                 )
             })
             .collect();
-        Ok(Arc::new(Self {
+        Ok(Arc::new_cyclic(|me| Self {
+            me: me.clone(),
             logs: logs::LogSink::open(&tasks, shutdown.clone()),
             settings,
+            creator,
+            owner: OnceLock::new(),
             entries: Mutex::new(entries),
             operations: tokio::sync::Mutex::new(()),
             notifications: broadcast::channel(NOTIFICATION_BUFFER).0,

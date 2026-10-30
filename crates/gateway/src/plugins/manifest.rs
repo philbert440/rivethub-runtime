@@ -43,6 +43,12 @@ fn check_program(program: Option<&String>) -> Result<(), ManifestProblem> {
 }
 
 pub(super) fn check_manifest(manifest: &PluginManifest) -> Result<(), ManifestProblem> {
+    if manifest.id.as_ref() == super::creator::NAMESPACE {
+        return Err(problem(
+            "id".into(),
+            "plugins is reserved for rh's own plug-in tools",
+        ));
+    }
     check_program(manifest.run.command.first())?;
     if let Some(name) = manifest
         .run

@@ -30,7 +30,7 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 | B14 | Mesh registry, re-registration, heartbeat and agent channel; `/ca/v1/sign`, `/ca/v1/chain`, `/ca/v1/crl`; SPIFFE URI SAN identity, holder-generated P-256 keys, 7-day node/agent and 30-day device leaves, one-time enrollment through step-ca, verified-principal renewal by minting a fresh token, step-ca's X.509 CRL; the existing intermediate is bootstrapped into step-ca outside this runtime | peer nodes, holders, operators and legacy CRL readers during cutover | PKI-DESIGN addenda 2026-10-15/15b; mesh inventory unchanged | `crates/testkit/tests/fixtures/stepca/` and `crates/pki/tests` | recorded sign refusals, step-ca chain and CRL through the port, shared `rh ca token` minting, `CaError::Unavailable` when step-ca is unreachable; holder mTLS renew/revoke and local SAN-policy cases listed with reasons |
 | B15 | Hook events (names and context fields) seen by skills and the safety fence / audit log | skills, the audit log, operators | core-domain.md §1.6 | existing TypeScript test fixtures | the same hook sequence and fields for the same turn (the workflow journal belongs to the `rivethub-workflows` package, not the runtime) |
 | B16 | Logs operators read, health endpoint, `doctor` output | operators, monitoring | config-and-boot.md §3.10–§3.11; cli.md §2.5 | documented lines | same lines for the documented events |
-| B17 | Plug-in contract: the manifest `rivethub-plugin.json` (note 51); the plug-in process routes, its socket and environment (note 52); the plug-in API socket and its token (note 53); the permissions (note 54); the management routes `GET`/`POST /api/plugins`, `GET`/`DELETE /api/plugins/{id}`, `POST /api/plugins/{id}/enable`, `/disable` and `/reload`, `GET /api/plugins/{id}/logs`, `GET`/`PUT /api/plugins/{id}/settings` and `POST /api/plugins/{id}/jobs/{job}/run`, and the proxy `/api/plugins/{id}/{views,actions,canvas,tools,panel,http}/…` (note 55); event delivery and jobs (note 56); plug-in tools in `rh mcp` and the node-local tools socket `<state>/plugins/tools.sock` (note 57); views, canvases and web panels (notes 58–60); the `plugin.changed` and `plugin.views` notices on `/api/events/ws` and `plugin.notification` on `/api/notifications/ws` | plug-in processes and their TypeScript and Rust SDKs, RivetHub desktop / Android / web, `rh mcp` | notes 50–60 | none: new, with no TypeScript recording; bodies are the `wire::plugin` types in `contract/*.schema.json`, and `crates/wire/tests/fixtures/plugin/` holds a workflows and a file-browser plug-in's bodies | every fixture body parses as its `wire::plugin` type and writes back unchanged; the host's route behaviour is pinned by the gateway's tests against a fixture plug-in process |
+| B17 | Plug-in contract: the manifest `rivethub-plugin.json` (note 51); the plug-in process routes, its socket and environment (note 52); the plug-in API socket and its token (note 53); the permissions (note 54); the management routes `GET`/`POST /api/plugins`, `GET`/`DELETE /api/plugins/{id}`, `POST /api/plugins/{id}/enable`, `/disable` and `/reload`, `GET /api/plugins/{id}/logs`, `GET`/`PUT /api/plugins/{id}/settings` and `POST /api/plugins/{id}/jobs/{job}/run`, and the proxy `/api/plugins/{id}/{views,actions,canvas,tools,panel,http}/…` (note 55); event delivery and jobs (note 56); plug-in tools in `rh mcp` and the node-local tools socket `<state>/plugins/tools.sock` (note 57); views, canvases and web panels (notes 58–60); the plug-in creator's tools, its templates `<state>/plugin-templates/` and its workshop `<state>/workshop/` (note 70); the `plugin.changed` and `plugin.views` notices on `/api/events/ws` and `plugin.notification` on `/api/notifications/ws` | plug-in processes and their TypeScript and Rust SDKs, RivetHub desktop / Android / web, `rh mcp` | notes 50–60, 70 | none: new, with no TypeScript recording; bodies are the `wire::plugin` types in `contract/*.schema.json`, and `crates/wire/tests/fixtures/plugin/` holds a workflows and a file-browser plug-in's bodies | every fixture body parses as its `wire::plugin` type and writes back unchanged; the host's route behaviour is pinned by the gateway's tests against a fixture plug-in process |
 
 ## 2. What is explicitly NOT part of the contract
 
@@ -521,8 +521,8 @@ process runs; any other plug-in runs as confined as the kernel allows, or unconf
 TypeScript recording.
 (51) Plug-in manifest (proposed 2026-10-29): a plug-in is a directory holding `rivethub-plugin.json`, a
 `wire::plugin::manifest::PluginManifest`. `manifest` is 1. `id` is 2 to 24 characters of `a-z`, `0-9` and single
-hyphens, starting with a letter and not ending with a hyphen, unique on the node; it names the plug-in's routes, folder
-and tools. `name`, `version` and `description` are text; `icon` (optional) is a Material Symbols name, as is every icon
+hyphens, starting with a letter and not ending with a hyphen, unique on the node and never `plugins`, which names the
+creator's tools (note 70); it names the plug-in's routes, folder and tools. `name`, `version` and `description` are text; `icon` (optional) is a Material Symbols name, as is every icon
 in B17, and a client draws its generic plug-in glyph for a name it lacks; `$schema` (optional) is ignored, for editors.
 `run` is `command` (an argv, never a shell line: a first element without a slash is looked up on `PATH`, one with a
 slash is relative to the plug-in directory, which is also the working directory; an absolute path or one with a `..`
@@ -637,7 +637,8 @@ and drops the caller's `Authorization`, cookies and every `x-rivethub-*` header 
 header fails the call with `500` rather than reach the plug-in without it). On `views`, `actions`, `canvas` and `tools` rh parses the request and the answer as their `wire::plugin`
 types and sends the client the answer as it parsed it: an answer that does not parse is `502` `plugin_invalid_response`
 with the field path as `detail` and a `host` log line; an action's `422` reaches the client as it is, and any other
-status but `200` is `502` `plugin_error`. `panel` and `http` pass status, headers (less hop-by-hop headers and
+status but `200` is `502` `plugin_error` with a `host` log line naming the status and the answer's first 1 KiB; a
+`tools` call reaches only an installed plug-in. `panel` and `http` pass status, headers (less hop-by-hop headers and
 `Set-Cookie`) and body through, streamed. An unknown plug-in is `404`, one not running `503` `plugin_unavailable`
 (retryable), and no answer in time `504` `plugin_timeout` (30 s; 120 s for tools; 60 s to the first byte on `http`).
 Request bodies are capped at 16 MiB and parsed answers at 4 MiB.
@@ -660,8 +661,8 @@ process; events queued when rh stops are lost, so a plug-in that sees `missed` r
 trigger, scheduledAt?}` (`trigger` `schedule` or `manual`), answered by `{outcome, message?}` (`succeeded` or `failed`)
 within `timeoutMs` (default 600000; else the run failed, "timed out"). A job runs once at a time, so a tick while it
 runs is skipped, and ticks missed while rh was down are not made up. Each job's last run is on the plug-in record.
-(57) Plug-in tools in MCP (proposed 2026-10-29): `rh mcp` lists, after B7's nine and in manifest order, the tools of
-every running plug-in on its node, named `<id>__<tool>` (neither part can hold a double underscore, and the name is at
+(57) Plug-in tools in MCP (proposed 2026-10-29): `rh mcp` lists, after B7's nine, the plug-in creator's four tools (note
+70) and then, in manifest order, the tools of every running plug-in on its node, named `<id>__<tool>` (neither part can hold a double underscore, and the name is at
 most 50 characters so harness prefixes stay inside 64), with the manifest's `title`, `description` and `inputSchema`,
 and the `hints` as MCP `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, each `true`
 when listed and `false` otherwise). B7's nine tools are unchanged. `rh local` serves MCP in the gateway process and
@@ -818,6 +819,26 @@ the answer is `504` with `{ "error": "wait deadline exceeded", "task" }`, the ta
 `delegate_task` likewise leaves the task running when its wait ends or the call is aborted, its timeout reply names the
 task's id and status, and the wait is no longer the task's wall-clock budget. Only `POST /api/tasks/{id}/kill` ends a
 task. Bodies are `wire::task::TaskWaitTimeoutResponse`.
+(70) Plug-in creator (proposed 2026-10-30): an agent builds a plug-in on its own node with four tools of the host's,
+which `rh mcp` lists as note 57 says under the reserved id `plugins`: `plugins__templates` `{}`, `plugins__scaffold`
+`{template, id, name, description}`, `plugins__install` `{id}` and `plugins__status` `{id?, lines?}` (default 40, at most
+200). They read templates only from the node's `<state>/plugin-templates/` and build only in its plug-in workshop
+`<state>/workshop/` (B11). rh carries no template and fetches none: each real folder in `<state>/plugin-templates/` is
+one, a working plug-in whose manifest is checked as note 51 does, written there by rivethub-plugins' `npm run
+templates:install` (its `javascript` template: a checklist page with a form, a list and a canvas board, an agent tool,
+a `session.placed` subscription, `GUIDE.md` on the build loop and the limits of notes 51–59, and the SDK's sources).
+Templates lists them, or says that a person has to install them. Scaffold copies the template's plain files and
+folders (a link is refused) into a new `<state>/workshop/<id>/` (an existing one is refused) and sets its manifest's
+`id`, `name` and `description`. Install takes the real folder `<state>/workshop/<id>` (a link is refused) whose manifest
+names that id, checks the manifest as note 51 does (a refusal names the field and changes nothing), then installs the
+folder (note 55) or reloads it; a plug-in of that id installed from elsewhere is refused. It waits for a starting
+process up to the manifest's `readyTimeoutMs` plus 2 s and then asks each page of a running plug-in for its view with an
+empty context, checking the answer as the proxy does and logging a refused or failed answer as a `host` line. Status
+answers the record's state, permissions and last exit with the log's last lines, or without an id the node's plug-ins.
+The tools never enable a plug-in or grant a permission: a new plug-in stays off, and an answer that leaves one off or
+awaiting approval says that a person approves it in the app (Settings › Plug-ins › the plug-in) on a paired device. A
+call from a session rh can tell (note 57) whose owner is not the node's owner is refused. Answers are text results; a
+refusal or a failure is `isError`.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice

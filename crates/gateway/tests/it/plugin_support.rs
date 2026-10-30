@@ -271,6 +271,8 @@ pub(crate) async fn harness_with(
     settings.state_dir = root.join("state");
     let host = PluginHost::open(HostSettings {
         root: root.join("state").join("plugins"),
+        workshop: root.join("state").join("workshop"),
+        templates: root.join("state").join("plugin-templates"),
         node: "node-a".to_owned(),
         inherited: Vec::new(),
         node_ports,
