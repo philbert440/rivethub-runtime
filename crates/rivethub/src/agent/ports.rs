@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use kernel::agent_presets::AgentPresetStore as _;
 use kernel::queue::JobQueue;
 use kernel::tasks::CatalogSource;
 use kernel::tasks::TaskAgents;
@@ -31,6 +32,22 @@ impl PresetFile {
     }
 }
 
+#[derive(Debug)]
+pub(super) struct StoredPresets(pub(super) memory_postgres::PostgresPresets);
+
+#[async_trait]
+impl TaskPresets for StoredPresets {
+    async fn presets(&self) -> Result<Vec<AgentPreset>, TaskError> {
+        self.0
+            .list(None)
+            .await
+            .map_err(|error| TaskError::Operation {
+                operation: "agent preset read",
+                source: Box::new(error),
+            })
+    }
+}
+
 #[async_trait]
 impl TaskPresets for PresetFile {
     async fn presets(&self) -> Result<Vec<AgentPreset>, TaskError> {
@@ -48,7 +65,7 @@ pub(super) struct Roster {
     pub node: String,
     pub mesh: bool,
     pub local: BTreeMap<String, LocalBinding>,
-    pub presets: Arc<PresetFile>,
+    pub presets: Arc<dyn TaskPresets>,
     pub nodes: Vec<MeshNode>,
 }
 
@@ -77,7 +94,7 @@ impl Roster {
     }
 
     pub(super) fn presets(&self) -> Arc<dyn TaskPresets> {
-        Arc::clone(&self.presets) as Arc<dyn TaskPresets>
+        Arc::clone(&self.presets)
     }
 }
 

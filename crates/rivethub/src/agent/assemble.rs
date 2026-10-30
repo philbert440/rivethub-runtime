@@ -9,6 +9,7 @@ use config::Config;
 use config::Environment;
 use config::POSTGRES_URL_VARIABLE;
 use gateway::server::BindSource;
+use kernel::tasks::TaskPresets;
 use memory_postgres::PostgresTasks;
 use thiserror::Error;
 use wire::gateway::agents::AgentPreset;
@@ -19,6 +20,7 @@ use super::LocalBinding;
 use super::TaskEngine;
 use super::ports::PresetFile;
 use super::ports::Roster;
+use super::ports::StoredPresets;
 use crate::service::StartupError;
 use crate::service::postgres_url;
 
@@ -292,14 +294,22 @@ pub(super) async fn connect(config: &Config, env: &Environment) -> Result<Connec
     plan.mesh_identity = load_mesh_identity(config, env).await?;
     drop(load_presets(plan.state_dir.clone()).await?);
     let nodes = load_nodes(config, env).await?;
+    let tasks = PostgresTasks::connect(&plan.postgres).await?;
+    let presets: Arc<dyn TaskPresets> = match tasks
+        .agent_presets()
+        .await
+        .map_err(|error| AgentError::Invalid(error.to_string()))?
+    {
+        Some(store) => Arc::new(StoredPresets(store)),
+        None => Arc::new(PresetFile::new(plan.state_dir.clone())),
+    };
     let roster = Arc::new(Roster {
         node: plan.node.clone(),
         mesh: plan.mesh,
         local: local_agents(config)?,
-        presets: Arc::new(PresetFile::new(plan.state_dir.clone())),
+        presets,
         nodes,
     });
-    let tasks = PostgresTasks::connect(&plan.postgres).await?;
     Ok(Connected {
         tasks,
         roster,
