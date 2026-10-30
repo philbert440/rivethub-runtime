@@ -8,16 +8,16 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use kernel::plugins::{PluginToolError, PluginTools};
+use kernel::plugins::{self, PluginToolError, PluginTools};
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 use subtle::ConstantTimeEq as _;
 use tokio::net::UnixListener;
 use tokio_util::sync::CancellationToken;
 use wire::gateway::GatewayError;
-use wire::plugin::host::{PluginState, PluginToolEntry, PluginToolList};
-use wire::plugin::process::{PluginToolCall, PluginToolResult};
-use wire::plugin::{PluginId, ToolName};
+use wire::plugin::host::{self, PluginState, PluginToolEntry, PluginToolList};
+use wire::plugin::process::{self, PluginToolCall, PluginToolResult};
+use wire::plugin::{PluginId, ToolName, manifest};
 
 use super::PluginHost;
 use crate::extract::Body;
@@ -30,7 +30,29 @@ const CALLER_POLL: Duration = Duration::from_millis(50);
 
 #[async_trait]
 impl PluginTools for PluginHost {
-    async fn tools(&self) -> Result<PluginToolList, PluginToolError> {
+    async fn tools(&self) -> Result<plugins::PluginToolList, PluginToolError> {
+        Ok(plugin_tool_list(self.listed()))
+    }
+
+    async fn call(
+        &self,
+        plugin: &PluginId,
+        tool: &ToolName,
+        call: plugins::PluginToolCall,
+        tool_use: Option<&str>,
+    ) -> Result<plugins::PluginToolResult, PluginToolError> {
+        self.called(plugin, tool, plugin_tool_call(call), tool_use)
+            .await
+            .map(plugin_tool_result)
+    }
+
+    async fn changed(&self, seen: u64) -> Result<u64, PluginToolError> {
+        self.changed_after(seen).await
+    }
+}
+
+impl PluginHost {
+    fn listed(&self) -> PluginToolList {
         let version = *self.tools.borrow();
         let running: Vec<PluginToolEntry> = self
             .entries
@@ -50,10 +72,10 @@ impl PluginTools for PluginHost {
             })
             .collect();
         let tools = self.creator.iter().cloned().chain(running).collect();
-        Ok(PluginToolList { version, tools })
+        PluginToolList { version, tools }
     }
 
-    async fn call(
+    pub(crate) async fn called(
         &self,
         plugin: &PluginId,
         tool: &ToolName,
@@ -130,7 +152,7 @@ impl PluginTools for PluginHost {
         })
     }
 
-    async fn changed(&self, seen: u64) -> Result<u64, PluginToolError> {
+    async fn changed_after(&self, seen: u64) -> Result<u64, PluginToolError> {
         let mut versions = self.tools.subscribe();
         let version = versions
             .wait_for(|version| *version != seen)
@@ -221,16 +243,12 @@ async fn list(State(host): State<Arc<PluginHost>>, Query(query): Query<ListQuery
     if let Some(seen) = query.after
         && *host.tools.borrow() == seen
     {
-        let waited =
-            tokio::time::timeout(LIST_WAIT, PluginTools::changed(host.as_ref(), seen)).await;
+        let waited = tokio::time::timeout(LIST_WAIT, host.changed_after(seen)).await;
         if let Err(elapsed) = waited {
             tracing::trace!(%elapsed, "plug-in tool list unchanged");
         }
     }
-    match PluginTools::tools(host.as_ref()).await {
-        Ok(list) => Json(list).into_response(),
-        Err(error) => tool_error(&error),
-    }
+    Json(host.listed()).into_response()
 }
 
 async fn call(
@@ -250,9 +268,7 @@ async fn call(
         .get(TOOL_USE_HEADER)
         .and_then(|value| value.to_str().ok());
     let answered = match kernel::plugins::split_tool_name(&name) {
-        Ok((plugin, tool)) => {
-            PluginTools::call(host.as_ref(), &plugin, &tool, request, tool_use).await
-        }
+        Ok((plugin, tool)) => host.called(&plugin, &tool, request, tool_use).await,
         Err(error) => Err(error),
     };
     match answered {
@@ -278,4 +294,51 @@ pub(crate) fn tool_error(error: &PluginToolError) -> Response {
         Json(GatewayError::new(error.to_string()).code(code)),
     )
         .into_response()
+}
+
+fn plugin_tool_list(value: host::PluginToolList) -> plugins::PluginToolList {
+    plugins::PluginToolList {
+        version: value.version,
+        tools: value.tools.into_iter().map(plugin_tool_entry).collect(),
+    }
+}
+
+fn plugin_tool_entry(value: host::PluginToolEntry) -> plugins::PluginToolEntry {
+    plugins::PluginToolEntry {
+        plugin: value.plugin,
+        tool: plugin_tool(value.tool),
+    }
+}
+
+fn plugin_tool(value: manifest::PluginTool) -> plugins::PluginTool {
+    plugins::PluginTool {
+        name: value.name,
+        title: value.title,
+        description: value.description,
+        input_schema: value.input_schema,
+        hints: value.hints.into_iter().map(plugin_tool_hint).collect(),
+    }
+}
+
+const fn plugin_tool_hint(value: manifest::PluginToolHint) -> plugins::PluginToolHint {
+    match value {
+        manifest::PluginToolHint::ReadOnly => plugins::PluginToolHint::ReadOnly,
+        manifest::PluginToolHint::Destructive => plugins::PluginToolHint::Destructive,
+        manifest::PluginToolHint::Idempotent => plugins::PluginToolHint::Idempotent,
+        manifest::PluginToolHint::OpenWorld => plugins::PluginToolHint::OpenWorld,
+    }
+}
+
+fn plugin_tool_result(value: process::PluginToolResult) -> plugins::PluginToolResult {
+    plugins::PluginToolResult {
+        text: value.text,
+        is_error: value.is_error,
+    }
+}
+
+fn plugin_tool_call(value: plugins::PluginToolCall) -> process::PluginToolCall {
+    process::PluginToolCall {
+        arguments: value.arguments,
+        session_id: value.session_id,
+    }
 }

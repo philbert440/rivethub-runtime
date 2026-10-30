@@ -2,9 +2,13 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use wire::plugin::host::PluginToolList;
-use wire::plugin::process::{PluginToolCall, PluginToolResult};
-use wire::plugin::{PluginId, PluginNameError, ToolName};
+use values::{PluginId, PluginNameError, ToolName};
+
+mod tools;
+
+pub use tools::{
+    PluginTool, PluginToolCall, PluginToolEntry, PluginToolHint, PluginToolList, PluginToolResult,
+};
 
 const TOOL_SEPARATOR: char = '-';
 const FIRST_RESTART: Duration = Duration::from_secs(1);

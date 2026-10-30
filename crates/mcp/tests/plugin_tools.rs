@@ -2,16 +2,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use kernel::plugins::{PluginToolError, PluginTools};
+use kernel::plugins::{
+    PluginTool, PluginToolCall, PluginToolEntry, PluginToolError, PluginToolHint, PluginToolList,
+    PluginToolResult, PluginTools,
+};
 use mcp::Server;
 use mcp::client::Client;
 use mcp::transport::{Bearer, serve_tcp};
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use tokio_util::sync::CancellationToken;
-use wire::plugin::host::{PluginToolEntry, PluginToolList};
-use wire::plugin::manifest::PluginTool;
-use wire::plugin::process::{PluginToolCall, PluginToolResult};
 use wire::plugin::{PluginId, ToolName};
 
 pub mod support;
@@ -52,11 +52,13 @@ impl PluginTools for FixturePlugin {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn plugin_tools_follow_the_nine_and_answer_calls() {
-    let tool: PluginTool = serde_json::from_str(
-        r#"{"name": "echo", "title": "Echo", "description": "Echo the arguments.",
-            "inputSchema": {"type": "object"}, "hints": ["readOnly"]}"#,
-    )
-    .expect("tool");
+    let tool = PluginTool {
+        name: ToolName::try_from("echo".to_owned()).expect("name"),
+        title: Some("Echo".to_owned()),
+        description: "Echo the arguments.".to_owned(),
+        input_schema: serde_json::from_str(r#"{"type": "object"}"#).expect("schema"),
+        hints: vec![PluginToolHint::ReadOnly],
+    };
     let list = PluginToolList {
         version: 1,
         tools: vec![PluginToolEntry {
