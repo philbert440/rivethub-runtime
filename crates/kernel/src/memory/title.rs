@@ -90,8 +90,9 @@ pub fn summary_title(content: &str) -> Option<String> {
 }
 
 fn placeholder(title: &str) -> bool {
-    let folded = collapsed(title).to_lowercase();
-    if folded.parse::<DefaultTitle>().is_ok() {
+    let spaced = collapsed(title);
+    let folded = spaced.to_lowercase();
+    if folded.parse::<DefaultTitle>().is_ok() || stamped_default(&spaced) {
         return true;
     }
     if let Some(name) = folded.strip_suffix(IMPORTED_SUFFIX) {
@@ -100,6 +101,12 @@ fn placeholder(title: &str) -> bool {
     folded
         .strip_suffix(SESSION_SUFFIX)
         .is_some_and(|name| name.replace(' ', "-").parse::<PlaceholderHarness>().is_ok())
+}
+
+fn stamped_default(title: &str) -> bool {
+    title.split_once(" - ").is_some_and(|(name, stamp)| {
+        name.parse::<DefaultTitle>().is_ok() && chrono::DateTime::parse_from_rfc3339(stamp).is_ok()
+    })
 }
 
 fn lead(text: &str) -> Lead<'_> {
@@ -232,6 +239,7 @@ mod tests {
             "dsh session",
             "Untitled",
             "new  chat",
+            "New session - 2026-10-30T19:02:47.323Z",
             "opus session (imported)",
             "<recommended_plugins> Here is a list of plugins that are",
             "# AGENTS.md instructions <INSTRUCTIONS> # CODEX.md",

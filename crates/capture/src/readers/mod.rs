@@ -8,7 +8,7 @@ mod hermes;
 mod kimi;
 mod message;
 pub(crate) mod omp;
-mod opencode;
+pub(crate) mod opencode;
 mod opencode_events;
 mod scan;
 pub(crate) mod sqlite;

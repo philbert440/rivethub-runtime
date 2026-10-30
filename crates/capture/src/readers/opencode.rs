@@ -61,6 +61,22 @@ impl OpencodeTranscriptReader {
         session: &SessionId,
         offset: u64,
     ) -> Result<TranscriptSlice, TranscriptReaderError> {
+        self.slice(session, offset, Mode::Transcript).await
+    }
+
+    pub async fn capture(
+        &self,
+        session: &SessionId,
+    ) -> Result<TranscriptSlice, TranscriptReaderError> {
+        self.slice(session, 0, Mode::Capture).await
+    }
+
+    async fn slice(
+        &self,
+        session: &SessionId,
+        offset: u64,
+        mode: Mode,
+    ) -> Result<TranscriptSlice, TranscriptReaderError> {
         let Some(native_id) = native(session, HarnessId::Opencode) else {
             return Ok(TranscriptSlice::empty(offset));
         };
@@ -78,7 +94,7 @@ impl OpencodeTranscriptReader {
             .map_err(read_error)?;
         let (format, slice) = match rows {
             OpencodeTranscript::Unreadable => (FORMAT, TranscriptSlice::empty(offset)),
-            OpencodeTranscript::Parts(rows) => (FORMAT, map_parts(session, &rows, offset)?),
+            OpencodeTranscript::Parts(rows) => (FORMAT, map_parts(session, &rows, offset, mode)?),
             OpencodeTranscript::Events(rows) => (
                 opencode_events::FORMAT,
                 opencode_events::map_events(session, &rows, offset)?,
@@ -136,10 +152,17 @@ fn located(store: &Path, native_id: &str) -> Result<Option<PathBuf>, TranscriptR
     database_file(store, FILE)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Transcript,
+    Capture,
+}
+
 fn map_parts(
     session: &SessionId,
     rows: &[OpencodePart],
     offset: u64,
+    mode: Mode,
 ) -> Result<TranscriptSlice, TranscriptReaderError> {
     let mut drafts = Vec::new();
     let mut skipped = Vec::new();
@@ -147,7 +170,14 @@ fn map_parts(
     for row in rows {
         let position = row_position(row.row_id)?;
         last = last.max(position);
-        push_mapped(map_part(session, position, row)?, &mut drafts, &mut skipped);
+        let mapped = match map_part(session, position, row, mode)? {
+            Mapped::Draft(mut draft) => {
+                draft.message.event_id.clone_from(&row.part_id);
+                Mapped::Draft(draft)
+            }
+            mapped @ (Mapped::Skip(_) | Mapped::None) => mapped,
+        };
+        push_mapped(mapped, &mut drafts, &mut skipped);
     }
     Ok(assemble(offset, last, drafts, skipped))
 }
@@ -156,8 +186,11 @@ fn map_part(
     session: &SessionId,
     position: u64,
     row: &OpencodePart,
+    mode: Mode,
 ) -> Result<Mapped, TranscriptReaderError> {
-    if row.kind == PartKind::Ignored {
+    if row.kind == PartKind::Ignored
+        || (row.kind == PartKind::Reasoning && mode == Mode::Transcript)
+    {
         return Ok(Mapped::None);
     }
     if row.kind == PartKind::Unrecognized {
@@ -174,7 +207,12 @@ fn map_part(
         }));
     };
     if row.kind == PartKind::Text {
-        let content = row.text.as_deref().unwrap_or_default();
+        let text = row.text.as_deref().unwrap_or_default();
+        let content = if mode == Mode::Capture {
+            text.trim()
+        } else {
+            text
+        };
         return text_turn(&TextTurn {
             session,
             position,
@@ -184,7 +222,25 @@ fn map_part(
             format: FORMAT,
         });
     }
-    let Some(content) = tool_content(row) else {
+    if row.kind == PartKind::Reasoning {
+        let Some(text) = row
+            .text
+            .as_deref()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+        else {
+            return Ok(Mapped::None);
+        };
+        return text_turn(&TextTurn {
+            session,
+            position,
+            role: Role::Assistant,
+            content: &format!("[thinking] {text}"),
+            at,
+            format: FORMAT,
+        });
+    }
+    let Some(content) = tool_content(row, mode) else {
         return Ok(Mapped::None);
     };
     let arguments = match row.tool_arguments.as_deref() {
@@ -211,7 +267,18 @@ fn map_part(
     )
 }
 
-fn tool_content(row: &OpencodePart) -> Option<String> {
+fn tool_content(row: &OpencodePart, mode: Mode) -> Option<String> {
+    if mode == Mode::Capture {
+        let outcome = if row.tool_failed {
+            "tool-failure"
+        } else {
+            "tool-result"
+        };
+        return Some(format!(
+            "[{outcome}] {}",
+            row.tool_name.as_deref().unwrap_or("tool")
+        ));
+    }
     if let Some(text) = &row.text
         && !text.is_empty()
     {

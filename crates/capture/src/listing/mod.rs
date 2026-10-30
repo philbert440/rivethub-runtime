@@ -111,6 +111,18 @@ pub(crate) async fn grok_title(
     blocking(move || grok::title(&root, &id)).await
 }
 
+pub(crate) async fn opencode_title(
+    root: PathBuf,
+    id: String,
+) -> Result<Option<String>, TranscriptReaderError> {
+    blocking(move || {
+        Ok(databases::opencode_describe(&root, &id)?
+            .map(|row| row.title)
+            .filter(|title| *title != id))
+    })
+    .await
+}
+
 fn list_harness(
     roots: &StoreRoots,
     spawns: &grok::SpawnIndex,

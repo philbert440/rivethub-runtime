@@ -62,6 +62,7 @@ const OPENCODE_LAYOUT: &str =
 
 const OPENCODE_PARTS: &str = "\
 SELECT part.rowid AS rowid, \
+       part.id AS part_id, \
        part.session_id AS session_id, \
        part.message_id AS message_id, \
        message.role AS role, \
@@ -70,6 +71,7 @@ SELECT part.rowid AS rowid, \
        part.tool_name AS tool_name, \
        part.tool_arguments AS tool_arguments, \
        part.tool_result AS tool_result, \
+       NULL AS tool_status, \
        part.created_at AS created_at \
 FROM part \
 LEFT JOIN message ON message.id = part.message_id \
@@ -81,6 +83,7 @@ const OPENCODE_DOCUMENTS: &str =
 
 const OPENCODE_JSON_PARTS: &str = "\
 SELECT part.rowid AS rowid, \
+       part.id AS part_id, \
        part.session_id AS session_id, \
        part.message_id AS message_id, \
        json_extract(message.data, '$.role') AS role, \
@@ -89,6 +92,7 @@ SELECT part.rowid AS rowid, \
        json_extract(part.data, '$.tool') AS tool_name, \
        json_extract(part.data, '$.state.input') AS tool_arguments, \
        COALESCE(json_extract(part.data, '$.state.output'), json_extract(part.data, '$.state.error')) AS tool_result, \
+       json_extract(part.data, '$.state.status') AS tool_status, \
        part.time_created AS created_at \
 FROM part \
 LEFT JOIN message ON message.id = part.message_id \
@@ -130,6 +134,7 @@ pub(crate) struct HermesMessage {
 pub(crate) enum PartKind {
     Text,
     Tool,
+    Reasoning,
     Ignored,
     Unrecognized,
 }
@@ -137,6 +142,7 @@ pub(crate) enum PartKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OpencodePart {
     pub(crate) row_id: i64,
+    pub(crate) part_id: String,
     pub(crate) session_id: String,
     pub(crate) message_id: String,
     pub(crate) speaker: Speaker,
@@ -145,6 +151,7 @@ pub(crate) struct OpencodePart {
     pub(crate) tool_name: Option<String>,
     pub(crate) tool_arguments: Option<String>,
     pub(crate) tool_result: Option<String>,
+    pub(crate) tool_failed: bool,
     pub(crate) at: Option<String>,
 }
 
@@ -512,6 +519,7 @@ fn opencode_row(row: &Row<'_>) -> rusqlite::Result<OpencodePart> {
     let kind: String = row.get("part_type")?;
     Ok(OpencodePart {
         row_id: row.get("rowid")?,
+        part_id: row.get("part_id")?,
         session_id: row.get("session_id")?,
         message_id: row.get("message_id")?,
         speaker: speaker(role),
@@ -520,6 +528,7 @@ fn opencode_row(row: &Row<'_>) -> rusqlite::Result<OpencodePart> {
         tool_name: row.get("tool_name")?,
         tool_arguments: row.get("tool_arguments")?,
         tool_result: row.get("tool_result")?,
+        tool_failed: row.get::<_, Option<String>>("tool_status")?.as_deref() == Some("error"),
         at: instant(&row.get("created_at")?),
     })
 }
@@ -538,7 +547,8 @@ fn part_kind(text: &str) -> PartKind {
     match text {
         "text" => PartKind::Text,
         "tool" => PartKind::Tool,
-        "reasoning" | "step-start" | "step-finish" | "patch" | "compaction" => PartKind::Ignored,
+        "reasoning" => PartKind::Reasoning,
+        "step-start" | "step-finish" | "patch" | "compaction" => PartKind::Ignored,
         _ => PartKind::Unrecognized,
     }
 }
