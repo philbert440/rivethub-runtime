@@ -220,6 +220,17 @@ impl RouteStores<'_> {
             .collect())
     }
 
+    async fn cited(&self, slug: &str) -> Found<Vec<String>> {
+        Ok(self
+            .pages
+            .shown(slug)
+            .await?
+            .citations
+            .into_iter()
+            .map(|citation| citation.summary_id)
+            .collect())
+    }
+
     async fn named(&self, kind: TopicKind, name: &str) -> Found<Option<Topic>> {
         Ok(self
             .pages
@@ -554,6 +565,12 @@ pub async fn a_moved_session_takes_its_notes_along(
         Vec::new(),
     )?;
     same("moved", stores.notes(&desk).await?, note.clone())?;
+    same("uncited", stores.cited("acmekit").await?, Vec::new())?;
+    same(
+        "cited where it went",
+        stores.cited("billing-desk").await?,
+        vec![job.summary_id.to_string()],
+    )?;
     stores
         .pages
         .topics

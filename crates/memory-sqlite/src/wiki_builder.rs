@@ -93,6 +93,11 @@ impl WikiBuilderStore for SqliteStore {
         })
         .await
     }
+
+    async fn uncite_wiki(&self, summary_id: Uuid, slug: &WikiSlug) -> Result<(), WikiStoreError> {
+        let slug = slug.clone();
+        blocking(self, move |conn| wiki_held::uncite(conn, summary_id, &slug)).await
+    }
 }
 
 pub(crate) async fn blocking<T, F>(store: &SqliteStore, body: F) -> Result<T, WikiStoreError>

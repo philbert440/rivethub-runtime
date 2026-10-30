@@ -147,6 +147,31 @@ pub(super) async fn cite(
     tx.commit().await.map_err(query_error)
 }
 
+pub(super) async fn uncite(
+    pool: &PgPool,
+    summary_id: Uuid,
+    slug: &WikiSlug,
+) -> Result<(), WikiStoreError> {
+    let mut tx = pool.begin().await.map_err(query_error)?;
+    for statement in [
+        "DELETE FROM rh_wiki_citations WHERE topic_slug = $1 AND summary_id = $2
+            AND NOT EXISTS (SELECT 1 FROM rh_wiki_extractions e
+                             WHERE e.summary_id = $2 AND $1 = ANY (e.topics_touched))",
+        "DELETE FROM rh_wiki_provenance
+          WHERE topic_slug = $1 AND source_kind = 'summary' AND source_id = $2
+            AND NOT EXISTS (SELECT 1 FROM rh_wiki_extractions e
+                             WHERE e.summary_id = $2 AND $1 = ANY (e.topics_touched))",
+    ] {
+        sqlx::query(statement)
+            .bind(slug.as_ref())
+            .bind(summary_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(query_error)?;
+    }
+    tx.commit().await.map_err(query_error)
+}
+
 fn encoded<T: serde::Serialize>(value: &T) -> Result<String, WikiStoreError> {
     serde_json::to_string(value).map_err(invalid)
 }

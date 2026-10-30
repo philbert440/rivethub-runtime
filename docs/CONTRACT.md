@@ -352,7 +352,8 @@ on its page as before, a patch whose `type` names one of the types goes to that 
 any other patch becomes a note section on the session's topic page. A session that isn't filed yet keeps its notes until it
 is filed (a child session until its parent is, a conversation or delegated task until that conversation is), then
 they land on its topic page and cite its summary. A session's notes follow it: moved to another topic, by you or
-the categorizer, they leave the old topic's page for the new one, and taken out of a topic they wait until it is
+the categorizer, they leave the old topic's page for the new one (and so does the summary's citation, unless the summary
+also patched the old page itself), and taken out of a topic they wait until it is
 filed again; a child follows its parent, and a delegated task its parent unless you placed it; an entity named by one session waits as a candidate until
 a second session names it. `WikiPatch.kind` (person, host or tool) is replaced by `type`, and the extraction input lists
 the type paths as `types`. Postgres migration `0032_entities.sql` and SQLite schema 20 add the kind, the tombstones and the

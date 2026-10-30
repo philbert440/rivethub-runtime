@@ -164,6 +164,27 @@ pub(crate) fn cite(
     crate::wiki_topics::cite(conn, slug.as_ref(), &summary, now)
 }
 
+pub(crate) fn uncite(
+    conn: &mut Connection,
+    summary_id: Uuid,
+    slug: &WikiSlug,
+) -> Result<(), WikiStoreError> {
+    let tx = conn.transaction().map_err(query)?;
+    for statement in [
+        "DELETE FROM ros_wiki_citations WHERE topic_slug = ?1 AND summary_id = ?2
+            AND NOT EXISTS (SELECT 1 FROM ros_wiki_extractions e, json_each(e.topics_touched) t
+                             WHERE e.summary_id = ?2 AND t.value = ?1)",
+        "DELETE FROM ros_wiki_provenance
+          WHERE topic_slug = ?1 AND source_kind = 'summary' AND source_id = ?2
+            AND NOT EXISTS (SELECT 1 FROM ros_wiki_extractions e, json_each(e.topics_touched) t
+                             WHERE e.summary_id = ?2 AND t.value = ?1)",
+    ] {
+        tx.execute(statement, params![slug.as_ref(), summary_id.to_string()])
+            .map_err(query)?;
+    }
+    tx.commit().map_err(query)
+}
+
 fn encoded<T: serde::Serialize>(value: &T) -> Result<String, WikiStoreError> {
     serde_json::to_string(value).map_err(invalid)
 }
