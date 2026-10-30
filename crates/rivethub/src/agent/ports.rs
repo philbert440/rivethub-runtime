@@ -3,12 +3,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use kernel::agent_presets::AgentPresetStore as _;
 use kernel::queue::JobQueue;
 use kernel::tasks::CatalogSource;
 use kernel::tasks::TaskAgents;
 use kernel::tasks::TaskError;
 use kernel::tasks::TaskPresets;
 use kernel::tasks::TaskQuery;
+use kernel::tasks::TaskRoute;
 use kernel::tasks::TaskStore;
 use kernel::tasks::TaskWatch;
 use wire::gateway::agents::AgentPreset;
@@ -30,6 +32,22 @@ impl PresetFile {
     }
 }
 
+#[derive(Debug)]
+pub(super) struct StoredPresets(pub(super) memory_postgres::PostgresPresets);
+
+#[async_trait]
+impl TaskPresets for StoredPresets {
+    async fn presets(&self) -> Result<Vec<AgentPreset>, TaskError> {
+        self.0
+            .list(None)
+            .await
+            .map_err(|error| TaskError::Operation {
+                operation: "agent preset read",
+                source: Box::new(error),
+            })
+    }
+}
+
 #[async_trait]
 impl TaskPresets for PresetFile {
     async fn presets(&self) -> Result<Vec<AgentPreset>, TaskError> {
@@ -47,7 +65,7 @@ pub(super) struct Roster {
     pub node: String,
     pub mesh: bool,
     pub local: BTreeMap<String, LocalBinding>,
-    pub presets: Arc<PresetFile>,
+    pub presets: Arc<dyn TaskPresets>,
     pub nodes: Vec<MeshNode>,
 }
 
@@ -76,34 +94,54 @@ impl Roster {
     }
 
     pub(super) fn presets(&self) -> Arc<dyn TaskPresets> {
-        Arc::clone(&self.presets) as Arc<dyn TaskPresets>
-    }
-
-    async fn known(&self, agent_id: &str) -> Result<bool, TaskError> {
-        if self.local.contains_key(agent_id) {
-            return Ok(true);
-        }
-        if self
-            .presets
-            .presets()
-            .await?
-            .iter()
-            .any(|preset| preset.name == agent_id || preset.id == agent_id)
-        {
-            return Ok(true);
-        }
-        Ok(self.nodes.iter().any(|node| {
-            node.status == MeshNodeStatus::Online
-                && node.agents.iter().any(|agent| agent == agent_id)
-        }))
+        Arc::clone(&self.presets)
     }
 }
 
 #[async_trait]
 impl TaskAgents for Roster {
-    async fn contains(&self, agent_id: &str) -> Result<bool, TaskError> {
-        self.known(agent_id).await
+    async fn route(
+        &self,
+        agent_id: &str,
+        node: Option<&str>,
+    ) -> Result<Option<TaskRoute>, TaskError> {
+        let presets = self.presets.presets().await?;
+        let preset = presets
+            .iter()
+            .find(|preset| preset.name == agent_id || preset.id == agent_id);
+        let host = match preset {
+            Some(preset) => Some(preset.node.clone().unwrap_or_else(|| self.node.clone())),
+            None if self.local.contains_key(agent_id) => Some(self.node.clone()),
+            None => newest_host(&self.nodes, agent_id),
+        };
+        let Some(host) = host else {
+            return Ok(None);
+        };
+        Ok(Some(TaskRoute {
+            agent_id: preset
+                .map_or(agent_id, |preset| preset.name.as_str())
+                .to_owned(),
+            node: match node.filter(|node| !node.is_empty()) {
+                Some(pinned) => pinned.to_owned(),
+                None => host,
+            },
+        }))
     }
+}
+
+fn newest_host(nodes: &[MeshNode], agent_id: &str) -> Option<String> {
+    nodes
+        .iter()
+        .filter(|node| {
+            node.status == MeshNodeStatus::Online
+                && node.agents.iter().any(|agent| agent == agent_id)
+        })
+        .max_by(|left, right| {
+            left.last_seen
+                .cmp(&right.last_seen)
+                .then_with(|| right.id.cmp(&left.id))
+        })
+        .map(|node| node.id.clone())
 }
 
 pub(super) fn api<T>(

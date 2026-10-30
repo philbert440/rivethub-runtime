@@ -50,6 +50,21 @@ pub struct Prepared {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorkingDir {
+    Configured(String),
+    Requested(String),
+}
+
+impl WorkingDir {
+    #[must_use]
+    pub fn path(&self) -> &str {
+        match self {
+            Self::Configured(path) | Self::Requested(path) => path,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedTarget {
     pub executor: TaskExecutorKind,
     pub node: String,
@@ -59,7 +74,7 @@ pub struct ResolvedTarget {
     pub model: Option<String>,
     pub effort: Option<Effort>,
     pub system_prompt: Option<String>,
-    pub working_dir: Option<String>,
+    pub working_dir: Option<WorkingDir>,
     pub remote: bool,
 }
 
@@ -118,7 +133,7 @@ impl Directory {
             drop(self.resolve(input)?);
         }
         Ok(Prepared {
-            job_name: job_name(&node, remote)?,
+            job_name: job_name(&node)?,
             node,
             remote,
         })
@@ -246,7 +261,11 @@ impl Directory {
                 node: node.to_string(),
             });
         }
-        if !mesh.agents.iter().any(|name| name == agent) {
+        let preset_here = self
+            .presets
+            .get(agent)
+            .is_some_and(|preset| preset.node.as_deref().is_none_or(|home| home == node));
+        if !preset_here && !mesh.agents.iter().any(|name| name == agent) {
             return Err(Error::MeshAgent {
                 node: node.to_string(),
                 agent: agent.to_string(),
@@ -286,7 +305,7 @@ struct AgentFields {
     model: Option<String>,
     effort: Option<Effort>,
     system_prompt: Option<String>,
-    working_dir: Option<String>,
+    working_dir: Option<WorkingDir>,
 }
 
 fn fields_from_local(agent: &LocalAgent) -> AgentFields {
@@ -295,7 +314,7 @@ fn fields_from_local(agent: &LocalAgent) -> AgentFields {
         model: agent.model.clone(),
         effort: agent.effort,
         system_prompt: agent.system_prompt.clone(),
-        working_dir: agent.working_dir.clone(),
+        working_dir: agent.working_dir.clone().map(WorkingDir::Configured),
     }
 }
 
@@ -303,14 +322,17 @@ fn fields_from_preset(preset: &AgentPreset) -> Result<AgentFields, Error> {
     Ok(AgentFields {
         harness: preset.harness_id,
         model: Some(preset.model.clone()),
-        effort: Some(parse_effort(&preset.effort)?),
+        effort: preset_effort(&preset.effort)?,
         system_prompt: Some(preset.system_prompt.clone()),
-        working_dir: preset.directory.clone(),
+        working_dir: preset.directory.clone().map(WorkingDir::Configured),
     })
 }
 
-fn parse_effort(text: &str) -> Result<Effort, Error> {
-    crate::payload::from_text(text)
+fn preset_effort(text: &str) -> Result<Option<Effort>, Error> {
+    if text.is_empty() {
+        return Ok(None);
+    }
+    crate::payload::from_text(text).map(Some)
 }
 
 pub(crate) fn apply_spec(target: &mut ResolvedTarget, spec: &TaskSpec) -> Result<(), Error> {
@@ -327,7 +349,7 @@ pub(crate) fn apply_spec(target: &mut ResolvedTarget, spec: &TaskSpec) -> Result
         });
     }
     if let Some(working) = &spec.working_dir {
-        target.working_dir = Some(working.clone());
+        target.working_dir = Some(WorkingDir::Requested(working.clone()));
     }
     if target.executor == TaskExecutorKind::HarnessSession && target.harness.is_none() {
         return Err(Error::HarnessRequired);
@@ -346,19 +368,13 @@ fn mesh_node_name(input: &TargetInput) -> Result<String, Error> {
     }
 }
 
-fn job_name(node: &str, remote: bool) -> Result<kernel::queue::JobName, Error> {
-    if remote {
-        if node.is_empty() {
-            return Err(Error::JobName(kernel::queue::JobNameError::EmptyNode));
-        }
-        Ok(kernel::queue::JobName::RunTaskOn {
-            node: node.to_string(),
-        })
-    } else {
-        Ok(kernel::queue::JobName::Fixed(
-            kernel::queue::FixedJob::RunTask,
-        ))
+fn job_name(node: &str) -> Result<kernel::queue::JobName, Error> {
+    if node.is_empty() {
+        return Err(Error::JobName(kernel::queue::JobNameError::EmptyNode));
     }
+    Ok(kernel::queue::JobName::RunTaskOn {
+        node: node.to_string(),
+    })
 }
 
 fn mesh_base(node: &MeshNode, preset_base: Option<&str>) -> Result<Url, Error> {

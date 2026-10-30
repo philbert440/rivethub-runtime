@@ -2,7 +2,6 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use chrono::Utc;
-use kernel::queue::FixedJob;
 use kernel::queue::Job;
 use kernel::queue::JobKeyMode;
 use kernel::queue::JobName;
@@ -198,7 +197,9 @@ async fn enqueue_blocked_task(pool: &PgPool) -> TestResult<sqlx::types::Uuid> {
     tasks.insert(&queued_task(id)).await?;
     tasks
         .enqueue(Job {
-            name: JobName::Fixed(FixedJob::RunTask),
+            name: JobName::RunTaskOn {
+                node: "agent-node".to_owned(),
+            },
             payload: wire::JsonObject::from_serialize(&TaskJobPayload {
                 task_id: id.to_string(),
             })?,
@@ -302,7 +303,7 @@ async fn agent_blocked_on_a_gateway_releases_the_task_on_sigint(pool: PgPool) ->
             home.path(),
             &url,
             &format!(
-                "gateway:\n  host: 127.0.0.1\n  port: {}\n",
+                "mesh:\n  node_name: agent-node\ngateway:\n  host: 127.0.0.1\n  port: {}\n",
                 hole.address.port()
             ),
         ),

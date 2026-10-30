@@ -1,4 +1,3 @@
-use kernel::queue::FixedJob;
 use kernel::queue::Job;
 use kernel::queue::JobKeyMode;
 use kernel::queue::JobName;
@@ -34,10 +33,10 @@ pub(super) async fn enqueue(api: &TasksApi, record: &TaskRecord) -> Result<(), T
 }
 
 fn job_name(affinity: Option<&str>, local: &str) -> JobName {
-    match affinity {
-        Some(node) if !node.is_empty() && node != local => JobName::RunTaskOn {
-            node: node.to_owned(),
-        },
-        Some(_) | None => JobName::Fixed(FixedJob::RunTask),
+    JobName::RunTaskOn {
+        node: affinity
+            .filter(|node| !node.is_empty())
+            .unwrap_or(local)
+            .to_owned(),
     }
 }

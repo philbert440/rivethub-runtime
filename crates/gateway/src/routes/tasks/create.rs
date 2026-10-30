@@ -11,6 +11,7 @@ use kernel::tasks::Finish;
 use kernel::tasks::TaskError;
 use kernel::tasks::TaskOrigin;
 use kernel::tasks::TaskRecord;
+use kernel::tasks::TaskRoute;
 use kernel::tasks::TaskStore;
 use serde::Deserialize;
 use uuid::Uuid;
@@ -67,6 +68,7 @@ pub(super) struct CreateQuery {
 struct Accepted {
     goal: String,
     agent_id: String,
+    node: String,
     executor: TaskExecutorKind,
     requested_by: Option<String>,
 }
@@ -90,10 +92,11 @@ async fn accept(api: &TasksApi, body: &CreateBody) -> Result<Accepted, TaskHttpE
     let agent_id = required(body.agent_id.clone(), "agentId")?;
     let executor = executor_of(body.executor.as_deref())?;
     harness_allowed(api, executor, body.executor_target.as_deref())?;
-    ensure_agent(api, &agent_id).await?;
+    let route = route(api, &agent_id, body.node_affinity.as_deref()).await?;
     Ok(Accepted {
         goal,
-        agent_id,
+        agent_id: route.agent_id,
+        node: route.node,
         executor,
         requested_by: Some(requester(body.requested_by.clone())),
     })
@@ -137,14 +140,18 @@ fn harness_allowed(
     }
 }
 
-async fn ensure_agent(api: &TasksApi, agent_id: &str) -> Result<(), TaskHttpError> {
-    if api
+async fn route(
+    api: &TasksApi,
+    agent_id: &str,
+    node: Option<&str>,
+) -> Result<TaskRoute, TaskHttpError> {
+    if let Some(route) = api
         .agents
-        .contains(agent_id)
+        .route(agent_id, node)
         .await
         .map_err(|error| store_error(&error))?
     {
-        return Ok(());
+        return Ok(route);
     }
     let message = if api.mesh {
         format!("agent \"{agent_id}\" not found locally or on the mesh")
@@ -186,7 +193,7 @@ async fn assemble(
         parent_task_id: parent,
         chain_depth: depth,
         budget,
-        node_affinity: body.node_affinity.clone(),
+        node_affinity: Some(accepted.node.clone()),
         usage: None,
         status: TaskStatus::Queued,
         attempt: 0,

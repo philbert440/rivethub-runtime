@@ -31,9 +31,11 @@ use crate::client::GatewayClient;
 use crate::client::check_segment;
 use crate::directory::ResolvedTarget;
 use crate::directory::TargetInput;
+use crate::directory::WorkingDir;
 use crate::directory::apply_spec;
 use crate::engine::Engine;
 use crate::error::Error;
+use crate::paths::configured;
 use crate::paths::contained;
 use crate::price::cost;
 
@@ -60,12 +62,9 @@ where
 
     pub(crate) fn selector(&self) -> ClaimSelector {
         ClaimSelector {
-            names: vec![
-                JobName::Fixed(kernel::queue::FixedJob::RunTask),
-                JobName::RunTaskOn {
-                    node: self.settings.node.clone(),
-                },
-            ],
+            names: vec![JobName::RunTaskOn {
+                node: self.settings.node.clone(),
+            }],
             only_id: None,
         }
     }
@@ -93,7 +92,6 @@ where
                 .settle_budget(
                     &task,
                     claimed.id,
-                    None,
                     "maxTurns (0) reached".to_string(),
                     Utc::now(),
                 )
@@ -160,18 +158,29 @@ where
     }
 
     async fn working_dir(&self, target: &ResolvedTarget) -> Result<Option<String>, Error> {
-        if let Some(working) = target.working_dir.as_deref() {
-            let Some(root) = self.settings.files_root.as_deref() else {
-                return Err(Error::FilesRootRequired);
-            };
-            return contained_string(root, std::path::Path::new(working))
-                .await
-                .map(Some);
-        }
-        if target.harness.is_some() || target.executor == TaskExecutorKind::HarnessSession {
-            return self.files_root_cwd().await;
-        }
-        Ok(None)
+        let root = self.settings.files_root.as_deref();
+        let path = match &target.working_dir {
+            Some(WorkingDir::Configured(working)) => {
+                configured(root, std::path::Path::new(working)).await?
+            }
+            Some(WorkingDir::Requested(working)) => {
+                contained(
+                    root.ok_or(Error::FilesRootRequired)?,
+                    std::path::Path::new(working),
+                )
+                .await?
+            }
+            None if target.harness.is_some()
+                || target.executor == TaskExecutorKind::HarnessSession =>
+            {
+                return self.files_root_cwd().await;
+            }
+            None => return Ok(None),
+        };
+        path.into_os_string()
+            .into_string()
+            .map(Some)
+            .map_err(|_| Error::PathEscape)
     }
 
     async fn files_root_cwd(&self) -> Result<Option<String>, Error> {
@@ -204,11 +213,6 @@ where
             Ok(usage) => usage,
             Err(error) => return self.settle_call_error(task, job_id, error, started).await,
         };
-        if let Some(reason) = budget_reason(&task.budget, &usage) {
-            return self
-                .settle_budget(task, job_id, Some(usage), reason, ended)
-                .await;
-        }
         let result = TaskResult {
             verdict: TaskVerdict::Completed,
             summary: reply.message.text.clone(),
@@ -225,7 +229,6 @@ where
         &self,
         task: &TaskRecord,
         job_id: JobId,
-        usage: Option<TaskUsage>,
         reason: String,
         ended: DateTime<Utc>,
     ) -> Result<RunOutcome, Error> {
@@ -235,10 +238,7 @@ where
             output: None,
             artifacts: Vec::new(),
             criteria_self_report: None,
-            usage: match usage {
-                Some(usage) => usage,
-                None => empty_usage(0),
-            },
+            usage: empty_usage(0),
             error: Some(reason),
         };
         self.record_failure(RecordedFailure {
@@ -464,7 +464,10 @@ fn harnessed(
         .filter(|model| !model.trim().is_empty());
     body.thinking = target.effort.map(thinking);
     body.working_dir = if target.remote {
-        target.working_dir.clone()
+        target
+            .working_dir
+            .as_ref()
+            .map(|working| working.path().to_owned())
     } else {
         working_dir
     };
@@ -516,34 +519,6 @@ fn usage_of(
     })
 }
 
-fn budget_reason(budget: &TaskBudget, usage: &TaskUsage) -> Option<String> {
-    if let Some(max) = budget.max_turns
-        && usage.turns >= max
-    {
-        return Some(format!("maxTurns ({max}) reached"));
-    }
-    if let Some(max) = budget.max_tokens
-        && usage.total_tokens.is_some_and(|total| total >= max)
-    {
-        return Some(format!("maxTokens ({max}) reached"));
-    }
-    if let Some(max) = budget.max_usd {
-        let over = match usage.cost_usd {
-            Some(cost) => cost >= max,
-            None => true,
-        };
-        if over {
-            return Some(format!("maxUsd ({max}) reached"));
-        }
-    }
-    if let Some(max) = budget.max_wall_clock_ms
-        && usage.wall_clock_ms >= max
-    {
-        return Some(format!("maxWallClockMs ({max}) reached"));
-    }
-    None
-}
-
 fn empty_usage(wall: u64) -> TaskUsage {
     TaskUsage {
         input_tokens: None,
@@ -553,16 +528,6 @@ fn empty_usage(wall: u64) -> TaskUsage {
         turns: 0,
         wall_clock_ms: wall,
     }
-}
-
-async fn contained_string(
-    root: &std::path::Path,
-    working: &std::path::Path,
-) -> Result<String, Error> {
-    let path = contained(root, working).await?;
-    path.into_os_string()
-        .into_string()
-        .map_err(|_| Error::PathEscape)
 }
 
 fn wall_ms(started: DateTime<Utc>, ended: DateTime<Utc>) -> Result<u64, Error> {

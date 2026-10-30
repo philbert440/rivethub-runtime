@@ -22,7 +22,7 @@ use wire::gateway::sessions::{
     SessionPostRequest, SessionSteerRequest, SessionSteerResponse,
 };
 use wire::harness::{
-    ApprovalDecision, HarnessSessionCreateRequest, HarnessSessionSummary, SteerOutcome,
+    ApprovalDecision, HarnessId, HarnessSessionCreateRequest, HarnessSessionSummary, SteerOutcome,
 };
 use wire::hooks::HookContextBase;
 use wire::message::{Message, MessageContent, Role};
@@ -34,7 +34,7 @@ use crate::error::ApiError;
 use crate::extract::Body;
 use crate::routes::agents::Failure;
 use crate::tenancy::UserId;
-use crate::term::{ChatStart, DelegatedTurn};
+use crate::term::{AgentLaunch, ChatStart, Delegate, DelegatedTurn};
 use crate::uploads::AttachedTurn;
 
 pub(crate) fn router() -> Router<Arc<Gateway>> {
@@ -174,19 +174,21 @@ async fn prompt(
     Query(posted): Query<Posted>,
     extension: Option<Extension<Arc<crate::routes::v1::Service>>>,
     Body(request): Body<SessionPostRequest>,
-) -> Result<Response, ApiError> {
+) -> Result<Response, Failure> {
     if request
         .user_id
         .as_ref()
         .is_some_and(|id| id != user.as_str())
     {
-        return Err(ApiError::SessionForbidden);
+        return Err(ApiError::SessionForbidden.into());
     }
     match posted.wait.as_deref() {
-        None => accept(gateway, user, session, request).await,
-        Some("1") if request.harness.is_some() => delegated(gateway, user, session, request).await,
-        Some("1") => waited(gateway, extension, session, request).await,
-        Some(_) => Err(ApiError::BadRequest("wait must be 1".into())),
+        None => Ok(accept(gateway, user, session, request).await?),
+        Some("1") if request.harness.is_some() || delegate_of(&gateway, &request).is_some() => {
+            delegated(gateway, user, session, request).await
+        }
+        Some("1") => Ok(waited(gateway, extension, session, request).await?),
+        Some(_) => Err(ApiError::BadRequest("wait must be 1".into()).into()),
     }
 }
 
@@ -314,10 +316,22 @@ async fn delegated(
     user: UserId,
     session: String,
     request: SessionPostRequest,
-) -> Result<Response, ApiError> {
+) -> Result<Response, Failure> {
+    let delegate = delegate_of(&gateway, &request);
     let harness = request
         .harness
+        .or_else(|| delegate.as_ref().map(|agent| agent.harness))
         .ok_or_else(|| ApiError::BadRequest("harness is required".into()))?;
+    let configured = match (&delegate, request.agent.as_deref()) {
+        (Some(agent), Some(name)) => agent.cwd.clone().map(|directory| AgentLaunch {
+            name: name.to_owned(),
+            directory,
+            harness: Some(agent.harness),
+            model: String::new(),
+            effort: String::new(),
+        }),
+        _ => configured_preset(&gateway, &request, harness).await?,
+    };
     let attachments = staged(&gateway, &user, request.attachments).await?;
     let journal = if attachments.is_empty() {
         None
@@ -327,11 +341,16 @@ async fn delegated(
     let turn = DelegatedTurn {
         start: ChatStart {
             harness,
-            model: request.model,
+            model: request
+                .model
+                .or_else(|| delegate.as_ref().and_then(|agent| agent.model.clone())),
             effort: request.thinking,
-            cwd: request.working_dir.map(std::path::PathBuf::from),
+            cwd: match configured {
+                Some(_) => None,
+                None => request.working_dir.map(std::path::PathBuf::from),
+            },
             inherited_cwd: None,
-            agent: None,
+            agent: configured,
             startup_context: None,
             topic: None,
         },
@@ -339,6 +358,7 @@ async fn delegated(
         system_prompt: request.system_prompt,
         attachments,
         journal,
+        delegate,
     };
     let reply = service(&gateway)?.delegated_turn(&user, turn).await?;
     let mut message = reply_message(&session, reply.text);
@@ -351,6 +371,44 @@ async fn delegated(
             .unwrap_or_default(),
     });
     Ok(Json(SessionPostReply { message }).into_response())
+}
+
+async fn configured_preset(
+    gateway: &Gateway,
+    request: &SessionPostRequest,
+    harness: HarnessId,
+) -> Result<Option<AgentLaunch>, Failure> {
+    let (Some(name), Some(working)) = (request.agent.as_deref(), request.working_dir.as_deref())
+    else {
+        return Ok(None);
+    };
+    let Some(preset) = gateway
+        .presets()
+        .list(None)
+        .await?
+        .into_iter()
+        .find(|preset| preset.name == name && preset.harness_id == Some(harness))
+    else {
+        return Ok(None);
+    };
+    let launch = crate::routes::agents::launch_preset(gateway, preset.id).await?;
+    let requested = std::path::PathBuf::from(working);
+    let home = launch.directory.clone();
+    let same = tokio::task::spawn_blocking(move || {
+        Ok::<_, std::io::Error>(requested.canonicalize()? == home.canonicalize()?)
+    })
+    .await
+    .map_err(ApiError::Task)?
+    .map_err(ApiError::Io)?;
+    Ok(same.then_some(launch))
+}
+
+fn delegate_of(gateway: &Gateway, request: &SessionPostRequest) -> Option<Delegate> {
+    let delegate = gateway.terminal()?.delegate(request.agent.as_deref()?)?;
+    request
+        .harness
+        .is_none_or(|harness| harness == delegate.harness)
+        .then(|| delegate.clone())
 }
 
 fn turn_messages(request: &SessionPostRequest) -> Result<Vec<Message>, ApiError> {

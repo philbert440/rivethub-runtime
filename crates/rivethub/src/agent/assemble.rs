@@ -9,6 +9,7 @@ use config::Config;
 use config::Environment;
 use config::POSTGRES_URL_VARIABLE;
 use gateway::server::BindSource;
+use kernel::tasks::TaskPresets;
 use memory_postgres::PostgresTasks;
 use thiserror::Error;
 use wire::gateway::agents::AgentPreset;
@@ -19,6 +20,7 @@ use super::LocalBinding;
 use super::TaskEngine;
 use super::ports::PresetFile;
 use super::ports::Roster;
+use super::ports::StoredPresets;
 use crate::service::StartupError;
 use crate::service::postgres_url;
 
@@ -214,7 +216,7 @@ pub(super) async fn plan(config: &Config, env: &Environment) -> Result<Plan, Age
         worker,
         postgres: require_postgres(config, env)?,
         gateway: endpoint.url,
-        files_root: settings.files_root,
+        files_root: task_root(settings.files_root, config),
         allowed: settings.allowed_harnesses,
         pricing: pricing(config)?,
         api_token: api_token(config)?,
@@ -261,7 +263,7 @@ pub(super) async fn standalone(
         settings: tasks::Settings {
             node,
             worker,
-            files_root: gateway_settings.files_root,
+            files_root: task_root(gateway_settings.files_root, config),
             pricing: pricing(config)?,
             api_token: api_token(config)?,
         },
@@ -315,14 +317,27 @@ async fn prepared(config: &Config, env: &Environment) -> Result<(Plan, Arc<Roste
     plan.mesh_identity = load_mesh_identity(config, env).await?;
     drop(load_presets(plan.state_dir.clone()).await?);
     let nodes = load_nodes(config, env).await?;
+    let tasks = PostgresTasks::connect(&plan.postgres).await?;
+    let presets: Arc<dyn TaskPresets> = match tasks
+        .agent_presets()
+        .await
+        .map_err(|error| AgentError::Invalid(error.to_string()))?
+    {
+        Some(store) => Arc::new(StoredPresets(store)),
+        None => Arc::new(PresetFile::new(plan.state_dir.clone())),
+    };
     let roster = Arc::new(Roster {
         node: plan.node.clone(),
         mesh: plan.mesh,
         local: local_agents(config)?,
-        presets: Arc::new(PresetFile::new(plan.state_dir.clone())),
+        presets,
         nodes,
     });
-    Ok((plan, roster))
+    Ok(Connected {
+        tasks,
+        roster,
+        plan,
+    })
 }
 
 fn require_postgres(config: &Config, env: &Environment) -> Result<String, AgentError> {
@@ -544,4 +559,13 @@ async fn load_nodes(config: &Config, env: &Environment) -> Result<Vec<MeshNode>,
         Some(file) => Ok(file.nodes.into_values().collect()),
         None => Ok(Vec::new()),
     }
+}
+
+fn task_root(files_root: Option<PathBuf>, config: &Config) -> Option<PathBuf> {
+    files_root.or_else(|| {
+        config
+            .runtime
+            .as_ref()
+            .and_then(|runtime| runtime.workspace.clone())
+    })
 }

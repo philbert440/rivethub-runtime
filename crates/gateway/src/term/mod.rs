@@ -28,6 +28,7 @@ use crate::sessions::SessionRegistry;
 use crate::tenancy::UserId;
 use actor::{Command, Handle};
 pub(crate) use chat::ChatStart;
+pub use delegated::Delegate;
 pub(crate) use delegated::DelegatedTurn;
 pub use trust::ClaudeTrust;
 
@@ -124,6 +125,7 @@ pub struct TerminalService {
     claude_trust: Option<ClaudeTrust>,
     session_lister: Option<Arc<dyn kernel::transcript::SessionLister>>,
     plugins: std::sync::OnceLock<Arc<crate::plugins::PluginHost>>,
+    delegates: BTreeMap<String, Delegate>,
 }
 
 impl TerminalService {
@@ -160,6 +162,7 @@ impl TerminalService {
             claude_trust: None,
             session_lister: None,
             plugins: std::sync::OnceLock::new(),
+            delegates: BTreeMap::new(),
         })
     }
 

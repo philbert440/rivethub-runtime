@@ -16,6 +16,8 @@ use axum::routing::get;
 use axum::routing::post;
 use gateway::Gateway;
 use kernel::memory::MemoryStore;
+use kernel::tasks::TaskAgents;
+use kernel::tasks::TaskRoute;
 use testkit::TaskMemory;
 use tokio::sync::Semaphore;
 use tokio::sync::mpsc;
@@ -30,6 +32,8 @@ use wire::gateway::sessions::SessionMessageRole;
 use wire::gateway::sessions::SessionPostReply;
 use wire::gateway::sessions::SessionPostRequest;
 use wire::harness::HarnessId;
+use wire::mesh::MeshNode;
+use wire::mesh::MeshNodeStatus;
 use wire::task::TaskCreateRequest;
 use wire::task::TaskExecutorKind;
 use wire::task::TaskResponse;
@@ -285,4 +289,89 @@ async fn preset_edits_reach_the_next_task_without_a_restart() {
     assert!(rig.turns.try_recv().is_err());
     assert!(rig.root.path().join("state").join("agents.json").is_file());
     rig.stub.close().await.expect("stub shuts down");
+}
+
+fn host(id: &str, agents: &[&str], seen: i64, status: MeshNodeStatus) -> MeshNode {
+    let stamp = chrono::DateTime::from_timestamp_millis(seen).expect("stamp");
+    MeshNode {
+        id: id.to_owned(),
+        name: id.to_owned(),
+        role: None,
+        agents: agents.iter().map(|agent| (*agent).to_owned()).collect(),
+        host: "127.0.0.1".to_owned(),
+        port: 9,
+        providers: Vec::new(),
+        models: Vec::new(),
+        capabilities: Vec::new(),
+        status,
+        last_seen: stamp,
+        registered_at: stamp,
+        version: "0.1.0".to_owned(),
+        metadata: None,
+        ssh_user: None,
+        install_root: None,
+        platform: None,
+        extra: wire::Extra::default(),
+    }
+}
+
+#[tokio::test]
+async fn a_task_routes_to_the_node_that_hosts_its_agent() {
+    let root = tempfile::tempdir().expect("root");
+    let mut local = BTreeMap::new();
+    local.insert(
+        "worker".to_owned(),
+        super::super::LocalBinding {
+            model: None,
+            provider: None,
+        },
+    );
+    let roster = Roster {
+        node: NODE.to_owned(),
+        mesh: true,
+        local,
+        presets: Arc::new(PresetFile::new(root.path().to_path_buf())),
+        nodes: vec![
+            host(
+                "east",
+                &["claude"],
+                1_760_000_001_000,
+                MeshNodeStatus::Online,
+            ),
+            host(
+                "west",
+                &["claude"],
+                1_760_000_002_000,
+                MeshNodeStatus::Online,
+            ),
+            host(
+                "north",
+                &["claude"],
+                1_760_000_003_000,
+                MeshNodeStatus::Offline,
+            ),
+        ],
+    };
+    let routed = |agent: &str, node: &str| {
+        Some(TaskRoute {
+            agent_id: agent.to_owned(),
+            node: node.to_owned(),
+        })
+    };
+    assert_eq!(
+        roster.route("worker", None).await.expect("local"),
+        routed("worker", NODE)
+    );
+    assert_eq!(
+        roster.route("claude", None).await.expect("mesh"),
+        routed("claude", "west")
+    );
+    assert_eq!(
+        roster.route("claude", Some("east")).await.expect("pinned"),
+        routed("claude", "east")
+    );
+    assert_eq!(
+        roster.route("ghost", Some("east")).await.expect("unknown"),
+        None
+    );
 }
