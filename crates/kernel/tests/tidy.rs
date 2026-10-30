@@ -20,6 +20,7 @@ use kernel::topics::TopicId;
 use kernel::topics::TopicKind;
 use kernel::topics::TopicListing;
 use kernel::topics::TopicName;
+use kernel::wiki::page::WikiSlug;
 use wire::session_id::SessionId;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -100,6 +101,22 @@ fn a_filing_s_fingerprint_is_its_set_of_members() {
     let mut reordered = first.to_vec();
     reordered.reverse();
     assert_eq!(file(first.to_vec()).unwrap(), file(reordered).unwrap());
+}
+
+#[test]
+fn a_page_fold_s_fingerprint_keeps_its_direction() -> TestResult {
+    let fold = |page: &str, into: &str| -> TestResult<_> {
+        Ok(TreeEdit::MergePage {
+            page: WikiSlug::try_from(page.to_owned())?,
+            into: WikiSlug::try_from(into.to_owned())?,
+        }
+        .fingerprint()?)
+    };
+    assert_ne!(
+        fold("acmekit-deploys", "acmekit")?,
+        fold("acmekit", "acmekit-deploys")?
+    );
+    Ok(())
 }
 
 #[test]

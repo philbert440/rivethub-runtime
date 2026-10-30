@@ -415,7 +415,8 @@ redirect, or a delete whose topic is gone, is approved as already applied.
 `{ decided, failed: [{ proposalId, error }] }`, where a failed proposal stays pending; an unknown batch is `404`. Every
 change has a fingerprint (a merge's unordered pair; a move's topic and parent; a rename's topic and new slug; the topic
 of a close or delete; the folded name of a new topic or type; a `fileInto`'s topic and a SHA-256 digest of its sorted
-session keys and conversation ids, so filing other members is another change), and a proposal whose fingerprint is
+session keys and conversation ids, so filing other members is another change; a `mergePage`'s page then the page it
+folds into, in that order, since the opposite fold leaves the other page), and a proposal whose fingerprint is
 pending or rejected is dropped when a batch is stored, so a rejected change is never proposed again; approvals are not
 remembered. The categorizer role claims `propose-tidy` (cron `tidy-sweep`, hourly; `rh local` also queues it at start), which does
 nothing until a week has passed since the categorizer's last batch. It reads the work tree and the types with session

@@ -90,12 +90,7 @@ impl TreeEdit {
                 Fingerprint::of(&["file", &topic.to_string(), &member_digest(members)])
             }
             Self::MergePage { page, into } => {
-                let (low, high) = if page.as_ref() < into.as_ref() {
-                    (page, into)
-                } else {
-                    (into, page)
-                };
-                Fingerprint::of(&["merge-page", low.as_ref(), high.as_ref()])
+                Fingerprint::of(&["merge-page", page.as_ref(), into.as_ref()])
             }
             Self::RemovePage { page } => Fingerprint::of(&["remove-page", page.as_ref()]),
             Self::AddType { name, .. } => Fingerprint::of(&["type", slug(name)?.as_str()]),
