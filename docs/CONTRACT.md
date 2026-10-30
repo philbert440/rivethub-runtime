@@ -499,7 +499,8 @@ hyphens, starting with a letter and not ending with a hyphen, unique on the node
 and tools. `name`, `version` and `description` are text; `icon` (optional) is a Material Symbols name, as is every icon
 in B17, and a client draws its generic plug-in glyph for a name it lacks; `$schema` (optional) is ignored, for editors.
 `run` is `command` (an argv, never a shell line: a first element without a slash is looked up on `PATH`, one with a
-slash is relative to the plug-in directory, which is also the working directory), `env` (extra variables; a `RIVETHUB_`
+slash is relative to the plug-in directory, which is also the working directory; an absolute path or one with a `..`
+is refused, and a confined start refuses a path that resolves outside the directory through a link), `env` (extra variables; a `RIVETHUB_`
 name is refused) and `readyTimeoutMs` (default 10000). `permissions` lists what it asks for (note 54). `settings` is a
 list of fields (note 58) other than `file`, keys unique; rh keeps the values and each client draws them as a native form
 on the plug-in's entry in Settings. `tools` are agent tools (note 57): `name` (1 to 24 characters of `a-z`, `0-9` and
@@ -558,8 +559,8 @@ sends a turn and can start a session), `topics.read` (`GET /api/topics*`, `GET /
 a plug-in), `tasks.read` (`GET /api/tasks*`), `tasks.delegate`
 (`POST /api/tasks`), `agents.read` (`GET /api/agents*`) and `notifications.send` (`POST /api/plugin/notify`). Events
 need the permission of what they reveal (note 56). On Linux the process is confined (note 50): it reads and writes its
-own `data/` and `run/` folders; reads its install directory, the program it runs (and the installation around it when
-that program sits in a `bin` folder), `/usr`, `/bin`, `/sbin`, `/lib`, `/lib32`, `/lib64`, `/etc`, `/proc`, `/sys`,
+own `data/` and `run/` folders; reads its install directory, the program it runs (and the `lib` folder beside the `bin`
+folder it sits in, if it does), `/usr`, `/bin`, `/sbin`, `/lib`, `/lib32`, `/lib64`, `/etc`, `/proc`, `/sys`,
 `/dev/null`, `/dev/zero`, `/dev/random` and `/dev/urandom`; writes `/dev/null`; connects to the plug-in API socket; and
 opens no TCP connection or listener, reaches no abstract unix socket and signals no process outside its own. The host
 permissions widen that: `host.files.read` reads every file and `host.files.write` writes every file (files outside the

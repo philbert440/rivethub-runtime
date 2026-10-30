@@ -176,26 +176,38 @@ pub(super) fn policy(
 fn installation(program: &Path) -> Option<PathBuf> {
     let folder = program.parent()?;
     (folder.file_name() == Some(OsStr::new("bin")))
-        .then(|| folder.parent().map(Path::to_path_buf))
+        .then(|| folder.parent().map(|prefix| prefix.join("lib")))
         .flatten()
 }
 
-fn located(program: &Path, search: Option<&OsStr>) -> Result<PathBuf, String> {
-    let found = if program.components().count() > 1 {
-        program.to_path_buf()
-    } else {
-        search
-            .into_iter()
-            .flat_map(std::env::split_paths)
-            .map(|folder| folder.join(program))
-            .find(|candidate| candidate.is_file())
-            .ok_or_else(|| format!("{} is not on PATH", program.display()))?
-    };
+fn located(program: &Path, install: &Path, search: Option<&OsStr>) -> Result<PathBuf, String> {
+    if program.components().count() > 1 {
+        let found = std::fs::canonicalize(program)
+            .map_err(|error| format!("{}: {error}", program.display()))?;
+        return if found.starts_with(install) {
+            Ok(found)
+        } else {
+            Err(format!(
+                "{} resolves outside the plug-in's folder",
+                program.display()
+            ))
+        };
+    }
+    let found = search
+        .into_iter()
+        .flat_map(std::env::split_paths)
+        .map(|folder| folder.join(program))
+        .find(|candidate| candidate.is_file())
+        .ok_or_else(|| format!("{} is not on PATH", program.display()))?;
     std::fs::canonicalize(&found).map_err(|error| format!("{}: {error}", found.display()))
 }
 
 pub(super) fn resolve(request: &Request) -> Result<Policy, String> {
-    let program = located(&request.program, request.search.as_deref())?;
+    let program = located(
+        &request.program,
+        &request.folders.install,
+        request.search.as_deref(),
+    )?;
     #[cfg_attr(
         dylint_lib = "rr_lints",
         expect(
@@ -289,9 +301,47 @@ pub(super) fn restrict(_policy: &Policy) -> Result<Confinement, std::convert::In
 
 #[cfg(test)]
 mod tests {
+    use std::path::{Path, PathBuf};
+
     use wire::plugin::manifest::Permission;
 
-    use super::{Support, refusal};
+    use super::{Folders, Request, Support, policy, refusal, resolve};
+
+    fn folders(install: &Path) -> Folders {
+        Folders {
+            install: install.to_path_buf(),
+            data: install.join("data"),
+            run: install.join("run"),
+            api: install.join("api.sock"),
+        }
+    }
+
+    #[test]
+    fn a_program_in_a_bin_folder_reads_only_the_lib_beside_it() {
+        let install = Path::new("/srv/plugin");
+        let read =
+            |program: &str| policy(&[], &folders(install), Some(Path::new(program)), None).read;
+        let cargo = read("/home/someone/.cargo/bin/cargo");
+        assert!(cargo.contains(&PathBuf::from("/home/someone/.cargo/lib")));
+        assert!(!cargo.contains(&PathBuf::from("/home/someone/.cargo")));
+        let home = read("/home/someone/bin/tool");
+        assert!(!home.contains(&PathBuf::from("/home/someone")));
+        assert!(!read("/bin/sh").contains(&PathBuf::from("/")));
+    }
+
+    #[test]
+    fn a_program_path_must_stay_in_the_install_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let install = std::fs::canonicalize(root.path()).unwrap();
+        std::os::unix::fs::symlink("/bin/sh", install.join("escape")).unwrap();
+        let request = Request {
+            permissions: Vec::new(),
+            folders: folders(&install),
+            program: install.join("escape"),
+            search: None,
+        };
+        assert!(resolve(&request).unwrap_err().contains("outside"));
+    }
 
     #[test]
     fn host_permissions_need_every_landlock_rule() {
