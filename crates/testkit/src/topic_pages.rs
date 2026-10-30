@@ -65,7 +65,7 @@ impl PageStores<'_> {
         self.settle().await
     }
 
-    async fn slug(&self, topic: &Topic) -> Result<WikiSlug, Box<dyn std::error::Error>> {
+    pub(crate) async fn slug(&self, topic: &Topic) -> Result<WikiSlug, Box<dyn std::error::Error>> {
         Ok(self
             .topics
             .page_slug(topic.id)

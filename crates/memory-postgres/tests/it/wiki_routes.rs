@@ -27,10 +27,11 @@ impl Seeded {
             .execute(&mut *tx)
             .await?;
         sqlx::query(
-            "INSERT INTO rh_conversations (id, session_key, agent) VALUES ($1, $2, 'rivet')",
+            "INSERT INTO rh_conversations (id, session_key, agent, title) VALUES ($1, $2, 'rivet', $3)",
         )
         .bind(conversation)
         .bind(wiki_routes::SESSION_KEY)
+        .bind(wiki_routes::SESSION_TITLE)
         .execute(&mut *tx)
         .await?;
         sqlx::query(
@@ -100,6 +101,12 @@ async fn a_second_session_naming_an_entity_gives_it_its_own_page(pool: PgPool) -
         &seeded.job,
     )
     .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn an_entity_page_names_the_sessions_that_cite_it(pool: PgPool) -> TestResult {
+    let seeded = Seeded::new(pool).await?;
+    wiki_routes::an_entity_page_names_the_sessions_that_cite_it(seeded.stores(), &seeded.job).await
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]

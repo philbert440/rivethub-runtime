@@ -7495,6 +7495,40 @@
             "string",
             "null"
           ]
+        },
+        "conversationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessionId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SessionId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "channel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -7775,6 +7809,12 @@
         },
         "excerpt": {
           "type": "string"
+        },
+        "topicId": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

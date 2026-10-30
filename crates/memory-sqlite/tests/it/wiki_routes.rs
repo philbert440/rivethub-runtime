@@ -21,11 +21,12 @@ async fn seeded() -> TestResult<(TempDir, SqliteStore, ExtractWiki)> {
     execute(
         &store,
         &format!(
-            "INSERT INTO ros_conversations (id, session_key, agent, created_at, updated_at)
-             VALUES ('{CONVERSATION}', '{}', 'rivet', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z');
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
+             VALUES ('{CONVERSATION}', '{}', 'rivet', '{}', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z');
              INSERT INTO ros_summaries (id, conversation_id, content, created_at)
              VALUES ('{SUMMARY}', '{CONVERSATION}', 'AcmeKit notes.', '2026-10-10T12:00:00.000Z');",
-            wiki_routes::SESSION_KEY
+            wiki_routes::SESSION_KEY,
+            wiki_routes::SESSION_TITLE
         ),
     )
     .await?;
@@ -78,6 +79,13 @@ async fn a_second_session_naming_an_entity_gives_it_its_own_page() -> TestResult
     let (_directory, store, job) = seeded().await?;
     wiki_routes::a_second_session_naming_an_entity_gives_it_its_own_page(stores(&store), &job)
         .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_entity_page_names_the_sessions_that_cite_it() -> TestResult {
+    let (_directory, store, job) = seeded().await?;
+    wiki_routes::an_entity_page_names_the_sessions_that_cite_it(stores(&store), &job).await?;
     Ok(())
 }
 

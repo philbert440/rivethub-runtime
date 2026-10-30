@@ -600,5 +600,6 @@ fn wiki_topic(page: &wire::gateway::wiki::WikiPageResponse) -> wire::gateway::wi
         entities: page.entities.clone(),
         updated_at: page.updated_at,
         excerpt: page.current_state.chars().take(240).collect(),
+        topic_id: page.topic_id.clone(),
     }
 }

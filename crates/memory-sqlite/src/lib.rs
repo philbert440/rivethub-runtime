@@ -34,6 +34,7 @@ mod topics;
 mod unembedded;
 mod vector;
 mod wiki_builder;
+mod wiki_citations;
 mod wiki_consolidate;
 mod wiki_held;
 mod wiki_read;

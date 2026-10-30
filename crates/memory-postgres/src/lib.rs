@@ -33,6 +33,7 @@ mod title;
 mod topics;
 mod wiki;
 mod wiki_builder;
+mod wiki_citations;
 pub mod wiki_writer;
 
 #[cfg(test)]
