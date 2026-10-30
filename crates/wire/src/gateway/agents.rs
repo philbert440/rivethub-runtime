@@ -39,6 +39,16 @@ pub struct AgentPreset {
     pub extra: Extra,
 }
 
+pub const HARNESS_DEFAULT_MODEL: &str = "default";
+
+impl AgentPreset {
+    #[must_use]
+    pub fn launch_model(&self) -> Option<&str> {
+        let model = self.model.trim();
+        (!model.is_empty() && model != HARNESS_DEFAULT_MODEL).then_some(model)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(try_from = "String", into = "String")]
 pub struct KnownHarness(HarnessId);

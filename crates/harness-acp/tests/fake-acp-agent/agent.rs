@@ -45,9 +45,17 @@ struct FakeArgs {
     record_new: Option<std::path::PathBuf>,
     #[arg(long)]
     steering: bool,
+    #[arg(long, default_value = "offered")]
+    effort_option: EffortOption,
 }
 
 const REPLAYED_CHUNKS: usize = 300;
+
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum EffortOption {
+    Offered,
+    Absent,
+}
 
 #[derive(Clone, Copy, clap::ValueEnum)]
 enum OnLoad {
@@ -93,6 +101,7 @@ struct AgentState {
     record_meta: Option<std::path::PathBuf>,
     record_new: Option<std::path::PathBuf>,
     steering: bool,
+    effort_option: EffortOption,
     running: AtomicBool,
     cancelled: AtomicBool,
     cancel_notify: Notify,
@@ -131,6 +140,7 @@ fn prepare(args: FakeArgs) -> Option<AgentState> {
         record_meta: args.record_meta,
         record_new: args.record_new,
         steering: args.steering,
+        effort_option: args.effort_option,
         running: AtomicBool::new(false),
         cancelled: AtomicBool::new(false),
         cancel_notify: Notify::new(),
@@ -144,7 +154,13 @@ fn session_id(state: &AgentState) -> acp::SessionId {
 }
 
 fn current_options(state: &AgentState) -> Vec<acp::SessionConfigOption> {
-    script::fixture_options(&state.selection.lock())
+    let mut options = script::fixture_options(&state.selection.lock());
+    if state.effort_option == EffortOption::Absent {
+        options.retain(|option| {
+            option.category != Some(acp::SessionConfigOptionCategory::ThoughtLevel)
+        });
+    }
+    options
 }
 
 fn on_initialize(
