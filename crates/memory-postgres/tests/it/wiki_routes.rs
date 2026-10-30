@@ -149,9 +149,20 @@ async fn a_child_session_waits_for_its_parent(pool: PgPool) -> TestResult {
 #[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic(pool: PgPool) -> TestResult {
     let seeded = Seeded::new(pool).await?;
-    testkit::wiki_lineage::a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic(
+    testkit::wiki_lineage::a_child_s_notes_land_on_its_filed_ancestor_s_topic(
         seeded.stores_in(&testkit::wiki_lineage::GRANDCHILD),
         &seeded.job,
+    )
+    .await
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_subagent_key_s_notes_land_on_its_parent_s_topic(pool: PgPool) -> TestResult {
+    let subagent = summarized(&pool, testkit::wiki_lineage::SUBAGENT_KEY).await?;
+    let seeded = Seeded::new(pool).await?;
+    testkit::wiki_lineage::a_child_s_notes_land_on_its_filed_ancestor_s_topic(
+        seeded.stores(),
+        &subagent,
     )
     .await
 }

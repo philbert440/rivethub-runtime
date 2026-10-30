@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+#[path = "memory_jobs/filing.rs"]
+mod filing;
 #[path = "memory_jobs/support.rs"]
 mod support;
 #[path = "memory_jobs/synthesis.rs"]

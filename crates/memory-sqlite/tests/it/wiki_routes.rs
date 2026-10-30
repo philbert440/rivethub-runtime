@@ -14,6 +14,8 @@ const CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c1";
 const SUMMARY: &str = "00000000-0000-4000-8000-0000000000d1";
 const EARLIER_CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c2";
 const EARLIER_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d2";
+const SUBAGENT_CONVERSATION: &str = "00000000-0000-4000-8000-0000000000c3";
+const SUBAGENT_SUMMARY: &str = "00000000-0000-4000-8000-0000000000d3";
 
 async fn seeded() -> TestResult<(TempDir, SqliteStore, ExtractWiki)> {
     let directory = tempfile::tempdir()?;
@@ -140,9 +142,35 @@ async fn a_child_session_waits_for_its_parent() -> TestResult {
 #[tokio::test]
 async fn a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic() -> TestResult {
     let (_directory, store, job) = seeded().await?;
-    testkit::wiki_lineage::a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic(
+    testkit::wiki_lineage::a_child_s_notes_land_on_its_filed_ancestor_s_topic(
         stores_in(&store, &testkit::wiki_lineage::GRANDCHILD),
         &job,
+    )
+    .await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_subagent_key_s_notes_land_on_its_parent_s_topic() -> TestResult {
+    let (_directory, store, _job) = seeded().await?;
+    execute(
+        &store,
+        &format!(
+            "INSERT INTO ros_conversations (id, session_key, agent, title, created_at, updated_at)
+             VALUES ('{SUBAGENT_CONVERSATION}', '{}', 'rivet', 'Billing check', '2026-10-10T12:00:00.000Z', '2026-10-10T12:00:00.000Z');
+             INSERT INTO ros_summaries (id, conversation_id, content, created_at)
+             VALUES ('{SUBAGENT_SUMMARY}', '{SUBAGENT_CONVERSATION}', 'Billing notes.', '2026-10-10T12:00:00.000Z');",
+            testkit::wiki_lineage::SUBAGENT_KEY
+        ),
+    )
+    .await?;
+    let subagent = ExtractWiki {
+        summary_id: Uuid::parse_str(SUBAGENT_SUMMARY)?,
+        conversation_id: Some(Uuid::parse_str(SUBAGENT_CONVERSATION)?),
+    };
+    testkit::wiki_lineage::a_child_s_notes_land_on_its_filed_ancestor_s_topic(
+        stores(&store),
+        &subagent,
     )
     .await?;
     Ok(())

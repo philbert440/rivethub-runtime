@@ -20,6 +20,8 @@ use crate::wiki_routes::SESSION_KEY;
 use crate::wiki_routes::patch;
 
 pub const MIDDLE_KEY: &str = "claude-code:00000000-0000-4000-8000-000000000040";
+pub const SUBAGENT_KEY: &str =
+    "claude-code:00000000-0000-4000-8000-000000000041/subagents/agent-a1";
 
 #[derive(Debug)]
 pub struct Parents(pub &'static [(&'static str, &'static str)]);
@@ -85,7 +87,7 @@ impl SessionLister for Parents {
     }
 }
 
-pub async fn a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic(
+pub async fn a_child_s_notes_land_on_its_filed_ancestor_s_topic(
     stores: RouteStores<'_>,
     job: &ExtractWiki,
 ) -> Outcome {
@@ -100,7 +102,7 @@ pub async fn a_nested_child_s_notes_land_on_its_filed_ancestor_s_topic(
         .await?;
     stores.router().apply_deferred().await?;
     same(
-        "the grandchild's note on the root's topic",
+        "the child's note on its filed ancestor's topic",
         stores.notes(&acmekit).await?,
         vec![("Billing".to_owned(), note.to_owned())],
     )?;

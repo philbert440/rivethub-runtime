@@ -36,6 +36,7 @@ use crate::topics::root_page;
 use crate::transcript::SessionLister;
 use crate::transcript::TranscriptReaderError;
 use crate::transcript::linked_parent;
+use crate::transcript::session_parent;
 
 const DEFERRALS_PER_SWEEP: u32 = 50;
 const LINEAGE_DEPTH: usize = 8;
@@ -412,12 +413,8 @@ impl TopicPorts<'_> {
         &self,
         session: &SessionId,
     ) -> Result<Option<SessionId>, TranscriptReaderError> {
-        let described = self
-            .lineage
-            .describe(session.harness(), session.native(), None)
-            .await?;
-        Ok(described
-            .and_then(|row| row.parent_session_id)
+        Ok(session_parent(self.lineage, session)
+            .await?
             .and_then(|parent| linked_parent(session.harness(), &parent)))
     }
 

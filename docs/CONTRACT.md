@@ -378,7 +378,9 @@ stay. What is filed: a key that is a session id files that session; a bare uuid 
 `claude-code:<uuid>`; `task:<uuid>` files the conversation under the topic of the conversation whose messages name the
 task id (as a conversation when none is found or it is unfiled); any other key files as a conversation. Never filed:
 keys starting `grokbot-run-sand-subagent-` or `heartbeat`, and the channels `test-channel`, `env-test-channel` and
-`test`. Order: an existing placement is kept; a child session follows its parent on the client and is not filed; a
+`test`. Order: an existing placement is kept; a child session (one whose native id holds `/subagents/`, the parent
+being the part before it, or one whose harness store names a parent; the wiki and the cleanup use the same test)
+follows its parent on the client and is not filed; a
 task follows its parent; a working directory inside a topic's own directory (deepest wins, a tie decides nothing; a
 local directory matches by path, since conversations captured before (64) record no node) files it there; exactly one
 topic named in the title or first leaf files it there; otherwise the model answers file, suggest a name (with an
