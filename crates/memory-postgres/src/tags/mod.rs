@@ -408,6 +408,15 @@ async fn add_tag(pool: &PgPool, add: &TagAdd) -> Result<TagWire, MemoryStoreErro
         TagEntity::Id(id) => *id,
         TagEntity::SessionKey(key) => resolve_session(pool, key, add.agent.as_deref()).await?,
     };
+    let display = match add
+        .display
+        .as_deref()
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+    {
+        Some(text) => text.to_owned(),
+        None => add.tag.value.clone(),
+    };
     let record = sqlx::query!(
         "insert into rh_tags (entity_type, entity_id, key, value, display, source, state, \
                               proposed_by, reason, decided_by, decided_at) \
@@ -424,7 +433,7 @@ async fn add_tag(pool: &PgPool, add: &TagAdd) -> Result<TagWire, MemoryStoreErro
         entity_id,
         add.tag.key.as_str(),
         add.tag.value.as_str(),
-        add.display.clone(),
+        Some(display),
         add.reason.clone(),
         add.decided_by.clone()
     )

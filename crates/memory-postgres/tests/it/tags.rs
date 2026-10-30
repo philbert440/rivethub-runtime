@@ -194,6 +194,51 @@ async fn add_tag_accepts_ids_and_session_keys(pool: PgPool) -> TestResult {
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn add_tag_defaults_display_to_the_value(pool: PgPool) -> TestResult {
+    let memory = store(&pool);
+    let conversation = seed_conversation(&pool, "claude-code:display").await?;
+
+    let omitted = memory
+        .add_tag(TagAdd {
+            entity_type: TagEntityType::Conversation,
+            entity: TagEntity::Id(conversation),
+            agent: None,
+            tag: kernel::memory::TagLiteral {
+                key: "project".to_string(),
+                value: "General".to_string(),
+            },
+            display: None,
+            reason: None,
+            decided_by: None,
+        })
+        .await?;
+    assert_eq!(
+        omitted.display, "General",
+        "an omitted display falls back to the value"
+    );
+
+    let blank = memory
+        .add_tag(TagAdd {
+            entity_type: TagEntityType::Conversation,
+            entity: TagEntity::Id(conversation),
+            agent: None,
+            tag: kernel::memory::TagLiteral {
+                key: "project".to_string(),
+                value: "Local Model Dev".to_string(),
+            },
+            display: Some("   ".to_string()),
+            reason: None,
+            decided_by: None,
+        })
+        .await?;
+    assert_eq!(
+        blank.display, "Local Model Dev",
+        "a blank display falls back to the value"
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn list_pending_counts_and_lookup_read_the_tags(pool: PgPool) -> TestResult {
     let memory = store(&pool);
     let conversation = seed_conversation(&pool, "claude-code:read").await?;
