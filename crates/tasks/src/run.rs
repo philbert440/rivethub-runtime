@@ -107,7 +107,11 @@ where
             Err(error) => return Err(self.fail_job(claimed.id, error.into()).await),
         };
         let child = self.begin_run(running.id, parent);
-        let driven = self.drive(&running, &child).await;
+        let driven = tokio::select! {
+            biased;
+            driven = self.drive(&running, &child) => driven,
+            () = self.keep_alive(running.id) => Err(Error::Cancelled),
+        };
         self.end_run(running.id);
         match driven {
             Ok(reply) => self.settle_reply(&running, claimed.id, reply, now).await,
@@ -115,6 +119,21 @@ where
             Err(error) => {
                 self.settle_call_error(&running, claimed.id, error, now)
                     .await
+            }
+        }
+    }
+
+    async fn keep_alive(&self, id: Uuid) {
+        let mut beats = tokio::time::interval(self.heartbeat);
+        beats.tick().await;
+        loop {
+            beats.tick().await;
+            if let Err(error) = self
+                .store
+                .heartbeat(id, &self.settings.worker, Utc::now())
+                .await
+            {
+                tracing::warn!(%error, task = %id, "task heartbeat failed");
             }
         }
     }

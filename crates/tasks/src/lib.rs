@@ -27,6 +27,7 @@ pub use directory::TargetInput;
 pub use directory::WorkingDir;
 pub use engine::Engine;
 pub use engine::Settings;
+pub use engine::TASK_HEARTBEAT;
 pub use error::Error;
 pub use identity::MeshIdentity;
 pub use kernel::queue::ClaimSelector;

@@ -18,11 +18,13 @@ where
     pub async fn serve(self: &Arc<Self>, cancel: CancellationToken) -> Result<(), Error> {
         let wake = self.wake();
         let mut notifications = self.jobs.subscribe().await?;
+        let mut sweeps = tokio::time::interval(self.heartbeat);
         self.notify_jobs();
         loop {
             tokio::select! {
                 () = cancel.cancelled() => break,
                 () = wake.notified() => self.drain(&cancel).await,
+                _ = sweeps.tick() => self.notify_jobs(),
                 incoming = notifications.recv() => match incoming {
                     Ok(()) => self.notify_jobs(),
                     Err(error) => {

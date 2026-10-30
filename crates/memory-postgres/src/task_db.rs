@@ -154,6 +154,23 @@ impl TaskStore for PostgresTasks {
         .await
     }
 
+    async fn heartbeat(&self, id: Uuid, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError> {
+        sqlx::query(
+            "UPDATE rh_tasks SET last_heartbeat_at = $3 \
+             WHERE id = $1 AND claimed_by = $2 AND status IN ('running', 'awaiting-input')",
+        )
+        .bind(id)
+        .bind(worker)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|source| TaskError::Operation {
+            operation: "task heartbeat",
+            source: Box::new(source),
+        })?;
+        Ok(())
+    }
+
     async fn kill_queued_by_session(
         &self,
         session_key: &str,

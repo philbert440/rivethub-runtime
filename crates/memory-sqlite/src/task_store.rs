@@ -61,6 +61,14 @@ impl TaskStore for SqliteStore {
         .await
     }
 
+    async fn heartbeat(&self, id: Uuid, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError> {
+        let worker = worker.to_owned();
+        call(self, move |conn| {
+            crate::task_rows::heartbeat(conn, id, &worker, now)
+        })
+        .await
+    }
+
     async fn kill_queued_by_session(
         &self,
         session_key: &str,

@@ -223,6 +223,8 @@ pub trait TaskStore: std::fmt::Debug + Send + Sync {
 
     async fn sweep(&self, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError>;
 
+    async fn heartbeat(&self, id: Uuid, worker: &str, now: DateTime<Utc>) -> Result<(), TaskError>;
+
     async fn kill_queued_by_session(
         &self,
         session_key: &str,
