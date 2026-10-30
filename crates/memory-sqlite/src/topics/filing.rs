@@ -89,12 +89,10 @@ impl FilingStore for SqliteStore {
                 "SELECT c.id, c.session_key, c.agent, c.channel, c.title
                    FROM ros_messages m
                    JOIN ros_conversations c ON c.id = m.conversation_id
-                   JOIN ros_conversations own ON own.id = ?2
                   WHERE m.conversation_id <> ?2
-                    AND julianday(m.created_at) BETWEEN julianday(own.created_at) - 1
-                                                    AND julianday(own.created_at) + 1
                     AND (instr(coalesce(m.tool_result, ''), ?1) > 0 OR instr(m.content, ?1) > 0)
-                  ORDER BY m.created_at
+                  ORDER BY instr(coalesce(m.tool_result, ''), ?1) > 0 DESC,
+                           julianday(m.created_at), c.id
                   LIMIT 1",
                 params![task.to_string(), conversation.to_string()],
                 read_head,

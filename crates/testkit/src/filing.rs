@@ -23,6 +23,7 @@ const CLAUDE: &str = "00000000-0000-4000-8000-000000000031";
 const BARE: &str = "00000000-0000-4000-8000-000000000032";
 const NODE_A: &str = "node-a";
 const NODE_B: &str = "node-b";
+const THREE_DAYS: u32 = 3 * 24 * 60;
 
 pub async fn conversations_file_with_titles_and_corrections<S>(store: &S) -> Outcome
 where
@@ -157,6 +158,83 @@ async fn corrections_follow_the_tree<S: TopicStore + FilingStore>(
         (None, 0),
     )?;
     Ok(())
+}
+
+pub async fn a_task_files_under_the_conversation_that_started_it<S>(store: &S) -> Outcome
+where
+    S: FilingStore + MemoryStore,
+{
+    let task = Uuid::parse_str("00000000-0000-4000-8000-0000000000a1")?;
+    let said = |role, content: String, result: Option<String>, minute| CaptureMessage {
+        event_id: format!("task-mention-{minute}"),
+        role,
+        content,
+        tool_name: None,
+        tool_args: None,
+        tool_result: result,
+        metadata: None,
+        created_at: Some(at(minute)),
+    };
+    record(
+        store,
+        "claude-code:00000000-0000-4000-8000-000000000051",
+        said(Role::User, format!("Is task {task} done?"), None, 0),
+    )
+    .await?;
+    let started = record(
+        store,
+        "claude-code:00000000-0000-4000-8000-000000000052",
+        said(
+            Role::Tool,
+            "Delegated.".to_owned(),
+            Some(format!("{{\"taskId\":\"{task}\"}}")),
+            10,
+        ),
+    )
+    .await?;
+    let own = record(
+        store,
+        &format!("task:{task}"),
+        said(
+            Role::User,
+            "Run the release checks.".to_owned(),
+            None,
+            THREE_DAYS,
+        ),
+    )
+    .await?;
+    same(
+        "the conversation whose tool output names the task",
+        store.task_parent(task, own).await?.map(|head| head.id),
+        Some(started),
+    )?;
+    Ok(())
+}
+
+async fn record<S: MemoryStore>(
+    store: &S,
+    key: &str,
+    message: CaptureMessage,
+) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let created = message.created_at;
+    let captured = store
+        .capture(
+            CaptureBatchRequest {
+                session_key: key.to_owned(),
+                agent: "rivet".to_owned(),
+                channel: Some("claude-code".to_owned()),
+                title: None,
+                settings: None,
+                task_id: None,
+                finalize: None,
+                created_at: created,
+                updated_at: created,
+                messages: vec![message],
+            },
+            None,
+        )
+        .await?;
+    Ok(Uuid::parse_str(&captured.conversation_id)?)
 }
 
 pub async fn capture<S: MemoryStore>(

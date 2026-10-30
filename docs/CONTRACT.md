@@ -375,8 +375,10 @@ entity or moves an entity, so what a person sets stays.
 (`{conversationId}`), which only the categorizer role runs, on the model of its config's default agent. The tag
 suggester (`suggest-tags`) and the folder rule that wrote `project:` tags are retired; tag storage and the tag routes
 stay. What is filed: a key that is a session id files that session; a bare uuid on the `claude-code` channel files
-`claude-code:<uuid>`; `task:<uuid>` files the conversation under the topic of the conversation whose messages name the
-task id (as a conversation when none is found or it is unfiled); any other key files as a conversation. Never filed:
+`claude-code:<uuid>`; `task:<uuid>` files the conversation under the topic of the conversation that started the task:
+the earliest whose tool output names the task id, else the earliest whose messages name it, however long before or after
+the task conversation was recorded (as a conversation when none is found or it is unfiled); any other key files as a
+conversation. Never filed:
 keys starting `grokbot-run-sand-subagent-` or `heartbeat`, and the channels `test-channel`, `env-test-channel` and
 `test`. Order: an existing placement is kept; a child session (one whose native id holds `/subagents/`, the parent
 being the part before it, or one whose harness store names a parent; the wiki and the cleanup use the same test)
