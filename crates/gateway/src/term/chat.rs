@@ -119,11 +119,11 @@ impl TerminalService {
             model: model.clone(),
             effort,
             working_dir: Some(directory.clone()),
-            startup_context,
+            startup_context: startup_context.clone(),
         };
         let session = harness.new_session(spec).await?;
         let initialized = self
-            .register_chat(user, &harness, &session, harness_id)
+            .register_chat(user, &harness, &session, harness_id, startup_context)
             .await;
         if let Err(error) = initialized {
             harness.release(&session).await?;
@@ -205,15 +205,17 @@ impl TerminalService {
         harness: &Arc<dyn kernel::harness::HarnessAdapter>,
         session: &SessionId,
         harness_id: HarnessId,
+        startup: Option<String>,
     ) -> Result<(), ApiError> {
         let key = self.registry.claim(user, session.as_str())?;
         let events = harness.events(session).await?;
-        let chat = ChatActor::start(
+        let chat = ChatActor::start_with(
             self,
             harness.clone(),
             user.clone(),
             session.clone(),
             Some(events),
+            startup,
         )?;
         self.chats.write().insert(key.clone(), chat);
         self.registry.ingest(

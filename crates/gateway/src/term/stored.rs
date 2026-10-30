@@ -13,6 +13,19 @@ impl TerminalService {
         self
     }
 
+    pub(crate) async fn stored(
+        &self,
+        harness: HarnessId,
+        native: &str,
+    ) -> Result<Option<bool>, ApiError> {
+        match &self.session_lister {
+            Some(lister) => Ok(Some(
+                lister.describe(harness, native, None).await?.is_some(),
+            )),
+            None => Ok(None),
+        }
+    }
+
     pub(crate) async fn resume(
         &self,
         harness: Option<HarnessId>,

@@ -13,6 +13,8 @@ use crate::error::ApiError;
 use crate::tenancy::UserId;
 use crate::term::{Launch, TerminalService};
 
+mod handover;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Surface {
     Chat,
@@ -185,6 +187,7 @@ pub(crate) struct ChatActor {
     closing: Option<oneshot::Sender<Result<(), ApiError>>>,
     tools: ToolNames,
     steering: tokio::task::JoinSet<Steered>,
+    startup: Option<String>,
 }
 
 impl ChatActor {
@@ -195,12 +198,23 @@ impl ChatActor {
         session: SessionId,
         events: Option<mpsc::Receiver<SessionEvent>>,
     ) -> Result<ChatHandle, ApiError> {
+        Self::start_with(service, harness, user, session, events, None)
+    }
+
+    pub(crate) fn start_with(
+        service: &Arc<TerminalService>,
+        harness: Arc<dyn HarnessAdapter>,
+        user: UserId,
+        session: SessionId,
+        events: Option<mpsc::Receiver<SessionEvent>>,
+        startup: Option<String>,
+    ) -> Result<ChatHandle, ApiError> {
         let surface = if events.is_some() {
             Surface::Chat
         } else {
             Surface::Terminal
         };
-        Self::spawn(service, harness, user, session, events, surface)
+        Self::spawn(service, harness, user, session, (events, surface), startup)
     }
 
     pub(crate) fn idle(
@@ -209,7 +223,7 @@ impl ChatActor {
         user: UserId,
         session: SessionId,
     ) -> Result<ChatHandle, ApiError> {
-        Self::spawn(service, harness, user, session, None, Surface::Idle)
+        Self::spawn(service, harness, user, session, (None, Surface::Idle), None)
     }
 
     fn spawn(
@@ -217,8 +231,8 @@ impl ChatActor {
         harness: Arc<dyn HarnessAdapter>,
         user: UserId,
         session: SessionId,
-        events: Option<mpsc::Receiver<SessionEvent>>,
-        surface: Surface,
+        (events, surface): (Option<mpsc::Receiver<SessionEvent>>, Surface),
+        startup: Option<String>,
     ) -> Result<ChatHandle, ApiError> {
         let key = service.registry.authorize(&user, session.as_str())?;
         let (commands, requests) = mpsc::channel(64);
@@ -237,6 +251,7 @@ impl ChatActor {
             closing: None,
             tools: ToolNames::default(),
             steering: tokio::task::JoinSet::new(),
+            startup,
         };
         service.track(async move {
             if let Err(error) = actor.run(requests).await {
@@ -311,7 +326,7 @@ impl ChatActor {
                             else { self.pending = Some((launch, reply)); }
                         }
                         Request::Steer { message, reply } => { let running = !turn.is_empty() || !self.turn_ended; self.steer(running, message, reply); }
-                        Request::TurnEnd => self.terminal_busy = false,
+                        Request::TurnEnd => self.terminal_turn_ended(),
                         Request::Stop { reply } => {
                             let result = match self.surface {
                                 Surface::Chat => self.harness.cancel(&self.session).await.map_err(ApiError::from),
@@ -353,12 +368,13 @@ impl ChatActor {
             return Ok(());
         }
         if let Some((mut launch, reply)) = self.pending.take() {
+            let fresh = self.fresh().await?;
             if self.surface == Surface::Chat {
                 self.harness.release(&self.session).await?;
                 self.events = None;
                 self.surface = Surface::Idle;
             }
-            launch.resume = Some(self.session.native().into());
+            self.prepare(&mut launch, fresh);
             let result = self
                 .service
                 .spawn_raw(&self.user, &self.key, launch)
