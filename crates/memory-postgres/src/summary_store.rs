@@ -54,6 +54,10 @@ const INSERT_SQL: &str = "insert into rh_summaries (
         earliest_at, latest_at, model, created_at, pipeline_version
     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
 
+const NOTIFY_SQL: &str = "select pg_notify('rh_summary_written', json_build_object(
+        'id', $1::text, 'sessionKey', c.session_key, 'kind', $2::text, 'depth', $3::int)::text)
+    from rh_conversations c where c.id = $4";
+
 const SOURCE_SQL: &str = "insert into rh_summary_sources (summary_id, message_id, ordinal)
     values ($1, $2, $3)";
 
@@ -189,6 +193,14 @@ impl SummaryStore for PostgresMemory {
         } else {
             SummaryWrite::Added
         };
+        sqlx::query(NOTIFY_SQL)
+            .bind(summary.id.to_string())
+            .bind(summary.kind.as_str())
+            .bind(summary.depth)
+            .bind(summary.conversation_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|source| query_err("announce summary", source))?;
         tx.commit()
             .await
             .map_err(|source| query_err("commit summary write", source))?;

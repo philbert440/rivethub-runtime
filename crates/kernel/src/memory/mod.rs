@@ -71,8 +71,10 @@ pub use summary::SummaryNode;
 pub use summary::SummarySource;
 pub use summary::SummaryStore;
 pub use summary::SummaryStoreError;
+pub use summary::SummaryWatch;
 pub use summary::SummaryWrite;
 pub use summary::WindowMessage;
+pub use summary::WrittenSummary;
 pub use title::SUMMARY_TITLE_MAX_CHARS;
 pub use title::summary_title;
 

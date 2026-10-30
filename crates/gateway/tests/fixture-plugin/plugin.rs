@@ -32,6 +32,11 @@ struct ApiProbe {
     path: String,
 }
 
+#[derive(Deserialize)]
+struct FileProbe {
+    path: PathBuf,
+}
+
 fn main() {
     let environment = config::Environment::from_process();
     let (Some(socket), Some(api), Some(token), Some(data)) = (
@@ -190,6 +195,10 @@ async fn tool(
             serde_json::to_string(&events).map_err(|error| error.to_string())
         }
         "pid" => Ok(std::process::id().to_string()),
+        "read" => match call.arguments.deserialize::<FileProbe>() {
+            Ok(asked) => std::fs::read_to_string(&asked.path).map_err(|error| error.to_string()),
+            Err(error) => Err(error.to_string()),
+        },
         "api" => match call.arguments.deserialize::<ApiProbe>() {
             Ok(asked) => Ok(probe(&fixture, &asked.method, &asked.path).await),
             Err(error) => Err(error.to_string()),

@@ -31,6 +31,7 @@ impl PluginTools for FixturePlugin {
         plugin: &PluginId,
         tool: &ToolName,
         call: PluginToolCall,
+        _tool_use: Option<&str>,
     ) -> Result<PluginToolResult, PluginToolError> {
         let arguments =
             serde_json::to_string(&call.arguments).map_err(|error| PluginToolError::Failed {

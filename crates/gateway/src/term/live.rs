@@ -104,6 +104,19 @@ impl TerminalService {
         }
     }
 
+    pub(crate) fn running_tool(&self, call: &str) -> Option<SessionId> {
+        let key = self
+            .activity
+            .read()
+            .iter()
+            .find(|(_, live)| live.running(call))
+            .map(|(key, _)| key.clone())?;
+        self.summaries
+            .read()
+            .get(&key)
+            .map(|summary| summary.session_id.clone())
+    }
+
     pub(crate) fn live_preview(&self, key: &str) -> Option<Preview> {
         self.activity
             .read()
@@ -209,15 +222,16 @@ impl TerminalService {
         self.registry_events.subscribe()
     }
 
-    pub(crate) fn publish_registry(&self, key: String, event: HarnessEvent) {
-        if let (Some(host), HarnessEvent::SessionCreated { session_id, .. }) =
-            (self.plugins.get(), &event)
-        {
+    pub(crate) fn tell_started(&self, session: &SessionId, topic: Option<String>) {
+        if let Some(host) = self.plugins.get() {
             host.publish(&PluginEvent::SessionStarted {
-                session_id: session_id.clone(),
-                topic_id: None,
+                session_id: session.clone(),
+                topic_id: topic,
             });
         }
+    }
+
+    pub(crate) fn publish_registry(&self, key: String, event: HarnessEvent) {
         if self
             .registry_events
             .send(RegistryEvent { key, event })

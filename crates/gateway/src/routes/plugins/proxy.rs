@@ -265,7 +265,7 @@ async fn tool(
     let tool = ToolName::try_from(rest.to_owned())
         .map_err(|error| PluginRouteError::NotFound(error.to_string()))?;
     let call: PluginToolCall = read_request(request).await?;
-    match host.call(plugin, &tool, call).await {
+    match host.call(plugin, &tool, call, None).await {
         Ok(result) => Ok(Json(result).into_response()),
         Err(error) => Ok(crate::plugins::tool_error(&error)),
     }

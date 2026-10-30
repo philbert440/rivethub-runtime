@@ -136,12 +136,13 @@ impl Server {
     }
 
     pub async fn call(&self, request: CallToolRequestParams) -> Result<CallToolResult, ErrorData> {
-        self.dispatch(request, self.shutdown.clone()).await
+        self.dispatch(request, None, self.shutdown.clone()).await
     }
 
     async fn dispatch(
         &self,
         request: CallToolRequestParams,
+        tool_use: Option<String>,
         cancel: CancellationToken,
     ) -> Result<CallToolResult, ErrorData> {
         if !self.tools.iter().any(|tool| tool.name == request.name) {
@@ -149,7 +150,13 @@ impl Server {
                 && kernel::plugins::split_tool_name(&request.name).is_ok()
             {
                 let arguments = request.arguments.unwrap_or_default();
-                return Ok(plugins::call(port.as_ref(), &request.name, arguments, None).await);
+                return Ok(plugins::call(
+                    port.as_ref(),
+                    &request.name,
+                    arguments,
+                    tool_use.as_deref(),
+                )
+                .await);
             }
             return Err(ErrorData::invalid_params(
                 format!("Tool {} not found", request.name),
@@ -345,7 +352,8 @@ impl ServerHandler for Server {
         context: RequestContext<RoleServer>,
     ) -> Result<rmcp::model::CallToolResponse, ErrorData> {
         let cancel = self.shutdown.child_token();
-        let pending = self.dispatch(request, cancel.clone());
+        let tool_use = plugins::tool_use(&context.meta);
+        let pending = self.dispatch(request, tool_use, cancel.clone());
         tokio::pin!(pending);
         tokio::select! {
             biased;

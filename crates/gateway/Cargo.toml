@@ -49,6 +49,9 @@ url = { workspace = true }
 uuid = { workspace = true }
 wire = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = { workspace = true }
+
 [dev-dependencies]
 hex = { workspace = true }
 libtest-mimic = { workspace = true }

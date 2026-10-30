@@ -162,3 +162,58 @@ fn restarts_back_off_from_one_second_to_a_minute() {
     assert_eq!(restart_delay(7), Duration::from_secs(60));
     assert_eq!(restart_delay(40), Duration::from_secs(60));
 }
+
+#[test]
+fn settings_are_checked_against_their_fields() -> Result<(), serde_json::Error> {
+    use kernel::plugins::settings::{apply, effective, shown};
+    use std::collections::BTreeMap;
+    use wire::plugin::view::{ViewField, ViewValue};
+    let fields: Vec<ViewField> = serde_json::from_str(
+        r#"[{"key": "runs", "label": "Runs", "input": {"type": "number", "min": 1, "max": 8}, "value": 2, "required": true},
+            {"key": "mode", "label": "Mode", "input": {"type": "select", "options": [{"value": "fast", "label": "Fast"}]}},
+            {"key": "token", "label": "Token", "input": {"type": "secret"}}]"#,
+    )?;
+    let none = BTreeMap::new();
+    let update = |pairs: &[(&str, Option<ViewValue>)]| -> BTreeMap<String, Option<ViewValue>> {
+        pairs
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), value.clone()))
+            .collect()
+    };
+    let refused = |pairs: &[(&str, Option<ViewValue>)]| {
+        apply(&fields, &none, &update(pairs)).map_err(|problem| problem.key)
+    };
+    assert_eq!(
+        refused(&[("runs", Some(ViewValue::Number(9.0)))]),
+        Err("runs".to_owned())
+    );
+    assert_eq!(
+        refused(&[("runs", Some(ViewValue::Bool(true)))]),
+        Err("runs".to_owned())
+    );
+    assert_eq!(
+        refused(&[("mode", Some(ViewValue::Text("slow".into())))]),
+        Err("mode".to_owned())
+    );
+    assert_eq!(
+        refused(&[("colour", Some(ViewValue::Text("red".into())))]),
+        Err("colour".to_owned())
+    );
+    let kept = apply(
+        &fields,
+        &none,
+        &update(&[
+            ("runs", None),
+            ("token", Some(ViewValue::Text("s3cret".into()))),
+        ]),
+    )
+    .map_err(|problem| serde::de::Error::custom(problem.to_string()))?;
+    assert_eq!(
+        effective(&fields, &kept).get("runs"),
+        Some(&ViewValue::Number(2.0))
+    );
+    let visible = shown(&fields, &kept);
+    assert_eq!(visible.secrets_set, ["token"]);
+    assert!(!visible.values.contains_key("token"));
+    Ok(())
+}

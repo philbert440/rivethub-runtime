@@ -1,3 +1,5 @@
+pub mod settings;
+
 use std::collections::BTreeSet;
 use std::time::Duration;
 
@@ -50,6 +52,7 @@ pub trait PluginTools: Send + Sync {
         plugin: &PluginId,
         tool: &ToolName,
         call: PluginToolCall,
+        tool_use: Option<&str>,
     ) -> Result<PluginToolResult, PluginToolError>;
 
     async fn changed(&self, seen: u64) -> Result<u64, PluginToolError>;

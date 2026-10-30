@@ -20,6 +20,11 @@ pub async fn start(gateway: &Arc<Gateway>) -> Result<(), HostError> {
             "the plug-in host is already started".into(),
         ));
     }
+    if let Some(terminal) = gateway.terminal.as_ref()
+        && host.terminal.set(Arc::downgrade(terminal)).is_err()
+    {
+        tracing::debug!("plug-in host already knows the terminal service");
+    }
     tokio::fs::create_dir_all(&host.settings.root).await?;
     let api = super::api::bind(&host.api_socket()).await?;
     let tools = super::api::bind(&host.tools_socket()).await?;
@@ -38,6 +43,10 @@ pub async fn start(gateway: &Arc<Gateway>) -> Result<(), HostError> {
     if let Some(tasks) = gateway.tasks() {
         host.tasks
             .spawn(forward_task_events(Arc::clone(host), Arc::clone(tasks)));
+    }
+    if let Some(summaries) = gateway.summaries.as_ref() {
+        host.tasks
+            .spawn(forward_summaries(Arc::clone(host), summaries.written()));
     }
     let ids: Vec<PluginId> = host.entries.lock().keys().cloned().collect();
     for id in ids {
@@ -74,6 +83,40 @@ async fn forward_task_events(host: Arc<PluginHost>, tasks: Arc<crate::routes::ta
     }
 }
 
+async fn forward_summaries(
+    host: Arc<PluginHost>,
+    mut written: tokio::sync::broadcast::Receiver<kernel::memory::WrittenSummary>,
+) {
+    loop {
+        let summary = tokio::select! {
+            () = host.shutdown.cancelled() => return,
+            summary = written.recv() => summary,
+        };
+        match summary {
+            Ok(summary) => {
+                #[cfg_attr(
+                    dylint_lib = "rr_lints",
+                    expect(
+                        fallback,
+                        reason = "PATTERNS FALLBACK: a real absence, as note 56 of the contract leaves sessionId out when the key is not a canonical session id"
+                    )
+                )]
+                let session_id = summary.session_key.parse().ok();
+                host.publish(&PluginEvent::SummaryWritten {
+                    summary_id: summary.id.to_string(),
+                    session_id,
+                    kind: summary.kind,
+                    level: summary.depth.unsigned_abs(),
+                });
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(missed)) => {
+                tracing::warn!(missed, "plug-in summary events lagged");
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+        }
+    }
+}
+
 impl PluginHost {
     pub async fn close(&self) {
         self.shutdown.cancel();
@@ -92,7 +135,7 @@ impl PluginHost {
         }
     }
 
-    async fn persist(&self) -> Result<(), HostError> {
+    pub(super) async fn persist(&self) -> Result<(), HostError> {
         let snapshot = self
             .entries
             .lock()
@@ -141,6 +184,7 @@ impl PluginHost {
                     enabled: false,
                     granted: Vec::new(),
                     installed_at: Utc::now(),
+                    settings: std::collections::BTreeMap::new(),
                 },
                 live: Live::new(PluginState::Disabled),
             },
@@ -157,6 +201,8 @@ impl PluginHost {
         approved: &[Permission],
     ) -> Result<PluginRecord, HostError> {
         let _operation = self.operations.lock().await;
+        let requested = self.read(plugin, |entry| entry.stored.manifest.permissions.clone())?;
+        self.refuse_unconfinable(&requested)?;
         let granted = self.read(plugin, |entry| {
             kernel::plugins::approve(
                 &entry.stored.manifest.permissions,

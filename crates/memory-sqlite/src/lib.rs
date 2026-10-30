@@ -114,9 +114,11 @@ pub struct SqliteStore {
     notifications: tokio::sync::watch::Sender<()>,
     task_events: tokio::sync::watch::Sender<u64>,
     task_finished: tokio::sync::broadcast::Sender<uuid::Uuid>,
+    summaries_written: tokio::sync::broadcast::Sender<kernel::memory::WrittenSummary>,
 }
 
 const TASK_FINISHED_BUFFER: usize = 256;
+const SUMMARY_WRITTEN_BUFFER: usize = 256;
 
 impl SqliteStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SqliteError> {
@@ -277,6 +279,7 @@ fn from_conn(
         notifications: tokio::sync::watch::channel(()).0,
         task_events,
         task_finished,
+        summaries_written: tokio::sync::broadcast::channel(SUMMARY_WRITTEN_BUFFER).0,
     }
 }
 

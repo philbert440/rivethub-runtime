@@ -37,11 +37,20 @@ pub(crate) fn definitions(list: &PluginToolList) -> Vec<Tool> {
         .collect()
 }
 
+const TOOL_USE_META: &str = "claudecode/toolUseId";
+const TOOL_USE_HEADER: &str = "x-rivethub-tool-use";
+
+pub(crate) fn tool_use(meta: &rmcp::model::RequestMetaObject) -> Option<String> {
+    meta.get(TOOL_USE_META)
+        .and_then(|value| value.as_str())
+        .map(str::to_owned)
+}
+
 pub(crate) async fn call(
     port: &dyn PluginTools,
     name: &str,
     arguments: rmcp::model::JsonObject,
-    session_id: Option<wire::session_id::SessionId>,
+    tool_use: Option<&str>,
 ) -> CallToolResult {
     let answered = match kernel::plugins::split_tool_name(name) {
         Ok((plugin, tool)) => match wire::JsonObject::from_serialize(&arguments) {
@@ -51,8 +60,9 @@ pub(crate) async fn call(
                     &tool,
                     PluginToolCall {
                         arguments,
-                        session_id,
+                        session_id: None,
                     },
+                    tool_use,
                 )
                 .await
             }
@@ -128,13 +138,19 @@ impl PluginTools for SocketTools {
         plugin: &PluginId,
         tool: &ToolName,
         call: PluginToolCall,
+        tool_use: Option<&str>,
     ) -> Result<PluginToolResult, PluginToolError> {
         let name = kernel::plugins::tool_name(plugin, tool);
-        let response = self
+        let request = self
             .http
             .post(format!("http://plugins/tools/{name}"))
             .timeout(CALL_TIMEOUT)
-            .json(&call)
+            .json(&call);
+        let request = match tool_use {
+            Some(id) => request.header(TOOL_USE_HEADER, id),
+            None => request,
+        };
+        let response = request
             .send()
             .await
             .map_err(|error| PluginToolError::Unreachable(error.to_string()))?;

@@ -20,11 +20,11 @@ use wire::harness::HarnessId;
 use wire::plugin::action::{ViewActionRefusal, ViewActionResult};
 use wire::plugin::host::{
     PluginEnableRequest, PluginInstallRequest, PluginJobOutcome, PluginLogStream, PluginLogs,
-    PluginRecord, PluginState,
+    PluginRecord, PluginSettings, PluginState,
 };
 use wire::plugin::manifest::{Permission, PluginManifest};
 use wire::plugin::process::{PluginEvent, PluginToolCall, PluginToolResult};
-use wire::plugin::view::View;
+use wire::plugin::view::{View, ViewValue};
 use wire::session_id::SessionId;
 
 type Failure = Box<dyn std::error::Error + Send + Sync>;
@@ -44,7 +44,12 @@ const MANIFEST: &str = r#"{
     { "name": "echo", "description": "Echo the arguments.", "inputSchema": { "type": "object" } },
     { "name": "events", "description": "List received events.", "inputSchema": { "type": "object" } },
     { "name": "pid", "description": "Answer the process id.", "inputSchema": { "type": "object" } },
-    { "name": "api", "description": "Call the plug-in API.", "inputSchema": { "type": "object" } }
+    { "name": "api", "description": "Call the plug-in API.", "inputSchema": { "type": "object" } },
+    { "name": "read", "description": "Read a file.", "inputSchema": { "type": "object" } }
+  ],
+  "settings": [
+    { "key": "runs", "label": "Runs at once", "input": { "type": "number", "min": 1, "max": 8 }, "value": 2, "required": true },
+    { "key": "token", "label": "Token", "input": { "type": "secret" } }
   ],
   "contributes": { "pages": [{ "id": "fixture", "title": "Fixture", "view": "status" }] },
   "jobs": [{ "id": "tick", "title": "Tick" }],
@@ -55,6 +60,11 @@ const MANIFEST: &str = r#"{
 struct Probe<'a> {
     method: &'a str,
     path: &'a str,
+}
+
+#[derive(Serialize)]
+struct FileProbe<'a> {
+    path: &'a Path,
 }
 
 struct Harness {
@@ -211,6 +221,8 @@ async fn an_installed_plugin_is_approved_from_a_device_and_served_through_the_pr
     install_and_approve(&host, &source).await?;
     proxied_routes_are_checked(&host).await?;
     api_calls_are_scoped(&host).await?;
+    the_process_is_confined_to_its_folders(&host, root.path()).await?;
+    settings_are_checked_kept_and_delivered(&host).await?;
     events_and_jobs_reach_the_process(&host).await?;
     a_killed_process_is_restarted(&host).await?;
     a_wider_manifest_waits_for_approval(&host, &source).await?;
@@ -324,6 +336,70 @@ async fn api_calls_are_scoped(host: &Harness) -> TestResult {
     assert_eq!(
         host.probe("POST", "/api/plugin/views/changed").await?,
         "204"
+    );
+    Ok(())
+}
+
+async fn the_process_is_confined_to_its_folders(host: &Harness, root: &Path) -> TestResult {
+    let outside = root.join("outside.txt");
+    std::fs::write(&outside, "not the plug-in's")?;
+    let inside = root.join("state/plugins/fixture/data/inside.txt");
+    std::fs::write(&inside, "the plug-in's own")?;
+    let read = |path: &Path| -> Result<JsonObject, Failure> {
+        Ok(JsonObject::from_serialize(&FileProbe { path })?)
+    };
+    let own = host.tool("read", read(&inside)?).await?;
+    assert_eq!(own.text, "the plug-in's own");
+    let (_, bytes) = host
+        .call(Method::GET, "/api/plugins/fixture/logs", None, false)
+        .await?;
+    let logs: PluginLogs = serde_json::from_slice(&bytes)?;
+    let confined = logs.lines.iter().any(|line| {
+        line.stream == PluginLogStream::Host && line.text.ends_with("confined by Landlock")
+    });
+    let other = host.tool("read", read(&outside)?).await?;
+    assert_eq!(other.is_error, confined, "{}", other.text);
+    Ok(())
+}
+
+async fn settings_are_checked_kept_and_delivered(host: &Harness) -> TestResult {
+    let (status, bytes) = host
+        .call(Method::GET, "/api/plugins/fixture/settings", None, false)
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    let shown: PluginSettings = serde_json::from_slice(&bytes)?;
+    assert_eq!(shown.values.get("runs"), Some(&ViewValue::Number(2.0)));
+    let put = |body: &str| {
+        host.call(
+            Method::PUT,
+            "/api/plugins/fixture/settings",
+            Some(body.to_owned()),
+            false,
+        )
+    };
+    let (status, bytes) = put(r#"{"values": {"runs": 9}}"#).await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(refused(&bytes)?.error.starts_with("runs: "));
+    let (status, bytes) = put(r#"{"values": {"runs": 4, "token": "s3cret"}}"#).await?;
+    assert_eq!(status, StatusCode::OK);
+    let kept: PluginSettings = serde_json::from_slice(&bytes)?;
+    assert_eq!(kept.values.get("runs"), Some(&ViewValue::Number(4.0)));
+    assert!(!kept.values.contains_key("token"));
+    assert_eq!(kept.secrets_set, ["token"]);
+    let own = host.probe_body("GET", "/api/plugin/self").await?;
+    assert!(own.contains(r#""token":"s3cret""#), "{own}");
+    let mut delivered = String::new();
+    let mut poll = tokio::time::interval(POLL);
+    for _ in 0..200 {
+        poll.tick().await;
+        delivered = host.tool("events", JsonObject::default()).await?.text;
+        if delivered.contains("settings.changed") {
+            break;
+        }
+    }
+    assert!(
+        delivered.contains(r#""runs":4.0"#) || delivered.contains(r#""runs":4"#),
+        "{delivered}"
     );
     Ok(())
 }

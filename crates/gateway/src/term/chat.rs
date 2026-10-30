@@ -22,6 +22,7 @@ pub(crate) struct ChatStart {
     pub(crate) cwd: Option<std::path::PathBuf>,
     pub(crate) agent: Option<AgentLaunch>,
     pub(crate) startup_context: Option<String>,
+    pub(crate) topic: Option<String>,
 }
 
 type ChatDefaults = (
@@ -79,6 +80,7 @@ impl TerminalService {
                 cwd,
                 agent: None,
                 startup_context: None,
+                topic: None,
             },
         )
         .await
@@ -96,6 +98,7 @@ impl TerminalService {
             cwd,
             agent,
             startup_context,
+            topic,
         } = start;
         let harness = self
             .harness
@@ -152,6 +155,7 @@ impl TerminalService {
                 supersedes: None,
             },
         );
+        self.tell_started(&summary.session_id, topic);
         Ok(summary)
     }
 

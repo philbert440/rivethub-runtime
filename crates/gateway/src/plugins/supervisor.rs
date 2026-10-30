@@ -58,8 +58,11 @@ async fn run_once(host: &Arc<PluginHost>, plugin: &PluginId, stop: &Cancellation
         Ok(prepared) => prepared,
         Err(reason) => return Ended::Failed { exit: None, reason },
     };
-    let mut child = match launch::spawn(&prepared.plan) {
-        Ok(child) => child,
+    let launch::Launched {
+        mut child,
+        confinement,
+    } = match launch::spawn(&prepared.plan).await {
+        Ok(launched) => launched,
         Err(error) => {
             return Ended::Failed {
                 exit: None,
@@ -73,7 +76,11 @@ async fn run_once(host: &Arc<PluginHost>, plugin: &PluginId, stop: &Cancellation
     host.log(
         plugin,
         PluginLogStream::Host,
-        format!("started {}", prepared.plan.program.display()),
+        format!(
+            "started {}, {}",
+            prepared.plan.program.display(),
+            confinement.describe()
+        ),
     );
     pump(host, plugin, child.stdout.take(), PluginLogStream::Stdout);
     pump(host, plugin, child.stderr.take(), PluginLogStream::Stderr);

@@ -137,6 +137,7 @@ async fn create(
         cwd: request.cwd.map(std::path::PathBuf::from),
         agent,
         startup_context: rendered,
+        topic: topic.as_ref().map(|topic| topic.id.to_string()),
     };
     let mut summary = service.start_chat(&user, start).await?;
     if let Some(topic) = topic {
@@ -330,6 +331,7 @@ async fn delegated(
             cwd: request.working_dir.map(std::path::PathBuf::from),
             agent: None,
             startup_context: None,
+            topic: None,
         },
         text: request.text,
         system_prompt: request.system_prompt,

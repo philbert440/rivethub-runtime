@@ -257,6 +257,7 @@ pub struct Gateway {
     decisions: Option<Arc<dyn kernel::topics::DecisionStore>>,
     startup: Option<StartupMemory>,
     plugins: Option<Arc<plugins::PluginHost>>,
+    summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
 }
 
 struct StartupMemory {
@@ -305,6 +306,7 @@ impl Gateway {
             decisions: None,
             startup: None,
             plugins: None,
+            summaries: None,
         }
     }
 
@@ -357,6 +359,12 @@ impl Gateway {
         self.topics
             .as_ref()
             .ok_or_else(|| error::ApiError::Unavailable("topic store unavailable".into()))
+    }
+
+    #[must_use]
+    pub fn with_summary_watch(mut self, watch: Arc<dyn kernel::memory::SummaryWatch>) -> Self {
+        self.summaries = Some(watch);
+        self
     }
 
     #[must_use]

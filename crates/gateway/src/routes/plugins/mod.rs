@@ -12,6 +12,7 @@ use serde::Deserialize;
 use wire::gateway::GatewayError;
 use wire::plugin::host::{
     PluginEnableRequest, PluginInstallRequest, PluginList, PluginLogs, PluginRecord,
+    PluginSettings, PluginSettingsUpdate,
 };
 use wire::plugin::{PluginId, RouteName};
 
@@ -45,6 +46,12 @@ pub(crate) fn router() -> Router<Arc<Gateway>> {
         .route(
             "/api/plugins/{id}/logs",
             get(logs).fallback(super::method_not_allowed),
+        )
+        .route(
+            "/api/plugins/{id}/settings",
+            get(settings)
+                .put(change_settings)
+                .fallback(super::method_not_allowed),
         )
         .route(
             "/api/plugins/{id}/jobs/{job}/run",
@@ -87,6 +94,9 @@ impl IntoResponse for PluginRouteError {
                 (StatusCode::BAD_REQUEST, "invalid", None)
             }
             Self::Host(HostError::Conflict(_)) => (StatusCode::CONFLICT, "conflict", None),
+            Self::Host(HostError::Unconfinable(_)) => {
+                (StatusCode::CONFLICT, "sandbox_unavailable", None)
+            }
             Self::Host(HostError::Unavailable(_)) => {
                 (StatusCode::SERVICE_UNAVAILABLE, "plugin_unavailable", None)
             }
@@ -243,6 +253,26 @@ async fn logs(
     owner(&gateway, &user)?;
     let lines = host(&gateway)?.tail(&plugin_id(id)?, query.tail).await?;
     Ok(Json(PluginLogs { lines }))
+}
+
+async fn settings(
+    State(gateway): State<Arc<Gateway>>,
+    user: UserId,
+    Path(id): Path<String>,
+) -> Result<Json<PluginSettings>, PluginRouteError> {
+    owner(&gateway, &user)?;
+    Ok(Json(host(&gateway)?.plugin_settings(&plugin_id(id)?)?))
+}
+
+async fn change_settings(
+    State(gateway): State<Arc<Gateway>>,
+    user: UserId,
+    Path(id): Path<String>,
+    Body(request): Body<PluginSettingsUpdate>,
+) -> Result<Json<PluginSettings>, PluginRouteError> {
+    owner(&gateway, &user)?;
+    let host = host(&gateway)?;
+    Ok(Json(host.change_settings(&plugin_id(id)?, &request).await?))
 }
 
 async fn run_job(

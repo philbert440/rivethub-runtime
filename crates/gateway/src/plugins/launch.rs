@@ -7,7 +7,9 @@ use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
 use tokio::process::{Child, Command};
 use wire::plugin::PluginId;
-use wire::plugin::manifest::PluginRun;
+use wire::plugin::manifest::{Permission, PluginRun};
+
+use super::sandbox::{self, Confinement};
 
 const STOP_GRACE: Duration = Duration::from_secs(5);
 
@@ -17,6 +19,7 @@ pub(super) struct LaunchPlan {
     pub(super) args: Vec<String>,
     pub(super) directory: PathBuf,
     pub(super) env: Vec<(OsString, OsString)>,
+    pub(super) sandbox: Option<sandbox::Request>,
 }
 
 #[derive(Debug)]
@@ -24,9 +27,17 @@ pub(super) struct Contract<'a> {
     pub(super) plugin: &'a PluginId,
     pub(super) node: &'a str,
     pub(super) data: &'a Path,
+    pub(super) run: &'a Path,
     pub(super) socket: &'a Path,
     pub(super) api: &'a Path,
     pub(super) token: &'a str,
+    pub(super) confine: Option<&'a [Permission]>,
+}
+
+#[derive(Debug)]
+pub(super) struct Launched {
+    pub(super) child: Child,
+    pub(super) confinement: Confinement,
 }
 
 pub(super) fn plan(
@@ -63,12 +74,33 @@ pub(super) fn plan(
             contract.api.as_os_str().to_owned(),
         ),
         pair("RIVETHUB_PLUGIN_TOKEN", contract.token),
+        (
+            OsString::from("TMPDIR"),
+            contract.run.as_os_str().to_owned(),
+        ),
     ]);
+    let search = env
+        .iter()
+        .rev()
+        .find(|(name, _)| name == "PATH")
+        .map(|(_, value)| value.clone());
+    let sandbox = contract.confine.map(|permissions| sandbox::Request {
+        permissions: permissions.to_vec(),
+        folders: sandbox::Folders {
+            install: directory.to_path_buf(),
+            data: contract.data.to_path_buf(),
+            run: contract.run.to_path_buf(),
+            api: contract.api.to_path_buf(),
+        },
+        program: program.clone(),
+        search,
+    });
     Some(LaunchPlan {
         program,
         args: args.to_vec(),
         directory: directory.to_path_buf(),
         env,
+        sandbox,
     })
 }
 
@@ -76,7 +108,7 @@ fn pair(name: &str, value: &str) -> (OsString, OsString) {
     (OsString::from(name), OsString::from(value))
 }
 
-pub(super) fn spawn(plan: &LaunchPlan) -> std::io::Result<Child> {
+pub(super) async fn spawn(plan: &LaunchPlan) -> Result<Launched, String> {
     let mut command = Command::new(&plan.program);
     command
         .args(&plan.args)
@@ -88,7 +120,40 @@ pub(super) fn spawn(plan: &LaunchPlan) -> std::io::Result<Child> {
         .stderr(Stdio::piped())
         .process_group(0)
         .kill_on_drop(true);
-    command.spawn()
+    let Some(request) = plan.sandbox.clone() else {
+        return command
+            .spawn()
+            .map(|child| Launched {
+                child,
+                confinement: Confinement::Unconfined,
+            })
+            .map_err(|error| error.to_string());
+    };
+    let runtime = tokio::runtime::Handle::current();
+    let (sent, launched) = tokio::sync::oneshot::channel();
+    std::thread::Builder::new()
+        .name("plugin-launch".to_owned())
+        .spawn(move || {
+            let _entered = runtime.enter();
+            let started = sandbox::resolve(&request)
+                .and_then(|policy| {
+                    sandbox::restrict(&policy)
+                        .map_err(|error| format!("confinement failed: {error}"))
+                })
+                .and_then(|confinement| {
+                    command
+                        .spawn()
+                        .map(|child| Launched { child, confinement })
+                        .map_err(|error| error.to_string())
+                });
+            if sent.send(started).is_err() {
+                tracing::debug!("plug-in launch abandoned; its process is stopped");
+            }
+        })
+        .map_err(|error| format!("launch thread: {error}"))?;
+    launched
+        .await
+        .map_err(|error| format!("launch thread: {error}"))?
 }
 
 pub(super) async fn terminate(child: &mut Child) -> std::io::Result<std::process::ExitStatus> {

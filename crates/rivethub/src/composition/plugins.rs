@@ -25,7 +25,7 @@ async fn host(
     settings: &gateway::Settings,
     env: &Environment,
 ) -> Result<Arc<PluginHost>, ComposeError> {
-    let inherited = ["PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ", "TMPDIR"]
+    let inherited = ["PATH", "HOME", "USER", "LANG", "LC_ALL", "TZ"]
         .into_iter()
         .filter_map(|name| {
             env.get(name)

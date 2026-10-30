@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use wire::plugin::PluginId;
 use wire::plugin::manifest::{Permission, PluginManifest};
+use wire::plugin::view::ViewValue;
 
 use super::HostError;
 
@@ -19,6 +20,8 @@ pub(super) struct Stored {
     pub(super) enabled: bool,
     pub(super) granted: Vec<Permission>,
     pub(super) installed_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(super) settings: BTreeMap<String, ViewValue>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

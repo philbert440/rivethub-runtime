@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -21,6 +21,9 @@ use crate::extract::Body;
 
 const TOOL_TIMEOUT: Duration = Duration::from_secs(120);
 const LIST_WAIT: Duration = Duration::from_secs(60);
+const TOOL_USE_HEADER: &str = "x-rivethub-tool-use";
+const CALLER_WAIT: Duration = Duration::from_secs(1);
+const CALLER_POLL: Duration = Duration::from_millis(50);
 
 #[async_trait]
 impl PluginTools for PluginHost {
@@ -50,7 +53,8 @@ impl PluginTools for PluginHost {
         &self,
         plugin: &PluginId,
         tool: &ToolName,
-        call: PluginToolCall,
+        mut call: PluginToolCall,
+        tool_use: Option<&str>,
     ) -> Result<PluginToolResult, PluginToolError> {
         let declared = self
             .peek(plugin, |entry| {
@@ -71,6 +75,11 @@ impl PluginTools for PluginHost {
         let client = self
             .running_client(plugin)
             .ok_or_else(|| PluginToolError::NotRunning(plugin.as_ref().to_owned()))?;
+        if call.session_id.is_none()
+            && let Some(tool_use) = tool_use
+        {
+            call.session_id = self.calling_session(tool_use).await;
+        }
         let failed = |detail: String| PluginToolError::Failed {
             plugin: plugin.as_ref().to_owned(),
             tool: tool.as_ref().to_owned(),
@@ -124,6 +133,22 @@ impl PluginTools for PluginHost {
     }
 }
 
+impl PluginHost {
+    async fn calling_session(&self, tool_use: &str) -> Option<wire::session_id::SessionId> {
+        let terminal = self.terminal.get().and_then(std::sync::Weak::upgrade)?;
+        let deadline = tokio::time::Instant::now() + CALLER_WAIT;
+        loop {
+            if let Some(session) = terminal.running_tool(tool_use) {
+                return Some(session);
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return None;
+            }
+            tokio::time::sleep(CALLER_POLL).await;
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct ListQuery {
     after: Option<u64>,
@@ -161,10 +186,23 @@ async fn list(State(host): State<Arc<PluginHost>>, Query(query): Query<ListQuery
 async fn call(
     State(host): State<Arc<PluginHost>>,
     Path(name): Path<String>,
+    headers: HeaderMap,
     Body(request): Body<PluginToolCall>,
 ) -> Response {
+    #[cfg_attr(
+        dylint_lib = "rr_lints",
+        expect(
+            fallback,
+            reason = "PATTERNS FALLBACK: a non-UTF-8 header is no header, so the call names no tool use"
+        )
+    )]
+    let tool_use = headers
+        .get(TOOL_USE_HEADER)
+        .and_then(|value| value.to_str().ok());
     let answered = match kernel::plugins::split_tool_name(&name) {
-        Ok((plugin, tool)) => PluginTools::call(host.as_ref(), &plugin, &tool, request).await,
+        Ok((plugin, tool)) => {
+            PluginTools::call(host.as_ref(), &plugin, &tool, request, tool_use).await
+        }
         Err(error) => Err(error),
     };
     match answered {

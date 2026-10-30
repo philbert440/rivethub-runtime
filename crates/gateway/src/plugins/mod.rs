@@ -5,6 +5,8 @@ mod launch;
 mod logs;
 mod manage;
 mod registry;
+mod sandbox;
+mod settings;
 mod supervisor;
 mod tools;
 
@@ -32,7 +34,6 @@ use wire::plugin::host::{
 };
 use wire::plugin::manifest::{Permission, PluginJob};
 use wire::plugin::process::{PluginEvent, PluginNotification, PluginSelf};
-use wire::plugin::view::ViewValue;
 use wire::plugin::{PluginId, RouteName};
 
 use crate::sessions::SessionRegistry;
@@ -71,6 +72,8 @@ pub enum HostError {
     Conflict(String),
     #[error("{0}")]
     Unavailable(String),
+    #[error("{0}")]
+    Unconfinable(String),
     #[error(transparent)]
     Approval(#[from] kernel::plugins::ApprovalError),
     #[error(transparent)]
@@ -137,7 +140,9 @@ pub struct PluginHost {
     logs: logs::LogSink,
     notifications: broadcast::Sender<PluginNotification>,
     tools: watch::Sender<u64>,
+    confinable: bool,
     sessions: OnceLock<Arc<SessionRegistry>>,
+    terminal: OnceLock<std::sync::Weak<crate::term::TerminalService>>,
     shutdown: CancellationToken,
     tasks: TaskTracker,
 }
@@ -166,7 +171,9 @@ impl PluginHost {
             operations: tokio::sync::Mutex::new(()),
             notifications: broadcast::channel(NOTIFICATION_BUFFER).0,
             tools: watch::channel(0).0,
+            confinable: sandbox::available(),
             sessions: OnceLock::new(),
+            terminal: OnceLock::new(),
             shutdown,
             tasks,
         }))
@@ -285,11 +292,27 @@ impl PluginHost {
         })
     }
 
+    fn refuse_unconfinable(&self, requested: &[Permission]) -> Result<(), HostError> {
+        match sandbox::asks_host(requested) {
+            Some(permission) if !self.confinable => {
+                Err(HostError::Unconfinable(sandbox::unavailable(permission)))
+            }
+            _ => Ok(()),
+        }
+    }
+
     async fn prepare(&self, plugin: &PluginId) -> Result<Prepared, String> {
-        let (directory, run) = self
+        let (directory, run, requested, granted) = self
             .read(plugin, |entry| {
-                (entry.stored.path.clone(), entry.stored.manifest.run.clone())
+                (
+                    entry.stored.path.clone(),
+                    entry.stored.manifest.run.clone(),
+                    entry.stored.manifest.permissions.clone(),
+                    entry.stored.granted.clone(),
+                )
             })
+            .map_err(|error| error.to_string())?;
+        self.refuse_unconfinable(&requested)
             .map_err(|error| error.to_string())?;
         let folder = self.folder(plugin);
         let run_dir = folder.join("run");
@@ -307,9 +330,11 @@ impl PluginHost {
             plugin,
             node: &self.settings.node,
             data: &data,
+            run: &run_dir,
             socket: &socket,
             api: &api,
             token: &token,
+            confine: self.confinable.then_some(granted.as_slice()),
         };
         let plan = launch::plan(&run, &directory, &self.settings.inherited, &contract)
             .ok_or_else(|| "run.command is empty".to_owned())?;
@@ -529,22 +554,13 @@ impl PluginHost {
     }
 
     pub(crate) fn own(&self, plugin: &PluginId) -> Result<PluginSelf, HostError> {
-        self.read(plugin, |entry| {
-            let settings: BTreeMap<String, ViewValue> = entry
-                .stored
-                .manifest
-                .settings
-                .iter()
-                .filter_map(|field| field.value.clone().map(|value| (field.key.clone(), value)))
-                .collect();
-            PluginSelf {
-                id: plugin.clone(),
-                node: self.settings.node.clone(),
-                version: entry.stored.manifest.version.clone(),
-                permissions: entry.stored.granted.clone(),
-                settings,
-                data_dir: self.folder(plugin).join("data").display().to_string(),
-            }
+        self.read(plugin, |entry| PluginSelf {
+            id: plugin.clone(),
+            node: self.settings.node.clone(),
+            version: entry.stored.manifest.version.clone(),
+            permissions: entry.stored.granted.clone(),
+            settings: settings::effective(&entry.stored),
+            data_dir: self.folder(plugin).join("data").display().to_string(),
         })
     }
 }
