@@ -3,6 +3,7 @@ pub mod error;
 pub mod extract;
 mod history;
 pub mod mesh;
+pub mod plugins;
 pub mod routes;
 pub mod server;
 pub mod sessions;
@@ -258,6 +259,8 @@ pub struct Gateway {
     startup: Option<StartupMemory>,
     tidy: Option<Arc<dyn kernel::tidy::TidyStore>>,
     upkeep: Option<Arc<dyn kernel::tidy::UpkeepStore>>,
+    plugins: Option<Arc<plugins::PluginHost>>,
+    summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
 }
 
 struct StartupMemory {
@@ -308,6 +311,8 @@ impl Gateway {
             startup: None,
             tidy: None,
             upkeep: None,
+            plugins: None,
+            summaries: None,
         }
     }
 
@@ -334,6 +339,20 @@ impl Gateway {
     pub fn with_memory_export(mut self, export: Arc<dyn kernel::memory::MemoryExport>) -> Self {
         self.memory_export = Some(export);
         self
+    }
+
+    #[must_use]
+    pub fn with_plugins(mut self, host: Arc<plugins::PluginHost>) -> Self {
+        if let Some(terminal) = &self.terminal {
+            terminal.attach_plugins(Arc::clone(&host));
+        }
+        self.plugins = Some(host);
+        self
+    }
+
+    #[must_use]
+    pub fn plugins(&self) -> Option<&Arc<plugins::PluginHost>> {
+        self.plugins.as_ref()
     }
 
     #[must_use]
@@ -380,6 +399,11 @@ impl Gateway {
         self.upkeep
             .as_ref()
             .ok_or_else(|| error::ApiError::Unavailable("upkeep store unavailable".into()))
+    }
+
+    pub fn with_summary_watch(mut self, watch: Arc<dyn kernel::memory::SummaryWatch>) -> Self {
+        self.summaries = Some(watch);
+        self
     }
 
     #[must_use]
@@ -506,6 +530,9 @@ impl Gateway {
     #[must_use]
     pub fn with_terminal(mut self, terminal: Arc<term::TerminalService>) -> Self {
         self.sessions = terminal.registry.clone();
+        if let Some(host) = &self.plugins {
+            terminal.attach_plugins(Arc::clone(host));
+        }
         self.terminal = Some(terminal);
         self
     }
@@ -572,6 +599,9 @@ impl Gateway {
     }
 
     pub async fn close(&self) {
+        if let Some(host) = &self.plugins {
+            host.close().await;
+        }
         if let Some(audio) = &self.audio {
             audio.shutdown().await;
         }

@@ -9,8 +9,10 @@ use kernel::memory::SummaryKind;
 use kernel::memory::SummaryNode;
 use kernel::memory::SummaryStore;
 use kernel::memory::SummaryStoreError;
+use kernel::memory::SummaryWatch;
 use kernel::memory::SummaryWrite;
 use kernel::memory::WindowMessage;
+use kernel::memory::WrittenSummary;
 use rusqlite::OptionalExtension as _;
 use rusqlite::params_from_iter;
 use rusqlite::types::Value;
@@ -39,9 +41,27 @@ impl SummaryStore for SqliteStore {
     }
 
     async fn write_summary(&self, summary: NewSummary) -> Result<SummaryWrite, SummaryStoreError> {
-        self.with_conn(move |conn| write_one(conn, &summary))
+        let (id, kind, depth) = (summary.id, summary.kind, summary.depth);
+        let (written, session_key) = self
+            .with_conn(move |conn| write_one(conn, &summary))
             .await
-            .map_err(store_err)
+            .map_err(store_err)?;
+        let told = self.summaries_written.send(WrittenSummary {
+            id,
+            session_key,
+            kind,
+            depth,
+        });
+        if told.is_err() {
+            tracing::trace!("written summary has no listener");
+        }
+        Ok(written)
+    }
+}
+
+impl SummaryWatch for SqliteStore {
+    fn written(&self) -> tokio::sync::broadcast::Receiver<WrittenSummary> {
+        self.summaries_written.subscribe()
     }
 }
 
@@ -79,7 +99,7 @@ fn pending_windows(conn: &rusqlite::Connection) -> Result<Vec<ConversationWindow
 fn write_one(
     conn: &mut rusqlite::Connection,
     summary: &NewSummary,
-) -> Result<SummaryWrite, SqliteError> {
+) -> Result<(SummaryWrite, String), SqliteError> {
     let count = i64::from(summary.message_count);
     let tx = conn
         .transaction()
@@ -139,8 +159,15 @@ fn write_one(
     } else {
         SummaryWrite::Added
     };
+    let session_key: String = tx
+        .query_row(
+            "SELECT session_key FROM ros_conversations WHERE id = ?1",
+            params_from_iter([Value::Text(summary.conversation_id.to_string())]),
+            |row| row.get(0),
+        )
+        .map_err(SqliteError::query("summary session"))?;
     tx.commit().map_err(SqliteError::query("summary commit"))?;
-    Ok(written)
+    Ok((written, session_key))
 }
 
 fn leaf_write(

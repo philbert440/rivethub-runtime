@@ -2,6 +2,7 @@ mod devices;
 mod identities;
 mod mesh;
 mod models;
+pub(crate) mod plugins;
 mod stores;
 mod terminals;
 
@@ -74,6 +75,8 @@ pub enum ComposeError {
     #[error(transparent)]
     Tasks(#[from] crate::agent::AgentError),
     #[error(transparent)]
+    Plugins(#[from] gateway::plugins::HostError),
+    #[error(transparent)]
     Memory(#[from] memory_postgres::Error),
 }
 
@@ -132,6 +135,7 @@ struct Backing<'tasks> {
     decisions: Option<Arc<dyn DecisionStore>>,
     startup: Option<(Arc<dyn TopicPageStore>, Arc<dyn StartupStore>)>,
     tidy: Option<(Arc<dyn TidyStore>, Arc<dyn UpkeepStore>)>,
+    summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
     tasks: Option<&'tasks crate::agent::LocalTasks>,
 }
 
@@ -175,6 +179,10 @@ fn with_backing(gateway: Gateway, backing: &Backing<'_>) -> Gateway {
     };
     let gateway = match backing.tidy.clone() {
         Some((tidy, upkeep)) => gateway.with_tidy(tidy, upkeep),
+        None => gateway,
+    };
+    let gateway = match backing.summaries.clone() {
+        Some(watch) => gateway.with_summary_watch(watch),
         None => gateway,
     };
     match backing.startup.clone() {
@@ -269,13 +277,20 @@ impl Composition {
             decisions: Some(memory.clone()),
             startup: Some((memory.clone(), memory.clone())),
             tidy: Some((memory.clone(), memory.clone())),
+            summaries: Some(memory.clone()),
             tasks: None,
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
             .await?
             .with_activities(activities.clone());
         let store: Arc<dyn MemoryStore> = memory.clone();
-        Self::compose(config, env, store, backing, shutdown, &factory).await
+        let summaries = memory.spawn_summary_watch(shutdown.child_token()).await?;
+        let mut composition =
+            Self::compose(config, env, store, backing, shutdown, &factory).await?;
+        composition
+            .tasks
+            .spawn(async move { summaries.await.map_err(ComposeError::Task) });
+        Ok(composition)
     }
 
     pub(crate) async fn on_sqlite(
@@ -294,6 +309,7 @@ impl Composition {
             decisions: Some(store.clone()),
             startup: Some((store.clone(), store.clone())),
             tidy: Some((store.clone(), store.clone())),
+            summaries: Some(store.clone()),
             tasks,
         };
         let factory = crate::models::ModelFactory::from_config(config, env, shutdown)
@@ -389,7 +405,7 @@ impl Composition {
             });
         }
         Ok(Self {
-            gateway: Arc::new(gateway),
+            gateway: plugins::started(gateway, env).await?,
             v1,
             audit_tasks,
             audit_cancel,

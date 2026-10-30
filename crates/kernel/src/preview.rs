@@ -173,6 +173,12 @@ impl LiveActivity {
         }
     }
 
+    #[must_use]
+    pub fn running(&self, call: &str) -> bool {
+        self.tools.iter().any(|doing| doing.id == call)
+            || self.asking.as_ref().is_some_and(|asking| asking.id == call)
+    }
+
     pub fn tool_finished(&mut self, call: &str) {
         self.tools.retain(|doing| doing.id != call);
         if self.asking.as_ref().is_some_and(|asking| asking.id == call) {

@@ -8,6 +8,7 @@ use wire::harness::{
 
 use kernel::harness::ToolCallUpdate;
 use kernel::preview::{LiveActivity, Preview};
+use wire::plugin::process::PluginEvent;
 use wire::session_id::SessionId;
 
 use super::{LaunchCommand, TerminalService};
@@ -146,6 +147,19 @@ impl TerminalService {
         }
     }
 
+    pub(crate) fn running_tool(&self, call: &str) -> Option<SessionId> {
+        let key = self
+            .activity
+            .read()
+            .iter()
+            .find(|(_, live)| live.running(call))
+            .map(|(key, _)| key.clone())?;
+        self.summaries
+            .read()
+            .get(&key)
+            .map(|summary| summary.session_id.clone())
+    }
+
     pub(crate) fn live_preview(&self, key: &str) -> Option<Preview> {
         self.activity
             .read()
@@ -153,7 +167,46 @@ impl TerminalService {
             .and_then(LiveActivity::preview)
     }
 
+    pub(crate) fn attach_plugins(&self, host: std::sync::Arc<crate::plugins::PluginHost>) {
+        if self.plugins.set(host).is_err() {
+            tracing::debug!("plug-in host already attached to the terminal service");
+        }
+    }
+
+    fn tell_plugins(&self, event: &HarnessEvent) {
+        let Some(host) = self.plugins.get() else {
+            return;
+        };
+        let lifecycle = match event {
+            HarnessEvent::TurnComplete { session_id, .. } => PluginEvent::SessionIdle {
+                session_id: session_id.clone(),
+            },
+            HarnessEvent::SessionUpdated {
+                session_id,
+                status: HarnessSessionStatus::Ended,
+                ..
+            } => PluginEvent::SessionEnded {
+                session_id: session_id.clone(),
+            },
+            HarnessEvent::SessionUpdated { .. }
+            | HarnessEvent::AssistantDelta { .. }
+            | HarnessEvent::ReasoningDelta { .. }
+            | HarnessEvent::ToolUse { .. }
+            | HarnessEvent::ToolResult { .. }
+            | HarnessEvent::ApprovalRequest { .. }
+            | HarnessEvent::ApprovalResolved { .. }
+            | HarnessEvent::SessionCreated { .. }
+            | HarnessEvent::Plan { .. }
+            | HarnessEvent::Error { .. }
+            | HarnessEvent::Transcript { .. }
+            | HarnessEvent::Status(_)
+            | HarnessEvent::Prompt { .. } => return,
+        };
+        host.publish(&lifecycle);
+    }
+
     fn follow(&self, key: &str, event: &HarnessEvent) {
+        self.tell_plugins(event);
         let now = chrono::Utc::now();
         let mut activity = self.activity.write();
         match event {
@@ -211,6 +264,15 @@ impl TerminalService {
 
     pub(crate) fn subscribe_registry(&self) -> broadcast::Receiver<RegistryEvent> {
         self.registry_events.subscribe()
+    }
+
+    pub(crate) fn tell_started(&self, session: &SessionId, topic: Option<String>) {
+        if let Some(host) = self.plugins.get() {
+            host.publish(&PluginEvent::SessionStarted {
+                session_id: session.clone(),
+                topic_id: topic,
+            });
+        }
     }
 
     pub(crate) fn publish_registry(&self, key: String, event: HarnessEvent) {

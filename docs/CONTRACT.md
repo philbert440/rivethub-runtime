@@ -30,6 +30,7 @@ Reference material that survives from the first attempt (read-only; `/rivet-shar
 | B14 | Mesh registry, re-registration, heartbeat and agent channel; `/ca/v1/sign`, `/ca/v1/chain`, `/ca/v1/crl`; SPIFFE URI SAN identity, holder-generated P-256 keys, 7-day node/agent and 30-day device leaves, one-time enrollment through step-ca, verified-principal renewal by minting a fresh token, step-ca's X.509 CRL; the existing intermediate is bootstrapped into step-ca outside this runtime | peer nodes, holders, operators and legacy CRL readers during cutover | PKI-DESIGN addenda 2026-10-15/15b; mesh inventory unchanged | `crates/testkit/tests/fixtures/stepca/` and `crates/pki/tests` | recorded sign refusals, step-ca chain and CRL through the port, shared `rh ca token` minting, `CaError::Unavailable` when step-ca is unreachable; holder mTLS renew/revoke and local SAN-policy cases listed with reasons |
 | B15 | Hook events (names and context fields) seen by skills and the safety fence / audit log | skills, the audit log, operators | core-domain.md §1.6 | existing TypeScript test fixtures | the same hook sequence and fields for the same turn (the workflow journal belongs to the `rivethub-workflows` package, not the runtime) |
 | B16 | Logs operators read, health endpoint, `doctor` output | operators, monitoring | config-and-boot.md §3.10–§3.11; cli.md §2.5 | documented lines | same lines for the documented events |
+| B17 | Plug-in contract: the manifest `rivethub-plugin.json` (note 51); the plug-in process routes, its socket and environment (note 52); the plug-in API socket and its token (note 53); the permissions (note 54); the management routes `GET`/`POST /api/plugins`, `GET`/`DELETE /api/plugins/{id}`, `POST /api/plugins/{id}/enable`, `/disable` and `/reload`, `GET /api/plugins/{id}/logs`, `GET`/`PUT /api/plugins/{id}/settings` and `POST /api/plugins/{id}/jobs/{job}/run`, and the proxy `/api/plugins/{id}/{views,actions,canvas,tools,panel,http}/…` (note 55); event delivery and jobs (note 56); plug-in tools in `rh mcp` and the node-local tools socket `<state>/plugins/tools.sock` (note 57); views, canvases and web panels (notes 58–60); the `plugin.changed` and `plugin.views` notices on `/api/events/ws` and `plugin.notification` on `/api/notifications/ws` | plug-in processes and their TypeScript and Rust SDKs, RivetHub desktop / Android / web, `rh mcp` | notes 50–60 | none: new, with no TypeScript recording; bodies are the `wire::plugin` types in `contract/*.schema.json`, and `crates/wire/tests/fixtures/plugin/` holds a workflows and a file-browser plug-in's bodies | every fixture body parses as its `wire::plugin` type and writes back unchanged; the host's route behaviour is pinned by the gateway's tests against a fixture plug-in process |
 
 ## 2. What is explicitly NOT part of the contract
 
@@ -425,6 +426,254 @@ every type with the entities directly under it) and `loosePages` (pages bound to
 role's task list, and how many of its jobs have failed at least once without succeeding since, dead ones included.
 Completing a job records its task's finish in `rh_worker_runs`, in the graphile completion statement or the SQLite
 completion transaction. `pendingProposals` counts pending proposals. Without the stores the route is `503`.
+(50) Plug-in host (Phil, 2026-10-29; notes 51–60 are proposed and await his review): RivetHub's core is the workspace
+and memory, plus delegation, notifications and tasks; everything else is a plug-in, a program that runs in its own
+process on one node, is described by a manifest and reaches rh only over B17. No plug-in code is loaded into rh, so
+ARCHITECTURE's "no runtime plugin loading" still holds. The gateway process (`rh gateway`, and `rh local`) is the host:
+it keeps the registry, supervises each enabled plug-in's process, proxies clients to it, delivers its events, runs its
+jobs and answers its API calls. A plug-in is installed on one node and runs there. `GET /api/plugins` on a node lists
+only that node's plug-ins, each carrying the node's name, so a client connected to several nodes shows every node's
+plug-ins labelled by node and reaches each through its own node; a mesh-wide plug-in is not part of this contract. Each
+plug-in owns `<state>/plugins/<id>/` (B11): `data/` for its own files and databases (kept across reloads and disables;
+what is worth remembering goes into memory through `memory.write`), `run/` for its socket and `logs/`. The registry is
+`<state>/plugins/registry.json`, mode 0600, holding each plug-in's path, last valid manifest, enabled flag, granted
+permissions and install time. The `plugins:` key of `config.yaml` stays accepted and ignored (decision 10): plug-ins are
+managed only through B17. Trust: a plug-in runs as the node's user. Its token and permissions bound what it can do
+through rh, and on Linux its process is confined with Landlock to what note 54 lists. Every plug-in process is started
+by one launch function in the gateway's `plugins` module, from a thread of its own that confines itself first, so the
+process inherits the confinement and rh does not. Where the kernel has no Landlock, a plug-in that asks for a `host.*`
+permission cannot be enabled (`409` `sandbox_unavailable`, saying so) and any other runs unconfined; each start's `host`
+log line says whether the process is confined. Bodies are the `wire::plugin` types in `contract/*.schema.json`. The routes are new, with no
+TypeScript recording.
+(51) Plug-in manifest (proposed 2026-10-29): a plug-in is a directory holding `rivethub-plugin.json`, a
+`wire::plugin::manifest::PluginManifest`. `manifest` is 1. `id` is 2 to 24 characters of `a-z`, `0-9` and single
+hyphens, starting with a letter and not ending with a hyphen, unique on the node; it names the plug-in's routes, folder
+and tools. `name`, `version` and `description` are text; `icon` (optional) is a Material Symbols name, as is every icon
+in B17, and a client draws its generic plug-in glyph for a name it lacks; `$schema` (optional) is ignored, for editors.
+`run` is `command` (an argv, never a shell line: a first element without a slash is looked up on `PATH`, one with a
+slash is relative to the plug-in directory, which is also the working directory), `env` (extra variables; a `RIVETHUB_`
+name is refused) and `readyTimeoutMs` (default 10000). `permissions` lists what it asks for (note 54). `settings` is a
+list of fields (note 58) other than `file`, keys unique; rh keeps the values and each client draws them as a native form
+on the plug-in's entry in Settings. `tools` are agent tools (note 57): `name` (1 to 24 characters of `a-z`, `0-9` and
+single underscores, starting with a letter and not ending with an underscore), `title` (optional), `description`,
+`inputSchema` (a JSON Schema object) and `hints` (`readOnly`, `destructive`, `idempotent`, `openWorld`). `contributes`
+holds `pages` (`{id, title, icon?, view}`: a sidebar entry opening that view as a page), `topicCards` (`{id, title,
+view}`: the view drawn as a card in the topic rail with `context.topicId`) and `sessionActions` (`{id, title, icon?,
+action}`: a session-menu entry running that action with `context.sessionId`). `jobs` are `{id, title, schedule?,
+timeoutMs?}` and `events` the kinds it subscribes to (note 56). Lists default to empty. View, action, job, tab, form,
+canvas and contribution names are 1 to 64 characters of `a-z`, `0-9`, `-` and `_`, starting with a letter or digit.
+Unknown fields are refused here and in every other B17 body. Install also refuses an empty `command`, a `file` setting,
+duplicate tool, setting, job or contribution ids, an event whose permission is not asked for, and a `schedule` that is
+not a five-field cron expression, answering `400` with the field's path.
+(52) Plug-in process (proposed 2026-10-29): enabling starts `run.command` in its own process group with a scrubbed
+environment: `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL` and `TZ` from rh's own, then `run.env`, then
+`RIVETHUB_PLUGIN_ID`, `RIVETHUB_PLUGIN_NODE`, `RIVETHUB_PLUGIN_DATA` (the data folder), `RIVETHUB_PLUGIN_SOCKET`,
+`RIVETHUB_API_SOCKET`, `RIVETHUB_PLUGIN_TOKEN` and `TMPDIR`, its `run/` folder. rh reaches the plug-in over HTTP/1.1 on the unix socket
+`RIVETHUB_PLUGIN_SOCKET` (`<state>/plugins/<id>/run/plugin.sock`, in a 0700 folder rh creates and empties before each
+start), where the plug-in listens; a unix socket rather than a localhost port, because nothing has to be allocated, two
+plug-ins cannot collide and another local user cannot connect. The plug-in is ready when `GET /health` answers 2xx
+within `readyTimeoutMs`. It serves `GET /health`, `POST /views/{view}`, `POST /actions/{action}`, `POST
+/canvas/{canvas}/events`, `POST /tools/{tool}`, `POST /events`, `POST /jobs/{job}`, `GET /panel/{path}` and any method
+on `/http/{path}`, only those its manifest needs; an unknown route is its own `404`. Disabling, removing, reloading or
+stopping rh sends `SIGTERM` to the process group and `SIGKILL` 5 s later. A process that exits while enabled, or is not
+ready in time, goes to `backoff` and is started again after 1 s, doubling to 60 s; ten minutes running resets the delay.
+Its stdout and stderr lines are kept, with rh's own lines about it (start, ready, exit status, refused answers) as
+stream `host`, in `logs/plugin.log`, rotated at 5 MiB with one previous file kept.
+(53) Plug-in API (proposed 2026-10-29): rh mints a token of 32 random bytes (64 hex characters) at every start of a
+plug-in's process and keeps only its hash; the token stops working when the process stops. It is accepted only on the
+plug-in API socket `RIVETHUB_API_SOCKET` (`<state>/plugins/api.sock`, HTTP/1.1, one per node), never on the gateway's
+own listeners, and every request there carries `Authorization: Bearer <token>`: a missing or unknown token is `401`, and
+the loopback rule that makes a local caller the owner does not apply on this socket. The token names one plug-in; each
+request is checked against that plug-in's granted permissions when it arrives, so disabling or narrowing takes effect at
+once, and a route outside them is `403` with code `permission_required` and the permission as `detail`; a route no
+permission names (the management routes among them) is `403` with the same code and no `detail`. The socket serves the
+B1 routes each permission names (note 54) with their B1 bodies, acting as the node's owner, and three routes of its own:
+`GET /api/plugin/self` answers `PluginSelf` (id, node, version, granted permissions, settings values including secrets,
+and the data folder); `POST /api/plugin/views/changed` takes `{views}` and publishes `{type: "plugin.views", v: 1,
+plugin, views}` on every `/api/events/ws` socket, so a client showing one of those views fetches it again (clients poll
+nothing); and `POST /api/plugin/notify` (`notifications.send`) takes `{title, text?, tone?, action?}` and sends `{kind:
+"plugin.notification", plugin, node, title, text?, tone?, action?, ts}` on every `/api/notifications/ws` socket, a
+client running `action` when the person opens it. Memory a plug-in writes through `POST /api/capture` and the
+`memory_append` tool route is attributed to agent `plugin:<id>`: rh rewrites the body's `agent` before the route sees
+it.
+(54) Plug-in permissions (proposed 2026-10-29): a plug-in asks for permissions in its manifest; a person approves them
+at enable (note 55), and any later increase is approved again before the process runs with it. rh checks the B1
+permissions on every plug-in API call: `memory.read` (`GET /api/memory/*`, `POST /api/memory/tool/memory_search`,
+`memory_browse`, `memory_stats` and `memory_get_full`, `GET /api/wiki*`), `memory.write` (`POST
+/api/memory/tool/memory_append`, `POST /api/capture`), `sessions.read` (`GET` on `/api/harness-sessions*`,
+`/api/harnesses/*` and `/api/catalog`), `sessions.control` (`POST`, `PATCH` and `DELETE` on `/api/harness-sessions*`:
+create, turn, steer, cancel, answer an approval, retitle, delete), `topics.read` (`GET /api/topics*` and `GET
+/api/sessions/*`), `topics.write` (the other methods on those), `tasks.read` (`GET /api/tasks*`), `tasks.delegate`
+(`POST /api/tasks`), `agents.read` (`GET /api/agents*`) and `notifications.send` (`POST /api/plugin/notify`). Events
+need the permission of what they reveal (note 56). On Linux the process is confined (note 50): it reads and writes its
+own `data/` and `run/` folders; reads its install directory, the program it runs (and the installation around it when
+that program sits in a `bin` folder), `/usr`, `/bin`, `/sbin`, `/lib`, `/lib32`, `/lib64`, `/etc`, `/proc`, `/sys`,
+`/dev/null`, `/dev/zero`, `/dev/random` and `/dev/urandom`; writes `/dev/null`; connects to the plug-in API socket; and
+opens no TCP connection or listener, reaches no abstract unix socket and signals no process outside its own. The host
+permissions widen that: `host.files.read` reads every file and `host.files.write` writes every file (files outside the
+plug-in's own folder, still within the node user's rights), and `host.network` allows TCP, abstract unix sockets and
+reading the resolver configuration. `host.exec` (running other programs) is shown for consent and recorded; a program
+the plug-in runs inherits its confinement, so it is not checked apart. Landlock does not confine UDP, and confines
+connecting to pathname unix sockets only from its ABI 9. The tools and contributions a manifest
+declares need no permission; clients show them beside the permissions when asking for approval. The approval is the
+owner's `enable` call, and rh cannot tell a person from an agent using the owner's credentials, so an agent that builds
+a plug-in installs it and a client asks the person to enable it.
+(55) Plug-in routes (proposed 2026-10-29): every route but listing and showing answers only the node's owner (`403`
+`owner_required` for any other user); every authenticated user of the node can list plug-ins and use their views,
+actions, canvases, panels and tools, and rh names the caller to the plug-in in `x-rivethub-user`. `GET /api/plugins`
+answers `PluginList` `{node, plugins}`, and `GET /api/plugins/{id}` one `PluginRecord`: `{id, node, path, manifest,
+enabled, state, granted, pending, error?, lastExit? {at, code?, signal?}, restarts, startedAt?, installedAt, jobs: [{id,
+lastRun?}]}`, `state` one of `disabled`, `awaitingApproval`, `starting`, `running`, `backoff` and `invalid` (the
+manifest at `path` is gone or no longer valid; `error` says why, and `manifest` is the last valid one). `POST
+/api/plugins` takes `{path}`, an absolute directory on the node, reads and checks its manifest (note 51) and registers
+the plug-in in place, disabled, with every permission it asks for `pending`, answering `201` with the record; it runs
+and copies nothing, so an agent building a plug-in edits that directory and reloads. An invalid manifest is `400` naming
+the field, and an id already installed is `409` (from the same directory the message says to reload it). `POST
+/api/plugins/{id}/enable` takes `{approve}` (`{}` when nothing is pending), which must name exactly the `pending`
+permissions (`409` `permissions_unapproved` listing them, `400` `not_pending` for one not pending, `409`
+`sandbox_unavailable` for a `host.*` permission on a kernel without Landlock, note 50); it grants them, starts the
+process and answers the record. While anything is pending, only a caller presenting a paired device
+certificate (a device certificate the node maps to its owner) can enable: a node or agent certificate, a bearer token or
+a loopback caller is `403` `device_certificate_required`. This one check sits apart from the owner check
+(`routes/plugins/approval.rs`) until the approval identity is decided. `POST …/disable` stops it and keeps its grants,
+settings and data. `POST …/reload` reads the manifest again: an invalid one is `400` and changes nothing; fewer
+permissions narrow the grant at once; more stop the process in `awaitingApproval` with the new ones `pending` until
+enable approves them; otherwise an enabled plug-in restarts. `DELETE /api/plugins/{id}` stops and unregisters it,
+removes its folder unless `?keepData=true`, never touches the source directory, and answers `204`. `GET …/logs?tail=<n>`
+(default 200, at most 2000) answers `{lines: [{at, stream, text}]}`, oldest first, `stream` one of `stdout`, `stderr`
+and `host`. `GET …/settings` answers `{values, secretsSet}`: each field's kept value, else the manifest's `value`, a
+secret's value left out and its key in `secretsSet`; `PUT` takes `{values}`, where `null` clears a key back to the
+manifest's `value`, and refuses with `400` naming the key a key the manifest lacks, a value that does not fit its
+field's input (its type, `min` and `max`, a select's options) or a required field left without a value; otherwise it
+keeps them in the registry, answers as `GET` does and delivers `settings.changed` to the plug-in when it runs (one that
+starts later reads them from `PluginSelf.settings`, which holds the same values with secrets). `POST …/jobs/{job}/run` is note 56. Every change to a record
+publishes `{type: "plugin.changed", v: 1, plugin}` on `/api/events/ws`. The proxy forwards
+`/api/plugins/{id}/{views,actions,canvas,tools,panel,http}/…` to the plug-in socket with the `/api/plugins/{id}` prefix
+removed, adds `x-rivethub-user`, `x-rivethub-node` and `x-rivethub-request-id`, and drops the caller's `Authorization`
+and cookies. On `views`, `actions`, `canvas` and `tools` rh parses the request and the answer as their `wire::plugin`
+types and sends the client the answer as it parsed it: an answer that does not parse is `502` `plugin_invalid_response`
+with the field path as `detail` and a `host` log line; an action's `422` reaches the client as it is, and any other
+status but `200` is `502` `plugin_error`. `panel` and `http` pass status, headers (less hop-by-hop headers and
+`Set-Cookie`) and body through, streamed. An unknown plug-in is `404`, one not running `503` `plugin_unavailable`
+(retryable), and no answer in time `504` `plugin_timeout` (30 s; 120 s for tools; 60 s to the first byte on `http`).
+Request bodies are capped at 16 MiB and parsed answers at 4 MiB.
+(56) Plug-in events and jobs (proposed 2026-10-29): a plug-in receives the event kinds its manifest lists as `POST
+/events` with a `PluginEventDelivery` `{seq, at, missed, event}`, one at a time and in order; `seq` grows by one per
+delivery to that plug-in, so a repeat can be dropped. The kinds (`event.type`) are `session.started` (`sessionId`,
+`topicId?`, the topic it was started in), `session.idle` (a turn ended and the session waits for input), `session.ended` and
+`session.placed` (`sessionId`, `topicId`, `by`), which need `sessions.read`; `summary.written` (`summaryId`,
+`sessionId?`, the summarized conversation's session key when it is a canonical session id, `kind`, `level`, its depth),
+which needs `memory.read` (every summary write announces itself: in Postgres with `NOTIFY rh_summary_written` in the
+write's transaction, which the gateway listens for, so summaries from worker processes reach it; in SQLite, where
+`rh local` runs its workers, directly); and `task.done` (`taskId`, `status`), which needs `tasks.read`.
+`settings.changed` (`values`) goes to every plug-in whether or not it lists it. A 2xx answer acknowledges a delivery;
+anything else, or no answer in 10 s, is tried again after 1 s, doubling to 30 s, five tries in all. Each plug-in has a
+queue of at most 1000 events, kept while it is starting or in backoff and dropped when it is disabled; events lost to
+overflow or after the last try are counted in the next delivery's `missed`. Delivery is at least once within one gateway
+process; events queued when rh stops are lost, so a plug-in that sees `missed` reconciles through the API. A job with a
+`schedule` (five-field cron, the node's local time) runs at each tick, and any job runs on `POST
+/api/plugins/{id}/jobs/{job}/run` (`202` with the run, `409` while one runs). A run is `POST /jobs/{job}` with `{runId,
+trigger, scheduledAt?}` (`trigger` `schedule` or `manual`), answered by `{outcome, message?}` (`succeeded` or `failed`)
+within `timeoutMs` (default 600000; else the run failed, "timed out"). A job runs once at a time, so a tick while it
+runs is skipped, and ticks missed while rh was down are not made up. Each job's last run is on the plug-in record.
+(57) Plug-in tools in MCP (proposed 2026-10-29): `rh mcp` lists, after B7's nine and in manifest order, the tools of
+every running plug-in on its node, named `<id>__<tool>` (neither part can hold a double underscore, and the name is at
+most 50 characters so harness prefixes stay inside 64), with the manifest's `title`, `description` and `inputSchema`,
+and the `hints` as MCP `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, each `true`
+when listed and `false` otherwise). B7's nine tools are unchanged. `rh local` serves MCP in the gateway process and
+reads the set from the host directly; a separate `rh mcp` reaches the node's gateway on the local socket
+`<state>/plugins/tools.sock` (mode 0600): `GET /tools?after=<version>` answers `PluginToolList` `{version, tools}`,
+waiting up to 60 s while the version still equals `after`, and `POST /tools/<id>__<tool>` takes a call. Either way the
+server sends `notifications/tools/list_changed` when the version moves. A call carries `{arguments, sessionId?}` (the
+calling harness session when rh can tell it: a `tools/call` whose
+`_meta` holds `claudecode/toolUseId`, as Claude Code sends, names the session rh is driving whose running tool call has
+that id, waited for up to 1 s; a separate `rh mcp` passes that id to the tools socket as `x-rivethub-tool-use`) and goes on to the plug-in as `POST /tools/{tool}`; clients
+call the same tool through the proxy as `POST /api/plugins/{id}/tools/{tool}`, answered by `{text, isError}` within 120
+s; the MCP result is one text content with that `isError`. A plug-in that is not running, a timeout or a refused answer
+is an MCP result with `isError: true` naming the cause. Every harness whose MCP server is the node's `rh mcp` thus gets
+a plug-in's tools as it gets the memory tools.
+(58) Plug-in views (proposed 2026-10-29): a plug-in's UI is views it answers and each client draws with its own native
+widgets and theme, so a plug-in keeps the app's style on desktop, Android and web. A client asks for one with `POST
+/api/plugins/{id}/views/{view}` `{params?, context}` (`context` is `{topicId?, sessionId?}`, filled from the
+contribution that shows it) and gets a `View`: `title`, `subtitle?`, `toolbar` (buttons beside the title) and `blocks`,
+drawn top to bottom. Blocks (`type`): the containers `section` (`title?`, `subtitle?`, `actions`, `blocks`,
+`collapsed?`, absent for a section that does not collapse), `split` (`primary` and `secondary` blocks side by side on a
+wide window and stacked on a narrow one, `ratio?` the primary share) and `tabs` (`tabs` `[{id, title, badge?, blocks}]`,
+switched locally, `selected?`); the content blocks `text` (`text`, `tone?`, `monospace`), `markdown` (CommonMark with
+tables, no raw HTML, links opened in the browser), `code` (`text`, `language?`, `follow`: keep the end in view, for
+logs), `image` (`path` on the plug-in's `http/` route, `alt`), `properties` (`items` `[{label, value}]`, `value` an
+inline), `progress` (`value?` from 0 to 1, absent for indeterminate; `label?`), `notice` (`tone`, `title?`, `text`,
+`actions`), `list` (`items` `[{id, title, subtitle?, icon?, trailing, action?, menu}]`, `empty?`), `table` (`columns`
+`[{title, align?, sortable}]`, `rows` `[{id, cells, action?, menu}]` with one inline per column, `empty?`; a sortable
+column sorts locally by its cells' values) and `breadcrumbs` (`items` `[{label, action?}]`); and the controls `actions`
+(`buttons`), `form` (`id`, `fields`, `buttons`), `canvas` (note 59) and `webPanel` (note 60). `empty` is `{title, text?,
+button?}`. Inlines (`type`): `text` (`text`, `tone?`, `icon?`, `monospace`), `badge` (`text`, `tone`), `time` (`at` in
+epoch milliseconds, `style?` `relative` or `absolute`), `duration` (`ms`) and `bytes` (`value`), each formatted by the
+client in its own locale. Tones are `neutral`, `info`, `success`, `warning` and `danger`. A button is `{label, icon?,
+style?, action, confirm?, disabled}`, `style` one of `primary`, `secondary` (the default) and `danger`, and `confirm`
+`{title, text, confirmLabel?}` asked before the action runs; a menu is a list of buttons. A field is `{key, label,
+input, value?, required, help?, placeholder?}`, `input` (`type`) one of `text` (`multiline`), `secret`, `number`
+(`min?`, `max?`, `step?`), `toggle`, `select` (`options` `[{value, label}]`, `multiple`) and `file` (`multiple`,
+`accept`: media types); a value is a boolean, a number, a string, a list of strings or a list of files `{name, mimeType,
+data}` (`data` in base64). Actions (`type`): `call` (`action`, `params?`: `POST /api/plugins/{id}/actions/{action}` with
+`{params?, values?, context}`, `values` being the form's when the button belongs to a form), `navigate` (`view`,
+`params?`, `replace`: open that view as a page, or in place of the current one), `dialog` (`view`, `params?`: fetch it
+and show it modally), `back` (close the dialog, else go back a page), `refresh` (fetch every view of this plug-in on
+screen again), `toast` (`text`, `tone?`), `copy` (`text`, to the clipboard), `openSession` (`sessionId`), `openTopic`
+(`topicId`), `openUrl` (`url`, `http` or `https`, in the browser) and `download` (`path` on the plug-in's `http/` route,
+`filename?`). A call answers `200` with `{actions}`, run in order (a `call` among them is refused as an invalid answer),
+or `422` with `{message, fields}`, which the form shows beside the named fields. Pages keep a back stack; a `navigate`
+from a topic card or a session action opens the page in the main area.
+(59) Plug-in canvas (proposed 2026-10-29): a `canvas` block is `{id, scene, height?, readOnly, menu}`; the client draws
+the scene natively, handles pan, zoom, selection and dragging itself, and tells the plug-in only the results. A scene is
+`{items, grid?: {size, snap}, viewport?: {x, y, zoom}}` in canvas units (logical pixels at zoom 1, y downwards), its
+items drawn in order. An item (`type`) is a `node` (`id`, `x`, `y`, `width`, `height` (its box, used for hits, selection
+and connector routing), `shapes`, `anchors`, `tooltip?`, `menu`, `locked`: not draggable, `decorative`: not selectable,
+draggable or deletable and has no menu, for lanes and labels) or a `connector` (`id`, `from` and `to` `{node, anchor?}`,
+without an anchor meeting the node's box; `route` `straight`, `curved` or `orthogonal`; `stroke?`, `strokeWidth?`,
+`dashed`, `arrow` `none`, `end`, `start` or `both`, `label?` at its middle, `tooltip?`, `menu`, `decorative`). Shapes
+(`type`) are placed relative to their node's top-left: `rect` (`x`, `y`, `width`, `height`, `radius?`, `fill?`,
+`stroke?`, `strokeWidth?`), `ellipse` (the same without `radius`), `text` (`x`, `y`, `text`, `size?` (default 13),
+`weight?` `regular`, `medium` or `bold`, `color?`, `align?`, `maxWidth?` past which it ends in an ellipsis,
+`monospace`), `path` (`d`, SVG path data; `fill?`, `stroke?`, `strokeWidth?`, `dashed`) and `icon` (`x`, `y`, `name`,
+`size?`, `color?`). An anchor is `{id, x, y, side, direction}`: `side` (`top`, `right`, `bottom`, `left`) is where a
+connector leaves it and `direction` is `in`, `out` or `both`. Colours are theme roles, never literal values, so a canvas
+follows the light and dark themes: `surface`, `surfaceContainer`, `surfaceContainerHigh`, `primary`, `primaryContainer`,
+`onPrimary`, `onPrimaryContainer`, `secondaryContainer`, `onSurface`, `onSurfaceVariant`, `outline`, `outlineVariant`,
+the tones `info`, `success`, `warning` and `danger`, and `category1` to `category6` to tell kinds apart; an unset fill
+is `surfaceContainer`, stroke `outlineVariant`, text `onSurface`, icon `onSurfaceVariant` and connector `outline`.
+Locally the client pans (dragging empty space, scrolling), zooms (pinch, or ctrl or cmd with scroll, from 0.1 to 4, with
+a fit control), selects (click; shift or cmd click to toggle; shift-drag on empty space for a box; Escape clears), drags
+the selected nodes that are not locked, snapping their top-left to the grid when `snap`, with attached connectors
+following, draws a connector from an anchor to an anchor of another node (`out` or `both` to `in` or `both`), deletes
+the selection on Delete or Backspace, activates an item on double-click or Enter, and opens an item's `menu`, or the
+block's `menu` on empty space, on right-click or long press; the selection, hover and provisional connector are drawn in
+`primary`. `readOnly` turns off dragging, connecting and deleting. Each result goes to `POST
+/api/plugins/{id}/canvas/{canvas}/events` as `{event, params?, context}` (the view's params and context), one at a time
+per canvas and in order, consecutive `moved` and `selected` events merged: `selected` (`items`), `moved` (`items` `[{id,
+x, y}]`, at the end of a drag), `connected` (`from`, `to`), `deleted` (`items`), `activated` (`item`) and `menu`
+(`item?`, absent on empty space, `choice` the menu item's id, and `x`, `y` in canvas units). The plug-in answers `{ops,
+actions}`: `ops` (`type`) are `upsert` (`item`, added or replacing the item with its id) and `remove` (`ids`), applied
+to the scene before `actions` (note 58) run, so a selection can `navigate` with `replace` to show an inspector beside
+the canvas. Until the answer arrives the client shows its own result: moved nodes stay where they were dropped unless an
+upsert places them; a new connector is drawn provisionally and dropped when the answer comes, the plug-in's upsert
+adding the real one; deleted items are hidden and come back unless the answer removes them. When the view is fetched
+again, a canvas with the same id keeps its viewport and selection (less items that are gone); `viewport` is used only
+the first time, and without one the client fits the content. A scene holds at most 5000 items.
+(60) Plug-in web panel (proposed 2026-10-29): a `webPanel` block (`{id, entry, height?, params?}`) shows the plug-in's
+own HTML, `GET /panel/{entry}`, for what blocks and canvases cannot draw. It is specified here and built after the web
+panel test build on Wayland. The client loads it in a web view under an opaque origin of its own for each plug-in and
+node, serving `/http/…` from the plug-in's `http/` route and every other path from its `panel/` route through the proxy
+with the client's own credentials, so the page never holds a token or cookie of the app and reaches nothing but its own
+plug-in. Its content security policy allows only that origin (`default-src 'self'`, inline styles, `img-src 'self' data:
+blob:`), with no top-level navigation, pop-ups or downloads of its own. The client posts `{type: "init", theme, params?,
+context, plugin, node}` once the page has loaded and `{type: "theme", theme}` when the theme changes, `theme` being
+`{scheme, colors, fontFamily, fontMono, fontSize, radius}` (`scheme` `light` or `dark`, `colors` a CSS colour per colour
+role of note 59), and sets the same theme as CSS variables on the document: `--rh-color-<role>` with the role in kebab
+case (`--rh-color-surface-container`), `--rh-font-family`, `--rh-font-mono`, `--rh-font-size`, `--rh-radius` and
+`color-scheme`. The page posts `{type: "ready"}`, `{type: "resize", height}` and `{type: "action", action}`, which runs
+any action of note 58 as a button would. A panel has no permissions of its own: what it can do is what its plug-in's
+routes do.
 (61) Conversation summaries (Phil, 2026-10-29): `GET /api/memory/conversations/{id}/summaries` answers one
 conversation's summary DAG by its id, as `MemorySummaryDagResponse` with `sessionId` set to the conversation's own key,
 so a conversation filed in a topic that is no harness session shows its summaries. A segment that isn't a uuid is `400`

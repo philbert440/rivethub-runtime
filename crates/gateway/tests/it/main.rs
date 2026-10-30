@@ -39,6 +39,7 @@ mod mesh_replay;
 mod parity;
 mod parity_play;
 mod phone;
+mod plugins;
 mod remote_client_auth;
 mod server;
 mod serving;

@@ -1,0 +1,1732 @@
+{
+  "manifests": [
+    {
+      "$schema": "https://example.com/rivethub-plugin.schema.json",
+      "manifest": 1,
+      "id": "workflows",
+      "name": "Workflows",
+      "version": "0.1.0",
+      "description": "Multi-step agent workflows with a graph editor and run history.",
+      "icon": "account_tree",
+      "run": {
+        "command": [
+          "node",
+          "dist/main.js"
+        ],
+        "env": {
+          "NODE_ENV": "production"
+        },
+        "readyTimeoutMs": 15000
+      },
+      "permissions": [
+        "sessions.read",
+        "sessions.control",
+        "tasks.read",
+        "tasks.delegate",
+        "agents.read",
+        "memory.read",
+        "memory.write",
+        "notifications.send"
+      ],
+      "settings": [
+        {
+          "key": "maxParallelRuns",
+          "label": "Runs at once",
+          "input": {
+            "type": "number",
+            "min": 1,
+            "max": 8,
+            "step": 1
+          },
+          "value": 2,
+          "required": true
+        },
+        {
+          "key": "notifyOnFinish",
+          "label": "Notify when a run finishes",
+          "input": {
+            "type": "toggle"
+          },
+          "value": true
+        },
+        {
+          "key": "defaultAgent",
+          "label": "Default agent",
+          "input": {
+            "type": "text"
+          },
+          "placeholder": "claude-code",
+          "help": "Used by steps that name no agent."
+        },
+        {
+          "key": "webhookSecret",
+          "label": "Webhook secret",
+          "input": {
+            "type": "secret"
+          }
+        }
+      ],
+      "tools": [
+        {
+          "name": "start_run",
+          "title": "Start a workflow run",
+          "description": "Start a run of a saved workflow and answer its run id.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "workflow": {
+                "type": "string"
+              },
+              "inputs": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "workflow"
+            ]
+          }
+        },
+        {
+          "name": "run_status",
+          "description": "Report the status and step results of a workflow run.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "runId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "runId"
+            ]
+          },
+          "hints": [
+            "readOnly",
+            "idempotent"
+          ]
+        }
+      ],
+      "contributes": {
+        "pages": [
+          {
+            "id": "workflows",
+            "title": "Workflows",
+            "icon": "account_tree",
+            "view": "workflows"
+          }
+        ],
+        "topicCards": [
+          {
+            "id": "topic-runs",
+            "title": "Workflow runs",
+            "view": "topic-runs"
+          }
+        ],
+        "sessionActions": [
+          {
+            "id": "run-on-session",
+            "title": "Run a workflow on this session",
+            "icon": "play_arrow",
+            "action": {
+              "type": "dialog",
+              "view": "start-run"
+            }
+          }
+        ]
+      },
+      "jobs": [
+        {
+          "id": "prune-runs",
+          "title": "Prune old runs",
+          "schedule": "0 3 * * *",
+          "timeoutMs": 60000
+        },
+        {
+          "id": "nightly-review",
+          "title": "Nightly review",
+          "schedule": "0 2 * * *"
+        }
+      ],
+      "events": [
+        "session.idle",
+        "session.ended",
+        "summary.written",
+        "task.done"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "title": "Workflows",
+      "subtitle": "2 saved",
+      "toolbar": [
+        {
+          "label": "New workflow",
+          "icon": "add",
+          "style": "primary",
+          "action": {
+            "type": "dialog",
+            "view": "new-workflow"
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "list",
+          "items": [
+            {
+              "id": "release-notes",
+              "title": "Release notes",
+              "subtitle": "3 steps",
+              "icon": "account_tree",
+              "trailing": [
+                {
+                  "type": "badge",
+                  "text": "Failed",
+                  "tone": "danger"
+                },
+                {
+                  "type": "time",
+                  "at": 1793000000000,
+                  "style": "relative"
+                }
+              ],
+              "action": {
+                "type": "navigate",
+                "view": "editor",
+                "params": {
+                  "workflow": "release-notes"
+                }
+              },
+              "menu": [
+                {
+                  "label": "Run",
+                  "icon": "play_arrow",
+                  "action": {
+                    "type": "dialog",
+                    "view": "start-run",
+                    "params": {
+                      "workflow": "release-notes"
+                    }
+                  }
+                },
+                {
+                  "label": "Run history",
+                  "icon": "history",
+                  "action": {
+                    "type": "navigate",
+                    "view": "runs",
+                    "params": {
+                      "workflow": "release-notes"
+                    }
+                  }
+                },
+                {
+                  "label": "Delete",
+                  "icon": "delete",
+                  "style": "danger",
+                  "action": {
+                    "type": "call",
+                    "action": "delete-workflow",
+                    "params": {
+                      "workflow": "release-notes"
+                    }
+                  },
+                  "confirm": {
+                    "title": "Delete Release notes?",
+                    "text": "Its run history goes with it.",
+                    "confirmLabel": "Delete"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "nightly-review",
+              "title": "Nightly review",
+              "subtitle": "Every day at 02:00",
+              "icon": "schedule",
+              "trailing": [
+                {
+                  "type": "badge",
+                  "text": "Running",
+                  "tone": "info"
+                }
+              ],
+              "action": {
+                "type": "navigate",
+                "view": "editor",
+                "params": {
+                  "workflow": "nightly-review"
+                }
+              }
+            }
+          ],
+          "empty": {
+            "title": "No workflows yet",
+            "text": "A workflow chains agent sessions and tasks.",
+            "button": {
+              "label": "New workflow",
+              "action": {
+                "type": "dialog",
+                "view": "new-workflow"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Release notes",
+      "subtitle": "Run history",
+      "toolbar": [
+        {
+          "label": "Run",
+          "icon": "play_arrow",
+          "style": "primary",
+          "action": {
+            "type": "dialog",
+            "view": "start-run",
+            "params": {
+              "workflow": "release-notes"
+            }
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "table",
+          "columns": [
+            {
+              "title": "Run"
+            },
+            {
+              "title": "Status"
+            },
+            {
+              "title": "Started",
+              "sortable": true
+            },
+            {
+              "title": "Duration",
+              "align": "end",
+              "sortable": true
+            },
+            {
+              "title": "Trigger"
+            }
+          ],
+          "rows": [
+            {
+              "id": "run-42",
+              "cells": [
+                {
+                  "type": "text",
+                  "text": "#42",
+                  "monospace": true
+                },
+                {
+                  "type": "badge",
+                  "text": "Failed",
+                  "tone": "danger"
+                },
+                {
+                  "type": "time",
+                  "at": 1792848800000
+                },
+                {
+                  "type": "duration",
+                  "ms": 72000
+                },
+                {
+                  "type": "text",
+                  "text": "Manual",
+                  "icon": "person"
+                }
+              ],
+              "action": {
+                "type": "navigate",
+                "view": "run",
+                "params": {
+                  "run": "run-42"
+                }
+              },
+              "menu": [
+                {
+                  "label": "Run again",
+                  "icon": "replay",
+                  "action": {
+                    "type": "call",
+                    "action": "rerun",
+                    "params": {
+                      "run": "run-42"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "id": "run-41",
+              "cells": [
+                {
+                  "type": "text",
+                  "text": "#41",
+                  "monospace": true
+                },
+                {
+                  "type": "badge",
+                  "text": "Succeeded",
+                  "tone": "success"
+                },
+                {
+                  "type": "time",
+                  "at": 1792852400000
+                },
+                {
+                  "type": "duration",
+                  "ms": 254000
+                },
+                {
+                  "type": "text",
+                  "text": "Schedule",
+                  "icon": "schedule"
+                }
+              ],
+              "action": {
+                "type": "navigate",
+                "view": "run",
+                "params": {
+                  "run": "run-41"
+                }
+              },
+              "menu": [
+                {
+                  "label": "Run again",
+                  "icon": "replay",
+                  "action": {
+                    "type": "call",
+                    "action": "rerun",
+                    "params": {
+                      "run": "run-41"
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "empty": {
+            "title": "No runs yet"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Run #42",
+      "subtitle": "Release notes",
+      "toolbar": [
+        {
+          "label": "Run again",
+          "icon": "replay",
+          "action": {
+            "type": "call",
+            "action": "rerun",
+            "params": {
+              "run": "run-42"
+            }
+          }
+        },
+        {
+          "label": "Cancel run",
+          "icon": "stop",
+          "style": "danger",
+          "action": {
+            "type": "call",
+            "action": "cancel-run",
+            "params": {
+              "run": "run-42"
+            }
+          },
+          "confirm": {
+            "title": "Cancel run #42?",
+            "text": "Steps still running are stopped."
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "danger",
+          "title": "Draft notes failed",
+          "text": "The agent ended its turn with an error.",
+          "actions": [
+            {
+              "label": "Open session",
+              "icon": "open_in_new",
+              "action": {
+                "type": "openSession",
+                "sessionId": "claude-code:00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ]
+        },
+        {
+          "type": "progress",
+          "value": 0.5,
+          "label": "1 of 3 steps"
+        },
+        {
+          "type": "tabs",
+          "selected": "overview",
+          "tabs": [
+            {
+              "id": "overview",
+              "title": "Overview",
+              "blocks": [
+                {
+                  "type": "properties",
+                  "items": [
+                    {
+                      "label": "Status",
+                      "value": {
+                        "type": "badge",
+                        "text": "Failed",
+                        "tone": "danger"
+                      }
+                    },
+                    {
+                      "label": "Started",
+                      "value": {
+                        "type": "time",
+                        "at": 1793000000000,
+                        "style": "absolute"
+                      }
+                    },
+                    {
+                      "label": "Duration",
+                      "value": {
+                        "type": "duration",
+                        "ms": 72000
+                      }
+                    },
+                    {
+                      "label": "Trigger",
+                      "value": {
+                        "type": "text",
+                        "text": "Manual"
+                      }
+                    },
+                    {
+                      "label": "Topic",
+                      "value": {
+                        "type": "text",
+                        "text": "Release 0.2",
+                        "icon": "label"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "title": "Output",
+                  "collapsed": false,
+                  "actions": [
+                    {
+                      "label": "Open topic",
+                      "action": {
+                        "type": "openTopic",
+                        "topicId": "00000000-0000-4000-8000-000000000002"
+                      }
+                    }
+                  ],
+                  "blocks": [
+                    {
+                      "type": "markdown",
+                      "text": "## Changes\n\n- Plug-in host contract\n- Wire types"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "steps",
+              "title": "Steps",
+              "badge": "3",
+              "blocks": [
+                {
+                  "type": "canvas",
+                  "id": "run-graph",
+                  "scene": {
+                    "items": [
+                      {
+                        "type": "connector",
+                        "id": "e1",
+                        "from": {
+                          "node": "fetch",
+                          "anchor": "out"
+                        },
+                        "to": {
+                          "node": "draft",
+                          "anchor": "in"
+                        },
+                        "route": "curved",
+                        "stroke": "success",
+                        "arrow": "end"
+                      },
+                      {
+                        "type": "connector",
+                        "id": "e2",
+                        "from": {
+                          "node": "draft",
+                          "anchor": "out"
+                        },
+                        "to": {
+                          "node": "publish",
+                          "anchor": "in"
+                        },
+                        "route": "orthogonal",
+                        "stroke": "outlineVariant",
+                        "dashed": true,
+                        "arrow": "end"
+                      },
+                      {
+                        "type": "node",
+                        "id": "fetch",
+                        "x": 0,
+                        "y": 0,
+                        "width": 200,
+                        "height": 72,
+                        "shapes": [
+                          {
+                            "type": "rect",
+                            "x": 0,
+                            "y": 0,
+                            "width": 200,
+                            "height": 72,
+                            "radius": 12,
+                            "fill": "surfaceContainerHigh",
+                            "stroke": "success",
+                            "strokeWidth": 2
+                          },
+                          {
+                            "type": "icon",
+                            "x": 12,
+                            "y": 14,
+                            "name": "download",
+                            "size": 20,
+                            "color": "category1"
+                          },
+                          {
+                            "type": "text",
+                            "x": 40,
+                            "y": 14,
+                            "text": "Fetch changes",
+                            "weight": "medium",
+                            "maxWidth": 148
+                          },
+                          {
+                            "type": "text",
+                            "x": 40,
+                            "y": 42,
+                            "text": "12 commits",
+                            "size": 11,
+                            "color": "onSurfaceVariant",
+                            "monospace": true
+                          },
+                          {
+                            "type": "ellipse",
+                            "x": 184,
+                            "y": 8,
+                            "width": 8,
+                            "height": 8,
+                            "fill": "success"
+                          }
+                        ],
+                        "anchors": [
+                          {
+                            "id": "out",
+                            "x": 200,
+                            "y": 36,
+                            "side": "right",
+                            "direction": "out"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "node",
+                        "id": "draft",
+                        "x": 272,
+                        "y": 0,
+                        "width": 200,
+                        "height": 72,
+                        "shapes": [
+                          {
+                            "type": "rect",
+                            "x": 0,
+                            "y": 0,
+                            "width": 200,
+                            "height": 72,
+                            "radius": 12,
+                            "fill": "surfaceContainerHigh",
+                            "stroke": "danger",
+                            "strokeWidth": 2
+                          },
+                          {
+                            "type": "icon",
+                            "x": 12,
+                            "y": 14,
+                            "name": "smart_toy",
+                            "size": 20,
+                            "color": "category2"
+                          },
+                          {
+                            "type": "text",
+                            "x": 40,
+                            "y": 14,
+                            "text": "Draft notes",
+                            "weight": "medium",
+                            "maxWidth": 148
+                          },
+                          {
+                            "type": "text",
+                            "x": 40,
+                            "y": 42,
+                            "text": "turn failed",
+                            "size": 11,
+                            "color": "onSurfaceVariant",
+                            "monospace": true
+                          },
+                          {
+                            "type": "ellipse",
+                            "x": 184,
+                            "y": 8,
+                            "width": 8,
+                            "height": 8,
+                            "fill": "danger"
+                          }
+                        ],
+                        "anchors": [
+                          {
+                            "id": "in",
+                            "x": 0,
+                            "y": 36,
+                            "side": "left",
+                            "direction": "in"
+                          },
+                          {
+                            "id": "out",
+                            "x": 200,
+                            "y": 36,
+                            "side": "right",
+                            "direction": "out"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "node",
+                        "id": "publish",
+                        "x": 544,
+                        "y": 0,
+                        "width": 200,
+                        "height": 72,
+                        "shapes": [
+                          {
+                            "type": "rect",
+                            "x": 0,
+                            "y": 0,
+                            "width": 200,
+                            "height": 72,
+                            "radius": 12,
+                            "fill": "surfaceContainerHigh",
+                            "stroke": "outlineVariant"
+                          },
+                          {
+                            "type": "icon",
+                            "x": 12,
+                            "y": 14,
+                            "name": "rocket_launch",
+                            "size": 20,
+                            "color": "category3"
+                          },
+                          {
+                            "type": "text",
+                            "x": 40,
+                            "y": 14,
+                            "text": "Publish",
+                            "weight": "medium",
+                            "maxWidth": 148
+                          },
+                          {
+                            "type": "text",
+                            "x": 40,
+                            "y": 42,
+                            "text": "not started",
+                            "size": 11,
+                            "color": "onSurfaceVariant",
+                            "monospace": true
+                          }
+                        ],
+                        "anchors": [
+                          {
+                            "id": "in",
+                            "x": 0,
+                            "y": 36,
+                            "side": "left",
+                            "direction": "in"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "height": 240,
+                  "readOnly": true,
+                  "menu": [
+                    {
+                      "id": "fit",
+                      "label": "Fit to view",
+                      "icon": "fit_screen"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "logs",
+              "title": "Logs",
+              "blocks": [
+                {
+                  "type": "code",
+                  "text": "fetch: 12 commits\ndraft: started claude-code\ndraft: turn failed\n",
+                  "language": "text",
+                  "follow": true
+                }
+              ]
+            },
+            {
+              "id": "report",
+              "title": "Report",
+              "blocks": [
+                {
+                  "type": "webPanel",
+                  "id": "report",
+                  "entry": "report/index.html",
+                  "height": 480,
+                  "params": {
+                    "run": "run-42"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Run a workflow",
+      "blocks": [
+        {
+          "type": "form",
+          "id": "start-run",
+          "fields": [
+            {
+              "key": "workflow",
+              "label": "Workflow",
+              "input": {
+                "type": "select",
+                "options": [
+                  {
+                    "value": "release-notes",
+                    "label": "Release notes"
+                  },
+                  {
+                    "value": "nightly-review",
+                    "label": "Nightly review"
+                  }
+                ]
+              },
+              "value": "release-notes",
+              "required": true
+            },
+            {
+              "key": "agents",
+              "label": "Agents",
+              "input": {
+                "type": "select",
+                "multiple": true,
+                "options": [
+                  {
+                    "value": "claude-code",
+                    "label": "Claude Code"
+                  },
+                  {
+                    "value": "codex",
+                    "label": "Codex"
+                  }
+                ]
+              },
+              "value": [
+                "claude-code"
+              ]
+            },
+            {
+              "key": "branch",
+              "label": "Branch",
+              "input": {
+                "type": "text"
+              },
+              "placeholder": "main"
+            },
+            {
+              "key": "notes",
+              "label": "Extra instructions",
+              "input": {
+                "type": "text",
+                "multiline": true
+              },
+              "help": "Added to every agent step's prompt."
+            },
+            {
+              "key": "retries",
+              "label": "Retries per step",
+              "input": {
+                "type": "number",
+                "min": 0,
+                "max": 5,
+                "step": 1
+              },
+              "value": 1
+            },
+            {
+              "key": "dryRun",
+              "label": "Dry run",
+              "input": {
+                "type": "toggle"
+              },
+              "value": false
+            }
+          ],
+          "buttons": [
+            {
+              "label": "Cancel",
+              "action": {
+                "type": "back"
+              }
+            },
+            {
+              "label": "Start run",
+              "icon": "play_arrow",
+              "style": "primary",
+              "action": {
+                "type": "call",
+                "action": "start-run"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Release notes",
+      "subtitle": "Draft notes selected",
+      "toolbar": [
+        {
+          "label": "Run",
+          "icon": "play_arrow",
+          "style": "primary",
+          "action": {
+            "type": "dialog",
+            "view": "start-run",
+            "params": {
+              "workflow": "release-notes"
+            }
+          }
+        },
+        {
+          "label": "Run history",
+          "icon": "history",
+          "action": {
+            "type": "navigate",
+            "view": "runs",
+            "params": {
+              "workflow": "release-notes"
+            }
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "split",
+          "ratio": 0.7,
+          "primary": [
+            {
+              "type": "canvas",
+              "id": "graph",
+              "scene": {
+                "items": [
+                  {
+                    "type": "node",
+                    "id": "lane",
+                    "x": 32,
+                    "y": 48,
+                    "width": 808,
+                    "height": 200,
+                    "shapes": [
+                      {
+                        "type": "path",
+                        "d": "M0 0 H808 V200 H0 Z",
+                        "stroke": "outlineVariant",
+                        "dashed": true
+                      },
+                      {
+                        "type": "text",
+                        "x": 12,
+                        "y": 10,
+                        "text": "Release",
+                        "size": 11,
+                        "color": "onSurfaceVariant",
+                        "align": "start"
+                      }
+                    ],
+                    "decorative": true
+                  },
+                  {
+                    "type": "connector",
+                    "id": "e1",
+                    "from": {
+                      "node": "fetch",
+                      "anchor": "out"
+                    },
+                    "to": {
+                      "node": "draft",
+                      "anchor": "in"
+                    },
+                    "route": "curved",
+                    "arrow": "end"
+                  },
+                  {
+                    "type": "connector",
+                    "id": "e2",
+                    "from": {
+                      "node": "draft",
+                      "anchor": "out"
+                    },
+                    "to": {
+                      "node": "publish",
+                      "anchor": "in"
+                    },
+                    "route": "curved",
+                    "arrow": "end",
+                    "label": "on success"
+                  },
+                  {
+                    "type": "node",
+                    "id": "fetch",
+                    "x": 64,
+                    "y": 96,
+                    "width": 200,
+                    "height": 72,
+                    "shapes": [
+                      {
+                        "type": "rect",
+                        "x": 0,
+                        "y": 0,
+                        "width": 200,
+                        "height": 72,
+                        "radius": 12,
+                        "fill": "surfaceContainerHigh",
+                        "stroke": "outlineVariant"
+                      },
+                      {
+                        "type": "icon",
+                        "x": 12,
+                        "y": 14,
+                        "name": "download",
+                        "size": 20,
+                        "color": "category1"
+                      },
+                      {
+                        "type": "text",
+                        "x": 40,
+                        "y": 14,
+                        "text": "Fetch changes",
+                        "weight": "medium",
+                        "maxWidth": 148
+                      },
+                      {
+                        "type": "text",
+                        "x": 40,
+                        "y": 42,
+                        "text": "git log v0.1.30..",
+                        "size": 11,
+                        "color": "onSurfaceVariant",
+                        "monospace": true
+                      }
+                    ],
+                    "anchors": [
+                      {
+                        "id": "out",
+                        "x": 200,
+                        "y": 36,
+                        "side": "right",
+                        "direction": "out"
+                      }
+                    ],
+                    "tooltip": "Collect the commits since the last tag",
+                    "menu": [
+                      {
+                        "id": "duplicate",
+                        "label": "Duplicate",
+                        "icon": "content_copy"
+                      },
+                      {
+                        "id": "delete",
+                        "label": "Delete",
+                        "icon": "delete",
+                        "danger": true
+                      }
+                    ]
+                  },
+                  {
+                    "type": "node",
+                    "id": "draft",
+                    "x": 336,
+                    "y": 96,
+                    "width": 200,
+                    "height": 72,
+                    "shapes": [
+                      {
+                        "type": "rect",
+                        "x": 0,
+                        "y": 0,
+                        "width": 200,
+                        "height": 72,
+                        "radius": 12,
+                        "fill": "surfaceContainerHigh",
+                        "stroke": "outlineVariant"
+                      },
+                      {
+                        "type": "icon",
+                        "x": 12,
+                        "y": 14,
+                        "name": "smart_toy",
+                        "size": 20,
+                        "color": "category2"
+                      },
+                      {
+                        "type": "text",
+                        "x": 40,
+                        "y": 14,
+                        "text": "Draft notes",
+                        "weight": "medium",
+                        "maxWidth": 148
+                      },
+                      {
+                        "type": "text",
+                        "x": 40,
+                        "y": 42,
+                        "text": "claude-code",
+                        "size": 11,
+                        "color": "onSurfaceVariant",
+                        "monospace": true
+                      }
+                    ],
+                    "anchors": [
+                      {
+                        "id": "in",
+                        "x": 0,
+                        "y": 36,
+                        "side": "left",
+                        "direction": "in"
+                      },
+                      {
+                        "id": "out",
+                        "x": 200,
+                        "y": 36,
+                        "side": "right",
+                        "direction": "out"
+                      },
+                      {
+                        "id": "failed",
+                        "x": 100,
+                        "y": 72,
+                        "side": "bottom",
+                        "direction": "out"
+                      }
+                    ],
+                    "menu": [
+                      {
+                        "id": "duplicate",
+                        "label": "Duplicate",
+                        "icon": "content_copy"
+                      },
+                      {
+                        "id": "delete",
+                        "label": "Delete",
+                        "icon": "delete",
+                        "danger": true
+                      }
+                    ]
+                  },
+                  {
+                    "type": "node",
+                    "id": "publish",
+                    "x": 608,
+                    "y": 96,
+                    "width": 200,
+                    "height": 72,
+                    "shapes": [
+                      {
+                        "type": "rect",
+                        "x": 0,
+                        "y": 0,
+                        "width": 200,
+                        "height": 72,
+                        "radius": 12,
+                        "fill": "surfaceContainerHigh",
+                        "stroke": "outlineVariant"
+                      },
+                      {
+                        "type": "icon",
+                        "x": 12,
+                        "y": 14,
+                        "name": "rocket_launch",
+                        "size": 20,
+                        "color": "category3"
+                      },
+                      {
+                        "type": "text",
+                        "x": 40,
+                        "y": 14,
+                        "text": "Publish",
+                        "weight": "medium",
+                        "maxWidth": 148
+                      },
+                      {
+                        "type": "text",
+                        "x": 40,
+                        "y": 42,
+                        "text": "task: release",
+                        "size": 11,
+                        "color": "onSurfaceVariant",
+                        "monospace": true
+                      }
+                    ],
+                    "anchors": [
+                      {
+                        "id": "in",
+                        "x": 0,
+                        "y": 36,
+                        "side": "left",
+                        "direction": "in"
+                      }
+                    ],
+                    "locked": true,
+                    "menu": [
+                      {
+                        "id": "duplicate",
+                        "label": "Duplicate",
+                        "icon": "content_copy"
+                      },
+                      {
+                        "id": "delete",
+                        "label": "Delete",
+                        "icon": "delete",
+                        "danger": true
+                      }
+                    ]
+                  }
+                ],
+                "grid": {
+                  "size": 16,
+                  "snap": true
+                },
+                "viewport": {
+                  "x": 0,
+                  "y": 0,
+                  "zoom": 1
+                }
+              },
+              "height": 640,
+              "menu": [
+                {
+                  "id": "add-agent-step",
+                  "label": "Add agent step",
+                  "icon": "smart_toy"
+                },
+                {
+                  "id": "add-task-step",
+                  "label": "Add task step",
+                  "icon": "task"
+                }
+              ]
+            }
+          ],
+          "secondary": [
+            {
+              "type": "section",
+              "title": "Draft notes",
+              "subtitle": "Agent step",
+              "blocks": [
+                {
+                  "type": "form",
+                  "id": "step",
+                  "fields": [
+                    {
+                      "key": "title",
+                      "label": "Title",
+                      "input": {
+                        "type": "text"
+                      },
+                      "value": "Draft notes",
+                      "required": true
+                    },
+                    {
+                      "key": "agent",
+                      "label": "Agent",
+                      "input": {
+                        "type": "select",
+                        "options": [
+                          {
+                            "value": "claude-code",
+                            "label": "Claude Code"
+                          },
+                          {
+                            "value": "codex",
+                            "label": "Codex"
+                          }
+                        ]
+                      },
+                      "value": "claude-code"
+                    },
+                    {
+                      "key": "prompt",
+                      "label": "Prompt",
+                      "input": {
+                        "type": "text",
+                        "multiline": true
+                      },
+                      "value": "Write release notes from these commits."
+                    }
+                  ],
+                  "buttons": [
+                    {
+                      "label": "Apply",
+                      "style": "primary",
+                      "action": {
+                        "type": "call",
+                        "action": "save-step",
+                        "params": {
+                          "workflow": "release-notes",
+                          "step": "draft"
+                        }
+                      }
+                    },
+                    {
+                      "label": "Remove step",
+                      "style": "danger",
+                      "icon": "delete",
+                      "action": {
+                        "type": "call",
+                        "action": "remove-step",
+                        "params": {
+                          "workflow": "release-notes",
+                          "step": "draft"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "viewRequests": [
+    {
+      "params": {
+        "run": "run-42"
+      },
+      "context": {}
+    },
+    {
+      "context": {
+        "topicId": "00000000-0000-4000-8000-000000000002"
+      }
+    }
+  ],
+  "actionRequests": [
+    {
+      "values": {
+        "workflow": "release-notes",
+        "agents": [
+          "claude-code",
+          "codex"
+        ],
+        "branch": "main",
+        "retries": 1,
+        "dryRun": false
+      },
+      "context": {
+        "sessionId": "claude-code:00000000-0000-4000-8000-000000000001"
+      }
+    }
+  ],
+  "actionResults": [
+    {
+      "actions": [
+        {
+          "type": "back"
+        },
+        {
+          "type": "toast",
+          "text": "Run #43 started",
+          "tone": "success"
+        },
+        {
+          "type": "navigate",
+          "view": "run",
+          "params": {
+            "run": "run-43"
+          }
+        }
+      ]
+    }
+  ],
+  "actionRefusals": [
+    {
+      "message": "The run could not start.",
+      "fields": {
+        "branch": "No branch named feature-x"
+      }
+    }
+  ],
+  "canvasEvents": [
+    {
+      "event": {
+        "type": "selected",
+        "items": [
+          "draft"
+        ]
+      },
+      "params": {
+        "workflow": "release-notes"
+      },
+      "context": {}
+    },
+    {
+      "event": {
+        "type": "moved",
+        "items": [
+          {
+            "id": "draft",
+            "x": 352,
+            "y": 112
+          }
+        ]
+      },
+      "params": {
+        "workflow": "release-notes"
+      },
+      "context": {}
+    },
+    {
+      "event": {
+        "type": "connected",
+        "from": {
+          "node": "draft",
+          "anchor": "failed"
+        },
+        "to": {
+          "node": "fetch"
+        }
+      },
+      "params": {
+        "workflow": "release-notes"
+      },
+      "context": {}
+    },
+    {
+      "event": {
+        "type": "deleted",
+        "items": [
+          "e2"
+        ]
+      },
+      "params": {
+        "workflow": "release-notes"
+      },
+      "context": {}
+    },
+    {
+      "event": {
+        "type": "activated",
+        "item": "draft"
+      },
+      "params": {
+        "workflow": "release-notes"
+      },
+      "context": {}
+    },
+    {
+      "event": {
+        "type": "menu",
+        "item": null,
+        "choice": "add-agent-step",
+        "x": 420,
+        "y": 300
+      },
+      "params": {
+        "workflow": "release-notes"
+      },
+      "context": {}
+    }
+  ],
+  "canvasResponses": [
+    {
+      "ops": [],
+      "actions": [
+        {
+          "type": "navigate",
+          "view": "editor",
+          "params": {
+            "workflow": "release-notes",
+            "step": "draft"
+          },
+          "replace": true
+        }
+      ]
+    },
+    {
+      "ops": [
+        {
+          "type": "upsert",
+          "item": {
+            "type": "connector",
+            "id": "e3",
+            "from": {
+              "node": "draft",
+              "anchor": "failed"
+            },
+            "to": {
+              "node": "fetch",
+              "anchor": "in"
+            },
+            "route": "curved",
+            "stroke": "danger",
+            "dashed": true,
+            "arrow": "end",
+            "label": "on failure"
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "toast",
+          "text": "Retry path added"
+        }
+      ]
+    },
+    {
+      "ops": [
+        {
+          "type": "remove",
+          "ids": [
+            "e2"
+          ]
+        }
+      ],
+      "actions": []
+    },
+    {
+      "ops": [
+        {
+          "type": "upsert",
+          "item": {
+            "type": "node",
+            "id": "step-4",
+            "x": 416,
+            "y": 288,
+            "width": 200,
+            "height": 72,
+            "shapes": [
+              {
+                "type": "rect",
+                "x": 0,
+                "y": 0,
+                "width": 200,
+                "height": 72,
+                "radius": 12,
+                "fill": "surfaceContainerHigh",
+                "stroke": "outlineVariant"
+              },
+              {
+                "type": "icon",
+                "x": 12,
+                "y": 14,
+                "name": "smart_toy",
+                "size": 20,
+                "color": "category2"
+              },
+              {
+                "type": "text",
+                "x": 40,
+                "y": 14,
+                "text": "New agent step",
+                "weight": "medium",
+                "maxWidth": 148
+              },
+              {
+                "type": "text",
+                "x": 40,
+                "y": 42,
+                "text": "claude-code",
+                "size": 11,
+                "color": "onSurfaceVariant",
+                "monospace": true
+              }
+            ],
+            "anchors": [
+              {
+                "id": "in",
+                "x": 0,
+                "y": 36,
+                "side": "left",
+                "direction": "in"
+              },
+              {
+                "id": "out",
+                "x": 200,
+                "y": 36,
+                "side": "right",
+                "direction": "out"
+              }
+            ]
+          }
+        }
+      ],
+      "actions": [
+        {
+          "type": "navigate",
+          "view": "editor",
+          "params": {
+            "workflow": "release-notes",
+            "step": "step-4"
+          },
+          "replace": true
+        }
+      ]
+    }
+  ],
+  "eventDeliveries": [
+    {
+      "seq": 17,
+      "at": 1793000000000,
+      "missed": 0,
+      "event": {
+        "type": "session.idle",
+        "sessionId": "claude-code:00000000-0000-4000-8000-000000000001"
+      }
+    },
+    {
+      "seq": 18,
+      "at": 1793000000000,
+      "missed": 2,
+      "event": {
+        "type": "session.started",
+        "sessionId": "claude-code:00000000-0000-4000-8000-000000000001",
+        "topicId": "00000000-0000-4000-8000-000000000002"
+      }
+    },
+    {
+      "seq": 19,
+      "at": 1793000000000,
+      "missed": 0,
+      "event": {
+        "type": "session.placed",
+        "sessionId": "claude-code:00000000-0000-4000-8000-000000000001",
+        "topicId": "00000000-0000-4000-8000-000000000002",
+        "by": "categorizer"
+      }
+    },
+    {
+      "seq": 20,
+      "at": 1793000000000,
+      "missed": 0,
+      "event": {
+        "type": "summary.written",
+        "summaryId": "00000000-0000-4000-8000-000000000003",
+        "sessionId": "claude-code:00000000-0000-4000-8000-000000000001",
+        "kind": "leaf",
+        "level": 0
+      }
+    },
+    {
+      "seq": 21,
+      "at": 1793000000000,
+      "missed": 0,
+      "event": {
+        "type": "task.done",
+        "taskId": "00000000-0000-4000-8000-000000000004",
+        "status": "completed"
+      }
+    },
+    {
+      "seq": 22,
+      "at": 1793000000000,
+      "missed": 0,
+      "event": {
+        "type": "session.ended",
+        "sessionId": "claude-code:00000000-0000-4000-8000-000000000001"
+      }
+    },
+    {
+      "seq": 23,
+      "at": 1793000000000,
+      "missed": 0,
+      "event": {
+        "type": "settings.changed",
+        "values": {
+          "maxParallelRuns": 3,
+          "notifyOnFinish": false
+        }
+      }
+    }
+  ],
+  "toolCalls": [
+    {
+      "arguments": {
+        "workflow": "release-notes"
+      },
+      "sessionId": "claude-code:00000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "toolResults": [
+    {
+      "text": "Started run run-43 of Release notes."
+    },
+    {
+      "text": "No workflow named release.",
+      "isError": true
+    }
+  ],
+  "jobRequests": [
+    {
+      "runId": "job-7",
+      "trigger": "schedule",
+      "scheduledAt": 1793000000000
+    },
+    {
+      "runId": "job-8",
+      "trigger": "manual"
+    }
+  ],
+  "jobResults": [
+    {
+      "outcome": "succeeded",
+      "message": "Pruned 12 runs"
+    },
+    {
+      "outcome": "failed"
+    }
+  ]
+}

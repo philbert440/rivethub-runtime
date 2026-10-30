@@ -6,6 +6,7 @@ use kernel::memory::NewSummary;
 use kernel::memory::SummaryKind;
 use kernel::memory::SummarySource;
 use kernel::memory::SummaryStore;
+use kernel::memory::SummaryWatch as _;
 use kernel::memory::SummaryWrite;
 use memory_postgres::PostgresMemory;
 use serde::Deserialize;
@@ -170,6 +171,34 @@ async fn summary_writes_link_children_and_let_the_embed_trigger_fire(pool: PgPoo
 #[derive(Debug, sqlx::FromRow)]
 struct StoredTitle {
     title: Option<String>,
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_written_summary_is_announced_to_watchers(pool: PgPool) -> TestResult {
+    sqlx::query("alter table rh_summaries disable trigger user")
+        .execute(&pool)
+        .await?;
+    let memory = PostgresMemory::new(pool.clone());
+    let conversation = seed_conversation(&pool, "cli:announced", "Session cli:announced").await?;
+    let listening = tokio_util::sync::CancellationToken::new();
+    let watch = memory.spawn_summary_watch(listening.clone()).await?;
+    let mut written = memory.written();
+    let leaf = titled_leaf(conversation, "Announced to the plug-ins.");
+    let leaf_id = leaf.id;
+    memory.write_summary(leaf).await?;
+    let heard = tokio::time::timeout(std::time::Duration::from_secs(10), written.recv()).await??;
+    assert_eq!(
+        (
+            heard.id,
+            heard.session_key.as_str(),
+            heard.kind,
+            heard.depth
+        ),
+        (leaf_id, "cli:announced", SummaryKind::Leaf, 0)
+    );
+    listening.cancel();
+    watch.await?;
+    Ok(())
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]

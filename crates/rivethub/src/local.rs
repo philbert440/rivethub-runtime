@@ -258,6 +258,7 @@ async fn supervise(
         env,
         store: &store,
         shutdown: &shutdown,
+        plugins: composition.gateway().plugins().cloned(),
     })
     .start(runners, tasks)
     .await
@@ -298,6 +299,7 @@ struct NodeBoot<'a> {
     env: &'a Environment,
     store: &'a Arc<SqliteStore>,
     shutdown: &'a CancellationToken,
+    plugins: Option<Arc<gateway::plugins::PluginHost>>,
 }
 
 impl NodeBoot<'_> {
@@ -358,6 +360,9 @@ impl NodeBoot<'_> {
             self.config,
             Arc::clone(self.store) as Arc<dyn MemoryStore>,
             delegation,
+            self.plugins
+                .clone()
+                .map(|host| host as Arc<dyn kernel::plugins::PluginTools>),
             sidecar::display_zone(self.env),
             self.shutdown.clone(),
         )?;

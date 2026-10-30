@@ -28,6 +28,7 @@ chrono-tz = "0.10"
 clap = { version = "4", features = ["derive"] }
 cli = { path = "crates/cli", version = "0.1.0" }
 config = { path = "crates/config", version = "0.1.0" }
+croner = "4"
 eventsource-stream = "0.2"
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 futures = "0.3"
@@ -41,6 +42,7 @@ httparse = "1"
 hyper = { version = "1", default-features = false }
 hyper-util = { version = "0.1", default-features = false, features = ["service", "tokio"] }
 kernel = { path = "crates/kernel", version = "0.1.0" }
+landlock = "0.4.7"
 libc = "0.2"
 libtest-mimic = "0.8"
 mcp = { path = "crates/mcp", version = "0.1.0" }

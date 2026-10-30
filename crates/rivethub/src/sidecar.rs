@@ -24,6 +24,8 @@ pub(crate) enum SidecarError {
     Invalid(String),
     #[error(transparent)]
     Agent(#[from] crate::agent::AgentError),
+    #[error(transparent)]
+    Compose(#[from] crate::composition::ComposeError),
 }
 
 impl SidecarError {
@@ -31,7 +33,7 @@ impl SidecarError {
         match self {
             Self::Startup(error) => error.exit(),
             Self::Mcp(error) => mcp_exit(error),
-            Self::Join(_) | Self::Invalid(_) => Exit::Failure,
+            Self::Join(_) | Self::Invalid(_) | Self::Compose(_) => Exit::Failure,
             Self::Agent(error) => error.exit(),
         }
     }
@@ -121,7 +123,8 @@ pub(crate) fn report_error(error: &SidecarError) {
         SidecarError::Mcp(_)
         | SidecarError::Join(_)
         | SidecarError::Invalid(_)
-        | SidecarError::Agent(_) => {
+        | SidecarError::Agent(_)
+        | SidecarError::Compose(_) => {
             tracing::error!("{error}");
         }
     }
@@ -171,10 +174,13 @@ async fn run_server(
     activities: &kernel::shutdown::Activities,
 ) -> Result<(), SidecarError> {
     let delegation = crate::agent::open_delegation(config, env, shutdown, activities).await?;
+    let plugins =
+        mcp::plugins::SocketTools::new(crate::composition::plugins::tools_socket(config, env)?)?;
     let ran = async {
         let server = mcp::Server::builder(memory, false, shutdown.child_token())
             .display_zone(display_zone(env))
             .delegation(Arc::clone(&delegation.port), surface(&selected))
+            .plugins(Arc::new(plugins))
             .build()?;
         serve(server, selected, shutdown.clone()).await
     }
@@ -188,6 +194,7 @@ pub(crate) fn memory_future(
     config: &Config,
     memory: Arc<dyn MemoryStore>,
     delegation: Option<Arc<dyn kernel::tasks::Delegation>>,
+    plugins: Option<Arc<dyn kernel::plugins::PluginTools>>,
     zone: chrono_tz::Tz,
     shutdown: CancellationToken,
 ) -> Result<impl std::future::Future<Output = Result<(), SidecarError>> + Send + use<>, SidecarError>
@@ -202,6 +209,9 @@ pub(crate) fn memory_future(
         mcp::Server::builder(memory, false, shutdown.child_token()).display_zone(zone);
     if let Some(port) = delegation {
         builder = builder.delegation(port, mcp::Surface::Stdio);
+    }
+    if let Some(port) = plugins {
+        builder = builder.plugins(port);
     }
     let server = builder.build()?;
     Ok(async move {

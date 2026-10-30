@@ -351,8 +351,16 @@ async fn place(
         .map_err(map::error)?;
     let filed = before.map(|placement| (placement.by, placement.topic));
     filing::correct(&gateway, Target::Session(session), filed, Some(topic), now).await?;
+    let placement = map::placement(outcome.into_placement());
+    if let Some(host) = gateway.plugins() {
+        host.publish(&wire::plugin::process::PluginEvent::SessionPlaced {
+            session_id: placement.session_id.clone(),
+            topic_id: placement.topic_id.clone(),
+            by: placement.by,
+        });
+    }
     Ok(Json(PlacementReply {
-        placement: Some(map::placement(outcome.into_placement())),
+        placement: Some(placement),
         suggestion: None,
     }))
 }

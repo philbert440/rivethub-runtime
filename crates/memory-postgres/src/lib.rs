@@ -23,6 +23,7 @@ pub use search_complete::SearchSynthesis;
 mod store_impl;
 mod summary_dag;
 mod summary_store;
+mod summary_watch;
 mod tags;
 mod task_db;
 mod task_jobs;
@@ -73,7 +74,10 @@ pub struct PostgresMemory {
     synthesis: Option<SearchSynthesis>,
     access: std::sync::Arc<access::AccessLog>,
     unverified: bool,
+    summaries_written: tokio::sync::broadcast::Sender<kernel::memory::WrittenSummary>,
 }
+
+const SUMMARY_WRITTEN_BUFFER: usize = 256;
 
 impl PostgresMemory {
     #[must_use]
@@ -85,6 +89,7 @@ impl PostgresMemory {
             synthesis: None,
             access: std::sync::Arc::default(),
             unverified: false,
+            summaries_written: tokio::sync::broadcast::channel(SUMMARY_WRITTEN_BUFFER).0,
         }
     }
 

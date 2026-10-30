@@ -72,6 +72,18 @@ pub struct NewSummary {
     pub child_ids: Vec<Uuid>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WrittenSummary {
+    pub id: Uuid,
+    pub session_key: String,
+    pub kind: SummaryKind,
+    pub depth: i32,
+}
+
+pub trait SummaryWatch: Send + Sync {
+    fn written(&self) -> tokio::sync::broadcast::Receiver<WrittenSummary>;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SummaryWrite {
     FirstLeaf,
