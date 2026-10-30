@@ -6042,6 +6042,19 @@
         "title"
       ]
     },
+    "HarnessSessionForkRequest": {
+      "type": "object",
+      "properties": {
+        "prompts": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "prompts"
+      ]
+    },
     "HarnessToolOutput": {
       "type": "object",
       "properties": {

@@ -396,6 +396,17 @@ claude-agent-acp call is `Bash` or `Read`, as in its transcript, rather than "Te
 chats run claude-agent-acp with `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`, so Claude keeps its task list with `TaskCreate` and
 `TaskUpdate` and the stream carries the list as `plan` (32). Bodies are `wire::harness::HarnessEvent` in
 `contract/*.schema.json`.
+(46) Forks (Phil, 2026-10-29): `POST /api/harness-sessions/{session}/fork` with `{ "prompts" }` starts a new chat of
+the session's harness, on its model and in the directory it ran in (as a resume would, so it need not sit under the
+terminal root; a directory that is gone is `400`), that carries the conversation up to and including the reply to its
+`prompts`th prompt, and answers the new chat's `HarnessSessionSummary`. The conversation travels as
+startup context, the way topic memory does (25): one block, `## Earlier conversation (forked from <title>)`, then a
+`### User` or `### Assistant` section per turn with its text and the tools it used, the oldest turns left out past
+60,000 characters. The new chat is not filed anywhere and takes no topic memory. It is authorised like reading the
+transcript; `prompts` of 0 or more than the session has is `400`, and a harness whose chats take no startup context
+(opencode, hermes, kimi-code) is `501` with code `capability_unsupported`. Bodies are
+`wire::gateway::sessions::HarnessSessionForkRequest` in `contract/*.schema.json`. The route is new, with no TypeScript
+recording.
 Naming: no bare "RivetHub clients" anywhere — the clients are RivetHub web / Android / Electron; the product is RivetHub.
 
 ## 4. Gaps to close before building the affected slice
