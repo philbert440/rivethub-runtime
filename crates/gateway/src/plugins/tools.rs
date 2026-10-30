@@ -3,12 +3,15 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use kernel::plugins::{PluginToolError, PluginTools};
 use serde::Deserialize;
+use sha2::{Digest as _, Sha256};
+use subtle::ConstantTimeEq as _;
 use tokio::net::UnixListener;
 use tokio_util::sync::CancellationToken;
 use wire::gateway::GatewayError;
@@ -154,10 +157,50 @@ struct ListQuery {
     after: Option<u64>,
 }
 
+pub(super) async fn issue(path: &std::path::Path) -> Result<[u8; 32], super::HostError> {
+    let mut secret = [0_u8; 32];
+    getrandom::fill(&mut secret).map_err(|error| std::io::Error::other(error.to_string()))?;
+    let token = hex::encode(secret);
+    super::registry::write_private(path, token.as_bytes()).await?;
+    Ok(Sha256::digest(token.as_bytes()).into())
+}
+
+async fn holder(
+    State(host): State<Arc<PluginHost>>,
+    request: axum::extract::Request,
+    next: Next,
+) -> Response {
+    let presented = match request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .map(HeaderValue::to_str)
+    {
+        Some(Ok(text)) => text.strip_prefix("Bearer "),
+        Some(Err(_)) | None => None,
+    };
+    let held = match (presented, host.tools_key.get()) {
+        (Some(token), Some(key)) => {
+            let digest: [u8; 32] = Sha256::digest(token.as_bytes()).into();
+            bool::from(digest.ct_eq(key))
+        }
+        (Some(_) | None, _) => false,
+    };
+    if held {
+        next.run(request).await
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(GatewayError::new("the tools socket needs its token").code("unauthorized")),
+        )
+            .into_response()
+    }
+}
+
 pub(super) async fn serve(host: Arc<PluginHost>, listener: UnixListener, stop: CancellationToken) {
     let router = Router::new()
         .route("/tools", get(list))
         .route("/tools/{name}", post(call))
+        .layer(middleware::from_fn_with_state(Arc::clone(&host), holder))
         .with_state(host);
     if let Err(error) = axum::serve(listener, router)
         .with_graceful_shutdown(stop.cancelled_owned())

@@ -28,7 +28,13 @@ pub async fn start(gateway: &Arc<Gateway>) -> Result<(), HostError> {
     {
         tracing::debug!("plug-in host already knows the terminal service");
     }
-    tokio::fs::create_dir_all(&host.settings.root).await?;
+    registry::private_folder(&host.settings.root).await?;
+    let key = super::tools::issue(&host.tools_token()).await?;
+    if host.tools_key.set(key).is_err() {
+        return Err(HostError::Conflict(
+            "the plug-in host is already started".into(),
+        ));
+    }
     let api = super::api::bind(&host.api_socket()).await?;
     let tools = super::api::bind(&host.tools_socket()).await?;
     let inner = gateway.router(false);

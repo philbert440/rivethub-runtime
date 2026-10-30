@@ -51,11 +51,11 @@ async fn host(
     .await?)
 }
 
-pub(crate) fn tools_socket(
+pub(crate) fn tools_folder(
     config: &config::Config,
     env: &Environment,
 ) -> Result<PathBuf, ComposeError> {
     let node = crate::identity::resolve(config, env)?;
     let settings = gateway::Settings::from_config_in(config, env, node.hostname, node.name)?;
-    Ok(root(&settings.state_dir).join("tools.sock"))
+    Ok(root(&settings.state_dir))
 }

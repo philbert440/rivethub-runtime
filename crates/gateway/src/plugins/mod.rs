@@ -151,6 +151,7 @@ pub struct PluginHost {
     confinement: sandbox::Support,
     sessions: OnceLock<Arc<SessionRegistry>>,
     terminal: OnceLock<std::sync::Weak<crate::term::TerminalService>>,
+    tools_key: OnceLock<[u8; 32]>,
     shutdown: CancellationToken,
     tasks: TaskTracker,
 }
@@ -182,6 +183,7 @@ impl PluginHost {
             confinement: sandbox::support(),
             sessions: OnceLock::new(),
             terminal: OnceLock::new(),
+            tools_key: OnceLock::new(),
             shutdown,
             tasks,
         }))
@@ -223,6 +225,10 @@ impl PluginHost {
 
     fn tools_socket(&self) -> PathBuf {
         self.settings.root.join("tools.sock")
+    }
+
+    fn tools_token(&self) -> PathBuf {
+        self.settings.root.join("tools.token")
     }
 
     pub(crate) fn log(&self, plugin: &PluginId, stream: PluginLogStream, text: String) {

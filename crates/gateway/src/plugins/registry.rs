@@ -42,12 +42,24 @@ pub(super) async fn save(
     plugins: BTreeMap<PluginId, Stored>,
 ) -> Result<(), HostError> {
     let bytes = serde_json::to_vec_pretty(&RegistryFile { plugins })?;
-    let staged = root.join(format!("{REGISTRY_FILE}.tmp"));
+    private_folder(root).await?;
+    write_private(&root.join(REGISTRY_FILE), &bytes).await?;
+    Ok(())
+}
+
+pub(super) async fn private_folder(root: &Path) -> Result<(), std::io::Error> {
+    use std::os::unix::fs::PermissionsExt as _;
     tokio::fs::create_dir_all(root).await?;
+    tokio::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700)).await
+}
+
+pub(super) async fn write_private(path: &Path, bytes: &[u8]) -> Result<(), std::io::Error> {
+    let mut staged = path.as_os_str().to_owned();
+    staged.push(".tmp");
+    let staged = PathBuf::from(staged);
     tokio::fs::write(&staged, bytes).await?;
     set_private(&staged).await?;
-    tokio::fs::rename(&staged, root.join(REGISTRY_FILE)).await?;
-    Ok(())
+    tokio::fs::rename(&staged, path).await
 }
 
 pub(super) async fn set_private(path: &Path) -> Result<(), std::io::Error> {

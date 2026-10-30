@@ -640,7 +640,9 @@ most 50 characters so harness prefixes stay inside 64), with the manifest's `tit
 and the `hints` as MCP `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, each `true`
 when listed and `false` otherwise). B7's nine tools are unchanged. `rh local` serves MCP in the gateway process and
 reads the set from the host directly; a separate `rh mcp` reaches the node's gateway on the local socket
-`<state>/plugins/tools.sock` (mode 0600): `GET /tools?after=<version>` answers `PluginToolList` `{version, tools}`,
+`<state>/plugins/tools.sock` (mode 0600, in the mode 0700 `<state>/plugins` folder). Each request carries `Authorization:
+Bearer` the token rh writes to `<state>/plugins/tools.token` (mode 0600) at each start, which a confined plug-in cannot
+read; any other request is `401`. `GET /tools?after=<version>` answers `PluginToolList` `{version, tools}`,
 waiting up to 60 s while the version still equals `after`, and `POST /tools/<id>__<tool>` takes a call. Either way the
 server sends `notifications/tools/list_changed` when the version moves. A call carries `{arguments, sessionId?}` (the
 calling harness session when rh can tell it: a `tools/call` whose

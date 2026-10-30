@@ -332,3 +332,29 @@ async fn a_networked_plugin_cannot_reach_the_nodes_own_listeners() -> TestResult
     host.gateway.close().await;
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn only_a_caller_holding_the_tools_token_reaches_the_tools_socket() -> TestResult {
+    use std::os::unix::fs::PermissionsExt as _;
+    let root = tempfile::tempdir()?;
+    let host = harness(root.path()).await?;
+    let folder = root.path().join("state/plugins");
+    assert_eq!(
+        std::fs::metadata(&folder)?.permissions().mode() & 0o777,
+        0o700
+    );
+    let tools = reqwest::Client::builder()
+        .unix_socket(folder.join("tools.sock"))
+        .build()?;
+    let anonymous = tools.get("http://plugins/tools").send().await?;
+    assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+    let token = std::fs::read_to_string(folder.join("tools.token"))?;
+    let held = tools
+        .get("http://plugins/tools")
+        .bearer_auth(token.trim())
+        .send()
+        .await?;
+    assert_eq!(held.status(), StatusCode::OK);
+    host.gateway.close().await;
+    Ok(())
+}
