@@ -96,17 +96,40 @@ impl Confinement {
     }
 }
 
-pub(super) fn asks_host(requested: &[Permission]) -> Option<Permission> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Support {
+    Full,
+    Partial,
+    Missing,
+}
+
+fn asks_host(requested: &[Permission]) -> Option<Permission> {
     requested
         .iter()
         .copied()
         .find(|permission| HOST_PERMISSIONS.contains(permission))
 }
 
-pub(super) fn unavailable(permission: Permission) -> String {
-    format!(
-        "this node's kernel has no Landlock, so rh cannot confine a plug-in that asks for {permission}; it cannot be enabled here"
-    )
+pub(super) fn refusal(requested: &[Permission], support: Support) -> Option<String> {
+    let permission = asks_host(requested)?;
+    match support {
+        Support::Full => None,
+        Support::Partial => Some(format!(
+            "this node's kernel enforces only part of Landlock, so rh cannot fully confine a plug-in that asks for {permission}; it cannot be enabled here"
+        )),
+        Support::Missing => Some(format!(
+            "this node's kernel has no Landlock, so rh cannot confine a plug-in that asks for {permission}; it cannot be enabled here"
+        )),
+    }
+}
+
+pub(super) fn admit(request: &Request, confinement: Confinement) -> Result<Confinement, String> {
+    let support = match confinement {
+        Confinement::Full => Support::Full,
+        Confinement::Partial => Support::Partial,
+        Confinement::Unconfined => Support::Missing,
+    };
+    refusal(&request.permissions, support).map_or(Ok(confinement), Err)
 }
 
 #[must_use]
@@ -196,16 +219,32 @@ mod landlock_rules {
         RulesetCreatedAttr as _, RulesetError, RulesetStatus, Scope, path_beneath_rules,
     };
 
-    use super::{Confinement, Policy};
+    use super::{Confinement, Policy, Support};
 
     const ABI_KNOWN: ABI = ABI::V9;
 
-    pub(in crate::plugins) fn available() -> bool {
-        Ruleset::default()
+    pub(in crate::plugins) fn support() -> Support {
+        let full = Ruleset::default()
             .set_compatibility(CompatLevel::HardRequirement)
-            .handle_access(AccessFs::from_all(ABI::V1))
+            .handle_access(AccessFs::from_all(ABI_KNOWN))
+            .and_then(|ruleset| ruleset.handle_access(AccessNet::from_all(ABI_KNOWN)))
+            .and_then(|ruleset| ruleset.scope(Scope::from_all(ABI_KNOWN)))
             .and_then(Ruleset::create)
-            .is_ok()
+            .is_ok();
+        let some = || {
+            Ruleset::default()
+                .set_compatibility(CompatLevel::HardRequirement)
+                .handle_access(AccessFs::from_all(ABI::V1))
+                .and_then(Ruleset::create)
+                .is_ok()
+        };
+        if full {
+            Support::Full
+        } else if some() {
+            Support::Partial
+        } else {
+            Support::Missing
+        }
     }
 
     pub(in crate::plugins) fn restrict(policy: &Policy) -> Result<Confinement, RulesetError> {
@@ -236,14 +275,31 @@ mod landlock_rules {
 }
 
 #[cfg(target_os = "linux")]
-pub(super) use landlock_rules::{available, restrict};
+pub(super) use landlock_rules::{restrict, support};
 
 #[cfg(not(target_os = "linux"))]
-pub(super) const fn available() -> bool {
-    false
+pub(super) const fn support() -> Support {
+    Support::Missing
 }
 
 #[cfg(not(target_os = "linux"))]
 pub(super) fn restrict(_policy: &Policy) -> Result<Confinement, std::convert::Infallible> {
     Ok(Confinement::Unconfined)
+}
+
+#[cfg(test)]
+mod tests {
+    use wire::plugin::manifest::Permission;
+
+    use super::{Support, refusal};
+
+    #[test]
+    fn host_permissions_need_every_landlock_rule() {
+        let plain = [Permission::SessionsRead];
+        let host = [Permission::SessionsRead, Permission::HostNetwork];
+        assert_eq!(refusal(&plain, Support::Partial), None);
+        assert_eq!(refusal(&host, Support::Full), None);
+        assert!(refusal(&host, Support::Partial).is_some());
+        assert!(refusal(&host, Support::Missing).is_some());
+    }
 }

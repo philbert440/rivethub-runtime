@@ -147,7 +147,7 @@ pub struct PluginHost {
     logs: logs::LogSink,
     notifications: broadcast::Sender<PluginNotification>,
     tools: watch::Sender<u64>,
-    confinable: bool,
+    confinement: sandbox::Support,
     sessions: OnceLock<Arc<SessionRegistry>>,
     terminal: OnceLock<std::sync::Weak<crate::term::TerminalService>>,
     shutdown: CancellationToken,
@@ -178,7 +178,7 @@ impl PluginHost {
             operations: tokio::sync::Mutex::new(()),
             notifications: broadcast::channel(NOTIFICATION_BUFFER).0,
             tools: watch::channel(0).0,
-            confinable: sandbox::available(),
+            confinement: sandbox::support(),
             sessions: OnceLock::new(),
             terminal: OnceLock::new(),
             shutdown,
@@ -300,12 +300,8 @@ impl PluginHost {
     }
 
     fn refuse_unconfinable(&self, requested: &[Permission]) -> Result<(), HostError> {
-        match sandbox::asks_host(requested) {
-            Some(permission) if !self.confinable => {
-                Err(HostError::Unconfinable(sandbox::unavailable(permission)))
-            }
-            _ => Ok(()),
-        }
+        sandbox::refusal(requested, self.confinement)
+            .map_or(Ok(()), |refused| Err(HostError::Unconfinable(refused)))
     }
 
     async fn prepare(&self, plugin: &PluginId) -> Result<Prepared, String> {
@@ -341,7 +337,7 @@ impl PluginHost {
             socket: &socket,
             api: &api,
             token: &token,
-            confine: self.confinable.then_some(granted.as_slice()),
+            confine: (self.confinement != sandbox::Support::Missing).then_some(granted.as_slice()),
         };
         let plan = launch::plan(&run, &directory, &self.settings.inherited, &contract)
             .ok_or_else(|| "run.command is empty".to_owned())?;

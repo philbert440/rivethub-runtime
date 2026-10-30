@@ -487,9 +487,11 @@ permissions and install time. The `plugins:` key of `config.yaml` stays accepted
 managed only through B17. Trust: a plug-in runs as the node's user. Its token and permissions bound what it can do
 through rh, and on Linux its process is confined with Landlock to what note 54 lists. Every plug-in process is started
 by one launch function in the gateway's `plugins` module, from a thread of its own that confines itself first, so the
-process inherits the confinement and rh does not. Where the kernel has no Landlock, a plug-in that asks for a `host.*`
-permission cannot be enabled (`409` `sandbox_unavailable`, saying so) and any other runs unconfined; each start's `host`
-log line says whether the process is confined. Bodies are the `wire::plugin` types in `contract/*.schema.json`. The routes are new, with no
+process inherits the confinement and rh does not. Where the kernel lacks any Landlock rule rh uses (it needs ABI 9 for
+all of them), a plug-in that asks for a `host.*` permission cannot be enabled (`409` `sandbox_unavailable`, saying
+whether Landlock is missing or partial), and a start that comes out less than fully confined is stopped before the
+process runs; any other plug-in runs as confined as the kernel allows, or unconfined without Landlock. Each start's
+`host` log line says whether the process is confined. Bodies are the `wire::plugin` types in `contract/*.schema.json`. The routes are new, with no
 TypeScript recording.
 (51) Plug-in manifest (proposed 2026-10-29): a plug-in is a directory holding `rivethub-plugin.json`, a
 `wire::plugin::manifest::PluginManifest`. `manifest` is 1. `id` is 2 to 24 characters of `a-z`, `0-9` and single
@@ -581,7 +583,7 @@ and copies nothing, so an agent building a plug-in edits that directory and relo
 the field, and an id already installed is `409` (from the same directory the message says to reload it). `POST
 /api/plugins/{id}/enable` takes `{approve}` (`{}` when nothing is pending), which must name exactly the `pending`
 permissions (`409` `permissions_unapproved` listing them, `400` `not_pending` for one not pending, `409`
-`sandbox_unavailable` for a `host.*` permission on a kernel without Landlock, note 50); it grants them, starts the
+`sandbox_unavailable` for a `host.*` permission on a kernel without full Landlock, note 50); it grants them, starts the
 process and answers the record. An enable that grants a permission the plug-in does not hold yet needs a caller
 presenting a paired device certificate (a device certificate the node maps to its owner): a node or agent certificate, a
 bearer token or a loopback caller is `403` `device_certificate_required`. rh checks it under the lock that orders

@@ -140,6 +140,7 @@ pub(super) async fn spawn(plan: &LaunchPlan) -> Result<Launched, String> {
                     sandbox::restrict(&policy)
                         .map_err(|error| format!("confinement failed: {error}"))
                 })
+                .and_then(|confinement| sandbox::admit(&request, confinement))
                 .and_then(|confinement| {
                     command
                         .spawn()
