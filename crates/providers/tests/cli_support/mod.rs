@@ -129,7 +129,11 @@ impl HarnessAdapter for Harness {
         Ok(session)
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
+    async fn resume(
+        &self,
+        session: &SessionId,
+        _cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError> {
         if self.sessions.lock().contains_key(session) {
             Ok(())
         } else {

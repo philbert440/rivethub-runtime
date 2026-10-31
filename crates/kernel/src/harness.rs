@@ -291,7 +291,11 @@ pub trait HarnessAdapter: Send + Sync {
         SystemPromptSupport::None
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError>;
+    async fn resume(
+        &self,
+        session: &SessionId,
+        cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError>;
 
     async fn prompt(
         &self,

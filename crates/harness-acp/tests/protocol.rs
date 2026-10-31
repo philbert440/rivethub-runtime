@@ -448,7 +448,7 @@ fn resume_discards_the_load_replay_on_a_fresh_agent() {
             &["--on-load", "replay"],
             cwd.path(),
         ));
-        adapter.resume(&session).await.expect("resume");
+        adapter.resume(&session, None).await.expect("resume");
         let mut events = adapter.events(&session).await.expect("events");
         adapter
             .prompt(&session, TurnInput::Text("continue".to_owned()))
@@ -477,7 +477,10 @@ fn resume_of_an_unknown_session_is_a_typed_protocol_error() {
             cwd.path(),
         ));
         let unknown = SessionId::new(HarnessId::Opencode, "ses_other000000000000000019");
-        let error = adapter.resume(&unknown).await.expect_err("load rejected");
+        let error = adapter
+            .resume(&unknown, None)
+            .await
+            .expect_err("load rejected");
         assert!(error.to_string().contains("session/load failed"));
         assert!(error.to_string().contains("session not found"));
     });
@@ -720,7 +723,10 @@ fn resume_refuses_an_active_session() {
             .new_session(spec(cwd.path()))
             .await
             .expect("new session");
-        let error = adapter.resume(&session).await.expect_err("still active");
+        let error = adapter
+            .resume(&session, None)
+            .await
+            .expect_err("still active");
         assert!(error.to_string().contains("already active"));
     });
 }

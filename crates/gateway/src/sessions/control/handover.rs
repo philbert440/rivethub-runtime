@@ -13,6 +13,11 @@ impl ChatActor {
         Ok(self.service.stored(harness, self.session.native()).await? == Some(false))
     }
 
+    pub(super) async fn resume(&self) -> Result<(), ApiError> {
+        let cwd = self.service.recorded_cwd(&self.session).await?;
+        Ok(self.harness.resume(&self.session, cwd.as_deref()).await?)
+    }
+
     pub(super) fn prepare(&self, launch: &mut Launch, fresh: bool) {
         if !fresh {
             launch.resume = Some(self.session.native().into());

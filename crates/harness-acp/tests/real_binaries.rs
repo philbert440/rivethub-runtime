@@ -216,7 +216,7 @@ async fn run_harness(harness: HarnessId) -> Result<Completion, Failed> {
     drop(adapter);
     let resumed = AcpHarnessAdapter::with_launch_table(table);
     resumed
-        .resume(&created)
+        .resume(&created, None)
         .await
         .map_err(|error| Failed::from(format!("{harness} resume: {error}")))?;
     Ok(Completion::Completed)

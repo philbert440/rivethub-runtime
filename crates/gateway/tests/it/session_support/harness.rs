@@ -102,7 +102,11 @@ impl HarnessAdapter for Harness {
         Ok(spec.session)
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
+    async fn resume(
+        &self,
+        session: &SessionId,
+        _cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError> {
         self.opened(session.clone());
         self.trace.send_modify(|trace| trace.push("resume".into()));
         Ok(())

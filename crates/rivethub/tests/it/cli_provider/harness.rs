@@ -49,7 +49,11 @@ impl HarnessAdapter for Harness {
         Ok(session)
     }
 
-    async fn resume(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
+    async fn resume(
+        &self,
+        session: &SessionId,
+        _cwd: Option<&std::path::Path>,
+    ) -> Result<(), HarnessAdapterError> {
         if self.sessions.lock().await.contains_key(session) {
             Ok(())
         } else {
@@ -84,7 +88,7 @@ impl HarnessAdapter for Harness {
     }
 
     async fn cancel(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
-        self.resume(session).await
+        self.resume(session, None).await
     }
 
     async fn release(&self, session: &SessionId) -> Result<(), HarnessAdapterError> {
@@ -105,7 +109,7 @@ impl HarnessAdapter for Harness {
         decision: ApprovalDecision,
     ) -> Result<(), HarnessAdapterError> {
         assert_eq!(decision, ApprovalDecision::Deny);
-        self.resume(session).await
+        self.resume(session, None).await
     }
 
     async fn set_option(
