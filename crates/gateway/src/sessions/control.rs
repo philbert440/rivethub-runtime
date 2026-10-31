@@ -57,14 +57,10 @@ pub struct ChatHandle {
 
 impl ChatHandle {
     pub async fn close(&self) -> Result<(), ApiError> {
-        let (reply, result) = oneshot::channel();
-        self.send(Request::Close { reply }).await?;
-        result.await.map_err(|_| closed())?
+        self.ask(|reply| Request::Close { reply }).await
     }
     pub(crate) async fn terminal(&self, launch: Launch) -> Result<TermSpawnResponse, ApiError> {
-        let (reply, result) = oneshot::channel();
-        self.send(Request::Terminal { launch, reply }).await?;
-        result.await.map_err(|_| closed())?
+        self.ask(|reply| Request::Terminal { launch, reply }).await
     }
 
     pub async fn prompt(
@@ -74,15 +70,13 @@ impl ChatHandle {
         attachments: Vec<TurnAttachment>,
         options: Vec<SessionOption>,
     ) -> Result<(), ApiError> {
-        let (reply, result) = oneshot::channel();
         let turn = Queued {
             text,
             system_prompt,
             attachments,
             options,
         };
-        self.send(Request::Prompt { turn, reply }).await?;
-        result.await.map_err(|_| closed())?
+        self.ask(|reply| Request::Prompt { turn, reply }).await
     }
 
     pub async fn steer(
@@ -90,21 +84,17 @@ impl ChatHandle {
         text: String,
         attachments: Vec<TurnAttachment>,
     ) -> Result<SteerOutcome, ApiError> {
-        let (reply, result) = oneshot::channel();
         let message = Queued {
             text,
             system_prompt: None,
             attachments,
             options: Vec::new(),
         };
-        self.send(Request::Steer { message, reply }).await?;
-        result.await.map_err(|_| closed())?
+        self.ask(|reply| Request::Steer { message, reply }).await
     }
 
     pub async fn stop(&self) -> Result<(), ApiError> {
-        let (reply, result) = oneshot::channel();
-        self.send(Request::Stop { reply }).await?;
-        result.await.map_err(|_| closed())?
+        self.ask(|reply| Request::Stop { reply }).await
     }
 
     pub async fn turn_end(&self) -> Result<(), ApiError> {
@@ -133,6 +123,19 @@ impl ChatHandle {
 
     async fn send(&self, request: Request) -> Result<(), ApiError> {
         self.commands.send(request).await.map_err(|_| closed())
+    }
+
+    async fn ask<T>(
+        &self,
+        request: impl FnOnce(oneshot::Sender<Result<T, ApiError>>) -> Request,
+    ) -> Result<T, ApiError> {
+        let (reply, answer) = oneshot::channel();
+        self.send(request(reply)).await?;
+        tokio::select! {
+            biased;
+            answer = answer => answer.map_err(|_| closed())?,
+            () = self.commands.closed() => Err(closed()),
+        }
     }
 }
 
