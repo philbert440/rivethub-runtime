@@ -360,9 +360,7 @@ async fn the_real_binary_answers_healthz_and_exits_cleanly_on_sigterm(pool: PgPo
     let home = tempdir()?;
     let hub_home = home.path().join(".rivethub");
     std::fs::create_dir_all(&hub_home)?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
+    let port = testkit::ports::claim()?;
     let config_text = format!(
         "runtime:\n  workspace: {}\n  default_agent: main\nagents:\n  main:\n    provider: p\nproviders:\n  p:\n    type: openai-compatible\n    base_url: http://127.0.0.1:1\n    model: m\nmemory:\n  postgres:\n    connection_string: {url}\ngateway:\n  host: 127.0.0.1\n  port: {port}\n",
         home.path().display()
@@ -437,10 +435,8 @@ async fn first_start_moves_legacy_state_and_the_alias_names_the_new_variable() -
     let home = tempdir()?;
     let legacy = home.path().join(".rivetos");
     std::fs::create_dir_all(legacy.join("nested"))?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
-    std::fs::write(legacy.join("config.yaml"), minimal_config(port))?;
+    let port = testkit::ports::claim()?;
+    std::fs::write(legacy.join("config.yaml"), minimal_config(port.number()))?;
     std::fs::write(legacy.join("nested").join("marker"), "kept")?;
 
     let output = tokio::time::timeout(

@@ -13,9 +13,7 @@ async fn start_stops_its_children_within_the_grace_on_sigint(pool: PgPool) -> Te
     migrate::postgres_pool(&pool).await?;
     let url = pool.connect_options().to_url_lossy();
     let home = tempfile::tempdir()?;
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
+    let port = testkit::ports::claim()?;
     write_state(
         home.path(),
         &provider_config(

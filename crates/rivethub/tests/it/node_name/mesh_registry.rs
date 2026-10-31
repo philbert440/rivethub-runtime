@@ -7,8 +7,7 @@ use sqlx::PgPool;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use super::{
-    CONFIGURED, Started, TestResult, command, finish, free_port, logged_host, provider_config,
-    stop_early,
+    CONFIGURED, Started, TestResult, command, finish, logged_host, provider_config, stop_early,
 };
 
 fn write_certs(directory: &Path) -> TestResult {
@@ -42,8 +41,8 @@ async fn mesh_registry_records_the_configured_node(pool: PgPool) -> TestResult {
     write_certs(&state)?;
     let shared = home.path().join("shared");
     std::fs::create_dir_all(&shared)?;
-    let port = free_port()?;
-    let channel = free_port()?;
+    let port = testkit::ports::claim()?;
+    let channel = testkit::ports::claim()?;
     let body = provider_config(
         home.path(),
         &url,

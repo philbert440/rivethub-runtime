@@ -157,13 +157,6 @@ fn client() -> TestResult<reqwest::Client> {
     Ok(reqwest::Client::builder().no_proxy().build()?)
 }
 
-fn free_port() -> TestResult<u16> {
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
-    Ok(port)
-}
-
 async fn tally(pool: &PgPool, name: &str) -> Result<Tally, sqlx::Error> {
     sqlx::query_as(
         "SELECT count(*)::bigint AS n, max(j.attempts)::bigint AS attempts \
@@ -233,7 +226,7 @@ async fn gateway_stays_up_across_a_database_outage(pool: PgPool) -> TestResult {
     migrate::postgres_pool(&pool).await?;
     let (proxy, url) = front(&pool).await?;
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     write_state(
         home.path(),
         &provider_config(
@@ -282,7 +275,7 @@ async fn gateway_starts_while_the_database_is_down(pool: PgPool) -> TestResult {
     let (proxy, url) = front(&pool).await?;
     proxy.pause().await;
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     write_state(
         home.path(),
         &provider_config(
@@ -344,7 +337,7 @@ async fn gateway_runs_its_tasks_again_after_the_database_returns(pool: PgPool) -
     install_queue(&pool).await?;
     let (proxy, url) = front(&pool).await?;
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     write_state(
         home.path(),
         &provider_config(
@@ -458,7 +451,7 @@ fn tool<'a>(
 async fn local_sqlite_stays_healthy_when_postgres_backends_die(pool: PgPool) -> TestResult {
     migrate::postgres_pool(&pool).await?;
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let port_text = port.to_string();
     let mut running = spawn_rh(
         home.path(),

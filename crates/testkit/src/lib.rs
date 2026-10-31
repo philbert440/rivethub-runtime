@@ -14,6 +14,7 @@ mod memory_request;
 pub mod naming;
 pub mod paths;
 pub mod pgdump;
+pub mod ports;
 pub mod provider;
 pub mod session_delete;
 pub mod sqlite;

@@ -30,9 +30,7 @@ async fn the_hook_never_fails_the_harness_without_a_config()
 
 #[tokio::test]
 async fn an_unreachable_gateway_spools_the_batch() -> Result<(), Box<dyn std::error::Error>> {
-    let probe = std::net::TcpListener::bind(("127.0.0.1", 0))?;
-    let port = probe.local_addr()?.port();
-    drop(probe);
+    let port = testkit::ports::claim()?;
     let home = home();
     let env = environment(&home);
     config(

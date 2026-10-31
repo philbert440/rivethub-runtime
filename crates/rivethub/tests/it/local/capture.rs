@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use tokio::io::AsyncWriteExt as _;
 
-use super::{TestResult, free_port, provider_base, start, stop, write_config};
+use super::{TestResult, provider_base, start, stop, write_config};
 
 const SESSION: &str = "capture-resend";
 
@@ -46,7 +46,7 @@ fn batch(title: &str) -> CaptureBatchRequest {
 #[tokio::test]
 async fn resent_capture_batches_skip_stored_events_and_keep_the_title() -> TestResult {
     let home = tempfile::tempdir()?;
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let port_text = port.to_string();
     let started = start(
         home.path(),
@@ -134,7 +134,8 @@ async fn run_hook_with(
 #[tokio::test]
 async fn the_capture_hook_command_posts_a_held_prompt_to_the_local_gateway() -> TestResult {
     let home = tempfile::tempdir()?;
-    let port_text = free_port()?.to_string();
+    let port = testkit::ports::claim()?;
+    let port_text = port.to_string();
     let started = start(
         home.path(),
         &["local", "--no-lan", "--port", &port_text],
@@ -189,7 +190,7 @@ async fn the_capture_hook_leaves_a_model_providers_own_runs_alone() -> TestResul
 const NODE_OWNER: &str = "node-owner";
 
 async fn capture_on_node(home: &Path, sqlite: &str) -> TestResult<MemoryHealthResponse> {
-    let port = free_port()?;
+    let port = testkit::ports::claim()?;
     let database = home.join(".rivethub").join("memory.sqlite");
     if let Some(parent) = database.parent() {
         std::fs::create_dir_all(parent)?;
