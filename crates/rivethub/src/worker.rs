@@ -169,16 +169,8 @@ async fn run(
                 decisions,
                 tidy,
                 lineage: session_lineage(env),
-                load: crate::model_load::VllmMetrics::from_environment(env)
-                    .map_err(|error| RootError::Invalid(format!("model load probe: {error}")))?
-                    .map(|probe| Arc::new(probe) as Arc<dyn kernel::model::ModelLoadProbe>),
-                scopes: Some(workers::OwnerScopes {
-                    store: Arc::new(memory_postgres::PostgresTenancy::new(memory.pool().clone())),
-                    primary: crate::composition::identities::load(&config, env)
-                        .await
-                        .map_err(StartupError::from)?
-                        .primary(),
-                }),
+                load: model_load(env)?,
+                scopes: Some(owner_scopes(&memory, &config, env).await?),
             },
             &config,
             env,
@@ -207,6 +199,28 @@ async fn run(
     result?;
     tracing::info!("worker stopped");
     Ok(())
+}
+
+fn model_load(
+    env: &Environment,
+) -> Result<Option<Arc<dyn kernel::model::ModelLoadProbe>>, RootError> {
+    Ok(crate::model_load::VllmMetrics::from_environment(env)
+        .map_err(|error| RootError::Invalid(format!("model load probe: {error}")))?
+        .map(|probe| Arc::new(probe) as Arc<dyn kernel::model::ModelLoadProbe>))
+}
+
+async fn owner_scopes(
+    memory: &memory_postgres::PostgresMemory,
+    config: &Config,
+    env: &Environment,
+) -> Result<workers::OwnerScopes, RootError> {
+    Ok(workers::OwnerScopes {
+        store: Arc::new(memory_postgres::PostgresTenancy::new(memory.pool().clone())),
+        primary: crate::composition::identities::load(config, env)
+            .await
+            .map_err(StartupError::from)?
+            .primary(),
+    })
 }
 
 #[expect(
