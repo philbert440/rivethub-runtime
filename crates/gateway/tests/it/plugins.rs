@@ -111,10 +111,15 @@ async fn proxied_routes_are_checked(host: &Harness) -> TestResult {
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     let broken = refused(&bytes)?;
     assert_eq!(broken.code.as_deref(), Some("plugin_invalid_response"));
-    assert!(
-        broken
-            .detail
-            .is_some_and(|detail| detail.starts_with("blocks[0]"))
+    assert_eq!(
+        broken.detail.as_deref(),
+        Some("blocks[0]: missing field `text`")
+    );
+    let (status, bytes) = post("/api/plugins/fixture/views/nested").await?;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(
+        refused(&bytes)?.detail.as_deref(),
+        Some("blocks[1].items[1].title: invalid type: integer `42`, expected a string")
     );
     let (status, bytes) = post("/api/plugins/fixture/actions/save").await?;
     assert_eq!(status, StatusCode::OK);
