@@ -5,6 +5,7 @@ mod transcript_batch;
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use chrono::DateTime;
 use chrono::SecondsFormat;
@@ -43,6 +44,8 @@ const FALLBACK_TITLE: &str = "Claude Code session";
 const LOG_FILE: &str = "claude-capture.log";
 const LOG_MODE: u32 = 0o644;
 const INGEST_TOKEN_CHARS: usize = 9;
+const REPLY_WAIT: Duration = Duration::from_secs(5);
+const REPLY_POLL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Error)]
 pub enum HookError {
@@ -121,7 +124,14 @@ impl<T: CaptureTransport> ClaudeHook<T> {
                 .hold_prompt(&payload, session.native(), now, ingest_key)
                 .await;
         }
-        let transcript = load_transcript(&payload).await;
+        let transcript = match event {
+            HookEvent::Stop => settled_transcript(&payload).await,
+            HookEvent::PostToolUse
+            | HookEvent::SubagentStop
+            | HookEvent::SessionEnd
+            | HookEvent::UserPromptSubmit
+            | HookEvent::Other => load_transcript(&payload).await,
+        };
         let batch = match event {
             HookEvent::PostToolUse => {
                 tool_batch(&payload, session.as_str(), &transcript, ingest_key)
@@ -225,6 +235,26 @@ async fn load_transcript(payload: &HookPayload) -> Vec<Line> {
             Vec::new()
         }
     }
+}
+
+async fn settled_transcript(payload: &HookPayload) -> Vec<Line> {
+    let mut transcript = load_transcript(payload).await;
+    let Some(reply) = payload
+        .last_assistant_message
+        .as_deref()
+        .map(str::trim)
+        .filter(|reply| !reply.is_empty())
+    else {
+        return transcript;
+    };
+    let deadline = tokio::time::Instant::now() + REPLY_WAIT;
+    while !transcript_batch::holds_reply(&transcript, reply)
+        && tokio::time::Instant::now() < deadline
+    {
+        tokio::time::sleep(REPLY_POLL).await;
+        transcript = load_transcript(payload).await;
+    }
+    transcript
 }
 
 #[must_use]

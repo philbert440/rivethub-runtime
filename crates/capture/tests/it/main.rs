@@ -14,6 +14,7 @@ mod session_titles;
 mod session_transcripts;
 mod spool_and_transport;
 mod spool_recovery;
+mod stop_reply;
 mod store_hook;
 mod store_paths;
 mod store_readers;

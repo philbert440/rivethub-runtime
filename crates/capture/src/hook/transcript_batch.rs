@@ -141,6 +141,16 @@ pub(super) fn build(
     Ok(batch)
 }
 
+pub(super) fn holds_reply(transcript: &[Line], reply: &str) -> bool {
+    let folded: Vec<Folded<'_>> = transcript.iter().filter_map(fold).collect();
+    folded
+        .iter()
+        .rev()
+        .take_while(|message| !message.prompt())
+        .find(|message| message.assistant())
+        .is_some_and(|last| reply.ends_with(last.content.as_str()))
+}
+
 fn fold(line: &Line) -> Option<Folded<'_>> {
     if line.is_meta == Some(true) || !matches!(line.r#type, LineKind::User | LineKind::Assistant) {
         return None;
