@@ -241,6 +241,46 @@ async fn literal_search_matches_tokens_in_content_tool_results_and_summaries(
 }
 
 #[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn a_common_literal_answers_with_its_newest_matches(pool: PgPool) -> TestResult {
+    conversation(&pool).await?;
+    let memory = PostgresMemory::new(pool.clone());
+    for minute in 1..=70 {
+        message(
+            &pool,
+            minute,
+            &format!("host 203.0.113.70 at {minute:04}"),
+            None,
+            None,
+        )
+        .await?;
+    }
+    message(&pool, 71, "host 203.0.113.71 at 0071", None, None).await?;
+    let output = message(
+        &pool,
+        72,
+        "host 203.0.113.72 at 0072",
+        Some("ping 203.0.113.70"),
+        None,
+    )
+    .await?;
+    let mut expected = vec![output.to_string()];
+    expected.extend(
+        (52..=70)
+            .rev()
+            .map(|minute| Uuid::from_u128(minute).to_string()),
+    );
+    assert_eq!(
+        hit_ids(
+            &memory,
+            &search("203.0.113.70", SearchMode::Trigram, MemoryScope::Messages)
+        )
+        .await?,
+        expected
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
 async fn unchunked_returns_the_rows_of_the_full_length_scan(pool: PgPool) -> TestResult {
     conversation(&pool).await?;
     let memory = PostgresMemory::new(pool.clone());

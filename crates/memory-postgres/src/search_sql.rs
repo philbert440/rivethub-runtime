@@ -169,7 +169,7 @@ fn like_escaped(token: &str) -> String {
     escaped
 }
 
-fn push_contains(query: &mut QueryBuilder<sqlx::Postgres>, column: &str, token: &str) {
+pub(crate) fn push_contains(query: &mut QueryBuilder<sqlx::Postgres>, column: &str, token: &str) {
     query.push(format!("{column} ILIKE '%' || "));
     query.push_bind(like_escaped(token));
     query.push(" || '%' ESCAPE '\\'");
@@ -418,6 +418,14 @@ impl crate::PostgresMemory {
         };
         if kind == ArmKind::Trigram && tokens.is_empty() {
             return Ok(Vec::new());
+        }
+        if kind == ArmKind::Trigram
+            && is_message
+            && let Some(rows) = self
+                .recent_literals(context, &tokens, query_vector, pool)
+                .await?
+        {
+            return Ok(rows);
         }
         let candidates = if kind == ArmKind::Fts {
             self.capped_candidates(context, is_message).await?

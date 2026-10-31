@@ -24,6 +24,7 @@ pub mod search;
 mod search_cap;
 mod search_complete;
 mod search_details;
+mod search_recent;
 mod search_sql;
 mod search_vector;
 mod stats;
