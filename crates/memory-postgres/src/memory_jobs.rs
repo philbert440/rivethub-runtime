@@ -1,6 +1,8 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use kernel::memory::jobs::{
-    ChunkWrite, MemoryJobError, MemoryJobStore, ToolCallMessage, UnchunkedMessage, UnembeddedStore,
+    ChunkWrite, MemoryJobError, MemoryJobStore, MissingWiki, ToolCallMessage, UnchunkedMessage,
+    UnembeddedStore,
 };
 use kernel::memory::{EmbedTable, EmbedTarget, StoredChunk};
 use kernel::queue::{FixedJob, JobName};
@@ -52,13 +54,14 @@ const UNCHUNKED: &str = "SELECT m.id, m.content, m.tool_result FROM (
                  ELSE l.content_chars + least(l.tool_chars, $2) + 1 END) > $1
      ORDER BY m.created_at DESC LIMIT $3";
 
-const MISSING_WIKI: &str = "SELECT s.id, s.conversation_id FROM rh_summaries s
+const MISSING_WIKI: &str = "SELECT s.id, s.conversation_id, s.created_at FROM rh_summaries s
      LEFT JOIN rh_conversations c ON c.id = s.conversation_id
      WHERE s.kind = 'leaf'
        AND (c.id IS NULL OR c.session_key IS NULL OR c.session_key NOT LIKE 'heartbeat:%')
        AND NOT EXISTS (SELECT 1 FROM rh_wiki_extractions e WHERE e.summary_id = s.id)
        AND NOT EXISTS (SELECT 1 FROM graphile_worker._private_jobs j WHERE j.key = 'wiki-ext-' || s.id::text)
-     ORDER BY s.created_at ASC LIMIT $1";
+       AND NOT EXISTS (SELECT 1 FROM rh_flagged_jobs f WHERE f.job_key = 'wiki-ext-' || s.id::text)
+     ORDER BY s.created_at DESC LIMIT $1";
 
 #[async_trait]
 impl MemoryJobStore for PostgresMemory {
@@ -176,17 +179,20 @@ impl MemoryJobStore for PostgresMemory {
             .map_err(|error| MemoryJobError::Query(Box::new(error)))
     }
 
-    async fn missing_wiki(&self, limit: u32) -> Result<Vec<ExtractWiki>, MemoryJobError> {
-        let rows = sqlx::query_as::<_, (Uuid, Option<Uuid>)>(MISSING_WIKI)
+    async fn missing_wiki(&self, limit: u32) -> Result<Vec<MissingWiki>, MemoryJobError> {
+        let rows = sqlx::query_as::<_, (Uuid, Option<Uuid>, DateTime<Utc>)>(MISSING_WIKI)
             .bind(i64::from(limit))
             .fetch_all(&self.pool)
             .await
             .map_err(query_error)?;
         Ok(rows
             .into_iter()
-            .map(|(summary_id, conversation_id)| ExtractWiki {
-                summary_id,
-                conversation_id,
+            .map(|(summary_id, conversation_id, summarized_at)| MissingWiki {
+                job: ExtractWiki {
+                    summary_id,
+                    conversation_id,
+                },
+                summarized_at,
             })
             .collect())
     }

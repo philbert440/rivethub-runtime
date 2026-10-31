@@ -3,6 +3,7 @@ pub mod agent_presets;
 pub mod ca;
 pub mod cleanup;
 pub mod filing;
+pub mod flagged;
 pub mod fork;
 pub mod harness;
 pub mod hub_state;

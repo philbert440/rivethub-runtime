@@ -133,6 +133,7 @@ struct Backing {
     decisions: Option<Arc<dyn DecisionStore>>,
     startup: Option<(Arc<dyn TopicPageStore>, Arc<dyn StartupStore>)>,
     tidy: Option<(Arc<dyn TidyStore>, Arc<dyn UpkeepStore>)>,
+    flagged: Option<Arc<dyn kernel::flagged::FlaggedJobs>>,
     summaries: Option<Arc<dyn kernel::memory::SummaryWatch>>,
     deletions: Option<Arc<dyn kernel::memory::SessionDeletion>>,
     tasks: Option<tasks::TaskPorts>,
@@ -162,6 +163,10 @@ fn with_backing(gateway: Gateway, backing: &Backing) -> Gateway {
     };
     let gateway = match backing.tidy.clone() {
         Some((tidy, upkeep)) => gateway.with_tidy(tidy, upkeep),
+        None => gateway,
+    };
+    let gateway = match backing.flagged.clone() {
+        Some(flagged) => gateway.with_flagged(flagged),
         None => gateway,
     };
     let gateway = match backing.summaries.clone() {
@@ -262,6 +267,7 @@ impl Composition {
             decisions: Some(memory.clone()),
             startup: Some((memory.clone(), memory.clone())),
             tidy: Some((memory.clone(), memory.clone())),
+            flagged: Some(memory.clone()),
             deletions: Some(memory.clone()),
             summaries: Some(memory.clone()),
             tasks: Some(ports),
@@ -298,6 +304,7 @@ impl Composition {
             decisions: Some(store.clone()),
             startup: Some((store.clone(), store.clone())),
             tidy: Some((store.clone(), store.clone())),
+            flagged: Some(store.clone()),
             deletions: Some(store.clone()),
             summaries: Some(store.clone()),
             tasks: Some(tasks::TaskPorts::of(store.as_ref())),

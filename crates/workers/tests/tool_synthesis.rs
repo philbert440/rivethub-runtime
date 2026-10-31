@@ -78,7 +78,7 @@ impl MemoryJobStore for Store {
     async fn missing_wiki(
         &self,
         _limit: u32,
-    ) -> Result<Vec<kernel::wiki::builder::ExtractWiki>, MemoryJobError> {
+    ) -> Result<Vec<kernel::memory::jobs::MissingWiki>, MemoryJobError> {
         Ok(Vec::new())
     }
 }

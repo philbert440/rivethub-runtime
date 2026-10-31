@@ -97,6 +97,7 @@ async fn stale_wiki_re_adds_only_never_extracted_unqueued_leaves(pool: PgPool) -
     let queued = summary(&pool, 14, "leaf", Some(chat)).await?;
     summary(&pool, 15, "branch", Some(chat)).await?;
     let similar = summary(&pool, 16, "leaf", Some(near)).await?;
+    let flagged = summary(&pool, 17, "leaf", Some(chat)).await?;
     sqlx::query("INSERT INTO rh_wiki_extractions (summary_id, status, pipeline_version, owner_user_id) VALUES ($1, 'failed', 1, 'owner')")
         .bind(extracted)
         .execute(&pool)
@@ -120,6 +121,18 @@ async fn stale_wiki_re_adds_only_never_extracted_unqueued_leaves(pool: PgPool) -
         }
     );
     assert!(queue.jobs.lock().is_empty());
+    sqlx::query("UPDATE rh_summaries SET created_at = now() WHERE id = $1")
+        .bind(normal)
+        .execute(&pool)
+        .await?;
+    sqlx::query(
+        "INSERT INTO rh_flagged_jobs (task, job_key, payload, priority, max_attempts, failures,
+             last_error, first_failed_at, last_failed_at, flagged_at)
+         VALUES ('extract-wiki', $1, '{}', 10, 2, 2, 'boom', now(), now(), now())",
+    )
+    .bind(format!("wiki-ext-{flagged}"))
+    .execute(&pool)
+    .await?;
     assert_eq!(
         handle_enqueue_stale_wiki(&store, &queue, true, 20, &cancel).await?,
         WikiSweep {
@@ -127,12 +140,14 @@ async fn stale_wiki_re_adds_only_never_extracted_unqueued_leaves(pool: PgPool) -
             added: 3
         }
     );
+    let mut recent = extract(normal, Some(chat))?;
+    recent.priority = -10;
     assert_eq!(
         *queue.jobs.lock(),
         vec![
-            extract(orphan, None)?,
-            extract(normal, Some(chat))?,
+            recent,
             extract(similar, Some(near))?,
+            extract(orphan, None)?
         ]
     );
     let stored: (bool, String) = sqlx::query_as(
@@ -159,8 +174,8 @@ async fn stale_wiki_revives_dead_jobs_first_and_splits_the_cap(pool: PgPool) -> 
     let store = seed(&pool).await;
     let queue = RecordingQueue::new(&pool).await;
     let cancel = CancellationToken::new();
-    let first = summary(&pool, 20, "leaf", None).await?;
-    summary(&pool, 21, "leaf", None).await?;
+    summary(&pool, 20, "leaf", None).await?;
+    let newest = summary(&pool, 21, "leaf", None).await?;
     dead_job(&queue, &pool, Uuid::from_u128(30), 30, None).await?;
     dead_job(&queue, &pool, Uuid::from_u128(31), 29, Some(5)).await?;
     dead_job(&queue, &pool, Uuid::from_u128(32), 28, Some(1)).await?;
@@ -173,7 +188,7 @@ async fn stale_wiki_revives_dead_jobs_first_and_splits_the_cap(pool: PgPool) -> 
             added: 1
         }
     );
-    assert_eq!(*queue.jobs.lock(), vec![extract(first, None)?]);
+    assert_eq!(*queue.jobs.lock(), vec![extract(newest, None)?]);
     let rows: Vec<(String, i16, i16, bool, bool)> = sqlx::query_as(
         "SELECT key, attempts, priority, locked_at IS NULL AND locked_by IS NULL, run_at > now() - interval '1 minute'
            FROM graphile_worker._private_jobs WHERE key LIKE 'wiki-ext-%' ORDER BY key",
@@ -184,7 +199,7 @@ async fn stale_wiki_revives_dead_jobs_first_and_splits_the_cap(pool: PgPool) -> 
     assert_eq!(
         rows,
         vec![
-            (key(20), 0, 10, true, true),
+            (key(21), 0, 10, true, true),
             (key(30), 0, 10, true, true),
             (key(31), 0, 10, true, true),
             (key(32), 2, 3, false, false),

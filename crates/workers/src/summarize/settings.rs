@@ -18,7 +18,6 @@ pub(super) const STALE_MIN_BATCH: u32 = 2;
 const LEAF_MAX_TOKENS: u32 = 16_384;
 const BRANCH_MAX_TOKENS: u32 = 24_576;
 const ROOT_MAX_TOKENS: u32 = 32_768;
-pub const DEAD_REST: TimeDelta = TimeDelta::minutes(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

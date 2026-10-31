@@ -10,6 +10,7 @@ pub struct MemoryJobSettings {
     pub chunk_backfill_limit: u32,
     pub sweep_max_attempts: u32,
     pub wiki_sweep_limit: u32,
+    pub flag_after: u32,
 }
 
 impl MemoryJobSettings {
@@ -20,6 +21,7 @@ impl MemoryJobSettings {
             chunk_backfill_limit: 200,
             sweep_max_attempts: 5,
             wiki_sweep_limit: 20,
+            flag_after: kernel::flagged::FLAG_AFTER_FAILURES,
         }
     }
 
@@ -35,6 +37,7 @@ impl MemoryJobSettings {
                 "RIVETHUB_EMBED_SWEEP_MAX_ATTEMPTS",
                 &mut settings.sweep_max_attempts,
             ),
+            ("RIVETHUB_FLAG_AFTER_FAILURES", &mut settings.flag_after),
         ] {
             if let Some(parsed) = number(env, name)? {
                 if parsed == 0 || parsed > i64::from(i32::MAX) {

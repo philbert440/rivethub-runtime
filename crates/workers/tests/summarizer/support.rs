@@ -365,7 +365,7 @@ pub(super) fn plain_error(message: &str) -> ModelProviderError {
 }
 
 impl Seen {
-    pub(super) fn with_dead(dead: Vec<(JobName, DateTime<Utc>)>) -> Self {
+    pub(super) fn with_dead(dead: Vec<JobName>) -> Self {
         Self {
             jobs: Mutex::new(Vec::new()),
             dead: Mutex::new(dead),
@@ -396,7 +396,7 @@ impl Seen {
             .lock()
             .await
             .iter()
-            .filter(|(name, _)| *name == JobName::Fixed(job))
+            .filter(|name| **name == JobName::Fixed(job))
             .count()
     }
 }
@@ -509,24 +509,9 @@ impl JobQueue for Seen {
         outcome
     }
 
-    async fn revive_dead(
-        &self,
-        name: &JobName,
-        dead_before: DateTime<Utc>,
-    ) -> Result<u64, JobQueueError> {
-        let revived = {
-            let mut dead = self.dead.lock().await;
-            let mut revived = 0u64;
-            dead.retain(|(job, dead_at)| {
-                let due = job == name && *dead_at < dead_before;
-                if due {
-                    revived = revived.saturating_add(1);
-                }
-                !due
-            });
-            revived
-        };
-        Ok(revived)
+    async fn flag_stuck(&self) -> Result<u64, JobQueueError> {
+        let flagged = std::mem::take(&mut *self.dead.lock().await).len();
+        u64::try_from(flagged).map_err(|_| JobQueueError::Stored("flagged".to_owned()))
     }
 
     async fn read(&self, id: JobId) -> Result<Option<kernel::queue::StoredJob>, JobQueueError> {

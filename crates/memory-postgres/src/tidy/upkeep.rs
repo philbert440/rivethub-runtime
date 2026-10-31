@@ -121,11 +121,15 @@ impl UpkeepStore for PostgresMemory {
             .map_err(|error| TidyError::Unavailable(Box::new(error)))?;
         if queued {
             let failing: Vec<FailingRow> = sqlx::query_as(
-                "SELECT t.identifier AS task, count(*)::bigint AS failing
-                   FROM graphile_worker._private_jobs j
-                   JOIN graphile_worker._private_tasks t ON t.id = j.task_id
-                  WHERE j.last_error IS NOT NULL
-                  GROUP BY t.identifier",
+                "SELECT task, sum(failing)::bigint AS failing FROM (
+                     SELECT t.identifier AS task, count(*) AS failing
+                       FROM graphile_worker._private_jobs j
+                       JOIN graphile_worker._private_tasks t ON t.id = j.task_id
+                      WHERE j.last_error IS NOT NULL
+                      GROUP BY t.identifier
+                     UNION ALL
+                     SELECT task, count(*) FROM rh_flagged_jobs WHERE dismissed_at IS NULL GROUP BY task
+                 ) failing GROUP BY task",
             )
             .fetch_all(&self.pool)
             .await

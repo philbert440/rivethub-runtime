@@ -6,6 +6,7 @@ mod deletion;
 mod embed_store;
 pub mod error;
 pub mod export;
+mod flagged;
 mod health;
 pub mod import;
 mod insert;

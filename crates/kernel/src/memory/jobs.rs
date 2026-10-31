@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -27,6 +28,12 @@ pub struct UnchunkedMessage {
     pub id: Uuid,
     pub content: String,
     pub tool_result: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingWiki {
+    pub job: ExtractWiki,
+    pub summarized_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +85,7 @@ pub trait MemoryJobStore: Send + Sync {
 
     async fn revive_dead_wiki(&self, limit: u32) -> Result<u64, MemoryJobError>;
 
-    async fn missing_wiki(&self, limit: u32) -> Result<Vec<ExtractWiki>, MemoryJobError>;
+    async fn missing_wiki(&self, limit: u32) -> Result<Vec<MissingWiki>, MemoryJobError>;
 }
 
 #[async_trait]

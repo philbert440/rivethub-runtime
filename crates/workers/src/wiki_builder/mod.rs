@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, Utc};
+use kernel::memory::jobs::MissingWiki;
 use kernel::memory::{EmbedTable, EmbedTarget};
 use kernel::model::FinishReason;
 use kernel::model::{ModelProvider, ModelProviderError, ModelRequest};
@@ -61,16 +62,27 @@ struct ExtractionInput<'a> {
     types: Vec<String>,
 }
 
+const RECENT_WIKI_PRIORITY: i16 = -10;
+const WIKI_BACKLOG_PRIORITY: i16 = 10;
+
 pub fn extract_wiki_job(job: &ExtractWiki) -> Result<Job, WorkerError> {
     Ok(Job {
         name: JobName::Fixed(FixedJob::ExtractWiki),
         payload: JsonObject::from_serialize(job).map_err(WorkerError::WikiJson)?,
         key: Some(format!("wiki-ext-{}", job.summary_id)),
         key_mode: JobKeyMode::KeepRunAt,
-        priority: 10,
+        priority: WIKI_BACKLOG_PRIORITY,
         run_at: None,
         max_attempts: Some(2),
     })
+}
+
+pub fn missing_wiki_job(missing: &MissingWiki, now: DateTime<Utc>) -> Result<Job, WorkerError> {
+    let mut job = extract_wiki_job(&missing.job)?;
+    if now.signed_duration_since(missing.summarized_at) < chrono::TimeDelta::hours(24) {
+        job.priority = RECENT_WIKI_PRIORITY;
+    }
+    Ok(job)
 }
 
 pub async fn handle_wiki_backfill(env: &WikiBuilderEnv<'_>) -> Result<usize, WorkerError> {
