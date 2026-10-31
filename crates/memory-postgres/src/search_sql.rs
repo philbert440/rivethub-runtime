@@ -29,19 +29,24 @@ fn long_enough(body: &str) -> String {
 }
 
 pub(crate) fn recency_columns(alias: &str, is_message: bool) -> String {
-    let importance = if is_message {
-        format!(
-            "(CASE WHEN {alias}.role = 'system' THEN 0.5 \
-                    WHEN {alias}.tool_name IS NOT NULL THEN 0.3 \
-                    WHEN {alias}.role = 'user' THEN 0.7 \
-                    ELSE 0.6 END)"
+    let (importance, access_table, access_key) = if is_message {
+        (
+            format!(
+                "(CASE WHEN {alias}.role = 'system' THEN 0.5 \
+                        WHEN {alias}.tool_name IS NOT NULL THEN 0.3 \
+                        WHEN {alias}.role = 'user' THEN 0.7 \
+                        ELSE 0.6 END)"
+            ),
+            "rh_message_access",
+            "message_id",
         )
     } else {
-        "0.6".to_string()
+        ("0.6".to_string(), "rh_summary_access", "summary_id")
     };
     format!(
         "(EXTRACT(EPOCH FROM (now() - {alias}.created_at)) / 86400.0)::float8 AS age_days, \
-         COALESCE({alias}.access_count, 0) AS access_count, \
+         COALESCE((SELECT a.access_count FROM {access_table} a WHERE a.{access_key} = {alias}.id), \
+                  {alias}.access_count, 0) AS access_count, \
          ({importance})::float8 AS importance"
     )
 }
@@ -221,6 +226,36 @@ fn push_literal_match(
     }
 }
 
+pub(crate) fn push_fts_where(
+    query: &mut QueryBuilder<sqlx::Postgres>,
+    context: &ArmContext<'_>,
+    is_message: bool,
+    long: bool,
+) {
+    let alias = if is_message { "m" } else { "s" };
+    query.push(" WHERE ");
+    if let Some(filter) = context.tag_filter {
+        filter.push_condition(query, is_message);
+    } else {
+        query.push("true");
+    }
+    query.push(format!(
+        " AND {alias}.content_tsv @@ plainto_tsquery('english', "
+    ));
+    query.push_bind(context.options.text.clone());
+    query.push(")");
+    if long {
+        query.push(" AND ");
+        query.push(long_enough(if is_message {
+            "CASE WHEN m.role = 'tool' THEN coalesce(m.tool_result, '') ELSE m.content END"
+        } else {
+            "s.content"
+        }));
+    }
+    push_time_conditions(query, context.options, alias);
+    push_scope_conditions(query, context.options, is_message);
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub(crate) struct ArmSqlRow {
     chunk: Option<sqlx::types::Json<kernel::memory::MemoryChunkMatch>>,
@@ -379,6 +414,11 @@ impl crate::PostgresMemory {
         if kind == ArmKind::Trigram && tokens.is_empty() {
             return Ok(Vec::new());
         }
+        let candidates = if kind == ArmKind::Fts {
+            self.capped_candidates(context, is_message).await?
+        } else {
+            None
+        };
         let mut query = QueryBuilder::new("");
         push_select_prefix(&mut query, is_message, false);
         match kind {
@@ -412,14 +452,24 @@ impl crate::PostgresMemory {
         } else {
             "rh_summaries s"
         });
-        query.push(" WHERE ");
-        if let Some(filter) = tag_filter {
-            filter.push_condition(&mut query, is_message);
+        if kind == ArmKind::Fts {
+            push_fts_where(&mut query, context, is_message, true);
+            if let Some(candidates) = &candidates {
+                query.push(format!(" AND {alias}.id = ANY("));
+                query.push_bind(candidates.clone());
+                query.push(")");
+            }
         } else {
-            query.push("true");
+            query.push(" WHERE ");
+            if let Some(filter) = tag_filter {
+                filter.push_condition(&mut query, is_message);
+            } else {
+                query.push("true");
+            }
         }
         match kind {
-            ArmKind::Fts | ArmKind::FtsExplicit => {
+            ArmKind::Fts => {}
+            ArmKind::FtsExplicit => {
                 query.push(" AND ");
                 query.push(format!(
                     "{alias}.content_tsv @@ plainto_tsquery('english', "
@@ -442,17 +492,16 @@ impl crate::PostgresMemory {
                 }
             }
         }
-        if kind == ArmKind::Fts {
-            query.push(" AND ");
-            query.push(long_enough(if is_message {
-                "CASE WHEN m.role = 'tool' THEN coalesce(m.tool_result, '') ELSE m.content END"
-            } else {
-                "s.content"
-            }));
+        if kind != ArmKind::Fts {
+            push_time_conditions(&mut query, options, alias);
+            push_scope_conditions(&mut query, options, is_message);
         }
-        push_time_conditions(&mut query, options, alias);
-        push_scope_conditions(&mut query, options, is_message);
-        if kind == ArmKind::Trigram {
+        if candidates.is_some() {
+            query.push(format!(
+                " ORDER BY score DESC, {} DESC LIMIT {pool}",
+                crate::search_cap::newest_column(is_message)
+            ));
+        } else if kind == ArmKind::Trigram {
             query.push(format!(
                 " ORDER BY score DESC, {alias}.created_at DESC LIMIT {pool}"
             ));

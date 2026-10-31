@@ -363,7 +363,7 @@ async fn close_waits_for_access_writes_and_wakes_every_waiter(pool: PgPool) -> T
     seed(&pool).await?;
     let store: Arc<dyn MemoryStore> = Arc::new(PostgresMemory::new(pool.clone()));
     let mut blocker = pool.begin().await?;
-    sqlx::query("LOCK TABLE rh_messages, rh_summaries IN SHARE MODE")
+    sqlx::query("LOCK TABLE rh_message_access, rh_summary_access IN SHARE MODE")
         .execute(&mut *blocker)
         .await?;
     let mut search = query(SearchMode::Fts);
@@ -387,7 +387,7 @@ async fn close_waits_for_access_writes_and_wakes_every_waiter(pool: PgPool) -> T
     })
     .await??;
     let counts: Vec<i32> = sqlx::query_scalar(
-        "SELECT access_count FROM rh_messages UNION ALL SELECT access_count FROM rh_summaries",
+        "SELECT access_count FROM rh_message_access UNION ALL SELECT access_count FROM rh_summary_access",
     )
     .fetch_all(&pool)
     .await?;
@@ -401,9 +401,11 @@ async fn close_reports_background_write_failure(pool: PgPool) -> TestResult {
     use std::time::Duration;
 
     seed(&pool).await?;
-    sqlx::query("ALTER TABLE rh_messages ADD CONSTRAINT refuse_access CHECK (access_count = 0)")
-        .execute(&pool)
-        .await?;
+    sqlx::query(
+        "ALTER TABLE rh_message_access ADD CONSTRAINT refuse_access CHECK (access_count = 0)",
+    )
+    .execute(&pool)
+    .await?;
     let store = PostgresMemory::new(pool);
     let mut search = query(SearchMode::Fts);
     search.scope = MemoryScope::Messages;

@@ -133,8 +133,10 @@ async fn write(
     if !messages.is_empty() {
         let ids: Vec<Uuid> = messages.iter().copied().collect();
         sqlx::query!(
-            "update rh_messages set access_count = access_count + 1,
-                        last_accessed_at = now() where id = any($1)",
+            "insert into rh_message_access (message_id, access_count, last_accessed_at)
+             select m.id, m.access_count + 1, now() from rh_messages m where m.id = any($1)
+             on conflict (message_id) do update
+                set access_count = rh_message_access.access_count + 1, last_accessed_at = now()",
             &ids
         )
         .execute(pool)
@@ -144,8 +146,10 @@ async fn write(
     if !summaries.is_empty() {
         let ids: Vec<Uuid> = summaries.iter().copied().collect();
         sqlx::query!(
-            "update rh_summaries set access_count = access_count + 1,
-                        last_accessed_at = now() where id = any($1)",
+            "insert into rh_summary_access (summary_id, access_count, last_accessed_at)
+             select s.id, s.access_count + 1, now() from rh_summaries s where s.id = any($1)
+             on conflict (summary_id) do update
+                set access_count = rh_summary_access.access_count + 1, last_accessed_at = now()",
             &ids
         )
         .execute(pool)

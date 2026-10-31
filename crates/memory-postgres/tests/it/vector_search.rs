@@ -504,8 +504,9 @@ async fn observe_recency(
 
 async fn set_recency(pool: &PgPool, age_days: f64, access_count: i32) -> TestResult {
     sqlx::query(
-        "UPDATE rh_messages SET created_at = now() - make_interval(secs => $1 * 86400.0), \
-         access_count = $2 WHERE metadata->>'event_id' = 'deploy'",
+        "WITH target AS (UPDATE rh_messages SET created_at = now() - make_interval(secs => $1 * 86400.0), \
+         access_count = $2 WHERE metadata->>'event_id' = 'deploy' RETURNING id) \
+         DELETE FROM rh_message_access a USING target t WHERE a.message_id = t.id",
     )
     .bind(age_days)
     .bind(access_count)
@@ -542,6 +543,61 @@ async fn reads_reinforce_and_age_decays_the_recency_boost(pool: PgPool) -> TestR
         "{} vs {}",
         fresh.score,
         month_old.score
+    );
+    Ok(())
+}
+
+#[sqlx::test(migrator = "migrate::POSTGRES")]
+async fn common_text_ranks_only_the_newest_five_thousand_matches(pool: PgPool) -> TestResult {
+    crate::common::install_graphile(&pool).await?;
+    let conversation: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO rh_conversations (session_key, agent, owner_user_id) VALUES ('claude-code:shelves', 'rivet', 'owner') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await?;
+    sqlx::query(
+        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content, owner_user_id, created_at)
+         SELECT $1, 'rivet', 'cli', 'user', 'a shelf bracket note number ' || n || ' for the hallway wall', 'owner',
+                now() - make_interval(mins => n)
+           FROM generate_series(1, 5100) AS n",
+    )
+    .bind(conversation)
+    .execute(&pool)
+    .await?;
+    sqlx::query(
+        "INSERT INTO rh_messages (conversation_id, agent, channel, role, content, owner_user_id, created_at)
+         VALUES ($1, 'rivet', 'cli', 'user', 'shelf shelf shelf shelf bracket from the old garage', 'owner',
+                 now() - interval '400 days')",
+    )
+    .bind(conversation)
+    .execute(&pool)
+    .await?;
+    sqlx::query("ANALYZE rh_messages").execute(&pool).await?;
+
+    let memory = unwired(&pool);
+    let mut common = query("shelf", SearchMode::Hybrid);
+    common.scope = MemoryScope::Messages;
+    let outcome = memory.search_outcome_for(&common).await?;
+    memory.close().await?;
+    let found = contents(&outcome.hits);
+    assert!(
+        !found.is_empty(),
+        "a common word still finds recent matches"
+    );
+    assert!(
+        !found.iter().any(|content| content.contains("old garage")),
+        "only the newest 5,000 matches are ranked"
+    );
+
+    let rare = memory
+        .search_outcome_for(&query("garage", SearchMode::Hybrid))
+        .await?;
+    memory.close().await?;
+    assert!(
+        contents(&rare.hits)
+            .iter()
+            .any(|content| content.contains("old garage")),
+        "a rare word ranks every match"
     );
     Ok(())
 }

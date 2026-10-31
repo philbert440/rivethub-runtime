@@ -121,12 +121,32 @@ async fn write_copy(
 }
 
 fn copy_out(relation: &str, columns: &[&str], order: &str, body: Option<&str>) -> String {
-    let cols = columns.join(", ");
+    let access = match relation {
+        "rh_messages" => Some(("rh_message_access", "message_id")),
+        "rh_summaries" => Some(("rh_summary_access", "summary_id")),
+        _ => None,
+    };
+    let cols = columns
+        .iter()
+        .map(|column| match (access, *column) {
+            (Some(_), "access_count" | "last_accessed_at") => {
+                format!("coalesce(access.{column}, {relation}.{column}) AS {column}")
+            }
+            _ => format!("{relation}.{column}"),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let from = match access {
+        Some((table, key)) => {
+            format!("{relation} LEFT JOIN {table} access ON access.{key} = {relation}.id")
+        }
+        None => relation.to_owned(),
+    };
     match body {
         Some(body) => {
-            format!("COPY (SELECT {cols} FROM {relation} WHERE {body} ORDER BY {order}) TO STDOUT")
+            format!("COPY (SELECT {cols} FROM {from} WHERE {body} ORDER BY {order}) TO STDOUT")
         }
-        None => format!("COPY (SELECT {cols} FROM {relation} ORDER BY {order}) TO STDOUT"),
+        None => format!("COPY (SELECT {cols} FROM {from} ORDER BY {order}) TO STDOUT"),
     }
 }
 

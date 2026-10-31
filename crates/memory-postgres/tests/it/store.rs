@@ -325,10 +325,11 @@ async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
 
     let bumped = tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
-            let row =
-                sqlx::query("SELECT count(*)::bigint AS n FROM rh_messages WHERE access_count > 0")
-                    .fetch_one(&pool)
-                    .await?;
+            let row = sqlx::query(
+                "SELECT count(*)::bigint AS n FROM rh_message_access WHERE access_count > 0",
+            )
+            .fetch_one(&pool)
+            .await?;
             let count: i64 = row.try_get("n")?;
             if count > 0 {
                 return Ok::<i64, sqlx::Error>(count);
@@ -341,6 +342,11 @@ async fn search_ranks_like_the_recorded_cases(pool: PgPool) -> TestResult {
         bumped > 0,
         "search records access counts off the request path"
     );
+    let rewritten: i64 =
+        sqlx::query_scalar("SELECT count(*)::bigint FROM rh_messages WHERE access_count > 0")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(rewritten, 0, "a search hit no longer rewrites its message");
     Ok(())
 }
 

@@ -1,6 +1,7 @@
 mod access;
 pub mod admin;
 mod agent_presets;
+mod backfills;
 pub mod capture;
 mod cleanup;
 mod conversation;
@@ -18,10 +19,12 @@ mod memory_jobs;
 pub mod queue;
 pub mod read;
 pub mod search;
+mod search_cap;
 mod search_complete;
 mod search_details;
 mod search_sql;
 mod search_vector;
+mod stats;
 pub use search_complete::SearchSynthesis;
 mod stats_cache;
 mod store_impl;
@@ -73,7 +76,7 @@ pub use queue::PostgresQueue;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
-pub const SCHEMA_VERSION: i64 = 44;
+pub const SCHEMA_VERSION: i64 = 50;
 pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]
@@ -84,6 +87,7 @@ pub struct PostgresMemory {
     synthesis: Option<SearchSynthesis>,
     access: std::sync::Arc<access::AccessLog>,
     stats_cache: std::sync::Arc<stats_cache::StatsCache>,
+    backfills: std::sync::Arc<backfills::Backfills>,
     unverified: bool,
     summaries_written: tokio::sync::broadcast::Sender<kernel::memory::WrittenSummary>,
 }
@@ -100,6 +104,7 @@ impl PostgresMemory {
             synthesis: None,
             access: std::sync::Arc::default(),
             stats_cache: std::sync::Arc::default(),
+            backfills: std::sync::Arc::default(),
             unverified: false,
             summaries_written: tokio::sync::broadcast::channel(SUMMARY_WRITTEN_BUFFER).0,
         }

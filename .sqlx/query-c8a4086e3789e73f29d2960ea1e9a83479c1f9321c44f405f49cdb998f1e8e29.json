@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into rh_summary_access (summary_id, access_count, last_accessed_at)\n             select s.id, s.access_count + 1, now() from rh_summaries s where s.id = any($1)\n             on conflict (summary_id) do update\n                set access_count = rh_summary_access.access_count + 1, last_accessed_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c8a4086e3789e73f29d2960ea1e9a83479c1f9321c44f405f49cdb998f1e8e29"
+}

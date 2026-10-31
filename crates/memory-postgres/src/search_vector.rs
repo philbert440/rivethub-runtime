@@ -1,3 +1,4 @@
+use crate::backfills::Backfill;
 use crate::error::Error;
 use crate::search::ArmRow;
 use crate::search::SearchOptions;
@@ -15,12 +16,24 @@ use kernel::memory_core::hybrid_pool;
 use pgvector::HalfVector;
 use sqlx::QueryBuilder;
 use std::collections::BTreeMap;
+use strum::IntoEnumIterator as _;
+use wire::message::Role;
 
 const CHUNK_POOL_MULTIPLIER: i64 = 4;
 const CHUNK_POOL_MAX: i64 = 400;
 
 fn chunk_pool(limit: u32) -> i64 {
     (hybrid_pool(limit) * CHUNK_POOL_MULTIPLIER).min(CHUNK_POOL_MAX)
+}
+
+fn said_only(options: &SearchOptions) -> bool {
+    Role::iter()
+        .filter(|role| options.role.is_none_or(|wanted| wanted == *role))
+        .filter(|role| !options.exclude_roles.contains(role))
+        .all(|role| match role {
+            Role::User | Role::Assistant => true,
+            Role::System | Role::Tool => false,
+        })
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -167,6 +180,11 @@ impl crate::PostgresMemory {
             " AS distance FROM rh_message_chunks c \
              JOIN rh_messages m ON m.id = c.message_id WHERE c.embedding IS NOT NULL",
         );
+        if said_only(context.options)
+            && self.backfills.done(&self.pool, Backfill::ChunkSaid).await?
+        {
+            query.push(" AND c.said");
+        }
         if let Some(filter) = context.tag_filter {
             query.push(" AND ");
             filter.push_condition(&mut query, true);
