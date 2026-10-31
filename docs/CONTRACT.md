@@ -1180,7 +1180,11 @@ newest 64 entities. Merged rewrite: when `extract-wiki` routes a placed session,
 extraction input gains `current`, the bound page's `summary` and `article` cut to budget for a root topic, or
 `section`, the sub-topic's section cut to 4 KiB; the prompt asks for the topic's patch as a merged rewrite of that text,
 with what the summary says about parts of the topic folded in. That patch replaces the page's summary and article, or
-the sub-topic's section, instead of appending (23). A patch whose `type` names a known entity with a page is merged into
+the sub-topic's section, instead of appending (23). The page summary is a stable lead: what the topic or entity is,
+then at most one sentence starting "Currently". A merged write (a topic page or an entity merge) keeps the page's
+existing description and replaces only that last "Currently" sentence; an update that carries none leaves the summary
+as it is, an empty summary takes the update's lead, and only recompile-wiki's summary-only call or an edit rewrites the
+description. News goes to the article, the sections and History. A patch whose `type` names a known entity with a page is merged into
 that page by a second model call that sends only the entity page's summary and article cut to budget plus the patches'
 text and answers `{summary, article, history}`; a failed merge falls back to the patch as before. Notes that still
 arrive as separate patches, and deferred notes, go first in their section. Lost updates: a merged write carries the

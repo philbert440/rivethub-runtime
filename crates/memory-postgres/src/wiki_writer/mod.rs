@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use kernel::wiki::builder::WikiWriteError;
 use kernel::wiki::page::WikiSlug;
 use kernel::wiki::page::bound::{Archived, MergeBase, rebase};
+use kernel::wiki::page::lead::stable_summary;
 use kernel::wiki::page::{
     PagePatch, WikiPage, apply_patch, normalize_slug, parse_wiki_page, serialize_wiki_page,
 };
@@ -175,7 +176,7 @@ async fn apply_locked(
     if let (Some(base), Some(current)) = (merge, previous.as_ref()) {
         patch.current_state = patch
             .current_state
-            .map(|state| rebase(&base.summary, &state, &current.current_state));
+            .map(|state| stable_summary(&current.current_state, &state));
         patch.article = patch
             .article
             .map(|article| rebase(&base.article, &article, &current.article));
